@@ -75,7 +75,37 @@ export class ConversationStateSummarizer {
       janganDiulang.push(`Menanyakan "mau treatment di hari apa" karena Bunda sudah menyebutkan ${dayName}`);
     }
 
-    // 7. TOPIK YANG SEDANG DIBAHAS
+    // 7. EVALUASI COOL-OFF PERTANYAAN (ANTI-REPETISI CTA)
+    const recentAssistantMsgs = history.filter((h) => h.role === 'assistant').slice(-2);
+    const askedLocationRecently = recentAssistantMsgs.some((m) => {
+      const c = (m.content || '').toLowerCase();
+      return (
+        c.includes('daerah atau kelurahan') ||
+        c.includes('kelurahan mana') ||
+        c.includes('rumahnya dimana') ||
+        c.includes('lokasi rumah') ||
+        c.includes('alamat rumah')
+      );
+    });
+    if (askedLocationRecently && !extraction.locationText && !slate.kelurahan) {
+      janganDiulang.push('Menanyakan alamat/kelurahan rumah Bunda lagi (karena baru saja ditanyakan dan Bunda sedang fokus berkonsultasi). Berikan jawaban empatik tanpa menodong alamat!');
+    }
+
+    const askedScheduleRecently = recentAssistantMsgs.some((m) => {
+      const c = (m.content || '').toLowerCase();
+      return (
+        c.includes('di hari apa') ||
+        c.includes('jadwal kunjungan') ||
+        c.includes('jadwal bidan') ||
+        c.includes('ketersediaan jadwal') ||
+        c.includes('rencana mau treatment di hari apa')
+      );
+    });
+    if (askedScheduleRecently && !hasDayMention) {
+      janganDiulang.push('Menanyakan "mau treatment di hari apa" atau menodong jadwal kunjungan lagi (karena baru saja ditanyakan). Jawab dengan ramah tanpa menodong!');
+    }
+
+    // 8. TOPIK YANG SEDANG DIBAHAS
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
 
@@ -88,15 +118,15 @@ export class ConversationStateSummarizer {
       sedangDibahas = 'Bunda menanyakan tarif / harga layanan';
       yangPerluDijawab =
         'Sebutkan tarif promo paket yang relevan secara jelas dan transparan sesuai data katalog grounding, lalu tanyakan jadwal atau kebutuhan perawatan si kecil';
-    } else if (extraction.intents.includes('consult_symptom')) {
-      const symptomList = extraction.symptoms.length > 0 ? extraction.symptoms.join(', ') : 'keluhan fisik si kecil';
+    } else if (extraction.intents.includes('consult_symptom') || /\b(grok|grr|lendir|pilek|batuk|meler|mbeler|basah|bunyi|nafas|napas|sesak)\b/i.test(rawInputLower)) {
+      const symptomList = extraction.symptoms.length > 0 ? extraction.symptoms.join(', ') : 'kondisi pernapasan / keluhan fisik si kecil';
       sedangDibahas = `Bunda berkonsultasi mengenai keluhan: ${symptomList}`;
       const candidates2 = slate.childAgeMonths !== null
         ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(), { ageMonths: slate.childAgeMonths })
         : treatmentCatalogService.getAllServices();
       const suggested2 = extraction.symptoms?.length ? (candidates2.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates2[0]?.name) : (candidates2[0]?.name || 'treatment sesuai katalog');
       yangPerluDijawab =
-        `Rekomendasikan paket treatment yang tepat (*${suggested2}* untuk keluhan tersebut) secara suportif dan empatik, jelaskan manfaat terapinya dari katalog dinamis, lalu tawarkan jadwal kunjungan`;
+        `Jelaskan kondisi si kecil secara medis dan menenangkan (*${suggested2}* dapat membantu meredakan keluhan tersebut). Berikan empati tulus dan doa kesembuhan — DILARANG menodong jadwal/lokasi jika Bunda masih mendalami gejalanya`;
     } else if (extraction.intents.includes('provide_location') || extraction.locationText) {
       sedangDibahas = `Bunda menginformasikan lokasi rumah (${extraction.locationText || slate.kelurahan || 'alamat'})`;
       yangPerluDijawab =

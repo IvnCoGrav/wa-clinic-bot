@@ -79,6 +79,16 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     isActive: true,
     sortOrder: 6,
   },
+  {
+    id: 'symptom_followup_no_cta',
+    scenario: 'Pasien berkonsultasi gejala lanjutan atau respon penenang (Pacing Empati / Tanpa Todong CTA Jadwal)',
+    tags: ['consult_symptom', 'followup', 'grok', 'gejala', 'lendir', 'pilek', 'bunyi', 'basah'],
+    customerMessage: 'Nggk mbeler tp kyk cuman kyk basah trus kdng suka bunyi grr grr',
+    idealResponse:
+      'Iya Bunda, bunyi grok-grok pada si kecil wajar terjadi karena saluran napas bayi masih sangat sempit, sehingga sedikit lendir saja bisa menimbulkan bunyi saat bernapas 😊 Teknik akupresur dan pijat relaksasi di *Pijat Bayi Pulih Ceria* memang dirancang untuk membantu melegakan pernapasan dan mengencerkan lendir tersebut agar si kecil bisa bernapas lebih lega dan tidur pulas. Semoga si kecil selalu sehat dan nyaman yaa Bunda ✨',
+    isActive: true,
+    sortOrder: 7,
+  },
 ];
 
 // In-Memory dynamic cache per-tenant (0-latency runtime access)

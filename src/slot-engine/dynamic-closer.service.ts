@@ -32,6 +32,52 @@ export class DynamicCloserService {
   }
 
   /**
+   * Mengecek apakah asisten sudah pernah menanyakan lokasi/kelurahan pada N balasan terakhir.
+   */
+  public static hasAskedLocationRecently(history?: any[], depth: number = 2): boolean {
+    if (!history || history.length === 0) return false;
+    const assistantMessages = history.filter((m) => m.role === 'assistant').slice(-depth);
+    return assistantMessages.some((m) => {
+      const c = (m.content || '').toLowerCase();
+      return (
+        c.includes('daerah atau kelurahan') ||
+        c.includes('kelurahan mana') ||
+        c.includes('rumah bunda di') ||
+        c.includes('rumahnya dimana') ||
+        c.includes('lokasi rumah') ||
+        c.includes('alamat rumah')
+      );
+    });
+  }
+
+  /**
+   * Mengecek apakah asisten sudah pernah menanyakan hari/jadwal pada N balasan terakhir.
+   */
+  public static hasAskedScheduleRecently(history?: any[], depth: number = 2): boolean {
+    if (!history || history.length === 0) return false;
+    const assistantMessages = history.filter((m) => m.role === 'assistant').slice(-depth);
+    return assistantMessages.some((m) => {
+      const c = (m.content || '').toLowerCase();
+      return (
+        c.includes('di hari apa') ||
+        c.includes('jadwal kunjungan') ||
+        c.includes('jadwal bidan') ||
+        c.includes('ketersediaan jadwal') ||
+        c.includes('rencana mau treatment di hari apa')
+      );
+    });
+  }
+
+  /**
+   * Mengecek apakah customer sedang dalam fase konsultasi/curhat gejala fisik si kecil.
+   */
+  public static isSymptomExploration(rawText?: string): boolean {
+    if (!rawText) return false;
+    const lower = rawText.toLowerCase();
+    return /\b(grok|grook|grr|lendir|ingus|pilek|batuk|meler|mbeler|basah|bunyi|nafas|napas|sesak|flu|anget|demam|panas|rewel|susah\s+tidur|gumoh|kembung|kolik|sembelit|diare)\b/i.test(lower);
+  }
+
+  /**
    * Menghasilkan instruksi penutup dinamis untuk disuntikkan ke System Prompt LLM.
    */
   public static getCloserInstruction(
@@ -137,6 +183,21 @@ ${ongkirGuard}`;
 
     switch (missing) {
       case 'LOCATION': {
+        const askedLocationRecently = this.hasAskedLocationRecently(history, 2);
+        const isSymptomChat = this.isSymptomExploration(rawText);
+        const isExplicitBookingIntent = /\b(mau\s+(pesan|booking|ambil|daftar|jadwal)|bisa\s+datang|kapan\s+bisa|bisa\s+besok|bisa\s+hari|mau\s+coba)\b/i.test(lowerRaw);
+
+        // PACING & COOL-OFF: Jika asisten sudah menanyakan alamat/kelurahan di 1-2 pesan terakhir dan customer belum menjawab,
+        // ATAU customer sedang fokus berkonsultasi seputar gejala medis fisik anak (dan belum secara eksplisit meminta booking jadwal)
+        if (!isExplicitBookingIntent && (askedLocationRecently || (isSymptomChat && history && history.length > 0))) {
+          return `PANDUAN KONSULTASI & PENUTUP (EDUKASI MEDIS & EMPATI):
+1. Jawab pertanyaan atau curhat Bunda tentang kondisi/gejala si kecil dengan ramah, suportif, dan menenangkan layaknya seorang Bidan senior.
+2. ⚠️ DILARANG MENANYAKAN ALAMAT, KELURAHAN, ATAU LOKASI RUMAH LAGI! (Karena sudah ditanyakan di chat sebelumnya dan Bunda sedang fokus berkonsultasi seputar kondisi si kecil).
+3. ⚠️ DILARANG MENODONG JADWAL KUNJUNGAN ATAU MENANYAKAN "MAU DIJADWALKAN HARI APA" di turn ini.
+4. Di kalimat penutup, cukup sampaikan doa kesembuhan atau kata penenang yang hangat (contoh: "Semoga si kecil lekas pulih dan nyaman kembali yaa Bunda 😊" atau "Silakan tanyakan jika masih ada hal lain yang ingin Bunda konsultasikan yaa 😊").
+${ongkirGuard}`;
+        }
+
         if (extractedDateMention) {
           const scheduleCheckText = `Untuk jadwal hari ${extractedDateMention}, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊. Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan slot Bidan & ongkirnya? 😊`;
           return `PANDUAN PENUTUP (TANYA LOKASI RUMAH):
@@ -222,6 +283,18 @@ ${ongkirGuard}`;
 ${ongkirGuard}`;
         }
 
+        const askedScheduleRecently = this.hasAskedScheduleRecently(history, 2);
+        const isSymptomChat = this.isSymptomExploration(rawText);
+        const isExplicitBookingIntent = /\b(mau\s+(pesan|booking|ambil|daftar|jadwal)|bisa\s+datang|kapan\s+bisa|bisa\s+besok|bisa\s+hari|mau\s+coba)\b/i.test(lowerRaw);
+
+        if (!isExplicitBookingIntent && !extractedDateMention && (askedScheduleRecently || (isSymptomChat && history && history.length > 0))) {
+          return `PANDUAN KONSULTASI & PENUTUP (EDUKASI MEDIS & EMPATI):
+1. Jawab pertanyaan Bunda dengan ramah, solutif, dan mengayomi layaknya seorang Bidan senior.
+2. ⚠️ DILARANG MENGULANG MENANYAKAN "RENCANA MAU DI HARI APA" ATAU MENODONG JADWAL KUNJUNGAN LAGI di turn ini!
+3. Tutup dengan kata penenang atau doa kesembuhan yang tulus tanpa pertanyaan menodong.
+${ongkirGuard}`;
+        }
+
         return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
 1. Jika customer sudah memilih/menentukan treatment (misal treatment apapun yang tertera di katalog aktif), DILARANG KERAS menjelaskan ulang manfaat, rincian, atau minyak/aromaterapi dari treatment tersebut! Cukup sambut pilihan Bunda secara hangat.
 2. Tawarkan rencana hari reservasi secara santun dan natural (contoh: "Baik Bunda, untuk ${targetTreatment2} rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊" atau "Baik Bunda, rencana mau treatment di hari apa ya Bunda? 🙏😊").
@@ -243,8 +316,14 @@ ${ongkirGuard}`;
   /**
    * Menghasilkan kalimat penutup fallback siap pakai (deterministik).
    */
-  public static getCloserText(slate?: CustomerSlate): string {
+  public static getCloserText(slate?: CustomerSlate, history?: any[], rawText?: string): string {
     const missing = this.determineMissingSlot(slate);
+    const askedLoc = this.hasAskedLocationRecently(history, 2);
+    const isSymptom = this.isSymptomExploration(rawText);
+
+    if (askedLoc || isSymptom) {
+      return 'Semoga si kecil lekas nyaman dan sehat kembali yaa Bunda 😊';
+    }
 
     switch (missing) {
       case 'LOCATION':
