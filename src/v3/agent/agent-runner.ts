@@ -18,6 +18,7 @@ export interface AgentRunnerInput {
   incomingText: string;
   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   forceModel?: string;
+  skipDbLogging?: boolean;
 }
 
 export interface AgentRunnerOutput {
@@ -29,6 +30,47 @@ export interface AgentRunnerOutput {
 }
 
 export class V3AgentRunner {
+  private static async executeChatCompletion(params: {
+    payload: any;
+    tenantId: string;
+    phone: string;
+    conversationId: string;
+    baseUrl: string;
+    apiKey: string;
+    selectedModel: string;
+  }): Promise<any> {
+    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || '';
+    const fallbackBaseUrl = (process.env.LLM_FALLBACK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+    const fallbackModel = process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
+
+    try {
+      const response = await axios.post(`${params.baseUrl}/chat/completions`, params.payload, {
+        headers: { Authorization: `Bearer ${params.apiKey}`, 'Content-Type': 'application/json' },
+        timeout: 15000,
+      });
+      return response.data;
+    } catch (primaryErr: any) {
+      console.warn(
+        `[V3 AGENT PRIMARY FAILED] ${params.selectedModel} error: ${primaryErr.response?.status || primaryErr.message}. Triggering fallback to ${fallbackModel}...`
+      );
+
+      if (!fallbackApiKey) {
+        throw primaryErr;
+      }
+
+      const fallbackPayload = {
+        ...params.payload,
+        model: fallbackModel,
+      };
+
+      const fallbackResponse = await axios.post(`${fallbackBaseUrl}/chat/completions`, fallbackPayload, {
+        headers: { Authorization: `Bearer ${fallbackApiKey}`, 'Content-Type': 'application/json' },
+        timeout: 20000,
+      });
+      return fallbackResponse.data;
+    }
+  }
+
   /**
    * Menjalankan agentic execution loop dengan native tool-calling & context grounding.
    */
@@ -101,12 +143,17 @@ export class V3AgentRunner {
         temperature: 0.3,
       };
 
-      const firstResponse = await axios.post(`${baseUrl}/chat/completions`, firstPayload, {
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        timeout: 15000,
+      const firstData = await V3AgentRunner.executeChatCompletion({
+        payload: firstPayload,
+        tenantId,
+        phone,
+        conversationId,
+        baseUrl,
+        apiKey,
+        selectedModel,
       });
 
-      const choice = firstResponse.data?.choices?.[0];
+      const choice = firstData?.choices?.[0];
       const assistantMessage = choice?.message;
       const toolCalls = assistantMessage?.tool_calls;
 
@@ -203,12 +250,17 @@ export class V3AgentRunner {
           temperature: 0.3,
         };
 
-        const secondResponse = await axios.post(`${baseUrl}/chat/completions`, secondPayload, {
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          timeout: 15000,
+        const secondData = await V3AgentRunner.executeChatCompletion({
+          payload: secondPayload,
+          tenantId,
+          phone,
+          conversationId,
+          baseUrl,
+          apiKey,
+          selectedModel,
         });
 
-        finalReply = secondResponse.data?.choices?.[0]?.message?.content || '';
+        finalReply = secondData?.choices?.[0]?.message?.content || '';
       } else {
         // Jika tidak ada tool calls, gunakan langsung konten balasan
         finalReply = assistantMessage?.content || '';
@@ -222,7 +274,7 @@ export class V3AgentRunner {
         finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di Kala Moms & Baby Spa. Ada yang bisa Bidan Yusi bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
       }
 
-      if (conversationId) {
+      if (conversationId && !input.skipDbLogging) {
         try {
           await prisma.message.create({
             data: {
