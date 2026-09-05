@@ -280,7 +280,7 @@ export class V3AgentRunner {
       }
 
       // 7. Sanitasi Balasan
-      finalReply = OutputSanitizer.cleanOutboundReply(finalReply);
+      finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText);
 
       if (!OutputSanitizer.isValidReply(finalReply)) {
         console.warn(`[V3 AGENT WARNING] Reply rejected by sanitizer: "${finalReply}". Triggering silent fallback.`);
