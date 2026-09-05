@@ -293,6 +293,49 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     expect(capturedUpdateData.raw_text).toContain('Catatan: Pasien minta terapis berpengalaman');
   });
 
+  it('PATCH /api/admin/reservation/:id normalizes treatmentCategory BUNDLE to BOTH', async () => {
+    const reservationId = 'res-bundle-test-1';
+    const existingRes = {
+      id: reservationId,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-bundle-1',
+      treatment_category: 'BABY',
+      treatment_detail: 'Single',
+      status: 'pending',
+      booking_date: new Date('2026-08-03T02:00:00.000Z'),
+      assigned_staff_id: null,
+      raw_text: 'Old raw',
+      customer: { id: 'cust-bundle-1', children: [] },
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(existingRes as any);
+
+    let capturedUpdateData: any = null;
+    vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+      capturedUpdateData = data;
+      return {
+        ...existingRes,
+        ...data,
+        customer: existingRes.customer,
+        assigned_staff: null,
+      } as any;
+    });
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/reservation/${reservationId}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        treatmentCategory: 'BUNDLE',
+        treatmentDetail: 'Paket Selapan + Breast',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(capturedUpdateData.treatment_category).toBe('BOTH');
+  });
+
   it('PATCH /api/admin/reservation/:id returns 404 when reservation does not exist', async () => {
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null);
 

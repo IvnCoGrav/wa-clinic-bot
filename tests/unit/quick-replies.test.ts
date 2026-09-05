@@ -29,22 +29,37 @@ describe('Quick Replies - Helpers & In-Memory Store', () => {
     expect(isValidShortcut('a'.repeat(31))).not.toBeNull(); // too long
   });
 
-  it('interpolateQuickReply replaces all placeholders', () => {
-    const content = 'Halo {name} ({phone}) dari {clinic_name} oleh {admin_name}';
+  it('interpolateQuickReply replaces all placeholders including location fields', () => {
+    const content = 'Halo {name} ({phone})\nKec: {kec}\nKota: {kota}\nAlamat: {alamat}\nDari {clinic_name} oleh {admin_name}';
     const out = interpolateQuickReply(content, {
       name: 'Bunda Retno',
       phone: '628123456789',
+      kec: 'Rungkut',
+      kota: 'Surabaya',
+      alamat: 'Jl Rungkut Asri 12',
       clinic_name: 'Kala Spa',
       admin_name: 'Kak Sinta',
     });
-    expect(out).toBe('Halo Bunda Retno (628123456789) dari Kala Spa oleh Kak Sinta');
+    expect(out).toBe('Halo Bunda Retno (628123456789)\nKec: Rungkut\nKota: Surabaya\nAlamat: Jl Rungkut Asri 12\nDari Kala Spa oleh Kak Sinta');
   });
 
-  it('interpolateQuickReply uses fallbacks when vars missing', () => {
-    const out = interpolateQuickReply('Hi {name} {phone} {clinic_name} {admin_name}', {});
+  it('interpolateQuickReply supports Indonesian aliases ({nama}, {hp}, {kecamatan}, {address})', () => {
+    const content = 'Nama: {nama}, HP: {hp}, Kec: {kecamatan}, Alamat: {address}';
+    const out = interpolateQuickReply(content, {
+      nama: 'Bunda Sari',
+      hp: '0811223344',
+      kecamatan: 'Sukolilo',
+      address: 'Jl Kertajaya Indah',
+    });
+    expect(out).toBe('Nama: Bunda Sari, HP: 0811223344, Kec: Sukolilo, Alamat: Jl Kertajaya Indah');
+  });
+
+  it('interpolateQuickReply uses clean empty fallbacks for location when vars missing', () => {
+    const out = interpolateQuickReply('Hi {name} {phone} {clinic_name} {admin_name} Kec: {kec} Kota: {kota}', {});
     expect(out).toContain('Bunda');
     expect(out).toContain('Klinik Kami');
     expect(out).toContain('Admin');
+    expect(out).toContain('Kec:  Kota: ');
   });
 
   it('DEFAULT_QUICK_REPLIES contains 7 required shortcuts with tenant-aware content', () => {

@@ -808,8 +808,12 @@ function clearConversationDraft(convId: string) {
   }, []);
 
   const interpolateQuickReplyContent = useCallback((content: string): string => {
-    const name = selectedChat?.customerName || 'Bunda';
-    const phone = selectedChat?.customerPhone || '-';
+    const rawName = customerDetailData?.name || selectedChat?.customerName || '';
+    const name = rawName && rawName.trim() !== '-' ? rawName.trim() : 'Bunda';
+    const phone = customerDetailData?.phone || selectedChat?.customerPhone || '-';
+    const kec = customerDetailData?.kecamatan || selectedChat?.kecamatan || '';
+    const kota = customerDetailData?.kota || selectedChat?.kota || '';
+    const alamat = customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '';
     let clinicName = 'Kala Moms and Baby Spa';
     try {
       const rawBrand = (import.meta as any)?.env?.VITE_CLINIC_NAME;
@@ -817,11 +821,27 @@ function clearConversationDraft(convId: string) {
     } catch {}
     const adminName = (user as any)?.name || (user as any)?.email || 'Admin';
     return content
-      .replace(/\{name\}/g, name)
-      .replace(/\{phone\}/g, phone)
-      .replace(/\{clinic_name\}/g, clinicName)
-      .replace(/\{admin_name\}/g, adminName);
-  }, [selectedChat?.customerName, selectedChat?.customerPhone, user]);
+      .replace(/\{(?:name|nama|nama_bunda)\}/gi, name)
+      .replace(/\{(?:phone|hp|no_hp)\}/gi, phone)
+      .replace(/\{(?:kec|kecamatan)\}/gi, kec)
+      .replace(/\{kota\}/gi, kota)
+      .replace(/\{(?:alamat|address)\}/gi, alamat)
+      .replace(/\{clinic_name\}/gi, clinicName)
+      .replace(/\{admin_name\}/gi, adminName);
+  }, [
+    selectedChat?.customerName,
+    selectedChat?.customerPhone,
+    selectedChat?.kecamatan,
+    selectedChat?.kota,
+    selectedChat?.kelurahan,
+    customerDetailData?.name,
+    customerDetailData?.phone,
+    customerDetailData?.kecamatan,
+    customerDetailData?.kota,
+    customerDetailData?.address,
+    customerDetailData?.kelurahan,
+    user,
+  ]);
 
   const applyQuickReply = useCallback((qr: { content: string }) => {
     const interpolated = interpolateQuickReplyContent(qr.content);
