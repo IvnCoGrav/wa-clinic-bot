@@ -18,6 +18,7 @@ export interface ToolExecutionContext {
   conversationId: string;
   phone: string;
   chatId: string;
+  selectedTreatment?: string;
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -27,6 +28,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         locationText: args.locationText,
         streetDetail: args.streetDetail,
         tenantId: ctx.tenantId,
+        candidateTreatmentName: ctx.selectedTreatment,
       };
       return await executeCalculateDelivery(input);
     }

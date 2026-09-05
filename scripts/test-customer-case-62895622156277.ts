@@ -1,4 +1,4 @@
-﻿import { V3AgentRunner } from '../src/v3/agent/agent-runner';
+import { V3AgentRunner } from '../src/v3/agent/agent-runner';
 import { prisma } from '../src/db/client';
 import { DEFAULT_TENANT_ID } from '../src/config/tenant';
 
@@ -55,6 +55,8 @@ async function runCustomerCaseTest() {
   const turns = [
     'Kak ini area mana?',
     'Kalau terapi batuk pilek harganya berapa kak? Dapat apa aja?',
+    'Sedati ada ongkirkah kak?',
+    'Sedati pepe',
   ];
 
   for (let i = 0; i < turns.length; i++) {

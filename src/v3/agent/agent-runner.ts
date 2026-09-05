@@ -86,16 +86,17 @@ export class V3AgentRunner {
       forceModel,
     } = input;
 
+    // 1. Ambil session state saat ini
+    let session = await GoalTracker.getGoalSession(conversationId, tenantId);
+
     const toolContext: ToolExecutionContext = {
       tenantId,
       customerId,
       conversationId,
       phone,
       chatId,
+      selectedTreatment: session.selectedTreatment,
     };
-
-    // 1. Ambil session state saat ini
-    let session = await GoalTracker.getGoalSession(conversationId, tenantId);
 
     // 2. Siapkan LLM endpoint & API keys
     const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
@@ -140,7 +141,7 @@ export class V3AgentRunner {
         messages,
         tools: ALL_V3_TOOLS,
         tool_choice: 'auto',
-        temperature: 0.3,
+        temperature: 0.2,
       };
 
       const firstData = await V3AgentRunner.executeChatCompletion({
@@ -200,6 +201,15 @@ export class V3AgentRunner {
               session = await GoalTracker.updateGoalSession(conversationId, {
                 selectedTreatment: fnArgs.specificTreatmentName,
               }, tenantId);
+            } else if (!session.selectedTreatment && Array.isArray(toolResult.treatments) && toolResult.treatments.length > 0) {
+              // Jika belum ada treatment terpilih tetapi AI mencari katalog/gejala,
+              // simpan kandidat rekomendasi teratas agar konteks tidak amnesia pada turn berikutnya
+              const topTreatment = toolResult.treatments.find((t: any) => t.isRecommendedForSymptoms) || toolResult.treatments[0];
+              if (topTreatment?.name) {
+                session = await GoalTracker.updateGoalSession(conversationId, {
+                  selectedTreatment: topTreatment.name,
+                }, tenantId);
+              }
             }
             if (fnArgs.childAgeMonths || (fnArgs.symptoms && fnArgs.symptoms.length > 0)) {
               session = await GoalTracker.updateGoalSession(conversationId, {
@@ -244,10 +254,13 @@ export class V3AgentRunner {
         }
 
         // 6. Panggilan Kedua: Menyusun teks balasan ramah Bidan Yusi menggunakan fakta tool
+        // Perbarui system prompt di messages[0] dengan session terbaru yang telah di-grounding hasil tools
+        messages[0].content = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
+
         const secondPayload: any = {
           model: selectedModel,
           messages,
-          temperature: 0.3,
+          temperature: 0.65,
         };
 
         const secondData = await V3AgentRunner.executeChatCompletion({
