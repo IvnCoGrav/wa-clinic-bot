@@ -186,6 +186,15 @@ export class GroundingComposer {
       customerPreferencesText = `Catatan Medis Khusus: ${slate.medicalConcerns.join(', ')}`;
     }
 
+    const isMaternalCareTopic =
+      /\b(nifas|laktasi|asi|oksitosin|breast|payudara|bengkak|pelancar\s*asi|memperlancar\s*asi|lancar\s*asi)\b/i.test(inputLower) ||
+      Boolean(targetTreatment && /\b(nifas|laktasi|oksitosin|breast)\b/i.test(targetTreatment));
+
+    if (isMaternalCareTopic) {
+      const maternalNote = `Panduan Khusus Perawatan Ibu Nifas & Laktasi: Di pricelist kami, perawatan untuk ibu nifas/menyusui tersedia dalam 2 pilihan utama: *Oksitosin Massage Fullbody* (fokus relaksasi punggung/leher & rangsang hormon oksitosin ASI) dan *Paket Laktasi (Breast Massage)* (fokus penanganan payudara bengkak/ASI tersumbat). Jika customer mencari 'Pijat Nifas' di pricelist atau ingin relaksasi + pelancar ASI, terangkan kedua opsi ini dengan ramah dan tawarkan untuk dijadwalkan.`;
+      customerPreferencesText = customerPreferencesText ? `${customerPreferencesText}\n${maternalNote}` : maternalNote;
+    }
+
     const effectiveTreatment =
       extraction.treatmentReferenced ||
       slate.selectedTreatmentName ||

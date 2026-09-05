@@ -104,13 +104,26 @@ export class DecisionMatrix {
       /\b(habis|setelah|pasca|baru|selesai)\s+(?:vaksin|imunisasi|imun)\b/i.test(rawText) ||
       /\b(?:vaksin|imunisasi|imun)\b.*?\b(berpengaruh|boleh\s*(?:kah|ga|gak|nggak|ta)|aman\s*(?:kah|ga|gak)|bisa\s+pijat|pijatnya)\b/i.test(rawText);
 
+    const isExplicitUnlistedService =
+      /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText);
+
     // Ongkir, Location & Core Service guard: jangan bajak pertanyaan ongkir/lokasi/home treatment sebagai layanan asing
     const hasOngkirLocationGuard =
-      /\b(ongkir|ongkos\s*kirim|biaya\s*kirim|jarak|lokasi|home\s*(?:treatment|service|care))\b/i.test(rawText) || Boolean(extraction.locationText);
+      !isExplicitUnlistedService &&
+      (/\b(ongkir|ongkos\s*kirim|biaya\s*kirim|jarak|lokasi)\b/i.test(rawText) ||
+        /\bhome\s*(?:treatment|service|care)\b/i.test(rawText) ||
+        Boolean(extraction.locationText));
+
+    // Maternal, Postpartum, Lactation & Benefit Guard: jangan bajak pertanyaan nifas, laktasi, pelancar ASI, atau konfirmasi manfaat sebagai layanan asing!
+    const hasMaternalOrBenefitGuard =
+      /\b(nifas|laktasi|asi|oksitosin|breast|payudara|bengkak|pelancar\s*asi|memperlancar\s*asi|lancar\s*asi|relaksasi)\b/i.test(rawText) ||
+      Boolean(updatedSlate.selectedTreatmentName && /\b(nifas|laktasi|oksitosin|breast|moms)\b/i.test(updatedSlate.selectedTreatmentName)) ||
+      Boolean(context?.lastDiscussedTreatment && /\b(nifas|laktasi|oksitosin|breast|moms)\b/i.test(context.lastDiscussedTreatment));
 
     const isUnlistedServiceQuery =
       !isPostVaccineConsultation &&
       !hasOngkirLocationGuard &&
+      !hasMaternalOrBenefitGuard &&
       (extraction.intents.includes('ask_unlisted_service') ||
         /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText));
 
@@ -140,10 +153,9 @@ export class DecisionMatrix {
       updatedSlate.humanHandlingReason = 'unlisted_service';
       return {
         action: 'ESCALATE_HUMAN_UNLISTED_SERVICE',
-        reason: 'Customer menanyakan layanan di luar pricelist/katalog resmi -> Handoff ke CS dengan template sopan.',
+        reason: 'Customer menanyakan layanan di luar pricelist/katalog resmi -> Silent escalation ke CS.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.unlistedServiceHandoff(),
       };
     }
 
@@ -303,13 +315,13 @@ export class DecisionMatrix {
     const HONORIFICS = '(?:kak+|ka(?:k)?|sis(?:t)?|min|mimin|admin|bun(?:da|d)?|bu(?:nda)?|ibu|bidan|bu\\s+bidan|mbak+|mba|dok(?:ter)?|gan|om|tante|say(?:ang)?)';
     const PARTICLES = '(?:dong|ya(?:a)?|deh|sih|nih|yuk|tolong|mohon|kah|gak|nggak|ta)';
     const GREETINGS = '(?:halo|hola|hai|hi|hei|hey|p+|tes|test|ping|assalamu\\x27?alaikum|assalamualaikum|ass|askum|samlikum|(?:selamat|selmat|slmt|met)\\s+(?:pagi|siang|sore|malam|subuh)|pagi|siang|sore|malam|subuh|permisi|punten|spada)';
-    const INQUIRY_ACTIONS = '(?:mau\\s+tanya(?:-?tanya)?|tanya|boleh\\s+tanya|bisa\\s+konsultasi|mau\\s+konsultasi|minta\\s+info|info(?:\\s+lengkap)?|mau\\s+info|tertarik|saya\\s+tertarik|bisa|apakah\\s+bisa|bisa\\s+homecare|melayani\\s+homecare|ada\\s+homecare|bisa\\s+dipanggil|bisa\\s+panggil|homecare|home\\s*treatment|home\\s*service|mau\\s+(?:treatment|treatmen|pijat|massage|spa|reservasi|booking|pesan|order)|bisa\\s+(?:treatment|treatmen|pijat|massage|spa)|treatment|pijat)';
+    const INQUIRY_ACTIONS = '(?:mau\\s+tanya(?:-?tanya)?|tanya|boleh\\s+tanya|bisa\\s+konsultasi|mau\\s+konsultasi|minta\\s+info|info(?:\\s+lengkap)?|mau\\s+info|mau\\s+tau|mau\\s+tahu|tertarik|saya\\s+tertarik|bisa|apakah\\s+bisa|bisa\\s+homecare|melayani\\s+homecare|ada\\s+homecare|bisa\\s+dipanggil|bisa\\s+panggil|homecare|home\\s*treatment|home\\s*service|mau\\s+(?:treatment|treatmen|pijat|massage|spa|reservasi|booking|pesan|order)|bisa\\s+(?:treatment|treatmen|pijat|massage|spa)|treatment|pijat|layanan|perawatan|paket|ada\\s+(?:layanan|treatment|perawatan|paket|apa\\s*(?:aja|saja))|apa\\s*(?:aja|saja))';
     const TAIL_ELEMENT = `(?:\\s+(?:${HONORIFICS}|${PARTICLES}))*`;
 
     const isPureLeadOpener =
       new RegExp(`^(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}(?:\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT})*[!.\\s?~-]*$`, 'i').test(cleanText) ||
       new RegExp(`^${HONORIFICS}${TAIL_ELEMENT}\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}[!.\\s?~-]*$`, 'i').test(cleanText) ||
-      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|home\s*service|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan|mau\s+reservasi|mau\s+booking|bisa\s+reservasi|bisa\s+booking|cara\s+reservasi|cara\s+booking|bagaimana\s+caranya|gimana\s+caranya|alur\s+reservasi|alur\s+booking|mau\s+pesan|cara\s+pesan|info\s+reservasi|mau\s+treatment|mau\s+pijat|mau\s+massage)\b/i.test(rawText);
+      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|home\s*service|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan|mau\s+reservasi|mau\s+booking|bisa\s+reservasi|bisa\s+booking|cara\s+reservasi|cara\s+booking|bagaimana\s+caranya|gimana\s+caranya|alur\s+reservasi|alur\s+booking|mau\s+pesan|cara\s+pesan|info\s+reservasi|mau\s+treatment|mau\s+pijat|mau\s+massage|layanan\s+apa\s*(?:aja|saja)|perawatan\s+apa\s*(?:aja|saja)|treatment\s+apa\s*(?:aja|saja)|ada\s+perawatan\s+apa|ada\s+treatment\s+apa|ada\s+layanan\s+apa|mau\s+tau\s+layanan|mau\s+tahu\s+layanan|mau\s+tau\s+treatment|mau\s+tahu\s+treatment)\b/i.test(rawText);
 
     const isLeadGreeting =
       cleanText.length > 0 &&
@@ -617,8 +629,8 @@ export class DecisionMatrix {
       Boolean(currentLocText) &&
       (currentLocText === storedKelurahan ||
         currentLocText === storedKecamatan ||
-        (Boolean(storedKelurahan) && currentLocText.includes(storedKelurahan)) ||
-        (Boolean(storedKecamatan) && currentLocText.includes(storedKecamatan)));
+        (Boolean(storedKelurahan) && (currentLocText.includes(storedKelurahan) || storedKelurahan.includes(currentLocText))) ||
+        (Boolean(storedKecamatan) && (currentLocText.includes(storedKecamatan) || storedKecamatan.includes(currentLocText))));
 
     const isDifferentLocation = Boolean(currentLocText) && !isSameLocation;
 
@@ -680,8 +692,22 @@ export class DecisionMatrix {
       };
     }
 
+    // Treatment Selection Immunity: Jika lokasi customer SUDAH terkonfirmasi,
+    // dan customer sedang memilih / menyebut treatment spesifik tanpa meminta ganti lokasi eksplisit,
+    // DILARANG re-resolve lokasi atau mengirim ulang template ongkir.
+    const isSelectingTreatment =
+      extraction.intents.includes('select_treatment') ||
+      Boolean(extraction.treatmentReferenced);
+
+    const isBlockedByTreatmentSelection =
+      updatedSlate.isLocationConfirmed &&
+      !updatedSlate.isOutOfCoverage &&
+      isSelectingTreatment &&
+      !isExplicitLocationChange;
+
     const shouldResolveLocation =
       !isCompareLocations &&
+      !isBlockedByTreatmentSelection &&
       hasLocationInCurrentMessage &&
       (!updatedSlate.isLocationConfirmed || updatedSlate.isOutOfCoverage || isExplicitLocationChange || isDifferentLocation) &&
       // Idempotency Guard (fixed): HANYA blokir jika lokasi SUDAH terkonfirmasi DAN lokasinya SAMA
@@ -918,6 +944,10 @@ export class DecisionMatrix {
           const isPureLocationMessage =
             !extraction.intents.includes('consult_symptom') &&
             !extraction.intents.includes('ask_clinic_origin') &&
+            !extraction.intents.includes('select_treatment') &&
+            !Boolean(extraction.treatmentReferenced) &&
+            !extraction.intents.includes('ask_schedule') &&
+            !extraction.intents.includes('request_booking') &&
             extraction.symptoms.length === 0;
 
           if (isPureLocationMessage) {
