@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Preservasi Posisi Scroll Live Chat Saat Pindah Menu/Page & Alt-Tab (`LiveChatMonitor.tsx`) (2026-09-05)
+
+- **Akar Masalah:**
+  1. *Pindah Page*: Navigasi antar menu di React SPA menyebabkan `LiveChatMonitor` unmount dan remount. Scroll position tidak pernah disimpan ke `sessionStorage`, sehingga setiap kali kembali ke Live Chat, `isInitialMessagesLoadRef` selalu memicu `scrollToBottom(false, true)` yang memaksa scroll ke paling bawah.
+  2. *Alt-Tab*: Di Windows/Chrome, Alt-Tab ke aplikasi desktop lain sering kali tidak memicu `document.visibilitychange: hidden` (hanya `window.blur`), sehingga `savedScrollTopRef` tidak tercatat dan `wasNearBottomRef` default `true` memicu `scrollToBottom(true, true)` saat kembali. Selain itu, `loadChats(true)` pada saat tab aktif berisiko mengubah referensi `selectedChat` (terutama untuk chat di luar 50 teratas) yang memicu ulang `useEffect` pemuatan thread sehingga menghapus pesan dan me-reset scroll.
+- **Solusi Komprehensif:**
+  1. *Penyimpanan Posisi Scroll Persistent*: Menambahkan helper `saveConversationScroll` dan `getConversationScroll` dengan penyimpanan di `sessionStorage` (`liveChat:scrollPositions`) per conversationId.
+  2. *Sinkronisasi onScroll & handleSelect*: Setiap scroll mencatat `scrollTop` dan `isNearBottom` ke ref dan storage; `handleSelect` mencatat posisi chat lama sebelum berpindah ke chat baru.
+  3. *Restorasi Cerdas Saat Initial Load*: Di `useEffect` pesan, jika user sebelumnya tidak di posisi bawah (`!wasNearBottom && savedScrollTop !== null`), posisinya dipulihkan secara akurat (multi-frame rAF + timeouts) alih-alih di-force scroll ke bawah.
+  4. *Listener Window Blur/Focus & Safe Visibility*: Menambahkan listener `window.blur` (tangkap scroll saat Alt-Tab) dan `window.focus` (pulihkan scroll tanpa force-scroll). Pada `visibilitychange`, `scrollToBottom` diubah ke `force=false`.
+  5. *Isolasi Thread Load*: Menghapus `selectedChat?.conversationId` dari dependency array `loadThread` (hanya `[selectedId]`), serta mempertahankan objek chat aktif di `loadChats(reset=true)` jika berada di luar 50 teratas.
+- **Verifikasi:** Build `packages/admin-dashboard` ✓ 11.04s, `npm run build` root ✓, integration tests ✓ (9/9 passed).
+
 #### Fix — Sembunyikan Chat Sandbox/QA Test dari Live Server (`livechat.subroute.ts`, `conversation.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
 
 - **Latar Belakang:** Chat sandbox/QA test (`is_sandbox_test=true`) bocor ke daftar Live Chat di server produksi, mengganggu CS. Sesuai skill `qa-test-labeling`, chat test wajib terisolasi.

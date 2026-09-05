@@ -621,6 +621,30 @@ function clearConversationDraft(convId: string) {
   } catch (_) {}
 }
 
+const SCROLL_POS_STORAGE_KEY = 'liveChat:scrollPositions';
+
+function getConversationScroll(convId: string): { scrollTop: number; isNearBottom: boolean } | null {
+  if (!convId) return null;
+  try {
+    const raw = sessionStorage.getItem(SCROLL_POS_STORAGE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map[convId] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveConversationScroll(convId: string, scrollTop: number, isNearBottom: boolean) {
+  if (!convId) return;
+  try {
+    const raw = sessionStorage.getItem(SCROLL_POS_STORAGE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[convId] = { scrollTop, isNearBottom, updatedAt: Date.now() };
+    sessionStorage.setItem(SCROLL_POS_STORAGE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
   const handleInputChange = (text: string) => {
     replyTextRef.current = text;
     const isNotEmpty = text.trim().length > 0;
@@ -1057,8 +1081,22 @@ function clearConversationDraft(convId: string) {
   useEffect(() => {
     selectedIdRef.current = selectedId;
     isInitialMessagesLoadRef.current = true;
-    wasNearBottomRef.current = true;
-    savedScrollTopRef.current = null;
+
+    // Pulihkan posisi scroll tersimpan jika user sebelumnya sedang membaca history chat ini
+    if (selectedId) {
+      const savedScroll = getConversationScroll(selectedId);
+      if (savedScroll && !savedScroll.isNearBottom && savedScroll.scrollTop > 0) {
+        wasNearBottomRef.current = false;
+        savedScrollTopRef.current = savedScroll.scrollTop;
+      } else {
+        wasNearBottomRef.current = true;
+        savedScrollTopRef.current = null;
+      }
+    } else {
+      wasNearBottomRef.current = true;
+      savedScrollTopRef.current = null;
+    }
+
     setReplyingTo(null);
     setEmojiPickerOpen(false);
 
@@ -1101,7 +1139,7 @@ function clearConversationDraft(convId: string) {
       setMessages([]);
       setIsThreadLoading(false);
     }
-  }, [selectedId, selectedChat?.conversationId]);
+  }, [selectedId]);
 
   // Auto-save draft saat berpindah menu (unmount) atau meninggalkan halaman
   useEffect(() => {
@@ -1262,8 +1300,14 @@ function clearConversationDraft(convId: string) {
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
-        startTransition(() => setChats(data));
-        chatsRef.current = data;
+        // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama (misal chat lama ke-51+),
+        // pertahankan objek percakapan aktif agar selectedChat tidak hilang/undefined
+        const currentActive = chatsRef.current.find((c) => c.conversationId === selectedIdRef.current);
+        const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
+          ? [currentActive, ...data]
+          : data;
+        startTransition(() => setChats(finalData));
+        chatsRef.current = finalData;
       } else {
         const merged = [...chatsRef.current];
         const seen = new Set(merged.map((c) => c.conversationId));
@@ -1677,7 +1721,21 @@ function clearConversationDraft(convId: string) {
         }
       }
       if (isInitialMessagesLoadRef.current) {
-        scrollToBottom(false, true);
+        if (!wasNearBottomRef.current && savedScrollTopRef.current !== null) {
+          // Pulihkan posisi scroll tersimpan (user sebelumnya sedang membaca pesan lama di atas)
+          const targetScroll = savedScrollTopRef.current;
+          const restoreScroll = () => {
+            if (chatContainerRef.current) {
+              chatContainerRef.current.scrollTop = targetScroll;
+            }
+          };
+          restoreScroll();
+          requestAnimationFrame(restoreScroll);
+          setTimeout(restoreScroll, 50);
+          setTimeout(restoreScroll, 150);
+        } else {
+          scrollToBottom(false, true);
+        }
         isInitialMessagesLoadRef.current = false;
       } else {
         scrollToBottom(false, false);
@@ -1785,6 +1843,14 @@ function clearConversationDraft(convId: string) {
     if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
     if (typingStartTimerRef.current) { clearTimeout(typingStartTimerRef.current); typingStartTimerRef.current = null; }
     isTypingActiveRef.current = false;
+
+    // Simpan posisi scroll percakapan lama sebelum berpindah ke percakapan baru
+    if (selectedIdRef.current && chatContainerRef.current) {
+      const el = chatContainerRef.current;
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      saveConversationScroll(selectedIdRef.current, el.scrollTop, distance < 300);
+    }
+
     const targetChatPre = chatsRef.current.find((c) => c.conversationId === conversationId);
     if (targetChatPre && customerDetailData && customerDetailData.id !== targetChatPre.customerId) {
       setCustomerDetailData(null);
@@ -2072,33 +2138,58 @@ function clearConversationDraft(convId: string) {
       }
     }, 15000);
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        const el = chatContainerRef.current;
-        if (el) {
-          savedScrollTopRef.current = el.scrollTop;
-          wasNearBottomRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 300;
+    const captureCurrentScroll = () => {
+      const el = chatContainerRef.current;
+      if (el) {
+        savedScrollTopRef.current = el.scrollTop;
+        const isNear = (el.scrollHeight - el.scrollTop - el.clientHeight) < 300;
+        wasNearBottomRef.current = isNear;
+        if (selectedIdRef.current) {
+          saveConversationScroll(selectedIdRef.current, el.scrollTop, isNear);
         }
-      } else if (document.visibilityState === 'visible') {
-        loadChats(true);
-        // Preserve posisi baca: hanya auto-scroll jika sebelumnya di bawah
-        setTimeout(() => {
-          const el = chatContainerRef.current;
-          if (!el) return;
-          if (wasNearBottomRef.current) {
-            scrollToBottom(true, true);
-          } else if (savedScrollTopRef.current !== null) {
-            el.scrollTop = savedScrollTopRef.current;
-          }
-        }, 100);
       }
     };
+
+    const restoreCurrentScroll = () => {
+      const el = chatContainerRef.current;
+      if (!el) return;
+      if (wasNearBottomRef.current) {
+        scrollToBottom(true, false);
+      } else if (savedScrollTopRef.current !== null) {
+        el.scrollTop = savedScrollTopRef.current;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        captureCurrentScroll();
+      } else if (document.visibilityState === 'visible') {
+        loadChats(true);
+        // Preserve posisi baca: hanya auto-scroll jika sebelumnya memang di bawah
+        setTimeout(restoreCurrentScroll, 60);
+        setTimeout(restoreCurrentScroll, 160);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      captureCurrentScroll();
+    };
+
+    const handleWindowFocus = () => {
+      setTimeout(restoreCurrentScroll, 60);
+      setTimeout(restoreCurrentScroll, 160);
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       unsubscribe();
       clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4024,7 +4115,12 @@ function clearConversationDraft(convId: string) {
                   onScroll={(e) => {
                     const el = e.currentTarget;
                     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-                    wasNearBottomRef.current = distance < 300;
+                    const isNear = distance < 300;
+                    wasNearBottomRef.current = isNear;
+                    savedScrollTopRef.current = el.scrollTop;
+                    if (selectedIdRef.current) {
+                      saveConversationScroll(selectedIdRef.current, el.scrollTop, isNear);
+                    }
                   }}
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
