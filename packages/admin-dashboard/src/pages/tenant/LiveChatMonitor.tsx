@@ -430,7 +430,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
-  const [holdToConfirmReservation, setHoldToConfirmReservation] = useState<any>(null);
+
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
   const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
@@ -1253,7 +1253,8 @@ function clearConversationDraft(convId: string) {
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
-      const backendMode = sourceFilter === 'reservation' ? 'all' : sourceFilter;
+      // Sandbox (chat test/QA) tidak pernah ditampilkan di daftar — selalu minta mode real.
+      const backendMode = 'real';
       const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
@@ -2921,17 +2922,19 @@ function clearConversationDraft(convId: string) {
   };
 
   const filteredChats = useMemo(() => chats.filter((chat) => {
-    // 0. Filter reservasi aktif (pending/hold/terjadwal)
+    // 0. Sandbox (chat test/QA) tidak pernah tampil — termasuk yang masuk via SSE/live insert.
+    if ((chat as any).isSandboxTest) return false;
+    // 1. Filter reservasi aktif (pending/hold/terjadwal)
     if (sourceFilter === 'reservation') {
       const hasRes = !!(chat as any).hasActiveHold || !!(chat as any).hasUpcomingBooking || !!(chat as any).hasPendingBooking;
       if (!hasRes) return false;
     }
-    // 1. Filter label
+    // 2. Filter label
     if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
       return false;
     }
 
-    // 2. Filter search query (Nama, Nomor HP, atau Keyword Pesan)
+    // 3. Filter search query (Nama, Nomor HP, atau Keyword Pesan)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       const cleanDigits = q.replace(/\D/g, '');
@@ -3873,10 +3876,10 @@ function clearConversationDraft(convId: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          setHoldToConfirmReservation(activeHoldReservation);
+                          setSelectedReservation(activeHoldReservation);
                         }}
                         className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Konfirmasi & Lengkapi Data"
+                        title="Lihat Detail Reservasi"
                       >
                         Konfirmasi
                       </button>
@@ -3941,10 +3944,10 @@ function clearConversationDraft(convId: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          setHoldToConfirmReservation(activeConfirmedReservation);
+                          setSelectedReservation(activeConfirmedReservation);
                         }}
                         className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Lihat / Kelola Reservasi"
+                        title="Lihat Detail Reservasi"
                       >
                         Kelola
                       </button>
@@ -3983,10 +3986,10 @@ function clearConversationDraft(convId: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          setHoldToConfirmReservation(activePendingReservation);
+                          setSelectedReservation(activePendingReservation);
                         }}
                         className={`bg-sky-600 hover:bg-sky-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Konfirmasi / Proses Reservasi"
+                        title="Lihat Detail Reservasi"
                       >
                         Konfirmasi
                       </button>
@@ -5256,62 +5259,6 @@ function clearConversationDraft(convId: string) {
             }
           }}
           onInsertToChat={handleInsertInvoiceToChat}
-        />
-      )}
-
-      {holdToConfirmReservation && (
-        <CreateReservationModal
-          isOpen={!!holdToConfirmReservation}
-          mode="edit"
-          initialReservation={holdToConfirmReservation}
-          initialCustomer={
-            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
-              ? customerDetailData
-              : (selectedChat?.customerId ? {
-                  id: selectedChat.customerId,
-                  name: selectedChat.customerName,
-                  phone: selectedChat.customerPhone,
-                  kelurahan: (selectedChat as any)?.kelurahan,
-                  kecamatan: (selectedChat as any)?.kecamatan,
-                  kota: (selectedChat as any)?.kota,
-                  distance_km: (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km,
-                } : null)
-          }
-          staffList={reservationStaffList}
-          onClose={() => setHoldToConfirmReservation(null)}
-          onSuccess={async (updatedRes) => {
-            setHoldToConfirmReservation(null);
-            toast('Reservasi berhasil dikonfirmasi & dilengkapi!', 'success');
-            await handleReservationUpdate();
-            // patch chats: hold hilang, jadi Terjadwal/Pending sesuai status baru
-            if (updatedRes && selectedChat) {
-              const isConfirmed = updatedRes.status === 'confirmed';
-              const isPending = updatedRes.status === 'pending';
-              const isHold = updatedRes.status === 'hold';
-              setChats((prev) => {
-                const updated = prev.map((c) =>
-                  c.conversationId === selectedChat.conversationId
-                    ? {
-                        ...c,
-                        hasActiveHold: isHold,
-                        activeHoldReservation: isHold ? updatedRes : null,
-                        hasUpcomingBooking: isConfirmed,
-                        activeConfirmedReservation: isConfirmed ? updatedRes : null,
-                        hasPendingBooking: isPending,
-                        activePendingReservation: isPending ? updatedRes : null,
-                      }
-                    : c
-                );
-                chatsRef.current = updated;
-                return updated;
-              });
-            } else {
-              loadChats(true);
-            }
-            if (updatedRes) {
-              handleGenerateAndInsertInvoice(updatedRes);
-            }
-          }}
         />
       )}
 
