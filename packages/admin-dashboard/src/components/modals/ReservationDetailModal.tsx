@@ -802,7 +802,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
                 </button>
 
-                {reservation.status === 'pending' && (() => {
+                {(reservation.status === 'pending' || (reservation.status as string) === 'hold') && (() => {
+                  const isHold = (reservation.status as string) === 'hold';
                   const purchaseSentAt = reservation.purchase_event_sent_at ? new Date(reservation.purchase_event_sent_at) : null;
                   const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
                   return (
@@ -821,7 +822,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       }`}
                     >
                       <Check size={14} />
-                      <span>{purchaseWindowOpen ? 'Purchase Dikirim' : 'Tandai Lunas'}</span>
+                      <span>{purchaseWindowOpen ? 'Purchase Dikirim' : isHold ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
                     </button>
                   );
                 })()}
