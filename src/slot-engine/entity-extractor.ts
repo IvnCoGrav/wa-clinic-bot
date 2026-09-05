@@ -8,6 +8,7 @@ import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getGazetteerAreas, escapeRegex, resolvePrefixMatches } from '../utils/gazetteer';
 import { telemetryService } from '../services/telemetry.service';
+import { getStringSimilarity } from '../utils/similarity';
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -57,6 +58,59 @@ const NON_SYMPTOM_TOKENS = new Set([
 const INVALID_CUSTOMER_NAMES = new Set([
   'saya', 'aku', 'bunda', 'bund', 'bidan', 'bu bidan', 'admin', 'kak', 'min', 'kamu', 'kami', 'bapak', 'ibu',
 ]);
+
+/**
+ * Memeriksa apakah teks pesan customer terbaru benar-benar mengandung bukti lokasi/alamat.
+ * Mencegah kebocoran (history leakage) di mana LLM menyalin lokasi dari riwayat chat sebelumnya.
+ */
+function hasLocationEvidenceInText(
+  text: string,
+  locationText: string | null,
+  streetDetail: string | null
+): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const lower = text.toLowerCase().trim();
+  if (!lower) return false;
+
+  // 1. Kata kunci alamat/lokasi eksplisit dalam pesan customer
+  const addressKeywords =
+    /\b(jalan|jl|jln|gang|gg|blok|no\s*\d+|nomor\s*\d+|unit|rt|rw|kelurahan|kecamatan|desa|perum|perumahan|residence|apart|apartment|gedung|komplek|daerah|wilayah|posisi|alamat|lokasi)\b/i;
+  if (addressKeywords.test(lower)) return true;
+
+  // 2. Cek apakah ada kata dari locationText atau streetDetail yang disebutkan di teks
+  const checkOverlap = (candidate: string | null): boolean => {
+    if (!candidate) return false;
+    const words = candidate
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !['kota', 'kabupaten', 'jawa', 'timur', 'kecamatan', 'kelurahan'].includes(w));
+
+    const lowerClean = lower.replace(/[^a-z0-9\s]/g, ' ');
+    const lowerWords = lowerClean.split(/\s+/).filter((lw) => lw.length >= 3);
+
+    for (const w of words) {
+      if (lowerClean.includes(w)) return true;
+      for (const lw of lowerWords) {
+        if (lw.includes(w) || w.includes(lw)) return true;
+        if (getStringSimilarity(w, lw) >= 0.7) return true;
+      }
+    }
+    return false;
+  };
+
+  if (checkOverlap(locationText)) return true;
+  if (checkOverlap(streetDetail)) return true;
+
+  // 3. Cek apakah ada token teks customer yang cocok dengan gazetteer wilayah
+  const gazetteer = getGazetteerAreas();
+  const tokens = lower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((t) => t.length >= 3);
+  for (const t of tokens) {
+    if (gazetteer.has(t)) return true;
+  }
+
+  return false;
+}
 
 export class EntityExtractor {
   /**
@@ -331,6 +385,18 @@ export class EntityExtractor {
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
       }
+    } else if (/\b(?:pijat\s*nifas|perawatan\s*nifas|relaksasi\s*nifas)\b/i.test(lower)) {
+      result.treatmentReferenced = 'Oksitosin Massage Fullbody';
+      result.intents = result.intents || [];
+      if (!result.intents.includes('select_treatment')) {
+        result.intents.push('select_treatment');
+      }
+    } else if (/\b(?:pijat\s*laktasi|paket\s*laktasi|pijat\s*asi|breast\s*massage)\b/i.test(lower)) {
+      result.treatmentReferenced = 'Paket Laktasi (Breast Massage)';
+      result.intents = result.intents || [];
+      if (!result.intents.includes('select_treatment')) {
+        result.intents.push('select_treatment');
+      }
     }
 
     // 7. Deteksi Permintaan Layanan di Luar Katalog Resmi (Unlisted Service)
@@ -338,8 +404,12 @@ export class EntityExtractor {
       /\b(habis|setelah|pasca|baru|selesai)\s+(?:vaksin|imunisasi|imun)\b/i.test(lower) ||
       /\b(?:vaksin|imunisasi|imun)\b.*?\b(berpengaruh|boleh\s*(?:kah|ga|gak|nggak|ta)|aman\s*(?:kah|ga|gak)|bisa\s+pijat|pijatnya)\b/i.test(lower);
 
+    const isMaternalOrBenefitInquiry =
+      /\b(nifas|laktasi|asi|oksitosin|breast|payudara|bengkak|pelancar\s*asi|memperlancar\s*asi|lancar\s*asi|relaksasi)\b/i.test(lower);
+
     if (
       !isPostVaccineConsultation &&
+      !isMaternalOrBenefitInquiry &&
       /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(lower)
     ) {
       result.intents = result.intents || [];
@@ -434,6 +504,8 @@ Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan laya
 NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!
 14b. ANTI FALSE-POSITIVE ONGKIR/LOKASI (WAJIB):
 Jika pesan mengandung kata ongkir/ongkos kirim/biaya kirim/jarak/lokasi/patokan NAMA LOKASI atau slang daerah Sunda/Jawa untuk harga ("sabaraha", "sabaraha ongkir", "piro", "piro ongkir", "ongkir e", "piroan", "pinten"), DILARANG KERAS diklasifikasikan sebagai "ask_unlisted_service"! Ini adalah kombinasi intent "provide_location" + "ask_price" (atau "compare_locations" jika membandingkan 2 lokasi). Contoh: "Klo yg di jojoran ongkirnya berapa kak" => intents ["provide_location","ask_price"], location_text "Jojoran", comparison_locations null. Slang "jojoran baru ongkir sabaraha" => sama, location_text "Jojoran Baru".
+14c. ANTI FALSE-POSITIVE IBU NIFAS / LAKTASI / PELANCAR ASI (WAJIB):
+DILARANG KERAS mengklasifikasikan pertanyaan seputar perawatan ibu nifas, laktasi, memperlancar ASI, payudara bengkak/keras, pijat nifas, atau konfirmasi manfaat treatment ("relaksasi dan memperlancar asi kak apa ada?", "saya tidak melihat yang pijat nifas") sebagai "ask_unlisted_service"! Ini adalah intent "consult_symptom" atau "select_treatment" yang mengarah ke paket resmi klinik: "Oksitosin Massage Fullbody" atau "Paket Laktasi (Breast Massage)".
 15. PENYEBUTAN LOKASI SINGKAT / JAWABAN WILAYAH:
 Jika pesan customer menyebutkan nama daerah/kelurahan/kecamatan/kawasan di Surabaya atau Sidoarjo (contoh: "Berbek", "Berbek Bund", "di berbek", "rungkut", "jambangan", "ketintang", "tropodo", "sedati", "sukodono", "candi", "taman", "sidoarjo kota", "gayungan", "wonokromo", "gubeng", "wiyung", "pakal", "kenjeran"), ini adalah NAMA LOKASI/WILAYAH! WAJIB ekstrak sebagai "location_text" dan sertakan intent "provide_location". DILARANG menganggapnya sebagai chitchat biasa!
 16. PEMBATALAN / PENUNDAAN SLOT (CHANGE-OF-MIND / GESTUR BACK):
@@ -560,6 +632,27 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
           confidenceScore: d.confidence_score || 0.9,
           clearedSlots: Array.isArray(d.cleared_slots) && d.cleared_slots.length > 0 ? d.cleared_slots : null,
         };
+
+        // Anti-History-Leakage Guard:
+        // Jika LLM mengekstrak locationText / streetDetail tapi pesan customer terbaru
+        // sama sekali tidak memuat bukti lokasi (dan bukan GPS shareloc), buang entitas tersebut.
+        const hasNativeGps = Boolean(
+          context?.incomingMessage?.location ||
+          context?.incomingMessage?.type === 'location'
+        );
+        if (!hasNativeGps && (rawResult.locationText || rawResult.streetDetail)) {
+          const hasEvidence = hasLocationEvidenceInText(text, rawResult.locationText, rawResult.streetDetail);
+          if (!hasEvidence) {
+            console.log(
+              `[ENTITY EXTRACTOR ANTI-LEAK] Stripping leaked location "${rawResult.locationText}" / "${rawResult.streetDetail}" from non-location message: "${text}"`
+            );
+            rawResult.locationText = null;
+            rawResult.streetDetail = null;
+            rawResult.intents = rawResult.intents.filter(
+              (i) => i !== 'provide_location' && i !== 'supplement_address'
+            );
+          }
+        }
 
         const result = this.sanitizeExtractedEntities(rawResult);
         telemetryService.setLastNluError(context?.customerPhone || 'unknown', null);

@@ -153,14 +153,17 @@ export class SlateStore {
     // 3. Treatment yang pernah dibahas di history (HANYA DARI PESAN CUSTOMER — gejala dipisah ke symptoms)
     if (!slate.selectedTreatmentName) {
       const treatmentKeywords = [
-        { key: 'oksitosin', name: 'Pijat Oksitosin' },
-        { key: 'laktasi', name: 'Pijat Laktasi' },
-        { key: 'pulih ceria', name: 'Pijat Bayi Pulih Ceria' },
+        { key: 'oksitosin', name: 'Oksitosin Massage Fullbody' },
+        { key: 'laktasi', name: 'Paket Laktasi (Breast Massage)' },
+        { key: 'breast massage', name: 'Paket Laktasi (Breast Massage)' },
+        { key: 'pulih ceria', name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)' },
         { key: 'tumbuh ceria', name: 'Pijat Bayi Tumbuh Ceria' },
-        { key: 'bayi ceria', name: 'Pijat Bayi Ceria' },
-        { key: 'pijat bayi', name: 'pijat bayi' },
-        { key: 'pijat hamil', name: 'Pijat Relaksasi Ibu Hamil' },
-        { key: 'pijat nifas', name: 'Pijat Relaksasi Ibu Nifas' },
+        { key: 'bayi ceria', name: 'Pijat Bayi Ceria (Rileksasi)' },
+        { key: 'pijat bayi', name: 'Pijat Bayi Ceria (Rileksasi)' },
+        { key: 'pijat hamil', name: 'Prenatal Massage (Pijat Hamil)' },
+        { key: 'prenatal', name: 'Prenatal Massage (Pijat Hamil)' },
+        { key: 'pijat nifas', name: 'Oksitosin Massage Fullbody' },
+        { key: 'nifas', name: 'Oksitosin Massage Fullbody' },
       ];
       for (let i = history.length - 1; i >= 0; i--) {
         if (history[i].role !== 'user') continue;

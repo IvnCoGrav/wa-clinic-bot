@@ -653,6 +653,48 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       expect(decision.shouldSendPricelistImage).toBe(false);
       expect(decision.deterministicTemplateReply).toMatch(/Waru.*Sidoarjo/i);
     });
+
+    it('DecisionMatrix: Selecting treatment when location is confirmed does NOT re-trigger ongkir template', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const { SlateStore } = await import('../../src/slot-engine/slate-store');
+
+      const slate = SlateStore.hydrateSlate({
+        customer: {
+          id: 'c_test_treatment_select',
+          phone: '6281234567890',
+          kelurahan: 'Wiyung',
+          kecamatan: 'Wiyung',
+          distance_km: 12.5,
+          ongkir: 15000,
+        } as any,
+        conversation: { current_state: 'LOCATION_CONFIRMED' } as any,
+      });
+      slate.isLocationConfirmed = true;
+      slate.distanceKm = 12.5;
+      slate.ongkirFee = 25000;
+      slate.ongkirPromoFee = 15000;
+
+      // Simulate extraction of "Yang pijat bayi ceriaajakak"
+      const extraction = await EntityExtractor.extract('Yang pijat  bayi ceriaajakak', {
+        history: [
+          { role: 'user', content: 'Di dukuh pakis gang 2 kak' },
+          { role: 'assistant', content: 'Jika dilihat dari jaraknya kurang lebih 12.5 km... Rencana mau treatment apa bunda ?' },
+        ],
+      });
+
+      // Verification 1: Anti-leak guard stripped locationText
+      expect(extraction.locationText).toBeNull();
+      expect(extraction.streetDetail).toBeNull();
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'Yang pijat  bayi ceriaajakak',
+      });
+
+      // Verification 2: Does NOT re-trigger RESOLVE_LOCATION_AND_DELIVERY or repeat ongkir template
+      expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+      expect(decision.deterministicTemplateReply).toBeUndefined();
+    });
   });
 });
 
