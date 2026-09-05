@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Sembunyikan Chat Sandbox/QA Test dari Live Server (`livechat.subroute.ts`, `conversation.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
+
+- **Latar Belakang:** Chat sandbox/QA test (`is_sandbox_test=true`) bocor ke daftar Live Chat di server produksi, mengganggu CS. Sesuai skill `qa-test-labeling`, chat test wajib terisolasi.
+- **Backend:** `livechat.subroute.ts:63` `effectiveMode` paksa `all→real` saat `NODE_ENV=production`; `conversation.service.ts:184` `where.customer.is_sandbox_test=false` untuk `all` di production; fallback memory juga saring `is_sandbox_test`; SSE `message.created` diabaikan bila `isSandboxTest` & `PROD`.
+- **Frontend:** `LiveChatMonitor.tsx:436` `isLiveServer=import.meta.env.PROD` paksa `sourceFilter='real'`, sembunyikan opsi `all`/`sandbox` di toolbar (hanya `real` di live), cegah inject SSE sandbox ke `chats`.
+- **Verifikasi:** `npm run build` dashboard ✓, `npm test` ✓ (209 passed core; `migration.test.ts` butuh `--testTimeout=30000` saat load penuh).
+
 #### Fix — Perbaikan Permanen Sinkronisasi Reaksi Emoji Customer WhatsApp (`whatsapp-provider.service.ts`, `waha/client.ts`, `app.ts`, `message.service.ts`) (2026-09-04)
 
 - **Stage 1 — Schema WAHA & Auto-Sync:** Bersihkan events WAHA ke schema valid: hapus `message.reaction.added/deleted` (ditolak validator), pertahankan `message.reaction`, tambah `message.edited`; `buildDefaultSessionConfig` + `waha/client.ts:startSession` kini `['session.status','message','message.any','message.reaction','message.ack','message.revoked','message.edited','label.chat.added','label.chat.deleted']`; `syncSessionWebhooks()` kirim `{config: mergedConfig}` dan log `reaction terdaftar`; perbaiki import dynamic `DEFAULT_TENANT_ID` di `app.ts:183` agar tidak error scope TS2304 saat build.

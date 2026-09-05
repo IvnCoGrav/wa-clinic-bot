@@ -161,6 +161,20 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
 
           if (combinedRawText.trim().toLowerCase() === '/reset') {
             await customerService.clearPendingLocation(customer.id, DEFAULT_TENANT_ID);
+            try {
+              await prisma.message.deleteMany({ where: { conversation_id: conversation.id } });
+              await prisma.customer.update({
+                where: { id: customer.id },
+                data: {
+                  preferences: {},
+                  kelurahan: null,
+                  kecamatan: null,
+                  kota: null,
+                  distance_km: null,
+                  ongkir: null,
+                },
+              });
+            } catch (e) {}
             conversation = await conversationService.updateConversationState(
               conversation.id,
               {
@@ -215,6 +229,43 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               originalText: combinedRawText,
               burstMessages: rawTextList,
               burstCount: rawTextList.length,
+            };
+          }
+
+          const useV3 = process.env.USE_V3_AGENT !== 'false';
+          if (useV3) {
+            const { V3AgentRunner } = await import('../../v3/agent/agent-runner');
+            let incomingText = incomingMessage.text?.body || combinedRawText;
+            if (incomingMessage.type === 'location' && incomingMessage.location) {
+              incomingText = `[Shared Location: ${incomingMessage.location.latitude}, ${incomingMessage.location.longitude}]`;
+            }
+
+            const v3Result = await V3AgentRunner.processMessage({
+              tenantId: DEFAULT_TENANT_ID,
+              customerId: customer.id,
+              conversationId: conversation.id,
+              phone: customer.phone,
+              chatId: `${targetPhone}@c.us`,
+              incomingText,
+            });
+
+            const answer = v3Result.isEscalated && !v3Result.replyText
+              ? '🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]'
+              : v3Result.replyText;
+
+            return {
+              answer,
+              sentBubbles: answer ? [answer] : [],
+              chunks: [],
+              query: combinedRawText,
+              burstCount: rawTextList.length,
+              timestamp: new Date(),
+              llmError: null,
+              v3: {
+                executedTools: v3Result.executedTools,
+                isEscalated: v3Result.isEscalated,
+                goalSession: v3Result.updatedSession,
+              },
             };
           }
 
