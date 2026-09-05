@@ -171,6 +171,9 @@ export class ConversationService {
       };
       if (mode !== 'all') {
         where.customer = { is_sandbox_test: mode === 'sandbox' };
+      } else if (process.env.NODE_ENV === 'production') {
+        // Live server: 'all' tetap sembunyikan sandbox
+        where.customer = { is_sandbox_test: false };
       }
       if (search && search.trim()) {
         const query = search.trim();
@@ -217,6 +220,19 @@ export class ConversationService {
         }
       }
       let working: any[] = filtered;
+      // Live server: saring sandbox dari fallback 'all'
+      if (process.env.NODE_ENV === 'production' && mode === 'all') {
+        const cleaned: any[] = [];
+        for (const c of working) {
+          try {
+            const cust = await customerService.getCustomerById(c.customer_id, tenantId);
+            if (!cust?.is_sandbox_test) cleaned.push(c);
+          } catch {
+            cleaned.push(c);
+          }
+        }
+        working = cleaned;
+      }
       if (label && label !== 'all') {
         if (label === 'medical_concern') working = working.filter((c: any) => c.escalation_reason === 'medical_concern');
         else if (label === 'unresolved_faq') working = working.filter((c: any) => c.escalation_reason === 'unresolved_faq');
