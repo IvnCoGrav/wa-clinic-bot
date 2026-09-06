@@ -13,6 +13,9 @@ export interface KnowledgeChunkResult {
   title: string;
   content: string;
   documentName?: string | null;
+  similarity?: number | null;
+  score?: number | null;
+  rank?: number | null;
 }
 
 // In-Memory store fallback untuk offline / test environment
@@ -48,10 +51,10 @@ export function sanitizeQueryForFts(userQuery: string): string {
     .replace(/\b(klo|kalo)\b/gi, 'kalau')
     .replace(/\bkrn\b/gi, 'karena');
 
-  // 3. Hapus tanda baca & stopword umum tanpa membuang kata domain penting
+  // 3. Hapus tanda baca & stopword umum + stopword domain generik klinik (anti false-positive FTS)
   text = text
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa|saya)\b/gi, ' ')
+    .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa|saya|pijat|massage|treatment|perawatan|bisa|boleh|kalau|kalo|klo|setelah|sehabis|sebelum|pada)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -171,19 +174,34 @@ export class KnowledgeBaseService {
         LIMIT ${limit};
       `;
 
-      // 2. Fallback ke OR-based tsquery jika pencarian ketat AND bernilai 0
+      // 2. Fallback ke OR-based tsquery jika pencarian ketat AND bernilai 0 — dengan Relevance Gate
       if ((!rawResults || rawResults.length === 0) && cleanQuery.length > 0) {
         const terms = cleanQuery.split(/\s+/).filter((w) => w.length > 2);
-        if (terms.length > 1) {
+        if (terms.length >= 1) {
           const orQuery = terms.join(' | ');
-          rawResults = await prisma.$queryRaw<any[]>`
+          let orResults = await prisma.$queryRaw<any[]>`
             SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
                    ts_rank(to_tsvector('simple', content), to_tsquery('simple', ${orQuery})) as rank
             FROM knowledge_chunks
             WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ to_tsquery('simple', ${orQuery})
             ORDER BY rank DESC
-            LIMIT ${limit};
+            LIMIT ${limit * 2};
           `;
+          // Relevance Gate: pastikan minimal 1 token substantif benar-benar ada di title/content
+          if (orResults && orResults.length > 0) {
+            const substantiveTokens = terms.map((t) => t.toLowerCase());
+            const filtered = orResults.filter((r: any) => {
+              const text = `${r.title} ${r.content}`.toLowerCase();
+              return substantiveTokens.some((tok) => text.includes(tok));
+            });
+            rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
+          } else {
+            rawResults = [];
+          }
+          // Jika gate menghasilkan 0, jangan lanjut paksa plainto — kembalikan [] (topik belum ada artikel)
+          if (!rawResults || rawResults.length === 0) {
+            return [];
+          }
         }
       }
 
@@ -207,22 +225,34 @@ export class KnowledgeBaseService {
           title: r.title,
           content: r.content,
           documentName: r.documentName,
+          similarity: typeof r.rank === 'number' ? r.rank : null,
+          score: typeof r.rank === 'number' ? r.rank : null,
+          rank: typeof r.rank === 'number' ? r.rank : null,
         }));
       }
     } catch (error) {
       console.warn('[FTS QUERY FALLBACK] Postgres DB unavailable or query error, using keyword fallback search:', (error as Error).message);
     }
 
-    // In-Memory Keyword Fallback Search
+    // In-Memory Keyword Fallback Search — dengan Relevance Gate & skor similarity
     const lower = userQuery.toLowerCase();
-    const matches = memoryKnowledgeChunks.filter((chunk) => {
-      if (chunk.tenantId !== tenantId) return false;
-      const text = `${chunk.title} ${chunk.content}`.toLowerCase();
-      const keywords = lower.split(/\s+/);
-      return keywords.some((kw) => kw.length > 2 && text.includes(kw));
-    });
+    const lowerClean = sanitizeQueryForFts(userQuery).toLowerCase() || lower;
+    const cleanTokens = lowerClean.split(/\s+/).filter((kw) => kw.length > 2);
+    const keywords = cleanTokens.length > 0 ? cleanTokens : lower.split(/\s+/).filter((kw) => kw.length > 2);
+    const matches = memoryKnowledgeChunks
+      .filter((chunk) => {
+        if (chunk.tenantId !== tenantId) return false;
+        const text = `${chunk.title} ${chunk.content}`.toLowerCase();
+        return keywords.some((kw) => text.includes(kw));
+      })
+      .map((chunk) => {
+        const text = `${chunk.title} ${chunk.content}`.toLowerCase();
+        const bestKw = keywords.find((kw) => text.includes(kw)) || '';
+        const sim = bestKw ? getStringSimilarity(bestKw, text.slice(0, 200)) : 0.85;
+        return { ...chunk, similarity: sim, score: sim, rank: sim } as any;
+      });
 
-    return matches.slice(0, limit);
+    return matches.slice(0, limit) as any;
   }
 
   /**

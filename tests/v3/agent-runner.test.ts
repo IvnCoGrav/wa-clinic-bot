@@ -236,6 +236,13 @@ describe('V3 Agent Runner End-to-End Suite', () => {
   });
 
   it('Skenario 5: Multi-turn panjang + tanya SOP mandi — wajib tetap panggil search_knowledge_faq (anti-inertia)', async () => {
+    const { knowledgeBaseService: kbs5 } = await import('../../src/services/knowledge.service');
+    await kbs5.addFaqItem({
+      tenantId: 'default-tenant',
+      category: 'SOP',
+      question: 'Sebaiknya pijat dilakukan sebelum atau sesudah mandi?',
+      answer: 'Sebaiknya pijat dilakukan sebelum mandi ya Bunda. Setelah perawatan selesai, Bunda bisa memandikan si kecil dengan jeda istirahat sekitar 5-10 menit.',
+    });
     (axios.post as any)
       .mockResolvedValueOnce({
         data: {
