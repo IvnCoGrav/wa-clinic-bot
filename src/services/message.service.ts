@@ -537,11 +537,19 @@ export class MessageService {
 
   /**
    * Mengambil pesan-pesan terakhir untuk percakapan tertentu (terurut kronologis).
+   * Param opsional `before`: cursor ISO timestamp / Date — hanya pesan dengan
+   * created_at < before yang diambil (untuk infinite scroll up).
    */
-  public async getRecentMessages(conversationId: string, limit: number, tenantId: string): Promise<any[]> {
+  public async getRecentMessages(conversationId: string, limit: number, tenantId: string, before?: string | Date): Promise<any[]> {
+    const beforeDate = before ? new Date(before) : null;
+    const validBefore = beforeDate && !isNaN(beforeDate.getTime()) ? beforeDate : null;
     try {
       const messages = await prisma.message.findMany({
-        where: { conversation_id: conversationId, tenant_id: tenantId },
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          ...(validBefore ? { created_at: { lt: validBefore } } : {}),
+        },
         orderBy: { created_at: 'desc' },
         take: limit,
       });
@@ -549,9 +557,41 @@ export class MessageService {
     } catch (error) {
       // Memory fallback: ambil pesan terakhir (kronologis) untuk percakapan tsb
       return memoryMessages
-        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId)
+        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && (!validBefore || new Date(m.created_at) < validBefore))
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-limit);
+    }
+  }
+
+  /**
+   * Varian paged: mengambil `limit` pesan + flag hasMore (take limit+1).
+   * Backward-compatible: tanpa `before` hasilnya identik dengan getRecentMessages.
+   */
+  public async getRecentMessagesWithHasMore(
+    conversationId: string,
+    limit: number,
+    tenantId: string,
+    before?: string | Date
+  ): Promise<{ messages: any[]; hasMore: boolean }> {
+    const beforeDate = before ? new Date(before) : null;
+    const validBefore = beforeDate && !isNaN(beforeDate.getTime()) ? beforeDate : null;
+    try {
+      const rows = await prisma.message.findMany({
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          ...(validBefore ? { created_at: { lt: validBefore } } : {}),
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit + 1,
+      });
+      const hasMore = rows.length > limit;
+      return { messages: rows.slice(0, limit).reverse(), hasMore };
+    } catch (error) {
+      const all = memoryMessages
+        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && (!validBefore || new Date(m.created_at) < validBefore))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return { messages: all.slice(0, limit).reverse(), hasMore: all.length > limit };
     }
   }
 

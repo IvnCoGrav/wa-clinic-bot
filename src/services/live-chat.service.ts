@@ -259,7 +259,21 @@ export class LiveChatService {
    * Thread pesan sebuah percakapan (kronologis).
    */
   public async getConversationMessages(conversationId: string, tenantId: string, limit = 50): Promise<any[]> {
-    return messageService.getRecentMessages(conversationId, limit, tenantId);
+    const { messages } = await this.getConversationMessagesPaged(conversationId, tenantId, limit);
+    return messages;
+  }
+
+  /**
+   * Thread pesan paged (cursor-based): `before` = ISO timestamp / Date cursor.
+   * Mengembalikan pesan kronologis (lama -> baru) + flag hasMore.
+   */
+  public async getConversationMessagesPaged(
+    conversationId: string,
+    tenantId: string,
+    limit = 50,
+    before?: string | Date
+  ): Promise<{ messages: any[]; hasMore: boolean }> {
+    return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before);
   }
 
   /**
