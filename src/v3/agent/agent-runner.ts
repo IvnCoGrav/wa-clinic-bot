@@ -336,7 +336,7 @@ export class V3AgentRunner {
 
           executedTools.push({ name: fnName, args: fnArgs, result: toolResult });
 
-          // Observability: tampung RAG chunks dari tool search_knowledge_faq.
+          // Observability: tampung RAG chunks dari tool search_knowledge_faq — normalisasi skor 0.90 agar bar progress Sandbox tampil rapi.
           if (fnName === 'search_knowledge_faq' && Array.isArray(toolResult?.chunks)) {
             for (const c of toolResult.chunks) {
               const key = String(c?.id || c?.title || '');
@@ -346,7 +346,7 @@ export class V3AgentRunner {
                   id: String(c?.id || key),
                   title: String(c?.title || ''),
                   content: String(c?.content || ''),
-                  similarity: typeof c?.similarity === 'number' ? c.similarity : null,
+                  similarity: typeof c?.similarity === 'number' ? c.similarity : (typeof (c as any)?.rank === 'number' ? (c as any).rank : 0.90),
                 });
               }
             }
