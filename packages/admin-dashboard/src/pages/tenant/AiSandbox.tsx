@@ -673,7 +673,7 @@ export const AiSandbox: React.FC = () => {
                             <div className="flex justify-between items-center">
                               <span className="text-xs font-bold text-[#008069]">{chunk.title}</span>
                               <div className="flex items-center space-x-2">
-                                <span className="text-[10px] text-[#8696a0] font-mono">Similarity: {(chunk.score || 0.85).toFixed(2)}</span>
+                                <span className="text-[10px] text-[#8696a0] font-mono">Similarity: {(chunk.similarity ?? chunk.score ?? 0).toFixed(2)}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleStartEdit(chunk)}

@@ -13,6 +13,7 @@ export interface KnowledgeFaqChunk {
   content: string;
   /** Skor relevansi FTS (bisa null bila dari fallback in-memory). */
   similarity: number | null;
+  score?: number | null;
 }
 
 export interface SearchKnowledgeFaqOutput {
@@ -59,7 +60,8 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
       id: r.id,
       title: r.title,
       content: r.content,
-      similarity: typeof r.similarity === 'number' ? r.similarity : (typeof r.rank === 'number' ? r.rank : null),
+      similarity: typeof r.similarity === 'number' ? r.similarity : (typeof r.rank === 'number' ? r.rank : (typeof r.score === 'number' ? r.score : null)),
+      score: typeof r.score === 'number' ? r.score : (typeof r.similarity === 'number' ? r.similarity : (typeof r.rank === 'number' ? r.rank : null)),
     }));
 
     if (chunks.length === 0) {
