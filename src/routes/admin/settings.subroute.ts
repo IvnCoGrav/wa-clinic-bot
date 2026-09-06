@@ -315,17 +315,24 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { scenario, customerMessage, idealResponse, tags, isActive } = request.body || {};
-      if (!scenario || !customerMessage || !idealResponse) {
+      const cleanScenario = typeof scenario === 'string' ? scenario.trim() : '';
+      const cleanCustomerMessage = typeof customerMessage === 'string' ? customerMessage.trim() : '';
+      const cleanIdealResponse = typeof idealResponse === 'string' ? idealResponse.trim() : '';
+      const cleanTags = Array.isArray(tags)
+        ? tags.filter((t: unknown) => typeof t === 'string').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
+        : [];
+
+      if (!cleanScenario || !cleanCustomerMessage || !cleanIdealResponse) {
         return reply.status(400).send({ error: 'Skenario, Pesan Pasien, dan Respon Ideal wajib diisi' });
       }
 
       const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
       const created = await FewShotExemplarBank.createExemplar(
         {
-          scenario,
-          customerMessage,
-          idealResponse,
-          tags: tags || [],
+          scenario: cleanScenario,
+          customerMessage: cleanCustomerMessage,
+          idealResponse: cleanIdealResponse,
+          tags: cleanTags,
           isActive: isActive !== false,
         },
         tenantId
@@ -343,6 +350,42 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         success: true,
         message: 'Contoh percakapan berhasil ditambahkan!',
         data: created,
+      });
+    }
+  );
+
+  /**
+   * PUT /api/admin/few-shots/reorder — ubah urutan prioritas exemplar secara batch.
+   */
+  fastify.put(
+    '/api/admin/few-shots/reorder',
+    async (
+      request: FastifyRequest<{
+        Body: { orderedIds?: unknown };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { orderedIds } = request.body || {};
+      if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== 'string' || !id.trim())) {
+        return reply.status(400).send({ error: 'orderedIds wajib berupa array berisi id string' });
+      }
+
+      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const reordered = await FewShotExemplarBank.reorderExemplars(orderedIds as string[], tenantId);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'FEW_SHOT_REORDER',
+        targetId: 'ALL',
+        payload: { orderedIds },
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Urutan contoh percakapan berhasil diperbarui!',
+        data: reordered,
       });
     }
   );
@@ -368,8 +411,10 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
+      const body = request.body || {};
+
       const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
-      const updated = await FewShotExemplarBank.updateExemplar(id, request.body || {}, tenantId);
+      const updated = await FewShotExemplarBank.updateExemplar(id, body, tenantId);
 
       if (!updated) {
         return reply.status(404).send({ error: 'Contoh percakapan tidak ditemukan' });
