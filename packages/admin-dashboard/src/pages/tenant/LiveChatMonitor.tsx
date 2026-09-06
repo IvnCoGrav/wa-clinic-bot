@@ -405,6 +405,11 @@ export const LiveChatMonitor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const activeThreadRequestIdRef = useRef(0);
+  // Cursor pagination riwayat lama (infinite scroll up)
+  const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [isDeepSearching, setIsDeepSearching] = useState(false);
+  const oldestMessageCursorRef = useRef<string | null>(null);
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -1368,12 +1373,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const loadThread = async (conversationId: string) => {
     const reqId = ++activeThreadRequestIdRef.current;
     setIsThreadLoading(true);
+    // Reset cursor pagination setiap ganti/refresh percakapan
+    setHasMoreOlderMessages(false);
+    setIsLoadingOlder(false);
+    oldestMessageCursorRef.current = null;
     try {
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
+      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages?limit=50`);
       if (activeThreadRequestIdRef.current !== reqId || selectedIdRef.current !== conversationId) {
         return;
       }
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+      setHasMoreOlderMessages(!!(res as any)?.hasMore);
+      const cursor = (res as any)?.oldestCursor as string | undefined;
+      oldestMessageCursorRef.current = cursor || (list.length > 0 ? String((list[0] as any)?.created_at || '') || null : null);
       
       // Client-side deduplication — hanya duplikat nyata: id/wa_message_id sama, atau teks identik <2s, atau media URL sama <2s. Dua foto berbeda tidak pernah dianggap duplikat.
       const deduped: ChatMessage[] = [];
@@ -1413,6 +1425,105 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     } finally {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         setIsThreadLoading(false);
+      }
+    }
+  };
+
+  // Muat batch riwayat lama (cursor pagination) + scroll anchoring agar posisi baca tidak melonjak
+  const loadOlderMessages = async () => {
+    const conversationId = selectedIdRef.current;
+    const el = chatContainerRef.current;
+    if (!conversationId || !el || isLoadingOlder || !hasMoreOlderMessages || !oldestMessageCursorRef.current) {
+      return;
+    }
+    setIsLoadingOlder(true);
+    const prevScrollHeight = el.scrollHeight;
+    const prevScrollTop = el.scrollTop;
+    try {
+      const res = await apiRequest(
+        `/api/admin/live-chat/conversations/${conversationId}/messages?limit=50&before=${encodeURIComponent(oldestMessageCursorRef.current)}`
+      );
+      if (selectedIdRef.current !== conversationId) return;
+      const older: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+      setHasMoreOlderMessages(!!(res as any)?.hasMore);
+      const cursor = (res as any)?.oldestCursor as string | undefined;
+      if (older.length > 0) {
+        oldestMessageCursorRef.current = cursor || String((older[0] as any)?.created_at || '') || oldestMessageCursorRef.current;
+        const mapped = older.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => String(m.id)));
+          const fresh = mapped.filter((m) => {
+            const wa = String((m as any).wa_message_id || (m as any).waMessageId || '');
+            if (seen.has(String(m.id))) return false;
+            if (wa && prev.some((p) => String((p as any).wa_message_id || (p as any).waMessageId || '') === wa)) return false;
+            return true;
+          });
+          return [...fresh, ...prev];
+        });
+      } else if (!(res as any)?.hasMore) {
+        setHasMoreOlderMessages(false);
+      }
+      // Scroll anchoring: kompensasi selisih tinggi agar pandangan tetap di pesan yang sama
+      requestAnimationFrame(() => {
+        const target = chatContainerRef.current;
+        if (target && selectedIdRef.current === conversationId) {
+          target.scrollTop = prevScrollTop + (target.scrollHeight - prevScrollHeight);
+        }
+      });
+    } catch (err: any) {
+      console.error('Failed to load older messages:', err);
+    } finally {
+      if (selectedIdRef.current === conversationId) {
+        setIsLoadingOlder(false);
+      }
+    }
+  };
+
+  // Deep search: muat batch riwayat lama hingga kata kunci ditemukan / riwayat habis
+  const handleDeepSearchInHistory = async () => {
+    const conversationId = selectedIdRef.current;
+    const q = effectiveInChatQuery;
+    if (!conversationId || !q || isDeepSearching || isLoadingOlder) return;
+    setIsDeepSearching(true);
+    try {
+      let cursor = oldestMessageCursorRef.current;
+      let guard = 0;
+      while (cursor && guard < 20) {
+        guard++;
+        const res = await apiRequest(
+          `/api/admin/live-chat/conversations/${conversationId}/messages?limit=50&before=${encodeURIComponent(cursor)}`
+        );
+        if (selectedIdRef.current !== conversationId) return;
+        const batch: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+        const hasMore = !!(res as any)?.hasMore;
+        const nextCursor = (res as any)?.oldestCursor as string | undefined;
+        if (batch.length === 0) {
+          setHasMoreOlderMessages(hasMore);
+          if (!hasMore) oldestMessageCursorRef.current = null;
+          break;
+        }
+        cursor = nextCursor || String((batch[0] as any)?.created_at || '') || null;
+        oldestMessageCursorRef.current = cursor;
+        setHasMoreOlderMessages(hasMore);
+        const mapped = batch.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => String(m.id)));
+          const fresh = mapped.filter((m) => {
+            const wa = String((m as any).wa_message_id || (m as any).waMessageId || '');
+            if (seen.has(String(m.id))) return false;
+            if (wa && prev.some((p) => String((p as any).wa_message_id || (p as any).waMessageId || '') === wa)) return false;
+            return true;
+          });
+          return [...fresh, ...prev];
+        });
+        if (batch.some((m) => ((m as any)?.content || '').toLowerCase().includes(q))) break;
+        if (!hasMore) break;
+      }
+    } catch (err: any) {
+      console.error('Failed deep search history:', err);
+    } finally {
+      if (selectedIdRef.current === conversationId) {
+        setIsDeepSearching(false);
       }
     }
   };
@@ -4121,6 +4232,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     if (selectedIdRef.current) {
                       saveConversationScroll(selectedIdRef.current, el.scrollTop, isNear);
                     }
+                    // Infinite scroll up: capai puncak → muat riwayat lama
+                    if (el.scrollTop < 80 && hasMoreOlderMessages && !isLoadingOlder) {
+                      loadOlderMessages();
+                    }
                   }}
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
@@ -4131,6 +4246,29 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     overscrollBehavior: 'contain',
                   }}
                 >
+                  {/* Indikator riwayat lama di puncak chat */}
+                  {hasMoreOlderMessages && isLoadingOlder && (
+                    <div className="mx-auto w-fit flex items-center gap-2 px-3 py-1.5 my-1 rounded-full bg-white/90 dark:bg-[#202c33]/90 border border-[#e9edef] dark:border-[#2a3942] shadow-xs text-[11px] text-[#667781] dark:text-[#8696a0] animate-fadeIn select-none">
+                      <Loader size={12} className="animate-spin text-[#008069]" />
+                      <span>Memuat riwayat chat sebelumnya...</span>
+                    </div>
+                  )}
+                  {hasMoreOlderMessages && !isLoadingOlder && messages.length > 0 && (
+                    <div className="mx-auto w-fit my-1">
+                      <button
+                        type="button"
+                        onClick={loadOlderMessages}
+                        className="px-3 py-1.5 rounded-full bg-white/90 dark:bg-[#202c33]/90 border border-[#e9edef] dark:border-[#2a3942] shadow-xs text-[11px] font-semibold text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/15 transition active:scale-95 cursor-pointer"
+                      >
+                        ↑ Muat pesan sebelumnya
+                      </button>
+                    </div>
+                  )}
+                  {!hasMoreOlderMessages && !isThreadLoading && messages.length > 50 && (
+                    <div className="mx-auto w-fit my-1 px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-[10px] text-[#8696a0] select-none">
+                      Awal dari riwayat percakapan
+                    </div>
+                  )}
                   {/* Floating In-Chat Search Navigation Bar — terpisah dari pencarian daftar */}
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
                     <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-amber-50/95 backdrop-blur-md border border-amber-300 shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-amber-900 animate-fadeIn select-none">
@@ -4173,6 +4311,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <span className="truncate">
                         Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
                       </span>
+                      {hasMoreOlderMessages && (
+                        <button
+                          type="button"
+                          onClick={handleDeepSearchInHistory}
+                          disabled={isDeepSearching}
+                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
+                        >
+                          {isDeepSearching ? (
+                            <Loader size={11} className="animate-spin" />
+                          ) : (
+                            <Search size={11} />
+                          )}
+                          <span>{isDeepSearching ? 'Mencari...' : 'Cari di riwayat lama'}</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         title="Tutup"

@@ -234,15 +234,36 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/live-chat/conversations/:id/messages
-   * Thread pesan sebuah percakapan (kronologis).
+   * Thread pesan sebuah percakapan (kronologis) + cursor pagination opsional:
+   * ?limit=50&before=<ISO timestamp>. Tanpa param = 50 pesan terakhir (identik legacy).
    */
   fastify.get(
     '/api/admin/live-chat/conversations/:id/messages',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Querystring: { limit?: string; before?: string };
+      }>,
+      reply
+    ) => {
       const { id } = request.params;
       try {
-        const messages = await liveChatService.getConversationMessages(id, DEFAULT_TENANT_ID);
-        return reply.status(200).send({ success: true, count: messages.length, data: messages });
+        const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
+        const before = request.query.before?.trim() || undefined;
+        const { messages, hasMore } = await liveChatService.getConversationMessagesPaged(
+          id,
+          DEFAULT_TENANT_ID,
+          limit,
+          before
+        );
+        const oldest = messages.length > 0 ? (messages[0] as any)?.created_at : null;
+        return reply.status(200).send({
+          success: true,
+          count: messages.length,
+          data: messages,
+          hasMore,
+          oldestCursor: oldest ? new Date(oldest).toISOString() : null,
+        });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }
