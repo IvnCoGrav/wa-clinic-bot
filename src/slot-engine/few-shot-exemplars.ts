@@ -1,5 +1,6 @@
 import { CustomerSlate, ExtractedEntities } from './types';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { GOLD_FEW_SHOT_EXEMPLARS } from './gold-few-shot-exemplars';
 
 export interface FewShotExemplar {
   id: string;
@@ -92,6 +93,12 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     isActive: true,
     sortOrder: 7,
   },
+  // =========================================================================
+  // KOLEKSI EMAS (25 contoh master Bidan Yusi dari 532 dialog riil) — lihat
+  // ./gold-few-shot-exemplars.ts. Ditambahkan di belakang 7 SOP inti agar
+  // instalasi baru / reset SOP langsung mendapat bank contoh yang lengkap.
+  // =========================================================================
+  ...GOLD_FEW_SHOT_EXEMPLARS,
 ];
 
 // In-Memory dynamic cache per-tenant (0-latency runtime access)
@@ -159,6 +166,48 @@ export class FewShotExemplarBank {
         where: { tenant_id: tenantId },
         orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
       });
+
+      // AUTO-SEED NON-DESTRUKTIF: tabel kosong + tenant benar-benar baru
+      // (belum ada riwayat kelola FEW_SHOT_* di audit_logs) → seed 7 default
+      // SOP dengan UUID riil. Jika admin pernah mengelola bank lalu
+      // mengosongkannya (ada riwayat audit / flag empty-state), hormati
+      // kekosongan tersebut — JANGAN resurrect default sepihak.
+      if (rows.length === 0 && !tenantEmptyStateCache.get(tenantId)) {
+        let hasPriorActivity = false;
+        try {
+          const prior = await (prisma as any).auditLog?.findFirst?.({
+            where: { tenant_id: tenantId, action: { startsWith: 'FEW_SHOT_' } },
+          });
+          hasPriorActivity = !!prior;
+        } catch {
+          hasPriorActivity = false;
+        }
+        if (!hasPriorActivity) {
+          try {
+            const seeded: FewShotExemplar[] = [];
+            for (let i = 0; i < DEFAULT_FEW_SHOT_EXEMPLARS.length; i++) {
+              const d = DEFAULT_FEW_SHOT_EXEMPLARS[i];
+              const created = await prisma.fewShotExemplar.create({
+                data: {
+                  tenant_id: tenantId,
+                  scenario: d.scenario,
+                  customer_message: d.customerMessage,
+                  ideal_response: d.idealResponse,
+                  tags: d.tags,
+                  is_active: true,
+                  sort_order: i + 1,
+                },
+              });
+              seeded.push(mapRowToExemplar(created));
+            }
+            tenantExemplarsCache.set(tenantId, seeded);
+            tenantEmptyStateCache.set(tenantId, false);
+            return seeded;
+          } catch (seedErr: any) {
+            console.warn('[FEW SHOT BANK] Auto-seed gagal, fallback in-memory:', seedErr.message);
+          }
+        }
+      }
 
       const mapped = rows.map(mapRowToExemplar);
       tenantExemplarsCache.set(tenantId, mapped);
@@ -383,49 +432,92 @@ export class FewShotExemplarBank {
   }
 
   /**
-   * Mereset daftar exemplar ke default sistem.
-   * PENTING: mengembalikan record dengan ID ASLI dari database (UUID),
-   * bukan id statis DEFAULT_FEW_SHOT_EXEMPLARS — agar Edit/Delete pasca-reset
+   * Memulihkan contoh SOP klinik bawaan secara ADDITIVE / non-destruktif.
+   * - Exemplar sistem yang sudah ada (dicocokkan via teks scenario kanonik)
+   *   diperbarui isinya + diaktifkan kembali, ID & sort_order dipertahankan.
+   * - Exemplar sistem yang hilang dibuat ulang di urutan akhir.
+   * - Exemplar KUSTOM buatan admin TIDAK PERNAH dihapus/diubah.
+   * Mengembalikan record dengan ID ASLI dari database (UUID), bukan id
+   * statis DEFAULT_FEW_SHOT_EXEMPLARS — agar Edit/Delete pasca-pulihkan
    * tidak menghasilkan 404 karena ID mismatch.
    */
   public static async resetToDefaults(tenantId: string = DEFAULT_TENANT_ID): Promise<FewShotExemplar[]> {
-    let createdRows: any[] = [];
-    let dbOk = false;
     try {
       const { prisma } = await import('../db/client');
-      await prisma.fewShotExemplar.deleteMany({ where: { tenant_id: tenantId } });
+      const existing = await prisma.fewShotExemplar.findMany({
+        where: { tenant_id: tenantId },
+      });
+      const byScenario = new Map((existing || []).map((r: any) => [r.scenario, r]));
+      let maxSort = (existing || []).reduce((m: number, r: any) => Math.max(m, r.sort_order ?? 0), 0);
 
-      createdRows = [];
       for (let i = 0; i < DEFAULT_FEW_SHOT_EXEMPLARS.length; i++) {
         const d = DEFAULT_FEW_SHOT_EXEMPLARS[i];
-        const created = await prisma.fewShotExemplar.create({
-          data: {
-            tenant_id: tenantId,
-            scenario: d.scenario,
-            customer_message: d.customerMessage,
-            ideal_response: d.idealResponse,
-            tags: d.tags,
-            is_active: true,
-            sort_order: i + 1,
-          },
-        });
-        createdRows.push(created);
+        const found = byScenario.get(d.scenario);
+        if (found) {
+          await prisma.fewShotExemplar.update({
+            where: { id: found.id },
+            data: {
+              customer_message: d.customerMessage,
+              ideal_response: d.idealResponse,
+              tags: d.tags,
+              is_active: true,
+            },
+          });
+        } else {
+          maxSort += 1;
+          await prisma.fewShotExemplar.create({
+            data: {
+              tenant_id: tenantId,
+              scenario: d.scenario,
+              customer_message: d.customerMessage,
+              ideal_response: d.idealResponse,
+              tags: d.tags,
+              is_active: true,
+              sort_order: maxSort,
+            },
+          });
+        }
       }
-      dbOk = true;
     } catch (err: any) {
-      console.warn('[FEW SHOT BANK] DB reset failed, resetting in-memory only:', err.message);
+      console.warn('[FEW SHOT BANK] DB restore gagal, merge in-memory saja:', err.message);
+      // DB offline: merge non-destruktif pada cache in-memory.
+      const current =
+        tenantExemplarsCache.get(tenantId) ||
+        DEFAULT_FEW_SHOT_EXEMPLARS.map((d) => ({ ...d, tags: [...d.tags], tenantId }));
+      const merged = [...current];
+      let maxSort = merged.reduce((m, e) => Math.max(m, e.sortOrder ?? 0), 0);
+      for (const d of DEFAULT_FEW_SHOT_EXEMPLARS) {
+        const idx = merged.findIndex((e) => e.scenario === d.scenario);
+        if (idx >= 0) {
+          merged[idx] = {
+            ...merged[idx],
+            customerMessage: d.customerMessage,
+            idealResponse: d.idealResponse,
+            tags: [...d.tags],
+            isActive: true,
+            updatedAt: new Date(),
+          };
+        } else {
+          maxSort += 1;
+          merged.push({
+            ...d,
+            tags: [...d.tags],
+            tenantId,
+            sortOrder: maxSort,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+      }
+      tenantExemplarsCache.set(tenantId, merged);
+      tenantEmptyStateCache.set(tenantId, merged.length === 0);
+      return merged;
     }
 
-    let defaults: FewShotExemplar[];
-    if (dbOk) {
-      defaults = createdRows.map(mapRowToExemplar);
-    } else {
-      defaults = DEFAULT_FEW_SHOT_EXEMPLARS.map((d) => ({ ...d, tenantId }));
-    }
-
-    tenantExemplarsCache.set(tenantId, defaults);
-    tenantEmptyStateCache.set(tenantId, defaults.length === 0);
-    return defaults;
+    // DB sukses: baca ulang agar ID riil + contoh kustom ikut kembali.
+    const refreshed = await this.getAllExemplars(tenantId, true);
+    tenantEmptyStateCache.set(tenantId, refreshed.length === 0);
+    return refreshed;
   }
 
   /**

@@ -1,5 +1,4 @@
 import { CustomerSlate } from './types';
-import { sanitizeScheduleAffirmations } from '../utils/language-sanitizer';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -103,8 +102,9 @@ export class ResponseValidator {
       cleaned = cleaned.replace(/\bmau\s+dicobakan\s+yang\b/gi, 'mau coba paket');
     }
 
-    // 6b. Sanitasi Afirmasi Jadwal Sepihak ("Tentu bisa, kami bantu cekkan...")
-    cleaned = sanitizeScheduleAffirmations(cleaned);
+    // AI-FIRST (Minimal-Regex Mandate): kalimat pembuka alami LLM tidak lagi
+    // dipotong di tengah jalan. Penegasan jadwal dikendalikan di hulu via
+    // prompt PersonaComposer (anti-afirmasi), bukan regex hilir.
 
     // 7. Sanitasi Pengulangan Paragraf Ongkir (jika ongkir sudah pernah disampaikan)
     if (options?.isOngkirAlreadySent) {

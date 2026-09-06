@@ -36,6 +36,7 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 - **SaaS-readiness**: any new feature/config/tuning must be tenant-aware — business data (brand names, message templates, system prompts) MUST come from DB, never hardcoded. Pengecualian (hardcode sementara / tunda tenant-aware) WAJIB lewat **Confirmation Gate** — stop & konfirmasi ke user dengan pros/cons — bila solusi tenant-aware butuh infrastruktur baru / LOC sangat besar / migrasi berisiko. See `.agents/skills/saas-readiness/SKILL.md` and `docs/SAAS_READINESS_AUDIT.md`.
 - **Admin dashboard** (`packages/admin-dashboard`, React): never `window.confirm`/`alert` — use `useUiFeedback`. See `.agents/skills/no-native-confirm-alert/SKILL.md`.
 - **Known Issues Mandate**: Setiap temuan issue, bug, limitation, atau tech debt yang belum terselesaikan / sengaja ditunda WAJIB dicatat di satu tempat terpusat di `docs/KNOWN_ISSUES.md`.
+- **Mandat Minimalisasi Regex & Larangan Mutilasi Semantik (MANDATORY)**: DILARANG KERAS menggunakan regex sebagai gatekeeper intent pengguna atau untuk memotong/mengamputasi kata/nominal di tengah-tengah kalimat bahasa alami LLM (*Mid-Sentence Mutilation Ban* seperti kasus `danya` dan `menjadi ,`). Kendali perilaku LLM WAJIB diselesaikan di level Prompt/Grounding/Few-Shot. Regex HANYA diizinkan untuk pembersihan teknis mesin non-semantik (tag thinking AI, format 1-bintang markdown, tag iklan, nomor telepon).
 
 ## Monorepo (no npm workspaces)
 

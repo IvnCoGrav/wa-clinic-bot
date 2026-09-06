@@ -78,7 +78,9 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan untuk hari Sabtu ya.');
     });
 
-    it('should sanitize over-affirmation "Tentu bisa, kami bantu cekkan..." into neutral schedule check (via ResponseValidator)', async () => {
+    it('validator tidak memotong pembuka alami "Tentu bisa..." (AI-first, Minimal-Regex Mandate)', async () => {
+      // AI-FIRST: kalimat pembuka alami LLM tidak lagi diamputasi di tengah jalan.
+      // Penegasan jadwal dikendalikan di hulu via prompt PersonaComposer (anti-afirmasi).
       const affirmationText = 'Tentu bisa, kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bun 😊 Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?';
       const { ResponseValidator } = await import('../../src/slot-engine/response-validator');
       const baseSlateForTest: any = {
@@ -96,8 +98,8 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       };
       const validation = ResponseValidator.validate(affirmationText, baseSlateForTest, {});
       const cleaned = validation.sanitizedReply || affirmationText;
-      expect(cleaned).not.toContain('Tentu bisa');
-      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal');
+      expect(cleaned).toContain('Tentu bisa');
+      expect(cleaned).toContain('kami bantu cekkan ketersediaan jadwal');
     });
   });
 

@@ -6,6 +6,13 @@ export interface GetCatalogInput {
   childAgeMonths?: number;
   symptoms?: string[];
   specificTreatmentName?: string;
+  /**
+   * Sinyal intensi harga dari LLM (AI-First): true bila customer menanyakan
+   * harga/biaya/tarif/ongkir/promo atau menyebutkan nominal ("60rb ya",
+   * "harga berapa"). False bila hanya konsultasi keluhan / kecocokan usia.
+   * Harga nominal HANYA dialirkan ke prompt bila true.
+   */
+  inquirePrice?: boolean;
 }
 
 export interface CatalogTreatmentDetail {
@@ -52,6 +59,10 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         specificTreatmentName: {
           type: 'string',
           description: 'Nama treatment spesifik yang ditanyakan oleh customer (misal: "Pijat Bayi Ceria", "Pijat Bayi Pulih Ceria", "Cukur Rambut Bayi").'
+        },
+        inquirePrice: {
+          type: 'boolean',
+          description: 'Set true jika customer menanyakan harga/biaya/tarif/ongkir, bertanya promo, atau menyebutkan nominal angka tertentu (misal: "60rb ya", "harga berapa", "biayanya?"). Set false jika customer hanya berkonsultasi keluhan atau menanyakan kecocokan usia.'
         }
       }
     }
@@ -59,7 +70,10 @@ export const GET_CATALOG_TOOL_SCHEMA = {
 };
 
 export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCatalogOutput> {
-  const { category, childAgeMonths, symptoms = [], specificTreatmentName } = input;
+  const { category, childAgeMonths, symptoms = [], specificTreatmentName, inquirePrice } = input;
+  // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
+  // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
+  const showPrices = inquirePrice === true;
 
   try {
     const allServices = treatmentCatalogService.getAllServices(true);
@@ -121,20 +135,45 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
     // Urutkan yang direkomendasikan di atas
     formattedTreatments.sort((a, b) => (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0));
 
+    const formatRp = (n: number): string => `Rp ${n.toLocaleString('id-ID')}`;
+    const findTarget = (idFragment: string): CatalogTreatmentDetail | undefined =>
+      formattedTreatments.find((t) => t.id.includes(idFragment));
+
+    // Rekomendasi berbasis data katalog DINAMIS (Anti-Hardcode): nominal harga
+    // hanya disisipkan bila showPrices. Tanpa itu, fokus pada protokol medis,
+    // manfaat stimulasi, dan rincian perawatan.
     if (hasFluOrDigestiveSymptoms || (specificTreatmentName && /pulih|bapil|batuk|pilek|kembung/i.test(specificTreatmentName))) {
-      recommendationReason = 'Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung) promo Rp 70.000 (normal Rp 90.000, durasi 40 menit).\n\nRincian yang didapatkan si kecil:\n1. Pijat stimulasi seluruh tubuh (full body massage bayi) oleh Bidan ber-STR aktif\n2. Terapi akupresur titik pernapasan (dada & punggung) khusus melegakan batuk/flu\n3. Penggunaan double aromaterapi / balsem herbal khusus bayi\n4. Opsi Tambahan (Add-on): Sinar Moksa (terapi sinar hangat inframerah 15 menit, promo +Rp 10.000) untuk membantu mengencerkan dahak & lendir. Paket Combo Pulih Ceria + Sinar Moksa total Promo Rp 80.000 (normal Rp 105.000).';
+      const target = findTarget('pulih-ceria');
+      const priceLine = target && showPrices
+        ? ` promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, durasi ${target.durationMinutes} menit).`
+        : '.';
+      const moksa = allServices.find((s) => s.id.includes('moksa'));
+      const comboLine = target && moksa && showPrices
+        ? ` Paket Combo Pulih Ceria + Sinar Moksa total Promo ${formatRp(target.promoPrice + moksa.promoPrice)} (normal ${formatRp(target.originalPrice + moksa.originalPrice)}).`
+        : '';
+      recommendationReason = `Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung)${priceLine}\n\nRincian yang didapatkan si kecil:\n1. Pijat stimulasi seluruh tubuh (full body massage bayi) oleh Bidan kami\n2. Terapi akupresur titik pernapasan (dada & punggung) khusus melegakan batuk/flu\n3. Penggunaan double aromaterapi / balsem herbal khusus bayi\n4. Opsi Tambahan (Add-on): Sinar Moksa (terapi sinar hangat inframerah ${moksa?.durationMinutes ?? 15} menit${showPrices && moksa ? `, promo +${formatRp(moksa.promoPrice)}` : ''}) untuk membantu mengencerkan dahak & lendir.${comboLine}`;
     } else if (hasEatingIssues) {
-      recommendationReason = 'Untuk keluhan susah makan / GTM, paket yang tepat adalah Pijat Lahap Juara promo Rp 75.000 (normal Rp 95.000, 40 menit). Mencakup pijat relaksasi dan stimulasi titik pencernaan untuk nafsu makan.';
+      const target = findTarget('lahap-juara');
+      const priceLine = target && showPrices
+        ? ` promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, ${target.durationMinutes} menit).`
+        : '.';
+      recommendationReason = `Untuk keluhan susah makan / GTM, paket yang tepat adalah Pijat Lahap Juara${priceLine} Mencakup pijat relaksasi dan stimulasi titik pencernaan untuk nafsu makan.`;
     } else if (hasSleepOrRelaxationInquiry) {
-      recommendationReason = 'Untuk membantu si kecil lebih rileks dan tidur nyenyak, paket Pijat Bayi Ceria (Rileksasi) sangat cocok promo Rp 60.000 (normal Rp 80.000, 40 menit). Mencakup pijat relaksasi seluruh tubuh bayi sehat.';
+      const target = findTarget('baby-massage-ceria');
+      const priceLine = target && showPrices
+        ? ` sangat cocok promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, ${target.durationMinutes} menit).`
+        : ' sangat cocok.';
+      recommendationReason = `Untuk membantu si kecil lebih rileks dan tidur nyenyak, paket Pijat Bayi Ceria (Rileksasi)${priceLine} Mencakup pijat relaksasi seluruh tubuh bayi sehat.`;
     }
 
-    const summaryList = formattedTreatments.slice(0, 4).map(t => 
-      `• *${t.name}*: Promo *Rp ${t.promoPrice.toLocaleString('id-ID')}* (Normal *Rp ${t.originalPrice.toLocaleString('id-ID')}*, ${t.durationMinutes} menit)\n  Rincian: ${t.description}`
+    const summaryList = formattedTreatments.slice(0, 4).map(t =>
+      showPrices
+        ? `• *${t.name}*: Promo *${formatRp(t.promoPrice)}* (Normal *${formatRp(t.originalPrice)}*, ${t.durationMinutes} menit)\n  Rincian: ${t.description}`
+        : `• *${t.name}* (${t.durationMinutes} menit)\n  Rincian: ${t.description}`
     ).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;
-    if (formattedTreatments.length === 1 || specificTreatmentName) {
+    if (showPrices && (formattedTreatments.length === 1 || specificTreatmentName)) {
       const target = formattedTreatments[0];
       if (target) {
         suggestedPriceReply = TEMPLATES.priceInfo({

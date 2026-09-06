@@ -159,6 +159,27 @@ async function startSimulator() {
       );
       const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
+      // Simpan pesan INBOUND customer sebelum state machine agar histori simetris
+      // (isFollowUp tidak false-negative saat DB offline — mengandalkan
+      // in-memory fallback messageService). Best-effort, jangan gagalkan simulasi.
+      try {
+        const { messageService } = await import('../services/message.service');
+        const { Direction } = await import('@prisma/client');
+        const inboundText = (incomingMessage as any).text?.body
+          || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]` : '[MEDIA/UNKNOWN]');
+        if (inboundText && inboundText.trim()) {
+          await messageService.logMessage({
+            tenantId: DEFAULT_TENANT_ID,
+            conversationId: conversation.id,
+            direction: Direction.INBOUND,
+            content: inboundText,
+            waMessageId: incomingMessage.id,
+            payloadRaw: incomingMessage,
+          });
+          (incomingMessage as any)._preLogged = true;
+        }
+      } catch {}
+
       // Process state machine message
       await cliStateMachine.processMessage({
         tenantId: DEFAULT_TENANT_ID,
