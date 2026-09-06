@@ -5,7 +5,8 @@ import path from 'path';
 export type LlmFlowType =
   | 'SLOT_EXTRACTOR'
   | 'SLOT_GENERATOR'
-  | 'SLOT_FAST_FAQ';
+  | 'SLOT_FAST_FAQ'
+  | 'V3_AGENT';
 
 export interface LlmExecutionRecord {
   id: string;
@@ -262,6 +263,7 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
     SLOT_EXTRACTOR: 1,
     SLOT_GENERATOR: 2,
     SLOT_FAST_FAQ: 2,
+    V3_AGENT: 3,
   };
 
   for (const [phone, phoneLogs] of phoneMap.entries()) {

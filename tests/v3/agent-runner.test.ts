@@ -131,6 +131,69 @@ describe('V3 Agent Runner End-to-End Suite', () => {
     expect(result.replyText).not.toContain('Kita perlu menyusun');
   });
 
+  it('Skenario 4: Observability — RAG chunks, exemplars dinamis, prompt & token tercatat', async () => {
+    const { knowledgeBaseService } = await import('../../src/services/knowledge.service');
+    await knowledgeBaseService.addFaqItem({
+      tenantId: 'default-tenant',
+      category: 'MEDIS',
+      question: 'Apakah boleh pijat saat tumbuh gigi?',
+      answer: 'Boleh Bunda, pijat lembut membantu meredakan rewel saat tumbuh gigi.',
+    });
+
+    (axios.post as any)
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_faq_1',
+                    type: 'function',
+                    function: {
+                      name: 'search_knowledge_faq',
+                      arguments: JSON.stringify({ query: 'pijat saat tumbuh gigi' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { role: 'assistant', content: 'Boleh Bunda 😊 Pijat lembut aman saat tumbuh gigi.' } }],
+          usage: { prompt_tokens: 200, completion_tokens: 30 },
+        },
+      });
+
+    const result = await V3AgentRunner.processMessage({
+      customerId: 'mock-cust-4',
+      conversationId: 'mock-conv-4',
+      phone: '6281234567890',
+      chatId: '6281234567890@c.us',
+      incomingText: 'Apakah boleh pijat saat tumbuh gigi?',
+      history: [
+        { role: 'user', content: 'halo' },
+        { role: 'assistant', content: 'Halo Bunda! Selamat datang.' },
+      ],
+    });
+
+    expect(result.executedTools.some((t) => t.name === 'search_knowledge_faq')).toBe(true);
+    expect(result.retrievedChunks.length).toBeGreaterThan(0);
+    expect(result.retrievedChunks[0].title).toContain('tumbuh gigi');
+    expect(result.fewShotExemplars.length).toBeGreaterThan(0);
+    expect(result.systemPrompt).toContain('Bidan Yusi');
+    expect(result.tokens.total).toBe(350);
+    expect(result.tokens.prompt).toBe(300);
+    expect(result.tokens.completion).toBe(50);
+    expect(result.shouldSendReply).toBe(true);
+  });
+
   it('Skenario 3: Kondisi Darurat Medis (Tool escalate_to_human terpanggil & bot berhenti membalas)', async () => {
     (axios.post as any).mockResolvedValueOnce({
       data: {

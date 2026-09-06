@@ -659,7 +659,7 @@ function ConversationsSection() {
 interface LlmLogEntry {
   id: string;
   timestamp: string;
-  flowType: 'SLOT_EXTRACTOR' | 'SLOT_GENERATOR' | 'SLOT_FAST_FAQ';
+  flowType: 'SLOT_EXTRACTOR' | 'SLOT_GENERATOR' | 'SLOT_FAST_FAQ' | 'V3_AGENT';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -701,6 +701,8 @@ const getFlowBadge = (flowType: string) => {
       return { label: '2. Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
     case 'SLOT_FAST_FAQ':
       return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
+    case 'V3_AGENT':
+      return { label: '3. V3 Agent', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40' };
     default:
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
   }
@@ -1022,6 +1024,7 @@ function LlmLogsSection() {
             { id: 'SLOT_EXTRACTOR', label: '🎰 Slot Extractor' },
             { id: 'SLOT_GENERATOR', label: '🎯 Slot Generator' },
             { id: 'SLOT_FAST_FAQ', label: '⚡ Fast FAQ' },
+            { id: 'V3_AGENT', label: '🤖 V3 Agent' },
           ].map((f) => (
             <button
               key={f.id}
@@ -1287,8 +1290,8 @@ function LlmLogsSection() {
                                         </div>
                                       </div>
 
-                                      {/* STEP BODY — SLOT ENGINE ONLY */}
-                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ') && (
+                                      {/* STEP BODY — SLOT ENGINE & V3 AGENT */}
+                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_AGENT') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                             <div className="bg-violet-50/70 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/40 rounded-xl p-3 space-y-1">
@@ -1356,7 +1359,8 @@ function LlmLogsSection() {
                                       {/* GENERIC FALLBACK — legacy rehydrate */}
                                       {call.flowType !== 'SLOT_EXTRACTOR' &&
                                         call.flowType !== 'SLOT_GENERATOR' &&
-                                        call.flowType !== 'SLOT_FAST_FAQ' && (
+                                        call.flowType !== 'SLOT_FAST_FAQ' &&
+                                        call.flowType !== 'V3_AGENT' && (
                                           <div className="space-y-2.5 text-xs">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                               <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
