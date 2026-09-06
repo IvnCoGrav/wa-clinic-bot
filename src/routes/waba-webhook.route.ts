@@ -207,7 +207,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
               tenantId,
               conversationId: staleConversation.id,
               direction: 'INBOUND',
-              content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+              content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
               waMessageId: msg.messageId,
               payloadRaw: mergeWabaMedia(msg.rawPayload),
               isHistorical: true,
@@ -237,6 +237,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       });
 
       if (attributionResult.strippedText && msg.text) {
+        (msg as any).originalText = msg.text;
         msg.text = attributionResult.strippedText;
       }
 
@@ -246,7 +247,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           tenantId,
           conversationId: blockedConversation.id,
           direction: 'INBOUND',
-          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),
         });
@@ -260,7 +261,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         customer,
         conversation,
         tenantId,
-        content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+        content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
         waMessageId: msg.messageId,
         payloadRaw: mergeWabaMedia(msg.rawPayload),
       });
@@ -290,6 +291,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         timestamp: String(msg.timestamp),
         type: msg.type,
         text: msg.text ? { body: msg.text } : undefined,
+        originalText: (msg as any).originalText || msg.text,
         location: msg.location
           ? { latitude: msg.location.latitude, longitude: msg.location.longitude }
           : undefined,

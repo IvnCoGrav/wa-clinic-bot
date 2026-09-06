@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
 import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
+import { TEMPLATES } from '../../src/config/persona';
 
 vi.mock('axios');
 
@@ -41,16 +42,14 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
       .map((t) => t.trim())
       .filter(Boolean).length;
 
-  it('Test 1: Sapaan Pembuka (Turn-0) — hangat, kata ganti kami, ≤500 karakter', async () => {
-    mockAssistant(
-      'Halo Bunda! ✨\n\nPerkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nAda yang bisa saya bantu untuk layanan Homecare Bunda atau si kecil hari ini? 😊'
-    );
+  it('Test 1: Sapaan Pembuka (Turn-0) — gate deterministik TEMPLATES.greeting(), 0 token', async () => {
+    // Sapaan murni tidak lagi ke LLM: langsung template statis resmi.
     const result = await run('halo kak', 'mock-rules-1');
+    expect(result.replyText).toBe(TEMPLATES.greeting({ isIslamic: false }));
     expect(result.replyText).toContain('Halo Bunda');
-    expect(result.replyText).toContain('Homecare');
-    expect(result.replyText).toContain('kami bantu');
-    expect(result.replyText).not.toContain('saya bantu');
+    expect(result.replyText).toContain('Kalau boleh tau rumahnya dimana ya Bunda? 😊');
     expect(result.replyText.length).toBeLessThanOrEqual(500);
+    expect(axios.post).not.toHaveBeenCalled();
   });
 
   it('Test 2: Pertanyaan Lokasi (Turn-1) — Waru 30km, tanpa English leak, Bunda ≤2, ≤3 kalimat', async () => {

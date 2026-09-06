@@ -1008,10 +1008,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         tenantId: DEFAULT_TENANT_ID,
       });
 
-      // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail
+      // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail.
+      // text.body yang sudah di-strip dipakai khusus lapisan inferensi (LLM/NLU);
+      // salinan eksplisitnya tersedia sebagai cleanTextForAi.
       incomingMessage.originalText = bodyText;
       if (incomingMessage.text && attributionResult.strippedText) {
         incomingMessage.text.body = attributionResult.strippedText;
+        (incomingMessage as any).cleanTextForAi = attributionResult.strippedText;
+      } else if (incomingMessage.text) {
+        (incomingMessage as any).cleanTextForAi = incomingMessage.text.body;
       }
 
 
@@ -1086,7 +1091,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
@@ -1159,7 +1164,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
@@ -1267,7 +1272,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });

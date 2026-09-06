@@ -3,6 +3,8 @@ import { ALL_V3_TOOLS, executeToolByName, ToolExecutionContext } from '../tools/
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
 import { PersonaPromptBuilder } from './persona';
 import { OutputSanitizer } from '../guardrails/sanitizer';
+import { isPureLeadGreeting } from '../../utils/lead-greeting-detector';
+import { TEMPLATES } from '../../config/persona';
 import { getLlmEndpointConfig } from '../../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -16,6 +18,11 @@ export interface AgentRunnerInput {
   phone: string;
   chatId: string;
   incomingText: string;
+  /**
+   * Teks mentah asli customer (termasuk tag iklan Promo[...]) untuk DB audit
+   * trail. Jika kosong, incomingText dipakai sebagai fallback.
+   */
+  originalText?: string;
   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   forceModel?: string;
   skipDbLogging?: boolean;
@@ -121,13 +128,42 @@ export class V3AgentRunner {
       } catch (e) {}
     }
 
-    const isFollowUp = conversationHistory.length > 0;
+    const isFollowUp = conversationHistory.some((m) => m.role === 'assistant');
     const systemPrompt = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
       ...conversationHistory.slice(-6).map((h) => ({ role: h.role, content: h.content })),
       { role: 'user', content: incomingText },
     ];
+
+    // GATE DETERMINISTIK: sapaan pembuka murni (Turn-0) langsung dibalas template
+    // resmi tanpa LLM (0 token). Hanya bila asisten belum pernah membalas.
+    if (!isFollowUp) {
+      const leadCheck = isPureLeadGreeting(incomingText);
+      if (leadCheck.isLeadGreeting) {
+        const staticReply = TEMPLATES.greeting({ isIslamic: leadCheck.isIslamic });
+        if (conversationId && !input.skipDbLogging) {
+          try {
+            await prisma.message.create({
+              data: {
+                tenant_id: tenantId,
+                conversation_id: conversationId,
+                direction: 'INBOUND',
+                content: input.originalText || incomingText,
+                sender_type: 'CUSTOMER',
+              },
+            });
+          } catch (e) {}
+        }
+        return {
+          replyText: staticReply,
+          executedTools: [],
+          updatedSession: session,
+          shouldSendReply: true,
+          isEscalated: false,
+        };
+      }
+    }
 
     const executedTools: Array<{ name: string; args: any; result: any }> = [];
     let isEscalated = false;
@@ -294,7 +330,7 @@ export class V3AgentRunner {
               tenant_id: tenantId,
               conversation_id: conversationId,
               direction: 'INBOUND',
-              content: incomingText,
+              content: input.originalText || incomingText,
               sender_type: 'CUSTOMER',
             },
           });
