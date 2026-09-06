@@ -326,6 +326,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Skenario, Pesan Pasien, dan Respon Ideal wajib diisi' });
       }
 
+      // Prompt budget guard: cegah tempelan raksasa menjebol context window LLM.
+      if (cleanScenario.length > 150 || cleanCustomerMessage.length > 500 || cleanIdealResponse.length > 1000) {
+        return reply.status(400).send({
+          error: 'Panjang melebihi batas (skenario ≤150, pesan pasien ≤500, respon ideal ≤1000 karakter)',
+        });
+      }
+
       const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
       const created = await FewShotExemplarBank.createExemplar(
         {
@@ -413,8 +420,45 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       const body = request.body || {};
 
+      // Validasi ketat field yang dikirim (trim + batas panjang + sanitasi tags).
+      const cleanUpdate: {
+        scenario?: string;
+        customerMessage?: string;
+        idealResponse?: string;
+        tags?: string[];
+        isActive?: boolean;
+        sortOrder?: number;
+      } = {};
+      if (body.scenario !== undefined) {
+        const s = typeof body.scenario === 'string' ? body.scenario.trim() : '';
+        if (!s) return reply.status(400).send({ error: 'Skenario tidak boleh kosong' });
+        if (s.length > 150) return reply.status(400).send({ error: 'Skenario melebihi 150 karakter' });
+        cleanUpdate.scenario = s;
+      }
+      if (body.customerMessage !== undefined) {
+        const s = typeof body.customerMessage === 'string' ? body.customerMessage.trim() : '';
+        if (!s) return reply.status(400).send({ error: 'Pesan pasien tidak boleh kosong' });
+        if (s.length > 500) return reply.status(400).send({ error: 'Pesan pasien melebihi 500 karakter' });
+        cleanUpdate.customerMessage = s;
+      }
+      if (body.idealResponse !== undefined) {
+        const s = typeof body.idealResponse === 'string' ? body.idealResponse.trim() : '';
+        if (!s) return reply.status(400).send({ error: 'Respon ideal tidak boleh kosong' });
+        if (s.length > 1000) return reply.status(400).send({ error: 'Respon ideal melebihi 1000 karakter' });
+        cleanUpdate.idealResponse = s;
+      }
+      if (body.tags !== undefined) {
+        cleanUpdate.tags = Array.isArray(body.tags)
+          ? body.tags.filter((t: unknown) => typeof t === 'string').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
+          : [];
+      }
+      if (body.isActive !== undefined) cleanUpdate.isActive = body.isActive !== false;
+      if (body.sortOrder !== undefined && Number.isFinite(Number(body.sortOrder))) {
+        cleanUpdate.sortOrder = Number(body.sortOrder);
+      }
+
       const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
-      const updated = await FewShotExemplarBank.updateExemplar(id, body, tenantId);
+      const updated = await FewShotExemplarBank.updateExemplar(id, cleanUpdate, tenantId);
 
       if (!updated) {
         return reply.status(404).send({ error: 'Contoh percakapan tidak ditemukan' });
@@ -467,7 +511,8 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * POST /api/admin/few-shots/reset-defaults
+   * POST /api/admin/few-shots/reset-defaults — pulihkan contoh SOP klinik
+   * bawaan secara additive (contoh kustom admin dipertahankan).
    */
   fastify.post(
     '/api/admin/few-shots/reset-defaults',
@@ -485,7 +530,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({
         success: true,
-        message: 'Bank contoh percakapan berhasil di-reset ke default SOP klinik!',
+        message: 'Contoh SOP klinik berhasil dipulihkan (contoh kustom tetap dipertahankan)!',
         data: defaults,
       });
     }

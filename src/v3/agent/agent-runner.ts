@@ -3,7 +3,7 @@ import { ALL_V3_TOOLS, executeToolByName, ToolExecutionContext } from '../tools/
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
 import { PersonaPromptBuilder } from './persona';
 import { OutputSanitizer } from '../guardrails/sanitizer';
-import { isPureLeadGreeting } from '../../utils/lead-greeting-detector';
+import { isPureLeadGreeting, stripAdTags } from '../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../config/persona';
 import { getLlmEndpointConfig } from '../../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../../config/ai-models.config';
@@ -112,16 +112,17 @@ export class V3AgentRunner {
     const baseUrl = endpointConfig.baseUrl;
     const apiKey = endpointConfig.apiKey;
 
-    // 3. Susun percakapan dengan auto-rehydrate dari DB jika history kosong
+    // 3. Susun percakapan dengan auto-rehydrate dari DB jika history kosong.
+    // Gunakan messageService.getRecentMessages (punya in-memory fallback) agar
+    // isFollowUp tidak false-negative saat DB offline / pengujian lokal.
+    // Teks bersih (tanpa tag iklan Promo[...]) khusus lapisan inferensi LLM.
+    const cleanIncomingText = stripAdTags(incomingText) || incomingText;
     let conversationHistory = [...history];
     if (conversationHistory.length === 0 && conversationId) {
       try {
-        const recentDbMessages = await prisma.message.findMany({
-          where: { conversation_id: conversationId },
-          orderBy: { created_at: 'desc' },
-          take: 8,
-        });
-        conversationHistory = recentDbMessages.reverse().map((m) => ({
+        const { messageService } = await import('../../services/message.service');
+        const recentMsgs = await messageService.getRecentMessages(conversationId, 8, tenantId);
+        conversationHistory = (recentMsgs || []).map((m: any) => ({
           role: (m.direction === 'INBOUND' ? 'user' : 'assistant') as 'user' | 'assistant',
           content: m.content,
         }));
@@ -133,25 +134,30 @@ export class V3AgentRunner {
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
       ...conversationHistory.slice(-6).map((h) => ({ role: h.role, content: h.content })),
-      { role: 'user', content: incomingText },
+      { role: 'user', content: cleanIncomingText },
     ];
 
     // GATE DETERMINISTIK: sapaan pembuka murni (Turn-0) langsung dibalas template
     // resmi tanpa LLM (0 token). Hanya bila asisten belum pernah membalas.
     if (!isFollowUp) {
-      const leadCheck = isPureLeadGreeting(incomingText);
+      const leadCheck = isPureLeadGreeting(cleanIncomingText);
       if (leadCheck.isLeadGreeting) {
         const staticReply = TEMPLATES.greeting({ isIslamic: leadCheck.isIslamic });
         if (conversationId && !input.skipDbLogging) {
           try {
-            await prisma.message.create({
-              data: {
-                tenant_id: tenantId,
-                conversation_id: conversationId,
-                direction: 'INBOUND',
-                content: input.originalText || incomingText,
-                sender_type: 'CUSTOMER',
-              },
+            const { messageService } = await import('../../services/message.service');
+            const { Direction } = await import('@prisma/client');
+            await messageService.logMessage({
+              tenantId,
+              conversationId,
+              direction: Direction.INBOUND,
+              content: input.originalText || incomingText,
+            });
+            await messageService.logMessage({
+              tenantId,
+              conversationId,
+              direction: Direction.OUTBOUND,
+              content: staticReply,
             });
           } catch (e) {}
         }
@@ -316,7 +322,7 @@ export class V3AgentRunner {
       }
 
       // 7. Sanitasi Balasan
-      finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText);
+      finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText, isFollowUp);
 
       if (!OutputSanitizer.isValidReply(finalReply)) {
         console.warn(`[V3 AGENT WARNING] Reply rejected by sanitizer: "${finalReply}". Triggering silent fallback.`);
@@ -325,24 +331,20 @@ export class V3AgentRunner {
 
       if (conversationId && !input.skipDbLogging) {
         try {
-          await prisma.message.create({
-            data: {
-              tenant_id: tenantId,
-              conversation_id: conversationId,
-              direction: 'INBOUND',
-              content: input.originalText || incomingText,
-              sender_type: 'CUSTOMER',
-            },
+          const { messageService } = await import('../../services/message.service');
+          const { Direction } = await import('@prisma/client');
+          await messageService.logMessage({
+            tenantId,
+            conversationId,
+            direction: Direction.INBOUND,
+            content: input.originalText || incomingText,
           });
           if (finalReply && !isEscalated) {
-            await prisma.message.create({
-              data: {
-                tenant_id: tenantId,
-                conversation_id: conversationId,
-                direction: 'OUTBOUND',
-                content: finalReply,
-                sender_type: 'BOT',
-              },
+            await messageService.logMessage({
+              tenantId,
+              conversationId,
+              direction: Direction.OUTBOUND,
+              content: finalReply,
             });
           }
         } catch (e) {}

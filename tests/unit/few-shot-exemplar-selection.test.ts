@@ -92,7 +92,7 @@ describe('FewShotExemplarBank (Positive Exemplar Selection)', () => {
     expect(exemplars.some((e) => e.id === 'price_inquiry')).toBe(true);
   });
 
-  it('should select payment method exemplar when customer asks about QRIS/transfer', () => {
+  it('should select a payment method exemplar when customer asks about QRIS/transfer', () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,
       intents: ['chitchat'],
@@ -100,7 +100,11 @@ describe('FewShotExemplarBank (Positive Exemplar Selection)', () => {
 
     const exemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, 'Bisa bayar pakai QRIS gak?');
     expect(exemplars.length).toBeGreaterThan(0);
-    expect(exemplars.some((e) => e.id === 'payment_method_inquiry')).toBe(true);
+    // Baik SOP bawaan maupun Koleksi Emas sama-sama contoh pembayaran yang sah;
+    // yang penting sistem memilih minimal satu contoh bertema pembayaran.
+    expect(
+      exemplars.some((e) => ['payment_method_inquiry', 'gold_metode_pembayaran_qris_transfer_cash'].includes(e.id))
+    ).toBe(true);
   });
 
   it('should select maternal lactation exemplar when customer asks about oxytocin/breastfeeding', () => {

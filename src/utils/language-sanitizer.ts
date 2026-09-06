@@ -200,12 +200,15 @@ export function sanitizePronounsAndSlang(text: string): string {
 
 /**
  * Memangkas sapaan pembuka ganda (Halo Bunda! / Selamat siang Bunda!) jika percakapan sedang berlangsung aktif.
+ * Termasuk varian perkenalan diri Turn-0 agar chat lanjutan langsung ke inti jawaban.
  */
 export function sanitizeGreetingRepetitionForFollowUp(text: string, isFollowUp: boolean = false): string {
   if (!text || !isFollowUp) return text;
   return text
-    .replace(/^Halo\s+Bunda\s*[!✨🥰🌸\.,\s]*/i, '')
+    .replace(/^(?:halo|hai|hei|hey)\s+(?:bunda|bun|kak|min)\s*[!✨🥰🌸\.,\s]*/i, '')
     .replace(/^Selamat\s+(?:pagi|siang|sore|malam)\s*[!✨🥰🌸\.,\s]*(?:Bunda\s*[!✨🥰🌸\.,\s]*)?/i, '')
+    .replace(/^(?:Terima\s+kasih\s+sudah\s+menghubungi\s+kami[.,\s✨🌸]*)(?:Perkenalkan,\s+saya\s+Bidan\s+Yusi[^.!?\n]*[.!?\n]*)?/i, '')
+    .replace(/^Perkenalkan,\s+saya\s+Bidan\s+Yusi[^.!?\n]*[.!?\n]*/i, '')
     .trim();
 }
 
@@ -222,6 +225,11 @@ export function stripDuplicateTurn0Greeting(text: string): string {
 }
 
 /**
+ * @deprecated Tidak lagi dipakai di pipeline bot (Minimal-Regex Mandate —
+ * larangan memotong kalimat pembuka alami di tengah jalan). Penegasan jadwal
+ * dikendalikan di hulu via prompt PersonaComposer (anti-afirmasi).
+ * Dipertahankan hanya agar unit test historis & impor lama tidak rusak.
+ *
  * Membersihkan afirmasi sepihak atas ketersediaan jadwal ("Tentu bisa...", "Pasti bisa...", "Bisa ya, Bun...")
  * saat bot merespons pengecekan jadwal/ketersediaan slot, sehingga bot menginfokan secara netral
  * bahwa jadwal akan dicekkan terlebih dahulu tanpa mengonfirmasi "bisa" di depan.
@@ -286,13 +294,18 @@ export function sanitizeScheduleAffirmations(text: string): string {
 }
 
 /**
+ * @deprecated Tidak lagi dipakai di pipeline bot (Minimal-Regex Mandate —
+ * larangan Mid-Sentence Regex Mutilation). Kendali harga dikendalikan di hulu:
+ * prompt persona + grounding tool get_catalog_and_price (inquirePrice).
+ * Dipertahankan hanya agar unit test historis & impor lama tidak rusak.
+ *
  * Membersihkan bocoran harga dan durasi waktu jika customer TIDAK menanyakan harga/biaya atau durasi.
  * Sesuai SOP: Harga & durasi tidak boleh dijelaskan secara proaktif kecuali customer menanyakan langsung.
  */
 export function sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?: string): string {
   if (!text || !customerInput) return text;
 
-  const isAskingPriceOrDuration = /\b(berapa|harga|harganya|tarif|tarifnya|biaya|biayanya|ongkir|ongkirnya|ongkos|pricelist|durasi|menit|lama|lamanya|waktu|jam|bayar)\b/i.test(customerInput);
+  const isAskingPriceOrDuration = /\b(berapa|berapakah|berape|brp|brpa|brapaan|brapa|piro|harga|harganya|hrga|hrg|hargax|hargae|tarif|tarifnya|biaya|biayanya|ongkir|ongkirnya|ongkos|ongkosnya|pricelist|pl|rate|durasi|durasinya|menit|mnt|lama|lamanya|waktu|jam|bayar|bayarnya)\b/i.test(customerInput);
   if (isAskingPriceOrDuration) {
     return text;
   }
@@ -307,6 +320,14 @@ export function sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?
     .replace(/(?:,\s*|\s+)(?:dengan\s+)?(?:tarif|harga|biaya)(?:\s+promo)?\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
     .replace(/(?:,\s*|\s+)(?:seharga|seharganya)\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
     .replace(/(?:,\s*|\s+)(?:durasi\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
+    // Anti-dangling: sisa potongan menggantung pasca-strip harga
+    .replace(/\bdan\s+saat\s+ini\s+lagi\s+promo\b/gi, '')
+    .replace(/\bsaat\s+ini\s+lagi\s+promo\b/gi, '')
+    .replace(/\(\s*(?:harga\s+normal|harga\s+promo|normal|promo)\s*\)/gi, '')
+    .replace(/\(\s*(?:harga\s+normal|harga\s+promo|normal|promo)?\s*\*?Rp\s*[\d\.]+\*?\s*\)/gi, '')
+    .replace(/\*?Rp\s*[\d\.]+\*?/g, '')
+    .replace(/\(\s*\)/g, '')
+    .replace(/([\p{L}\p{N}\)\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])\*([A-Za-z])/gu, '$1* $2')
     .replace(/[^\S\r\n]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\s+\./g, '.')
