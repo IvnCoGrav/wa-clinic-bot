@@ -234,4 +234,62 @@ describe('V3 Agent Runner End-to-End Suite', () => {
     expect(result.executedTools.length).toBe(1);
     expect(result.executedTools[0].name).toBe('escalate_to_human');
   });
+
+  it('Skenario 5: Multi-turn panjang + tanya SOP mandi — wajib tetap panggil search_knowledge_faq (anti-inertia)', async () => {
+    (axios.post as any)
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_mandi_1',
+                    type: 'function',
+                    function: {
+                      name: 'search_knowledge_faq',
+                      arguments: JSON.stringify({ query: 'pijat sebelum atau sesudah mandi' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 120, completion_tokens: 15 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { role: 'assistant', content: 'Sebaiknya pijat dilakukan sebelum mandi ya Bunda 😊 Setelah perawatan selesai, Bunda bisa memandikan si kecil dengan jeda istirahat sekitar 5-10 menit.' } }],
+          usage: { prompt_tokens: 180, completion_tokens: 25 },
+        },
+      });
+
+    const longHistory = [
+      { role: 'user' as const, content: 'halo kak' },
+      { role: 'assistant' as const, content: 'Halo Bunda! Perkenalkan saya Bidan Yusi dari Kala Moms and Baby Spa.' },
+      { role: 'user' as const, content: 'mau tanya vaksin, habis vaksin kapan boleh pijat?' },
+      { role: 'assistant' as const, content: 'Minimal 3 hari setelah vaksin ya Bunda dan pastikan tidak demam.' },
+      { role: 'user' as const, content: 'harganya berapa kak?' },
+      { role: 'assistant' as const, content: 'Untuk Pijat Bayi Ceria promo Rp 60.000 durasi 40 menit ya Bunda.' },
+      { role: 'user' as const, content: 'okee kak noted' },
+    ];
+
+    const result = await V3AgentRunner.processMessage({
+      customerId: 'mock-cust-5',
+      conversationId: 'mock-conv-5',
+      phone: '6289990000005',
+      chatId: '6289990000005@c.us',
+      incomingText: 'kak sebaiknya pijat dilakukan sebelum atau sesudah mandi ya?',
+      history: longHistory,
+    });
+
+    expect(result.executedTools.some((t) => t.name === 'search_knowledge_faq')).toBe(true);
+    expect(result.retrievedChunks.length).toBeGreaterThan(0);
+    expect(result.retrievedChunks[0].similarity).toBeGreaterThan(0);
+    expect(result.replyText.toLowerCase()).toContain('sebelum mandi');
+    expect(result.shouldSendReply).toBe(true);
+  });
 });

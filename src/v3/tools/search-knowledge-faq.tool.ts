@@ -26,7 +26,7 @@ export const SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'search_knowledge_faq',
-    description: 'Mencari artikel FAQ / pengetahuan medis & SOP klinik dari Knowledge Base (47 artikel knowledge_chunks). PANGGIL TOOL INI ketika customer menanyakan hal medis/SOP di luar paket dasar: tumbuh gigi, sebelum/sesudah mandi, pijat saat demam/batuk, newborn, ASI/laktasi, keamanan treatment, atau pertanyaan "apakah boleh ...". Jangan panggil untuk sapaan, harga, jadwal, atau lokasi.',
+    description: 'Mencari artikel FAQ resmi, pengetahuan medis, panduan SOP klinik, persiapan sebelum kunjungan, aturan sebelum/sesudah mandi, minum susu, minyak yang dipakai, dan kondisi khusus anak dari Knowledge Base (47 artikel knowledge_chunks). WAJIB PANGGIL TOOL INI ketika customer menanyakan: persiapan/perlengkapan di rumah, aturan mandi sebelum/sesudah, minum susu, jenis minyak/balsem, tumbuh gigi, fisioterapi, keamanan kondisi medis bayi/ibu, atau pertanyaan apakah boleh/bagaimana aturan treatment. JANGAN panggil untuk sapaan awal murni, hitung ongkir/lokasi, atau tanya harga katalog.',
     parameters: {
       type: 'object',
       properties: {
