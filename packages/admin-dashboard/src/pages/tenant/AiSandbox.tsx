@@ -94,6 +94,9 @@ export const AiSandbox: React.FC = () => {
   const [editingContent, setEditingContent] = useState('');
   const [editLoading, setEditLoading] = useState(false);
 
+  // Inspector tab: chunks | bank | tools | prompt
+  const [inspectorTab, setInspectorTab] = useState<'chunks' | 'bank' | 'tools' | 'prompt'>('chunks');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -315,7 +318,12 @@ export const AiSandbox: React.FC = () => {
       setInspectorData({
         query: data.query || batch.join('\n'),
         chunks: data.chunks || [],
-        systemPrompt: `TUGAS UTAMA: Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen...`,
+        exemplars: data.exemplars || [],
+        executedTools: data.v3?.executedTools || [],
+        systemPrompt: data.systemPrompt || `TUGAS UTAMA: Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen...`,
+        reasoning: data.reasoning || null,
+        tokens: data.tokens || null,
+        costIdr: data.costIdr || 0,
         latencyMs: endTime - startTime,
         error: data.llmError || null,
       });
@@ -588,7 +596,31 @@ export const AiSandbox: React.FC = () => {
                 </div>
               )}
 
+              {/* Inspector tab navigation */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'chunks' as const, label: `📚 RAG Chunks (${inspectorData.chunks?.length || 0})` },
+                  { id: 'bank' as const, label: `💬 Chat Bank (${inspectorData.exemplars?.length || 0})` },
+                  { id: 'tools' as const, label: `🛠️ Tool Calls (${inspectorData.executedTools?.length || 0})` },
+                  { id: 'prompt' as const, label: '📝 Prompt & Reasoning' },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setInspectorTab(t.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                      inspectorTab === t.id
+                        ? 'bg-[#008069] text-white border-[#008069]'
+                        : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Reference Chunks section */}
+              {inspectorTab === 'chunks' && (
               <div className="space-y-2">
                 <span className="text-[11px] font-bold text-[#667781] block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0})</span>
                 <div className="space-y-2.5">
@@ -662,13 +694,77 @@ export const AiSandbox: React.FC = () => {
                   })}
                   {(!inspectorData.chunks || inspectorData.chunks.length === 0) && (
                     <div className="text-xs text-[#8696a0] py-2 italic">
-                      Tidak ada vector chunks yang relevan untuk pertanyaan ini.
+                      {inspectorData.executedTools?.some((t: any) => t.name === 'search_knowledge_faq')
+                        ? 'Tool FAQ dipanggil tetapi tidak ada artikel yang cocok.'
+                        : 'Tidak ada tool FAQ yang dipanggil — AI mengandalkan SOP inti & bank contoh chat.'}
                     </div>
                   )}
                 </div>
               </div>
+              )}
+
+              {/* Chat Bank (few-shot exemplars) section */}
+              {inspectorTab === 'bank' && (
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-[#667781] block uppercase">Dialog Master Bidan Yusi ({inspectorData.exemplars?.length || 0})</span>
+                <div className="space-y-2.5">
+                  {(inspectorData.exemplars || []).map((ex: any, i: number) => (
+                    <div key={ex.id || i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                      <div className="text-[11px] font-bold text-[#008069]">{ex.scenario || `Contoh ${i + 1}`}</div>
+                      <div className="rounded-lg bg-white border border-[#e9edef] p-2.5 text-xs text-[#111b21]">
+                        <span className="font-bold text-[#667781]">Pasien: </span>{ex.customerMessage}
+                      </div>
+                      <div className="rounded-lg bg-[#d9fdd3] border border-[#00a884]/20 p-2.5 text-xs text-[#111b21]">
+                        <span className="font-bold text-[#008069]">Bidan Yusi: </span>{ex.idealResponse}
+                      </div>
+                      {Array.isArray(ex.tags) && ex.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {ex.tags.map((t: string) => (
+                            <span key={t} className="px-1.5 py-0.5 rounded-md bg-white border border-[#d1d7db] text-[10px] font-mono text-[#54656f]">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(!inspectorData.exemplars || inspectorData.exemplars.length === 0) && (
+                    <div className="text-xs text-[#8696a0] py-2 italic">
+                      Tidak ada contoh chat dinamis yang disuntikkan (prompt memakai contoh statis bawaan).
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
+
+              {/* Tool Calls section */}
+              {inspectorTab === 'tools' && (
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-[#667781] block uppercase">Urutan Tools Dipanggil ({inspectorData.executedTools?.length || 0})</span>
+                <div className="space-y-2.5">
+                  {(inspectorData.executedTools || []).map((t: any, i: number) => (
+                    <div key={i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-1.5">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#008069] text-white text-[10px] font-bold font-mono">{i + 1}</span>
+                        <span className="text-xs font-bold text-[#111b21] font-mono">{t.name}</span>
+                      </div>
+                      <details className="text-[11px]">
+                        <summary className="cursor-pointer text-[#008069] font-semibold">Parameter & hasil</summary>
+                        <pre className="mt-1 p-2 rounded-lg bg-white border border-[#e9edef] text-[10px] font-mono text-[#54656f] whitespace-pre-wrap overflow-x-auto max-h-48">
+                          {JSON.stringify({ args: t.args, result: t.result }, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  ))}
+                  {(!inspectorData.executedTools || inspectorData.executedTools.length === 0) && (
+                    <div className="text-xs text-[#8696a0] py-2 italic">
+                      Tidak ada tool yang dipanggil — jawaban langsung dari LLM (mis. sapaan statis Turn-0).
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
 
               {/* System Persona prompt */}
+              {inspectorTab === 'prompt' && (
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] font-bold text-[#667781] block uppercase flex items-center space-x-1">
@@ -721,7 +817,35 @@ export const AiSandbox: React.FC = () => {
                     {inspectorData.systemPrompt}
                   </pre>
                 )}
+
+                {/* Model reasoning */}
+                <div className="space-y-1">
+                  <span className="text-[11px] font-bold text-[#667781] block uppercase">🧠 Reasoning Model</span>
+                  {inspectorData.reasoning ? (
+                    <pre className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-[10px] text-purple-950 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
+                      {inspectorData.reasoning}
+                    </pre>
+                  ) : (
+                    <div className="text-xs text-[#8696a0] py-1 italic">Provider tidak mengembalikan reasoning terpisah.</div>
+                  )}
+                </div>
+
+                {/* Token & cost metrics */}
+                {(inspectorData.tokens || inspectorData.costIdr) && (
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                    {typeof inspectorData.tokens?.prompt === 'number' && (
+                      <span className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f]">in: {inspectorData.tokens.prompt}</span>
+                    )}
+                    {typeof inspectorData.tokens?.completion === 'number' && (
+                      <span className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f]">out: {inspectorData.tokens.completion}</span>
+                    )}
+                    {typeof inspectorData.costIdr === 'number' && inspectorData.costIdr > 0 && (
+                      <span className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">≈ Rp {inspectorData.costIdr.toLocaleString('id-ID')}</span>
+                    )}
+                  </div>
+                )}
               </div>
+              )}
 
             </div>
           ) : (

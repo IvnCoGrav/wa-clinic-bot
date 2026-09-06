@@ -1,5 +1,25 @@
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
 import { getBrandIdentity } from '../../config/brand';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { FewShotExemplarBank } from '../../slot-engine/few-shot-exemplars';
+import type { ExtractedEntities } from '../../slot-engine/types';
+
+export interface DynamicPromptExemplar {
+  id: string;
+  scenario: string;
+  customerMessage: string;
+  idealResponse: string;
+  tags: string[];
+}
+
+export interface DynamicPromptResult {
+  systemPrompt: string;
+  exemplars: DynamicPromptExemplar[];
+  usedDynamicExamples: boolean;
+}
+
+const EXAMPLES_START_MARKER = '[CONTOH GAYA CHAT WHATSAPP BIDAN YUSI (FEW-SHOT EXAMPLES)]';
+const EXAMPLES_END_MARKER = '[ATURAN ANTI-OVERCLAIM MEDIS]';
 
 export class PersonaPromptBuilder {
   /**
@@ -163,7 +183,74 @@ Assistant: "Iya betul Bunda, untuk paket *Pijat Bayi Ceria (Rileksasi)* saat ini
    - Panggil tool ini KETIKA customer sudah memberikan detail tanggal dan treatment untuk pemesanan.
 5. escalate_to_human:
    - Panggil tool ini KETIKA ada kondisi darurat medis berat, komplain keras, permintaan bicara manusia, atau pembatalan/reschedule reservasi.
+6. search_knowledge_faq:
+   - Panggil tool ini KETIKA customer menanyakan hal medis/SOP di luar paket dasar: tumbuh gigi, pijat sebelum/sesudah mandi, pijat saat demam/batuk/pilek, keamanan newborn, ASI/laktasi, atau pertanyaan "apakah boleh ...".
+   - JANGAN panggil untuk sapaan, harga, jadwal, atau lokasi (itu ranah get_catalog_and_price / calculate_delivery).
 
 ${goalSummary}`;
+  }
+
+  /**
+   * Varian async: memuat contoh chat DINAMIS dari bank few_shot_exemplars
+   * (DB Koleksi Emas, fallback in-memory) yang paling relevan dengan pesan
+   * masuk, lalu MENGGANTIKAN blok contoh statis di prompt. Fallback aman ke
+   * prompt statis bila bank kosong / DB tidak terjangkau.
+   */
+  public static async buildSystemPromptAsync(
+    session: CustomerGoalSession,
+    isFollowUp: boolean = false,
+    opts?: { tenantId?: string; incomingText?: string }
+  ): Promise<DynamicPromptResult> {
+    const base = this.buildSystemPrompt(session, isFollowUp);
+    const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
+    const incomingText = opts?.incomingText || '';
+
+    try {
+      // Hangatkan cache bank dari DB (atau fallback in-memory saat offline).
+      await FewShotExemplarBank.getAllExemplars(tenantId);
+      const lightExtraction: ExtractedEntities = {
+        intents: [],
+        locationText: null,
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0,
+      };
+      const picked = FewShotExemplarBank.selectRelevantExemplars(
+        lightExtraction,
+        undefined,
+        incomingText,
+        tenantId
+      ).slice(0, 2);
+      if (!picked || picked.length === 0) {
+        return { systemPrompt: base, exemplars: [], usedDynamicExamples: false };
+      }
+
+      const startIdx = base.indexOf(EXAMPLES_START_MARKER);
+      const endIdx = base.indexOf(EXAMPLES_END_MARKER);
+      if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+        return { systemPrompt: base, exemplars: [], usedDynamicExamples: false };
+      }
+
+      const dynamicBlock =
+        `[CONTOH GAYA CHAT WHATSAPP BIDAN YUSI (DINAMIS DARI BANK — TIRU POLA & NADANYA)]:\n` +
+        FewShotExemplarBank.formatExemplarsForPrompt(picked);
+      const systemPrompt = base.slice(0, startIdx) + dynamicBlock + '\n\n' + base.slice(endIdx);
+      const exemplars: DynamicPromptExemplar[] = picked.map((e) => ({
+        id: e.id,
+        scenario: e.scenario,
+        customerMessage: e.customerMessage,
+        idealResponse: e.idealResponse,
+        tags: e.tags || [],
+      }));
+      return { systemPrompt, exemplars, usedDynamicExamples: true };
+    } catch {
+      return { systemPrompt: base, exemplars: [], usedDynamicExamples: false };
+    }
   }
 }
