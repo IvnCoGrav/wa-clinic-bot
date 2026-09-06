@@ -3,6 +3,7 @@ import { GET_CATALOG_TOOL_SCHEMA, executeGetCatalog, GetCatalogInput } from './g
 import { SAVE_RESERVATION_TOOL_SCHEMA, executeSaveReservation, SaveReservationInput } from './save-reservation.tool';
 import { ESCALATE_HUMAN_TOOL_SCHEMA, executeEscalateHuman, EscalateHumanInput } from './escalate-human.tool';
 import { GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA, executeGetClinicFaq, GetClinicFaqInput } from './clinic-faq.tool';
+import { SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA, executeSearchKnowledgeFaq, SearchKnowledgeFaqInput } from './search-knowledge-faq.tool';
 
 export const ALL_V3_TOOLS = [
   CALCULATE_DELIVERY_TOOL_SCHEMA,
@@ -10,6 +11,7 @@ export const ALL_V3_TOOLS = [
   SAVE_RESERVATION_TOOL_SCHEMA,
   ESCALATE_HUMAN_TOOL_SCHEMA,
   GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA,
+  SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA,
 ];
 
 export interface ToolExecutionContext {
@@ -39,6 +41,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         childAgeMonths: args.childAgeMonths,
         symptoms: args.symptoms,
         specificTreatmentName: args.specificTreatmentName,
+        inquirePrice: args.inquirePrice,
       };
       return await executeGetCatalog(input);
     }
@@ -75,6 +78,15 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         topic: args.topic,
       };
       return await executeGetClinicFaq(input);
+    }
+
+    case 'search_knowledge_faq': {
+      const input: SearchKnowledgeFaqInput = {
+        query: args.query,
+        limit: args.limit,
+        tenantId: ctx.tenantId,
+      };
+      return await executeSearchKnowledgeFaq(input);
     }
 
     default:

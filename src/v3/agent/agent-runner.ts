@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ALL_V3_TOOLS, executeToolByName, ToolExecutionContext } from '../tools/tool-registry';
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
-import { PersonaPromptBuilder } from './persona';
+import { PersonaPromptBuilder, DynamicPromptExemplar } from './persona';
 import { OutputSanitizer } from '../guardrails/sanitizer';
 import { isPureLeadGreeting, stripAdTags } from '../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../config/persona';
@@ -28,12 +28,37 @@ export interface AgentRunnerInput {
   skipDbLogging?: boolean;
 }
 
+export interface V3RetrievedChunk {
+  id: string;
+  title: string;
+  content: string;
+  similarity: number | null;
+}
+
+export interface V3TokenUsage {
+  prompt: number;
+  completion: number;
+  total: number;
+}
+
 export interface AgentRunnerOutput {
   replyText: string;
   executedTools: Array<{ name: string; args: any; result: any }>;
   updatedSession: CustomerGoalSession;
   shouldSendReply: boolean;
   isEscalated: boolean;
+  /** Observability: RAG chunks yang diambil via tool search_knowledge_faq. */
+  retrievedChunks: V3RetrievedChunk[];
+  /** Observability: contoh chat dinamis yang disuntikkan ke system prompt. */
+  fewShotExemplars: DynamicPromptExemplar[];
+  /** Observability: teks utuh system prompt yang dikirim ke LLM. */
+  systemPrompt: string;
+  /** Observability: reasoning/chain-of-thought model (bila disediakan provider). */
+  reasoning: string | null;
+  /** Observability: agregat token kedua panggilan LLM. */
+  tokens: V3TokenUsage;
+  /** Observability: estimasi biaya Rupiah agregat. */
+  costIdr: number;
 }
 
 export class V3AgentRunner {
@@ -130,12 +155,22 @@ export class V3AgentRunner {
     }
 
     const isFollowUp = conversationHistory.some((m) => m.role === 'assistant');
-    const systemPrompt = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
+    // System prompt ASYNC: contoh chat dimuat dinamis dari bank few_shot_exemplars
+    // (DB Koleksi Emas, fallback statis). Exemplar terpilih diekspor untuk observability.
+    const dynamicPrompt = await PersonaPromptBuilder.buildSystemPromptAsync(session, isFollowUp, {
+      tenantId,
+      incomingText: cleanIncomingText,
+    });
+    const systemPrompt = dynamicPrompt.systemPrompt;
+    const fewShotExemplars = dynamicPrompt.exemplars;
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
       ...conversationHistory.slice(-6).map((h) => ({ role: h.role, content: h.content })),
       { role: 'user', content: cleanIncomingText },
     ];
+
+    const emptyTokens: V3TokenUsage = { prompt: 0, completion: 0, total: 0 };
+    const turnStartedAt = Date.now();
 
     // GATE DETERMINISTIK: sapaan pembuka murni (Turn-0) langsung dibalas template
     // resmi tanpa LLM (0 token). Hanya bila asisten belum pernah membalas.
@@ -167,6 +202,12 @@ export class V3AgentRunner {
           updatedSession: session,
           shouldSendReply: true,
           isEscalated: false,
+          retrievedChunks: [],
+          fewShotExemplars,
+          systemPrompt,
+          reasoning: null,
+          tokens: emptyTokens,
+          costIdr: 0,
         };
       }
     }
@@ -175,6 +216,69 @@ export class V3AgentRunner {
     let isEscalated = false;
     let shouldSendReply = true;
     let finalReply = '';
+
+    // Observability turn-level: chunks RAG, reasoning model, agregat token.
+    const retrievedChunks: V3RetrievedChunk[] = [];
+    const retrievedChunkIds = new Set<string>();
+    let reasoning: string | null = null;
+    const totalTokens: V3TokenUsage = { prompt: 0, completion: 0, total: 0 };
+    const addUsage = (usage: any): void => {
+      const p = Number(usage?.prompt_tokens) || 0;
+      const c = Number(usage?.completion_tokens) || 0;
+      totalTokens.prompt += p;
+      totalTokens.completion += c;
+      totalTokens.total += p + c;
+    };
+    const auditUsage = async (usage: any, startedAt: number, error?: any): Promise<void> => {
+      try {
+        const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: phone,
+          tenant_id: tenantId,
+          conversation_id: conversationId,
+          task_type: 'V3_AGENT',
+          model_name: selectedModel,
+          baseUrl,
+          startedAt,
+          error: error ?? null,
+          usage: usage ?? null,
+        });
+      } catch {}
+    };
+    const finishCost = async (): Promise<number> => {
+      try {
+        const { calculateLlmCost } = await import('../../utils/cost-calculator');
+        return calculateLlmCost(selectedModel, totalTokens.prompt, totalTokens.completion, 0).totalCostIdr || 0;
+      } catch {
+        return 0;
+      }
+    };
+    const traceExecution = async (params: {
+      reply: string;
+      status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+      tools: Array<{ name: string; args: any; result: any }>;
+    }): Promise<void> => {
+      try {
+        const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'V3_AGENT' as any,
+          customerPhone: phone,
+          customerInput: incomingText,
+          bubbleCorrelationId: chatId,
+          promptPayload: { model: selectedModel, systemPrompt, messageCount: messages.length },
+          reasoning,
+          groundTruthUsed: {
+            retrievedChunks,
+            fewShotExemplars: fewShotExemplars.map((e) => ({ id: e.id, scenario: e.scenario })),
+            executedTools: params.tools.map((t) => t.name),
+          },
+          finalReply: params.reply,
+          modelUsed: selectedModel,
+          durationMs: Date.now() - turnStartedAt,
+          status: params.status,
+        });
+      } catch {}
+    };
 
     try {
       // 4. Panggilan Pertama: Model mengevaluasi apakah perlu memanggil Tools
@@ -186,6 +290,7 @@ export class V3AgentRunner {
         temperature: 0.2,
       };
 
+      const firstStartedAt = Date.now();
       const firstData = await V3AgentRunner.executeChatCompletion({
         payload: firstPayload,
         tenantId,
@@ -194,11 +299,18 @@ export class V3AgentRunner {
         baseUrl,
         apiKey,
         selectedModel,
+      }).then(async (data) => {
+        addUsage((data as any)?.usage);
+        await auditUsage((data as any)?.usage, firstStartedAt);
+        return data;
       });
 
       const choice = firstData?.choices?.[0];
       const assistantMessage = choice?.message;
       const toolCalls = assistantMessage?.tool_calls;
+      if (!reasoning && typeof (assistantMessage as any)?.reasoning_content === 'string') {
+        reasoning = (assistantMessage as any).reasoning_content;
+      }
 
       // 5. Jika Model Memanggil Tools
       if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
@@ -223,6 +335,22 @@ export class V3AgentRunner {
           }
 
           executedTools.push({ name: fnName, args: fnArgs, result: toolResult });
+
+          // Observability: tampung RAG chunks dari tool search_knowledge_faq.
+          if (fnName === 'search_knowledge_faq' && Array.isArray(toolResult?.chunks)) {
+            for (const c of toolResult.chunks) {
+              const key = String(c?.id || c?.title || '');
+              if (key && !retrievedChunkIds.has(key)) {
+                retrievedChunkIds.add(key);
+                retrievedChunks.push({
+                  id: String(c?.id || key),
+                  title: String(c?.title || ''),
+                  content: String(c?.content || ''),
+                  similarity: typeof c?.similarity === 'number' ? c.similarity : null,
+                });
+              }
+            }
+          }
 
           // Perbarui session state berdasarkan hasil tool
           if (fnName === 'calculate_delivery' && toolResult.success) {
@@ -286,18 +414,30 @@ export class V3AgentRunner {
 
         // Jika tereskalasi, hentikan langsung agar bot tidak mengirim balasan
         if (isEscalated) {
+          await traceExecution({ reply: '', status: 'SUCCESS', tools: executedTools });
           return {
             replyText: '',
             executedTools,
             updatedSession: session,
             shouldSendReply: false,
             isEscalated: true,
+            retrievedChunks,
+            fewShotExemplars,
+            systemPrompt,
+            reasoning,
+            tokens: { ...totalTokens },
+            costIdr: await finishCost(),
           };
         }
 
         // 6. Panggilan Kedua: Menyusun teks balasan ramah Bidan Yusi menggunakan fakta tool
         // Perbarui system prompt di messages[0] dengan session terbaru yang telah di-grounding hasil tools
-        messages[0].content = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
+        // (async agar blok contoh dinamis bank tetap dipakai, bukan revert ke statis).
+        const refreshedPrompt = await PersonaPromptBuilder.buildSystemPromptAsync(session, isFollowUp, {
+          tenantId,
+          incomingText: cleanIncomingText,
+        });
+        messages[0].content = refreshedPrompt.systemPrompt;
 
         const secondPayload: any = {
           model: selectedModel,
@@ -305,6 +445,7 @@ export class V3AgentRunner {
           temperature: 0.65,
         };
 
+        const secondStartedAt = Date.now();
         const secondData = await V3AgentRunner.executeChatCompletion({
           payload: secondPayload,
           tenantId,
@@ -313,9 +454,16 @@ export class V3AgentRunner {
           baseUrl,
           apiKey,
           selectedModel,
+        }).then(async (data) => {
+          addUsage((data as any)?.usage);
+          await auditUsage((data as any)?.usage, secondStartedAt);
+          return data;
         });
 
         finalReply = secondData?.choices?.[0]?.message?.content || '';
+        if (!reasoning && typeof (secondData?.choices?.[0]?.message as any)?.reasoning_content === 'string') {
+          reasoning = (secondData.choices[0].message as any).reasoning_content;
+        }
       } else {
         // Jika tidak ada tool calls, gunakan langsung konten balasan
         finalReply = assistantMessage?.content || '';
@@ -350,25 +498,69 @@ export class V3AgentRunner {
         } catch (e) {}
       }
 
+      await traceExecution({ reply: finalReply, status: 'SUCCESS', tools: executedTools });
       return {
         replyText: finalReply,
         executedTools,
         updatedSession: session,
         shouldSendReply: shouldSendReply && !isEscalated,
         isEscalated,
+        retrievedChunks,
+        fewShotExemplars,
+        systemPrompt,
+        reasoning,
+        tokens: { ...totalTokens },
+        costIdr: await finishCost(),
       };
     } catch (err: any) {
       console.error('[V3 AGENT RUNNER ERROR]', err.response?.data || err.message);
-      
+
+      try {
+        const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: phone,
+          tenant_id: tenantId,
+          conversation_id: conversationId,
+          task_type: 'V3_AGENT',
+          model_name: selectedModel,
+          baseUrl,
+          startedAt: turnStartedAt,
+          error: { message: err?.message || 'V3_AGENT_ERROR' },
+          usage: null,
+        });
+      } catch {}
+
       // Fallback ramah jika terjadi outage koneksi
       const fallbackReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi Kala Moms & Baby Spa. Kami siap membantu layanan Homecare treatment untuk Bunda dan si kecil. Boleh dibantu info daerah tempat tinggalnya ya Bund? 🙏`;
-      
+
+      try {
+        const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'V3_AGENT' as any,
+          customerPhone: phone,
+          customerInput: incomingText,
+          bubbleCorrelationId: chatId,
+          promptPayload: { model: selectedModel },
+          reasoning,
+          finalReply: fallbackReply,
+          modelUsed: selectedModel,
+          durationMs: Date.now() - turnStartedAt,
+          status: 'ERROR',
+        });
+      } catch {}
+
       return {
         replyText: fallbackReply,
         executedTools: [],
         updatedSession: session,
         shouldSendReply: true,
         isEscalated: false,
+        retrievedChunks,
+        fewShotExemplars,
+        systemPrompt,
+        reasoning,
+        tokens: { ...totalTokens },
+        costIdr: 0,
       };
     }
   }

@@ -81,6 +81,44 @@ describe('V3 Native Agent Tools Suite', () => {
     });
   });
 
+  describe('Tool: search_knowledge_faq', () => {
+    it('harus menemukan artikel FAQ klinis yang relevan dari Knowledge Base', async () => {
+      const { knowledgeBaseService } = await import('../../src/services/knowledge.service');
+      const { executeSearchKnowledgeFaq } = await import('../../src/v3/tools/search-knowledge-faq.tool');
+      await knowledgeBaseService.addFaqItem({
+        tenantId: 'default-tenant',
+        category: 'MEDIS',
+        question: 'Sebaiknya pijat dilakukan sebelum atau sesudah mandi?',
+        answer: 'Sebaiknya pijat dilakukan sebelum mandi agar minyak pijat bisa dibersihkan saat mandi.',
+      });
+
+      const result = await executeSearchKnowledgeFaq({ query: 'pijat sebelum atau sesudah mandi' });
+      expect(result.success).toBe(true);
+      expect(result.chunks.length).toBeGreaterThan(0);
+      expect(result.chunks[0].title).toContain('mandi');
+      expect(result.message).toContain('mandi');
+    });
+
+    it('harus menolak query kosong tanpa error', async () => {
+      const { executeSearchKnowledgeFaq } = await import('../../src/v3/tools/search-knowledge-faq.tool');
+      const result = await executeSearchKnowledgeFaq({ query: '   ' });
+      expect(result.success).toBe(false);
+      expect(result.chunks).toEqual([]);
+    });
+
+    it('harus terdaftar di ALL_V3_TOOLS dan tereksekusi via registry', async () => {
+      const { ALL_V3_TOOLS, executeToolByName } = await import('../../src/v3/tools/tool-registry');
+      const names = ALL_V3_TOOLS.map((t: any) => t.function?.name);
+      expect(names).toContain('search_knowledge_faq');
+      const result = await executeToolByName(
+        'search_knowledge_faq',
+        { query: 'pijat sebelum mandi' },
+        { tenantId: 'default-tenant', customerId: 'c', conversationId: 'v', phone: '62', chatId: '62@c.us' }
+      );
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('Guardrail: OutputSanitizer', () => {
     it('harus membuang tag <think> dan monolog internal AI', () => {
       const rawWithThink = '<think>Kita perlu membalas Bunda dengan sopan dan ramah</think>Halo Bunda ! ✨ Ada yang bisa Bidan Yusi bantu?';

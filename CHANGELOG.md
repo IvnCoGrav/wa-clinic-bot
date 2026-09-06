@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — RAG Knowledge & Bank Contoh Chat di V3 Agent + Full Observability Inspector (`search-knowledge-faq.tool.ts`, `tool-registry.ts`, `persona.ts`, `agent-runner.ts`, `llm-execution-logger.ts`, `evaluations.subroute.ts`, `AiSandbox.tsx`, `Debug.tsx`) (2026-09-06)
+
+- **Latar Belakang:** 11 contoh chat + 7 kebijakan tertanam statis di `persona.ts`; tidak ada visibilitas chunk/exemplar/prompt di Sandbox & Tracing.
+- **Stage 1 — Tool baru:** `search_knowledge_faq` (query/limit, via `knowledgeBaseService.searchRelevantChunks` + fallback in-memory) terdaftar di `ALL_V3_TOOLS` + handler registry; `get_catalog_and_price` kini meneruskan `inquirePrice` (sebelumnya hilang di registry).
+- **Stage 2 — Dynamic few-shot:** `PersonaPromptBuilder.buildSystemPromptAsync()` memuat bank via `getAllExemplars` + `selectRelevantExemplars` (skor tag terhadap pesan masuk), MENGGANTIKAN blok contoh statis bila bank berisi (fallback statis bila kosong/offline); panduan tool `search_knowledge_faq` ditambahkan ke prompt.
+- **Stage 3 — Observability runner:** output `+retrievedChunks/+fewShotExemplars/+systemPrompt/+reasoning/+tokens/+costIdr`; audit `V3_AGENT` per panggilan LLM (`auditLlmCall`, termasuk error path) + `recordLlmExecution` `flowType: 'V3_AGENT'` (tipe & `FLOW_ORDER` diperluas).
+- **Stage 4 — Sandbox & UI:** route meneruskan chunks/exemplars/systemPrompt/reasoning/tokens/costIdr/executedTools; `AiSandbox.tsx` panel 4 tab (📚 RAG Chunks + status SOP-inti, 💬 Chat Bank, 🛠️ Tool Calls, 📝 Prompt & Reasoning + token/Rp); `Debug.tsx` badge + filter + body `V3_AGENT`; dashboard build ✓.
+- **Verifikasi:** `tests/v3/agent-tools` 10/10 baru ✓ (2 gagal pre-existing di HEAD bersih: Manukan-ambigu, newline emoji), `agent-runner` 4/4 ✓ (Skenario 4 observability: chunk tumbuh-gigi, token 350), 12 file unit 133/133 ✓; `tsc` ✓; dashboard build ✓.
+
 #### Fix — Transisi AI-First & Eliminasi Mid-Sentence Regex Mutilation (`sanitizer.ts`, `response-validator.ts`, `language-sanitizer.ts`, `get-catalog.tool.ts`, `persona.ts`) (2026-09-06)
 
 - **Latar Belakang:** Insiden teks cacat "promo menjadi , danya Bunda" — regex hilir (`sanitizeUnsolicitedPriceAndDuration`, `cleanPriceStripRemnants`) mengamputasi nominal/kata di tengah kalimat LLM karena gagal mengenali slang ("60rb", "Hrga brp"). Sesuai Minimal-Regex Mandate (`.agents/rules/minimal-regex-mandate.md`), kendali dialihkan ke hulu.
