@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 import { isPureLeadGreeting, stripAdTags } from '../../src/utils/lead-greeting-detector';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
+import { sanitizeGreetingRepetitionForFollowUp } from '../../src/utils/language-sanitizer';
+import { PersonaPromptBuilder } from '../../src/v3/agent/persona';
 import { TEMPLATES } from '../../src/config/persona';
 import { prisma } from '../../src/db/client';
 
@@ -126,5 +129,60 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
     const userMsg = captured.messages.find((m: any) => m.role === 'user');
     expect(userMsg.content).not.toContain('Promo[');
     expect(userMsg.content).toContain('tarif pijat bayi berapa ya?');
+  });
+
+  it('Case 3: OutputSanitizer memotong perkenalan Turn-0 pada chat lanjutan', () => {
+    const turn0Repeat =
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Kalau boleh tahu, si kecil saat ini ada keluhan tertentu tidak ya Bunda?';
+    const cleaned = OutputSanitizer.sanitizeFollowUpGreetingRepetition(turn0Repeat, true);
+    expect(cleaned).not.toContain('Terima kasih sudah menghubungi kami');
+    expect(cleaned).not.toContain('Perkenalkan, saya Bidan Yusi');
+    expect(cleaned).not.toContain('Halo Bunda');
+    // Preservasi: Turn-0 tidak dipotong bila bukan follow-up
+    expect(OutputSanitizer.sanitizeFollowUpGreetingRepetition(turn0Repeat, false)).toBe(turn0Repeat);
+  });
+
+  it('Case 3: cleanOutboundReply(isFollowUp=true) tidak mengulang sapaan pembuka', () => {
+    const raw =
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Untuk pijat bayi, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
+    const out = OutputSanitizer.cleanOutboundReply(raw, 'pijat buat baby apa ya kak rekomendasinya', true);
+    expect(out).not.toContain('Terima kasih sudah menghubungi kami');
+    expect(out).not.toContain('Perkenalkan, saya Bidan Yusi');
+    expect(out).toContain('Pijat Bayi Ceria');
+  });
+
+  it('Case 3: language-sanitizer follow-up memotong perkenalan diri', () => {
+    const raw = 'Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Jawaban rekomendasi.';
+    const out = sanitizeGreetingRepetitionForFollowUp(raw, true);
+    expect(out).not.toContain('Perkenalkan, saya Bidan Yusi');
+    expect(out).toContain('Jawaban rekomendasi');
+  });
+
+  it('Case 3: persona CHAT LANJUTAN melarang keras pengulangan sapaan', () => {
+    const prompt = PersonaPromptBuilder.buildSystemPrompt({ genderGreeting: 'Bunda' } as any, true);
+    expect(prompt).toContain('DILARANG KERAS');
+    expect(prompt).toContain('Perkenalkan, saya Bidan Yusi');
+  });
+
+  it('Case 3: V3 follow-up membersihkan balasan LLM yang mengulang Turn-0', async () => {
+    const repeatedGreeting =
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Untuk rekomendasi pijat baby, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
+    (axios.post as any).mockResolvedValueOnce({
+      data: { choices: [{ message: { role: 'assistant', content: repeatedGreeting } }] },
+    });
+    const result = await V3AgentRunner.processMessage({
+      customerId: 'mock-follow-1',
+      conversationId: 'mock-follow-conv-1',
+      phone: '6286666666666',
+      chatId: '6286666666666@c.us',
+      incomingText: 'pijat buat baby apa ya kak rekomendasinya',
+      history: [
+        { role: 'user', content: 'halo' },
+        { role: 'assistant', content: TEMPLATES.greeting({ isIslamic: false }) },
+      ],
+    });
+    expect(axios.post).toHaveBeenCalled();
+    expect(result.replyText).not.toContain('Terima kasih sudah menghubungi kami');
+    expect(result.replyText).not.toContain('Perkenalkan, saya Bidan Yusi');
   });
 });

@@ -184,4 +184,77 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
     });
     expect(delRes.statusCode).toBe(200);
   });
+
+  it('POST /api/admin/few-shots rejects oversize fields with 400 (prompt budget guard)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots',
+      headers: { 'x-api-key': adminApiKey },
+      payload: {
+        scenario: 'x'.repeat(151),
+        customerMessage: 'Halo',
+        idealResponse: 'Hai',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots',
+      headers: { 'x-api-key': adminApiKey },
+      payload: {
+        scenario: 'Skenario valid',
+        customerMessage: 'Halo',
+        idealResponse: 'y'.repeat(1001),
+      },
+    });
+    expect(res2.statusCode).toBe(400);
+  });
+
+  it('PUT /api/admin/few-shots/:id rejects empty & oversize fields with 400', async () => {
+    const all = await FewShotExemplarBank.getAllExemplars('default-tenant', true);
+    const target = all[0];
+
+    const emptyRes = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/few-shots/${target.id}`,
+      headers: { 'x-api-key': adminApiKey },
+      payload: { scenario: '   ' },
+    });
+    expect(emptyRes.statusCode).toBe(400);
+
+    const longRes = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/few-shots/${target.id}`,
+      headers: { 'x-api-key': adminApiKey },
+      payload: { customerMessage: 'z'.repeat(501) },
+    });
+    expect(longRes.statusCode).toBe(400);
+  });
+
+  it('reset-defaults is non-destructive: custom exemplar dipertahankan', async () => {
+    const custom = await FewShotExemplarBank.createExemplar(
+      {
+        scenario: 'Pertanyaan Jam Operasional (kustom admin)',
+        customerMessage: 'Jam operasional klinik jam berapa?',
+        idealResponse: 'Kami buka setiap hari pukul 08.00-20.00 ya Bunda 😊',
+        tags: ['jam', 'operasional'],
+      },
+      'default-tenant'
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots/reset-defaults',
+      headers: { 'x-api-key': adminApiKey },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.success).toBe(true);
+    // 32 default SOP (7 SOP inti + 25 Koleksi Emas) + 1 kustom = 33;
+    // kustom tidak terhapus & ikut serta dalam hasil.
+    expect(body.data.length).toBe(33);
+    expect(body.data.some((e: any) => e.id === custom.id)).toBe(true);
+    expect(body.data.some((e: any) => e.scenario === 'Pertanyaan Jam Operasional (kustom admin)')).toBe(true);
+  });
 });

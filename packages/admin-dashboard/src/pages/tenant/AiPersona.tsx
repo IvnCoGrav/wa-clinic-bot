@@ -293,14 +293,14 @@ export const AiPersona: React.FC = () => {
     }
   };
 
-  // Reset to Defaults
+  // Pulihkan Contoh SOP Klinik (additive: contoh kustom tidak dihapus)
   const handleResetDefaults = async () => {
     const ok = await confirm({
-      title: 'Reset ke Default SOP',
-      message: 'Apakah Anda yakin ingin mereset seluruh contoh chat ke default SOP klinik bawaan sistem?',
-      confirmText: 'Ya, Reset',
+      title: 'Pulihkan Contoh SOP Klinik',
+      message: 'Contoh SOP bawaan sistem akan diperbarui/dilengkapi. Contoh kustom yang sudah Anda buat tetap dipertahankan. Lanjutkan?',
+      confirmText: 'Ya, Pulihkan',
       cancelText: 'Batal',
-      danger: true,
+      danger: false,
     });
 
     if (!ok) return;
@@ -311,10 +311,10 @@ export const AiPersona: React.FC = () => {
       });
       if (res.success && Array.isArray(res.data)) {
         setExemplars(res.data);
-        toast('Bank contoh percakapan berhasil di-reset ke default SOP klinik!', 'success');
+        toast('Contoh SOP klinik berhasil dipulihkan (contoh kustom tetap dipertahankan).', 'success');
       }
     } catch (err: any) {
-      toast('Gagal mereset: ' + err.message, 'error');
+      toast('Gagal memulihkan: ' + err.message, 'error');
     }
   };
 
@@ -368,10 +368,10 @@ export const AiPersona: React.FC = () => {
             <button
               onClick={handleResetDefaults}
               className="px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
-              title="Reset ke daftar contoh bawaan SOP klinik"
+              title="Pulihkan contoh SOP bawaan klinik (contoh kustom tetap dipertahankan)"
             >
               <RotateCcw size={13} />
-              <span>Reset SOP</span>
+              <span>Pulihkan SOP</span>
             </button>
             <button
               onClick={handleOpenCreateModal}

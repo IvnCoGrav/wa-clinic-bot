@@ -64,18 +64,20 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(countSentences(result.replyText)).toBeLessThanOrEqual(3);
   });
 
-  it('Test 3: Keluhan Bapil TANPA tanya harga — sanitizer menyapu Rp/menit', async () => {
+  it('Test 3: Keluhan Bapil TANPA tanya harga — pipeline TIDAK memutilasi kalimat (AI-first)', async () => {
+    // AI-FIRST: kendali harga hidup di hulu (prompt + tool inquirePrice).
+    // Sanitizer hilir tidak boleh mengamputasi nominal/kata di tengah kalimat.
     mockAssistant(
       'Untuk keluhan batuk pilek, paket yang paling tepat adalah *Pijat Bayi Pulih Ceria* (Terapi Bapil & Kembung) ya Bunda 😊 Durasinya 40 menit dengan promo *Rp 70.000* saja (harga normal *Rp 90.000*). Perawatan ini ditangani langsung oleh Bidan kami untuk membantu melegakan saluran pernapasan si kecil. Apakah si kecil saat ini sedang batuk pilek Bunda? 🤗'
     );
     const result = await run('Kalau terapi batuk pilek apa uya?', 'mock-rules-3');
     expect(result.replyText).toContain('*Pijat Bayi Pulih Ceria*');
-    expect(result.replyText).not.toMatch(/Rp\s*\d+/);
-    expect(result.replyText).not.toContain('40 menit');
-    expect(result.replyText).not.toContain('menit');
-    expect(result.replyText).not.toMatch(/(^|\n)\s*\d+\./);
+    // Utuh tanpa mutilasi — tidak ada kata cacat atau koma menggantung.
+    expect(result.replyText).toContain('*Rp 70.000*');
+    expect(result.replyText).not.toContain('danya');
+    expect(result.replyText).not.toContain('menjadi ,');
+    expect(result.replyText).not.toContain('untukperawatan');
     expect(result.replyText).not.toMatch(/usianya berapa bulan/i);
-    expect(countSentences(result.replyText)).toBeLessThanOrEqual(3);
     expect(result.replyText.length).toBeLessThanOrEqual(500);
   });
 
@@ -92,6 +94,8 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(result.replyText).not.toContain('(full body massage)');
     expect(result.replyText).toContain('akupresur');
     expect(result.replyText).toContain('aromaterapi');
+    expect(result.replyText).not.toContain('ber-STR aktif');
+    expect(result.replyText).toContain('Bidan kami');
   });
 
   it('Test 5: Pertanyaan Jadwal — anti-afirmasi, tawarkan cek jadwal', async () => {
@@ -124,22 +128,15 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(result.replyText).not.toMatch(/tersedia setiap hari|bisa setiap hari/i);
   });
 
-  it('Test 8: Sanitizer stripping harga/durasi (unit guardrail)', () => {
-    const leaky =
-      'Paket *Pijat Bayi Pulih Ceria* ya Bunda 😊 Durasinya 40 menit dengan promo *Rp 70.000* saja (harga normal *Rp 90.000*). Perawatan ditangani Bidan kami.';
-    const cleaned = OutputSanitizer.sanitizeUnsolicitedPriceAndDuration(
-      leaky,
-      'Kalau terapi batuk pilek apa ya?'
-    );
-    expect(cleaned).not.toMatch(/Rp\s*\d+/);
-    expect(cleaned).not.toContain('menit');
+  it('Test 8: Sanitizer teknis non-semantik (thinking tag, markdown, normalisasi Rp)', () => {
+    // AI-FIRST: sanitizer hanya untuk artefak mesin — tanpa mutilasi tengah kalimat.
+    const withThinking =
+      '<think>Pertimbangkan harga dan jadwal</think>Halo Bunda 😊 Paket *Pijat Bayi Pulih Ceria* promonya Rp 70.000 saja ya.';
+    const cleaned = OutputSanitizer.cleanOutboundReply(withThinking, 'Harganya berapa kak?');
+    expect(cleaned).not.toContain('<think>');
+    expect(cleaned).not.toContain('Pertimbangkan harga');
+    expect(cleaned).toContain('*Rp 70.000*');
     expect(cleaned).toContain('Pijat Bayi Pulih Ceria');
-
-    const kept = OutputSanitizer.sanitizeUnsolicitedPriceAndDuration(
-      leaky,
-      'Harganya berapa kak?'
-    );
-    expect(kept).toContain('Rp 70.000');
   });
 
   it('Test 9: Sanitizer truncate 500 karakter (unit guardrail)', () => {

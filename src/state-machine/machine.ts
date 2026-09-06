@@ -136,13 +136,23 @@ export class ConversationStateMachine {
       });
     }
 
-    // In-memory rewriting for Promo[CODE] greeting trigger
+    // In-memory rewriting for Promo[CODE] greeting trigger.
+    // STORAGE vs INFERENCE: teks asli (originalText) sudah di-log utuh di atas untuk
+    // DB audit trail & Live Chat; strip tag iklan hanya untuk lapisan inferensi
+    // (cleanTextForAi) agar payload LLM bersih.
+    if (!(incomingMessage as any).originalText && incomingMessage.text?.body) {
+      (incomingMessage as any).originalText = incomingMessage.text.body;
+    }
     if (incomingMessage.text?.body && /(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]/i.test(incomingMessage.text.body)) {
-      incomingMessage.text.body = incomingMessage.text.body.replace(/(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]\s*/gi, '').trim() || 'Halo';
+      const stripped = incomingMessage.text.body.replace(/(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]\s*/gi, '').trim() || 'Halo';
+      (incomingMessage as any).cleanTextForAi = stripped;
+      incomingMessage.text.body = stripped;
+    } else if (incomingMessage.text?.body) {
+      (incomingMessage as any).cleanTextForAi = (incomingMessage as any).cleanTextForAi || incomingMessage.text.body;
     }
 
     // --- GATE KELAS 🏥: MEDICAL CONCERN DETECTION ENGINE ---
-    const incomingText = incomingMessage.text?.body || '';
+    const incomingText = (incomingMessage as any).cleanTextForAi || incomingMessage.text?.body || '';
     const bubbleCorrelationId = incomingMessage.id || `msg_${customer.phone}_${Date.now()}`;
     const { MedicalDetectionService } = await import('../services/medical-detection.service');
     const medicalResult = MedicalDetectionService.detectMedicalConcern(incomingText);
@@ -292,6 +302,7 @@ export class ConversationStateMachine {
         phone: customer.phone,
         chatId: `${customer.phone}@c.us`,
         incomingText: effectiveInboundText,
+        originalText: (incomingMessage as any).originalText || inboundContent,
         history: historyFormatted,
         skipDbLogging: true,
       });

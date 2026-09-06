@@ -1303,7 +1303,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           conversationId: conversation.id,
           direction: 'INBOUND',
-          content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+          content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
           waMessageId,
           payloadRaw: mergeMediaIntoPayload(payload),
         });

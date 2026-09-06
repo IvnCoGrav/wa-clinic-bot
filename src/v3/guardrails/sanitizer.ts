@@ -2,7 +2,7 @@ export class OutputSanitizer {
   /**
    * Membersihkan tag thinking, monolog internal, dan artefak AI dari balasan sebelum dikirim ke WhatsApp.
    */
-  public static cleanOutboundReply(rawText: string, customerInput?: string): string {
+  public static cleanOutboundReply(rawText: string, customerInput?: string, isFollowUp: boolean = false): string {
     if (!rawText || typeof rawText !== 'string') return '';
 
     let text = rawText;
@@ -35,10 +35,14 @@ export class OutputSanitizer {
     // 6. Normalisasi spasi dan baris baru berlebih
     text = text.replace(/\n{3,}/g, '\n\n').trim();
 
-    // 7. Guardrail aturan emas klinik (deterministik, tanpa LLM)
+    // 7. Guardrail aturan emas klinik (deterministik, tanpa LLM).
+    // AI-FIRST: tidak ada pemotongan nominal/kata di tengah kalimat di sini
+    // (lihat Minimal-Regex Mandate). Kendali harga hidup di hulu: prompt
+    // persona + grounding tool get_catalog_and_price (inquirePrice).
     text = OutputSanitizer.stripEnglishLeakage(text);
-    text = OutputSanitizer.sanitizeUnsolicitedPriceAndDuration(text, customerInput);
     text = OutputSanitizer.sanitizeFirstPersonPronoun(text);
+    text = OutputSanitizer.sanitizeUnpromptedStrMention(text, customerInput);
+    text = OutputSanitizer.sanitizeFollowUpGreetingRepetition(text, isFollowUp);
     text = OutputSanitizer.truncateToMaxChars(text, 500);
     text = text.replace(/[^\S\r\n]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
@@ -46,25 +50,16 @@ export class OutputSanitizer {
   }
 
   /**
-   * Menyapu nominal harga & durasi jika customer tidak bertanya harga/durasi.
+   * Fallback deterministik: ubah sebutan "Bidan ber-STR aktif" menjadi
+   * "Bidan kami", KECUALI customer eksplisit menanyakan kualifikasi bidan.
    */
-  public static sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?: string): string {
-    if (!text || !customerInput) return text;
-    // Cek apakah customer menyertakan kata tanya harga / durasi
-    const isAskingPriceOrDuration = /\b(berapa|harga|harganya|tarif|tarifnya|biaya|biayanya|ongkir|ongkirnya|ongkos|pricelist|durasi|menit|lama|lamanya|waktu|jam|bayar)\b/i.test(customerInput);
-    if (isAskingPriceOrDuration) {
-      return text;
-    }
-    let cleaned = text;
-    // Hapus frasa durasi menit
-    cleaned = cleaned.replace(/(?:,\s*|\s+)(?:durasinya|durasi)?\s*(?:sekitar\s+)?\d+\s+menit\s*(?:dan\s+saat\s+ini\s+ada\s+promo)?/gi, '');
-    // Hapus nominal harga promo & normal
-    cleaned = cleaned.replace(/(?:,\s*|\s+)(?:dengan\s+)?(?:tarif|harga|biaya)?(?:\s+promo)?\s*(?:jadi\s+)?\*?Rp\s*[\d\.]+\*?(?:\s*saja)?(?:\s*\(harga\s+normal\s*\*?Rp\s*[\d\.]+\*?\))?/gi, '');
-    // Hapus frasa tambahan moksa jika bocor
-    cleaned = cleaned.replace(/(?:Sebagai\s+opsi\s+tambahan|Total\s+paket)[^.!?\n]*\*Rp\s*[\d\.]+\*[^.!?\n]*[.!?\n]*/gi, '');
-    // Normalisasi spasi dan baris baru
-    cleaned = cleaned.replace(/[^\S\r\n]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-    return cleaned;
+  public static sanitizeUnpromptedStrMention(text: string, customerInput?: string): string {
+    if (!text) return text;
+    const isAskingQualification = !!customerInput && /(sertifikat|STR\b|legalitas|surat\s+tanda\s+registrasi|bidan\s+asli|terapis|yang\s+(menangani|mijat|mijit|nanganin|datang)|ditangani\s+(oleh\s+)?siapa|petugasnya)/i.test(customerInput);
+    if (isAskingQualification) return text;
+    return text
+      .replace(/\boleh\s+Bidan\s+ber-STR\s+aktif\b/gi, 'oleh Bidan kami')
+      .replace(/\bBidan\s+ber-STR\s+aktif\b/gi, 'Bidan kami');
   }
 
   /**
@@ -116,6 +111,27 @@ export class OutputSanitizer {
     return text
       .replace(/\bAda\s+yang\s+bisa\s+saya\s+bantu\b/gi, 'Ada yang bisa kami bantu')
       .replace(/\b(?:saya|aku)\s+(bantu|sarankan|cekkan|rekomendasikan)\b/gi, 'kami $1');
+  }
+
+  /**
+   * Multi-turn anti-repetition guardrail: pada chat lanjutan (isFollowUp=true),
+   * potong deterministik seluruh varian sapaan pembuka & perkenalan diri Turn-0
+   * agar bot langsung menjawab inti pesan tanpa mengulang "Halo Bunda" /
+   * "Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi...".
+   */
+  public static sanitizeFollowUpGreetingRepetition(text: string, isFollowUp: boolean = false): string {
+    if (!text || !isFollowUp) return text;
+    let cleaned = text;
+    // Varian pembuka formal di awal balasan
+    cleaned = cleaned.replace(/^(?:halo|hai|hei|hey)\s+(?:bunda|bun|kak|min)\s*[!✨🥰🌸\.,\s]*/i, '');
+    cleaned = cleaned.replace(/^selamat\s+(?:pagi|siang|sore|malam)(?:\s+(?:bunda|bun|kak|min))?\s*[!✨🥰🌸\.,\s]*/i, '');
+    // Varian perkenalan diri redundan (terima kasih + perkenalkan)
+    cleaned = cleaned.replace(/^(?:terima\s+kasih\s+sudah\s+menghubungi\s+kami[.,\s✨🌸]*)(?:perkenalkan,\s+saya\s+bidan\s+yusi[^.!?\n]*[.!?\n]*)?/i, '');
+    // Varian perkenalan langsung
+    cleaned = cleaned.replace(/^perkenalkan,\s+saya\s+bidan\s+yusi[^.!?\n]*[.!?\n]*/i, '');
+    // Sisa sapaan "Halo Bunda" yang terselip tepat di awal setelah strip pertama
+    cleaned = cleaned.replace(/^(?:halo|hai)\s*[!✨🥰🌸\.,\s]*/i, '');
+    return cleaned.trim();
   }
 
   /**
