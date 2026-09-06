@@ -1,6 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
 import { FewShotExemplarBank } from '../../src/slot-engine/few-shot-exemplars';
+
+// Test API butuh mode non-production agar buildApp() tidak melempar
+// "WAHA_WEBHOOK_SECRET must be defined" — setup.ts global sengaja blank
+// secret supaya webhook berjalan no-auth secara deterministik.
+process.env.NODE_ENV = 'test';
+process.env.WAHA_WEBHOOK_SECRET = '';
+process.env.ADMIN_API_KEY = 'test_admin_api_key_few_shots';
 
 describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
   const app = buildApp();
@@ -9,6 +16,11 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.ADMIN_API_KEY = adminApiKey;
+  });
+
+  afterEach(() => {
+    // Bersihkan cache modul agar tiap test berangkat dari state bersih.
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
   });
 
   it('GET /api/admin/few-shots returns list of exemplars', async () => {
@@ -49,9 +61,44 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
     expect(body.data.tags).toContain('promo');
   });
 
+  it('POST /api/admin/few-shots rejects whitespace-only required fields with 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots',
+      headers: { 'x-api-key': adminApiKey },
+      payload: {
+        scenario: '   ',
+        customerMessage: 'Halo',
+        idealResponse: 'Hai',
+        tags: ['promo'],
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/admin/few-shots tolerates non-array tags (sanitized to empty)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots',
+      headers: { 'x-api-key': adminApiKey },
+      payload: {
+        scenario: 'Tag tidak valid',
+        customerMessage: 'Test',
+        idealResponse: 'Test',
+        tags: 'promo, bundling' as unknown as string[],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(Array.isArray(body.data.tags)).toBe(true);
+    expect(body.data.tags.length).toBe(0);
+  });
+
   it('PUT /api/admin/few-shots/:id updates existing exemplar', async () => {
     // 1. Get first exemplar
-    const all = await FewShotExemplarBank.getAllExemplars();
+    const all = await FewShotExemplarBank.getAllExemplars('default-tenant', true);
     const target = all[0];
 
     const res = await app.inject({
@@ -73,12 +120,15 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
 
   it('DELETE /api/admin/few-shots/:id deletes exemplar', async () => {
     // 1. Create a dummy to delete
-    const created = await FewShotExemplarBank.createExemplar({
-      scenario: 'To delete',
-      customerMessage: 'Test',
-      idealResponse: 'Test',
-      tags: ['test'],
-    });
+    const created = await FewShotExemplarBank.createExemplar(
+      {
+        scenario: 'To delete',
+        customerMessage: 'Test',
+        idealResponse: 'Test',
+        tags: ['test'],
+      },
+      'default-tenant'
+    );
 
     const res = await app.inject({
       method: 'DELETE',
@@ -102,5 +152,36 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
     const body = res.json();
     expect(body.success).toBe(true);
     expect(body.data.length).toBeGreaterThan(0);
+  });
+
+  it('reset-defaults -> update (no ID mismatch 404)', async () => {
+    // Reset dulu
+    const resetRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/few-shots/reset-defaults',
+      headers: { 'x-api-key': adminApiKey },
+    });
+    expect(resetRes.statusCode).toBe(200);
+    const resetBody = resetRes.json();
+    const first = resetBody.data[0];
+
+    // Update memakai ID riil hasil reset (harusnya sukses, bukan 404)
+    const updRes = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/few-shots/${first.id}`,
+      headers: { 'x-api-key': adminApiKey },
+      payload: { idealResponse: 'Diedit pasca-reset' },
+    });
+    expect(updRes.statusCode).toBe(200);
+    const updBody = updRes.json();
+    expect(updBody.data.idealResponse).toBe('Diedit pasca-reset');
+
+    // Delete memakai ID riil hasil reset (harusnya sukses)
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/few-shots/${first.id}`,
+      headers: { 'x-api-key': adminApiKey },
+    });
+    expect(delRes.statusCode).toBe(200);
   });
 });
