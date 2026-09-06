@@ -247,6 +247,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               phone: customer.phone,
               chatId: `${targetPhone}@c.us`,
               incomingText,
+              originalText: combinedRawText,
             });
 
             const answer = v3Result.isEscalated && !v3Result.replyText

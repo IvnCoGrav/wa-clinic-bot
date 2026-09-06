@@ -77,3 +77,18 @@ data/
 # local desktop tool state
 .freebuff/
 .commandcode/
+
+# Local evaluation scripts and live chat data dumps (protect customer PII)
+scripts/*.ps1
+scripts/live_10_*
+scripts/test_10_*
+scripts/*-10-*
+scripts/extract-treated-chats.*
+scripts/parse-*-chats.*
+scripts/inspect-treated.*
+scripts/test-spring-residence.*
+scripts/test-user-5turn-scenario.*
+scripts/test-v3-migration-verification.*
+scripts/test-v3-simulation.*
+scripts/test-golden-rules-audit.*
+scripts/process-chat-bank.*

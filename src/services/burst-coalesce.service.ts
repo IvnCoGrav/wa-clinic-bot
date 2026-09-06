@@ -122,7 +122,7 @@ export class BurstCoalesceService {
 
     // 4. Log pesan asli SEKARANG (audit trail + live chat realtime + idempotency lock).
     const hasMedia = !!(incomingMessage.media || incomingMessage.type === 'image');
-    const logContent = incomingMessage.text?.body || (hasMedia ? (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : '[IMAGE]') : '[TEXT]');
+    const logContent = (incomingMessage as any).originalText || incomingMessage.text?.body || (hasMedia ? (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : '[IMAGE]') : '[TEXT]');
     await messageService.logMessage({
       tenantId,
       conversationId: conversation.id,
