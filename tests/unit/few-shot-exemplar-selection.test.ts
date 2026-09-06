@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FewShotExemplarBank, FEW_SHOT_EXEMPLARS } from '../../src/slot-engine/few-shot-exemplars';
+import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/slot-engine/few-shot-exemplars';
 import { ExtractedEntities, CustomerSlate } from '../../src/slot-engine/types';
 import { ConversationState } from '@prisma/client';
 
@@ -112,5 +112,48 @@ describe('FewShotExemplarBank (Positive Exemplar Selection)', () => {
     const exemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, 'Pijat laktasi dan oksitosin itu untuk ibu ya?');
     expect(exemplars.length).toBeGreaterThan(0);
     expect(exemplars.some((e) => e.id === 'maternal_lactation_inquiry')).toBe(true);
+  });
+
+  it('should NOT match tag as sub-word (flu inside fluktuasi)', () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['chitchat'],
+      symptoms: [],
+    };
+
+    // "fluktuasi" mengandung substring "flu" — word-boundary matching harus menolak.
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, 'Harga treatmentnya fluktuasi terus ya bun?');
+    expect(exemplars.some((e) => e.id === 'symptom_flu_consultation')).toBe(false);
+
+    // "influence" mengandung substring "flu" — juga harus ditolak.
+    const exemplars2 = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, 'Does the price influence the schedule?');
+    expect(exemplars2.some((e) => e.id === 'symptom_flu_consultation')).toBe(false);
+  });
+
+  it('should prioritize a CUSTOM exemplar (non-default id) by its intent tags', () => {
+    const custom: (typeof DEFAULT_FEW_SHOT_EXEMPLARS)[0] = {
+      id: 'custom_diskon_promo_001',
+      tenantId: 'default-tenant',
+      scenario: 'Customer menanyakan promo diskon bundling',
+      tags: ['diskon', 'promo', 'potongan'],
+      customerMessage: 'Ada diskon buat ambil 2 paket gak?',
+      idealResponse: 'Tentu ada Bunda, untuk pembelian 2 paket kami berikan potongan spesial 😊',
+      isActive: true,
+      sortOrder: 99,
+    };
+
+    // Seed cache modul dengan exemplar kustom admin (id NON-bawaan).
+    FewShotExemplarBank.__setCacheForTest?.('default-tenant', [custom]);
+
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['diskon'],
+      symptoms: [],
+    };
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, 'Ada diskon khusus promo gak?');
+    expect(exemplars.some((e) => e.id === 'custom_diskon_promo_001')).toBe(true);
+
+    // Bersihkan seed agar tidak mencemari test lain.
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
   });
 });
