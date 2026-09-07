@@ -85,4 +85,36 @@ describe('V3 multi-recipient cart (multi-anak & Mom+Baby)', () => {
     const cart = GoalTracker.syncCartItems(baseSession, [msg('pijat bayi berapa menit')], CATALOG as any);
     expect(cart).toHaveLength(0);
   });
+
+  it('Anti-phantom: sapaan bot "Treatment moms & Baby" tidak memasukkan Newborn Treatment', () => {
+    const catalogWithNewborn = [
+      ...CATALOG,
+      { name: 'Newborn Treatment', promoPrice: 500000, originalPrice: 500000, category: 'BABY', isAddon: false },
+    ];
+    const cart = GoalTracker.syncCartItems(baseSession, [
+      msg('Perkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby langsung ke rumah', 'assistant'),
+    ], catalogWithNewborn as any);
+    expect(cart).toHaveLength(0);
+  });
+
+  it('Pesan durasi slang "brp menit" bukan sinyal beli & tidak masuk keranjang', () => {
+    expect(GoalTracker.isDurationOnlyQuestion('Untuk pijat bayi biasanya brp menit kak')).toBe(true);
+    const cart = GoalTracker.syncCartItems(baseSession, [msg('Untuk pijat bayi biasanya brp menit kak')], CATALOG as any);
+    expect(cart).toHaveLength(0);
+  });
+
+  it('Treatment terpilih: keranjang hanya berisi item yang benar (Pijat Bayi Ceria Rp 60.000)', () => {
+    const catalogWithNewborn = [
+      ...CATALOG,
+      { name: 'Newborn Treatment', promoPrice: 500000, originalPrice: 500000, category: 'BABY', isAddon: false },
+    ];
+    const cart = GoalTracker.syncCartItems(baseSession, [
+      msg('Perkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby langsung ke rumah', 'assistant'),
+      msg('Untuk pijat bayi biasanya brp menit kak'),
+      msg('Mau Pijat Bayi Ceria untuk si kecil'),
+    ], catalogWithNewborn as any);
+    expect(cart).toHaveLength(1);
+    expect(cart[0].name).toBe('Pijat Bayi Ceria');
+    expect(GoalTracker.calcCartTotal({ ...baseSession, cartItems: cart } as any)).toBe(60000);
+  });
 });

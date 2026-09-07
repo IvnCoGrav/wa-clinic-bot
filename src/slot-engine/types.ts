@@ -55,6 +55,7 @@ export interface ExtractedEntities {
     | 'provide_age'
     | 'consult_symptom'
     | 'ask_price'
+    | 'ask_duration'
     | 'ask_clinic_origin'
     | 'select_treatment'
     | 'request_booking'

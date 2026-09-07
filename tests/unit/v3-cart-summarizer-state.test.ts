@@ -75,6 +75,29 @@ describe('V3 cart tracking, fast intents & anti-amnesia summary', () => {
     expect(out).toMatch(/DILARANG menjelaskan ulang model potongan rambut/i);
   });
 
+  it('extractFastIntents: "brp menit" = ask_duration, BUKAN ask_price', () => {
+    const intents = extractFastIntents('Untuk pijat bayi biasanya brp menit kak');
+    expect(intents).toContain('ask_duration');
+    expect(intents).not.toContain('ask_price');
+  });
+
+  it('summarizer: pertanyaan durasi → fokus durasi waktu pelaksanaan, bukan tarif', () => {
+    const slate: any = {
+      isLocationConfirmed: true, kelurahan: 'Ngingas', kecamatan: 'Waru', ongkirPromoFee: 0, distanceKm: 3.5,
+      childAgeMonths: null, childAgeCategory: null, symptoms: [],
+      selectedTreatmentName: 'Pijat Bayi Ceria', preferredDate: null, preferredTime: null,
+      pricelistSent: false, reservationFormSent: false,
+    };
+    const out = ConversationStateSummarizer.summarize(slate, {
+      intents: ['ask_duration'], locationText: null, streetDetail: null, childAgeMonths: null,
+      symptoms: [], treatmentReferenced: 'Pijat Bayi Ceria', preferredDateText: null, preferredTimeText: null,
+      customerName: null, isMedicalEmergency: false, confidenceScore: 0.9,
+    } as any, { history: [], customerInput: 'Untuk pijat bayi biasanya brp menit kak' });
+    expect(out).toMatch(/durasi waktu pelaksanaan/i);
+    expect(out).toMatch(/Mau kami bantu jadwalkan untuk treatment/i);
+    expect(out).not.toMatch(/menanyakan tarif \/ harga layanan/i);
+  });
+
   it('deriveConversationState: peta status reuse-enum', () => {
     expect(V3AgentRunner.deriveConversationState({ genderGreeting: 'Bunda' } as any)).toBe(ConversationState.INITIAL);
     expect(V3AgentRunner.deriveConversationState({ genderGreeting: 'Bunda', location: { rawText: '', kelurahan: 'Pelemwatu' } } as any)).toBe(ConversationState.LOCATION_CONFIRMED);
