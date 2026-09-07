@@ -65,6 +65,115 @@ export function isAddonServiceName(name: string): boolean {
 }
 
 /**
+ * Penanda layanan bundle/paket — kandidat yang memuat kata ini HANYA dipilih bila
+ * teks customer eksplisit memuat kata bundle yang sama ("selapan", "cukur", ...).
+ * Mencegah "pijat ceria" salah cocok ke "Paket Selapan (Cukur + Pijat Ceria)".
+ */
+const BUNDLE_MARKERS = ['paket', 'selapan', 'cukur', 'bundle', 'bundling', 'hemat', 'komplit', 'lengkap'];
+
+/**
+ * Alias slang → token katalog ("oksifull" → oksitosin + full).
+ */
+const SERVICE_TOKEN_ALIASES: Record<string, string[]> = {
+  oksifull: ['oksitosin', 'full'],
+  oksitoksin: ['oksitosin'],
+  oksi: ['oksitosin'],
+  moksa: ['moksa'],
+};
+
+function significantTokens(s: string): string[] {
+  return (s || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3);
+}
+
+function expandTokenAliases(tokens: string[]): string[] {
+  const out: string[] = [];
+  for (const t of tokens) {
+    const alias = SERVICE_TOKEN_ALIASES[t];
+    if (alias) out.push(...alias);
+    else out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Satu token query cocok ke token kandidat bila sama persis ATAU substring dua arah
+ * (mis. "full"/"body" vs "fullbody"). Batas minimal 4 huruf agar tidak noisy.
+ */
+function tokenHits(queryTok: string, candTok: string): boolean {
+  if (queryTok === candTok) return true;
+  if (queryTok.length >= 4 && candTok.length >= 4 && (candTok.includes(queryTok) || queryTok.includes(candTok))) return true;
+  return false;
+}
+
+/**
+ * Intelligent matching: teks bebas customer ("pijat ceria", "oksitosin full body",
+ * "oksifull") → item katalog yang tepat ("Pijat Bayi Ceria (Rileksasi)",
+ * "Oksitosin Massage Fullbody"), BUKAN bundle ("Paket Selapan...").
+ *
+ * Skor = cakupan token query (shared/query) dengan tie-break spesifisitas
+ * (shared/kandidat). Kandidat bundle-ish yang tidak disebut eksplisit customer
+ * hanya dipakai sebagai fallback terakhir.
+ */
+export function matchCatalogService(
+  query: string | null | undefined,
+  catalog: Array<{
+    id?: string;
+    name: string;
+    price?: number;
+    promoPrice?: number;
+    originalPrice?: number;
+    category?: string;
+    durationMinutes?: number;
+  }> = []
+): any | null {
+  const qRaw = (query || '').trim();
+  if (!qRaw || !catalog || catalog.length === 0) return null;
+
+  // 1. Exact match selalu menang (nama resmi utuh).
+  const qLower = qRaw.toLowerCase();
+  const exact = catalog.find((c) => (c.name || '').toLowerCase().trim() === qLower);
+  if (exact) return exact;
+
+  // 2. Token overlap scoring.
+  const qToks = expandTokenAliases(significantTokens(qRaw));
+  if (qToks.length === 0) return null;
+  const qExplicitBundle = BUNDLE_MARKERS.some(
+    (m) => qToks.includes(m) || qLower.includes(m)
+  );
+
+  let best: any = null;
+  let bestCoverage = -1;
+  let bestSpecificity = -1;
+  let fallbackBundle: any = null;
+
+  for (const c of catalog) {
+    const cToks = significantTokens(c.name || '');
+    if (cToks.length === 0) continue;
+    const shared = qToks.filter((qt) => cToks.some((ct) => tokenHits(qt, ct))).length;
+    if (shared === 0) continue;
+    const isBundleish = BUNDLE_MARKERS.some((m) => (c.name || '').toLowerCase().includes(m));
+    if (isBundleish && !qExplicitBundle) {
+      if (!fallbackBundle) fallbackBundle = c;
+      continue;
+    }
+    const coverage = shared / qToks.length;
+    const specificity = shared / cToks.length;
+    if (coverage > bestCoverage || (coverage === bestCoverage && specificity > bestSpecificity)) {
+      best = c;
+      bestCoverage = coverage;
+      bestSpecificity = specificity;
+    }
+  }
+
+  return best || fallbackBundle;
+}
+
+/**
  * Mengekstrak daftar layanan murni dari string detail reservasi,
  * lalu mencocokkannya ke katalog database (jika tersedia) untuk mendapatkan harga & durasi riil.
  */
@@ -106,7 +215,7 @@ export function parseTreatmentItemsFromRaw(
   return parts.map((part, idx) => {
     const pureName = cleanTreatmentName(part);
     const matched = catalogMap.get(pureName.toLowerCase()) ||
-      catalog.find((c) => c.name.toLowerCase().includes(pureName.toLowerCase()) || pureName.toLowerCase().includes(c.name.toLowerCase()));
+      matchCatalogService(pureName, catalog);
 
     const isAddon = isAddonServiceName(pureName);
     let category: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | 'ADD_ON' = isAddon ? 'ADD_ON' : 'BABY';

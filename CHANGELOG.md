@@ -4,6 +4,42 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Ekstraksi Form Chat, Fuzzy Matching Layanan & Generator Invoice WhatsApp (`chatScheduleExtractor.ts`, `treatmentStringParser.ts`, `InvoiceGeneratorModal.tsx`) (2026-09-07)
+
+- **Latar Belakang (kasus Bunda Fitria 628563567095):** Invoice tidak sesuai form — tanggal geser H+1, nama anak kosong, usia "Treatment :", layanan salah "Paket Selapan" Rp 80.000 padahal "Pijat Ceria + Oksitosin". Akar: (1) regex top-down menangkap template kosong bot → section baby/moms terpotong; (2) baris historis `children` (`Usia Bayi/Anak :` / `Treatment :`) tanpa guard; (3) `.includes()` satu arah cocokkan "pijat ceria" ke bundle Selapan; (4) treatment Moms terabaikan.
+- **Stage 1 — Core extractor (`chatScheduleExtractor.ts`):** `pickFilledFormBlock` reverse-scan (terbaru→terlama, INBOUND terisi prioritas, fallback OUTBOUND terisi, template kosong tidak pernah dipilih); seluruh ekstraksi terstruktur TAHAP 1 (tanggal, nama, alamat, anak, treatment baby+moms) memakai blok form terisi yang sama; `isFormLabelAge` guard `raw_age_text`/`current_age` DB; `cleanBundaName` loop stabil + collapse token kembar ("fitria Wonokromo Wonokromo"→"fitria"); part treatment dikanonikalisasi ke nama resmi katalog bila tersedia.
+- **Stage 2 — Intelligent matching (`treatmentStringParser.ts`):** `matchCatalogService` token-overlap scoring (cakupan query + tie-break spesifisitas, substring dua arah "full/body↔fullbody", alias "oksifull"→oksitosin+full, exact-match menang, kandidat bundle hanya bila disebut eksplisit) — dipakai `parseTreatmentItemsFromRaw` & price matching extractor. "pijat ceria"→Pijat Bayi Ceria, "oksitosin full body"/"oksifull"→Oksitosin Massage Fullbody.
+- **Stage 3 — Modal (`InvoiceGeneratorModal.tsx`):** Hidrasi sanitasi bunda/usia (`cleanBundaName`, `isFormLabelAge`→kosong), render invoice pakai nama & usia aman; dynamic list otomatis hidrasi 2 item Rp 60.000+Rp 105.000 via parser Stage 2.
+- **Stage 4 — Live DB:** DELETE 1 baris korup `children` (`f5c207c7…`/`Usia Bayi/Anak :`/`Treatment :`), normalisasi `customers.name`→"Bunda Fitria Wonokromo". Verifikasi: tersisa Fitria/hamil 38 minggu + Nadira/2bulan.
+- **Verifikasi:** `chat-schedule-extractor-form.test.ts` 13/13 ✓ (thread riil Fitria: Minggu 13 Sep 2026, Nadira, 2bulan, BUNDLE Rp 165.000, anti-template-kosong, anti-Selapan, guard korup), regresi `chat-schedule-extractor` 8/8 + `treatment-string-and-tier-calc` 7/7 ✓, dashboard `vite build` ✓.
+
+#### Fix — Eliminasi Phantom Cart Item & Presisi Topik Durasi Pijat Bayi (`goal-tracker.ts`, `persona.ts`, `conversation-summarizer.ts`, `types.ts`) (2026-09-07)
+
+- **Latar Belakang:** Sesi simulator 933742 — sapaan bot Turn-0 ("Treatment moms & Baby...") memasukkan phantom item Rp 500.000 via token unik tunggal "treatment"; "Untuk pijat bayi biasanya brp menit kak" salah terdeteksi `ask_price` via substring 'rp' di "brp" (persona + buyingSignal); closing CTA berupa pertanyaan terbuka alih-alih ajakan booking spesifik. Commit `a31f350` hanya berisi dokumen rencana — kode belum pernah diimplementasikan.
+- **Tahap 1 — Engine keranjang (`goal-tracker.ts`):** `GENERIC_CLINIC_TOKENS` (16 kata: treatment, pijat, bayi, ...) dilarang jadi penentu tunggal fuzzy; pesan `assistant` hanya boleh `exactHits` (nama resmi utuh); `isDurationOnlyQuestion` pakai `/\brp\b/` presisi agar "brp" bukan sinyal beli.
+- **Tahap 2 — Intent & summarizer (`persona.ts`, `conversation-summarizer.ts`, `types.ts`):** `extractFastIntents` — 'rp' substring → token `/\brp\b/`, pertanyaan durasi mengalahkan harga, intent baru `ask_duration` (+ union type); summarizer cabang durasi SEBELUM harga ("durasi waktu pelaksanaan ..." + CTA jadwalkan spesifik, larang pertanyaan terbuka); `mentionsCost` cukur ikut presisi.
+- **Tahap 3 — Prompt (`persona.ts`):** SOP Kondisi C durasi (jelaskan durasi + manfaat, larang harga & pertanyaan terbuka, CTA "Mau kami bantu jadwalkan untuk treatment [Nama] Bunda?") + contoh few-shot kontras "brp menit" → 40 menit + CTA Pijat Bayi Ceria.
+- **Verifikasi:** 3 file target 32/32 ✓ + sweep 8 file 72/72 ✓ (regresi persona/extractor/decision/grounding), `tsc --noEmit` bersih, skenario 4-turn deterministik 12/12 ✓ (cart akhir hanya Pijat Bayi Ceria Rp 60.000, topik durasi, CTA spesifik). CLI interaktif hanya sampai Turn-0 via pipe (keterbatasan readline stdin) — Turn-0 asli "Treatment moms & Baby" terkonfirmasi sebagai pemicu.
+
+#### Audit & Enhancement — Investigasi Akar Masalah Follow-Up Cancelled & Optimasi Database Query Worker (`follow-up.service.ts`) (2026-09-07)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  - Pengguna meminta pengecekan performa Follow-Up Queue selama 1 minggu terakhir (31 Agu – 7 Sep 2026), memverifikasi apakah ada bug atau sudah berjalan sempurna, serta menanyakan penyebab mengapa banyak follow-up yang berstatus `CANCELLED`.
+- **Hasil Audit Mingguan Live Server (31 Agu – 7 Sep 2026):**
+  - **Terkirim (*SENT*)**: **85 pesan** (konsisten 10–19 pesan/hari pada hari kerja, rata-rata aman dari limitasi Meta).
+  - **Dalam Antrean (*QUEUED*)**: **52 pesan** (terjadwal rapi di masa mendatang).
+  - **Ditunda (*PENDING*)**: **30 pesan** (Review H+1 pasca treatment yang dipostpone sesuai kebijakan klinik).
+  - **Gagal (*FAILED*)**: **0 (Nol)** — tidak ada error pengiriman atau crash.
+  - **Overdue / Terlambat**: **0 (Nol)** — tidak ada antrian yang tersangkut.
+- **Investigasi Akar Masalah Status `CANCELLED` (Total 68 Kasus):**
+  - **41 kasus (60.3%) ➔ Pelanggan Berhasil Booking Reservasi Baru (`onReservationCreated`)**: Sistem otomatis membatalkan antrian `NO_PURCHASE` (+3, +7, +14 hari) atau sisa `NEXT_TREATMENT` saat pelanggan membuat booking baru agar mereka tidak mendapatkan chat follow-up keliru seperti *"apakah belum jadi booking?"*. Ini adalah **indikator konversi berhasil (*Conversion Win*)**.
+  - **17 kasus (25.0%) ➔ Proteksi Pelanggan dengan Reservasi Aktif (`Auto-Guard`)**: Saat worker hendak mengirim `NO_PURCHASE`, terdeteksi bahwa pelanggan sudah memiliki reservasi aktif (pending/confirmed/completed), sehingga dibatalkan otomatis agar pesan tepat sasaran.
+  - **9 kasus (13.2%) ➔ Pembatalan Manual oleh Admin**: Admin klinik mengklik tombol *"Batalkan"* dari antrian dashboard.
+  - **1 kasus (1.5%) ➔ Reservasi Customer Dibatalkan (`onReservationCancelled`)**: Pembatalan otomatis follow-up pengingat/review karena reservasi asalnya dibatalkan.
+  - **Kesimpulan**: Sebanyak **58 dari 68 (85.3%) pembatalan adalah mekanisme proteksi sukses karena pelanggan telah melakukan reservasi**, bukan bug.
+- **Optimasi Pencegahan (*Preventive Optimization*):**
+  - Menambahkan filter `type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] }` langsung pada query database Prisma di `processDueFollowUps`, sehingga 30 record yang berstatus postponed tidak memenuhi kuota batch `take: 20` di setiap siklus worker.
+
 #### Fix — Pemisahan Operasional "Tandai Lunas" dari Meta CAPI & Pemulihan Tombol Reservasi (`reservations.subroute.ts`, `ReservationDetailModal.tsx`) (2026-09-07)
 
 - **Kebijakan:** Eksklusivitas Meta Purchase Queue — `Tandai Lunas / Confirm` TIDAK lagi auto-kirim `Purchase` CAPI. Seluruh Purchase hanya via `POST /api/admin/reservation/:id/approve-purchase` (Meta CAPI Queue). `purchase_event_sent_at` hanya di-set saat CAPI riil terkirim, bukan saat lunas operasional.

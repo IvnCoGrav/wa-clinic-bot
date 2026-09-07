@@ -22,7 +22,7 @@ import {
   RotateCcw,
   FileText,
 } from 'lucide-react';
-import { ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
+import { ExtractedScheduleData, formatIndonesianDate, cleanBundaName, isFormLabelAge } from '../../utils/chatScheduleExtractor';
 import { useUiFeedback } from '../common/UiFeedback';
 import { parseTreatmentItemsFromRaw, stripBufferMetadata, isAddonServiceName } from '../../utils/treatmentStringParser';
 import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
@@ -121,15 +121,18 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     if (isOpen && initialData) {
       setDateDisplay(initialData.dateDisplay || '');
       setTimeDisplay(initialData.timeDisplay || '12.00-12.30');
-      setBundaName(initialData.bundaName || '');
+      // Sanitasi: bersihkan duplikasi kecamatan/kota ("fitria Wonokromo Wonokromo" -> "fitria")
+      setBundaName(cleanBundaName(initialData.bundaName || '', initialData.kecamatan, initialData.kota));
       setPhone(initialData.phone || '');
       setAddress((initialData.address || '').trim());
       setKecamatan((initialData.kecamatan || '').trim());
       setKota((initialData.kota || '').trim());
       setCategory((initialData.treatmentCategory as any) === 'MOMS' ? 'MOMS' : (initialData.treatmentCategory as any)==='BUNDLE' ? 'BUNDLE' : 'BABY');
       setChildName(initialData.childName || '');
-      setChildAge(initialData.childAge || '');
-      setBabies(initialData.childName ? [{ name: initialData.childName, ageText: initialData.childAge || '' }] : []);
+      // Sanitasi: label teknis form ("Treatment :") DILARANG menjadi usia — kosongkan
+      const safeAge = isFormLabelAge(initialData.childAge) ? '' : (initialData.childAge || '');
+      setChildAge(safeAge);
+      setBabies(initialData.childName ? [{ name: initialData.childName, ageText: safeAge }] : []);
 
       // Hydrate selectedTreatments using parser that strips buffer metadata & looks up real prices
       const parsedItems = parseTreatmentItemsFromRaw(initialData.treatmentName, clinicServices);
@@ -243,12 +246,15 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     const safeKota = (kota || '').trim();
     const safePhone = (phone || '').trim();
     const safeDiscount = Number(discountAmount) || 0;
+    // Sanitasi usia: label form korup ("Treatment :") dirender sebagai kosong
+    const safeChildAge = isFormLabelAge(childAge) ? '' : (childAge || '').trim();
+    const safeBundaName = cleanBundaName(safeBunda, safeKec, safeKota);
 
     const lines: string[] = [
       'Berikut reservasi 🐣',
       '',
       `Hari dan tanggal :  ${dateTimeLine}`,
-      `Nama Bunda:  ${safeBunda}`,
+      `Nama Bunda:  ${safeBundaName}`,
       `Alamat & Shareloc : ${safeAddress}`,
       `Kec : ${safeKec}`,
       `Kota : ${safeKota}`,
@@ -270,13 +276,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
 
     const isBundle = category === 'BUNDLE' || (treatList.length > 1 && (category === 'BABY' || category === 'MOMS'));
     if (category === 'BUNDLE' || (treatList.length > 1 && treatList.some(t=>/mom|hamil|laktasi|nifas|breast/i.test(t)))) {
-      lines.push('Pilihan treatment (Baby & Moms Bundle)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${(childAge || '').trim()}`, `Treatment : ${treatList.join(' + ')}`);
+      lines.push('Pilihan treatment (Baby & Moms Bundle)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${safeChildAge}`, `Treatment : ${treatList.join(' + ')}`);
     } else if (category === 'BABY') {
       if (treatList.length > 1) {
-        lines.push('Pilihan treatment (Baby & Kids)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${(childAge || '').trim()}`);
+        lines.push('Pilihan treatment (Baby & Kids)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${safeChildAge}`);
         treatList.forEach((t,i)=> lines.push(`Treatment ${treatList.length>1?i+1:''} : ${t}`.replace(' :',':').trim()));
       } else {
-        lines.push('Pilihan treatment (Baby & Kids)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${(childAge || '').trim()}`, `Treatment : ${(treatList[0] || treatmentName || '').trim()}`);
+        lines.push('Pilihan treatment (Baby & Kids)', '', `Nama Bayi : ${(childName || '').trim()}`, `Usia Bayi/Anak : ${safeChildAge}`, `Treatment : ${(treatList[0] || treatmentName || '').trim()}`);
       }
     } else {
       if (treatList.length > 1) {
