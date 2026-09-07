@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Refresh & Revisi Lokasi, Jarak & Ongkir Customer (Hierarki Validitas Bidan & Customer) (`customer.service.ts`, `customers.subroute.ts`, `LiveChatMonitor.tsx`, `CustomerEditForm.tsx`, `CustomerDatabase.tsx`) (2026-09-07)
+
+- **Hierarki Truth:** Tier1 `STAFF/ADMIN/HUMAN/BIDAN outbound` GPS pin/maps URL (paling valid) → Tier2 `customer inbound` shareloc → Tier3 `DB lat/lng` → Tier4 `geocoding kelurahan/kecamatan` (gazetteer + Nominatim). Deep scan `messages` (payload_raw.location, `[LOCATION SHARE]`, `[Shared Location]`, Google Maps shortlink via `resolveGoogleMapsUrl`).
+- **Backend Core (`customer.service.ts:refreshCustomerLocationAndOngkir`):** Pilih kandidat terbaru per-tier sesuai prioritas, `deliveryService.calculateDelivery` untuk jarak/ongkir presisi, `reverseGeocode` untuk kelurahan/kecamatan/kota/zip, update atomik `lat/lng/distance_km/ongkir/is_out_of_coverage/share_location_sent` + `preferences {location_source, location_source_label, location_refreshed_at, refreshed_by, source_detail, location_history[]}` (max 10). Fallback memory + `googleContacts` sync + `liveChatHub` publish.
+- **API (`customers.subroute.ts:POST /api/admin/customers/:id/refresh-location`):** Auth admin, audit `CUSTOMER_LOCATION_REFRESHED`, response `{source, sourceLabel, lat, lng, distanceKm, ongkir, isOutOfCoverage, kelurahan/kecamatan/kota, refreshedAt/By}` + message format `Rp`
+- **UI LiveChatMonitor (`LiveChatMonitor.tsx`):** Tombol `🔄 Refresh & Hitung Ulang` (spinner) di section Alamat & Lokasi, badge sumber `🟢 Terverifikasi Bidan / 🔵 Shareloc Customer / 🟡 Koordinat Tersimpan / ⚪ Estimasi Wilayah` + timestamp, realtime sync `customerDetailData + chats` tanpa reload (toast).
+- **UI Edit (`CustomerEditForm.tsx`):** Tombol `🔄 Ambil dari Shareloc Chat / Refresh` mengisi `lat/lng + kelurahan/kecamatan/kota` otomatis dari hierarki yang sama. `CustomerDatabase.tsx` tombol sama + badge di detail.
+- **Verifikasi:** `customer-location-refresh.test.ts` 5/5 ✓ (Tier1 bidan, Tier2 customer, Tier3 DB, Tier4 geocoding, kalkulasi ongkir), `human-background-enrichment` 5/5 ✓, dashboard `vite build` ✓ 211kB LiveChatMonitor, `tsc` tanpa regresi baru (pre-existing `knowledge keywords`).
+
 #### Feature — Integrasi Otomatis Data Gazetteer untuk Zipcode Meta CAPI (`gazetteer-zipcode-resolver.ts`, `capi.service.ts`, `human-background-enrichment.service.ts`, `backfill-customer-zipcodes.ts`) (2026-09-07)
 
 - **Tujuan:** Maksimalkan Event Match Quality (EMQ) Meta CAPI dengan otomatis menyertakan parameter `zp` (kode pos SHA-256) pada setiap event Purchase/InitiateCheckout/Lead, memanfaatkan dataset resmi `surabaya_sidoarjo_subdistricts.json` (573 kelurahan/desa SBY-SDA).
