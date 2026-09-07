@@ -646,5 +646,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Tambah entri remap `.dark` baru di `index.css` setiap kali warna eksotis ditemukan.
   - Migrasi bertahap halaman prioritas ke varian `dark:` eksplisit saat halaman disentuh refactor lain.
 
+---
+
+## 24. [CAPI] Gazetteer Zipcode Coverage Terbatas Surabaya & Sidoarjo (EMQ)
+
+- **Status:** by-design (2026-09-07).
+- **Ditemukan:** saat implementasi Integrasi Otomatis Data Gazetteer untuk Zipcode Meta CAPI.
+- **Gejala:** Dataset `src/config/surabaya_sidoarjo_subdistricts.json` hanya memuat 573 entri kelurahan/desa SBY-SDA. Customer di luar 2 kota/kabupaten tersebut (mis. Gresik, Malang, Jakarta, atau alamat tanpa kec/kel yang dikenali) akan tetap `zipcode = NULL` dan event CAPI terkirim tanpa `zp` — EMQ tidak meningkat untuk segmen non-SBY/SDA. Kecamatan multi-zip (Wonokromo 60241-60246) memakai representatif tunggal (60243) sehingga presisi 100% hanya bila kelurahan ikut terdeteksi.
+- **Mitigasi Saat Ini:** Resolver 3-layer (kel+ kec → kec representatif → free-text) + non-destruktif guard (tidak timpa zip existing) + backfill batch 200. CAPI & human enrichment sudah otomatis, log `[CAPI] zp enriched` memudahkan audit.
+- **Rencana Tindak Lanjut (opsional, bila EMQ perlu >90%):** Perluas dataset Gazetteer ke kota/kabupaten tambahan atau fallback ke geocoding reverse `zipcode` dari Google `geocodeText` (sudah ada `resolved.zipcode`) bila tersedia; evaluasi cost/benefit postcode prefix table nasional.
+
 
 
