@@ -220,12 +220,6 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   const handleCompleteClick = async () => {
     if (!onComplete) return;
-    const ok = await confirm({
-      title: 'Tandai Selesai Treatment?',
-      message: 'Apakah reservasi ini sudah selesai dilakukan penanganan/treatment oleh terapis?',
-      confirmText: 'Ya, Selesai',
-    });
-    if (!ok) return;
     await onComplete(reservation.id);
     toast('Reservasi berhasil ditandai Selesai Treatment!', 'success');
     onUpdate();
