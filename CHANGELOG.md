@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Pemisahan Operasional "Tandai Lunas" dari Meta CAPI & Pemulihan Tombol Reservasi (`reservations.subroute.ts`, `ReservationDetailModal.tsx`) (2026-09-07)
+
+- **Kebijakan:** Eksklusivitas Meta Purchase Queue — `Tandai Lunas / Confirm` TIDAK lagi auto-kirim `Purchase` CAPI. Seluruh Purchase hanya via `POST /api/admin/reservation/:id/approve-purchase` (Meta CAPI Queue). `purchase_event_sent_at` hanya di-set saat CAPI riil terkirim, bukan saat lunas operasional.
+- **Stage 1 Backend Decoupling (`reservations.subroute.ts`):** Hapus `capiService.sendCapiEvent Purchase (ADMIN_CONFIRM / ADMIN_EDIT_CONFIRM)` + mutasi `purchase_event_sent_at` dari `PATCH /api/admin/reservation/:id/confirm` (DB & mock) dan `PATCH /api/admin/reservation/:id` (edit menjadi confirmed). Flow operasional tetap: Google Calendar create, `followUpService.createReservationFollowUps`, audit `CONFIRM_RESERVATION`, remove WAHA label `pending payment`.
+- **Stage 2 UI (`ReservationDetailModal.tsx`):** Lepas hijacking tombol — selalu aktif hijau `bg-[#008069]`, teks `Konfirmasi Reservasi` (hold) / `Tandai Lunas` (pending) tanpa disabled `Purchase Dikirim`. Tambah badge CAPI terpisah: `✓ Purchase Terkirim (tgl)` / `⏳ Dalam Antrean Queue` / `Diabaikan (Outlier)` / `Belum Terkirim`.
+- **Stage 3 Live DB Fix:** Reservasi Bunda Yulia `4adb5589-4b42-4d5e-b3a1-b1ecb0a000db` (pending, CAPI approved) → `status confirmed` + sinkron Google Calendar (via live SSH/psql + `createEvent`).
+- **Verifikasi:** `admin-create-reservation.test.ts` 11/11 ✓, dashboard `vite build` ✓ 96.63kB ReservationDetailModal, `tsc` tanpa regresi baru.
+
 #### Feature — Refresh & Revisi Lokasi, Jarak & Ongkir Customer (Hierarki Validitas Bidan & Customer) (`customer.service.ts`, `customers.subroute.ts`, `LiveChatMonitor.tsx`, `CustomerEditForm.tsx`, `CustomerDatabase.tsx`) (2026-09-07)
 
 - **Hierarki Truth:** Tier1 `STAFF/ADMIN/HUMAN/BIDAN outbound` GPS pin/maps URL (paling valid) → Tier2 `customer inbound` shareloc → Tier3 `DB lat/lng` → Tier4 `geocoding kelurahan/kecamatan` (gazetteer + Nominatim). Deep scan `messages` (payload_raw.location, `[LOCATION SHARE]`, `[Shared Location]`, Google Maps shortlink via `resolveGoogleMapsUrl`).
