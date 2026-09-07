@@ -433,6 +433,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [customerDetailEditMode, setCustomerDetailEditMode] = useState(false);
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
+  const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
 
@@ -2632,6 +2633,54 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     }
     setCustomerDetailEditMode(false);
+  };
+
+  const handleRefreshLocation = async () => {
+    const customerId = customerDetailData?.id || selectedChat?.customerId;
+    if (!customerId) {
+      toast('Customer ID tidak ditemukan', 'error');
+      return;
+    }
+    setRefreshingLocation(true);
+    try {
+      const res: any = await apiRequest(`/api/admin/customers/${customerId}/refresh-location`, { method: 'POST' });
+      if (res?.success && res?.data) {
+        const d = res.data;
+        setCustomerDetailData((prev: any) => ({
+          ...prev,
+          lat: d.lat,
+          lng: d.lng,
+          distance_km: d.distanceKm,
+          ongkir: d.ongkir,
+          is_out_of_coverage: d.isOutOfCoverage,
+          kelurahan: d.kelurahan ?? prev?.kelurahan,
+          kecamatan: d.kecamatan ?? prev?.kecamatan,
+          kota: d.kota ?? prev?.kota,
+          preferences: {
+            ...(prev?.preferences || {}),
+            location_source: d.source,
+            location_source_label: d.sourceLabel,
+            location_refreshed_at: d.refreshedAt,
+            location_refreshed_by: d.refreshedBy,
+          },
+        }));
+        // sync ke daftar chats tanpa reload
+        const updatedChats = chatsRef.current.map((c) =>
+          c.customerId === customerId
+            ? { ...c, kelurahan: d.kelurahan ?? c.kelurahan, kecamatan: d.kecamatan ?? c.kecamatan, kota: d.kota ?? c.kota, distanceKm: d.distanceKm, ongkir: d.ongkir }
+            : c
+        );
+        setChats(updatedChats);
+        chatsRef.current = updatedChats;
+        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel} — ${d.distanceKm.toFixed(2)} km, Rp ${d.ongkir.toLocaleString('id-ID')}`, 'success');
+      } else {
+        toast(res?.error || 'Gagal refresh lokasi', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal refresh lokasi', 'error');
+    } finally {
+      setRefreshingLocation(false);
+    }
   };
 
   const handleOpenReservationDetail = async (reservationId: string) => {
@@ -5210,10 +5259,40 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                   {/* Detail Alamat & Lokasi */}
                   <div className="space-y-2">
-                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                      <MapPin size={12} />
-                      <span>Alamat & Lokasi</span>
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                        <MapPin size={12} />
+                        <span>Alamat & Lokasi</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={handleRefreshLocation}
+                        disabled={refreshingLocation}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed bg-white border-[#e9edef] hover:bg-[#f0f2f5] text-[#008069] hover:border-[#008069]"
+                        title="Pindai riwayat chat & hitung ulang jarak/ongkir berdasar shareloc paling valid (Bidan → Customer → DB → Geocoding)"
+                      >
+                        <RefreshCw size={12} className={refreshingLocation ? 'animate-spin' : ''} />
+                        <span>{refreshingLocation ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
+                      </button>
+                    </div>
+                    {customerDetailData?.preferences?.location_source_label || customerDetailData?.preferences?.location_source ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          (customerDetailData?.preferences?.location_source === 'bidan_shareloc') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          (customerDetailData?.preferences?.location_source === 'customer_shareloc') ? 'bg-sky-50 text-sky-700 border-sky-200' :
+                          (customerDetailData?.preferences?.location_source === 'db_coords') ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          {customerDetailData?.preferences?.location_source_label ||
+                            (customerDetailData?.preferences?.location_source === 'bidan_shareloc' ? '🟢 Terverifikasi Bidan' :
+                             customerDetailData?.preferences?.location_source === 'customer_shareloc' ? '🔵 Shareloc Customer' :
+                             customerDetailData?.preferences?.location_source === 'db_coords' ? '🟡 Koordinat Tersimpan' : '⚪ Estimasi Wilayah')}
+                        </span>
+                        {customerDetailData?.preferences?.location_refreshed_at ? (
+                          <span className="text-[10px] text-[#8696a0]">{new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID')}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
                         <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>

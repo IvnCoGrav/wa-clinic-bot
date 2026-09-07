@@ -584,9 +584,46 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   fastify.patch('/api/admin/customers/:id', handleUpdateCustomer);
 
   /**
-   * PUT /api/admin/customers/:id/location
-   * Admin memperbarui foto rumah, catatan patokan, dan/atau titik koordinat GPS customer.
-   */
+    * POST /api/admin/customers/:id/refresh-location
+    * Refresh & Hitung Ulang Lokasi, Jarak & Ongkir berdasar hierarki validitas (Bidan → Customer → DB → Geocoding)
+    */
+  fastify.post(
+    '/api/admin/customers/:id/refresh-location',
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      try {
+        const performedBy = (request as any).adminIdentity || (request as any).adminSession?.adminIdentity || 'Admin';
+        const result = await customerService.refreshCustomerLocationAndOngkir(id, DEFAULT_TENANT_ID, performedBy);
+        if (!result.success) {
+          return reply.status(400).send({ success: false, error: result.error });
+        }
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: performedBy,
+          action: 'CUSTOMER_LOCATION_REFRESHED',
+          targetId: id,
+          payload: result.data,
+          ipAddress: request.ip,
+        });
+        const ongkirStr = new Intl.NumberFormat('id-ID').format(result.data!.ongkir);
+        return reply.status(200).send({
+          success: true,
+          data: result.data,
+          message: `Lokasi & ongkir berhasil dimutakhirkan berdasarkan ${result.data!.sourceLabel} (Jarak: ${result.data!.distanceKm.toFixed(2)} km, Ongkir: Rp ${ongkirStr}).`,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+    * PUT /api/admin/customers/:id/location
+    * Admin memperbarui foto rumah, catatan patokan, dan/atau titik koordinat GPS customer.
+    */
   fastify.put(
     '/api/admin/customers/:id/location',
     { bodyLimit: 12 * 1024 * 1024 },
