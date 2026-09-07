@@ -862,27 +862,10 @@ export class StaffReservationService {
         },
       });
 
-      // Kirim konfirmasi pembayaran otomatis ke chat customer jika ada percakapan aktif
-      const conversationId = reservation.customer?.conversations?.[0]?.id;
-      if (conversationId) {
-        const methodLabel = paymentMethod === 'CASH' ? 'Tunai' : paymentMethod === 'QRIS' ? 'QRIS' : 'Transfer';
-        const receiptText = `✅ *PEMBAYARAN DITERIMA*\n\nTerima kasih Bunda ${reservation.customer?.name || ''}! Pembayaran sebesar *Rp ${totalPaid.toLocaleString('id-ID')}* (${methodLabel}) telah berhasil diterima dan dicatat.\n\nSemoga adik lekas sehat, ceria, dan tumbuh kembangnya optimal ya Bunda! 🙏🥰✨\n\n~ ${staffName}`;
-
-        try {
-          const { liveChatService } = await import('./live-chat.service');
-          await liveChatService.sendAdminReply({
-            conversationId,
-            text: receiptText,
-            tenantId,
-            adminName: staffName,
-            // Konfirmasi pembayaran oleh terapis juga menandakan percakapan
-            // ditangani manusia → bot tidak membalas lagi setelahnya.
-            forceEscalate: true,
-          });
-        } catch (chatErr: any) {
-          console.error('[STAFF RESERVATION] Error sending receipt chat message:', chatErr.message);
-        }
-      }
+      // [FITUR NONAKTIF]: Pengiriman pesan konfirmasi pembayaran otomatis ke WhatsApp customer
+      // dinonaktifkan atas arahan bisnis untuk mencegah pesan kaku/salah konteks (seperti template
+      // bayi terkirim ke customer nifas/suami). Pencatatan pembayaran tetap tersimpan di database
+      // dan audit log tanpa interupsi bot ke chat WhatsApp customer.
 
       // Audit log
       const { auditService } = await import('./audit.service');
