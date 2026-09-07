@@ -124,20 +124,26 @@ describe('General Age Inquiry Treatment Recommendation', () => {
       text: { body: 'okee Untuk anak umur 17 bulan yg mana yaa' },
     };
 
-    await machine.processMessage({
-      tenantId: DEFAULT_TENANT_ID,
-      customer,
-      conversation,
-      incomingMessage,
-    });
+    const prevV3 = process.env.USE_V3_AGENT;
+    process.env.USE_V3_AGENT = 'false';
+    try {
+      await machine.processMessage({
+        tenantId: DEFAULT_TENANT_ID,
+        customer,
+        conversation,
+        incomingMessage,
+      });
 
-    expect(mockWaha.sentMessages.length).toBeGreaterThan(0);
-    const reply = mockWaha.sentMessages[mockWaha.sentMessages.length - 1].text;
+      expect(mockWaha.sentMessages.length).toBeGreaterThan(0);
+      const reply = mockWaha.sentMessages[mockWaha.sentMessages.length - 1].text;
 
-    // Pastikan respon merekomendasikan Pijat Bayi Ceria / relaksasi / umum
-    expect(reply).toMatch(/Pijat Bayi Ceria|Ceria|Pijat/i);
-    // TIDAK boleh mempromosikan Nebulizer atau Sinar Moksa tanpa ada keluhan
-    expect(reply).not.toContain('Nebulizer');
-    expect(reply).not.toContain('Sinar Moksa');
+      // Pastikan respon merekomendasikan Pijat Bayi Ceria / relaksasi / umum
+      expect(reply).toMatch(/Pijat Bayi Ceria|Ceria|Pijat/i);
+      // TIDAK boleh mempromosikan Nebulizer atau Sinar Moksa tanpa ada keluhan
+      expect(reply).not.toContain('Nebulizer');
+      expect(reply).not.toContain('Sinar Moksa');
+    } finally {
+      process.env.USE_V3_AGENT = prevV3;
+    }
   });
 });

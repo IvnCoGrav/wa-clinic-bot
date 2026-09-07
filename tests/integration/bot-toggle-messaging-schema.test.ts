@@ -16,6 +16,7 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
     process.env.LLM_API_KEY = 'mock_llm_key';
     process.env.WAHA_API_KEY = 'my_waha_api_key_secret';
     process.env.ADMIN_API_KEY = 'test_admin_key_999';
+    await queueService.forceDisconnectRedis();
     await seedAiScopeAll();
     app = buildApp();
     await app.ready();

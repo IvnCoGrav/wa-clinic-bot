@@ -30,13 +30,13 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'calculate_delivery',
-    description: 'Menghitung jarak rute jalan dan tarif ongkos kirim (ongkir normal & promo) dari klinik ke lokasi/rumah customer.',
+    description: 'Wajib dipanggil setiap kali customer menyebutkan nama lokasi/rumah/daerah/kelurahan/desa/kecamatan/kota (termasuk Surabaya, Sidoarjo, Gresik, Menganti, atau daerah sekitar lainnya) untuk memverifikasi apakah jarak rute jalan masih dalam jangkauan homecare (<= 30 km) serta menghitung tarif ongkir resmi (normal & promo). DILARANG menanyakan jarak km kepada customer.',
     parameters: {
       type: 'object',
       properties: {
         locationText: {
           type: 'string',
-          description: 'Nama kelurahan, desa, perumahan, patokan, atau alamat lengkap customer (misal: "Sedati Pepe", "Bulusidokare", "Perumahan Safira Juanda").'
+          description: 'Nama kelurahan, desa, perumahan, patokan, kecamatan, kota, atau alamat lengkap customer (misal: "Pelemwatu Menganti Gresik", "Sedati Pepe", "Bulusidokare", "Perumahan Safira Juanda").'
         },
         streetDetail: {
           type: 'string',
@@ -51,6 +51,68 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
 const OUTSIDE_CITIES_RE = /\b(malang|jakarta|bandung|semarang|yogyakarta|jogja|bali|denpasar|kediri|blitar|madiun|probolinggo|pasuruan|jember|banyuwangi|bojonegoro|tuban|lamongan|ngawi|magetan|ponorogo|pacitan|trenggalek|tulungagung|lumajang|bondowoso|situbondo)\b/i;
 
 const BROAD_REGION_RE = /^(?:rumah\s+d\s+|rumah\s+di\s+|di\s+|daerah\s+|wilayah\s+)?(?:surabaya\s+(?:barat|timur|selatan|utara|pusat)|surabaya|sidoarjo|gresik)$/i;
+
+// ---------------------------------------------------------------------------
+// Data-driven kecamatan matcher (toleran typo ringan, tanpa regex patchwork):
+// mengenali nama kecamatan resmi dari database gazetteer di dalam query,
+// termasuk varian salah ketik 1 huruf (misal "memganti" → "Menganti").
+// ---------------------------------------------------------------------------
+import fs from 'fs';
+import path from 'path';
+
+let cachedKecamatanNames: Array<{ lower: string; orig: string }> | null = null;
+function getKecamatanNames(): Array<{ lower: string; orig: string }> {
+  if (cachedKecamatanNames) return cachedKecamatanNames;
+  const seen = new Map<string, string>();
+  try {
+    const candidates = [
+      path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+      path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+      path.resolve(__dirname, '../../config/surabaya_sidoarjo_subdistricts.json'),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        const data = JSON.parse(fs.readFileSync(c, 'utf-8'));
+        for (const item of data) {
+          const raw = String(item.Kecamatan || '').trim();
+          const lower = raw.toLowerCase();
+          if (lower.length >= 4 && !seen.has(lower)) seen.set(lower, raw);
+        }
+        break;
+      }
+    }
+  } catch (_) {}
+  cachedKecamatanNames = Array.from(seen.entries()).map(([lower, orig]) => ({ lower, orig }));
+  return cachedKecamatanNames;
+}
+
+function levenshteinAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    edits++;
+    if (edits > 1) return false;
+    if (la === lb) { i++; j++; } else if (la > lb) { i++; } else { j++; }
+  }
+  return edits + (la - i) + (lb - j) <= 1;
+}
+
+/** Kembalikan nama kecamatan resmi yang disebut (atau typo 1-huruf) di query, atau null. */
+const KECAMATAN_TOKEN_SKIPLIST = new Set(['kota', 'desa', 'jawa', 'timur', 'kecamatan', 'kabupaten', 'surabaya', 'sidoarjo', 'gresik', 'sby', 'sda']);
+function findKecamatanInQuery(query: string): string | null {
+  const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4 && !KECAMATAN_TOKEN_SKIPLIST.has(t));
+  if (tokens.length === 0) return null;
+  for (const { lower, orig } of getKecamatanNames()) {
+    for (const t of tokens) {
+      if (t === lower || t.includes(lower) || lower.includes(t)) return orig;
+      if (lower.length >= 6 && levenshteinAtMostOne(t, lower)) return orig;
+    }
+  }
+  return null;
+}
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
   const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName } = input;
@@ -113,11 +175,45 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         };
       }
 
+      // Query tanpa koordinat tapi memuat nama kecamatan (termasuk typo ringan) —
+      // tetap intersepsi sebagai kecamatan luas, bukan generic "tidak ditemukan".
+      const kecNoCoords = findKecamatanInQuery(compositeQuery);
+      if (kecNoCoords) {
+        return {
+          success: false,
+          isPrecise: false,
+          kecamatan: kecNoCoords,
+          kota: resolved.kota,
+          isOutOfCoverage: false,
+          message: `Area "${kecNoCoords}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
+        };
+      }
+
       return {
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
         message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya (atau tawarkan kirim share location). DILARANG mengeluarkan nominal km atau tarif ongkir!`
+      };
+    }
+
+    // Intersepsi KECAMATAN LUAS: hasil hanya setingkat kecamatan (tanpa kelurahan/desa),
+    // baik via ambiguity gazetteer maupun komponen Google administrative_area_level_3 —
+    // WAJIB minta kelurahan/desa, DILARANG mengeluarkan nominal jarak/ongkir.
+    const kecAmbiguity = (resolved as any).ambiguityResults;
+    const kecLevelName = (!resolved.kelurahan && resolved.kecamatan)
+      ? resolved.kecamatan
+      : (Array.isArray(kecAmbiguity) && kecAmbiguity.length > 0
+        ? (kecAmbiguity[0]?.Kecamatan || (resolved as any).matchedSpan || null)
+        : findKecamatanInQuery(compositeQuery));
+    if (!resolved.isPrecise && !resolved.kelurahan && !streetDetail && kecLevelName) {
+      return {
+        success: false,
+        isPrecise: false,
+        kecamatan: typeof kecLevelName === 'string' ? kecLevelName : undefined,
+        kota: resolved.kota,
+        isOutOfCoverage: false,
+        message: `Area "${kecLevelName}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
       };
     }
 

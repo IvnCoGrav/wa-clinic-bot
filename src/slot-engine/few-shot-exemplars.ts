@@ -64,6 +64,26 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     sortOrder: 4,
   },
   {
+    id: 'location_ongkir_confirmation',
+    scenario: 'Customer menyebutkan lokasi/kecamatan untuk cek layanan & ongkir',
+    tags: ['lokasi', 'domisili', 'alamat', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'ongkir', 'jarak'],
+    customerMessage: 'Saya di Balongdowo Candi Sidoarjo kak',
+    idealResponse:
+      'Baik Bunda 😊 Jika dilihat dari Waru jaraknya kurang lebih 23 km dengan ongkir promo Rp 25.000 yaa. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
+    isActive: true,
+    sortOrder: 33,
+  },
+  {
+    id: 'schedule_check_admin_handoff_sync',
+    scenario: 'Customer bertanya ketersediaan jadwal besok saat lokasi sudah diketahui — cekkan Admin, tanya perkiraan jam, tanpa tanya alamat',
+    tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'treatment', 'admin', 'jam'],
+    customerMessage: 'Treatment nya semisal besok apa bisa ya bu ?',
+    idealResponse:
+      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏 Mau kami bantu catatkan untuk perkiraan jamnya (pagi atau siang), Bunda? 🤗',
+    isActive: true,
+    sortOrder: 34,
+  },
+  {
     id: 'maternal_lactation_inquiry',
     scenario: 'Pasien menanyakan pijat laktasi / oksitosin untuk Ibu Menyusui',
     tags: ['laktasi', 'oksitosin', 'ibu', 'moms'],
@@ -141,10 +161,19 @@ const PRIORITY_TAG_GROUPS: Record<string, string[]> = {
   price: ['ask_price', 'price', 'harga', 'tarif', 'biaya', 'ongkir'],
   symptom: ['consult_symptom', 'symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'lendir'],
   treatment_continuation: ['follow_up', 'after_ongkir', 'select_treatment'],
+  location: ['lokasi', 'domisili', 'alamat', 'ongkir', 'jarak', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya'],
 };
 
 const hasAnyTag = (tags: string[] | undefined, group: string[]): boolean =>
   !!tags && tags.some((t) => group.includes(t.toLowerCase()));
+
+/**
+ * Kata generik domain klinik yang TIDAK boleh menjadi satu-satunya dasar
+ * kecocokan exemplar (anti false-positive, misal tag "bayi" menyalakan
+ * exemplar usia-minimal pada pesan "Pijat bayi sinar moksa ini gmn ya").
+ * Poin dari kata generik hanya dihitung bila exemplar juga punya poin substantif.
+ */
+const DOMAIN_GENERIC_WORDS = new Set(['bayi', 'moms', 'spa', 'anak', 'ibu']);
 
 export class FewShotExemplarBank {
   /**
@@ -537,12 +566,16 @@ export class FewShotExemplarBank {
 
     for (const ex of activeExemplars) {
       let score = 0;
+      let genericOnlyScore = 0;
       const exTags = (ex.tags || []).map((t) => t.toLowerCase());
 
       // 1. Cocokkan dengan tags — word boundary (hindari false positive
       //    sub-kata seperti "flu" di dalam "fluktuasi").
       for (const tag of exTags) {
-        if (inputLower && isWordTagMatch(inputLower, tag)) score += 3;
+        if (inputLower && isWordTagMatch(inputLower, tag)) {
+          if (DOMAIN_GENERIC_WORDS.has(tag)) genericOnlyScore += 3;
+          else score += 3;
+        }
         if (extraction.intents.some((i) => i === tag || i.includes(tag))) score += 4;
         if (extraction.symptoms.some((s) => s === tag || s.includes(tag))) score += 4;
       }
@@ -556,6 +589,18 @@ export class FewShotExemplarBank {
 
       // 3. Prioritaskan harga jika ada intent ask_price.
       if (hasAnyTag(exTags, PRIORITY_TAG_GROUPS.price) && extraction.intents.includes('ask_price')) {
+        score += 5;
+      }
+
+      // 3b. Prioritaskan lokasi/ongkir HANYA bila ada bukti di sisi input
+      // (cocok kata-tag lokasi atau intent alamat) — tanpa bukti input, input netral
+      // seperti "halo"/"oke" harus menghasilkan [] (tanpa suntikan salah konteks).
+      const hasLocationSignal =
+        hasAnyTag(exTags, PRIORITY_TAG_GROUPS.location) &&
+        (exTags.some((t) => inputLower && isWordTagMatch(inputLower, t)) ||
+          extraction.intents.includes('provide_location') ||
+          extraction.intents.includes('supplement_address'));
+      if (hasLocationSignal) {
         score += 5;
       }
 
@@ -576,16 +621,21 @@ export class FewShotExemplarBank {
         score += 2;
       }
 
-      scored.push({ exemplar: ex, score });
+      // 6. Filter stopword domain: poin dari kata generik (bayi/moms/spa/anak/ibu)
+      // hanya dihitung bila ada poin substantif lain — cegah false positive.
+      scored.push({ exemplar: ex, score: score > 0 ? score + genericOnlyScore : 0 });
     }
 
     // Urutkan skor tertinggi dan ambil maksimal 2 contoh
     scored.sort((a, b) => b.score - a.score);
     const top = scored.filter((s) => s.score > 0).slice(0, 2);
 
-    // Fallback: Jika tidak ada yang cocok kuat, ambil exemplar pertama yang aktif
+    // Tanpa topik relevan: kembalikan [] — JANGAN paksa exemplar pertama (blind fallback
+    // menyuntik contoh salah konteks, misal batuk/pilek untuk pesan alamat).
+    // V3 mempertahankan prompt dasar statis; Call 2 tidak menyuntik blok palsu;
+    // Inspector Sandbox menampilkan 0 exemplar secara jujur.
     if (top.length === 0) {
-      return activeExemplars.length > 0 ? [activeExemplars[0]] : [DEFAULT_FEW_SHOT_EXEMPLARS[0]];
+      return [];
     }
 
     return top.map((t) => t.exemplar);

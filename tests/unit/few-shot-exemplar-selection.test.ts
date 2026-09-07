@@ -118,6 +118,101 @@ describe('FewShotExemplarBank (Positive Exemplar Selection)', () => {
     expect(exemplars.some((e) => e.id === 'maternal_lactation_inquiry')).toBe(true);
   });
 
+  it('should return empty array when customer input has no matching tags (no blind fallback)', () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['chitchat'],
+      symptoms: [],
+    };
+
+    for (const text of ['oke', 'terima kasih']) {
+      const exemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, baseSlate, text);
+      expect(exemplars).toEqual([]);
+      expect(FewShotExemplarBank.formatExemplarsForPrompt(exemplars)).toBe('');
+    }
+
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
+  });
+
+  it("should select location/ongkir exemplar when customer mentions address ('Balongdowo kec Candi Sidoarjo')", () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['provide_location'],
+      symptoms: [],
+    };
+
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(
+      extraction,
+      baseSlate,
+      'Balongdowo kec Candi Sidoarjo'
+    );
+    expect(exemplars.length).toBeGreaterThan(0);
+    expect(exemplars.some((e) => e.id === 'location_ongkir_confirmation')).toBe(true);
+    // Exemplar batuk/pilek yang tidak relevan TIDAK boleh ikut tersuntik
+    expect(exemplars.some((e) => e.id === 'symptom_flu_consultation')).toBe(false);
+
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
+  });
+
+  it('should not replace system prompt with irrelevant flu exemplar when location is entered', () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['provide_location'],
+      symptoms: [],
+    };
+
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(
+      extraction,
+      baseSlate,
+      'Saya di Balongdowo Candi Sidoarjo kak'
+    );
+    const ids = exemplars.map((e) => e.id);
+    expect(ids).not.toContain('symptom_flu_consultation');
+    expect(ids).not.toContain('symptom_followup_no_cta');
+
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
+  });
+
+  it('should select admin-handoff schedule exemplar for "besok apa bisa" (no address re-ask)', () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['ask_schedule'],
+      symptoms: [],
+    };
+
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(
+      extraction,
+      baseSlate,
+      'Treatment nya semisal besok apa bisa ya bu ?'
+    );
+    expect(exemplars.length).toBeGreaterThan(0);
+    expect(
+      exemplars.some((e) => ['schedule_check_admin_handoff_sync', 'gold_jadwal_besok_cek_admin_tanpa_tanya_alamat'].includes(e.id))
+    ).toBe(true);
+
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
+  });
+
+  it('should NOT fire usia-minimal exemplar on generic "bayi" word alone ("Pijat bayi sinar moksa ini gmn ya")', () => {
+    const extraction: ExtractedEntities = {
+      ...emptyExtraction,
+      intents: ['chitchat'],
+      symptoms: [],
+    };
+
+    const exemplars = FewShotExemplarBank.selectRelevantExemplars(
+      extraction,
+      baseSlate,
+      'Pijat bayi sinar moksa ini gmn ya'
+    );
+    // Exemplar usia-minimal (dulu bertag "bayi") tidak boleh terpancing kata generik "bayi"
+    expect(exemplars.some((e) => e.id === 'gold_tanya_usia_minimal_treatment')).toBe(false);
+    // Exemplar khasiat Sinar Moksa yang relevan harus terpilih
+    expect(exemplars.some((e) => e.id === 'gold_khasiat_sinar_moksa_bapil')).toBe(true);
+
+    FewShotExemplarBank.__clearCacheForTest?.('default-tenant');
+  });
+
   it('should NOT match tag as sub-word (flu inside fluktuasi)', () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,

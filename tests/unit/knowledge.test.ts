@@ -35,4 +35,23 @@ describe('Knowledge Base & Text Chunker Unit Tests', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].content).toContain('Acne Care Therapy');
   });
+
+  it('should find chunk via keywords synonym ("lampu merah" → Sinar Moksa)', async () => {
+    await knowledgeBaseService.importFaqs(
+      [
+        {
+          question: 'Apa itu treatment Sinar Moksa?',
+          answer: 'Sinar Moksa adalah terapi sinar hangat inframerah untuk membantu melegakan pernapasan.',
+          keywords: 'lampu merah, infrared dada, uap hangat',
+        },
+      ],
+      DEFAULT_TENANT_ID
+    );
+
+    const results = await knowledgeBaseService.searchRelevantChunks('ada terapi lampu merah dada?', 3, DEFAULT_TENANT_ID);
+    expect(results.length).toBeGreaterThan(0);
+    const hit = results.find((r) => (r.keywords || '').includes('lampu merah'));
+    expect(hit).toBeTruthy();
+    expect(hit!.content).toContain('Sinar Moksa');
+  });
 });

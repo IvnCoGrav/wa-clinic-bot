@@ -13,7 +13,10 @@ export interface LocationState {
 }
 
 export interface ChildState {
+  id?: string;
   name?: string;
+  /** Label penerima: 'Adik' | 'Kakak' | 'Si Kecil'. */
+  roleLabel?: string;
   ageMonths?: number;
   symptoms: string[];
 }
@@ -25,14 +28,38 @@ export interface BookingState {
   isConfirmed: boolean;
 }
 
+/** Satu item layanan di keranjang (multi-item cart, deterministik). */
+export interface CartItem {
+  name: string;
+  price: number;
+  promoPrice?: number;
+  type: 'PRIMARY' | 'ADDON' | 'SERVICE';
+  category?: 'BABY' | 'KIDS' | 'MOMS' | 'BUNDLE' | 'ADDON';
+  /** Label penerima tampil: 'Si Kecil', 'Adik (2 bln)', 'Kakak (3 th)', 'Bunda'. */
+  recipientLabel?: string;
+  recipientScope?: RecipientScope;
+}
+
+/** Lifecycle fakta ongkir: UNQUOTED → QUOTED (disampaikan) → CONFIRMED (lanjut booking). */
+export type OngkirStatus = 'UNQUOTED' | 'QUOTED' | 'CONFIRMED';
+
 export interface CustomerGoalSession {
   customerName?: string;
   genderGreeting: 'Bunda' | 'Bapak';
   location?: LocationState;
+  /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
   childProfile?: ChildState;
+  /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
+  children?: ChildState[];
   selectedTreatment?: string;
   booking?: BookingState;
+  cartItems?: CartItem[];
+  ongkirStatus?: OngkirStatus;
+  totalPrice?: number;
 }
+
+/** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
+export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
 
 const DEFAULT_SESSION: CustomerGoalSession = {
   genderGreeting: 'Bunda',
@@ -77,8 +104,12 @@ export class GoalTracker {
           ageMonths: prefs.childAgeMonths,
           symptoms: prefs.symptoms || []
         } : undefined),
+        children: Array.isArray(prefs.children) ? prefs.children : undefined,
         selectedTreatment: prefs.selectedTreatmentName || prefs.selectedTreatment || undefined,
-        booking: prefs.booking || undefined
+        booking: prefs.booking || undefined,
+        cartItems: Array.isArray(prefs.cartItems) ? prefs.cartItems : undefined,
+        ongkirStatus: prefs.ongkirStatus || undefined,
+        totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
       };
     } catch (err: any) {
       console.warn('[GOAL TRACKER GET ERROR]', err.message);
@@ -136,6 +167,227 @@ export class GoalTracker {
   }
 
   /**
+   * Deteksi scope penerima dari teks pesan (data-driven keyword, tanpa regex):
+   * MOMS (layanan ibu), CHILD_2 (kakak), CHILD_1 (adik/si kecil), GENERAL (netral).
+   */
+  public static detectRecipientScope(
+    text: string,
+    service?: { name?: string; category?: string; isAddon?: boolean }
+  ): RecipientScope {
+    const lower = (text || '').toLowerCase();
+    const hasAny = (words: string[]) => words.some((w) => lower.includes(w));
+    if (
+      service?.category === 'MOMS' ||
+      hasAny(['oksitosin', 'laktasi', 'nifas', 'hamil', 'menyusui', 'buat saya', 'untuk saya', 'saya sendiri', 'bunda sendiri'])
+    ) {
+      return 'MOMS';
+    }
+    if (hasAny(['kakak', 'kaka', 'anak pertama', 'anak ke-1', 'anak ke 1', 'si kakak'])) return 'CHILD_2';
+    if (hasAny(['adik', 'adek', 'anak kedua', 'anak ke-2', 'anak ke 2', 'si kecil', 'bayi', 'baby', 'anak saya'])) return 'CHILD_1';
+    return 'GENERAL';
+  }
+
+  /**
+   * Pertanyaan durasi/umum saja (misal "pijat bayi berapa menit") — BUKAN sinyal
+   * pembelian. Pesan seperti ini dilewati saat sinkronisasi keranjang.
+   */
+  public static isDurationOnlyQuestion(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    const asksDuration = lower.includes('menit') || lower.includes('durasi') || lower.includes('berapa lama');
+    if (!asksDuration) return false;
+    const buyingSignal = [
+      'harga', 'tarif', 'booking', 'jadwal', 'ambil', 'mau', 'jadwalkan',
+      'rp', 'ribu', 'batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel',
+    ].some((w) => lower.includes(w));
+    return !buyingSignal;
+  }
+
+  /**
+   * Sinkronisasi keranjang layanan dari riwayat obrolan (deterministik, 0 token).
+   * Aturan: PRIMARY satu scope saling menggantikan (replace); scope berbeda atau
+   * ADDON diakumulasikan (add). Pesan pertanyaan-durasi-saja dilewati.
+   * Mengembalikan cart baru (tidak mutasi session).
+   */
+  public static syncCartItems(
+    session: CustomerGoalSession,
+    history: Array<{ role: string; content: string }>,
+    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean }>
+  ): CartItem[] {
+    const cart: CartItem[] = [...(session.cartItems || [])];
+    const keyOf = (name: string, scope: RecipientScope) => `${scope}::${name.toLowerCase()}`;
+    const inCart = new Set(cart.map((c) => keyOf(c.name, c.recipientScope || 'GENERAL')));
+    const services = [...(catalog || [])]
+      .filter((s) => s && s.name && s.name.trim().length >= 4)
+      .sort((a, b) => b.name.length - a.name.length);
+    if (services.length === 0) return cart;
+    const significantTokens = (name: string): string[] =>
+      name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+    // Token khas yang hanya dimiliki SATU layanan katalog (misal "oksitosin"):
+    // sekali disebut langsung mengidentifikasi layanan tersebut.
+    const tokenOwnerCount = new Map<string, number>();
+    for (const s of services) {
+      const seen = new Set<string>();
+      for (const t of significantTokens(s.name)) {
+        if (!seen.has(t)) { seen.add(t); tokenOwnerCount.set(t, (tokenOwnerCount.get(t) || 0) + 1); }
+      }
+    }
+    // Parafrasa ("cukur bayi" ~ "Cukur Rambut Bayi"): ≥2 token signifikan cocok & rasio ≥50%,
+    // ATAU satu token khas panjang (≥7 huruf, unik 1 layanan) seperti "oksitosin".
+    const fuzzyMatches = (text: string, name: string): boolean => {
+      const toks = significantTokens(name);
+      if (toks.length === 0) return false;
+      if (toks.some((t) => t.length >= 7 && text.includes(t) && tokenOwnerCount.get(t) === 1)) return true;
+      const hits = toks.filter((t) => text.includes(t)).length;
+      return hits >= 2 && hits / toks.length >= 0.5;
+    };
+    const pushService = (s: (typeof services)[number], scope: RecipientScope, switching = false) => {
+      const price = typeof s.originalPrice === 'number' ? s.originalPrice : 0;
+      const type = s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
+      const category = (s.category as CartItem['category']) || (s.isAddon ? 'ADDON' : undefined);
+      const recipientLabel = scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil' : undefined;
+      // Replace: PRIMARY baru menggantikan PRIMARY lama pada scope yang sama HANYA
+      // bila pesan menandakan pergantian eksplisit (ganti/pindah/batal/...).
+      if (type === 'PRIMARY' && switching) {
+        const idx = cart.findIndex((c) => c.type === 'PRIMARY' && (c.recipientScope || 'GENERAL') === scope);
+        if (idx >= 0) {
+          inCart.delete(keyOf(cart[idx].name, scope));
+          cart[idx] = { name: s.name, price, promoPrice: typeof s.promoPrice === 'number' ? s.promoPrice : price, type, category, recipientLabel, recipientScope: scope };
+          inCart.add(keyOf(s.name, scope));
+          return;
+        }
+      }
+      if (inCart.has(keyOf(s.name, scope))) return;
+      cart.push({
+        name: s.name, price,
+        promoPrice: typeof s.promoPrice === 'number' ? s.promoPrice : price,
+        type, category, recipientLabel, recipientScope: scope,
+      });
+      inCart.add(keyOf(s.name, scope));
+    };
+    // Sinyal pergantian eksplisit: PRIMARY baru menggantikan PRIMARY lama scope sama
+    // HANYA bila pesan menandakan switch (bukan sekadar menyebut layanan tambahan).
+    const isSwitchSignal = (text: string): boolean =>
+      text.includes('ganti') || text.includes('pindah') || text.includes('jadinya') ||
+      text.includes('bukan') || text.includes('batal') || text.includes('sebelumnya') ||
+      text.includes('yang tadi');
+    // Diproses KRONOLOGIS (tertua → terbaru) agar sinyal pergantian ("ganti ke ...")
+    // menggantikan item lama secara natural, bukan sebaliknya.
+    for (let i = 0; i < history.length; i++) {
+      const text = (history[i]?.content || '').toLowerCase();
+      if (!text || GoalTracker.isDurationOnlyQuestion(text)) continue;
+      const switching = isSwitchSignal(text);
+      // 1. Nama persis selalu dihitung (semua yang cocok).
+      const exactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
+      // 2. Tanpa nama persis, parafrasa hanya mengambil SATU yang terpanjang
+      //    (paling spesifik) agar tidak mengotori keranjang dengan kandidat umum.
+      const fuzzyHits = exactHits.length === 0
+        ? services.filter((s) => fuzzyMatches(text, s.name)).sort((a, b) => b.name.length - a.name.length).slice(0, 1)
+        : [];
+      for (const s of [...exactHits, ...fuzzyHits]) {
+        pushService(s, GoalTracker.detectRecipientScope(text, s), switching);
+      }
+    }
+    return cart;
+  }
+
+  /** Total akumulasi: subtotal promo cart + ongkir promo (jika ada). */
+  public static calcCartTotal(session: CustomerGoalSession): number {
+    const subtotal = (session.cartItems || []).reduce(
+      (sum, it) => sum + (typeof it.promoPrice === 'number' ? it.promoPrice : it.price), 0
+    );
+    const ongkir = session.location?.ongkirPromo ?? 0;
+    return subtotal + ongkir;
+  }
+
+  /**
+   * Ekstraksi profil anak otomatis dari satu pesan (deterministik, 0 token):
+   * usia ("2 bulan", "3 tahun", "baru lahir"), gejala, dan peran (Adik/Kakak).
+   * Mengembalikan children baru (tidak mutasi session).
+   */
+  public static syncChildrenProfiles(
+    session: CustomerGoalSession,
+    text: string
+  ): ChildState[] {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return [...(session.children || [])];
+    const children: ChildState[] = (session.children || []).map((c) => ({
+      ...c,
+      symptoms: [...(c.symptoms || [])],
+    }));
+    const ensureChild = (idx: 0 | 1, roleLabel: string): ChildState => {
+      if (!children[idx]) children[idx] = { roleLabel, symptoms: [] };
+      else if (!children[idx].roleLabel) children[idx].roleLabel = roleLabel;
+      return children[idx];
+    };
+
+    // Sinyal peran & multi-anak dibaca DULU (tanpa mutasi) agar penetapan usia tepat sasaran.
+    const mentionsKakak = lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'));
+    const mentionsAdik = lower.includes('adik') || lower.includes('adek');
+    const mentionsMulti = lower.includes('anak saya 2') || lower.includes('dua anak') || lower.includes('2 anak') || lower.includes('keduanya');
+
+    // Usia: "2 bulan", "3 tahun", "4 bln", "baru lahir" (=0 bulan).
+    const ages: number[] = [];
+    const ageRe = /(\d+(?:[.,]\d+)?)\s*(bulan|bln|tahun|thn|th)\b/g;
+    let m: RegExpExecArray | null;
+    while ((m = ageRe.exec(lower)) !== null) {
+      const val = parseFloat(m[1].replace(',', '.'));
+      if (!Number.isFinite(val)) continue;
+      const unit = m[2];
+      ages.push(unit.startsWith('tahun') || unit.startsWith('thn') || unit === 'th' ? Math.round(val * 12) : Math.round(val));
+    }
+    if (lower.includes('baru lahir')) ages.push(0);
+
+    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam'];
+    const foundSymptoms = SYMPTOM_WORDS.filter((s) => lower.includes(s));
+
+    const addSymptoms = (child: ChildState) => {
+      for (const s of foundSymptoms) {
+        if (!child.symptoms.includes(s)) child.symptoms.push(s);
+      }
+    };
+
+    if (mentionsMulti) {
+      ensureChild(0, 'Adik');
+      ensureChild(1, 'Kakak');
+    }
+    if (ages.length >= 2) {
+      // Tetapkan berurutan: usia pertama → anak pertama, dst.
+      ages.forEach((age, i) => {
+        const child = ensureChild(i === 0 ? 0 : 1, i === 0 ? 'Adik' : 'Kakak');
+        child.ageMonths = age;
+      });
+      if (foundSymptoms.length > 0) addSymptoms(ensureChild(0, 'Adik'));
+    } else if (ages.length === 1 || foundSymptoms.length > 0) {
+      // Satu usia/gejala → anak berlabel peran bila disebut ("Kakak ... 3 tahun"
+      // tidak boleh menimpa Adik), else anak pertama.
+      const idx: 0 | 1 = mentionsKakak ? 1 : 0;
+      const child = ensureChild(idx, idx === 1 ? 'Kakak' : (mentionsAdik ? 'Adik' : 'Si Kecil'));
+      if (ages.length === 1) child.ageMonths = ages[0];
+      addSymptoms(child);
+    } else {
+      if (mentionsAdik) ensureChild(0, 'Adik');
+      if (mentionsKakak) ensureChild(1, 'Kakak');
+    }
+
+    // childProfile selalu mirror children[0] (backward compat).
+    return children;
+  }
+
+  /** Tandai ongkir QUOTED (baru disampaikan) — idempoten, tidak downgrade CONFIRMED. */
+  public static async markOngkirQuoted(conversationId: string, tenantId = DEFAULT_TENANT_ID): Promise<CustomerGoalSession> {
+    const current = await this.getGoalSession(conversationId, tenantId);
+    if (current.ongkirStatus === 'CONFIRMED' || current.ongkirStatus === 'QUOTED') return current;
+    return this.updateGoalSession(conversationId, { ongkirStatus: 'QUOTED' }, tenantId);
+  }
+
+  /** Tandai ongkir CONFIRMED (customer lanjut booking) — idempoten. */
+  public static async markOngkirConfirmed(conversationId: string, tenantId = DEFAULT_TENANT_ID): Promise<CustomerGoalSession> {
+    const current = await this.getGoalSession(conversationId, tenantId);
+    if (current.ongkirStatus === 'CONFIRMED') return current;
+    return this.updateGoalSession(conversationId, { ongkirStatus: 'CONFIRMED' }, tenantId);
+  }
+
+  /**
    * Format session state menjadi ringkasan faktual ringkas untuk prompt LLM.
    */
   public static formatGoalSessionForPrompt(session: CustomerGoalSession): string {
@@ -145,15 +397,62 @@ export class GoalTracker {
     ];
 
     if (session.location?.kelurahan || session.location?.distanceKm) {
-      lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km)`);
+      lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!]`);
       if (session.location.ongkirPromo != null) {
-        lines.push(`• Ongkir: Rp ${session.location.ongkirPromo.toLocaleString('id-ID')} (Promo dari normal Rp ${session.location.ongkirNormal?.toLocaleString('id-ID') || '-'})`);
+        const ongkirState = session.ongkirStatus === 'CONFIRMED'
+          ? 'SUDAH DIKONFIRMASI - DILARANG ULANG HITUNGAN KM/ONGKIR!'
+          : session.ongkirStatus === 'QUOTED'
+            ? 'SUDAH DISAMPAIKAN - DILARANG ULANG HITUNGAN KM/ONGKIR!'
+            : null;
+        lines.push(`• Ongkir: Rp ${session.location.ongkirPromo.toLocaleString('id-ID')} (Promo dari normal Rp ${session.location.ongkirNormal?.toLocaleString('id-ID') || '-'})` + (ongkirState ? ` [STATUS: ${ongkirState}]` : ''));
       }
     } else {
       lines.push(`• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)`);
     }
 
-    if (session.childProfile) {
+    if (session.cartItems && session.cartItems.length > 0) {
+      const fmtRp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+      const ageSuffixFor = (scope?: string, label?: string): string => {
+        if (label && /\(\d+\s*(bln|th)\)/.test(label)) return '';
+        const kids = session.children || [];
+        const child = scope === 'CHILD_2' ? kids[1] : scope === 'CHILD_1' ? kids[0] : undefined;
+        if (!child || child.ageMonths == null) return '';
+        return child.ageMonths >= 12 && child.ageMonths % 12 === 0
+          ? ` (${Math.round(child.ageMonths / 12)} th)`
+          : ` (${child.ageMonths} bln)`;
+      };
+      const rows = session.cartItems.map((it) => {
+        const scope = it.recipientScope || 'GENERAL';
+        const hasAgeInLabel = it.recipientLabel ? /\(\d+\s*(bln|th)\)/.test(it.recipientLabel) : false;
+        const who = it.recipientLabel
+          || (scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil' : 'Si Kecil');
+        const priceLabel = it.type === 'ADDON'
+          ? `Tambahan: ${fmtRp(it.promoPrice ?? it.price)}`
+          : it.type === 'SERVICE'
+            ? `Layanan: ${fmtRp(it.promoPrice ?? it.price)}`
+            : `Promo: ${fmtRp(it.promoPrice ?? it.price)}`;
+        return `  - [Untuk ${who}${ageSuffixFor(scope, it.recipientLabel)}] ${it.name} (${priceLabel})`;
+      });
+      lines.push(`• Keranjang Layanan Terpilih:\n${rows.join('\n')}`);
+      const subtotal = session.cartItems.reduce((s, it) => s + (it.promoPrice ?? it.price), 0);
+      const ongkir = session.location?.ongkirPromo ?? 0;
+      lines.push(`• Total Akumulasi Biaya: ${fmtRp(subtotal + ongkir)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
+    }
+
+    const kids = session.children && session.children.length > 0
+      ? session.children
+      : (session.childProfile ? [session.childProfile] : []);
+    if (kids.length > 1) {
+      const kidLines = kids.map((k) => {
+        const label = k.roleLabel || 'Anak';
+        const age = k.ageMonths != null
+          ? (k.ageMonths >= 12 && k.ageMonths % 12 === 0 ? `${Math.round(k.ageMonths / 12)} tahun (${k.ageMonths} bulan)` : `${k.ageMonths} bulan`)
+          : 'usia belum diketahui';
+        const sym = (k.symptoms && k.symptoms.length > 0) ? `, Keluhan: ${k.symptoms.join(', ')}` : ', Sehat/Relaksasi';
+        return `  - ${label}: Usia ${age}${sym}`;
+      });
+      lines.push(`• Data Si Kecil (${kids.length} Anak):\n${kidLines.join('\n')}`);
+    } else if (session.childProfile) {
       lines.push(`• Data Si Kecil: Usia ${session.childProfile.ageMonths != null ? session.childProfile.ageMonths + ' bulan' : 'belum spesifik'}${session.childProfile.symptoms.length > 0 ? `, Keluhan: ${session.childProfile.symptoms.join(', ')}` : ''}`);
     }
 

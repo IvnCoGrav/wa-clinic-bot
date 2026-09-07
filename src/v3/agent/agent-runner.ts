@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { ALL_V3_TOOLS, executeToolByName, ToolExecutionContext } from '../tools/tool-registry';
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
-import { PersonaPromptBuilder, DynamicPromptExemplar } from './persona';
+import { PersonaPromptBuilder, DynamicPromptExemplar, extractFastIntents } from './persona';
+import { ConversationStateSummarizer } from '../../slot-engine/conversation-summarizer';
+import { ConversationState } from '@prisma/client';
+import type { CustomerSlate, ExtractedEntities } from '../../slot-engine/types';
 import { OutputSanitizer } from '../guardrails/sanitizer';
 import { isPureLeadGreeting, stripAdTags } from '../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../config/persona';
@@ -60,9 +63,95 @@ export interface AgentRunnerOutput {
   tokens: V3TokenUsage;
   /** Observability: estimasi biaya Rupiah agregat. */
   costIdr: number;
+  /** Sinkronisasi CRM: status state-machine turunan dari session (agar tidak beku di INITIAL). */
+  nextState?: ConversationState;
+  /** Observability: ringkasan konteks deterministik terakhir yang disuntik ke system prompt. */
+  contextSummary?: string;
 }
 
 export class V3AgentRunner {
+  /**
+   * Adaptasi CustomerGoalSession (V3) menjadi CustomerSlate (slot-engine) agar
+   * ConversationStateSummarizer deterministik dapat dipakai lintas engine.
+   */
+  public static buildSlateAdapter(session: CustomerGoalSession): CustomerSlate {
+    return {
+      customerId: '',
+      phone: '',
+      name: session.customerName || null,
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: '',
+      kelurahan: session.location?.kelurahan || null,
+      kecamatan: session.location?.kecamatan || null,
+      kota: session.location?.kota || null,
+      lat: null,
+      lng: null,
+      streetDetail: null,
+      distanceKm: session.location?.distanceKm ?? null,
+      ongkirFee: session.location?.ongkirNormal ?? null,
+      ongkirPromoFee: session.location?.ongkirPromo ?? null,
+      isLocationConfirmed: Boolean(session.location?.kelurahan || session.location?.distanceKm != null),
+      isOutOfCoverage: Boolean(session.location?.isOutOfCoverage),
+      childAgeMonths: session.childProfile?.ageMonths ?? null,
+      childAgeCategory: null,
+      symptoms: session.childProfile?.symptoms || [],
+      medicalConcerns: [],
+      selectedTreatmentName: session.selectedTreatment || (session.cartItems && session.cartItems[0] ? session.cartItems[0].name : null),
+      preferredDate: session.booking?.preferredDate || null,
+      preferredTime: session.booking?.preferredTime || null,
+      pricelistSent: false,
+      reservationFormSent: false,
+      isHumanHandling: false,
+      humanHandlingReason: null,
+      lastInteractionAt: new Date(),
+      projectedState: ConversationState.INITIAL,
+    };
+  }
+
+  /**
+   * Turunan status state-machine dari session (reuse enum existing — tanpa migrasi):
+   * lokasi terkonfirmasi → LOCATION_CONFIRMED; cart/treatment terisi → AWAITING_INTEREST;
+   * jadwal ditanyakan → RESERVATION_SENT; reservasi tersimpan → COMPLETED.
+   */
+  public static deriveConversationState(session: CustomerGoalSession, currentIntents: string[] = []): ConversationState {
+    if (session.booking?.isConfirmed || session.booking?.reservationId) {
+      return ConversationState.COMPLETED;
+    }
+    if (session.booking?.preferredDate || currentIntents.includes('ask_schedule')) {
+      return ConversationState.RESERVATION_SENT;
+    }
+    if ((session.cartItems && session.cartItems.length > 0) || session.selectedTreatment) {
+      return ConversationState.AWAITING_INTEREST;
+    }
+    if (session.location?.kelurahan || session.location?.distanceKm != null) {
+      return ConversationState.LOCATION_CONFIRMED;
+    }
+    return ConversationState.INITIAL;
+  }
+
+  /**
+   * Deteksi layanan katalog yang disepakati dari riwayat obrolan (data-driven:
+   * pencocokan substring nama layanan katalog aktif, tanpa regex/daftar hardcode).
+   * Dipindai dari pesan terbaru; nama terpanjang menang (paling spesifik).
+   */
+  public static detectAgreedTreatment(
+    history: Array<{ role: string; content: string }>,
+    catalogNames: string[]
+  ): string | null {
+    if (!history || history.length === 0 || !catalogNames || catalogNames.length === 0) return null;
+    const names = [...catalogNames]
+      .filter((n) => n && n.trim().length >= 4)
+      .sort((a, b) => b.length - a.length);
+    for (let i = history.length - 1; i >= 0; i--) {
+      const text = (history[i]?.content || '').toLowerCase();
+      if (!text) continue;
+      for (const name of names) {
+        if (text.includes(name.toLowerCase())) return name;
+      }
+    }
+    return null;
+  }
+
   private static async executeChatCompletion(params: {
     payload: any;
     tenantId: string;
@@ -147,7 +236,7 @@ export class V3AgentRunner {
     if (conversationHistory.length === 0 && conversationId) {
       try {
         const { messageService } = await import('../../services/message.service');
-        const recentMsgs = await messageService.getRecentMessages(conversationId, 8, tenantId);
+        const recentMsgs = await messageService.getRecentMessages(conversationId, 20, tenantId);
         conversationHistory = (recentMsgs || []).map((m: any) => ({
           role: (m.direction === 'INBOUND' ? 'user' : 'assistant') as 'user' | 'assistant',
           content: m.content,
@@ -155,7 +244,71 @@ export class V3AgentRunner {
       } catch (e) {}
     }
 
+    // Auto-capture ringan: jika riwayat obrolan aktif menyebut layanan katalog yang
+    // disepakati (misal Pulih Ceria, Cukur) sementara session belum mencatatnya,
+    // sinkronkan selectedTreatment agar header status tidak amnesia pada turn berikut.
+    // Data-driven dari katalog aktif (tanpa regex/daftar hardcode).
+    if (!session.selectedTreatment && conversationId) {
+      try {
+        const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+        const agreed = V3AgentRunner.detectAgreedTreatment(
+          conversationHistory,
+          treatmentCatalogService.getAllServices(true).map((s) => s.name)
+        );
+        if (agreed) {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            selectedTreatment: agreed,
+          }, tenantId);
+        }
+      } catch (e) {}
+    }
+
     const isFollowUp = conversationHistory.some((m) => m.role === 'assistant');
+
+    // Sinkronisasi keranjang layanan dari riwayat + pesan masuk (deterministik),
+    // agar penambahan add-on (Sinar Moksa, Cukur) tidak amnesia antar turn.
+    if (conversationId) {
+      try {
+        const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+        const syncedCart = GoalTracker.syncCartItems(
+          session,
+          [...conversationHistory, { role: 'user', content: cleanIncomingText }],
+          treatmentCatalogService.getAllServices(true).map((s) => ({
+            name: s.name,
+            promoPrice: s.promoPrice,
+            originalPrice: s.originalPrice,
+            category: s.category,
+            isAddon: (treatmentCatalogService as any).isAddonService
+              ? (treatmentCatalogService as any).isAddonService(s)
+              : false,
+          }))
+        );
+        if (JSON.stringify(syncedCart) !== JSON.stringify(session.cartItems || [])) {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            cartItems: syncedCart,
+            totalPrice: GoalTracker.calcCartTotal({ ...session, cartItems: syncedCart }),
+          }, tenantId);
+        }
+      } catch (e) {}
+    }
+
+    // Ekstraksi profil anak otomatis dari pesan masuk (usia, gejala, peran Adik/Kakak),
+    // sinkron ke session.children (+ mirror childProfile) sebelum pemanggilan LLM.
+    if (conversationId && cleanIncomingText) {
+      try {
+        const nextChildren = GoalTracker.syncChildrenProfiles(session, cleanIncomingText);
+        if (JSON.stringify(nextChildren) !== JSON.stringify(session.children || [])) {
+          const firstChild = nextChildren[0];
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            children: nextChildren,
+            childProfile: firstChild
+              ? { name: firstChild.name, roleLabel: firstChild.roleLabel, ageMonths: firstChild.ageMonths, symptoms: [...(firstChild.symptoms || [])] }
+              : session.childProfile,
+          }, tenantId);
+        }
+      } catch (e) {}
+    }
+
     // System prompt ASYNC: contoh chat dimuat dinamis dari bank few_shot_exemplars
     // (DB Koleksi Emas, fallback statis). Exemplar terpilih diekspor untuk observability.
     const dynamicPrompt = await PersonaPromptBuilder.buildSystemPromptAsync(session, isFollowUp, {
@@ -164,9 +317,42 @@ export class V3AgentRunner {
     });
     const systemPrompt = dynamicPrompt.systemPrompt;
     const fewShotExemplars = dynamicPrompt.exemplars;
+    // Ringkasan konteks deterministik (0 token): apa yang SUDAH dibahas, FOKUS saat ini,
+    // dan apa yang DILARANG diulang — anti kaset-rusak & anti amnesia antar turn.
+    // Closure agar bisa dihitung ulang dari session terbaru sebelum Call 2 (refresh prompt
+    // menimpa messages[0], sehingga summary harus ditempel ulang).
+    const buildContextSummary = (): string => {
+      try {
+        const slateAdapter = V3AgentRunner.buildSlateAdapter(session);
+        const summaryExtraction: ExtractedEntities = {
+          intents: extractFastIntents(cleanIncomingText) as ExtractedEntities['intents'],
+          locationText: null,
+          streetDetail: null,
+          childAgeMonths: session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null,
+          symptoms: [...(session.childProfile?.symptoms || []), ...((session.children || []).flatMap((c) => c.symptoms || []))].filter(
+            (s, i, arr) => arr.indexOf(s) === i
+          ),
+          treatmentReferenced: null,
+          preferredDateText: null,
+          preferredTimeText: null,
+          customerName: null,
+          isMedicalEmergency: false,
+          confidenceScore: 0.8,
+        };
+        return ConversationStateSummarizer.summarize(slateAdapter, summaryExtraction, {
+          history: conversationHistory.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+          customerInput: cleanIncomingText,
+        });
+      } catch (e) {
+        return '';
+      }
+    };
+    const contextSummary = buildContextSummary();
+    let lastContextSummary = contextSummary;
     const messages: any[] = [
-      { role: 'system', content: systemPrompt },
-      ...conversationHistory.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+      { role: 'system', content: contextSummary ? `${systemPrompt}\n\n${contextSummary}` : systemPrompt },
+      // Jendela 14 pesan terakhir (7 turn) agar lokasi & ongkir turn awal tidak terpotong amnesia.
+      ...conversationHistory.slice(-14).map((h) => ({ role: h.role, content: h.content })),
       { role: 'user', content: cleanIncomingText },
     ];
 
@@ -209,6 +395,7 @@ export class V3AgentRunner {
           reasoning: null,
           tokens: emptyTokens,
           costIdr: 0,
+          nextState: V3AgentRunner.deriveConversationState(session, extractFastIntents(cleanIncomingText)),
         };
       }
     }
@@ -369,6 +556,10 @@ export class V3AgentRunner {
                 isOutOfCoverage: toolResult.isOutOfCoverage,
               },
             }, tenantId);
+            // Lifecycle ongkir: hasil kalkulasi akan disampaikan ke customer → QUOTED.
+            if (!toolResult.isOutOfCoverage) {
+              session = await GoalTracker.markOngkirQuoted(conversationId, tenantId);
+            }
           } else if (fnName === 'get_catalog_and_price' && toolResult.success) {
             if (fnArgs.specificTreatmentName) {
               session = await GoalTracker.updateGoalSession(conversationId, {
@@ -402,6 +593,7 @@ export class V3AgentRunner {
                 isConfirmed: true,
               },
             }, tenantId);
+            session = await GoalTracker.markOngkirConfirmed(conversationId, tenantId);
           } else if (fnName === 'escalate_to_human') {
             isEscalated = true;
             shouldSendReply = false;
@@ -430,6 +622,7 @@ export class V3AgentRunner {
             reasoning,
             tokens: { ...totalTokens },
             costIdr: await finishCost(),
+            nextState: ConversationState.HUMAN_HANDLING,
           };
         }
 
@@ -441,6 +634,12 @@ export class V3AgentRunner {
           incomingText: cleanIncomingText,
         });
         messages[0].content = refreshedPrompt.systemPrompt;
+        // Tempel ulang ringkasan dari session terbaru (refresh menimpa messages[0]).
+        const refreshedSummary = buildContextSummary();
+        if (refreshedSummary) {
+          messages[0].content = `${messages[0].content}\n\n${refreshedSummary}`;
+          lastContextSummary = refreshedSummary;
+        }
 
         const secondPayload: any = {
           model: selectedModel,
@@ -514,6 +713,10 @@ export class V3AgentRunner {
         reasoning,
         tokens: { ...totalTokens },
         costIdr: await finishCost(),
+        nextState: isEscalated
+          ? ConversationState.HUMAN_HANDLING
+          : V3AgentRunner.deriveConversationState(session, extractFastIntents(cleanIncomingText)),
+        contextSummary: lastContextSummary || undefined,
       };
     } catch (err: any) {
       console.error('[V3 AGENT RUNNER ERROR]', err.response?.data || err.message);

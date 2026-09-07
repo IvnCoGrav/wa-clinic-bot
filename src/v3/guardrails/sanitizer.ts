@@ -68,12 +68,24 @@ export class OutputSanitizer {
   public static truncateToMaxChars(text: string, maxChars: number = 500): string {
     if (!text || text.length <= maxChars) return text;
     const rawSlice = text.slice(0, maxChars);
-    // Cari tanda baca akhir kalimat (. ! ?) terakhir sebelum limit
-    const lastSentenceEnd = Math.max(
-      rawSlice.lastIndexOf('.'),
-      rawSlice.lastIndexOf('!'),
-      rawSlice.lastIndexOf('?')
-    );
+    // Cari akhir kalimat yang valid: titik WAJIB didahului huruf kata (bukan angka —
+    // titik pada nomor daftar "3." atau desimal "70.000" BUKAN akhir kalimat) dan
+    // diikuti spasi/newline/akhir teks. Tanda ! dan ? selalu valid.
+    let lastSentenceEnd = -1;
+    const punctRe = /[.!?]/g;
+    let m: RegExpExecArray | null;
+    while ((m = punctRe.exec(rawSlice)) !== null) {
+      const idx = m.index;
+      const ch = m[0];
+      if (ch === '.' ) {
+        const prev = idx > 0 ? rawSlice[idx - 1] : '';
+        const next = idx + 1 < rawSlice.length ? rawSlice[idx + 1] : '';
+        const prevIsLetter = /[a-zA-Z\u00C0-\u024F]/.test(prev);
+        const nextIsBoundary = next === '' || next === ' ' || next === '\n' || next === '\r' || next === '\t';
+        if (!prevIsLetter || !nextIsBoundary) continue;
+      }
+      lastSentenceEnd = idx;
+    }
     if (lastSentenceEnd > 0) {
       return rawSlice.slice(0, lastSentenceEnd + 1).trimEnd();
     }
@@ -91,7 +103,8 @@ export class OutputSanitizer {
   public static stripEnglishLeakage(text: string): string {
     if (!text) return '';
     return text
-      .replace(/\s*\(full\s+body\s+massage\)/gi, '')
+      .replace(/\s*\(full\s+body\s+massage[^)]*\)/gi, '')
+      .replace(/\bfull\s+body\s+massage(\s+bayi)?\b/gi, 'pijat seluruh badan')
       .replace(/\bhomecare\s+treatment\b/gi, 'layanan Homecare')
       .replace(/\bappointment(-nya)?\b/gi, 'jadwal reservasi')
       .replace(/\bschedule(-nya)?\b/gi, 'jadwal')

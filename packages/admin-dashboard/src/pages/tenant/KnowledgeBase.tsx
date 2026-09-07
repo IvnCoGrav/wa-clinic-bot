@@ -42,6 +42,7 @@ export const KnowledgeBase: React.FC = () => {
   // Form FAQ state
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
+  const [faqKeywords, setFaqKeywords] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
 
   // Document uploader state
@@ -68,6 +69,7 @@ export const KnowledgeBase: React.FC = () => {
   const [editingChunkId, setEditingChunkId] = useState<string | null>(null);
   const [editingChunkTitle, setEditingChunkTitle] = useState('');
   const [editingChunkContent, setEditingChunkContent] = useState('');
+  const [editingChunkKeywords, setEditingChunkKeywords] = useState('');
   const [chunkSaveLoading, setChunkSaveLoading] = useState(false);
 
   // Unanswered logs state
@@ -368,7 +370,7 @@ export const KnowledgeBase: React.FC = () => {
     try {
       await apiRequest(`/api/admin/knowledge/chunks/${chunkId}`, {
         method: 'PUT',
-        body: JSON.stringify({ title: editingChunkTitle, content: editingChunkContent })
+        body: JSON.stringify({ title: editingChunkTitle, content: editingChunkContent, keywords: editingChunkKeywords.trim() || null })
       });
       showToast('FAQ existing berhasil diperbarui!', 'success');
       setEditingChunkId(null);
@@ -410,12 +412,13 @@ export const KnowledgeBase: React.FC = () => {
       await apiRequest('/api/admin/knowledge/faq', {
         method: 'POST',
         body: JSON.stringify({
-          faqs: [{ question, answer }]
+          faqs: [{ question, answer, keywords: faqKeywords.trim() || undefined }]
         })
       });
       showToast('FAQ added successfully!', 'success');
       setQuestion('');
       setAnswer('');
+      setFaqKeywords('');
       loadChunks();
     } catch (err: any) {
       showToast(`Failed to add FAQ: ${err.message}`, 'error');
@@ -547,6 +550,16 @@ export const KnowledgeBase: React.FC = () => {
                             className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed resize-none shadow-xs"
                           />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-[#111b21]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
+                          <input
+                            type="text"
+                            value={editingChunkKeywords}
+                            onChange={(e) => setEditingChunkKeywords(e.target.value)}
+                            placeholder="Contoh: lampu merah, infrared, terapi hangat, batuk pilek"
+                            className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                          />
+                        </div>
                         <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
                           <button
                             type="button"
@@ -584,6 +597,7 @@ export const KnowledgeBase: React.FC = () => {
                                 setEditingChunkId(chunk.id);
                                 setEditingChunkTitle(chunk.title);
                                 setEditingChunkContent(chunk.content);
+                                setEditingChunkKeywords(chunk.keywords || '');
                               }}
                               className="px-2 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                               title="Edit FAQ Ini"
@@ -602,6 +616,15 @@ export const KnowledgeBase: React.FC = () => {
                           </div>
                         </div>
                         <h4 className="font-bold text-[#111b21] text-xs leading-snug">{chunk.title}</h4>
+                        {chunk.keywords && chunk.keywords.trim() && (
+                          <div className="flex flex-wrap gap-1">
+                            {chunk.keywords.split(',').map((kw) => kw.trim()).filter(Boolean).map((kw, ki) => (
+                              <span key={ki} className="px-1.5 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-[10px] font-semibold text-purple-700">
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <p className="text-xs text-[#54656f] leading-relaxed whitespace-pre-wrap">
                           {chunk.content}
                         </p>
@@ -645,6 +668,17 @@ export const KnowledgeBase: React.FC = () => {
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder="Halo Bunda, untuk pijat bayi sebaiknya dihindari saat bayi demam tinggi ya bund..."
                   className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none leading-relaxed shadow-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[#111b21]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
+                <input
+                  type="text"
+                  value={faqKeywords}
+                  onChange={(e) => setFaqKeywords(e.target.value)}
+                  placeholder="Contoh: lampu merah, infrared, terapi hangat, batuk pilek"
+                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
@@ -1049,6 +1083,7 @@ export const KnowledgeBase: React.FC = () => {
                                 setEditingChunkId(item.matchedChunk.id);
                                 setEditingChunkTitle(item.matchedChunk.title);
                                 setEditingChunkContent(item.matchedChunk.content);
+                                setEditingChunkKeywords(item.matchedChunk.keywords || '');
                               }}
                               className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                             >
@@ -1072,6 +1107,13 @@ export const KnowledgeBase: React.FC = () => {
                                 value={editingChunkContent}
                                 onChange={(e) => setEditingChunkContent(e.target.value)}
                                 className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
+                              />
+                              <input
+                                type="text"
+                                value={editingChunkKeywords}
+                                onChange={(e) => setEditingChunkKeywords(e.target.value)}
+                                placeholder="Tag intent / sinonim, dipisahkan koma"
+                                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                               />
                               <div className="flex space-x-2 justify-end">
                                 <button

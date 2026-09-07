@@ -115,7 +115,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
       const res = await service.calculateDelivery({ lat: -7.50, lng: 112.40 });
 
-      expect(res.distanceKm).toBe(35.2);
+      expect(res.distanceKm).toBe(33.6);
       expect(res.isOutOfCoverage).toBe(true);
       expect(res.messageTemplate).toContain('luar jangkauan');
     });
@@ -143,8 +143,9 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
   describe('4. Exact Boundary Delivery Price Tier Testing via ORS-Mocked Path', () => {
     const createMockService = (targetKm: number) => {
-      // Hitung raw meters agar setelah buffer 1.1x menghasilkan tepat targetKm
-      const rawMeters = Math.round((targetKm / 1.1) * 1000);
+      // Hitung raw meters dengan memperhitungkan buffer adaptif (1.10x <= 18 km, 1.05x > 18 km)
+      const factor = targetKm > 18.9 ? 1.05 : 1.10;
+      const rawMeters = Math.round((targetKm / factor) * 1000);
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: rawMeters,

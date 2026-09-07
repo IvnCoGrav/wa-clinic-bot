@@ -38,6 +38,7 @@ process.env.LLM_FALLBACK_BASE_URL = ''; // pastikan test tidak mencoba tembak ex
 process.env.LLM_FALLBACK_API_KEY = '';
 process.env.ENABLE_SELF_LEARNING = 'false';
 process.env.SLOT_FILLING_ENGINE_ENABLED = 'false';
+process.env.USE_V3_AGENT = 'false';
 process.env.SLOT_FILLING_WHITELIST_PHONES = '';
 process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS = '0'; // default 0 saat test agar timestamp fixture statis tidak ter-drop
 process.env.HUMANIZER_TYPING_AVERAGE_WPM = '48';

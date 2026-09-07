@@ -18,6 +18,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock_llm_key';
     process.env.WAHA_API_KEY = 'my_waha_api_key_secret';
+    await queueService.forceDisconnectRedis();
     await seedAiScopeAll();
     app = buildApp();
     await app.ready();
