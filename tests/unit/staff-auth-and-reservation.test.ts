@@ -582,5 +582,50 @@ describe('Staff Auth & Reservation Services', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('melenceng jauh');
     });
+
+    it('should record payment without sending automated WhatsApp receipt chat message', async () => {
+      const now = new Date();
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-pay-1',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        status: 'confirmed',
+        purchase_value: 105000,
+        customer: {
+          id: 'cust-1',
+          name: 'Bapak Naufal',
+          conversations: [{ id: 'conv-pay-1' }],
+        },
+      });
+
+      (prisma.reservation.update as any).mockResolvedValue({
+        id: 'res-pay-1',
+        status: 'completed',
+        purchase_value: 105000,
+        purchase_occurred_at: now,
+      });
+
+      const result = await StaffReservationService.recordPayment({
+        reservationId: 'res-pay-1',
+        staffId: 'staff-1',
+        staffName: 'Bidan Yusi F',
+        tenantId: 'default-tenant',
+        paymentMethod: 'CASH',
+        amount: 105000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(prisma.reservation.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'res-pay-1' },
+          data: expect.objectContaining({
+            status: 'completed',
+            payment_method: 'CASH',
+            purchase_value: 105000,
+          }),
+        })
+      );
+    });
   });
 });
+
