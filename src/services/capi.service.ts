@@ -886,7 +886,54 @@ export class CapiService {
         hashedCity = builder.getNormalizedAndHashedPII(rawCity, PII_DATA_TYPE.CITY) || undefined;
       }
       hashedState = builder.getNormalizedAndHashedPII('jawa timur', PII_DATA_TYPE.STATE) || undefined;
-      const rawZip = (fullCustomer?.zipcode || fullCustomer?.pending_zipcode || '').trim();
+      let rawZip = (fullCustomer?.zipcode || fullCustomer?.pending_zipcode || '').trim();
+      let gazetteerZip: string | null = null;
+      if (!rawZip) {
+        try {
+          const { resolveZipcode } = await import('../utils/gazetteer-zipcode-resolver');
+          const prefs = (fullCustomer as any)?.preferences || {};
+          const addrText = (prefs.address || prefs.full_address || (fullCustomer as any)?.address || '').trim();
+          const nameText = (fullCustomer?.name || '').trim();
+          const gazInput = {
+            kelurahan: (fullCustomer?.kelurahan || fullCustomer?.pending_kelurahan || '') as string,
+            kecamatan: (fullCustomer?.kecamatan || fullCustomer?.pending_kecamatan || '') as string,
+            kota: (fullCustomer?.kota || fullCustomer?.pending_kota || '') as string,
+            text: `${nameText} ${addrText}`.trim(),
+          };
+          gazetteerZip = resolveZipcode(gazInput);
+          if (gazetteerZip) {
+            rawZip = gazetteerZip;
+            // Non-blocking async persist (non-destruktif: hanya jika zipcode IS NULL)
+            const custId = fullCustomer?.id;
+            if (custId) {
+              void (async () => {
+                try {
+                  const { prisma: p } = await import('../db/client');
+                  const existing = await p.customer.findUnique({ where: { id: custId }, select: { zipcode: true } });
+                  if (existing && !existing.zipcode) {
+                    await p.customer.update({ where: { id: custId }, data: { zipcode: gazetteerZip } });
+                    console.log(`[CAPI ZIP ENRICH] Persisted gazetteer zip ${gazetteerZip} for customer ${custId}`);
+                  }
+                } catch (e: any) {
+                  // Fallback memory store when DB offline (tests)
+                  try {
+                    const { customerService } = await import('./customer.service');
+                    const mem = (customerService as any).getMemoryCustomers?.();
+                    if (mem) {
+                      for (const [, c] of mem.entries()) {
+                        if (c.id === custId && !c.zipcode) { c.zipcode = gazetteerZip; break; }
+                      }
+                    }
+                  } catch {}
+                }
+              })();
+            }
+            console.log(`[CAPI] zp enriched via Gazetteer: ${gazetteerZip} (kec=${gazInput.kecamatan || '-'}, text="${gazInput.text.slice(0, 40)}")`);
+          }
+        } catch (e) {
+          // gazetteer resolver unavailable — silent
+        }
+      }
       if (rawZip) {
         hashedZip = builder.getNormalizedAndHashedPII(rawZip, PII_DATA_TYPE.ZIP_CODE) || undefined;
       }

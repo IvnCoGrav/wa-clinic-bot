@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Integrasi Otomatis Data Gazetteer untuk Zipcode Meta CAPI (`gazetteer-zipcode-resolver.ts`, `capi.service.ts`, `human-background-enrichment.service.ts`, `backfill-customer-zipcodes.ts`) (2026-09-07)
+
+- **Tujuan:** Maksimalkan Event Match Quality (EMQ) Meta CAPI dengan otomatis menyertakan parameter `zp` (kode pos SHA-256) pada setiap event Purchase/InitiateCheckout/Lead, memanfaatkan dataset resmi `surabaya_sidoarjo_subdistricts.json` (573 kelurahan/desa SBY-SDA).
+- **Core Resolver (`src/utils/gazetteer-zipcode-resolver.ts`):** In-memory 3-layer index: (1) Kelurahan+Kecamatan exact → 100% presisi (Sawotratap+Gedangan→61254, Keputih+Sukolilo→60111), (2) Kecamatan fallback representatif most-common + override eksplisit (Gedangan→61254, Sedati→61253, Waru→61256, Wonokromo→60243, Rungkut→60293, Lakarsantri→60213), (3) Free-text entity match word-boundary dari `name+address` (Bunda Retno Gedangan→61254). Normalisasi lowercase + `__reset` untuk test.
+- **CAPI Auto-Enrichment Guard (`src/services/capi.service.ts`):** Bila `customer.zipcode` & `pending_zipcode` kosong, `resolveZipcode({kelurahan,kecamatan,kota,text:name+address})` dipanggil, hash via `ParamBuilder.getNormalizedAndHashedPII(... ZIP_CODE)` → `userData.zp`, persist non-blocking non-destruktif ke `customers.zipcode` (hanya IS NULL) + memory fallback.
+- **Human Background Enrichment (`src/services/human-background-enrichment.service.ts`):** Form reservasi, teks alamat, dan admin outbound kini fallback ke Gazetteer bila `geocodingService` tidak bawa zip; helper `tryEnrichZipcodeViaGazetteer` + oportunistik free-text early enrichment (bahkan saat sudah punya lat/lng) — hanya isi IS NULL.
+- **Backfill Script (`scripts/backfill-customer-zipcodes.ts`):** `npx tsx scripts/backfill-customer-zipcodes.ts [--dry-run] [--tenant=ID]` — batch 200, non-destruktif, progress log, tenant-aware.
+- **Verifikasi:** `gazetteer-zipcode-resolver.test.ts` 5/5 ✓ (presisi, fallback, free-text), `human-background-enrichment.test.ts` 5/5 ✓, `capi-payload-sanitizer` 4/4 ✓, CAPI hashing manual `61254` via ParamBuilder ✓; `tsc --noEmit` tanpa regresi baru.
+
 #### Feature — RAG Knowledge & Bank Contoh Chat di V3 Agent + Full Observability Inspector (`search-knowledge-faq.tool.ts`, `tool-registry.ts`, `persona.ts`, `agent-runner.ts`, `llm-execution-logger.ts`, `evaluations.subroute.ts`, `AiSandbox.tsx`, `Debug.tsx`) (2026-09-06)
 
 - **Latar Belakang:** 11 contoh chat + 7 kebijakan tertanam statis di `persona.ts`; tidak ada visibilitas chunk/exemplar/prompt di Sandbox & Tracing.
