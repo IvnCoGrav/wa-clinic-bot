@@ -736,6 +736,28 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               </pre>
             </div>
 
+            {/* Meta CAPI Status Badge — terpisah dari tombol operasional */}
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider">Meta CAPI:</span>
+              {(reservation as any).purchase_event_sent_at ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">
+                  ✓ Purchase Terkirim {new Date((reservation as any).purchase_event_sent_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              ) : (reservation as any).purchase_review_status === 'ignored_outlier' ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-600 font-semibold">
+                  Diabaikan (Outlier)
+                </span>
+              ) : (reservation as any).purchase_review_status === 'pending' ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-semibold">
+                  ⏳ Dalam Antrean Queue
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600 font-semibold">
+                  Belum Terkirim
+                </span>
+              )}
+            </div>
+
             {/* Actions button footer */}
             <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-between items-stretch sm:items-center">
               {/* Left Action Group: Batalkan & Hapus */}
@@ -802,30 +824,15 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
                 </button>
 
-                {(reservation.status === 'pending' || (reservation.status as string) === 'hold') && (() => {
-                  const isHold = (reservation.status as string) === 'hold';
-                  const purchaseSentAt = reservation.purchase_event_sent_at ? new Date(reservation.purchase_event_sent_at) : null;
-                  const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
-                  return (
-                    <button
-                      onClick={handleConfirmClick}
-                      disabled={!!purchaseWindowOpen}
-                      title={
-                        purchaseWindowOpen
-                          ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
-                          : undefined
-                      }
-                      className={`flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
-                        purchaseWindowOpen
-                          ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
-                          : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
-                      }`}
-                    >
-                      <Check size={14} />
-                      <span>{purchaseWindowOpen ? 'Purchase Dikirim' : isHold ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
-                    </button>
-                  );
-                })()}
+                {(reservation.status === 'pending' || (reservation.status as string) === 'hold') && (
+                  <button
+                    onClick={handleConfirmClick}
+                    className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-[#008069] text-white hover:bg-[#00a884] text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+                  >
+                    <Check size={14} />
+                    <span>{(reservation.status as string) === 'hold' ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
+                  </button>
+                )}
 
                 {reservation.status === 'confirmed' && (
                   <button

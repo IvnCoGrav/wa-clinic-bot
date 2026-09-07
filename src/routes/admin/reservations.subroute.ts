@@ -1102,34 +1102,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
-        if (existing.customer) {
-          resolveTreatmentValue(existing.treatment_detail)
-            .then((value) => {
-              capiService
-                .sendCapiEvent({
-                  eventName: 'Purchase',
-                  customer: existing.customer,
-                  adClick: existing.customer.adClick || undefined,
-                  value,
-                  currency: 'IDR',
-                  tenantId: DEFAULT_TENANT_ID,
-                  customData: { source: 'ADMIN_CONFIRM' },
-                })
-                .catch((err) => {
-                  console.error('[CAPI ERROR] Failed to send Purchase event:', err.message);
-                });
-            })
-            .catch(() => {});
-
-          try {
-            await prisma.reservation.update({
-              where: { id },
-              data: { purchase_event_sent_at: new Date() },
-            });
-          } catch (sentErr) {
-            console.warn('[CAPI] Gagal set purchase_event_sent_at:', (sentErr as Error).message);
-          }
-        }
+        // CAPI Purchase decoupled: event Purchase HANYA via Meta Purchase Queue (POST /api/admin/reservation/:id/approve-purchase)
+        // — Tandai Lunas / Confirm tidak lagi auto-trigger CAPI & tidak set purchase_event_sent_at.
 
         if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && existing.customer?.phone) {
           const { wahaClient } = await import('../../integrations/waha/client');
@@ -1149,26 +1123,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
 
-          if (mock.customer) {
-            resolveTreatmentValue(mock.treatment_detail)
-              .then((value) => {
-                capiService
-                  .sendCapiEvent({
-                    eventName: 'Purchase',
-                    customer: mock.customer,
-                    adClick: mock.customer.adClick || undefined,
-                    value,
-                    currency: 'IDR',
-                    tenantId: DEFAULT_TENANT_ID,
-                    customData: { source: 'ADMIN_CONFIRM' },
-                  })
-                  .catch((err) => {
-                    console.error('[CAPI MOCK ERROR] Failed to send Purchase event:', err.message);
-                  });
-              })
-              .catch(() => {});
-            mock.purchase_event_sent_at = new Date();
-          }
+          // CAPI decoupled — mock juga tidak kirim Purchase & tidak set purchase_event_sent_at.
 
           if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && mock.customer?.phone) {
             const { wahaClient } = await import('../../integrations/waha/client');
@@ -1428,23 +1383,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               console.error('[Admin API] Google Calendar Event create on edit failed:', gcErr.message);
             }
           }
-          // CAPI Purchase
-          if (existing.customer) {
-            try {
-              const value = await resolveTreatmentValue(updated.treatment_detail || updated.raw_text || '');
-              await capiService.sendCapiEvent({
-                eventName: 'Purchase',
-                customer: existing.customer as any,
-                value: value || updated.purchase_value || 60000,
-                currency: 'IDR',
-                tenantId: DEFAULT_TENANT_ID,
-                customData: { source: 'ADMIN_EDIT_CONFIRM' },
-              });
-              await prisma.reservation.update({ where: { id }, data: { purchase_event_sent_at: new Date() } }).catch(() => {});
-            } catch (capiErr: any) {
-              console.warn('[Admin API] CAPI Purchase on edit failed:', capiErr.message);
-            }
-          }
+          // CAPI Purchase decoupled: tidak auto-kirim saat edit menjadi confirmed — eksklusif via Purchase Queue.
         }
         if (isBecomingCancelled) {
           try {
