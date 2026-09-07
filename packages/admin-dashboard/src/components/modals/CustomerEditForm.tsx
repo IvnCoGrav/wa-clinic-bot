@@ -18,6 +18,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
+import { apiRequest } from '../../services/api';
+import { RefreshCw } from 'lucide-react';
 
 export interface EditableChildItem {
   id?: string;
@@ -95,6 +97,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   const [geocoding, setGeocoding] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [showManualCoords, setShowManualCoords] = useState(false);
+  const [refreshingChatLoc, setRefreshingChatLoc] = useState(false);
 
   useEffect(() => {
     setFormData({
@@ -185,6 +188,32 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
       toast(err.message || 'Gagal mengunci GPS.', 'error');
     } finally {
       setGettingGps(false);
+    }
+  };
+
+  const handleRefreshFromChat = async () => {
+    if (!customer.id) { toast('Customer ID tidak ditemukan', 'error'); return; }
+    setRefreshingChatLoc(true);
+    try {
+      const res: any = await apiRequest(`/api/admin/customers/${customer.id}/refresh-location`, { method: 'POST' });
+      if (res?.success && res?.data) {
+        const d = res.data;
+        setFormData((prev) => ({
+          ...prev,
+          lat: String(d.lat),
+          lng: String(d.lng),
+          kelurahan: d.kelurahan || prev.kelurahan,
+          kecamatan: d.kecamatan || prev.kecamatan,
+          kota: d.kota || prev.kota,
+        }));
+        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel} — ${d.distanceKm.toFixed(2)} km`, 'success');
+      } else {
+        toast(res?.error || 'Gagal refresh lokasi', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal refresh lokasi', 'error');
+    } finally {
+      setRefreshingChatLoc(false);
     }
   };
 
@@ -531,6 +560,16 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                 <span>{geocoding ? 'Mencari...' : 'Cari Titik Alamat'}</span>
               </button>
             </div>
+            <button
+              type="button"
+              onClick={handleRefreshFromChat}
+              disabled={refreshingChatLoc}
+              className="w-full py-2 px-3 bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#00a884]/30 text-[#008069] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+              title="Ambil koordinat paling valid dari riwayat chat (Bidan → Customer → DB → Geocoding) dan isi otomatis"
+            >
+              {refreshingChatLoc ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              <span>{refreshingChatLoc ? 'Memperbarui...' : '🔄 Ambil dari Shareloc Chat / Refresh'}</span>
+            </button>
 
             {/* Current Coordinate Badge */}
             {formData.lat && formData.lng ? (

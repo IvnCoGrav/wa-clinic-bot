@@ -1495,6 +1495,305 @@ export class CustomerService {
   }
 
   /**
+   * Refresh & Hitung Ulang Lokasi, Jarak & Ongkir Customer (Hierarchy of Truth)
+   * Tier1 (Bidan/Staff outbound GPS) → Tier2 (Customer inbound GPS) → Tier3 (DB lat/lng) → Tier4 (Geocoding kelurahan/kecamatan)
+   */
+  public async refreshCustomerLocationAndOngkir(
+    customerId: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+    performedBy?: string
+  ): Promise<{
+    success: boolean;
+    data?: {
+      customerId: string;
+      source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding';
+      sourceLabel: string;
+      lat: number;
+      lng: number;
+      distanceKm: number;
+      ongkir: number;
+      isOutOfCoverage: boolean;
+      kelurahan?: string | null;
+      kecamatan?: string | null;
+      kota?: string | null;
+      refreshedAt: string;
+      refreshedBy?: string;
+    };
+    error?: string;
+  }> {
+    try {
+      const customer = await this.getCustomerById(customerId, tenantId);
+      if (!customer) return { success: false, error: 'Customer tidak ditemukan' };
+
+      // Deep scan messages
+      let messages: any[] = [];
+      try {
+        const convs = await prisma.conversation.findMany({
+          where: { customer_id: customerId, tenant_id: tenantId },
+          select: { id: true },
+        });
+        if (convs.length > 0) {
+          const ids = convs.map((c) => c.id);
+          messages = await prisma.message.findMany({
+            where: { conversation_id: { in: ids }, tenant_id: tenantId },
+            orderBy: { created_at: 'asc' },
+          });
+        }
+      } catch (_) {
+        // fallback memory: try messageService
+        try {
+          const { messageService } = await import('./message.service');
+          const { conversationService } = await import('./conversation.service');
+          const conv = await conversationService.getOrCreateConversation(customerId, tenantId);
+          if (conv) messages = await messageService.getRecentMessages(conv.id, 1000, tenantId);
+        } catch {}
+      }
+
+      const isBidanSender = (msg: any): boolean => {
+        const st = (msg.sender_type || '').toUpperCase();
+        const name = (msg.sender_name || '').toLowerCase();
+        return ['STAFF', 'ADMIN', 'HUMAN', 'BIDAN'].includes(st) || name.includes('bidan') || name.includes('staff') || name.includes('admin');
+      };
+
+      const extractFromPayloadRaw = (msg: any): { lat: number; lng: number; detail: string } | null => {
+        const loc = msg.payload_raw?.location || msg.payloadRaw?.location;
+        if (loc && loc.latitude != null && loc.longitude != null) {
+          const lat = Number(loc.latitude);
+          const lng = Number(loc.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) return { lat, lng, detail: 'payload_raw.location' };
+        }
+        return null;
+      };
+
+      const extractFromText = (text: string): { lat: number; lng: number; detail: string } | null => {
+        if (!text) return null;
+        // [LOCATION SHARE: Lat -7.x, Lng 112.x] or [Shared Location: -7.x, 112.x]
+        const re1 = /\[LOCATION\s+SHARE:\s*Lat\s*(-?\d+\.\d+)\s*,\s*Lng\s*(-?\d+\.\d+)\s*\]/i;
+        const m1 = text.match(re1);
+        if (m1) return { lat: parseFloat(m1[1]), lng: parseFloat(m1[2]), detail: 'text [LOCATION SHARE]' };
+        const re2 = /\[Shared\s+Location:\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\]/i;
+        const m2 = text.match(re2);
+        if (m2) return { lat: parseFloat(m2[1]), lng: parseFloat(m2[2]), detail: 'text [Shared Location]' };
+        // Try Google Maps URL extraction (sync part)
+        try {
+          const { extractGoogleMapsUrls, extractCoordinatesFromUrlString } = require('../utils/google-maps-url-resolver');
+          const urls: string[] = extractGoogleMapsUrls(text);
+          for (const u of urls) {
+            const c = extractCoordinatesFromUrlString(u);
+            if (c) return { lat: c.lat, lng: c.lng, detail: `url ${u.slice(0, 40)}` };
+          }
+        } catch {}
+        return null;
+      };
+
+      let tier1Candidate: { lat: number; lng: number; detail: string; msg: any } | null = null;
+      let tier2Candidate: { lat: number; lng: number; detail: string; msg: any } | null = null;
+
+      // Scan from newest to oldest to prioritize latest valid shareloc within tier
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        const content: string = msg.content || '';
+        const payloadCoords = extractFromPayloadRaw(msg);
+        const textCoords = !payloadCoords ? extractFromText(content) : null;
+        let coords = payloadCoords || textCoords;
+        // Try async shortlink resolve if still no coords but contains google maps url
+        if (!coords && content && /maps\.app\.goo\.gl|google\.[a-z.]+\/maps/i.test(content)) {
+          try {
+            const { extractGoogleMapsUrls, resolveGoogleMapsUrl } = await import('../utils/google-maps-url-resolver');
+            const urls = extractGoogleMapsUrls(content);
+            for (const u of urls) {
+              const res = await resolveGoogleMapsUrl(u);
+              if (res.success && res.lat != null && res.lng != null) {
+                coords = { lat: res.lat, lng: res.lng, detail: `resolved ${u.slice(0, 40)}` };
+                break;
+              }
+            }
+          } catch {}
+        }
+        if (!coords) continue;
+        const isBidan = isBidanSender(msg) || msg.direction === 'OUTBOUND';
+        // Strict Tier1: outbound from staff/bidan/human
+        if (isBidan && msg.direction === 'OUTBOUND') {
+          if (!tier1Candidate) tier1Candidate = { ...coords, msg };
+        } else if (msg.direction === 'INBOUND') {
+          if (!tier2Candidate) tier2Candidate = { ...coords, msg };
+        } else if (isBidan && !tier1Candidate) {
+          // fallback: if sender_type bidan but direction ambiguous
+          tier1Candidate = { ...coords, msg };
+        }
+        if (tier1Candidate && tier2Candidate) break;
+      }
+
+      let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding'; sourceLabel: string; detail: string } | null = null;
+
+      if (tier1Candidate) {
+        chosen = { lat: tier1Candidate.lat, lng: tier1Candidate.lng, source: 'bidan_shareloc', sourceLabel: '📍 Terverifikasi Bidan (Paling Valid)', detail: tier1Candidate.detail };
+      } else if (tier2Candidate) {
+        chosen = { lat: tier2Candidate.lat, lng: tier2Candidate.lng, source: 'customer_shareloc', sourceLabel: '🔵 Shareloc Customer', detail: tier2Candidate.detail };
+      } else if (customer.lat != null && customer.lng != null) {
+        chosen = { lat: Number(customer.lat), lng: Number(customer.lng), source: 'db_coords', sourceLabel: '🟡 Koordinat Tersimpan', detail: 'DB lat/lng' };
+      } else {
+        // Tier4: geocoding kelurahan/kecamatan/kota
+        const kel = customer.kelurahan || customer.pending_kelurahan || (customer.preferences as any)?.address || '';
+        const kec = customer.kecamatan || customer.pending_kecamatan || '';
+        const kota = customer.kota || customer.pending_kota || '';
+        const query = [kel, kec, kota].filter(Boolean).join(', ') || (customer.preferences as any)?.full_address || '';
+        if (!query) return { success: false, error: 'Tidak ada koordinat atau alamat untuk direfresh' };
+        try {
+          const { geocodingService } = await import('../integrations/google-maps/geocoding');
+          const geo = await geocodingService.geocodeText(query);
+          if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+            chosen = { lat: geo.lat, lng: geo.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `geocoding ${query}` };
+          } else {
+            // fallback gazetteer via local file centroid
+            const { resolveZipcode } = await import('../utils/gazetteer-zipcode-resolver');
+            // Try to get centroid from surabaya_sidoarjo_subdistricts.json directly
+            try {
+              const fs = await import('fs');
+              const path = await import('path');
+              const candidates = [
+                path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+                path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+              ];
+              let coords: { lat: number; lng: number } | null = null;
+              for (const p of candidates) {
+                if (fs.existsSync(p)) {
+                  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+                  const qLower = query.toLowerCase();
+                  const hit = data.find((d: any) => qLower.includes(d.Kelurahan_Desa.toLowerCase()) || qLower.includes(d.Kecamatan.toLowerCase()));
+                  if (hit && hit.Koordinat) {
+                    const [la, ln] = hit.Koordinat.split(',').map((s: string) => parseFloat(s.trim()));
+                    if (Number.isFinite(la) && Number.isFinite(ln)) coords = { lat: la, lng: ln };
+                    break;
+                  }
+                }
+              }
+              if (coords) chosen = { lat: coords.lat, lng: coords.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `gazetteer centroid ${query}` };
+            } catch {}
+            if (!chosen) return { success: false, error: `Geocoding tidak presisi untuk "${query}"` };
+          }
+        } catch (e: any) {
+          return { success: false, error: `Geocoding gagal: ${e.message}` };
+        }
+      }
+
+      // Calculate delivery & reverse geocode untuk kelurahan/kecamatan/kota
+      const { deliveryService } = await import('./delivery.service');
+      const delivery = await deliveryService.calculateDelivery({ lat: chosen.lat, lng: chosen.lng }, undefined, tenantId);
+
+      let resolvedAdmin: any = {};
+      try {
+        const { geocodingService } = await import('../integrations/google-maps/geocoding');
+        resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng);
+      } catch {}
+
+      const nowIso = new Date().toISOString();
+      const existingPrefs = (customer.preferences as any) || {};
+      const history: any[] = Array.isArray(existingPrefs.location_history) ? existingPrefs.location_history : [];
+      const newHistoryEntry = {
+        source: chosen.source,
+        sourceLabel: chosen.sourceLabel,
+        lat: chosen.lat,
+        lng: chosen.lng,
+        distanceKm: delivery.distanceKm,
+        ongkir: delivery.ongkir,
+        detail: chosen.detail,
+        refreshedBy: performedBy || 'Admin',
+        refreshedAt: nowIso,
+      };
+
+      // Persist atomically
+      try {
+        await prisma.customer.update({
+          where: { id: customerId },
+          data: {
+            lat: chosen.lat,
+            lng: chosen.lng,
+            distance_km: delivery.distanceKm,
+            ongkir: delivery.ongkir,
+            is_out_of_coverage: delivery.isOutOfCoverage,
+            share_location_sent: chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc' ? true : customer.share_location_sent,
+            kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
+            kecamatan: resolvedAdmin.kecamatan || customer.kecamatan,
+            kota: resolvedAdmin.kota || customer.kota,
+            zipcode: resolvedAdmin.zipcode || customer.zipcode,
+            preferences: {
+              ...existingPrefs,
+              location_source: chosen.source,
+              location_source_label: chosen.sourceLabel,
+              location_refreshed_at: nowIso,
+              refreshed_by: performedBy,
+              source_detail: chosen.detail,
+              location_history: [...history.slice(-9), newHistoryEntry],
+              location_updated_at: nowIso,
+              location_updated_by_staff_name: performedBy || 'Admin',
+            },
+          },
+        });
+      } catch (dbErr) {
+        // memory fallback
+        const mem = memoryCustomers.get(customer.phone) || memoryCustomers.get(customerId);
+        if (mem) {
+          Object.assign(mem, {
+            lat: chosen.lat,
+            lng: chosen.lng,
+            distance_km: delivery.distanceKm,
+            ongkir: delivery.ongkir,
+            is_out_of_coverage: delivery.isOutOfCoverage,
+            kelurahan: resolvedAdmin.kelurahan || mem.kelurahan,
+            kecamatan: resolvedAdmin.kecamatan || mem.kecamatan,
+            kota: resolvedAdmin.kota || mem.kota,
+            zipcode: resolvedAdmin.zipcode || mem.zipcode,
+            preferences: {
+              ...existingPrefs,
+              location_source: chosen.source,
+              location_source_label: chosen.sourceLabel,
+              location_refreshed_at: nowIso,
+              refreshed_by: performedBy,
+              source_detail: chosen.detail,
+              location_history: [...history.slice(-9), newHistoryEntry],
+              location_updated_at: nowIso,
+            },
+            updated_at: new Date(),
+          });
+          if (chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc') mem.share_location_sent = true;
+        }
+      }
+
+      // Auto-sync Google Contacts & live chat hub
+      try {
+        const { googleContactsService } = await import('./google-contacts.service');
+        googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
+      } catch {}
+      try {
+        const { getLiveChatHub } = await import('./live-chat-hub.service');
+        getLiveChatHub().publish({ type: 'conversation.updated', tenantId, payload: { event: 'customer:location_refreshed', customerId, ...newHistoryEntry } }).catch(() => {});
+      } catch {}
+
+      return {
+        success: true,
+        data: {
+          customerId,
+          source: chosen.source,
+          sourceLabel: chosen.sourceLabel,
+          lat: chosen.lat,
+          lng: chosen.lng,
+          distanceKm: delivery.distanceKm,
+          ongkir: delivery.ongkir,
+          isOutOfCoverage: delivery.isOutOfCoverage,
+          kelurahan: resolvedAdmin.kelurahan || customer.kelurahan || null,
+          kecamatan: resolvedAdmin.kecamatan || customer.kecamatan || null,
+          kota: resolvedAdmin.kota || customer.kota || null,
+          refreshedAt: nowIso,
+          refreshedBy: performedBy,
+        },
+      };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Gagal refresh lokasi' };
+    }
+  }
+
+  /**
    * Sync foto profil customer dari WhatsApp Gateway secara background (non-blocking & rate-limited).
    * URL standar yang diambil dari WAHA/CDN WhatsApp disimpan ke database PostgreSQL.
    */

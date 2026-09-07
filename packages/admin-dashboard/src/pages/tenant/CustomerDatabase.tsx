@@ -116,6 +116,7 @@ export const CustomerDatabase: React.FC = () => {
   const [detailData, setDetailData] = useState<any | null>(null);
   const [customerSeries, setCustomerSeries] = useState<any[]>([]);
   const [detailEditMode, setDetailEditMode] = useState(false);
+  const [refreshingLocationDb, setRefreshingLocationDb] = useState(false);
   // Reservation detail dari riwayat (klik row/card)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
@@ -270,6 +271,45 @@ export const CustomerDatabase: React.FC = () => {
       toast('Profil customer berhasil diperbarui!', 'success');
     } catch (err: any) {
       toast(`Gagal menyimpan: ${err.message}`, 'error');
+    }
+  };
+
+  const handleRefreshLocationDb = async () => {
+    if (!activeDetailCustomer) return;
+    setRefreshingLocationDb(true);
+    try {
+      const res: any = await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}/refresh-location`, { method: 'POST' });
+      if (res?.success && res?.data) {
+        const d = res.data;
+        setDetailData((prev: any) => ({
+          ...prev,
+          lat: d.lat,
+          lng: d.lng,
+          latitude: d.lat,
+          longitude: d.lng,
+          delivery_distance_km: d.distanceKm,
+          delivery_fee: d.ongkir,
+          distance_km: d.distanceKm,
+          ongkir: d.ongkir,
+          kelurahan: d.kelurahan ?? prev?.kelurahan,
+          kecamatan: d.kecamatan ?? prev?.kecamatan,
+          kota: d.kota ?? prev?.kota,
+          preferences: {
+            ...(prev?.preferences || {}),
+            location_source: d.source,
+            location_source_label: d.sourceLabel,
+            location_refreshed_at: d.refreshedAt,
+          },
+        }));
+        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel}`, 'success');
+        loadCustomers();
+      } else {
+        toast(res?.error || 'Gagal refresh lokasi', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal refresh lokasi', 'error');
+    } finally {
+      setRefreshingLocationDb(false);
     }
   };
 
@@ -1236,10 +1276,36 @@ export const CustomerDatabase: React.FC = () => {
 
                   {/* Section 1: Alamat & Lokasi Rumah */}
                   <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
-                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
-                      <MapPin size={15} />
-                      <span>Alamat Lengkap & Logistik Kunjungan</span>
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                        <MapPin size={15} />
+                        <span>Alamat Lengkap & Logistik Kunjungan</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={handleRefreshLocationDb}
+                        disabled={refreshingLocationDb}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white border-[#e9edef] hover:bg-[#f0f2f5] text-[#008069] hover:border-[#008069] transition disabled:opacity-50"
+                      >
+                        <RefreshCw size={11} className={refreshingLocationDb ? 'animate-spin' : ''} />
+                        <span>{refreshingLocationDb ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
+                      </button>
+                    </div>
+                    {detailData?.preferences?.location_source_label || detailData?.preferences?.location_source ? (
+                      <div className="flex items-center gap-1.5 -mt-1">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          detailData.preferences.location_source === 'bidan_shareloc' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          detailData.preferences.location_source === 'customer_shareloc' ? 'bg-sky-50 text-sky-700 border-sky-200' :
+                          detailData.preferences.location_source === 'db_coords' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          {detailData.preferences.location_source_label || detailData.preferences.location_source}
+                        </span>
+                        {detailData.preferences.location_refreshed_at ? (
+                          <span className="text-[10px] text-[#8696a0]">{new Date(detailData.preferences.location_refreshed_at).toLocaleString('id-ID')}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
