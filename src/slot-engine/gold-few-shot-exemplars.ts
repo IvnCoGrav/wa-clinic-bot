@@ -49,7 +49,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'gold_lokasi_homecare_waru_surabaya_sidoarjo',
     scenario: 'Customer menanyakan lokasi/basecamp layanan homecare',
-    tags: ['lokasi', 'homecare', 'basecamp', 'domisili', 'alamat', 'waru'],
+    tags: ['lokasi', 'homecare', 'basecamp', 'domisili', 'alamat', 'waru', 'kec', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'jarak'],
     customerMessage: 'Kalau lokasinya di mana kak? Saya di Surabaya.',
     idealResponse:
       'Basecamp kami berada di daerah Waru, perbatasan Surabaya–Sidoarjo ya Bunda 😊 Kami melayani treatment Moms & Baby yang bisa langsung dipanggil ke rumah (homecare) untuk area Surabaya dan Sidoarjo. Kalau boleh tahu rumah Bunda di daerah mana ya?',
@@ -59,7 +59,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'gold_konfirmasi_domisili_detail_kelurahan',
     scenario: 'Customer hanya menyebut kecamatan/kota, diminta detail kelurahan untuk akurasi jarak',
-    tags: ['lokasi', 'domisili', 'kelurahan', 'kecamatan', 'alamat', 'ongkir'],
+    tags: ['lokasi', 'domisili', 'kelurahan', 'kecamatan', 'alamat', 'ongkir', 'kec', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'jarak'],
     customerMessage: 'Saya di daerah Gunung Anyar, Surabaya kak',
     idealResponse:
       'Baik Bunda 😊 Kalau boleh tahu rumahnya di kelurahan mana ya Bunda? Karena jarak yang berbeda bisa memengaruhi estimasi kunjungan kami. Boleh juga kirim titik lokasinya agar lebih akurat 🙏',
@@ -191,7 +191,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'gold_tanya_usia_minimal_treatment',
     scenario: 'Customer menanyakan berapa usia minimal bayi boleh treatment',
-    tags: ['usia', 'bayi', 'newborn', 'umur', 'minimal', 'aman'],
+    tags: ['usia', 'newborn', 'umur', 'minimal', 'aman', 'usia_minimal', '3_minggu'],
     customerMessage: 'Bayi saya umur 3 minggu, boleh nggak kak dipijat?',
     idealResponse:
       'Boleh Bunda, bayi baru lahir pun sudah bisa kami tangani dengan aman oleh Bidan kami 😊 Untuk usia segini, treatment akan kami sesuaikan dengan kondisi si kecil. Rencana mau treatment di hari apa ya Bunda? 🤗',
@@ -268,6 +268,26 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
       'Alhamdulillah, senang sekali mendengarnya Bunda 😊 Terima kasih sudah mau berbagi kabarnya. Semoga si kecil semakin sehat, nyaman, dan tumbuh aktif ya. Kami doakan yang terbaik untuk Bunda dan si kecil 🤗',
     isActive: true,
     sortOrder: 31,
+  },
+  {
+    id: 'gold_jadwal_besok_cek_admin_tanpa_tanya_alamat',
+    scenario: 'Customer bertanya ketersediaan jadwal besok saat lokasi sudah diketahui — cekkan Admin tanpa tanya alamat lagi',
+    tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'admin', 'jam'],
+    customerMessage: 'Treatment nya semisal besok apa bisa ya bu ?',
+    idealResponse:
+      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏 Mau kami bantu catatkan untuk perkiraan jamnya (pagi atau siang), Bunda? 🤗',
+    isActive: true,
+    sortOrder: 33,
+  },
+  {
+    id: 'gold_khasiat_sinar_moksa_bapil',
+    scenario: 'Customer menanyakan khasiat atau cara kerja terapi Sinar Moksa',
+    tags: ['sinar_moksa', 'moksa', 'inframerah', 'terapi_hangat'],
+    customerMessage: 'Pijat bayi sinar moksa ini gmn ya',
+    idealResponse:
+      'Untuk Sinar Moksa itu terapi sinar hangat inframerah ya Bunda 😊 Fungsinya membantu menghangatkan area dada dan punggung si kecil agar dahak atau lendir flu lebih cepat encer dan pernapasannya lebih lega. Apakah saat ini si kecil sedang batuk atau pilek Bunda? 🤗',
+    isActive: true,
+    sortOrder: 34,
   },
   {
     id: 'gold_ucapan_terima_kasih_singkat',

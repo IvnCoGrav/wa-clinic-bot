@@ -275,6 +275,130 @@ export class ConversationStateMachine {
       };
     }
 
+    // --- 📋 GERBANG UTAMA: FORMULIR RESERVASI MASUK (DETERMINISTIK) ---
+    // SOP kritis: formulir reservasi yang diisi customer diparsing & disimpan ke DB secara deterministik
+    // sebelum delegasi ke engine percakapan (V3 / Slot Engine).
+    const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
+    const lowerFormText = (incomingText || '').toLowerCase().trim();
+    const { getTenantCapiFormats } = await import('../services/capi.service');
+    const tenantFormats = await getTenantCapiFormats(tenantId);
+    const checkoutKeyword = (tenantFormats.formatCheckout || '').toLowerCase();
+    const tenantCheckoutHit =
+      checkoutKeyword.length > 0 && lowerFormText.includes(checkoutKeyword.replace(/\s+/g, ' ').trim());
+    const isFormSubmission =
+      isReservationFormMessage(incomingText) ||
+      tenantCheckoutHit ||
+      lowerFormText.includes('berikut list untuk reservasi') ||
+      (lowerFormText.includes('pilihan treatment') && (lowerFormText.includes('nama bunda') || lowerFormText.includes('alamat')));
+
+    if (isFormSubmission) {
+      const parseResult = parseReservationText(incomingText);
+      if (parseResult.success && parseResult.reservation) {
+        const parsed = parseResult.reservation;
+        try {
+          const { prisma } = await import('../db/client');
+          const reservation = await prisma.reservation.create({
+            data: {
+              tenant_id: tenantId,
+              customer_id: customer.id,
+              treatment_category: parsed.treatmentCategory,
+              treatment_detail: parsed.treatmentDetail,
+              booking_date: parsed.bookingDate,
+              raw_text: incomingText,
+              status: 'pending',
+            },
+          });
+
+          const { reservationLifecycleService } = await import('../services/reservation-lifecycle.service');
+          await reservationLifecycleService.onReservationCreated({
+            customerId: customer.id,
+            reservationId: reservation.id,
+            tenantId,
+            chatId: incomingMessage.chatId || `${customer.phone}@c.us`,
+            babies: parsed.babies || [],
+            customerName: parsed.name,
+            kecamatan: parsed.kec,
+            kota: parsed.kota,
+            kelurahan: parsed.address,
+          });
+
+          try {
+            const { fireCapiEvent } = await import('../services/capi.service');
+            fireCapiEvent({
+              eventName: 'InitiateCheckout',
+              customer,
+              tenantId,
+              customData: {
+                source: 'CUSTOMER_FORM_SUBMITTED',
+                treatment: parsed.treatmentDetail,
+              },
+            });
+          } catch (capiErr: any) {
+            console.warn('[CAPI] InitiateCheckout (customer form submit) skipped:', capiErr.message);
+          }
+        } catch (dbErr: any) {
+          console.error(`[MACHINE FORM] Gagal simpan reservasi customer ${customer.phone} (${parsed.name}):`, dbErr.message);
+        }
+
+        // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"
+        const customerName = parsed.name?.trim();
+        if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
+          const kecamatan = parsed.kec || customer.kecamatan || '';
+          const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+          try {
+            const { customerService } = await import('../services/customer.service');
+            await customerService.updateCustomerName(customer.id, contactName, tenantId);
+          } catch (nameErr: any) {
+            console.warn('[MACHINE CONTACT SAVE] Failed to update customer name:', nameErr.message);
+          }
+        }
+
+        // Eskalasi ke Human Handling
+        await conversationService.escalateToHumanHandling(
+          activeConversation,
+          customer.phone,
+          `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"`,
+          tenantId,
+          'reservation_submitted'
+        );
+
+        activeConversation.is_human_handling = true;
+        activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+
+        const { TEMPLATES } = await import('../config/persona');
+        const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
+        const replyText = `Baik Bunda, data reservasi sudah kami terima ya bund. Kami cek dulu ya bund. 😊${shareNote}`;
+
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          replyText,
+          shouldSendReply: true,
+          isHumanHandling: true,
+          aiReasoning: 'Customer submitted valid reservation form -> Saved reservation to DB & escalated to human handling.',
+        };
+      } else {
+        const hasFormHeaderOrColonFields =
+          lowerFormText.includes('list untuk reservasi') ||
+          lowerFormText.includes('format reservasi') ||
+          lowerFormText.includes('form reservasi') ||
+          lowerFormText.includes('form booking') ||
+          lowerFormText.includes('pilihan treatment (') ||
+          (lowerFormText.includes('nama') && lowerFormText.includes(':') && (lowerFormText.includes('alamat') || lowerFormText.includes('treatment')));
+
+        if (hasFormHeaderOrColonFields) {
+          const missing = parseResult.missingFields || [];
+          const missingStr = missing.join(', ');
+          const incompleteReply = `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`;
+          return {
+            nextState: ConversationState.RESERVATION_SENT,
+            replyText: incompleteReply,
+            shouldSendReply: true,
+            aiReasoning: 'Customer submitted incomplete reservation form -> Prompted to fill missing fields.',
+          };
+        }
+      }
+    }
+
     // --- 🚀 4. EKSEKUSI UTAMA: V3 AGENTIC (DEFAULT) / V2 SLOT-FILLING ENGINE ---
     const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
     const historyFormatted = recentDbMsgs.map((m) => ({
@@ -320,7 +444,9 @@ export class ConversationStateMachine {
       }
 
       result = {
-        nextState: v3Result.isEscalated ? ConversationState.HUMAN_HANDLING : activeConversation.current_state,
+        nextState: v3Result.isEscalated
+          ? ConversationState.HUMAN_HANDLING
+          : (v3Result.nextState || activeConversation.current_state),
         replyText: v3Result.replyText,
         shouldSendReply: v3Result.shouldSendReply && !!v3Result.replyText,
         isHumanHandling: v3Result.isEscalated,

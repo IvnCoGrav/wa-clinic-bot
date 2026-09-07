@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
-import { FewShotExemplarBank } from '../../src/slot-engine/few-shot-exemplars';
+import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/slot-engine/few-shot-exemplars';
 
 // Test API butuh mode non-production agar buildApp() tidak melempar
 // "WAHA_WEBHOOK_SECRET must be defined" — setup.ts global sengaja blank
@@ -251,9 +251,10 @@ describe('Few-Shot Exemplars Admin API (/api/admin/few-shots)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.success).toBe(true);
-    // 32 default SOP (7 SOP inti + 25 Koleksi Emas) + 1 kustom = 33;
-    // kustom tidak terhapus & ikut serta dalam hasil.
-    expect(body.data.length).toBe(33);
+    // Seluruh default SOP (inti + Koleksi Emas + lokasi/ongkir) + 1 kustom;
+    // kustom tidak terhapus & ikut serta dalam hasil. Hitung dinamis agar
+    // tidak rapuh saat koleksi default bertambah.
+    expect(body.data.length).toBe(DEFAULT_FEW_SHOT_EXEMPLARS.length + 1);
     expect(body.data.some((e: any) => e.id === custom.id)).toBe(true);
     expect(body.data.some((e: any) => e.scenario === 'Pertanyaan Jam Operasional (kustom admin)')).toBe(true);
   });

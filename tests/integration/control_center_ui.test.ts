@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
       // coalescing supaya pesan text langsung diproses (deterministik), tidak
       // tergantung nilai .env lokal (mis. BURST_COALESCE_MS=5000).
       process.env.BURST_COALESCE_MS = '0';
+      process.env.USE_V3_AGENT = 'false';
       await seedAiScopeAll();
     });
 
@@ -201,6 +202,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
     const customer = await customerService.getOrCreateCustomer(testPhone, 'Mock Integration Customer', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     
+    const { queueService } = await import('../../src/services/queue.service');
+    await queueService.forceDisconnectRedis();
+    
     // 1. Reset state to INITIAL
     await conversationService.updateConversationState(conversation.id, {
       currentState: ConversationState.INITIAL,
@@ -232,7 +236,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
     expect(resWebhook.statusCode).toBe(200);
     
     // Wait for background worker processing
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     const convAfterWebhook = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     expect(convAfterWebhook.current_state).toBe(ConversationState.AWAITING_LOCATION);

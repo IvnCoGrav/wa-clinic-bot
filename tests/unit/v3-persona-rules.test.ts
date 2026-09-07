@@ -161,4 +161,60 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(out).toContain('Bunda');
     expect(out).toContain('jadwal');
   });
+
+  it('Test 11: truncate TIDAK boleh memotong di titik nomor daftar ("3.")', () => {
+    const withList =
+      'Rincian yang didapatkan si kecil:\n1. Pijat stimulasi seluruh tubuh oleh Bidan kami\n2. Terapi akupresur titik pernapasan khusus melegakan batuk\n3. Penggunaan double aromaterapi khusus bayi\n4. Opsi tambahan sinar moksa untuk membantu encerkan dahak. Semoga membantu ya Bunda 😊 '.repeat(2);
+    expect(withList.length).toBeGreaterThan(500);
+    const out = OutputSanitizer.truncateToMaxChars(withList, 500);
+    expect(out.length).toBeLessThanOrEqual(500);
+    // Tidak boleh berakhir menggantung tepat di belakang angka daftar
+    expect(out).not.toMatch(/\d+\.\s*$/);
+    expect(out).toMatch(/[.!?…]\s*$/u);
+  });
+
+  it('Test 12: stripEnglishLeakage membersihkan "full body massage bayi"', () => {
+    const dirty = 'Pijat stimulasi seluruh tubuh (full body massage bayi) oleh Bidan kami';
+    const out = OutputSanitizer.stripEnglishLeakage(dirty);
+    expect(out.toLowerCase()).not.toContain('full body massage');
+    expect(out).toContain('Pijat stimulasi seluruh tubuh');
+  });
+
+  it('Test 13: prompt memuat panduan bayi sehat (Ceria default) + larangan asumsi Pulih Ceria', async () => {
+    const { PersonaPromptBuilder } = await import('../../src/v3/agent/persona');
+    const prompt = PersonaPromptBuilder.buildSystemPrompt({ genderGreeting: 'Bunda' } as any, true);
+    // Panduan KONDISI A.1: bayi sehat tanpa keluhan -> Ceria, bukan Pulih Ceria
+    expect(prompt).toContain('KONDISI A.1');
+    expect(prompt).toContain('Pijat Bayi Ceria (Relaksasi)');
+    expect(prompt).toContain('DILARANG KERAS menyebut Pijat Bayi Pulih Ceria');
+  });
+
+  it('Test 14: prompt memuat mandat total biaya treatment + ongkir', async () => {
+    const { PersonaPromptBuilder } = await import('../../src/v3/agent/persona');
+    const prompt = PersonaPromptBuilder.buildSystemPrompt({ genderGreeting: 'Bunda' } as any, true);
+    expect(prompt).toContain('MANDAT TOTAL BIAYA');
+    expect(prompt).toContain('total keseluruhannya menjadi');
+    expect(prompt).toContain('DILARANG KERAS memuntahkan harga treatment saja tanpa total dengan ongkir');
+  });
+
+  it('Test 15: e2e usia 1 bulan tanpa keluhan — balasan Ceria, tanpa Pulih/saluran napas', async () => {
+    const run = (incomingText: string, conversationId: string) =>
+      V3AgentRunner.processMessage({
+        customerId: 'mock-cust-rules-age',
+        conversationId,
+        phone: '6281234567890',
+        chatId: '6281234567890@c.us',
+        incomingText,
+      });
+    (axios.post as any).mockResolvedValueOnce({
+      data: { choices: [{ message: { role: 'assistant', content:
+        'Bisa banget Bunda 😊 Untuk usia 1 bulan sudah sangat aman dan nyaman ditangani langsung oleh Bidan kami. Untuk perawatan dasarnya ada *Pijat Bayi Ceria (Relaksasi)* untuk membantu si kecil lebih rileks dan tidur nyenyak.\n\nApakah saat ini si kecil ada keluhan seperti batuk pilek atau perut kembung Bunda? 🤗',
+      } }] },
+    });
+    const result = await run('Pijat bayi 1 bln bisa kak?', 'mock-rules-13');
+    expect(result.replyText).toContain('Pijat Bayi Ceria (Relaksasi)');
+    expect(result.replyText).not.toContain('Pulih Ceria');
+    expect(result.replyText.toLowerCase()).not.toContain('saluran pernapasan');
+    expect(result.shouldSendReply).toBe(true);
+  });
 });

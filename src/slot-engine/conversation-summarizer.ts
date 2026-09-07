@@ -109,7 +109,25 @@ export class ConversationStateSummarizer {
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
 
-    if (hasDayMention || extraction.intents.includes('ask_schedule')) {
+    // 8a. DISAMBIGUASI BIAYA CUKUR: "cukurnya kak?" dalam konteks biaya = tanya TARIF,
+    // bukan tanya model potongan rambut. Deteksi via keyword includes (tanpa regex).
+    const mentionsCukur = rawInputLower.includes('cukur');
+    const mentionsCost = ['berapa', 'biaya', 'harga', 'total', 'rp', 'ribu', 'termasuk', 'bayar'].some((w) => rawInputLower.includes(w));
+    const modelCukurExplained = history
+      .filter((h) => h.role === 'assistant')
+      .some((m) => {
+        const c = (m.content || '').toLowerCase();
+        return c.includes('gundul') || c.includes('potong rapi') || c.includes('cepak') || c.includes('disisakan tipis');
+      });
+    if (modelCukurExplained) {
+      janganDiulang.push('Penjelasan model gaya cukur rambut (gundul vs potong rapi/cepak sudah selesai dibahas)');
+    }
+
+    if (mentionsCukur && mentionsCost) {
+      sedangDibahas = 'Bunda menanyakan TARIF biaya cukur rambut (apakah sudah termasuk di total biaya)';
+      yangPerluDijawab =
+        'Sebutkan biaya cukur rambut dan akumulasikan ke total biaya secara transparan. DILARANG menjelaskan ulang model potongan rambut!';
+    } else if (hasDayMention || extraction.intents.includes('ask_schedule')) {
       const dayRef = extraction.preferredDateText || 'jadwal kunjungan';
       sedangDibahas = `Bunda menanyakan ketersediaan jadwal (${dayRef})`;
       yangPerluDijawab =

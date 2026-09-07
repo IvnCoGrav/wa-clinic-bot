@@ -161,15 +161,16 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
   fastify.put(
     '/api/admin/knowledge/chunks/:id',
     async (
-      request: FastifyRequest<{ Params: { id: string }; Body: { title: string; content: string } }>,
+      request: FastifyRequest<{ Params: { id: string }; Body: { title: string; content: string; keywords?: string } }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
-      const { title, content } = request.body || {};
+      const { title, content, keywords } = request.body || {};
 
       if (!title || !content) {
         return reply.status(400).send({ error: 'Title and content are required' });
       }
+      const cleanKeywords = typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null;
 
       try {
         const updated = await prisma.knowledgeChunk.update({
@@ -177,6 +178,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           data: {
             title,
             content,
+            keywords: cleanKeywords,
           },
         });
 
@@ -200,7 +202,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           data: updated,
         });
       } catch (err: any) {
-        const updatedInMemory = knowledgeBaseService.updateInMemoryChunk(id, title, content);
+        const updatedInMemory = knowledgeBaseService.updateInMemoryChunk(id, title, content, cleanKeywords);
 
         if (updatedInMemory) {
           try {
@@ -256,7 +258,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/knowledge/faq',
     async (
-      request: FastifyRequest<{ Body: { faqs: Array<{ question: string; answer: string }> } }>,
+      request: FastifyRequest<{ Body: { faqs: Array<{ question: string; answer: string; keywords?: string }> } }>,
       reply: FastifyReply
     ) => {
       const { faqs } = request.body || {};
