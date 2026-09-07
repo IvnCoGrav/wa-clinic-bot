@@ -246,6 +246,7 @@ model KnowledgeChunk {
   source_type   SourceType
   title         String
   content       String
+  keywords      String?    // Tag intent & sinonim pencarian (misal: "lampu merah, infrared, terapi hangat, batuk pilek")
   document_name String?
   created_at    DateTime   @default(now())
 

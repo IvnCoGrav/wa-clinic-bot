@@ -531,8 +531,14 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
       },
     };
     
-    const res = await testStateMachine.processMessage(ctx);
-    expect(res.nextState).toBe(ConversationState.AWAITING_LOCATION);
+    const prevV3 = process.env.USE_V3_AGENT;
+    process.env.USE_V3_AGENT = 'false';
+    try {
+      const res = await testStateMachine.processMessage(ctx);
+      expect(res.nextState).toBe(ConversationState.AWAITING_LOCATION);
+    } finally {
+      process.env.USE_V3_AGENT = prevV3;
+    }
   });
 
   it.skip('17. [SKIP] tests old handler-based no-match fallback — replaced by slot engine', async () => {

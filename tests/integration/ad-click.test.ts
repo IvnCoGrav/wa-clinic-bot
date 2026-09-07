@@ -55,6 +55,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
     customerService.clearCustomerMemory('62899990000');
     vi.stubEnv('TRACKING_API_KEY', 'valid_track_key');
     vi.stubEnv('ADMIN_API_KEY', 'valid_admin_key');
+    const { queueService } = await import('../../src/services/queue.service');
+    await queueService.forceDisconnectRedis();
     await seedAiScopeAll();
   });
 

@@ -71,6 +71,7 @@ export interface FAQChunk {
   title: string;
   question?: string;
   content: string;
+  keywords?: string | null;
   source_type: 'FAQ' | 'DOCUMENT';
   created_at: string;
 }

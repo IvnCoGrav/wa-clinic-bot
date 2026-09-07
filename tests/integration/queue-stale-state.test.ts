@@ -25,6 +25,7 @@ describe('Queue Stale-State Fix: 2 Rapid Affirmations', () => {
     // burst coalescing supaya 2 pesan text langsung di-enqueue (bukan di-buffer),
     // sehingga deterministik dan tidak tergantung nilai .env lokal.
     process.env.BURST_COALESCE_MS = '0';
+    await queueService.forceDisconnectRedis();
     await seedAiScopeAll();
     app = buildApp();
     await app.ready();

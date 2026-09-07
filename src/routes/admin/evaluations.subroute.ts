@@ -271,6 +271,8 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
                 executedTools: v3Result.executedTools || [],
                 isEscalated: v3Result.isEscalated,
                 goalSession: v3Result.updatedSession,
+                contextSummary: (v3Result as any).contextSummary || '',
+                conversationState: (v3Result as any).nextState || 'INITIAL',
               },
             };
           }

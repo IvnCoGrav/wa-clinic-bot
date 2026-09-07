@@ -320,7 +320,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     candidateTreatmentName?: string;
     preferredDate?: string;
   }) => {
-    let ctaQuestion = 'Rencana mau treatment apa bunda ?🤗';
+    let ctaQuestion = 'Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗';
 
     const treatment = params.candidateTreatmentName ? params.candidateTreatmentName.trim() : null;
     const date = params.preferredDate ? params.preferredDate.trim() : null;
@@ -336,7 +336,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     if (params.promoPrice === 0) {
       return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya, Bunda ☺️\n\n${ctaQuestion}`;
     }
-    return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
+    return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
   },
 
   locationComparison: (params: {

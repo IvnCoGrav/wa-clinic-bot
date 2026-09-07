@@ -62,7 +62,7 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         },
         inquirePrice: {
           type: 'boolean',
-          description: 'Set true jika customer menanyakan harga/biaya/tarif/ongkir, bertanya promo, atau menyebutkan nominal angka tertentu (misal: "60rb ya", "harga berapa", "biayanya?"). Set false jika customer hanya berkonsultasi keluhan atau menanyakan kecocokan usia.'
+          description: 'Set true HANYA jika customer eksplisit menanyakan harga/biaya/tarif/ongkir/promo atau menyebutkan nominal angka (misal: "60rb ya", "harga berapa", "biayanya?"). WAJIB false untuk pertanyaan penjelasan cara kerja, khasiat, atau "gimana ya / seperti apa / maksudnya apa" (misal: "sinar moksa ini gmn ya") — itu BUKAN pertanyaan harga.'
         }
       }
     }
@@ -151,7 +151,7 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
       const comboLine = target && moksa && showPrices
         ? ` Paket Combo Pulih Ceria + Sinar Moksa total Promo ${formatRp(target.promoPrice + moksa.promoPrice)} (normal ${formatRp(target.originalPrice + moksa.originalPrice)}).`
         : '';
-      recommendationReason = `Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung)${priceLine}\n\nRincian yang didapatkan si kecil:\n1. Pijat stimulasi seluruh tubuh (full body massage bayi) oleh Bidan kami\n2. Terapi akupresur titik pernapasan (dada & punggung) khusus melegakan batuk/flu\n3. Penggunaan double aromaterapi / balsem herbal khusus bayi\n4. Opsi Tambahan (Add-on): Sinar Moksa (terapi sinar hangat inframerah ${moksa?.durationMinutes ?? 15} menit${showPrices && moksa ? `, promo +${formatRp(moksa.promoPrice)}` : ''}) untuk membantu mengencerkan dahak & lendir.${comboLine}`;
+      recommendationReason = `Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung)${priceLine} Perawatannya berupa pijat stimulasi seluruh badan oleh Bidan kami, terapi akupresur titik pernapasan dada dan punggung khusus melegakan batuk/flu, serta balsem herbal dan aromaterapi khusus bayi. Sinar Moksa adalah terapi sinar hangat inframerah yang dikombinasikan dengan pijat untuk membantu menghangatkan dada dan punggung agar dahak/lendir flu lebih cepat encer.${comboLine}`;
     } else if (hasEatingIssues) {
       const target = findTarget('lahap-juara');
       const priceLine = target && showPrices
@@ -169,7 +169,7 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
     const summaryList = formattedTreatments.slice(0, 4).map(t =>
       showPrices
         ? `• *${t.name}*: Promo *${formatRp(t.promoPrice)}* (Normal *${formatRp(t.originalPrice)}*, ${t.durationMinutes} menit)\n  Rincian: ${t.description}`
-        : `• *${t.name}* (${t.durationMinutes} menit)\n  Rincian: ${t.description}`
+        : `• *${t.name}*\n  Rincian: ${t.description}`
     ).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;

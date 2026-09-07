@@ -59,10 +59,11 @@ describe('Slot Engine Legacy Parity & Conversational SOP Hardening', () => {
     });
 
     expect(text).toContain('Jika dilihat dari jaraknya kurang lebih 9.2 km');
-    expect(text).toContain('ada tambahan ongkir Rp 15.000');
-    expect(text).toContain('ongkir menjadi Rp 10.000 saja bunda');
+    expect(text).toContain('ada tambahan ongkir *Rp 15.000*');
+    expect(text).toContain('ongkir menjadi *Rp 10.000* saja bunda');
     expect(text).toContain('Jadi bisa ya bunda ☺️');
-    expect(text).toContain('Rencana mau treatment apa bunda ?🤗');
+    expect(text).not.toContain('Rencana mau treatment apa bunda ?🤗');
+    expect(text).toContain('Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗');
   });
 
   it('2. Pure Location Message must trigger deterministic TEMPLATES.ongkirInfo and send pricelist image', async () => {
@@ -80,8 +81,9 @@ describe('Slot Engine Legacy Parity & Conversational SOP Hardening', () => {
 
     expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
     expect(decision.shouldSendPricelistImage).toBe(true);
-    expect(decision.deterministicTemplateReply).toContain('ongkir menjadi Rp');
-    expect(decision.deterministicTemplateReply).toContain('Rencana mau treatment apa bunda ?🤗');
+    expect(decision.deterministicTemplateReply).toContain('ongkir menjadi *Rp');
+    expect(decision.deterministicTemplateReply).toContain('Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗');
+    expect(decision.deterministicTemplateReply).not.toContain('Rencana mau treatment apa bunda ?🤗');
   });
 
   it('3. Double Ongkir Guard: prevents repeating ongkir text when pin/text is resent within 45s', async () => {

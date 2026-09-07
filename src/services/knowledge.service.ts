@@ -12,6 +12,7 @@ export interface KnowledgeChunkResult {
   sourceType: SourceType;
   title: string;
   content: string;
+  keywords?: string | null;
   documentName?: string | null;
   similarity?: number | null;
   score?: number | null;
@@ -25,6 +26,7 @@ const memoryKnowledgeChunks: Array<{
   sourceType: SourceType;
   title: string;
   content: string;
+  keywords?: string | null;
   documentName?: string | null;
 }> = [];
 
@@ -65,11 +67,12 @@ export class KnowledgeBaseService {
   /**
    * Update a chunk directly in memory store (fallback/testing).
    */
-  public updateInMemoryChunk(id: string, title: string, content: string): boolean {
+  public updateInMemoryChunk(id: string, title: string, content: string, keywords?: string | null): boolean {
     const idx = memoryKnowledgeChunks.findIndex(c => c.id === id);
     if (idx !== -1) {
       memoryKnowledgeChunks[idx].title = title;
       memoryKnowledgeChunks[idx].content = content;
+      if (keywords !== undefined) memoryKnowledgeChunks[idx].keywords = keywords;
       return true;
     }
     return false;
@@ -79,11 +82,12 @@ export class KnowledgeBaseService {
    * Bulk import FAQ (Pertanyaan & Jawaban).
    * 1 row per pasangan FAQ.
    */
-  public async importFaqs(faqs: Array<{ question: string; answer: string }>, tenantId: string): Promise<number> {
+  public async importFaqs(faqs: Array<{ question: string; answer: string; keywords?: string }>, tenantId: string): Promise<number> {
     let count = 0;
     for (const faq of faqs) {
       const title = faq.question.trim();
       const content = `Pertanyaan: ${faq.question.trim()}\nJawaban: ${faq.answer.trim()}`;
+      const keywords = typeof faq.keywords === 'string' && faq.keywords.trim() ? faq.keywords.trim() : null;
 
       try {
         await prisma.knowledgeChunk.create({
@@ -92,6 +96,7 @@ export class KnowledgeBaseService {
             source_type: FAQ_SOURCE_TYPE,
             title,
             content,
+            keywords,
           },
         });
       } catch (error) {
@@ -102,6 +107,7 @@ export class KnowledgeBaseService {
           sourceType: FAQ_SOURCE_TYPE,
           title,
           content,
+          keywords,
         });
       }
       count++;
@@ -165,11 +171,12 @@ export class KnowledgeBaseService {
 
     try {
       // 1. Try websearch_to_tsquery with cleanQuery (robust against extra natural language stop words & slang)
+      // Kolom keywords ikut diindeks agar sinonim intent (misal "lampu merah" → Sinar Moksa) ikut ketemu.
       let rawResults = await prisma.$queryRaw<any[]>`
-        SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
-               ts_rank(to_tsvector('simple', content), websearch_to_tsquery('simple', ${queryToSearch})) as rank
+        SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, keywords, document_name as "documentName",
+               ts_rank(to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content), websearch_to_tsquery('simple', ${queryToSearch})) as rank
         FROM knowledge_chunks
-        WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ websearch_to_tsquery('simple', ${queryToSearch})
+        WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content) @@ websearch_to_tsquery('simple', ${queryToSearch})
         ORDER BY rank DESC
         LIMIT ${limit};
       `;
@@ -180,10 +187,10 @@ export class KnowledgeBaseService {
         if (terms.length >= 1) {
           const orQuery = terms.join(' | ');
           let orResults = await prisma.$queryRaw<any[]>`
-            SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
-                   ts_rank(to_tsvector('simple', content), to_tsquery('simple', ${orQuery})) as rank
+            SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, keywords, document_name as "documentName",
+                   ts_rank(to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content), to_tsquery('simple', ${orQuery})) as rank
             FROM knowledge_chunks
-            WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ to_tsquery('simple', ${orQuery})
+            WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content) @@ to_tsquery('simple', ${orQuery})
             ORDER BY rank DESC
             LIMIT ${limit * 2};
           `;
@@ -191,7 +198,7 @@ export class KnowledgeBaseService {
           if (orResults && orResults.length > 0) {
             const substantiveTokens = terms.map((t) => t.toLowerCase());
             const filtered = orResults.filter((r: any) => {
-              const text = `${r.title} ${r.content}`.toLowerCase();
+              const text = `${r.title} ${r.keywords || ''} ${r.content}`.toLowerCase();
               return substantiveTokens.some((tok) => text.includes(tok));
             });
             rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
@@ -208,10 +215,10 @@ export class KnowledgeBaseService {
       // 3. Fallback to plainto_tsquery with raw userQuery if clean search yields no results
       if (!rawResults || rawResults.length === 0) {
         rawResults = await prisma.$queryRaw<any[]>`
-          SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
-                 ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', ${userQuery})) as rank
+          SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, keywords, document_name as "documentName",
+                 ts_rank(to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content), plainto_tsquery('simple', ${userQuery})) as rank
           FROM knowledge_chunks
-          WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ plainto_tsquery('simple', ${userQuery})
+          WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content) @@ plainto_tsquery('simple', ${userQuery})
           ORDER BY rank DESC
           LIMIT ${limit};
         `;
@@ -224,6 +231,7 @@ export class KnowledgeBaseService {
           sourceType: r.sourceType,
           title: r.title,
           content: r.content,
+          keywords: r.keywords ?? null,
           documentName: r.documentName,
           similarity: typeof r.rank === 'number' ? r.rank : null,
           score: typeof r.rank === 'number' ? r.rank : null,
@@ -242,7 +250,7 @@ export class KnowledgeBaseService {
     const matches = memoryKnowledgeChunks
       .filter((chunk) => {
         if (chunk.tenantId !== tenantId) return false;
-        const text = `${chunk.title} ${chunk.content}`.toLowerCase();
+        const text = `${chunk.title} ${chunk.keywords || ''} ${chunk.content}`.toLowerCase();
         return keywords.some((kw) => text.includes(kw));
       })
       .map((chunk) => {

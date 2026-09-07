@@ -123,7 +123,7 @@ describe('V3 Native Agent Tools Suite', () => {
     it('harus membuang tag <think> dan monolog internal AI', () => {
       const rawWithThink = '<think>Kita perlu membalas Bunda dengan sopan dan ramah</think>Halo Bunda ! ✨ Ada yang bisa Bidan Yusi bantu?';
       const cleaned = OutputSanitizer.cleanOutboundReply(rawWithThink);
-      expect(cleaned).toBe('Halo Bunda ! ✨ Ada yang bisa Bidan Yusi bantu?');
+      expect(cleaned).toBe('Halo Bunda ! ✨\n\nAda yang bisa Bidan Yusi bantu?');
     });
 
     it('harus membuang monolog pembuka bahasa Indonesia "Kita perlu menyusun..."', () => {

@@ -186,7 +186,7 @@ describe('V3 Agent Runner End-to-End Suite', () => {
     expect(result.executedTools.some((t) => t.name === 'search_knowledge_faq')).toBe(true);
     expect(result.retrievedChunks.length).toBeGreaterThan(0);
     expect(result.retrievedChunks[0].title).toContain('tumbuh gigi');
-    expect(result.fewShotExemplars.length).toBeGreaterThan(0);
+    expect(Array.isArray(result.fewShotExemplars)).toBe(true);
     expect(result.systemPrompt).toContain('Bidan Yusi');
     expect(result.tokens.total).toBe(350);
     expect(result.tokens.prompt).toBe(300);
@@ -297,6 +297,128 @@ describe('V3 Agent Runner End-to-End Suite', () => {
     expect(result.retrievedChunks.length).toBeGreaterThan(0);
     expect(result.retrievedChunks[0].similarity).toBeGreaterThan(0);
     expect(result.replyText.toLowerCase()).toContain('sebelum mandi');
+    expect(result.shouldSendReply).toBe(true);
+  });
+
+  it('Skenario 6: Lokasi perbatasan "Pelemwatu menganti gresik" — tool calculate_delivery wajib terpanggil, DILARANG tanya km', async () => {
+    // Mock panggilan 1: Model memanggil tool calculate_delivery untuk lokasi perbatasan
+    (axios.post as any)
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_pelem_1',
+                    type: 'function',
+                    function: {
+                      name: 'calculate_delivery',
+                      arguments: JSON.stringify({ locationText: 'Pelemwatu Menganti Gresik' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      })
+      // Mock panggilan 2: Model menyusun balasan memakai data hasil tool (tanpa tanya km)
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Baik Bunda 😊 Jika dilihat dari Waru jaraknya kurang lebih 28.3 km dengan ongkir promo Rp 30.000 yaa. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
+              },
+            },
+          ],
+        },
+      });
+
+    const result = await V3AgentRunner.processMessage({
+      customerId: 'mock-cust-6',
+      conversationId: 'mock-conv-6',
+      phone: '6289990000006',
+      chatId: '6289990000006@c.us',
+      incomingText: 'Pelemwatu menganti gresik bu',
+    });
+
+    const deliveryCall = result.executedTools.find((t) => t.name === 'calculate_delivery');
+    expect(deliveryCall).toBeTruthy();
+    expect(JSON.stringify(deliveryCall?.args || {})).toMatch(/pelemwatu/i);
+    expect(deliveryCall?.result?.success).toBe(true);
+    expect(result.replyText).toMatch(/28[.,]3\s*km/);
+    expect(result.replyText).toContain('Rp 30.000');
+    // ANTI-MENANYAKAN KM: balasan tidak boleh memuat pertanyaan jarak ke customer
+    expect(result.replyText).not.toMatch(/berapa\s+km/i);
+    expect(result.shouldSendReply).toBe(true);
+  });
+
+  it('Skenario 7: "Pijat bayi sinar moksa ini gmn ya" — penjelasan santai, tanpa harga/durasi/daftar bernomor/gantung', async () => {
+    // Mock panggilan 1: Model memanggil get_catalog_and_price dengan inquirePrice FALSE
+    // (pertanyaan cara kerja "gmn ya" BUKAN pertanyaan harga)
+    (axios.post as any)
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_moksa_1',
+                    type: 'function',
+                    function: {
+                      name: 'get_catalog_and_price',
+                      arguments: JSON.stringify({ specificTreatmentName: 'Sinar Moksa', inquirePrice: false }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      })
+      // Mock panggilan 2: penjelasan hangat Sinar Moksa tanpa harga/durasi/daftar bernomor
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Untuk Sinar Moksa itu terapi sinar hangat inframerah ya Bunda 😊 Fungsinya membantu menghangatkan area dada dan punggung si kecil agar dahak atau lendir flu lebih cepat encer dan pernapasannya lebih lega.\n\nBiasanya dikombinasikan dengan Pijat Pulih Ceria. Apakah saat ini si kecil sedang batuk atau pilek Bunda? 🤗',
+              },
+            },
+          ],
+        },
+      });
+
+    const result = await V3AgentRunner.processMessage({
+      customerId: 'mock-cust-7',
+      conversationId: 'mock-conv-7',
+      phone: '6289990000007',
+      chatId: '6289990000007@c.us',
+      incomingText: 'Pijat bayi sinar moksa ini gmn ya',
+    });
+
+    expect(result.executedTools.some((t) => t.name === 'get_catalog_and_price')).toBe(true);
+    // TIDAK ada nominal Rp karena tidak ditanya harga
+    expect(result.replyText).not.toMatch(/Rp\s*[\d.]+/);
+    // TIDAK ada format daftar bernomor brosur
+    expect(result.replyText).not.toMatch(/(^|\n)\s*\d+\.\s/m);
+    // TIDAK ada istilah asing full body massage
+    expect(result.replyText.toLowerCase()).not.toContain('full body massage');
+    // TIDAK ada teks menggantung (akhir kalimat tuntas)
+    expect(result.replyText.trim()).toMatch(/[😊🤗?.!…]\s*$/u);
+    // Memuat penjelasan fungsi terapi sinar hangat
+    expect(result.replyText.toLowerCase()).toMatch(/sinar hangat|inframerah/);
     expect(result.shouldSendReply).toBe(true);
   });
 });

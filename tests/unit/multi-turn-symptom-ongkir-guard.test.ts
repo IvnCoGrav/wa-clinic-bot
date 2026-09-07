@@ -139,7 +139,7 @@ Untuk paket *Pijat Bayi Pulih Ceria*, rencana mau kami bantu jadwalkan untuk har
       {
         role: 'assistant' as const,
         content:
-          'Jika dilihat dari jaraknya kurang lebih 22.6 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp 35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp 25.000 saja bunda. Jadi bisa ya bunda ☺️\n\nRencana mau treatment apa bunda ?🤗',
+          'Jika dilihat dari jaraknya kurang lebih 22.6 km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp 35.000* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp 25.000* saja bunda. Jadi bisa ya bunda ☺️\n\nRencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
       },
     ];
 
