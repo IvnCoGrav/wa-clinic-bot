@@ -656,5 +656,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Mitigasi Saat Ini:** Resolver 3-layer (kel+ kec → kec representatif → free-text) + non-destruktif guard (tidak timpa zip existing) + backfill batch 200. CAPI & human enrichment sudah otomatis, log `[CAPI] zp enriched` memudahkan audit.
 - **Rencana Tindak Lanjut (opsional, bila EMQ perlu >90%):** Perluas dataset Gazetteer ke kota/kabupaten tambahan atau fallback ke geocoding reverse `zipcode` dari Google `geocodeText` (sudah ada `resolved.zipcode`) bila tersedia; evaluasi cost/benefit postcode prefix table nasional.
 
+---
+
+## 25. [Test] `tests/integration/ad-click.test.ts` gagal pasca-decoupling CAPI dari konfirmasi reservasi
+
+- **Status:** open (dampak disengaja dari kebijakan, bukan bug kode baru).
+- **Ditemukan:** 2026-09-07, saat full `npm test` (2 file / 4 test gagal; 3 di antaranya di `ad-click.test.ts` bagian "Meta CAPI Event Integration").
+- **Gejala:** Test `should fire Purchase (not Lead) event to CAPI Service on reservation confirmation`, `should also fire Purchase event with value...`, dan `should send Purchase without value when treatment is unknown` mengharapkan `capiService.sendCapiEvent({ eventName: 'Purchase', customData: { source: 'ADMIN_CONFIRM' } })` saat reservasi dikonfirmasi.
+- **Akar masalah:** Commit `59f434c` ("pisahkan Tandai Lunas dari Meta CAPI") SENGAJA menghapus auto-trigger Purchase dari `PATCH /api/admin/reservation/:id/confirm` dan `PATCH /api/admin/reservation/:id` — Purchase kini eksklusif via Meta Purchase Queue (`POST /api/admin/reservation/:id/approve-purchase`). Test belum diselaraskan dengan kebijakan baru ini.
+- **Rencana Tindak Lanjut:** Update `tests/integration/ad-click.test.ts` agar (a) menegaskan confirm TIDAK memicu `sendCapiEvent`, dan (b) menegaskan Purchase terkirim via `approve-purchase`. Tidak terkait perubahan extractor/invoice (test tersebut tidak mengimpor file dashboard mana pun).
+
 
 

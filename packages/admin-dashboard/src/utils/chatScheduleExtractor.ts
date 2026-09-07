@@ -2,6 +2,7 @@
  * Utility untuk ekstraksi pintar jadwal, waktu, layanan, data anak, dan ongkir
  * dari percakapan obrolan WhatsApp antara Bidan/CS dan Pelanggan.
  */
+import { matchCatalogService } from './treatmentStringParser';
 
 export interface ExtractedScheduleData {
   bookingDate: Date | null;
@@ -130,26 +131,89 @@ export function parsePriceText(val: string | null | undefined): number | null {
 }
 
 /**
- * Helper untuk membersihkan nama Bunda dari prefix (Bunda, Ibu) dan suffix kota/kecamatan (e.g. "Bunda Vita Sidoarjo" -> "Vita")
+ * Escape string agar aman dipakai di dalam pola RegExp dinamis.
+ */
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Helper untuk membersihkan nama Bunda dari prefix (Bunda, Ibu) dan suffix kota/kecamatan
+ * (e.g. "Bunda Vita Sidoarjo" -> "Vita", "fitria Wonokromo Wonokromo" -> "fitria").
+ * Strip kecamatan/kota dilakukan berulang sampai stabil + collapse token kembar di ekor.
  */
 export function cleanBundaName(name?: string | null, kecamatan?: string | null, kota?: string | null): string {
   if (!name) return '';
   let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)\s+/i, '').trim();
-  if (kecamatan) {
-    const kecClean = kecamatan.trim().replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim();
-    if (kecClean) {
-      const kecRegex = new RegExp(`\\s+${kecClean}$`, 'i');
-      clean = clean.replace(kecRegex, '').trim();
+  let prev = '';
+  while (prev !== clean) {
+    prev = clean;
+    if (kecamatan) {
+      const kecClean = kecamatan.trim().replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim();
+      if (kecClean) {
+        clean = clean.replace(new RegExp(`\\s+${escapeRegexLiteral(kecClean)}$`, 'i'), '').trim();
+      }
     }
-  }
-  if (kota) {
-    const kotaClean = kota.trim().replace(/^(?:kab\.?|kabupaten|kota)\s+/i, '').trim();
-    if (kotaClean) {
-      const kotaRegex = new RegExp(`\\s+${kotaClean}$`, 'i');
-      clean = clean.replace(kotaRegex, '').trim();
+    if (kota) {
+      const kotaClean = kota.trim().replace(/^(?:kab\.?|kabupaten|kota)\s+/i, '').trim();
+      if (kotaClean) {
+        clean = clean.replace(new RegExp(`\\s+${escapeRegexLiteral(kotaClean)}$`, 'i'), '').trim();
+      }
     }
+    // Collapse token kembar di ekor ("Wonokromo Wonokromo" -> "Wonokromo")
+    clean = clean.replace(/\s+(\S+)\s+\1$/i, ' $1').trim();
   }
   return clean;
+}
+
+/**
+ * Guard ketat: teks label teknis formulir ("Treatment :", "Usia Bayi/Anak :", ...)
+ * DILARANG menjadi usia anak — cegah data korup (mis. raw_age_text "Treatment :")
+ * bocor ke invoice. Berbeda dengan isValidChildName (validasi nama), ini validasi usia.
+ */
+export function isFormLabelAge(age: string | null | undefined): boolean {
+  if (!age) return true;
+  const clean = age.trim().replace(/^[-:.,\s]+|[-:.,\s]+$/g, '');
+  if (!clean) return true;
+  if (/^(?:treatment|layanan|pilihan|nama|usia|umur|alamat|kec|kota|no|jam|tgl|hari|payment|total|ongkir)\b/i.test(clean)) return true;
+  if (clean.includes(':')) return true;
+  return false;
+}
+
+/**
+ * Cek apakah sebuah pesan adalah formulir reservasi yang SUDAH TERISI customer
+ * (memiliki nilai riil setelah label kunci). Template kosong bot (nilai kosong
+ * setelah "Hari dan tanggal :" / "Nama Bunda:") mengembalikan false.
+ */
+function isFilledFormMessage(content: string | undefined): boolean {
+  if (!content) return false;
+  if (!/(?:hari\s*dan\s*tanggal|list untuk reservasi|nama\s*bunda)/i.test(content)) return false;
+  const dateVal = content.match(/(?:hari\s*dan\s*tanggal)\s*[:=][ \t]*([^\r\n\t]+)/i)?.[1];
+  const bundaVal = content.match(/(?:nama\s*bunda)\s*[:=][ \t]*([^\r\n\t]+)/i)?.[1];
+  const isRealVal = (v?: string) => !!v && !!v.trim() && v.trim() !== '-' && v.trim() !== ':';
+  return isRealVal(dateVal) || isRealVal(bundaVal);
+}
+
+/**
+ * Prioritas Pesan Formulir Terisi (Reverse Scan, terbaru → terlama):
+ * 1. Formulir INBOUND customer yang terisi (diutamakan — kata-kata customer sendiri).
+ * 2. Fallback: formulir OUTBOUND terisi (mis. invoice "Berikut reservasi 🐣" yang
+ *    sudah dikoreksi admin — data paling lengkap & final).
+ * Template kosong bot tidak pernah dipilih. Return null bila tidak ada yang terisi.
+ */
+function pickFilledFormBlock(
+  messages: Array<{ content?: string; direction?: string }>
+): string | null {
+  const list = messages || [];
+  let bestOutbound: string | null = null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    const c = m?.content || '';
+    if (!isFilledFormMessage(c)) continue;
+    if ((m?.direction || '').toUpperCase() === 'INBOUND') return c;
+    if (!bestOutbound) bestOutbound = c;
+  }
+  return bestOutbound;
 }
 
 /**
@@ -186,12 +250,20 @@ export function extractScheduleFromMessages(
     .filter(Boolean)
     .join('\n');
 
+  // 1b. Prioritas Formulir Terisi: pindai dari terbaru → terlama, dahulukan form
+  // INBOUND customer yang terisi; abaikan template kosong bot. Seluruh ekstraksi
+  // terstruktur TAHAP 1 (tanggal, nama, alamat, anak, treatment) memakai blok ini
+  // bila ada; fallback longgar (jam mandiri, tanggal percakapan, payment) tetap
+  // memakai fullChatText.
+  const formText = pickFilledFormBlock(recentMessages) || fullChatText;
+
   // =========================================================================
   // TAHAP 1: EKSTRAKSI DARI STRUKTUR FORM / TEMPLATE RESERVASI DI CHAT
   // =========================================================================
 
   // A. Ekstraksi "Hari dan tanggal : Kamis, 27 Agustus 2026 jam 16.30-17.00"
-  const formDateMatch = fullChatText.match(/(?:hari\s*dan\s*tanggal|hari\/tgl|jadwal|tanggal)\s*[:=][ \t]*([^\r\n]+)/i);
+  // (dari blok form terisi — bukan template kosong bot)
+  const formDateMatch = formText.match(/(?:hari\s*dan\s*tanggal|hari\/tgl|jadwal|tanggal)\s*[:=][ \t]*([^\r\n]+)/i);
   if (formDateMatch && formDateMatch[1].trim()) {
     const rawLine = formDateMatch[1].trim();
     // Cek apakah ada jam di baris tanggal
@@ -291,7 +363,8 @@ export function extractScheduleFromMessages(
   }
 
   // D. Ekstraksi Nama Bunda dari baris: "Nama Bunda: Vita", "Nama: Vita"
-  const bundaLineMatch = fullChatText.match(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  // (dari blok form terisi)
+  const bundaLineMatch = formText.match(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (bundaLineMatch && bundaLineMatch[1].trim()) {
     const rawVal = bundaLineMatch[1].trim();
     if (
@@ -306,7 +379,8 @@ export function extractScheduleFromMessages(
   }
 
   // E. Ekstraksi Alamat dari baris: "Alamat & Shareloc :Jln gang sempati...", "Alamat : ..."
-  const addressLineMatch = fullChatText.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  // (dari blok form terisi)
+  const addressLineMatch = formText.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (addressLineMatch && addressLineMatch[1].trim()) {
     const rawAddr = addressLineMatch[1].trim();
     if (
@@ -321,7 +395,8 @@ export function extractScheduleFromMessages(
   }
 
   // F. Ekstraksi Kecamatan & Kota
-  const kecLineMatch = fullChatText.match(/(?:kec\s*&(?:amp;)?\s*kota|kecamatan)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  // (dari blok form terisi)
+  const kecLineMatch = formText.match(/(?:kec\s*&(?:amp;)?\s*kota|kecamatan)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (kecLineMatch && kecLineMatch[1].trim()) {
     const rawKec = kecLineMatch[1].trim();
     if (rawKec && rawKec !== '-' && !/^(?:kota|kab|no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawKec)) {
@@ -330,7 +405,7 @@ export function extractScheduleFromMessages(
     }
   }
 
-  const kotaLineMatch = fullChatText.match(/(?:kota|kabupaten|kab)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  const kotaLineMatch = formText.match(/(?:kota|kabupaten|kab)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (kotaLineMatch && kotaLineMatch[1].trim()) {
     const rawKota = kotaLineMatch[1].trim();
     if (rawKota && rawKota !== '-' && !/^(?:no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawKota)) {
@@ -340,33 +415,35 @@ export function extractScheduleFromMessages(
   }
 
   // G. Ekstraksi No HP
-  const phoneLineMatch = fullChatText.match(/(?:no\.?\s*hp|nomor\s*hp|wa|telepon|phone)\s*[:=][ \t]*([0-9\s+-]{9,20})/i);
+  // (dari blok form terisi)
+  const phoneLineMatch = formText.match(/(?:no\.?\s*hp|nomor\s*hp|wa|telepon|phone)\s*[:=][ \t]*([0-9\s+-]{9,20})/i);
   if (phoneLineMatch && phoneLineMatch[1].trim()) {
     extractedPhone = phoneLineMatch[1].replace(/[^\d+]/g, '').trim();
     isExtracted = true;
   }
 
   // H. Ekstraksi Bagian Per Kategori: (Baby & Kids) vs (Moms)
+  // (langsung dari blok form terisi yang SAMA — section baby & moms tidak terpotong template kosong)
   let babySectionText = '';
   let momsSectionText = '';
 
-  const babyIndex = fullChatText.search(/pilihan\s*treatment\s*\(\s*baby/i);
-  const momsIndex = fullChatText.search(/pilihan\s*treatment\s*\(\s*moms/i);
+  const babyIndex = formText.search(/pilihan\s*treatment\s*\(\s*baby/i);
+  const momsIndex = formText.search(/pilihan\s*treatment\s*\(\s*moms/i);
 
   if (babyIndex !== -1 && momsIndex !== -1) {
     if (babyIndex < momsIndex) {
-      babySectionText = fullChatText.slice(babyIndex, momsIndex);
-      momsSectionText = fullChatText.slice(momsIndex);
+      babySectionText = formText.slice(babyIndex, momsIndex);
+      momsSectionText = formText.slice(momsIndex);
     } else {
-      momsSectionText = fullChatText.slice(momsIndex, babyIndex);
-      babySectionText = fullChatText.slice(babyIndex);
+      momsSectionText = formText.slice(momsIndex, babyIndex);
+      babySectionText = formText.slice(babyIndex);
     }
   } else if (babyIndex !== -1) {
-    babySectionText = fullChatText.slice(babyIndex);
+    babySectionText = formText.slice(babyIndex);
   } else if (momsIndex !== -1) {
-    momsSectionText = fullChatText.slice(momsIndex);
+    momsSectionText = formText.slice(momsIndex);
   } else {
-    babySectionText = fullChatText;
+    babySectionText = formText;
   }
 
   // Ekstraksi Data Bayi dari babySectionText (Formulir eksplisit)
@@ -429,8 +506,15 @@ export function extractScheduleFromMessages(
   // Tentukan Kategori & Nama Treatment gabungan — support 2 treatment / bundling moms+baby
   // Normalisasi: pecah treatment yang ditulis "A + B", "A, B", "A & B", "A dan B" menjadi list
   const splitTreatments = (s: string) => s.split(/\s*(?:\+|,|&|\bdan\b)\s*/i).map(x=>x.trim()).filter(Boolean);
-  const babyTreatList = babyTreatment ? splitTreatments(babyTreatment) : [];
-  const momsTreatList = momsTreatment ? splitTreatments(momsTreatment) : [];
+  // Kanonikalisasi tiap part ke nama resmi katalog ("pijat ceria" → "Pijat Bayi Ceria
+  // (Rileksasi)") bila katalog tersedia; tanpa katalog pertahankan teks mentah customer.
+  const canonicalizePart = (p: string): string => {
+    if (clinicServices.length === 0) return p;
+    const m = matchCatalogService(p, clinicServices as any);
+    return m ? m.name : p;
+  };
+  const babyTreatList = babyTreatment ? splitTreatments(babyTreatment).map(canonicalizePart) : [];
+  const momsTreatList = momsTreatment ? splitTreatments(momsTreatment).map(canonicalizePart) : [];
   const allTreatList = [...babyTreatList, ...momsTreatList];
   if (babyTreatList.length > 0 && momsTreatList.length > 0) {
     extractedTreatment = [...babyTreatList, ...momsTreatList].join(' + ');
@@ -540,15 +624,17 @@ export function extractScheduleFromMessages(
   }
 
   // 2. Data Anak dari Database (Prioritas jika chat tidak punya nama anak valid)
+  // Guard: label teknis form ("Treatment :", "Usia Bayi/Anak :") dari baris historis
+  // korup DILARANG menjadi usia — cegah "Treatment :" bocor ke invoice.
   if (customer?.children && customer.children.length > 0) {
     const firstChild = customer.children[0];
     if (!extractedChildName && isValidChildName(firstChild.name)) {
       extractedChildName = firstChild.name;
     }
     if (!extractedChildAge) {
-      if (firstChild.raw_age_text) {
+      if (firstChild.raw_age_text && !isFormLabelAge(firstChild.raw_age_text)) {
         extractedChildAge = firstChild.raw_age_text;
-      } else if (firstChild.current_age) {
+      } else if (firstChild.current_age && !isFormLabelAge(firstChild.current_age)) {
         extractedChildAge = firstChild.current_age;
       } else if (firstChild.age_months) {
         const yrs = Math.floor(firstChild.age_months / 12);
@@ -618,23 +704,24 @@ export function extractScheduleFromMessages(
       extractedPrice = 60000;
     }
   } else if (extractedPrice === null) {
+    // Intelligent catalog matching (token overlap + anti-bundle) — "pijat ceria"
+    // → "Pijat Bayi Ceria (Rileksasi)", bukan "Paket Selapan (Cukur + Pijat Ceria)".
     const names = extractedTreatment.split(/\s*\+\s*/).map(s=>s.trim()).filter(Boolean);
     if (names.length > 1 && clinicServices.length > 0) {
       let sum = 0; let found = 0;
       for (const n of names) {
-        const m = clinicServices.find(s => s.name.toLowerCase() === n.toLowerCase() || n.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(n.toLowerCase()));
+        const m = matchCatalogService(n, clinicServices as any);
         if (m) { sum += Number(m.promoPrice ?? m.price ?? m.originalPrice ?? 0); found++; }
       }
       if (found > 0) extractedPrice = sum || 60000;
       else {
-        const matchedService = clinicServices.find(s => s.name.toLowerCase() === extractedTreatment.toLowerCase() || extractedTreatment.toLowerCase().includes(s.name.toLowerCase()));
+        const matchedService = matchCatalogService(extractedTreatment, clinicServices as any);
         extractedPrice = matchedService ? Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000) : 60000;
       }
     } else {
-      const matchedService = clinicServices.find(
-        (s) => s.name.toLowerCase() === extractedTreatment.toLowerCase() ||
-               extractedTreatment.toLowerCase().includes(s.name.toLowerCase())
-      );
+      const matchedService = clinicServices.length > 0
+        ? matchCatalogService(extractedTreatment, clinicServices as any)
+        : null;
       if (matchedService) {
         extractedPrice = Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000);
       } else {
