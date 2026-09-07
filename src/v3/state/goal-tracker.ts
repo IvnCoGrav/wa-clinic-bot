@@ -61,6 +61,17 @@ export interface CustomerGoalSession {
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
 export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
 
+/**
+ * Kata generik domain klinik — DILARANG menjadi token tunggal unik penentu
+ * fuzzy matching. Mencegah sapaan bot ("Treatment moms & Baby...") memicu
+ * phantom cart item via satu kata umum yang kebetulan unik di katalog.
+ */
+export const GENERIC_CLINIC_TOKENS = new Set([
+  'treatment', 'treatments', 'layanan', 'service', 'services', 'homecare',
+  'perawatan', 'terapi', 'therapy', 'pijat', 'massage', 'paket',
+  'bunda', 'bayi', 'baby', 'anak', 'moms', 'klinik',
+]);
+
 const DEFAULT_SESSION: CustomerGoalSession = {
   genderGreeting: 'Bunda',
 };
@@ -195,9 +206,12 @@ export class GoalTracker {
     const lower = (text || '').toLowerCase();
     const asksDuration = lower.includes('menit') || lower.includes('durasi') || lower.includes('berapa lama');
     if (!asksDuration) return false;
-    const buyingSignal = [
+    // Sinyal nominal presisi: 'rp' hanya hitung bila berupa token kata utuh
+    // (/\brp\b/) — kata slang "brp" (berapa) BUKAN sinyal pembelian.
+    const hasRpToken = /\brp\b/i.test(lower);
+    const buyingSignal = hasRpToken || [
       'harga', 'tarif', 'booking', 'jadwal', 'ambil', 'mau', 'jadwalkan',
-      'rp', 'ribu', 'batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel',
+      'ribu', 'batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel',
     ].some((w) => lower.includes(w));
     return !buyingSignal;
   }
@@ -232,11 +246,13 @@ export class GoalTracker {
       }
     }
     // Parafrasa ("cukur bayi" ~ "Cukur Rambut Bayi"): ≥2 token signifikan cocok & rasio ≥50%,
-    // ATAU satu token khas panjang (≥7 huruf, unik 1 layanan) seperti "oksitosin".
+    // ATAU satu token khas panjang (≥7 huruf, unik 1 layanan, BUKAN kata generik
+    // klinik) seperti "oksitosin". Kata generik ("treatment", "pijat", ...)
+    // tidak boleh menjadi penentu tunggal agar sapaan bot tidak memicu phantom item.
     const fuzzyMatches = (text: string, name: string): boolean => {
       const toks = significantTokens(name);
       if (toks.length === 0) return false;
-      if (toks.some((t) => t.length >= 7 && text.includes(t) && tokenOwnerCount.get(t) === 1)) return true;
+      if (toks.some((t) => t.length >= 7 && !GENERIC_CLINIC_TOKENS.has(t) && text.includes(t) && tokenOwnerCount.get(t) === 1)) return true;
       const hits = toks.filter((t) => text.includes(t)).length;
       return hits >= 2 && hits / toks.length >= 0.5;
     };
@@ -276,11 +292,15 @@ export class GoalTracker {
       const text = (history[i]?.content || '').toLowerCase();
       if (!text || GoalTracker.isDurationOnlyQuestion(text)) continue;
       const switching = isSwitchSignal(text);
-      // 1. Nama persis selalu dihitung (semua yang cocok).
+      // 1. Nama persis selalu dihitung (semua yang cocok, termasuk pesan asisten).
       const exactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
       // 2. Tanpa nama persis, parafrasa hanya mengambil SATU yang terpanjang
       //    (paling spesifik) agar tidak mengotori keranjang dengan kandidat umum.
-      const fuzzyHits = exactHits.length === 0
+      //    Pesan asisten (role === 'assistant') DILARANG memicu fuzzyHits — sapaan
+      //    bot ("Treatment moms & Baby...") tidak boleh memasukkan phantom item;
+      //    asisten hanya boleh mencocokkan nama layanan resmi utuh (exactHits).
+      const isAssistant = (history[i]?.role || '').toLowerCase() === 'assistant';
+      const fuzzyHits = (exactHits.length === 0 && !isAssistant)
         ? services.filter((s) => fuzzyMatches(text, s.name)).sort((a, b) => b.name.length - a.name.length).slice(0, 1)
         : [];
       for (const s of [...exactHits, ...fuzzyHits]) {

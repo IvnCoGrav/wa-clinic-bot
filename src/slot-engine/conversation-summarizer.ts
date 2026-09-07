@@ -110,9 +110,11 @@ export class ConversationStateSummarizer {
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
 
     // 8a. DISAMBIGUASI BIAYA CUKUR: "cukurnya kak?" dalam konteks biaya = tanya TARIF,
-    // bukan tanya model potongan rambut. Deteksi via keyword includes (tanpa regex).
+    // bukan tanya model potongan rambut. 'rp' presisi token utuh agar slang "brp"
+    // tidak ikut memicu (deteksi kata utuh, bukan substring).
     const mentionsCukur = rawInputLower.includes('cukur');
-    const mentionsCost = ['berapa', 'biaya', 'harga', 'total', 'rp', 'ribu', 'termasuk', 'bayar'].some((w) => rawInputLower.includes(w));
+    const mentionsCost = ['berapa', 'biaya', 'harga', 'total', 'ribu', 'termasuk', 'bayar'].some((w) => rawInputLower.includes(w))
+      || /\brp\b/i.test(rawInputLower);
     const modelCukurExplained = history
       .filter((h) => h.role === 'assistant')
       .some((m) => {
@@ -132,6 +134,11 @@ export class ConversationStateSummarizer {
       sedangDibahas = `Bunda menanyakan ketersediaan jadwal (${dayRef})`;
       yangPerluDijawab =
         'Sampaikan bahwa ketersediaan jadwal Bidan yang bertugas akan dibantu cekkan terlebih dahulu (DILARANG bilang "Tentu bisa" sepihak). Arahkan untuk menentukan preferensi jam (pagi/siang/sore) atau melengkapi data reservasi';
+    } else if (extraction.intents.includes('ask_duration') || /\b(menit|durasi|berapa lama|brp menit|brp lama)\b/i.test(rawInputLower)) {
+      const treatmentLabel = slate.selectedTreatmentName || 'perawatan si kecil';
+      sedangDibahas = `Bunda menanyakan durasi waktu pelaksanaan ${treatmentLabel}`;
+      yangPerluDijawab =
+        `Sebutkan durasi pelaksanaan ${treatmentLabel} secara jelas beserta manfaat relaksasinya bagi si kecil. Tutup dengan menawarkan penjadwalan langsung untuk treatment tersebut (contoh: "Mau kami bantu jadwalkan untuk treatment ${treatmentLabel}, Bunda?"). DILARANG menanyakan pertanyaan terbuka seperti "ada treatment lain yang dibutuhkan?"`;
     } else if (extraction.intents.includes('ask_price')) {
       sedangDibahas = 'Bunda menanyakan tarif / harga layanan';
       yangPerluDijawab =

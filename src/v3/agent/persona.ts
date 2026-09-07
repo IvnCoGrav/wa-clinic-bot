@@ -16,9 +16,17 @@ export function extractFastIntents(text: string): string[] {
   const intents: string[] = [];
   const hasAnyWord = (words: string[]) => words.some((w) => lower.includes(w));
 
-  // Harga / biaya (catatan: kata "cukur" saja BUKAN sinyal harga — lihat cost-words di bawah)
-  if (hasAnyWord(['berapa', 'biaya', 'harga', 'tarif', 'total', 'rp', 'ribu', 'bayar', 'promo', 'diskon', 'ongkir'])) {
+  // Harga / biaya (catatan: kata "cukur" saja BUKAN sinyal harga — lihat cost-words di bawah).
+  // 'rp' hanya dihitung bila berupa token kata utuh (/\brp\b/) — kata slang "brp"
+  // (berapa) pada kalimat durasi ("biasanya brp menit") BUKAN sinyal harga.
+  // Pertanyaan durasi ("menit", "berapa lama", ...) mengalahkan sinyal harga.
+  const asksDuration = hasAnyWord(['menit', 'durasi', 'berapa lama', 'brp lama', 'brp menit', 'lama pijat', 'lama perawatan']);
+  if (!asksDuration && (hasAnyWord(['berapa', 'biaya', 'harga', 'tarif', 'total', 'ribu', 'bayar', 'promo', 'diskon', 'ongkir']) || /\brp\b/i.test(lower))) {
     intents.push('ask_price');
+  }
+  // Durasi / spesifikasi layanan (misal "pijat bayi biasanya brp menit")
+  if (asksDuration) {
+    intents.push('ask_duration');
   }
   // Jadwal
   if (hasAnyWord(['jadwal', 'besok', 'lusa', 'minggu depan', 'bisa hari apa', 'masih kosong', 'kapan', 'hari apa', 'tanggal', 'slot'])) {
@@ -38,8 +46,9 @@ export function extractFastIntents(text: string): string[] {
       }
     }
   } catch (_) {}
-  // Cukur + kata biaya = pertanyaan TARIF cukur (disambiguasi konteks biaya)
-  if (lower.includes('cukur') && hasAnyWord(['berapa', 'biaya', 'harga', 'total', 'rp', 'ribu', 'termasuk', 'bayar'])) {
+  // Cukur + kata biaya = pertanyaan TARIF cukur (disambiguasi konteks biaya).
+  // 'rp' presisi token utuh agar slang "brp" tidak ikut memicu.
+  if (lower.includes('cukur') && (hasAnyWord(['berapa', 'biaya', 'harga', 'total', 'ribu', 'termasuk', 'bayar']) || /\brp\b/i.test(lower))) {
     if (!intents.includes('ask_price')) intents.push('ask_price');
   }
 
@@ -140,7 +149,13 @@ export class PersonaPromptBuilder {
         Format: "Untuk [Nama Treatment] durasinya 40 menit dan saat ini promonya *Rp [Harga]* (normal *Rp [Normal]*) ya Bunda 😊 Ditambah ongkir promo ke [Kelurahan] (*Rp [OngkirPromo]*), total keseluruhannya menjadi *Rp [Total]* ya Bunda. Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
       - DILARANG KERAS memuntahkan harga treatment saja tanpa total dengan ongkir jika lokasi sudah dihitung di chat sebelumnya!
       - Kalimat Penutup: Tanyakan rencana hari kunjungan: "Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
-     • KHUSUS PERTANYAAN SINAR MOKSA ("sinar moksa ini gimana ya" / "maksudnya apa"): WAJIB PANGGIL TOOL search_knowledge_faq (query: "treatment sinar moksa")! Jelaskan fungsi terapi berdasarkan hasil RAG tersebut secara hangat. DILARANG memuntahkan harga jika customer tidak bertanya harga! Tutup dengan menanyakan kondisi si kecil (misal: "Apakah saat ini si kecil sedang batuk atau pilek Bunda? 🤗"), BUKAN menodong jadwal.
+      • KHUSUS PERTANYAAN SINAR MOKSA ("sinar moksa ini gimana ya" / "maksudnya apa"): WAJIB PANGGIL TOOL search_knowledge_faq (query: "treatment sinar moksa")! Jelaskan fungsi terapi berdasarkan hasil RAG tersebut secara hangat. DILARANG memuntahkan harga jika customer tidak bertanya harga! Tutup dengan menanyakan kondisi si kecil (misal: "Apakah saat ini si kecil sedang batuk atau pilek Bunda? 🤗"), BUKAN menodong jadwal.
+    • KONDISI C (Customer menanyakan DURASI treatment / paket tertentu):
+      (Contoh: "Untuk pijat bayi biasanya brp menit kak?", "Pijat oksitosin berapa lama?")
+      - Jelaskan durasi waktu perawatan paket yang ditanyakan beserta manfaat relaksasinya secara hangat (durasi resmi dari hasil tool get_catalog_and_price).
+      - DILARANG memuntahkan nominal harga jika customer tidak bertanya harga!
+      - DILARANG menanyakan pertanyaan terbuka seperti "Ada treatment lain yang Bunda butuhkan untuk si kecil? Atau mau langsung jadwalkan?".
+      - Closing CTA WAJIB: tawarkan penjadwalan langsung untuk paket tersebut: "Mau kami bantu jadwalkan untuk treatment [Nama Treatment] Bunda? 🤗".
      • KONTEKS RINCIAN TOTAL BIAYA: Jika percakapan membahas rincian total biaya lalu customer bertanya "cukurnya gimana" / "cukurnya kak?", perlakukan sebagai PERTANYAAN BIAYA CUKUR (+Rp 30.000) dan akumulasikan ke total biaya. DILARANG menjelaskan ulang model potongan rambut!
    • MULTI-PASIEN DALAM 1 KUNJUNGAN (2 ANAK / MOM + BABY): Bidan melayani paket keluarga dalam 1 kunjungan dengan 1x ongkir (gratis ongkir ≤ 5 km tetap Rp 0 walau 2 anak atau Mom + Baby).
      - 2 Anak (Adik + Kakak): tawarkan/akumulasikan layanan per anak terpisah dengan label penerima (contoh: "[Adik (2 bln)] Pijat Bayi Pulih Ceria Rp 70.000 + [Kakak (3 th)] Pijat Kids Ceria Rp 70.000 + ongkir Rp 0 = Rp 140.000").
@@ -229,6 +244,10 @@ Assistant: "Jika dilihat dari jaraknya kurang lebih 11.4 km ya Bunda. Dari tarif
 Contoh 11 (Customer konfirmasi nominal harga / Kontras tanpa-vs-dengan harga):
 User: "Pijat baby relaksi 60rb ya"
 Assistant: "Iya betul Bunda, untuk paket *Pijat Bayi Ceria (Rileksasi)* saat ini lagi promo jadi *Rp 60.000* saja yaa (harga normal *Rp 80.000*) dengan durasi 40 menit 😊\n\nPerawatan ini sangat cocok untuk membantu si kecil lebih rileks dan tidur lebih nyenyak.\n\nRencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
+
+Contoh (Customer tanya durasi pijat bayi):
+User: "Untuk pijat bayi biasanya brp menit kak"
+Assistant: "Untuk *Pijat Bayi Ceria (Rileksasi)*, durasinya sekitar 40 menit ya Bunda 😊\n\nPerawatan ini difokuskan Bidan kami untuk membantu si kecil lebih rileks, tidur lebih nyenyak, dan melancarkan sirkulasi darahnya.\n\nMau kami bantu jadwalkan untuk treatment Pijat Bayi Ceria Bunda? 🤗"
 
 Contoh 12 (Customer tanya aturan mandi sebelum/sesudah pijat):
 User: "kak sebaiknya pijat dilakukan sebelum atau sesudah mandi ya?"
