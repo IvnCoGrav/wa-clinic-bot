@@ -712,5 +712,16 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Fallback in-memory `knowledge.service.ts:searchRelevantChunks` memakai `text.includes(kw)` per token, sehingga token pendek/umum seperti "ada" ikut cocok via substring di kata "pada" (query nonsense "xyzqwerty topik tidak ada 999" sempat me-return 1 chunk). Relevansi FTS Postgres tidak terdampak; hanya jalur offline/test.
   - Kolom `keywords` (migrasi `20260907000000_add_knowledge_chunk_keywords`) + artikel "Panduan Usia Kehamilan untuk Pijat Induksi Alami" baru tersedia di seed lokal (`src/cli/seed-faq.ts`, `src/scripts/seed-maternal-induction-knowledge.ts`); live DB masih perlu `npx prisma migrate deploy` + `npx tsx src/scripts/seed-maternal-induction-knowledge.ts`. Kode kini defensif (retry FTS tanpa kolom `keywords` saat error 42703) sehingga live lama tetap jalan dengan degradasi tanpa sinonim keywords.
 - **Rencana Tindak Lanjut:** (a) ganti matcher in-memory ke word-boundary/token-overlap scoring (seperti `treatmentStringParser`) bila relevansi offline jadi masalah; (b) jalankan migrasi + seed induksi di server live, verifikasi via `POST /api/admin/knowledge` / query "38 weeks induksi capek".
+- **Update 2026-09-08 (post-deploy `b56864f`):** Live DB ternyata SUDAH punya kolom `keywords` (`migrate deploy` = no pending; 43 chunks, artikel induksi FTS-hit ✓). Error P2022 kemarin berasal dari **DB lokal dev**, bukan live — jalankan `npx prisma migrate deploy` di lokal juga.
+
+---
+
+## 30. [Migrations] Live `tenants.settings` tidak ada di DB (P2022 di log app)
+
+- **Status:** open (pre-existing drift, bot tetap jalan — error ter-catch).
+- **Ditemukan:** 2026-09-08, saat verifikasi log pasca-deploy `b56864f` di live server.
+- **Gejala:** log app live berulang: `Invalid prisma.tenant.findUnique()/findFirst() ... The column tenants.settings does not exist in the current database.` Alur pesan tetap berjalan (HUMAN_HANDLING + web push normal).
+- **Akar masalah (dugaan):** drift baseline yang sama seperti #1 — migrasi penambah kolom `tenants.settings` tidak ada / belum applied di live, sementara `migrate deploy` melaporkan no pending. Perlu audit `prisma/migrations` vs `information_schema` untuk tabel `tenants`.
+- **Rencana Tindak Lanjut (proyek terpisah):** audit kolom `tenants` live vs schema, buat migrasi penambahan kolom yang hilang, verifikasi `migrate diff --from-url` empty. Jangan ubah manual tanpa rencana per-env.
 
 
