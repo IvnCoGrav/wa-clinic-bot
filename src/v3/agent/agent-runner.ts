@@ -499,7 +499,7 @@ export class V3AgentRunner {
             console.warn(JSON.stringify({ event: 'V3_TOOL_SCHEMA_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), tool: fnName, error: validation.error, timestamp: new Date().toISOString() }));
             toolResult = { error: validation.error };
           } else {
-            const TOOL_TIMEOUT_MS = 7000;
+            const TOOL_TIMEOUT_MS = fnName === 'calculate_delivery' ? 12000 : 7000;
             try {
               toolResult = await withTimeout(
                 executeToolByName(fnName, validation.data, toolContext),

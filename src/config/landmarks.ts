@@ -570,6 +570,17 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lat: -7.2769919,
     lng: 112.76634,
   },
+  {
+    name: 'Kawasan Bratang Gede',
+    patterns: [
+      /\bbratang\s*gede\b/i,
+    ],
+    kelurahan: 'Ngagelrejo',
+    kecamatan: 'Wonokromo',
+    kota: 'Kota Surabaya',
+    lat: -7.2978835,
+    lng: 112.749761,
+  },
 ];
 
 /**
