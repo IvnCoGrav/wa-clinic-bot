@@ -357,7 +357,7 @@ export class GoalTracker {
     }
     if (lower.includes('baru lahir')) ages.push(0);
 
-    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam'];
+    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung'];
     const foundSymptoms = SYMPTOM_WORDS.filter((s) => lower.includes(s));
 
     const addSymptoms = (child: ChildState) => {

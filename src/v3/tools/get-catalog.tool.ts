@@ -38,7 +38,7 @@ export const GET_CATALOG_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'get_catalog_and_price',
-    description: 'Mengambil daftar layanan/treatment resmi, harga asli, harga promo, durasi, dan rekomendasi terapi yang tepat berdasarkan usia anak atau keluhan/gejala.',
+    description: 'WAJIB dipanggil untuk SETIAP pertanyaan keluhan fisik, ketersediaan perawatan, atau tanya harga. Mengambil daftar layanan/treatment resmi, harga asli, harga promo, durasi, dan rekomendasi terapi yang tepat berdasarkan usia anak atau keluhan/gejala. Rekomendasikan layanan dengan skor tertinggi dari hasil tool ini; DILARANG mengarang nama layanan di luar hasil tool.',
     parameters: {
       type: 'object',
       properties: {
@@ -104,22 +104,25 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
       }
     }
 
-    // 4. Rekomendasi berdasarkan keluhan / gejala
-    let recommendationReason: string | undefined = undefined;
-    const hasFluOrDigestiveSymptoms = symptoms.some(s => /flu|pilek|batuk|kembung|kolik|sembelit|susah bab|rewel|nangis terus/i.test(s));
-    const hasSleepOrRelaxationInquiry = symptoms.some(s => /susah tidur|gelisah|lelah|capek/i.test(s));
-    const hasEatingIssues = symptoms.some(s => /gtm|susah makan|nafsu makan/i.test(s));
+    // 4. Rekomendasi SEMANTIK DINAMIS lintas seluruh layanan aktif (Zero-Code Admin):
+    // skor kecocokan token gejala terhadap `${name} ${description}` tiap layanan.
+    // Layanan baru dari dashboard (Nasal Care, Pijat Kolik, ...) otomatis ikut
+    // tanpa perubahan kode — skor tertinggi ditandai isRecommendedForSymptoms.
+    const symptomTokens = (symptoms || [])
+      .flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/))
+      .filter((w) => w.length > 3);
+    const scoreService = (item: { name: string; description: string }): number => {
+      const nameLower = item.name.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+      let score = 0;
+      for (const tok of symptomTokens) {
+        if (nameLower.includes(tok)) score += 4;
+        else if (descLower.includes(tok)) score += 2;
+      }
+      return score;
+    };
 
     const formattedTreatments: CatalogTreatmentDetail[] = filtered.map(item => {
-      let isRecommended = false;
-      if (hasFluOrDigestiveSymptoms && item.id.includes('pulih-ceria')) {
-        isRecommended = true;
-      } else if (hasEatingIssues && item.id.includes('lahap-juara')) {
-        isRecommended = true;
-      } else if (hasSleepOrRelaxationInquiry && item.id.includes('baby-massage-ceria')) {
-        isRecommended = true;
-      }
-
       return {
         id: item.id,
         name: item.name,
@@ -128,42 +131,46 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
         originalPrice: item.originalPrice,
         promoPrice: item.promoPrice,
         description: item.description,
-        isRecommendedForSymptoms: isRecommended
+        isRecommendedForSymptoms: false
       };
     });
+
+    // Tandai skor tertinggi (bila ada sinyal gejala yang cocok).
+    if (symptomTokens.length > 0) {
+      let best = 0;
+      for (const t of formattedTreatments) {
+        const s = scoreService({ name: t.name, description: t.description });
+        (t as any).__score = s;
+        if (s > best) best = s;
+      }
+      if (best > 0) {
+        for (const t of formattedTreatments) {
+          if ((t as any).__score === best) t.isRecommendedForSymptoms = true;
+          delete (t as any).__score;
+        }
+      }
+    }
 
     // Urutkan yang direkomendasikan di atas
     formattedTreatments.sort((a, b) => (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0));
 
     const formatRp = (n: number): string => `Rp ${n.toLocaleString('id-ID')}`;
-    const findTarget = (idFragment: string): CatalogTreatmentDetail | undefined =>
-      formattedTreatments.find((t) => t.id.includes(idFragment));
 
-    // Rekomendasi berbasis data katalog DINAMIS (Anti-Hardcode): nominal harga
-    // hanya disisipkan bila showPrices. Tanpa itu, fokus pada protokol medis,
-    // manfaat stimulasi, dan rincian perawatan.
-    if (hasFluOrDigestiveSymptoms || (specificTreatmentName && /pulih|bapil|batuk|pilek|kembung/i.test(specificTreatmentName))) {
-      const target = findTarget('pulih-ceria');
-      const priceLine = target && showPrices
-        ? ` promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, durasi ${target.durationMinutes} menit).`
+    // Alasan rekomendasi DINAMIS dari properti layanan teratas (nama + deskripsi
+    // resmi dashboard). Nominal harga hanya disisipkan bila showPrices.
+    let recommendationReason: string | undefined = undefined;
+    const topService = formattedTreatments.find((t) => t.isRecommendedForSymptoms);
+    if (topService) {
+      const priceLine = showPrices
+        ? ` promo ${formatRp(topService.promoPrice)} (normal ${formatRp(topService.originalPrice)}, durasi ${topService.durationMinutes} menit).`
         : '.';
       const moksa = allServices.find((s) => s.id.includes('moksa'));
-      const comboLine = target && moksa && showPrices
-        ? ` Paket Combo Pulih Ceria + Sinar Moksa total Promo ${formatRp(target.promoPrice + moksa.promoPrice)} (normal ${formatRp(target.originalPrice + moksa.originalPrice)}).`
+      const topText = `${topService.name} ${topService.description}`.toLowerCase();
+      const isRespiratory = /pernapasan|dahak|flu|bapil|pilek|batuk/i.test(topText);
+      const comboLine = (showPrices && moksa && topService.id !== moksa.id && isRespiratory)
+        ? ` Paket Combo ${topService.name} + Sinar Moksa total Promo ${formatRp(topService.promoPrice + moksa.promoPrice)} (normal ${formatRp(topService.originalPrice + moksa.originalPrice)}).`
         : '';
-      recommendationReason = `Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung)${priceLine} Perawatannya berupa pijat stimulasi seluruh badan oleh Bidan kami, terapi akupresur titik pernapasan dada dan punggung khusus melegakan batuk/flu, serta balsem herbal dan aromaterapi khusus bayi. Sinar Moksa adalah terapi sinar hangat inframerah yang dikombinasikan dengan pijat untuk membantu menghangatkan dada dan punggung agar dahak/lendir flu lebih cepat encer.${comboLine}`;
-    } else if (hasEatingIssues) {
-      const target = findTarget('lahap-juara');
-      const priceLine = target && showPrices
-        ? ` promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, ${target.durationMinutes} menit).`
-        : '.';
-      recommendationReason = `Untuk keluhan susah makan / GTM, paket yang tepat adalah Pijat Lahap Juara${priceLine} Mencakup pijat relaksasi dan stimulasi titik pencernaan untuk nafsu makan.`;
-    } else if (hasSleepOrRelaxationInquiry) {
-      const target = findTarget('baby-massage-ceria');
-      const priceLine = target && showPrices
-        ? ` sangat cocok promo ${formatRp(target.promoPrice)} (normal ${formatRp(target.originalPrice)}, ${target.durationMinutes} menit).`
-        : ' sangat cocok.';
-      recommendationReason = `Untuk membantu si kecil lebih rileks dan tidur nyenyak, paket Pijat Bayi Ceria (Rileksasi)${priceLine} Mencakup pijat relaksasi seluruh tubuh bayi sehat.`;
+      recommendationReason = `Berdasarkan keluhan yang disampaikan (${symptoms.join(', ')}), layanan yang paling sesuai adalah ${topService.name}${priceLine} ${topService.description}${comboLine}`;
     }
 
     const summaryList = formattedTreatments.slice(0, 4).map(t =>

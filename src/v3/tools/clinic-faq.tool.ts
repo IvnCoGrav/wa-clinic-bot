@@ -26,7 +26,7 @@ export const GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'get_clinic_policy_faq',
-    description: 'Mengambil informasi resmi, SOP, dan kebijakan klinik Kala Moms & Baby Spa. PANGGIL TOOL INI ketika customer bertanya: asal/lokasi/homebase klinik ("dari mana asal klinik", "lokasinya dimana", "dari surabaya kah?"), kualifikasi terapis ber-STR, metode pembayaran transfer/QRIS/cash, ongkir multi-anak, aturan pijat pasca-vaksinasi, atau jam operasional.',
+    description: 'Mengambil informasi resmi, SOP, dan kebijakan klinik Kala Moms & Baby Spa. PANGGIL TOOL INI ketika customer bertanya: asal/lokasi/homebase klinik ("dari mana asal klinik", "lokasinya dimana", "dari surabaya kah?", "sus nya dimana", "bidannya dimana", "posisi bidan dari mana"), kualifikasi terapis ber-STR, metode pembayaran transfer/QRIS/cash, ongkir multi-anak, aturan pijat pasca-vaksinasi, atau jam operasional.',
     parameters: {
       type: 'object',
       properties: {
@@ -91,7 +91,7 @@ export async function executeGetClinicFaq(input: GetClinicFaqInput): Promise<Get
         success: true,
         topic,
         factualSummary: `Homebase klinik kami berlokasi di Waru, Sidoarjo (dekat perbatasan Surabaya). Layanan resmi kami adalah Homecare (Bidan yang berkunjung langsung ke rumah Bunda) dengan area jangkauan seluruh Surabaya dan Sidoarjo (maksimal 30 km dari homebase).`,
-        suggestedReply: `Homebase kami berada di Waru, Sidoarjo ya Bunda 😊 Layanan kami adalah Homecare treatment di mana Bidan kami yang akan datang langsung ke rumah Bunda untuk seluruh area Surabaya dan Sidoarjo (maksimal 30 km). Boleh tahu rumah Bunda di daerah mana agar kami bantu cekkan jaraknya? 🤗`
+        suggestedReply: `Homebase kami berada di Waru, Sidoarjo ya Bunda 😊 Layanan kami adalah Homecare treatment di mana Bidan kami yang akan datang langsung ke rumah Bunda untuk seluruh area Surabaya dan Sidoarjo (maksimal 30 km).`
       };
 
     case 'operational_hours_and_booking':
