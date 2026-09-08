@@ -16,13 +16,13 @@ describe('Abuse Detection & Customer Blocking Suite', () => {
     await seedAiScopeAll();
   });
 
-  it('1. should trigger FLOOD auto-block when customer sends > 10 messages in 60 seconds', async () => {
+  it('1. should trigger FLOOD auto-block when customer sends > 15 messages in 60 seconds', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Flood Test', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
-    // Kirim 10 pesan pertama -> belum ter-block
-    for (let i = 0; i < 10; i++) {
+    // Kirim 15 pesan pertama -> belum ter-block (Phase 5.3: 15 msg / 60s)
+    for (let i = 0; i < 15; i++) {
       const res = await abuseDetectionService.checkAndProcessAbuse(
         customer,
         conversation,
@@ -32,11 +32,11 @@ describe('Abuse Detection & Customer Blocking Suite', () => {
       expect(res.blocked).toBe(false);
     }
 
-    // Kirim pesan ke-11 -> ter-block otomatis!
+    // Kirim pesan ke-16 -> ter-block otomatis!
     const resFinal = await abuseDetectionService.checkAndProcessAbuse(
       customer,
       conversation,
-      'pesan ke-11',
+      'pesan ke-16',
       DEFAULT_TENANT_ID
     );
     expect(resFinal.blocked).toBe(true);

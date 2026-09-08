@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 
 export interface LocationState {
   rawText: string;
@@ -76,6 +77,34 @@ const DEFAULT_SESSION: CustomerGoalSession = {
   genderGreeting: 'Bunda',
 };
 
+const conversationLocks = new Map<string, Promise<any>>();
+const memorySessions = new Map<string, CustomerGoalSession>();
+
+function memoryKey(conversationId: string, tenantId: string): string {
+  return `${tenantId}:${conversationId}`;
+}
+
+/**
+ * Memastikan fungsi callback untuk conversationId yang sama dieksekusi
+ * secara berurutan (serialized queue) tanpa race condition.
+ */
+async function withConversationLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
+  const currentLock = conversationLocks.get(conversationId) || Promise.resolve();
+  let release: () => void;
+  const nextLock = new Promise<void>((resolve) => { release = resolve; });
+  conversationLocks.set(conversationId, currentLock.then(() => nextLock));
+
+  await currentLock;
+  try {
+    return await fn();
+  } finally {
+    release!();
+    if (conversationLocks.get(conversationId) === nextLock) {
+      conversationLocks.delete(conversationId);
+    }
+  }
+}
+
 export class GoalTracker {
   /**
    * Mengambil session state dari database (kolom preferences di Conversation atau Customer).
@@ -85,12 +114,15 @@ export class GoalTracker {
     tenantId = DEFAULT_TENANT_ID
   ): Promise<CustomerGoalSession> {
     try {
-      const conv = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const conv = await prisma.conversation.findFirst({
+        where: { id: conversationId, tenant_id: tenantId },
         include: { customer: true }
       });
 
-      if (!conv) return { ...DEFAULT_SESSION };
+      if (!conv) {
+        const mem = memorySessions.get(memoryKey(conversationId, tenantId));
+        return mem ? { ...mem } : { ...DEFAULT_SESSION };
+      }
 
       const prefs: any = (conv.customer?.preferences as any) || {};
       
@@ -123,8 +155,9 @@ export class GoalTracker {
         totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
       };
     } catch (err: any) {
-      console.warn('[GOAL TRACKER GET ERROR]', err.message);
-      return { ...DEFAULT_SESSION };
+      console.warn(JSON.stringify({ event: 'GOAL_TRACKER_GET_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
+      const mem = memorySessions.get(memoryKey(conversationId, tenantId));
+      return mem ? { ...mem } : { ...DEFAULT_SESSION };
     }
   }
 
@@ -136,45 +169,50 @@ export class GoalTracker {
     updates: Partial<CustomerGoalSession>,
     tenantId = DEFAULT_TENANT_ID
   ): Promise<CustomerGoalSession> {
-    const current = await this.getGoalSession(conversationId, tenantId);
-    const merged: CustomerGoalSession = {
-      ...current,
-      ...updates,
-      location: updates.location ? { ...current.location, ...updates.location } : current.location,
-      childProfile: updates.childProfile ? { ...current.childProfile, ...updates.childProfile } : current.childProfile,
-      booking: updates.booking ? { ...current.booking, ...updates.booking } : current.booking,
-    };
+    return withConversationLock(conversationId, async () => {
+      const current = await this.getGoalSession(conversationId, tenantId);
+      const merged: CustomerGoalSession = {
+        ...current,
+        ...updates,
+        location: updates.location ? { ...current.location, ...updates.location } : current.location,
+        childProfile: updates.childProfile ? { ...current.childProfile, ...updates.childProfile } : current.childProfile,
+        booking: updates.booking ? { ...current.booking, ...updates.booking } : current.booking,
+      };
 
-    try {
-      const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
-      if (conv?.customer_id) {
-        const updateData: any = {
-          preferences: merged,
-        };
-        if (merged.customerName) {
-          updateData.name = merged.customerName;
-        }
-        if (merged.location) {
-          if (merged.location.kelurahan) updateData.kelurahan = merged.location.kelurahan;
-          if (merged.location.kecamatan) updateData.kecamatan = merged.location.kecamatan;
-          if (merged.location.kota) updateData.kota = merged.location.kota;
-          if (merged.location.distanceKm != null) updateData.distance_km = merged.location.distanceKm;
-          if (merged.location.ongkirPromo != null || merged.location.ongkirNormal != null) {
-            updateData.ongkir = merged.location.ongkirPromo || merged.location.ongkirNormal;
+      try {
+        const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenant_id: tenantId } });
+        if (conv?.customer_id) {
+          const updateData: any = {
+            preferences: merged,
+          };
+          if (merged.customerName) {
+            updateData.name = merged.customerName;
           }
-          if (merged.location.isOutOfCoverage != null) updateData.is_out_of_coverage = merged.location.isOutOfCoverage;
+          if (merged.location) {
+            if (merged.location.kelurahan) updateData.kelurahan = merged.location.kelurahan;
+            if (merged.location.kecamatan) updateData.kecamatan = merged.location.kecamatan;
+            if (merged.location.kota) updateData.kota = merged.location.kota;
+            if (merged.location.distanceKm != null) updateData.distance_km = merged.location.distanceKm;
+            if (merged.location.ongkirPromo != null || merged.location.ongkirNormal != null) {
+              updateData.ongkir = merged.location.ongkirPromo || merged.location.ongkirNormal;
+            }
+            if (merged.location.isOutOfCoverage != null) updateData.is_out_of_coverage = merged.location.isOutOfCoverage;
+          }
+
+          await prisma.customer.updateMany({
+            where: { id: conv.customer_id, tenant_id: tenantId },
+            data: updateData
+          });
         }
-
-        await prisma.customer.update({
-          where: { id: conv.customer_id },
-          data: updateData
-        });
+      } catch (err: any) {
+        console.warn(JSON.stringify({ event: 'GOAL_TRACKER_UPDATE_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
       }
-    } catch (err: any) {
-      console.warn('[GOAL TRACKER UPDATE ERROR]', err.message);
-    }
 
-    return merged;
+      // Selalu cache ke memory untuk fallback offline & concurrency
+      memorySessions.set(memoryKey(conversationId, tenantId), { ...merged });
+
+      return merged;
+    });
   }
 
   /**
@@ -409,12 +447,40 @@ export class GoalTracker {
 
   /**
    * Format session state menjadi ringkasan faktual ringkas untuk prompt LLM.
+   * Termasuk pre-grounding rekomendasi katalog deterministik: jika ada keluhan
+   * dan belum ada treatment terpilih, layanan teratas dari katalog didorong ke
+   * status agar LLM terpandu — bahkan bila tool_choice dilewati model.
    */
   public static formatGoalSessionForPrompt(session: CustomerGoalSession): string {
+    // Pre-grounding deterministik (Zero-Code): rekomendasi dari katalog aktif
+    const allSymptoms: string[] = [
+      ...(session.childProfile?.symptoms || []),
+      ...((session.children || []).flatMap((c) => c.symptoms || [])),
+    ].filter((s, i, arr) => arr.indexOf(s) === i);
+    let pregroundedRecommendation: string | null = null;
+    if (allSymptoms.length > 0 && !session.selectedTreatment) {
+      try {
+        const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null);
+        if (rec) {
+          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk keluhan si kecil ini. DILARANG mengganti dengan nama paket lain!]`;
+        }
+      } catch (_) {}
+    } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
+      // Bayi sehat tanpa keluhan → paket relaksasi default dari katalog
+      try {
+        const def = treatmentCatalogService.getDefaultRelaxationService();
+        if (def) {
+          pregroundedRecommendation = `• Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan): *${def.name}* (Promo ${`Rp ${def.promoPrice.toLocaleString('id-ID')}`}) — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk bayi sehat; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]`;
+        }
+      } catch (_) {}
+    }
+
     const lines: string[] = [
       `[STATUS DATA CUSTOMER SAAT INI]`,
       `• Sapaan: ${session.genderGreeting} ${session.customerName ? `(${session.customerName})` : ''}`,
     ];
+
+    if (pregroundedRecommendation) lines.push(pregroundedRecommendation);
 
     if (session.location?.kelurahan || session.location?.distanceKm) {
       lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!]`);

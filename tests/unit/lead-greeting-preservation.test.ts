@@ -132,19 +132,23 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
   });
 
   it('Case 3: OutputSanitizer memotong perkenalan Turn-0 pada chat lanjutan', () => {
+    // Phase 4 minimal: hanya potong bila 2 paragraf dan paragraf pertama murni sapaan
     const turn0Repeat =
-      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Kalau boleh tahu, si kecil saat ini ada keluhan tertentu tidak ya Bunda?';
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nKalau boleh tahu, si kecil saat ini ada keluhan tertentu tidak ya Bunda?';
     const cleaned = OutputSanitizer.sanitizeFollowUpGreetingRepetition(turn0Repeat, true);
     expect(cleaned).not.toContain('Terima kasih sudah menghubungi kami');
     expect(cleaned).not.toContain('Perkenalkan, saya Bidan Yusi');
-    expect(cleaned).not.toContain('Halo Bunda');
+    expect(cleaned).toContain('Kalau boleh tahu');
+    // Single-paragraf tidak dipotong (minimal regex)
+    const singlePara = 'Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms. Untuk pijat bayi, kami sarankan *Pijat Bayi Ceria*';
+    expect(OutputSanitizer.sanitizeFollowUpGreetingRepetition(singlePara, true)).toBe(singlePara);
     // Preservasi: Turn-0 tidak dipotong bila bukan follow-up
     expect(OutputSanitizer.sanitizeFollowUpGreetingRepetition(turn0Repeat, false)).toBe(turn0Repeat);
   });
 
   it('Case 3: cleanOutboundReply(isFollowUp=true) tidak mengulang sapaan pembuka', () => {
     const raw =
-      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Untuk pijat bayi, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nUntuk pijat bayi, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
     const out = OutputSanitizer.cleanOutboundReply(raw, 'pijat buat baby apa ya kak rekomendasinya', true);
     expect(out).not.toContain('Terima kasih sudah menghubungi kami');
     expect(out).not.toContain('Perkenalkan, saya Bidan Yusi');
@@ -166,7 +170,7 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
 
   it('Case 3: V3 follow-up membersihkan balasan LLM yang mengulang Turn-0', async () => {
     const repeatedGreeting =
-      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Untuk rekomendasi pijat baby, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
+      'Halo Bunda! ✨ Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nUntuk rekomendasi pijat baby, kami sarankan *Pijat Bayi Ceria* ya Bunda 😊';
     (axios.post as any).mockResolvedValueOnce({
       data: { choices: [{ message: { role: 'assistant', content: repeatedGreeting } }] },
     });

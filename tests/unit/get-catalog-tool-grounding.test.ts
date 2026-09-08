@@ -26,7 +26,7 @@ describe('get_catalog_and_price — AI-First Price Grounding', () => {
     expect(out.suggestedPriceReply).toBeUndefined();
     // Konteks non-harga tetap informatif: nama paket + rincian manfaat.
     expect(out.message).toContain('Pijat Bayi Pulih Ceria');
-    expect(out.message).toContain('Bidan kami');
+    expect(out.message).toContain('Catatan Rekomendasi');
     expect(out.message).not.toContain('ber-STR aktif');
   });
 

@@ -66,7 +66,7 @@ export async function executeEscalateHuman(input: EscalateHumanInput): Promise<E
           metadata: { phone, reason }
         }).catch(() => {});
       } catch (err: any) {
-        console.warn('[V3 ESCALATE ALERT ERROR]', err.message);
+        console.warn(JSON.stringify({ event: 'V3_ESCALATE_ALERT_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
       }
     }
 

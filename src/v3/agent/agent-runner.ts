@@ -2,9 +2,8 @@ import axios from 'axios';
 import { ALL_V3_TOOLS, executeToolByName, ToolExecutionContext } from '../tools/tool-registry';
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
 import { PersonaPromptBuilder, DynamicPromptExemplar, extractFastIntents } from './persona';
-import { ConversationStateSummarizer } from '../../slot-engine/conversation-summarizer';
+import { V3ConversationSummarizer } from '../state/conversation-summarizer';
 import { ConversationState } from '@prisma/client';
-import type { CustomerSlate, ExtractedEntities } from '../../slot-engine/types';
 import { OutputSanitizer } from '../guardrails/sanitizer';
 import { isPureLeadGreeting, stripAdTags } from '../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../config/persona';
@@ -13,6 +12,51 @@ import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 import { prisma } from '../../db/client';
+import { validateToolArgs } from '../tools/tool-schemas';
+import { validateNumericFacts } from '../guardrails/numeric-fact-validator';
+import { CircuitBreaker } from '../../utils/circuit-breaker';
+import { maskPhoneNumber, maskToolArgsForLogging } from '../../utils/pii-masker';
+
+/**
+ * Bungkus promise dengan batas waktu aman (default 7 detik).
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
+}
+
+export const v3LlmCircuitBreaker = new CircuitBreaker(
+  async (url: string, payload: any, headers: any) => {
+    const response = await axios.post(url, payload, { headers, timeout: 15000 });
+    return response.data;
+  },
+  async (url: string, payload: any, headers: any) => {
+    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || '';
+    const fallbackBaseUrl = (process.env.LLM_FALLBACK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+    const fallbackModel = process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
+    const fallbackPayload = { ...payload, model: fallbackModel };
+    const fallbackHeaders = { Authorization: `Bearer ${fallbackApiKey}`, 'Content-Type': 'application/json' };
+    console.warn(`[CIRCUIT BREAKER FALLBACK] Executing fallback to ${fallbackModel}...`);
+    if (!fallbackApiKey) {
+      throw new Error('LLM_FALLBACK_API_KEY not configured');
+    }
+    const fallbackResponse = await axios.post(`${fallbackBaseUrl}/chat/completions`, fallbackPayload, {
+      headers: fallbackHeaders,
+      timeout: 20000,
+    });
+    return fallbackResponse.data;
+  },
+  {
+    name: 'V3 LLM Primary Gateway',
+    failureThreshold: 0.5,
+    slidingWindowSize: 6,
+    cooldownPeriodMs: 45000,
+  }
+);
 
 export interface AgentRunnerInput {
   tenantId?: string;
@@ -71,44 +115,6 @@ export interface AgentRunnerOutput {
 
 export class V3AgentRunner {
   /**
-   * Adaptasi CustomerGoalSession (V3) menjadi CustomerSlate (slot-engine) agar
-   * ConversationStateSummarizer deterministik dapat dipakai lintas engine.
-   */
-  public static buildSlateAdapter(session: CustomerGoalSession): CustomerSlate {
-    return {
-      customerId: '',
-      phone: '',
-      name: session.customerName || null,
-      tenantId: DEFAULT_TENANT_ID,
-      conversationId: '',
-      kelurahan: session.location?.kelurahan || null,
-      kecamatan: session.location?.kecamatan || null,
-      kota: session.location?.kota || null,
-      lat: null,
-      lng: null,
-      streetDetail: null,
-      distanceKm: session.location?.distanceKm ?? null,
-      ongkirFee: session.location?.ongkirNormal ?? null,
-      ongkirPromoFee: session.location?.ongkirPromo ?? null,
-      isLocationConfirmed: Boolean(session.location?.kelurahan || session.location?.distanceKm != null),
-      isOutOfCoverage: Boolean(session.location?.isOutOfCoverage),
-      childAgeMonths: session.childProfile?.ageMonths ?? null,
-      childAgeCategory: null,
-      symptoms: session.childProfile?.symptoms || [],
-      medicalConcerns: [],
-      selectedTreatmentName: session.selectedTreatment || (session.cartItems && session.cartItems[0] ? session.cartItems[0].name : null),
-      preferredDate: session.booking?.preferredDate || null,
-      preferredTime: session.booking?.preferredTime || null,
-      pricelistSent: false,
-      reservationFormSent: false,
-      isHumanHandling: false,
-      humanHandlingReason: null,
-      lastInteractionAt: new Date(),
-      projectedState: ConversationState.INITIAL,
-    };
-  }
-
-  /**
    * Turunan status state-machine dari session (reuse enum existing — tanpa migrasi):
    * lokasi terkonfirmasi → LOCATION_CONFIRMED; cart/treatment terisi → AWAITING_INTEREST;
    * jadwal ditanyakan → RESERVATION_SENT; reservasi tersimpan → COMPLETED.
@@ -161,36 +167,9 @@ export class V3AgentRunner {
     apiKey: string;
     selectedModel: string;
   }): Promise<any> {
-    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || '';
-    const fallbackBaseUrl = (process.env.LLM_FALLBACK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-    const fallbackModel = process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
-
-    try {
-      const response = await axios.post(`${params.baseUrl}/chat/completions`, params.payload, {
-        headers: { Authorization: `Bearer ${params.apiKey}`, 'Content-Type': 'application/json' },
-        timeout: 15000,
-      });
-      return response.data;
-    } catch (primaryErr: any) {
-      console.warn(
-        `[V3 AGENT PRIMARY FAILED] ${params.selectedModel} error: ${primaryErr.response?.status || primaryErr.message}. Triggering fallback to ${fallbackModel}...`
-      );
-
-      if (!fallbackApiKey) {
-        throw primaryErr;
-      }
-
-      const fallbackPayload = {
-        ...params.payload,
-        model: fallbackModel,
-      };
-
-      const fallbackResponse = await axios.post(`${fallbackBaseUrl}/chat/completions`, fallbackPayload, {
-        headers: { Authorization: `Bearer ${fallbackApiKey}`, 'Content-Type': 'application/json' },
-        timeout: 20000,
-      });
-      return fallbackResponse.data;
-    }
+    const url = `${params.baseUrl}/chat/completions`;
+    const headers = { Authorization: `Bearer ${params.apiKey}`, 'Content-Type': 'application/json' };
+    return await v3LlmCircuitBreaker.execute(url, params.payload, headers);
   }
 
   /**
@@ -253,7 +232,7 @@ export class V3AgentRunner {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
         const agreed = V3AgentRunner.detectAgreedTreatment(
           conversationHistory,
-          treatmentCatalogService.getAllServices(true).map((s) => s.name)
+          treatmentCatalogService.getAllServices(true, tenantId).map((s) => s.name)
         );
         if (agreed) {
           session = await GoalTracker.updateGoalSession(conversationId, {
@@ -273,7 +252,7 @@ export class V3AgentRunner {
         const syncedCart = GoalTracker.syncCartItems(
           session,
           [...conversationHistory, { role: 'user', content: cleanIncomingText }],
-          treatmentCatalogService.getAllServices(true).map((s) => ({
+          treatmentCatalogService.getAllServices(true, tenantId).map((s) => ({
             name: s.name,
             promoPrice: s.promoPrice,
             originalPrice: s.originalPrice,
@@ -323,23 +302,7 @@ export class V3AgentRunner {
     // menimpa messages[0], sehingga summary harus ditempel ulang).
     const buildContextSummary = (): string => {
       try {
-        const slateAdapter = V3AgentRunner.buildSlateAdapter(session);
-        const summaryExtraction: ExtractedEntities = {
-          intents: extractFastIntents(cleanIncomingText) as ExtractedEntities['intents'],
-          locationText: null,
-          streetDetail: null,
-          childAgeMonths: session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null,
-          symptoms: [...(session.childProfile?.symptoms || []), ...((session.children || []).flatMap((c) => c.symptoms || []))].filter(
-            (s, i, arr) => arr.indexOf(s) === i
-          ),
-          treatmentReferenced: null,
-          preferredDateText: null,
-          preferredTimeText: null,
-          customerName: null,
-          isMedicalEmergency: false,
-          confidenceScore: 0.8,
-        };
-        return ConversationStateSummarizer.summarize(slateAdapter, summaryExtraction, {
+        return V3ConversationSummarizer.summarize(session, cleanIncomingText, {
           history: conversationHistory.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
           customerInput: cleanIncomingText,
         });
@@ -353,7 +316,10 @@ export class V3AgentRunner {
       { role: 'system', content: contextSummary ? `${systemPrompt}\n\n${contextSummary}` : systemPrompt },
       // Jendela 14 pesan terakhir (7 turn) agar lokasi & ongkir turn awal tidak terpotong amnesia.
       ...conversationHistory.slice(-14).map((h) => ({ role: h.role, content: h.content })),
-      { role: 'user', content: cleanIncomingText },
+      {
+        role: 'user',
+        content: `<customer_message>\n${cleanIncomingText}\n</customer_message>`,
+      },
     ];
 
     const emptyTokens: V3TokenUsage = { prompt: 0, completion: 0, total: 0 };
@@ -470,11 +436,23 @@ export class V3AgentRunner {
 
     try {
       // 4. Panggilan Pertama: Model mengevaluasi apakah perlu memanggil Tools
+      const detectedIntents = extractFastIntents(cleanIncomingText);
+
+      let dynamicToolChoice: any = 'auto';
+
+      // Prioritaskan lokasi (ongkir) bila gazetteer match, karena kalimat "berapa ongkir ke X"
+      // mengandung dua sinyal (ask_price + provide_location) namun intent utamanya adalah cek ongkir
+      if (detectedIntents.includes('provide_location')) {
+        dynamicToolChoice = { type: 'function', function: { name: 'calculate_delivery' } };
+      } else if (detectedIntents.includes('ask_price')) {
+        dynamicToolChoice = { type: 'function', function: { name: 'get_catalog_and_price' } };
+      }
+
       const firstPayload: any = {
         model: selectedModel,
         messages,
         tools: ALL_V3_TOOLS,
-        tool_choice: 'auto',
+        tool_choice: dynamicToolChoice,
         temperature: 0.2,
       };
 
@@ -513,13 +491,25 @@ export class V3AgentRunner {
               : tc.function?.arguments || {};
           } catch (_) {}
 
-          console.log(`[V3 AGENT TOOL EXECUTE] Tool: "${fnName}", Args:`, JSON.stringify(fnArgs));
+          console.log(`[V3 AGENT TOOL EXECUTE] Tool: "${fnName}", Args:`, JSON.stringify(maskToolArgsForLogging(fnName, fnArgs)));
 
+          const validation = validateToolArgs(fnName, fnArgs);
           let toolResult: any;
-          try {
-            toolResult = await executeToolByName(fnName, fnArgs, toolContext);
-          } catch (toolErr: any) {
-            toolResult = { error: toolErr.message };
+          if (!validation.success) {
+            console.warn(JSON.stringify({ event: 'V3_TOOL_SCHEMA_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), tool: fnName, error: validation.error, timestamp: new Date().toISOString() }));
+            toolResult = { error: validation.error };
+          } else {
+            const TOOL_TIMEOUT_MS = 7000;
+            try {
+              toolResult = await withTimeout(
+                executeToolByName(fnName, validation.data, toolContext),
+                TOOL_TIMEOUT_MS,
+                `Tool "${fnName}" timeout setelah ${TOOL_TIMEOUT_MS}ms`
+              );
+            } catch (toolErr: any) {
+              console.warn(JSON.stringify({ event: 'V3_TOOL_TIMEOUT_ERROR', tenantId, conversationId, phone: maskPhoneNumber(phone), tool: fnName, error: toolErr.message, timestamp: new Date().toISOString() }));
+              toolResult = { error: toolErr.message };
+            }
           }
 
           executedTools.push({ name: fnName, args: fnArgs, result: toolResult });
@@ -674,8 +664,18 @@ export class V3AgentRunner {
       // 7. Sanitasi Balasan
       finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText, isFollowUp);
 
+      const numCheck = validateNumericFacts(finalReply, executedTools);
+      if (!numCheck.isValid && executedTools.length > 0) {
+        console.warn(JSON.stringify({ event: 'NUMERIC_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: numCheck.violations, timestamp: new Date().toISOString() }));
+        // Gunakan suggestedPriceReply / suggestedTemplateReply dari tool jika ada
+        const fallbackToolReply = executedTools[0]?.result?.suggestedPriceReply || executedTools[0]?.result?.suggestedTemplateReply;
+        if (fallbackToolReply) {
+          finalReply = fallbackToolReply;
+        }
+      }
+
       if (!OutputSanitizer.isValidReply(finalReply)) {
-        console.warn(`[V3 AGENT WARNING] Reply rejected by sanitizer: "${finalReply}". Triggering silent fallback.`);
+        console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
         finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di Kala Moms & Baby Spa. Ada yang bisa Bidan Yusi bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
       }
 
@@ -719,7 +719,7 @@ export class V3AgentRunner {
         contextSummary: lastContextSummary || undefined,
       };
     } catch (err: any) {
-      console.error('[V3 AGENT RUNNER ERROR]', err.response?.data || err.message);
+      console.error(JSON.stringify({ event: 'V3_AGENT_RUNNER_ERROR', tenantId, conversationId, phone: maskPhoneNumber(phone), error: err.response?.data || err.message, timestamp: new Date().toISOString() }));
 
       try {
         const { auditLlmCall } = await import('../../utils/llm-audit-buffer');

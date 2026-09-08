@@ -1,6 +1,7 @@
 import { upsertReservationForm } from '../../services/reservation-lifecycle.service';
 import { BabyDetail } from '../../utils/reservation-text-parser';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { parseIndonesianDate } from '../../utils/indonesian-date-parser';
 
 export interface SaveReservationChild {
   name?: string;
@@ -115,18 +116,14 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     const momsCue = /oksitosin|laktasi|nifas|hamil|menyusui|moms|perineum|yoga/i.test(treatmentDetail);
     const treatmentCategory = isMulti ? 'BOTH' : (momsCue ? 'MOMS' : 'BABY');
 
-    const childLabel = children.length > 0
-      ? children.map((c, i) => `${c.name || `Anak ${i + 1}`}${c.ageMonths != null ? ` (${c.ageMonths} bln)` : ''}`).join(', ')
-      : `${childName || '-'} (${childAgeMonths ? childAgeMonths + ' bln' : '-'})`;
-    const rawFormText = `[V3 RESERVATION]\nNama: ${customerName || '-]'.replace(']', '')}\nTreatment: ${treatmentDetail}\nJadwal: ${bookingDate} ${bookingTime || ''}\nAnak: ${childLabel}\nCatatan: ${notes || '-'}`;
-
     const babies: BabyDetail[] = children.length > 0
       ? children.map((c, i) => ({ name: c.name || `Anak ${i + 1}`, age: c.ageMonths != null ? `${c.ageMonths} bulan` : '0 bulan' }))
       : (childName
         ? [{ name: childName, age: childAgeMonths ? `${childAgeMonths} bulan` : '0 bulan' }]
         : []);
 
-    const parsedDate = !isNaN(Date.parse(bookingDate)) ? new Date(bookingDate) : new Date();
+    const parsedResult = parseIndonesianDate(bookingDate);
+    const parsedDate = parsedResult.date;
 
     const result = await upsertReservationForm({
       tenantId,
@@ -135,7 +132,6 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       treatmentCategory: treatmentCategory as any,
       treatmentDetail,
       bookingDate: parsedDate,
-      rawText: rawFormText,
       babies,
       customerName,
       source: 'V3_NATIVE_AGENT_TOOL'
@@ -150,7 +146,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       message: `${summary} Jadwal akan dikoordinasikan dengan Bidan yang bertugas.`
     };
   } catch (error: any) {
-    console.error('[V3 TOOL RESERVATION ERROR]', error);
+    console.error(JSON.stringify({ event: 'V3_TOOL_RESERVATION_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
     return {
       success: false,
       summary: 'Gagal mencatat reservasi',
