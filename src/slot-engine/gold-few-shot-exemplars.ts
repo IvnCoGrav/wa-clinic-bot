@@ -280,6 +280,16 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     sortOrder: 33,
   },
   {
+    id: 'gold_asal_klinik_lokasi_diketahui',
+    scenario: 'Customer menanyakan posisi/asal klinik atau Bidan saat lokasi sudah diketahui',
+    tags: ['ask_clinic_origin', 'asal', 'homebase', 'posisi', 'sus', 'bidan', 'lokasi_klinik'],
+    customerMessage: 'sus nya dimana',
+    idealResponse:
+      'Homebase kami berada di Waru, Sidoarjo ya Bunda 😊 Lokasi Bunda sudah masuk area jangkauan kami. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
+    isActive: true,
+    sortOrder: 35,
+  },
+  {
     id: 'gold_khasiat_sinar_moksa_bapil',
     scenario: 'Customer menanyakan khasiat atau cara kerja terapi Sinar Moksa',
     tags: ['sinar_moksa', 'moksa', 'inframerah', 'terapi_hangat'],
