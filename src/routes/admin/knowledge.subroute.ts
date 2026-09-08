@@ -19,15 +19,37 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
         const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '200', 10) || 200));
         const where = { tenant_id: DEFAULT_TENANT_ID };
-        const [rows, total] = await Promise.all([
-          prisma.knowledgeChunk.findMany({
+        const { isMissingKeywordsColumnError } = await import('../../services/knowledge.service');
+        let rows: any[];
+        try {
+          rows = await prisma.knowledgeChunk.findMany({
             where,
             orderBy: { created_at: 'desc' },
             skip: (page - 1) * pageSize,
             take: pageSize,
-          }),
-          prisma.knowledgeChunk.count({ where }),
-        ]);
+          });
+        } catch (findErr: any) {
+          // Skema lama tanpa kolom keywords (P2022): baca ulang tanpa kolom tersebut
+          // agar dashboard tetap menampilkan data sambil menunggu migrasi.
+          if (!isMissingKeywordsColumnError(findErr)) throw findErr;
+          const legacyRows = await prisma.knowledgeChunk.findMany({
+            where,
+            orderBy: { created_at: 'desc' },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+            select: {
+              id: true,
+              tenant_id: true,
+              source_type: true,
+              title: true,
+              content: true,
+              document_name: true,
+              created_at: true,
+            },
+          });
+          rows = legacyRows.map((r: any) => ({ ...r, keywords: null }));
+        }
+        const total = await prisma.knowledgeChunk.count({ where });
         return reply.status(200).send({
           success: true,
           data: rows,
@@ -173,14 +195,29 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       const cleanKeywords = typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null;
 
       try {
-        const updated = await prisma.knowledgeChunk.update({
-          where: { id },
-          data: {
-            title,
-            content,
-            keywords: cleanKeywords,
-          },
-        });
+        const { isMissingKeywordsColumnError } = await import('../../services/knowledge.service');
+        let updated: any;
+        try {
+          updated = await prisma.knowledgeChunk.update({
+            where: { id },
+            data: {
+              title,
+              content,
+              keywords: cleanKeywords,
+            },
+          });
+        } catch (updateErr: any) {
+          // Skema lama tanpa kolom keywords (P2022): update tanpa keywords + peringatan.
+          if (!isMissingKeywordsColumnError(updateErr)) throw updateErr;
+          updated = await prisma.knowledgeChunk.update({
+            where: { id },
+            data: { title, content },
+          });
+          updated = { ...updated, keywords: null };
+          console.warn(
+            '[KNOWLEDGE ADMIN] Kolom keywords belum ada di DB — update disimpan tanpa keywords. Jalankan: npx prisma migrate deploy'
+          );
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

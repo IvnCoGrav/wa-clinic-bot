@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Defensive Admin Knowledge untuk DB skema lama tanpa kolom keywords (P2022) (2026-09-08)
+
+- **Gejala:** `GET /api/admin/knowledge/chunks` melempar `prisma:error Invalid prisma.knowledgeChunk.findMany() ... The column knowledge_chunks.keywords does not exist` sehingga dashboard tampil kosong (catch diam-diam me-return `data: []`).
+- **Akar:** drift skema-vs-DB — `prisma/schema.prisma` sudah punya `keywords` + migrasi `20260907000000_add_knowledge_chunk_keywords` ada di repo, tapi belum di-apply di database yang sedang dipakai bot. Prisma typed query (findMany/update) memvalidasi kolom dan melempar P2022.
+- **Perbaikan:** `isMissingKeywordsColumnError()` diperluas mendeteksi P2022 (`keywords ... does not exist`); `GET /chunks` retry dengan `select` tanpa `keywords` (balik `keywords: null`) agar dashboard tetap tampil; `PUT /chunks/:id` retry update tanpa `keywords` + warn log; `checkDuplicateFaq()` ikut defensif. Perbaikan permanen tetap migrasi DB (lihat bawah).
+- **Verifikasi:** `npm run build` bersih; `dynamic-knowledge-maternal` 5/5 + `knowledge` 3/3 ✓.
+
+#### Fix — Dynamic Knowledge Grounding & Zero-Hardcode Persona Restoration (kasus maternal 38 weeks + induksi + capek) (2026-09-08)
+
+- **Latar Belakang:** Query "38 weeks apa sudah bisa pakai yang induksi ya kak? Ini sama capek² juga soalnya" gagal grounding. Akar: (1) fallback `search-knowledge-faq.tool.ts:72` hardcoded "konsultasikan ke Bidan + tawarkan eskalasi" memicu krisis identitas; (2) FTS `knowledge.service.ts` memakai kolom `keywords` yang belum ter-migrasi di sebagian env (error 42703) sehingga selalu jatuh ke fallback kosong; (3) aturan klinis aterm ≥37-38 minggu + relaksasi bumil capek belum ada di DB knowledge base.
+- **Tahap 1 — DB-driven (`knowledge.service.ts`, `seed-faq.ts`, `scripts/seed-maternal-induction-knowledge.ts`):** `isMissingKeywordsColumnError()` + retry FTS `searchFtsWithoutKeywordsColumn()` (title+content saja) saat error 42703/P2010 agar DB skema lama tetap bisa FTS; metode generik tenant-aware `upsertChunk()` (upsert by title, fallback in-memory saat offline, toleran skema lama); artikel klinis "Panduan Usia Kehamilan untuk Pijat Induksi Alami" + keywords (38 weeks, induksi, capek, aterm, hpl) masuk sebagai SEED DB (editable via dashboard), bukan hardcode runtime. Script idempoten: `npx tsx src/scripts/seed-maternal-induction-knowledge.ts [--tenant=ID]`.
+- **Tahap 2 — Zero-hardcode fallback (`search-knowledge-faq.tool.ts`):** pesan kosong diganti generik — rujuk katalog dinamis (`get_catalog_and_price`) + kompetensi Bidan Yusi; eskalasi HANYA untuk kegawatdaruratan patologis. Tanpa nama treatment/usia statis.
+- **Tahap 3 — Prinsip persona (`persona.ts`):** blok baru `[PRINSIP EMPATI & IDENTITAS BIDAN YUSI]` — validasi keluhan fisik, integritas identitas (larang "akan kami konsultasikan ke Bidan kami" untuk ranah komplementer standar), kata ganti profesional. Tanpa data bisnis statis.
+- **Verifikasi:** `dynamic-knowledge-maternal.test.ts` 5/5 ✓ (RAG aterm via in-memory, tool FAQ maternal, fallback generik tanpa false-escalation/hardcode, prinsip persona, deteksi 42703), regresi `knowledge` 3/3 + `v3-persona-rules` 15/15 ✓, `npm run build` (tsc) bersih.
+- **Tindak lanjut live DB:** jalankan `npx prisma migrate deploy` (kolom `keywords`) + script seed induksi di server; artikel selanjutnya diedit via dashboard `/api/admin/knowledge`.
+
 #### Fix — Ekstraksi Form Chat, Fuzzy Matching Layanan & Generator Invoice WhatsApp (`chatScheduleExtractor.ts`, `treatmentStringParser.ts`, `InvoiceGeneratorModal.tsx`) (2026-09-07)
 
 - **Latar Belakang (kasus Bunda Fitria 628563567095):** Invoice tidak sesuai form — tanggal geser H+1, nama anak kosong, usia "Treatment :", layanan salah "Paket Selapan" Rp 80.000 padahal "Pijat Ceria + Oksitosin". Akar: (1) regex top-down menangkap template kosong bot → section baby/moms terpotong; (2) baris historis `children` (`Usia Bayi/Anak :` / `Treatment :`) tanpa guard; (3) `.includes()` satu arah cocokkan "pijat ceria" ke bundle Selapan; (4) treatment Moms terabaikan.
