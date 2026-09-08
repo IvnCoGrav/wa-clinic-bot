@@ -8,7 +8,7 @@ import { ConversationState } from '@prisma/client';
 const CATALOG = [
   { name: 'Pijat Bayi Pulih Ceria', promoPrice: 70000, originalPrice: 90000, category: 'BABY', isAddon: false },
   { name: 'Sinar Moksa', promoPrice: 10000, originalPrice: 15000, category: 'ADD_ON', isAddon: true },
-  { name: 'Cukur Rambut Bayi', promoPrice: 30000, originalPrice: 30000, category: 'BABY', isAddon: false },
+  { name: 'Cukur Rambut Bayi', promoPrice: 30000, originalPrice: 30000, category: 'BABY', isAddon: true },
 ];
 
 const baseSession: any = { genderGreeting: 'Bunda' };
