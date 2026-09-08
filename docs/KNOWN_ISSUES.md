@@ -702,6 +702,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Keputusan:** Keempat file ini **DIPROTEKSI dari penghapusan** pada Phase 6.
 - **Rencana Tindak Lanjut (Sprint Berikutnya):** Jadwalkan 1 sub-task khusus untuk me-refactor assertion keempat file tersebut agar memanggil `V3AgentRunner.processMessage` secara native, lalu hapus sisa file legacy setelah 100% lulus.
 
+---
 
+## 29. [RAG] In-memory fallback memakai substring `includes` sehingga token umum over-match + seed maternal induksi belum dijalankan di live DB
+
+- **Status:** open sebagian (defensive fix sudah applied 2026-09-08; sisa: migrasi live + matcher presisi).
+- **Ditemukan:** 2026-09-08, saat implementasi Dynamic Knowledge Grounding (kasus maternal 38 weeks + induksi + capek).
+- **Gejala / detail:**
+  - Fallback in-memory `knowledge.service.ts:searchRelevantChunks` memakai `text.includes(kw)` per token, sehingga token pendek/umum seperti "ada" ikut cocok via substring di kata "pada" (query nonsense "xyzqwerty topik tidak ada 999" sempat me-return 1 chunk). Relevansi FTS Postgres tidak terdampak; hanya jalur offline/test.
+  - Kolom `keywords` (migrasi `20260907000000_add_knowledge_chunk_keywords`) + artikel "Panduan Usia Kehamilan untuk Pijat Induksi Alami" baru tersedia di seed lokal (`src/cli/seed-faq.ts`, `src/scripts/seed-maternal-induction-knowledge.ts`); live DB masih perlu `npx prisma migrate deploy` + `npx tsx src/scripts/seed-maternal-induction-knowledge.ts`. Kode kini defensif (retry FTS tanpa kolom `keywords` saat error 42703) sehingga live lama tetap jalan dengan degradasi tanpa sinonim keywords.
+- **Rencana Tindak Lanjut:** (a) ganti matcher in-memory ke word-boundary/token-overlap scoring (seperti `treatmentStringParser`) bila relevansi offline jadi masalah; (b) jalankan migrasi + seed induksi di server live, verifikasi via `POST /api/admin/knowledge` / query "38 weeks induksi capek".
 
 

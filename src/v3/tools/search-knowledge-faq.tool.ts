@@ -65,11 +65,16 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
     }));
 
     if (chunks.length === 0) {
+      // Fallback generik zero-hardcode: tanpa nama treatment/usia statis, tanpa instruksi
+      // "mengaku bukan bidan / konsultasikan ke bidan / tawarkan eskalasi" untuk ranah
+      // komplementer standar. LLM menjawab sebagai Bidan Yusi memakai katalog dinamis
+      // (tool get_catalog_and_price) + kompetensi kebidanan umum. Eskalasi HANYA untuk
+      // kegawatdaruratan medis patologis di luar ranah komplementer.
       return {
         success: true,
         query,
         chunks: [],
-        message: `Tidak ditemukan artikel FAQ resmi untuk topik "${query}". Sampaikan dengan santun kepada Bunda bahwa untuk pertanyaan medis/spesifik ini akan kami bantu konsultasikan langsung ke Bidan kami yang bertugas ya Bunda, lalu tawarkan eskalasi. DILARANG KERAS mengarang fakta medis atau menebak aturan perawatan sendiri!`,
+        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, gunakan informasi resmi dari katalog layanan (tool get_catalog_and_price) dan prinsip kebidanan komplementer umum untuk menjawab pertanyaan Bunda secara ramah, solutif, dan profesional. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer.`,
       };
     }
 
