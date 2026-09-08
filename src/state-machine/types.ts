@@ -35,4 +35,14 @@ export interface StateHandlerResult {
   forcePricelistResend?: boolean;
   /** Reasoning dari LLM generator jika balasan dihasilkan oleh AI. */
   aiReasoning?: string | null;
+  /** Metadata eksekusi V3 Agent untuk observability baseline (Phase 0.5). */
+  metadata?: {
+    engine: string;
+    tokens: { prompt: number; completion: number; total: number };
+    costIdr: number;
+    executedTools: Array<{ name: string; args: any }>;
+    toolCount: number;
+    reasoning: string | null;
+    retrievedChunksCount: number;
+  };
 }

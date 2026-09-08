@@ -35,12 +35,10 @@ export class OutputSanitizer {
     // 6. Normalisasi spasi dan baris baru berlebih
     text = text.replace(/\n{3,}/g, '\n\n').trim();
 
-    // 7. Guardrail aturan emas klinik (deterministik, tanpa LLM).
-    // AI-FIRST: tidak ada pemotongan nominal/kata di tengah kalimat di sini
-    // (lihat Minimal-Regex Mandate). Kendali harga hidup di hulu: prompt
-    // persona + grounding tool get_catalog_and_price (inquirePrice).
-    text = OutputSanitizer.stripEnglishLeakage(text);
-    text = OutputSanitizer.sanitizeFirstPersonPronoun(text);
+    // 7. Guardrail minimal (Mandat Minimal-Regex Phase 4):
+    // - stripEnglishLeakage & sanitizeFirstPersonPronoun DIHAPUS — sudah ditangani
+    //   via Positive Few-Shot Exemplars + prompt persona DB (Phase 1 & 3.2)
+    // - Hanya pertahankan sanitizer non-mutilasi: STR mention & followUp greeting minimal
     text = OutputSanitizer.sanitizeUnpromptedStrMention(text, customerInput);
     text = OutputSanitizer.sanitizeFollowUpGreetingRepetition(text, isFollowUp);
     text = OutputSanitizer.truncateToMaxChars(text, 500);
@@ -127,24 +125,33 @@ export class OutputSanitizer {
   }
 
   /**
-   * Multi-turn anti-repetition guardrail: pada chat lanjutan (isFollowUp=true),
-   * potong deterministik seluruh varian sapaan pembuka & perkenalan diri Turn-0
-   * agar bot langsung menjawab inti pesan tanpa mengulang "Halo Bunda" /
-   * "Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi...".
+   * Multi-turn anti-repetition guardrail (Phase 4 minimal):
+   * HANYA memotong sapaan duplikat bila pesan terdiri dari >=2 paragraf
+   * dan paragraf pertama murni sapaan pembuka Turn-0 (bukan regex global).
+   * Menangani kasus emot memecah "Halo Bunda! ✨ Terima kasih..." menjadi 2 paragraf.
    */
   public static sanitizeFollowUpGreetingRepetition(text: string, isFollowUp: boolean = false): string {
     if (!text || !isFollowUp) return text;
-    let cleaned = text;
-    // Varian pembuka formal di awal balasan
-    cleaned = cleaned.replace(/^(?:halo|hai|hei|hey)\s+(?:bunda|bun|kak|min)\s*[!✨🥰🌸\.,\s]*/i, '');
-    cleaned = cleaned.replace(/^selamat\s+(?:pagi|siang|sore|malam)(?:\s+(?:bunda|bun|kak|min))?\s*[!✨🥰🌸\.,\s]*/i, '');
-    // Varian perkenalan diri redundan (terima kasih + perkenalkan)
-    cleaned = cleaned.replace(/^(?:terima\s+kasih\s+sudah\s+menghubungi\s+kami[.,\s✨🌸]*)(?:perkenalkan,\s+saya\s+bidan\s+yusi[^.!?\n]*[.!?\n]*)?/i, '');
-    // Varian perkenalan langsung
-    cleaned = cleaned.replace(/^perkenalkan,\s+saya\s+bidan\s+yusi[^.!?\n]*[.!?\n]*/i, '');
-    // Sisa sapaan "Halo Bunda" yang terselip tepat di awal setelah strip pertama
-    cleaned = cleaned.replace(/^(?:halo|hai)\s*[!✨🥰🌸\.,\s]*/i, '');
-    return cleaned.trim();
+    let paragraphs = text.split(/\n\s*\n/);
+    if (paragraphs.length < 2) return text;
+    const isGreetingPara = (p: string): boolean => {
+      const t = p.trim().toLowerCase();
+      return (
+        /^(halo|hai|hei|hey)\s+(bunda|bun|kak|min)\b/.test(t) ||
+        /^selamat\s+(pagi|siang|sore|malam)\b/.test(t) ||
+        /^terima\s+kasih\s+sudah\s+menghubungi/.test(t) ||
+        /^perkenalkan,\s+saya\s+bidan\s+yusi/.test(t)
+      );
+    };
+    // Hapus berurutan semua paragraf awal yang murni sapaan (handle emot split)
+    let cut = 0;
+    while (cut < paragraphs.length - 1 && isGreetingPara(paragraphs[cut])) {
+      cut++;
+    }
+    if (cut > 0) {
+      return paragraphs.slice(cut).join('\n\n').trim();
+    }
+    return text;
   }
 
   /**

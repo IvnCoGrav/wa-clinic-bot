@@ -10,7 +10,6 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
-import { processSlotEngine } from '../slot-engine/slot-engine';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -408,52 +407,56 @@ export class ConversationStateMachine {
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
     
     let result: StateHandlerResult;
-    const useV3 = process.env.USE_V3_AGENT !== 'false';
-
-    if (useV3) {
-      const { V3AgentRunner } = await import('../v3/agent/agent-runner');
-      let effectiveInboundText = incomingText;
-      if (hasValidLocation && loc) {
-        effectiveInboundText = `[Shared Location: ${loc.latitude}, ${loc.longitude}]`;
-      } else if (!effectiveInboundText && inboundContent) {
-        effectiveInboundText = inboundContent;
-      }
-
-      const v3Result = await V3AgentRunner.processMessage({
-        tenantId,
-        customerId: customer.id,
-        conversationId: activeConversation.id,
-        phone: customer.phone,
-        chatId: `${customer.phone}@c.us`,
-        incomingText: effectiveInboundText,
-        originalText: (incomingMessage as any).originalText || inboundContent,
-        history: historyFormatted,
-        skipDbLogging: true,
-      });
-
-      if (v3Result.isEscalated) {
-        activeConversation.is_human_handling = true;
-        activeConversation.current_state = ConversationState.HUMAN_HANDLING;
-        await conversationService.escalateToHumanHandling(
-          activeConversation,
-          customer.phone,
-          'Eskalasi otomatis oleh V3 Agent',
-          tenantId,
-          'v3_agent_escalation'
-        );
-      }
-
-      result = {
-        nextState: v3Result.isEscalated
-          ? ConversationState.HUMAN_HANDLING
-          : (v3Result.nextState || activeConversation.current_state),
-        replyText: v3Result.replyText,
-        shouldSendReply: v3Result.shouldSendReply && !!v3Result.replyText,
-        isHumanHandling: v3Result.isEscalated,
-      };
-    } else {
-      result = await processSlotEngine(handlerCtx);
+    // Eksekusi Tunggal V3 Agent Runner (V2 slot-engine telah didekomisioning)
+    const { V3AgentRunner } = await import('../v3/agent/agent-runner');
+    let effectiveInboundText = incomingText;
+    if (hasValidLocation && loc) {
+      effectiveInboundText = `[Shared Location: ${loc.latitude}, ${loc.longitude}]`;
+    } else if (!effectiveInboundText && inboundContent) {
+      effectiveInboundText = inboundContent;
     }
+
+    const v3Result = await V3AgentRunner.processMessage({
+      tenantId,
+      customerId: customer.id,
+      conversationId: activeConversation.id,
+      phone: customer.phone,
+      chatId: `${customer.phone}@c.us`,
+      incomingText: effectiveInboundText,
+      originalText: (incomingMessage as any).originalText || inboundContent,
+      history: historyFormatted,
+      skipDbLogging: true,
+    });
+
+    if (v3Result.isEscalated) {
+      activeConversation.is_human_handling = true;
+      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      await conversationService.escalateToHumanHandling(
+        activeConversation,
+        customer.phone,
+        'Eskalasi otomatis oleh V3 Agent',
+        tenantId,
+        'v3_agent_escalation'
+      );
+    }
+
+    result = {
+      nextState: v3Result.isEscalated
+        ? ConversationState.HUMAN_HANDLING
+        : (v3Result.nextState || activeConversation.current_state),
+      replyText: v3Result.replyText,
+      shouldSendReply: v3Result.shouldSendReply && !!v3Result.replyText,
+      isHumanHandling: v3Result.isEscalated,
+      metadata: {
+        engine: 'V3_AGENT',
+        tokens: v3Result.tokens,
+        costIdr: v3Result.costIdr,
+        executedTools: (v3Result.executedTools || []).map((t) => ({ name: t.name, args: t.args })),
+        toolCount: (v3Result.executedTools || []).length,
+        reasoning: v3Result.reasoning,
+        retrievedChunksCount: (v3Result.retrievedChunks || []).length,
+      },
+    };
 
     // 4. Update Conversation State jika berubah
     if (result.nextState !== activeConversation.current_state) {
@@ -570,14 +573,16 @@ export class ConversationStateMachine {
       });
 
       const reason = result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined;
+      const v3Meta = (result as any).metadata;
+      const outboundPayload: any = { ...(reason || {}) };
+      if (v3Meta) outboundPayload.v3Execution = v3Meta;
+      if (!resultHuman.success) outboundPayload.sendError = resultHuman.error || 'WAHA sendText failed';
       await messageService.logMessage({
         tenantId,
         conversationId: activeConversation.id,
         direction: Direction.OUTBOUND,
         content: result.replyText,
-        payloadRaw: !resultHuman.success
-          ? { ...(reason || {}), sendError: resultHuman.error || 'WAHA sendText failed' }
-          : reason,
+        payloadRaw: Object.keys(outboundPayload).length > 0 ? outboundPayload : undefined,
         deliveryStatus: resultHuman.success ? 'sent' : 'failed',
         metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
         metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',

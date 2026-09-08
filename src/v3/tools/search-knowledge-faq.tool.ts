@@ -69,7 +69,7 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
         success: true,
         query,
         chunks: [],
-        message: `Tidak ditemukan artikel FAQ yang relevan untuk "${query}". Jawab dengan SOP inti Bidan Yusi tanpa mengarang fakta medis.`,
+        message: `Tidak ditemukan artikel FAQ resmi untuk topik "${query}". Sampaikan dengan santun kepada Bunda bahwa untuk pertanyaan medis/spesifik ini akan kami bantu konsultasikan langsung ke Bidan kami yang bertugas ya Bunda, lalu tawarkan eskalasi. DILARANG KERAS mengarang fakta medis atau menebak aturan perawatan sendiri!`,
       };
     }
 
@@ -81,7 +81,7 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
       message: `Ditemukan ${chunks.length} artikel FAQ relevan untuk "${query}":\n${summary}`,
     };
   } catch (error: any) {
-    console.error('[V3 TOOL FAQ ERROR]', error.message);
+    console.error(JSON.stringify({ event: 'V3_TOOL_FAQ_ERROR', tenantId, query, error: error.message, timestamp: new Date().toISOString() }));
     return { success: false, query, chunks: [], message: `Gagal mencari FAQ: ${error.message}` };
   }
 }

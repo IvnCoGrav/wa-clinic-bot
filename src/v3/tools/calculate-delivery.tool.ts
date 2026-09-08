@@ -86,6 +86,12 @@ function getKecamatanNames(): Array<{ lower: string; orig: string }> {
   return cachedKecamatanNames;
 }
 
+export function initKecamatanGazetteerSync(): void {
+  if (cachedKecamatanNames) return;
+  getKecamatanNames();
+}
+initKecamatanGazetteerSync();
+
 function levenshteinAtMostOne(a: string, b: string): boolean {
   if (a === b) return true;
   const la = a.length, lb = b.length;
@@ -264,7 +270,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}. Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
     };
   } catch (error: any) {
-    console.error('[V3 TOOL DELIVERY ERROR]', error);
+    console.error(JSON.stringify({ event: 'V3_TOOL_DELIVERY_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
     return {
       success: false,
       isPrecise: false,

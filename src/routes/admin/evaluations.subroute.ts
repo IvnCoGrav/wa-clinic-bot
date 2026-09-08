@@ -232,8 +232,8 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             };
           }
 
-          const useV3 = process.env.USE_V3_AGENT !== 'false';
-          if (useV3) {
+          // V3 only (V2 decommissioned)
+          {
             const { V3AgentRunner } = await import('../../v3/agent/agent-runner');
             let incomingText = incomingMessage.text?.body || combinedRawText;
             if (incomingMessage.type === 'location' && incomingMessage.location) {
@@ -276,35 +276,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               },
             };
           }
-
-          await sandboxStateMachine.processMessage({
-            tenantId: DEFAULT_TENANT_ID,
-            customer,
-            conversation,
-            incomingMessage,
-          });
-
-          const chunks = await knowledgeBaseService.searchRelevantChunks(
-            incomingMessage.text?.body || '',
-            3,
-            DEFAULT_TENANT_ID
-          );
-
-          const sentBubbles = sandboxClient.sentMessages.map((m) => m.text);
-          const answer =
-            sentBubbles.length > 0
-              ? sentBubbles.join('\n\n')
-              : '🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]';
-
-          return {
-            answer,
-            sentBubbles,
-            chunks,
-            query: combinedRawText,
-            burstCount: rawTextList.length,
-            timestamp: new Date(),
-            llmError: simulateOutage ? 'Primary LLM provider connection timeout (500 Internal Server Error)' : null,
-          };
+          // V2 decommissioned — no fallback
         } catch (err: any) {
           return {
             answer: `Error processing sandbox message: ${err.message}`,

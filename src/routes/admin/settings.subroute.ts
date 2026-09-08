@@ -288,7 +288,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/few-shots', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
-    const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+    const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
     const exemplars = await FewShotExemplarBank.getAllExemplars(tenantId);
     return reply.status(200).send({
       success: true,
@@ -333,7 +333,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       const created = await FewShotExemplarBank.createExemplar(
         {
           scenario: cleanScenario,
@@ -378,7 +378,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'orderedIds wajib berupa array berisi id string' });
       }
 
-      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       const reordered = await FewShotExemplarBank.reorderExemplars(orderedIds as string[], tenantId);
 
       await auditService.logAdminAction({
@@ -457,7 +457,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         cleanUpdate.sortOrder = Number(body.sortOrder);
       }
 
-      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       const updated = await FewShotExemplarBank.updateExemplar(id, cleanUpdate, tenantId);
 
       if (!updated) {
@@ -493,7 +493,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
-      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       await FewShotExemplarBank.deleteExemplar(id, tenantId);
 
       await auditService.logAdminAction({
@@ -518,7 +518,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/few-shots/reset-defaults',
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
-      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       const defaults = await FewShotExemplarBank.resetToDefaults(tenantId);
 
       await auditService.logAdminAction({
@@ -1506,6 +1506,80 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           },
           message: 'Pengaturan Laporan Operasional Harian & Telegram berhasil disimpan.',
         });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/settings/clinic-policies — Ambil semua kebijakan SOP per-tenant
+   */
+  fastify.get('/api/admin/settings/clinic-policies', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const policies = await (prisma as any).clinicPolicy.findMany({
+        where: { tenant_id: DEFAULT_TENANT_ID },
+        orderBy: { topic: 'asc' },
+      });
+      // Fallback ke statis bila DB kosong
+      if (!policies || policies.length === 0) {
+        const { getStaticFallbackTopics } = await import('../../v3/tools/clinic-faq.tool');
+        const fallback = getStaticFallbackTopics();
+        return reply.status(200).send({ success: true, data: fallback, source: 'fallback' });
+      }
+      return reply.status(200).send({ success: true, data: policies });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/clinic-policies/:topic — Edit summary & template teks kebijakan
+   */
+  fastify.put(
+    '/api/admin/settings/clinic-policies/:topic',
+    async (
+      request: FastifyRequest<{ Params: { topic: string }; Body: { factual_summary?: string; suggested_reply?: string; title?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { topic } = request.params;
+      const { factual_summary, suggested_reply, title } = request.body || {};
+      if (!factual_summary && !suggested_reply) {
+        return reply.status(400).send({ success: false, error: 'factual_summary atau suggested_reply wajib diisi' });
+      }
+      try {
+        const existing = await (prisma as any).clinicPolicy.findUnique({
+          where: { tenant_id_topic: { tenant_id: DEFAULT_TENANT_ID, topic } },
+        });
+        const data: any = {};
+        if (factual_summary !== undefined) data.factual_summary = factual_summary;
+        if (suggested_reply !== undefined) data.suggested_reply = suggested_reply;
+        if (title !== undefined) data.title = title;
+        data.is_active = true;
+        const policy = existing
+          ? await (prisma as any).clinicPolicy.update({ where: { id: existing.id }, data })
+          : await (prisma as any).clinicPolicy.create({
+              data: {
+                tenant_id: DEFAULT_TENANT_ID,
+                topic,
+                title: title || topic,
+                factual_summary: factual_summary || '',
+                suggested_reply: suggested_reply || '',
+                is_active: true,
+              },
+            });
+        // Invalidate cache
+        const { clearClinicPolicyCache } = await import('../../v3/tools/clinic-faq.tool');
+        clearClinicPolicyCache(DEFAULT_TENANT_ID, topic);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_CLINIC_POLICY',
+          targetId: topic,
+          payload: data,
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, data: policy });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }

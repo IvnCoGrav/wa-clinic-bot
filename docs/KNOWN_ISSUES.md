@@ -666,5 +666,42 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Akar masalah:** Commit `59f434c` ("pisahkan Tandai Lunas dari Meta CAPI") SENGAJA menghapus auto-trigger Purchase dari `PATCH /api/admin/reservation/:id/confirm` dan `PATCH /api/admin/reservation/:id` — Purchase kini eksklusif via Meta Purchase Queue (`POST /api/admin/reservation/:id/approve-purchase`). Test belum diselaraskan dengan kebijakan baru ini.
 - **Rencana Tindak Lanjut:** Update `tests/integration/ad-click.test.ts` agar (a) menegaskan confirm TIDAK memicu `sendCapiEvent`, dan (b) menegaskan Purchase terkirim via `approve-purchase`. Tidak terkait perubahan extractor/invoice (test tersebut tidak mengimpor file dashboard mana pun).
 
+---
+
+## 26. [V3 Guardrail] Multi-Treatment Combo Pricing Arithmetic Ungrounded (TC-24, TC-25)
+
+- **Status:** open (backlog arsitektur produk — sprint berikutnya).
+- **Ditemukan:** 2026-09-08, saat closure eval harness V3 (`tests/evals/numeric-hallucination-harness.ts`).
+- **Gejala:** Ketika customer menanyakan total harga untuk kombinasi 2+ layanan sekaligus (misal: "Pijat pulih ceria plus sinar moksa totalnya berapa?"), model memanggil tool `get_catalog_and_price` untuk 1 layanan utama. Saat LLM di Call 2 melakukan penjumlahan aritmatika (Rp 70.000 + Rp 10.000 = Rp 80.000), guardrail `NumericFactValidator` mendeteksi nominal Rp 80.000 tidak ada di whitelist hasil tool resmi, menganggapnya halusinasi, dan mengganti balasan ke harga single treatment (Rp 70.000).
+- **Rencana Tindak Lanjut (Sprint Berikutnya):**
+  - Perluas skema `get_catalog_and_price` agar menerima array nama treatment (`treatmentNames: string[]` atau `addons: string[]`).
+  - Tool mengembalikan rincian per-item beserta total resmi terhitung langsung dari database katalog.
+  - Dengan demikian, nominal total combo memiliki grounding resmi sebelum sampai ke `NumericFactValidator`.
+
+---
+
+## 27. [V3 UX] Respon Permintaan "Pricelist Lengkap" Naratif vs Daftar Lengkap (TC-16)
+
+- **Status:** open (backlog UX produk — sprint berikutnya).
+- **Ditemukan:** 2026-09-08, saat closure eval harness V3.
+- **Gejala:** Pada input umum tanpa keluhan seperti "Minta pricelist lengkap pijat bayi dong min", LLM merespon secara conversational dengan menyajikan 1-2 opsi terpopuler (Pijat Bayi Ceria Rp 60.000) alih-alih mendump seluruh puluhan variasi layanan dalam 1 bubble chat.
+- **Rencana Tindak Lanjut (Sprint Berikutnya):**
+  - Evaluasi bersama tim CS dan bisnis klinik: apakah customer WhatsApp lebih menyukai rekomendasi ringkas berfokus keluhan (pendekatan conversational), atau perlu mode tombol/link brosur PDF / daftar lengkap eksplisit jika intent minta pricelist terdeteksi.
+
+---
+
+## 28. [V3 Test Suite] Porting 4 File Skenario Fungsional Legacy V2 ke V3
+
+- **Status:** open (test debt terjadwal — sprint berikutnya).
+- **Ditemukan:** 2026-09-08, saat audit 39 file test legacy sebelum pembersihan V2.
+- **Gejala:** 4 file test warisan V2 memuat skenario bisnis nyata yang sangat berharga namun masih mengimpor file `src/slot-engine/*` yang telah didekomisioning:
+  1. `tests/unit/slot-engine-back-gesture.test.ts` (Customer berubah pikiran: ganti lokasi, batal treatment, tunda hari booking).
+  2. `tests/unit/need-time-and-non-destructive-revoke.test.ts` (Customer "minta waktu berpikir / tanya suami dulu" tanpa membatalkan draft booking).
+  3. `tests/regression/real-conversations.test.ts` (Konsultasi pasca-vaksin BCG/Polio & bayi 26 hari batuk pilek).
+  4. `tests/unit/slot-engine-transcript-e2e.test.ts` (Replay transkrip percakapan utuh dari customer riil).
+- **Keputusan:** Keempat file ini **DIPROTEKSI dari penghapusan** pada Phase 6.
+- **Rencana Tindak Lanjut (Sprint Berikutnya):** Jadwalkan 1 sub-task khusus untuk me-refactor assertion keempat file tersebut agar memanggil `V3AgentRunner.processMessage` secara native, lalu hapus sisa file legacy setelah 100% lulus.
+
+
 
 

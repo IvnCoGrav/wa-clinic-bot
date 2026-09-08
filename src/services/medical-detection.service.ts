@@ -1,4 +1,4 @@
-import { checkMedicalKeywords } from '../config/medical-keywords';
+import { checkMedicalKeywords, EMERGENCY_SYMPTOM_PATTERNS } from '../config/medical-keywords';
 
 export interface MedicalDetectionResult {
   isMedical: boolean;
@@ -12,6 +12,19 @@ export class MedicalDetectionService {
    * Returns severity level and detected symptom list.
    */
   static detectMedicalConcern(text: string): MedicalDetectionResult {
-    return checkMedicalKeywords(text);
+    const base = checkMedicalKeywords(text);
+    if (base.severity === 'HIGH') return base;
+    // Lightweight regex classifier parafrase darurat — jika cocok, paksa HIGH
+    for (const pattern of EMERGENCY_SYMPTOM_PATTERNS) {
+      if (pattern.test(text)) {
+        const matched = text.match(pattern)?.[0] || pattern.source;
+        return {
+          isMedical: true,
+          severity: 'HIGH',
+          detectedSymptoms: [...base.detectedSymptoms, matched.trim()],
+        };
+      }
+    }
+    return base;
   }
 }

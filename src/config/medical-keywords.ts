@@ -107,6 +107,14 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'alergi susu',
 ];
 
+export const EMERGENCY_SYMPTOM_PATTERNS: RegExp[] = [
+  /(?:gemetar|kelojotan|kaku|melotot|kejang)/i,
+  /(?:tarikan\s+(?:dinding\s+)?dada|napas\s+tersengal|sesak|cekung\s+di\s+bawah\s+iga)/i,
+  /(?:tidak\s+bangun|lemas\s+tidak\s+merespon|pingsan|tidak\s+sadar)/i,
+  /(?:bibir\s+kebiruan|tubuh\s+dingin\s+sekali|sianosis)/i,
+  /(?:darah\s+mengucur|perdarahan\s+hebat|jahitan\s+robek)/i,
+];
+
 /**
  * Helper to check text against keyword list and qualitative/quantitative patterns.
  */

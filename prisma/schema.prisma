@@ -650,6 +650,7 @@ model Tenant {
   format_value              String?          @default("Treatment = %VALUE%")
   landing_domain            String?          @default("")
   auto_send_purchase_capi   Boolean          @default(false)
+  settings                  Json?
   created_at                DateTime         @default(now())
   updated_at                DateTime         @updatedAt
 
@@ -861,6 +862,40 @@ model QuickReply {
   @@unique([tenant_id, shortcut])
   @@index([tenant_id])
   @@map("quick_replies")
+}
+
+model TenantPromptConfig {
+  id                    String   @id @default(uuid())
+  tenant_id             String   @default("default-tenant")
+  version               Int      @default(1)
+  is_active             Boolean  @default(true)
+  personality_tone      String   @db.Text
+  answering_hierarchy   String   @db.Text
+  negative_constraints String   @db.Text
+  medical_overclaim_rules String @db.Text
+  created_by            String?
+  change_summary        String?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@index([tenant_id, is_active])
+  @@map("tenant_prompt_configs")
+}
+
+model ClinicPolicy {
+  id                    String   @id @default(uuid())
+  tenant_id             String   @default("default-tenant")
+  topic                 String
+  title                 String
+  factual_summary       String   @db.Text
+  suggested_reply       String   @db.Text
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@unique([tenant_id, topic])
+  @@index([tenant_id])
+  @@map("clinic_policies")
 }
 
 

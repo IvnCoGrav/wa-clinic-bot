@@ -205,7 +205,7 @@ export interface UpsertReservationFormParams {
   treatmentCategory?: TreatmentCategory | string | null;
   treatmentDetail?: string | null;
   bookingDate?: Date | null;
-  rawText: string;
+  rawText?: string;
   purchaseValue?: number;
   babies?: BabyDetail[];
   customerName?: string;
@@ -263,6 +263,7 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
   let isNew = false;
 
   const validCategory = (treatmentCategory as TreatmentCategory) || TreatmentCategory.BABY;
+  const effectiveRawText = rawText || `[RESERVATION] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0,10) : '-'} | ${customerName || '-'} | ${babies.map(b=>b.name).join(',') || '-'}`;
 
   if (recentPending) {
     // UPDATE reservasi pending yang ada agar tidak muncul kartu dobel di queue Purchase
@@ -272,7 +273,7 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
         treatment_category: treatmentCategory ? (treatmentCategory as TreatmentCategory) : recentPending.treatment_category,
         treatment_detail: treatmentDetail !== undefined ? treatmentDetail : recentPending.treatment_detail,
         booking_date: bookingDate !== undefined ? bookingDate : recentPending.booking_date,
-        raw_text: rawText,
+        raw_text: effectiveRawText,
         purchase_value: purchaseValue !== undefined ? purchaseValue : recentPending.purchase_value,
       },
     });
@@ -299,7 +300,7 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
           treatment_category: validCategory,
           treatment_detail: treatmentDetail,
           booking_date: bookingDate,
-          raw_text: rawText,
+          raw_text: effectiveRawText,
           status: 'pending',
           purchase_value: purchaseValue,
         },

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
 import { checkMedicalKeywords } from '../config/medical-keywords';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE' | 'ADD_ON';
 
@@ -32,7 +33,21 @@ export interface ClinicServiceItem {
 
 const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
 
-const serviceCatalog: Map<string, ClinicServiceItem> = new Map();
+// Struktur: Map<tenantId, Map<serviceId, ClinicServiceItem>>
+const tenantServiceCatalog: Map<string, Map<string, ClinicServiceItem>> = new Map();
+
+/** Helper untuk mendapatkan atau membuat catalog map per-tenant */
+function getTenantCatalog(tenantId: string = DEFAULT_TENANT_ID): Map<string, ClinicServiceItem> {
+  let cat = tenantServiceCatalog.get(tenantId);
+  if (!cat) {
+    cat = new Map<string, ClinicServiceItem>();
+    tenantServiceCatalog.set(tenantId, cat);
+  }
+  return cat;
+}
+
+// Backwards-compat: alias untuk default tenant (dipakai legacy code tanpa tenantId)
+const serviceCatalog: Map<string, ClinicServiceItem> = getTenantCatalog(DEFAULT_TENANT_ID);
 
 // Default data catalog
 export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
@@ -385,29 +400,31 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   }
 ];
 
-// Inisialisasi map katalog
+// Inisialisasi map katalog (default tenant)
 export function loadServices() {
+  const catalog = getTenantCatalog(DEFAULT_TENANT_ID);
   try {
     if (fs.existsSync(SERVICES_FILE)) {
       const data = fs.readFileSync(SERVICES_FILE, 'utf-8');
       const list: ClinicServiceItem[] = JSON.parse(data);
-      serviceCatalog.clear();
-      list.forEach((item) => serviceCatalog.set(item.id, item));
+      catalog.clear();
+      list.forEach((item) => catalog.set(item.id, item));
     } else {
       fs.writeFileSync(SERVICES_FILE, JSON.stringify(DEFAULT_CLINIC_SERVICES, null, 2));
-      serviceCatalog.clear();
-      DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+      catalog.clear();
+      DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, item));
     }
   } catch (err) {
     console.error('Failed to load clinic services from file:', err);
-    serviceCatalog.clear();
-    DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+    catalog.clear();
+    DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, item));
   }
 }
 
 export function saveServices() {
   try {
-    const list = Array.from(serviceCatalog.values());
+    const catalog = getTenantCatalog(DEFAULT_TENANT_ID);
+    const list = Array.from(catalog.values());
     fs.writeFileSync(SERVICES_FILE, JSON.stringify(list, null, 2));
     return true;
   } catch (err) {
@@ -428,8 +445,10 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
       orderBy: { sort_order: 'asc' },
     });
 
+    const targetCatalog = getTenantCatalog(tenantId);
+    targetCatalog.clear(); // ✅ HANYA menghapus cache milik tenant yang bersangkutan!
+
     if (dbServices.length > 0) {
-      serviceCatalog.clear();
       dbServices.forEach((s) => {
         let bundleItemIds: string[] | undefined = undefined;
         let isAddon = s.category === 'ADD_ON';
@@ -452,7 +471,7 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           cat === 'BUNDLE' || (bundleItemIds && bundleItemIds.length >= 2) ? 'BUNDLE' :
           cat === 'ADD_ON' || isAddon ? 'ADD_ON' : 'STANDARD';
 
-        serviceCatalog.set(s.service_id, {
+        targetCatalog.set(s.service_id, {
           id: s.service_id,
           name: s.name,
           category: cat,
@@ -477,10 +496,10 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     }
 
     // Tidak ada data di DB -> seed dari file/default lalu simpan
-    const source = Array.from(serviceCatalog.values());
+    const source = Array.from(targetCatalog.values());
     if (source.length === 0) {
       console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${DEFAULT_CLINIC_SERVICES.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
-      DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+      DEFAULT_CLINIC_SERVICES.forEach((item) => targetCatalog.set(item.id, item));
     }
     await saveServicesToDb(tenantId);
   } catch (err) {
@@ -495,7 +514,8 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
 export async function saveServicesToDb(tenantId: string): Promise<boolean> {
   try {
     const { prisma } = await import('../db/client');
-    const list = Array.from(serviceCatalog.values());
+    const catalog = getTenantCatalog(tenantId);
+    const list = Array.from(catalog.values());
 
     await prisma.clinicService.deleteMany({ where: { tenant_id: tenantId } });
     await prisma.clinicService.createMany({
@@ -542,8 +562,9 @@ export class TreatmentCatalogService {
   /**
    * Mengambil semua daftar layanan/treatment yang aktif
    */
-  public getAllServices(onlyActive = true): ClinicServiceItem[] {
-    const list = Array.from(serviceCatalog.values());
+  public getAllServices(onlyActive = true, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem[] {
+    const catalog = getTenantCatalog(tenantId);
+    const list = Array.from(catalog.values());
     if (onlyActive) {
       return list.filter((s) => s.isActive);
     }
@@ -553,8 +574,8 @@ export class TreatmentCatalogService {
   /**
    * Mengambil detail layanan berdasarkan ID
    */
-  public getServiceById(id: string): ClinicServiceItem | undefined {
-    return serviceCatalog.get(id);
+  public getServiceById(id: string, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem | undefined {
+    return getTenantCatalog(tenantId).get(id);
   }
 
   /**
@@ -780,7 +801,9 @@ export class TreatmentCatalogService {
    * Menambahkan atau meng-update data layanan baru (sync ke DB per tenant)
    */
   public upsertService(service: ClinicServiceItem, tenantId: string = 'default-tenant'): ClinicServiceItem {
-    serviceCatalog.set(service.id, service);
+    getTenantCatalog(tenantId).set(service.id, service);
+    // Also sync default alias if tenant is default
+    if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.set(service.id, service);
     saveServices();
     // Fire-and-forget sinkronisasi ke DB (SaaS-ready)
     saveServicesToDb(tenantId).catch((e) => console.warn('[TREATMENT CATALOG] upsert DB sync failed:', (e as Error).message));
@@ -791,7 +814,8 @@ export class TreatmentCatalogService {
    * Menghapus layanan (sync ke DB per tenant)
    */
   public deleteService(id: string, tenantId: string = 'default-tenant'): boolean {
-    const deleted = serviceCatalog.delete(id);
+    const deleted = getTenantCatalog(tenantId).delete(id);
+    if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.delete(id);
     if (deleted) {
       saveServices();
       saveServicesToDb(tenantId).catch((e) => console.warn('[TREATMENT CATALOG] delete DB sync failed:', (e as Error).message));
@@ -900,6 +924,60 @@ export class TreatmentCatalogService {
     }
 
     return services;
+  }
+
+  /**
+   * Rekomendasi dinamis berdasarkan gejala/keluhan: cocokkan token gejala ke
+   * `${name} ${description}` seluruh layanan aktif (isActive). Skor nama +4,
+   * deskripsi +2. Filter usia bila diketahui. Nilai tertinggi menang.
+   * Zero-Code Admin: layanan baru otomatis ikut tanpa koding.
+   */
+  public recommendServiceBySymptoms(
+    symptoms: string[],
+    ageMonths?: number | null,
+    category?: TreatmentCategoryType,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): ClinicServiceItem | undefined {
+    const tokens = (symptoms || [])
+      .flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/))
+      .filter((w) => w.length > 3);
+    if (tokens.length === 0) return undefined;
+    let pool = this.getAllServices(true, tenantId);
+    if (category) pool = pool.filter((s) => s.category === category || s.category === 'BOTH');
+    if (ageMonths != null && ageMonths > 0) {
+      pool = this.filterServicesByAudience(pool, { ageMonths });
+    }
+    pool = pool.filter((s) => s.isActive);
+    if (pool.length === 0) return undefined;
+    let best: ClinicServiceItem | undefined;
+    let bestScore = 0;
+    for (const item of pool) {
+      const nameLower = item.name.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+      let score = 0;
+      for (const tok of tokens) {
+        if (nameLower.includes(tok)) score += 4;
+        else if (descLower.includes(tok)) score += 2;
+      }
+      if (score > bestScore) { bestScore = score; best = item; }
+    }
+    return bestScore > 0 ? best : undefined;
+  }
+
+  /** Paket relaksasi umum untuk bayi sehat (tanpa keluhan): ambil layanan BABY/KIDS relaksasi pertama. */
+  public getDefaultRelaxationService(category?: TreatmentCategoryType, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem | undefined {
+    let pool = this.getAllServices(true, tenantId).filter((s) => s.isActive);
+    if (category && category !== 'BABY' && category !== 'KIDS' && category !== 'BOTH') {
+      // kategori ibu → cari layanan BABY default tetap
+      pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
+    } else if (category === 'KIDS') {
+      pool = pool.filter((s) => s.category === 'KIDS' || s.category === 'BOTH');
+    } else {
+      pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
+    }
+    return pool.find((s) => s.name.toLowerCase().includes('ceria') && !s.name.toLowerCase().includes('pulih'))
+      || pool.find((s) => s.category === 'BABY')
+      || pool[0];
   }
 
   /**
