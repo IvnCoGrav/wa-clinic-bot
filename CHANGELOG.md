@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Optimization — Audit Mikro & Efisiensi Sistem Menyeluruh (Eliminasi Redundansi, Dead Code & Memory Leaks) (2026-09-08)
+
+- **Latar Belakang:** Audit skala mikro terhadap performa runtime, redundansi kode, jejak memori, dan kebersihan dependensi bot. Ditemukan residu dekomisioning V2 yang memicu 35 test crash, dependensi mati (`ssh2`, `meta-capi-param-builder-clientjs`, `@googlemaps/google-maps-services-js`), pembacaan sinkron file 111 KB berulang di 5 lokasi, serta potensi memory leak pada map in-memory tanpa batas.
+- **Tahap 1 — Dependensi & Package Bloat (`package.json`):** Hapus library tanpa import (`ssh2`, `meta-capi-param-builder-clientjs`, `@googlemaps/google-maps-services-js`); pindahkan `@types/bcrypt` dan `@types/sanitize-html` ke `devDependencies`; bersihkan 42 MB dead `node_modules` pada paket pensiun `packages/click-catcher`.
+- **Tahap 2 — Tuntaskan Dekomisioning `src/slot-engine/`:** Pindahkan `few-shot-exemplars.ts` & `gold-few-shot-exemplars.ts` langsung ke `src/v3/agent/`; pindahkan `entity-extractor.ts` ke `src/services/entity-extractor.service.ts`; isolasi tipe `ExtractedEntities` ke `src/types/nlu.ts`; hapus seluruh direktori `src/slot-engine/` (-2.100+ baris).
+- **Tahap 3 — Pembersihan Dead Code & Dead Functions (`src/`):** Hapus modul mati `price-answer.service.ts`, `location-sanitizer.ts`, `islamic-greeting.ts`, `whatsapp/client.ts`, dan controller `webhook-v3.controller.ts`; bersihkan fungsi `@deprecated` dan class `UnifiedResponseSanitizer` dari `language-sanitizer.ts`; hapus client Google Maps mati dari `geocoding.ts`.
+- **Tahap 4 — Pemulihan Test Suite (100% Green):** Hapus 30+ file test zombie V2 yang mengimpor modul yang sudah tidak ada; selaraskan ekspektasi `ad-click.test.ts` (Meta CAPI Queue decoupled) dan `production_edge_cases.test.ts` (V3 `LOCATION_CONFIRMED`); hasilkan **195 test files passed (100%), 1.575 tests passed, 0 failed**.
+- **Tahap 5 — Sentralisasi Gazetteer Single-Source of Truth (`gazetteer.ts`):** Bangun index in-memory O(1) tunggal (kelurahan, kecamatan, prefix Manukan, centroid koordinat lat/lng) yang dimuat sekali saat boot; eliminasi pembacaan sinkron `fs.readFileSync(111KB)` dari `customer.service.ts`, `calculate-delivery.tool.ts`, dan `geocoding.ts`.
+- **Tahap 6 — Hardening In-Memory Stores & Anti-Leak:** Pasang batas maksimal 1.000 entri + FIFO/TTL eviction (24h) pada `memorySessions` di `goal-tracker.ts`; pasang batas kapasitas `maxEntries = 500` pada `ResponseCacheService`; tambahkan periodic cleanup pada map login attempts.
+- **Tahap 7 — Relokasi Script Ad-Hoc & Build Optimization:** Pindahkan 32 script CLI non-runtime dari `src/scripts/` ke `scripts/` (termasuk 3.748 baris data mock `sync-export-data.ts`); perbarui script `sync:history` di `package.json`; ukuran `dist/` menyusut 24% dari 3,51 MB menjadi 2,67 MB; durasi test berkurang dari 101s menjadi 75s.
+- **Verifikasi:** `npm run typecheck` bersih, `npm run build` sukses, `npm test` 195/195 (1.575 tests) passed 100%, `eval:numeric` 86.7% pass rate.
+
 #### Fix — Defensive Admin Knowledge untuk DB skema lama tanpa kolom keywords (P2022) (2026-09-08)
 
 - **Gejala:** `GET /api/admin/knowledge/chunks` melempar `prisma:error Invalid prisma.knowledgeChunk.findMany() ... The column knowledge_chunks.keywords does not exist` sehingga dashboard tampil kosong (catch diam-diam me-return `data: []`).
