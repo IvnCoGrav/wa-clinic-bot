@@ -292,23 +292,41 @@ export class GoalTracker {
       if (toks.length === 0) return false;
       if (toks.some((t) => t.length >= 7 && !GENERIC_CLINIC_TOKENS.has(t) && text.includes(t) && tokenOwnerCount.get(t) === 1)) return true;
       const hits = toks.filter((t) => text.includes(t)).length;
-      return hits >= 2 && hits / toks.length >= 0.5;
+      if (hits >= 2 && hits / toks.length >= 0.5) return true;
+      // Fallback: filter generic tokens for ratio (e.g., "pulih ceria" vs "Pijat Bayi Pulih Ceria")
+      const filteredToks = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
+      if (filteredToks.length > 0) {
+        const filteredHits = filteredToks.filter((t) => text.includes(t)).length;
+        if (filteredHits >= 2 && filteredHits / filteredToks.length >= 0.5) return true;
+      }
+      return false;
     };
-    const pushService = (s: (typeof services)[number], scope: RecipientScope, switching = false) => {
+    const pushService = (s: (typeof services)[number], scope: RecipientScope) => {
       const price = typeof s.originalPrice === 'number' ? s.originalPrice : 0;
       const type = s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
       const category = (s.category as CartItem['category']) || (s.isAddon ? 'ADDON' : undefined);
       const recipientLabel = scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil' : undefined;
-      // Replace: PRIMARY baru menggantikan PRIMARY lama pada scope yang sama HANYA
-      // bila pesan menandakan pergantian eksplisit (ganti/pindah/batal/...).
-      if (type === 'PRIMARY' && switching) {
+      // Domain rule: Single PRIMARY per recipient (1 anak = 1 layanan utama)
+      // Jika PRIMARY baru untuk scope yang sama dan beda layanan -> replace (tanpa keyword)
+      if (type === 'PRIMARY') {
         const idx = cart.findIndex((c) => c.type === 'PRIMARY' && (c.recipientScope || 'GENERAL') === scope);
         if (idx >= 0) {
+          if (cart[idx].name.toLowerCase() === s.name.toLowerCase()) return;
           inCart.delete(keyOf(cart[idx].name, scope));
           cart[idx] = { name: s.name, price, promoPrice: typeof s.promoPrice === 'number' ? s.promoPrice : price, type, category, recipientLabel, recipientScope: scope };
           inCart.add(keyOf(s.name, scope));
           return;
         }
+      } else if (type === 'ADDON') {
+        // ADDON bersifat akumulatif, jangan replace
+        if (inCart.has(keyOf(s.name, scope))) return;
+        cart.push({
+          name: s.name, price,
+          promoPrice: typeof s.promoPrice === 'number' ? s.promoPrice : price,
+          type, category, recipientLabel, recipientScope: scope,
+        });
+        inCart.add(keyOf(s.name, scope));
+        return;
       }
       if (inCart.has(keyOf(s.name, scope))) return;
       cart.push({
@@ -318,18 +336,10 @@ export class GoalTracker {
       });
       inCart.add(keyOf(s.name, scope));
     };
-    // Sinyal pergantian eksplisit: PRIMARY baru menggantikan PRIMARY lama scope sama
-    // HANYA bila pesan menandakan switch (bukan sekadar menyebut layanan tambahan).
-    const isSwitchSignal = (text: string): boolean =>
-      text.includes('ganti') || text.includes('pindah') || text.includes('jadinya') ||
-      text.includes('bukan') || text.includes('batal') || text.includes('sebelumnya') ||
-      text.includes('yang tadi');
-    // Diproses KRONOLOGIS (tertua → terbaru) agar sinyal pergantian ("ganti ke ...")
-    // menggantikan item lama secara natural, bukan sebaliknya.
+    // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
       if (!text || GoalTracker.isDurationOnlyQuestion(text)) continue;
-      const switching = isSwitchSignal(text);
       // 1. Nama persis selalu dihitung (semua yang cocok, termasuk pesan asisten).
       const exactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
       // 2. Tanpa nama persis, parafrasa hanya mengambil SATU yang terpanjang
@@ -339,10 +349,10 @@ export class GoalTracker {
       //    asisten hanya boleh mencocokkan nama layanan resmi utuh (exactHits).
       const isAssistant = (history[i]?.role || '').toLowerCase() === 'assistant';
       const fuzzyHits = (exactHits.length === 0 && !isAssistant)
-        ? services.filter((s) => fuzzyMatches(text, s.name)).sort((a, b) => b.name.length - a.name.length).slice(0, 1)
+        ? services.filter((s) => fuzzyMatches(text, s.name)).sort((a, b) => b.name.length - a.name.length).slice(0, 2)
         : [];
       for (const s of [...exactHits, ...fuzzyHits]) {
-        pushService(s, GoalTracker.detectRecipientScope(text, s), switching);
+        pushService(s, GoalTracker.detectRecipientScope(text, s));
       }
     }
     return cart;
