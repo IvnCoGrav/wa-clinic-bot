@@ -4,8 +4,8 @@ import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 
 export class AbuseDetectionService {
-  // Ambang batas abuse — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
-  private readonly FLOOD_LIMIT = parseInt(process.env.FLOOD_LIMIT || '10', 10);
+  // Ambang batas abuse — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md) — Phase 5.3: 15 pesan / 60 detik
+  private readonly FLOOD_LIMIT = parseInt(process.env.FLOOD_LIMIT || '15', 10);
   private readonly FLOOD_WINDOW_MS = parseInt(process.env.FLOOD_WINDOW_MS || '60000', 10);
   private readonly SPAM_DUPLICATE_LIMIT = parseInt(process.env.SPAM_DUPLICATE_LIMIT || '5', 10);
 

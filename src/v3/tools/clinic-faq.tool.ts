@@ -1,6 +1,7 @@
 import { clinicConfig } from '../../config/clinic';
 import { getBrandIdentity } from '../../config/brand';
 import { TEMPLATES } from '../../config/persona';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 export type ClinicPolicyTopic =
   | 'therapist_qualification'
@@ -49,10 +50,33 @@ export const GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA = {
   }
 };
 
-export async function executeGetClinicFaq(input: GetClinicFaqInput): Promise<GetClinicFaqOutput> {
-  const { topic } = input;
-  const brand = getBrandIdentity();
+const clinicPolicyCache = new Map<string, { data: GetClinicFaqOutput; expiresAt: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
 
+export function clearClinicPolicyCache(tenantId: string, topic?: string): void {
+  if (topic) clinicPolicyCache.delete(`${tenantId}:${topic}`);
+  else {
+    for (const key of clinicPolicyCache.keys()) {
+      if (key.startsWith(`${tenantId}:`)) clinicPolicyCache.delete(key);
+    }
+  }
+}
+
+export function getStaticFallbackTopics(): GetClinicFaqOutput[] {
+  const topics: ClinicPolicyTopic[] = [
+    'therapist_qualification',
+    'payment_methods',
+    'multi_child_transport',
+    'post_vaccine_rules',
+    'homebase_and_coverage',
+    'operational_hours_and_booking',
+    'general_homecare_info',
+  ];
+  return topics.map((t) => getStaticFallbackPolicy(t));
+}
+
+function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
+  const brand = getBrandIdentity();
   switch (topic) {
     case 'therapist_qualification':
       return {
@@ -111,4 +135,38 @@ export async function executeGetClinicFaq(input: GetClinicFaqInput): Promise<Get
         suggestedReply: `Di ${brand.businessName}, kami menyediakan layanan Homecare treatment profesional di mana Bidan kami yang akan datang langsung ke rumah Bunda dengan membawa seluruh perlengkapan steril dan higienis 😊`
       };
   }
+}
+
+export async function executeGetClinicFaq(input: GetClinicFaqInput, tenantId: string = DEFAULT_TENANT_ID): Promise<GetClinicFaqOutput> {
+  const { topic } = input;
+  const cacheKey = `${tenantId}:${topic}`;
+  const cached = clinicPolicyCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  try {
+    const { prisma } = await import('../../db/client');
+    const policy = await (prisma as any).clinicPolicy.findUnique({
+      where: { tenant_id_topic: { tenant_id: tenantId, topic } },
+    });
+
+    if (policy && policy.is_active) {
+      const result: GetClinicFaqOutput = {
+        success: true,
+        topic,
+        factualSummary: policy.factual_summary,
+        suggestedReply: policy.suggested_reply,
+      };
+      clinicPolicyCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+      return result;
+    }
+  } catch (err: any) {
+    console.warn(JSON.stringify({ event: 'CLINIC_FAQ_TOOL_DB_ERROR', tenantId, topic, error: err.message, timestamp: new Date().toISOString() }));
+  }
+
+  // Fallback ke data statis bawaan jika DB belum di-seed
+  const fallback = getStaticFallbackPolicy(topic);
+  clinicPolicyCache.set(cacheKey, { data: fallback, expiresAt: Date.now() + CACHE_TTL_MS });
+  return fallback;
 }

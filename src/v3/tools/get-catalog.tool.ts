@@ -1,5 +1,6 @@
 import { treatmentCatalogService, ClinicServiceItem } from '../../services/treatment-catalog.service';
 import { TEMPLATES } from '../../config/persona';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 export interface GetCatalogInput {
   category?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
@@ -69,14 +70,14 @@ export const GET_CATALOG_TOOL_SCHEMA = {
   }
 };
 
-export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCatalogOutput> {
+export async function executeGetCatalog(input: GetCatalogInput, tenantId: string = DEFAULT_TENANT_ID): Promise<GetCatalogOutput> {
   const { category, childAgeMonths, symptoms = [], specificTreatmentName, inquirePrice } = input;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
   const showPrices = inquirePrice === true;
 
   try {
-    const allServices = treatmentCatalogService.getAllServices(true);
+    const allServices = treatmentCatalogService.getAllServices(true, tenantId);
     let filtered: ClinicServiceItem[] = [...allServices];
 
     // 1. Filter kategori
@@ -104,24 +105,9 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
       }
     }
 
-    // 4. Rekomendasi SEMANTIK DINAMIS lintas seluruh layanan aktif (Zero-Code Admin):
-    // skor kecocokan token gejala terhadap `${name} ${description}` tiap layanan.
-    // Layanan baru dari dashboard (Nasal Care, Pijat Kolik, ...) otomatis ikut
-    // tanpa perubahan kode — skor tertinggi ditandai isRecommendedForSymptoms.
-    const symptomTokens = (symptoms || [])
-      .flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/))
-      .filter((w) => w.length > 3);
-    const scoreService = (item: { name: string; description: string }): number => {
-      const nameLower = item.name.toLowerCase();
-      const descLower = (item.description || '').toLowerCase();
-      let score = 0;
-      for (const tok of symptomTokens) {
-        if (nameLower.includes(tok)) score += 4;
-        else if (descLower.includes(tok)) score += 2;
-      }
-      return score;
-    };
-
+    // 4. Rekomendasi SEMANTIK DINAMIS via service terpusat (Zero-Code Admin):
+    // satu algoritma konsisten di seluruh codebase. Skor tertinggi ditandai
+    // isRecommendedForSymptoms.
     const formattedTreatments: CatalogTreatmentDetail[] = filtered.map(item => {
       return {
         id: item.id,
@@ -135,18 +121,18 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
       };
     });
 
-    // Tandai skor tertinggi (bila ada sinyal gejala yang cocok).
-    if (symptomTokens.length > 0) {
-      let best = 0;
-      for (const t of formattedTreatments) {
-        const s = scoreService({ name: t.name, description: t.description });
-        (t as any).__score = s;
-        if (s > best) best = s;
-      }
-      if (best > 0) {
-        for (const t of formattedTreatments) {
-          if ((t as any).__score === best) t.isRecommendedForSymptoms = true;
-          delete (t as any).__score;
+    if ((symptoms || []).length > 0) {
+      const recommended = treatmentCatalogService.recommendServiceBySymptoms(
+        symptoms, childAgeMonths ?? null, category as any
+      );
+      if (recommended) {
+        const hit = formattedTreatments.find((t) => t.id === recommended.id);
+        if (hit) hit.isRecommendedForSymptoms = true;
+        else {
+          // Fallback: bila recommended tidak ada di filtered (mis. filter usia
+          // menyempitkan pool), tandai kecocokan nama terdekat di filtered.
+          const fallback = formattedTreatments.find((t) => t.name.toLowerCase() === recommended.name.toLowerCase());
+          if (fallback) fallback.isRecommendedForSymptoms = true;
         }
       }
     }
@@ -200,7 +186,7 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
       message: `Ditemukan ${formattedTreatments.length} treatment yang sesuai:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}`
     };
   } catch (error: any) {
-    console.error('[V3 TOOL CATALOG ERROR]', error);
+    console.error(JSON.stringify({ event: 'V3_TOOL_CATALOG_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
     return {
       success: false,
       treatments: [],

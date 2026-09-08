@@ -4,11 +4,9 @@ import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
 import { messageService } from '../../services/message.service';
 import { queueService } from '../../services/queue.service';
-import { typingService } from '../../services/typing.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { safeCompare } from '../../utils/auth';
 import { normalizeWahaJid, extractRealPhoneFromWahaPayload } from '../../utils/jid';
-import { V3AgentRunner } from '../agent/agent-runner';
 
 /**
  * V3 Lean Fast Ingest Webhook Handler (< 100 lines).
@@ -16,13 +14,16 @@ import { V3AgentRunner } from '../agent/agent-runner';
  */
 export async function webhookV3Routes(fastify: FastifyInstance) {
   fastify.post('/webhook/v3', async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
-    // 1. Verifikasi Keamanan Secret Token
+    // 1. Verifikasi Keamanan Secret Token (Fail-Closed)
     const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const clientSecret = (request.headers['x-webhook-secret'] || request.headers['x-waha-signature'] || '') as string;
-      if (!clientSecret || !safeCompare(clientSecret, webhookSecret)) {
-        return reply.status(401).send({ error: 'Unauthorized: Invalid secret.' });
-      }
+    if (!webhookSecret) {
+      console.error(JSON.stringify({ event: 'SECURITY_FATAL', error: 'WAHA_WEBHOOK_SECRET is not configured on server.', timestamp: new Date().toISOString() }));
+      return reply.status(500).send({ error: 'Server configuration error: Webhook secret is not defined.' });
+    }
+
+    const clientSecret = (request.headers['x-webhook-secret'] || request.headers['x-waha-signature'] || '') as string;
+    if (!clientSecret || !safeCompare(clientSecret, webhookSecret)) {
+      return reply.status(401).send({ error: 'Unauthorized: Invalid or missing secret token.' });
     }
 
     const event = request.body;
@@ -77,41 +78,22 @@ export async function webhookV3Routes(fastify: FastifyInstance) {
       return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE' });
     }
 
-    // 6. Jalankan V3 Agent Runner (Asynchronous / Non-blocking response)
-    void (async () => {
-      try {
-        const agentResult = await V3AgentRunner.processMessage({
-          tenantId: DEFAULT_TENANT_ID,
-          customerId: customer.id,
-          conversationId: conversation.id,
-          phone,
-          chatId,
-          incomingText: inboundText,
-        });
-
-        if (agentResult.shouldSendReply && agentResult.replyText) {
-          const sent = await typingService.simulateHumanReply({
-            chatId: `${phone}@c.us`,
-            incomingMessageId: waMessageId,
-            incomingText: inboundText,
-            replyText: agentResult.replyText,
-          });
-
-          if (sent.success) {
-            await messageService.logMessage({
-              tenantId: DEFAULT_TENANT_ID,
-              conversationId: conversation.id,
-              direction: 'OUTBOUND',
-              content: agentResult.replyText,
-              senderType: 'BOT',
-              senderName: 'Bot (Kala Spa V3)',
-            });
-          }
-        }
-      } catch (err: any) {
-        console.error('[V3 WEBHOOK RUNNER ERROR]', err.message);
-      }
-    })();
+    // 6. Enqueue ke queueService (throttled, sama dengan webhook utama) — DILARANG direct V3AgentRunner
+    await queueService.enqueueMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: customer.id,
+      phone,
+      incomingMessage: {
+        id: waMessageId,
+        chatId,
+        from: phone,
+        text: { body: inboundText },
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        // Preserve original payload untuk audit & PII masking
+        _rawPayload: payload,
+      } as any,
+    });
 
     return reply.status(200).send({ status: 'EVENT_PROCESSED' });
   });

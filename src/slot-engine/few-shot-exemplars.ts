@@ -155,8 +155,9 @@ const isWordTagMatch = (textLower: string, tag: string): boolean => {
  * Himpunan tag intent yang memicu prioritas skor tambahan (+5/+2)
  * pada selectRelevantExemplars. Berbasis TAG (bukan id hardcode) sehingga
  * exemplar kustom buatan admin ikut diprioritaskan secara dinamis.
+ * Default fallback bila Tenant.settings belum dikonfigurasi.
  */
-const PRIORITY_TAG_GROUPS: Record<string, string[]> = {
+const DEFAULT_PRIORITY_TAG_GROUPS: Record<string, string[]> = {
   schedule: ['ask_schedule', 'schedule', 'jadwal', 'hari'],
   price: ['ask_price', 'price', 'harga', 'tarif', 'biaya', 'ongkir'],
   symptom: ['consult_symptom', 'symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'lendir'],
@@ -164,16 +165,41 @@ const PRIORITY_TAG_GROUPS: Record<string, string[]> = {
   location: ['lokasi', 'domisili', 'alamat', 'ongkir', 'jarak', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya'],
 };
 
+const DEFAULT_DOMAIN_GENERIC_WORDS = new Set(['bayi', 'moms', 'spa', 'anak', 'ibu']);
+
+// Tenant-awareOverrides (diisi via DB Tenant.settings.priorityTagGroups / genericWords)
+const tenantPriorityGroupsCache = new Map<string, Record<string, string[]>>();
+const tenantGenericWordsCache = new Map<string, Set<string>>();
+
+/** Load override dari Tenant.settings (preferences) — fallback ke default bila belum ada */
+async function loadTenantFewShotConfig(tenantId: string): Promise<void> {
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await (prisma as any).tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    const settings: any = tenant?.settings || {};
+    if (settings.priorityTagGroups && typeof settings.priorityTagGroups === 'object') {
+      tenantPriorityGroupsCache.set(tenantId, settings.priorityTagGroups);
+    }
+    if (Array.isArray(settings.genericWords)) {
+      tenantGenericWordsCache.set(tenantId, new Set(settings.genericWords.map((w: string) => String(w).toLowerCase())));
+    }
+  } catch {}
+}
+
+function getPriorityGroupsForTenant(tenantId: string): Record<string, string[]> {
+  return tenantPriorityGroupsCache.get(tenantId) || DEFAULT_PRIORITY_TAG_GROUPS;
+}
+
+function getGenericWordsForTenant(tenantId: string): Set<string> {
+  return tenantGenericWordsCache.get(tenantId) || DEFAULT_DOMAIN_GENERIC_WORDS;
+}
+
+// Backwards-compat alias (kode lama pakai nama ini)
+const PRIORITY_TAG_GROUPS = DEFAULT_PRIORITY_TAG_GROUPS;
+const DOMAIN_GENERIC_WORDS = DEFAULT_DOMAIN_GENERIC_WORDS;
+
 const hasAnyTag = (tags: string[] | undefined, group: string[]): boolean =>
   !!tags && tags.some((t) => group.includes(t.toLowerCase()));
-
-/**
- * Kata generik domain klinik yang TIDAK boleh menjadi satu-satunya dasar
- * kecocokan exemplar (anti false-positive, misal tag "bayi" menyalakan
- * exemplar usia-minimal pada pesan "Pijat bayi sinar moksa ini gmn ya").
- * Poin dari kata generik hanya dihitung bila exemplar juga punya poin substantif.
- */
-const DOMAIN_GENERIC_WORDS = new Set(['bayi', 'moms', 'spa', 'anak', 'ibu']);
 
 export class FewShotExemplarBank {
   /**
@@ -561,6 +587,8 @@ export class FewShotExemplarBank {
     const inputLower = (customerInput || '').toLowerCase();
     const cached = tenantExemplarsCache.get(tenantId) || DEFAULT_FEW_SHOT_EXEMPLARS;
     const activeExemplars = cached.filter((e) => e.isActive !== false);
+    const priorityGroups = getPriorityGroupsForTenant(tenantId);
+    const genericWords = getGenericWordsForTenant(tenantId);
 
     const scored: Array<{ exemplar: FewShotExemplar; score: number }> = [];
 
@@ -573,7 +601,7 @@ export class FewShotExemplarBank {
       //    sub-kata seperti "flu" di dalam "fluktuasi").
       for (const tag of exTags) {
         if (inputLower && isWordTagMatch(inputLower, tag)) {
-          if (DOMAIN_GENERIC_WORDS.has(tag)) genericOnlyScore += 3;
+          if (genericWords.has(tag)) genericOnlyScore += 3;
           else score += 3;
         }
         if (extraction.intents.some((i) => i === tag || i.includes(tag))) score += 4;
@@ -582,13 +610,13 @@ export class FewShotExemplarBank {
 
       // 2. Prioritaskan jadwal jika ada mention hari/jadwal — berbasis TAG,
       //    sehingga exemplar kustom bertag jadwal ikut diprioritaskan.
-      const hasScheduleTag = hasAnyTag(exTags, PRIORITY_TAG_GROUPS.schedule);
+      const hasScheduleTag = hasAnyTag(exTags, priorityGroups.schedule);
       if (hasScheduleTag && (extraction.intents.includes('ask_schedule') || Boolean(extraction.preferredDateText))) {
         score += 5;
       }
 
       // 3. Prioritaskan harga jika ada intent ask_price.
-      if (hasAnyTag(exTags, PRIORITY_TAG_GROUPS.price) && extraction.intents.includes('ask_price')) {
+      if (hasAnyTag(exTags, priorityGroups.price) && extraction.intents.includes('ask_price')) {
         score += 5;
       }
 
@@ -596,7 +624,7 @@ export class FewShotExemplarBank {
       // (cocok kata-tag lokasi atau intent alamat) — tanpa bukti input, input netral
       // seperti "halo"/"oke" harus menghasilkan [] (tanpa suntikan salah konteks).
       const hasLocationSignal =
-        hasAnyTag(exTags, PRIORITY_TAG_GROUPS.location) &&
+        hasAnyTag(exTags, priorityGroups.location) &&
         (exTags.some((t) => inputLower && isWordTagMatch(inputLower, t)) ||
           extraction.intents.includes('provide_location') ||
           extraction.intents.includes('supplement_address'));
@@ -606,7 +634,7 @@ export class FewShotExemplarBank {
 
       // 4. Prioritaskan keluhan jika ada symptoms.
       if (
-        hasAnyTag(exTags, PRIORITY_TAG_GROUPS.symptom) &&
+        hasAnyTag(exTags, priorityGroups.symptom) &&
         (extraction.symptoms.length > 0 || extraction.intents.includes('consult_symptom'))
       ) {
         score += 5;
@@ -614,7 +642,7 @@ export class FewShotExemplarBank {
 
       // 5. Prioritaskan follow-up jika ongkir sudah pernah terkirim.
       if (
-        hasAnyTag(exTags, PRIORITY_TAG_GROUPS.treatment_continuation) &&
+        hasAnyTag(exTags, priorityGroups.treatment_continuation) &&
         slate?.isLocationConfirmed &&
         !slate.selectedTreatmentName
       ) {

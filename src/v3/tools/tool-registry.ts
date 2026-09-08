@@ -43,7 +43,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         specificTreatmentName: args.specificTreatmentName,
         inquirePrice: args.inquirePrice,
       };
-      return await executeGetCatalog(input);
+      return await executeGetCatalog(input, ctx.tenantId);
     }
 
     case 'save_reservation': {
@@ -77,7 +77,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
       const input: GetClinicFaqInput = {
         topic: args.topic,
       };
-      return await executeGetClinicFaq(input);
+      return await executeGetClinicFaq(input, ctx.tenantId);
     }
 
     case 'search_knowledge_faq': {

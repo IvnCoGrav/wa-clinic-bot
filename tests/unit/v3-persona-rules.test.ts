@@ -186,7 +186,7 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     // Panduan KONDISI A.1: bayi sehat tanpa keluhan -> Ceria, bukan Pulih Ceria
     expect(prompt).toContain('KONDISI A.1');
     expect(prompt).toContain('Pijat Bayi Ceria (Relaksasi)');
-    expect(prompt).toContain('DILARANG KERAS menyebut Pijat Bayi Pulih Ceria');
+    expect(prompt).toContain('DILARANG KERAS merekomendasikan paket terapi sakit');
   });
 
   it('Test 14: prompt memuat mandat total biaya treatment + ongkir', async () => {

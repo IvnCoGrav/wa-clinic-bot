@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "eval:numeric": "tsx tests/evals/numeric-hallucination-harness.ts",
     "seed:faq": "tsx src/cli/seed-faq.ts",
     "scrape:all": "tsx src/cli/scrape-all.ts",
     "sync:history": "tsx src/scripts/sync-waha-history.ts",
