@@ -121,7 +121,7 @@ export class HumanBackgroundEnrichmentService {
         try {
           const { geocodingService } = await import('../integrations/google-maps/geocoding');
           const { isClinicLocationQuestion } = await import('../utils/location-classifier');
-          const { EntityExtractor } = await import('../slot-engine/entity-extractor');
+          const { EntityExtractor } = await import('./entity-extractor.service');
 
           const adminLoc = parseAdminChatLocation(text);
           if (adminLoc) {
@@ -369,7 +369,7 @@ export class HumanBackgroundEnrichmentService {
         return { enriched: false, reason: 'already_has_location' };
       }
 
-      const { EntityExtractor } = await import('../slot-engine/entity-extractor');
+      const { EntityExtractor } = await import('./entity-extractor.service');
       const history = (ctx as any).history || [];
       const extraction = await EntityExtractor.extract(textForEnrich, {
         history,

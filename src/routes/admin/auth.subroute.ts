@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { safeCompare } from '../../utils/auth';
-import { getAdminEmail, loginAttemptsMap } from './stores';
+import { getAdminEmail, loginAttemptsMap, pruneLoginAttempts, LOGIN_ATTEMPTS_MAX_ENTRIES } from './stores';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import { verifyPassword } from '../../utils/bcrypt';
 import { prisma } from '../../db/client';
@@ -17,6 +17,14 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
   fastify.post('/api/admin/auth/login', async (request, reply) => {
     const ip = request.ip || '127.0.0.1';
     const now = Date.now();
+
+    // Opportunistic TTL + FIFO eviction sebelum cek rate (anti memory-leak)
+    if (loginAttemptsMap.size > LOGIN_ATTEMPTS_MAX_ENTRIES) {
+      pruneLoginAttempts();
+    } else if (Math.random() < 0.05) {
+      // Sample 5% request untuk sapu TTL tanpa overhead tiap request
+      pruneLoginAttempts();
+    }
 
     // Rate limiting check (5 attempts / min)
     let rate = loginAttemptsMap.get(ip);

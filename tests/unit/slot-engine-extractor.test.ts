@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EntityExtractor } from '../../src/slot-engine/entity-extractor';
+import { EntityExtractor } from '../../src/services/entity-extractor.service';
 import * as modelFallback from '../../src/integrations/llm/model-fallback';
 
 describe('Unified Single-Pass Semantic Extractor (Part 3)', () => {

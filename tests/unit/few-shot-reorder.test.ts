@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
-import { FewShotExemplarBank } from '../../src/slot-engine/few-shot-exemplars';
+import { FewShotExemplarBank } from '../../src/v3/agent/few-shot-exemplars';
 
 process.env.NODE_ENV = 'test';
 process.env.WAHA_WEBHOOK_SECRET = '';

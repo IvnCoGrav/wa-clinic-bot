@@ -56,38 +56,17 @@ const BROAD_REGION_RE = /^(?:rumah\s+d\s+|rumah\s+di\s+|di\s+|daerah\s+|wilayah\
 // Data-driven kecamatan matcher (toleran typo ringan, tanpa regex patchwork):
 // mengenali nama kecamatan resmi dari database gazetteer di dalam query,
 // termasuk varian salah ketik 1 huruf (misal "memganti" → "Menganti").
+// Delegates to central gazetteer service (Single Source of Truth) — no direct fs I/O.
 // ---------------------------------------------------------------------------
-import fs from 'fs';
-import path from 'path';
+import { getGazetteerKecamatanEntries } from '../../utils/gazetteer';
 
-let cachedKecamatanNames: Array<{ lower: string; orig: string }> | null = null;
 function getKecamatanNames(): Array<{ lower: string; orig: string }> {
-  if (cachedKecamatanNames) return cachedKecamatanNames;
-  const seen = new Map<string, string>();
-  try {
-    const candidates = [
-      path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-      path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-      path.resolve(__dirname, '../../config/surabaya_sidoarjo_subdistricts.json'),
-    ];
-    for (const c of candidates) {
-      if (fs.existsSync(c)) {
-        const data = JSON.parse(fs.readFileSync(c, 'utf-8'));
-        for (const item of data) {
-          const raw = String(item.Kecamatan || '').trim();
-          const lower = raw.toLowerCase();
-          if (lower.length >= 4 && !seen.has(lower)) seen.set(lower, raw);
-        }
-        break;
-      }
-    }
-  } catch (_) {}
-  cachedKecamatanNames = Array.from(seen.entries()).map(([lower, orig]) => ({ lower, orig }));
-  return cachedKecamatanNames;
+  // Filter len >=4 to match previous behavior (skip short kecamatan names)
+  return getGazetteerKecamatanEntries().filter((e) => e.lower.length >= 4);
 }
 
 export function initKecamatanGazetteerSync(): void {
-  if (cachedKecamatanNames) return;
+  // Eagerly warm central cache — no-op if already initialized
   getKecamatanNames();
 }
 initKecamatanGazetteerSync();
