@@ -1,8 +1,8 @@
-import fs from 'fs';
-import path from 'path';
+import { getGazetteerData } from './gazetteer';
 
 /**
  * Gazetteer Zipcode Resolver
+ * Thin wrapper delegating dataset loading to src/utils/gazetteer.ts (Single Source of Truth).
  * Resolusi kode pos instan berbasis in-memory index dari
  * src/config/surabaya_sidoarjo_subdistricts.json
  *
@@ -57,17 +57,11 @@ function escapeRegex(s: string): string {
 }
 
 function loadGazetteer(): GazetteerRow[] {
-  const candidates = [
-    path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-    path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-    path.resolve(__dirname, '../config/surabaya_sidoarjo_subdistricts.json'),
-    path.resolve(__dirname, '../../src/config/surabaya_sidoarjo_subdistricts.json'),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) {
-      return JSON.parse(fs.readFileSync(c, 'utf-8')) as GazetteerRow[];
-    }
-  }
+  // Delegate to central gazetteer service — single file I/O, cached
+  try {
+    const data = getGazetteerData() as GazetteerRow[];
+    if (data && data.length > 0) return data as unknown as GazetteerRow[];
+  } catch (_) {}
   return [];
 }
 

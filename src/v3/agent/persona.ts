@@ -3,7 +3,7 @@ import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { FewShotExemplarBank } from './few-shot-exemplars';
 import { getGazetteerAreas } from '../../utils/gazetteer';
-import type { ExtractedEntities } from '../../slot-engine/types';
+import type { ExtractedEntities } from '../../types/nlu';
 import { TenantPromptConfigService } from '../../services/tenant-prompt-config.service';
 
 /**

@@ -182,8 +182,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
     });
   });
 
-  describe('3. Meta CAPI Event Integration', () => {
-    it('should fire Purchase (not Lead) event to CAPI Service on reservation confirmation', async () => {
+  describe('3. Meta CAPI Event Integration (Decoupled Queue)', () => {
+    it('should NOT auto-fire Purchase on reservation confirmation (decoupled CAPI Queue - manual moderation)', async () => {
       const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
 
       // Setup a mock reservation in memory fallback
@@ -219,21 +219,21 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
       expect(response.statusCode).toBe(200);
       await new Promise((r) => setTimeout(r, 50));
 
-      // Confirm HANYA memicu Purchase (Lead dihapus dari sini — Lead hanya di MQL,
-      // InitiateCheckout di momen form reservasi dikirim).
+      // CAPI Purchase decoupled: Confirm (Tandai Lunas) HANYA mengubah status operasional
+      // menjadi confirmed — TIDAK auto-kirim Purchase. Purchase eksklusif via
+      // POST /api/admin/reservation/:id/approve-purchase (Meta Purchase Queue moderation)
+      // agar outlier value tidak otomatis terkirim ke Meta.
       const purchaseCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Purchase');
-      expect(purchaseCall).toBeDefined();
-      expect(purchaseCall[0]).toEqual(expect.objectContaining({
-        customer: mockCustomer,
-        adClick: mockCustomer.adClick,
-        customData: { source: 'ADMIN_CONFIRM' },
-      }));
+      expect(purchaseCall).toBeUndefined();
 
       const leadCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Lead');
       expect(leadCall).toBeUndefined();
+
+      // Status tetap confirmed, tapi tanpa trigger CAPI
+      expect(memoryReservations.get(resId)?.status).toBe('confirmed');
     });
 
-    it('should also fire Purchase event with value on reservation confirmation', async () => {
+    it('should NOT auto-fire Purchase with value on confirm — value resolved only on queue approval', async () => {
       const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
 
       const resId = 'res_capi_purchase';
@@ -264,18 +264,18 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Purchase event terkirim (fire-and-forget, tunggu microtask)
+      // Decoupled: tunggu microtask, pastikan TIDAK ada Purchase auto-fire (value 60000
+      // hanya di-resolve saat admin approve via Purchase Queue moderation).
       await new Promise((r) => setTimeout(r, 50));
 
-      // `.some()` bukan `.find()` — async Purchase dari test Lead sebelumnya bisa
-      // nyangkut di spy; kita cari call yg benar-benar value 60000.
       const hasPurchaseWithValue = capiSpy.mock.calls.some(
         (c: any) => c[0]?.eventName === 'Purchase' && c[0]?.value === 60000
       );
-      expect(hasPurchaseWithValue).toBe(true);
+      expect(hasPurchaseWithValue).toBe(false);
+      expect(memoryReservations.get(resId)?.status).toBe('confirmed');
     });
 
-    it('should send Purchase without value when treatment is unknown', async () => {
+    it('should NOT auto-send Purchase even without value — decoupled queue handles it', async () => {
       const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
 
       const resId = 'res_capi_purchase_novalue';
@@ -304,9 +304,11 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
       expect(response.statusCode).toBe(200);
       await new Promise((r) => setTimeout(r, 50));
 
+      // Decoupled: bahkan untuk treatment unknown, Confirm tidak auto-kirim Purchase.
+      // Purchase (dengan/ tanpa value) hanya via approve-purchase queue.
       const purchaseCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Purchase');
-      expect(purchaseCall).toBeDefined();
-      expect(purchaseCall[0].value).toBeUndefined();
+      expect(purchaseCall).toBeUndefined();
+      expect(memoryReservations.get(resId)?.status).toBe('confirmed');
     });
   });
 });

@@ -57,3 +57,47 @@ export function getAdminEmail(): string {
 }
 
 export const loginAttemptsMap = new Map<string, { count: number; resetAt: number }>();
+
+// ── Bounded + TTL eviction untuk loginAttemptsMap (anti memory-leak brute-force) ──
+export const LOGIN_ATTEMPTS_TTL_MS = 15 * 60 * 1000; // 15 menit sejak percobaan terakhir
+export const LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // sapu tiap 5 menit
+export const LOGIN_ATTEMPTS_MAX_ENTRIES = 1000; // hard cap FIFO
+
+/** Hapus entri login yang sudah kadaluarsa (>TTL) dan evict jika melebihi max. Diekspor untuk testing. */
+export function pruneLoginAttempts(
+  map: Map<string, { count: number; resetAt: number }> = loginAttemptsMap,
+  maxEntries = LOGIN_ATTEMPTS_MAX_ENTRIES,
+  ttlMs = LOGIN_ATTEMPTS_TTL_MS
+): number {
+  const now = Date.now();
+  let removed = 0;
+  for (const [key, entry] of map.entries()) {
+    // resetAt = waktu percobaan terakhir + 60 detik window; TTL dihitung dari percobaan terakhir
+    const lastAttemptMs = entry.resetAt - 60 * 1000;
+    if (now - lastAttemptMs > ttlMs) {
+      map.delete(key);
+      removed++;
+    }
+  }
+  // FIFO hard-cap: hapus tertua hingga di bawah batas
+  while (map.size > maxEntries) {
+    const oldestKey = map.keys().next().value as string | undefined;
+    if (oldestKey === undefined) break;
+    map.delete(oldestKey);
+    removed++;
+  }
+  return removed;
+}
+
+// Periodic cleanup tiap 5 menit (unref agar tidak menghalangi exit proses / test)
+const loginAttemptsCleanupTimer: NodeJS.Timeout = setInterval(() => {
+  try {
+    pruneLoginAttempts();
+  } catch (_) {}
+}, LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS);
+if ((loginAttemptsCleanupTimer as any)?.unref) (loginAttemptsCleanupTimer as any).unref();
+
+/** Untuk testing / graceful shutdown: hentikan timer periodik loginAttempts. */
+export function stopLoginAttemptsCleanupTimer(): void {
+  clearInterval(loginAttemptsCleanupTimer);
+}

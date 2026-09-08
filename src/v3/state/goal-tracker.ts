@@ -80,6 +80,45 @@ const DEFAULT_SESSION: CustomerGoalSession = {
 const conversationLocks = new Map<string, Promise<any>>();
 const memorySessions = new Map<string, CustomerGoalSession>();
 
+// ── Bounded in-memory session store (anti memory-leak) ──
+const MAX_MEMORY_SESSIONS = 1000;
+const MEMORY_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam
+const memorySessionTimestamps = new Map<string, number>();
+
+/** Helper pruning FIFO + TTL + COMPLETED. Diekspor untuk testing. */
+export function pruneMemoryMap(map: Map<string, CustomerGoalSession>, max = MAX_MEMORY_SESSIONS): void {
+  const now = Date.now();
+  // 1. Auto-cleanup: COMPLETED (booking terkonfirmasi) atau inactive >24 jam
+  for (const [key, session] of map.entries()) {
+    const ts = memorySessionTimestamps.get(key);
+    const isExpired = ts != null && now - ts > MEMORY_SESSION_TTL_MS;
+    const isCompleted = (session as CustomerGoalSession)?.booking?.isConfirmed === true;
+    if (isExpired || isCompleted) {
+      map.delete(key);
+      memorySessionTimestamps.delete(key);
+    }
+  }
+  // 2. FIFO eviction jika masih melebihi max (hapus entry tertua / first-inserted)
+  while (map.size > max) {
+    const oldestKey = map.keys().next().value as string | undefined;
+    if (oldestKey === undefined) break;
+    map.delete(oldestKey);
+    memorySessionTimestamps.delete(oldestKey);
+  }
+}
+
+/** Untuk testing / diagnostik: ukuran store & akses internal. */
+export function __getMemorySessionsMap(): Map<string, CustomerGoalSession> {
+  return memorySessions;
+}
+export function __getMemorySessionTimestampsMap(): Map<string, number> {
+  return memorySessionTimestamps;
+}
+export function __clearMemorySessions(): void {
+  memorySessions.clear();
+  memorySessionTimestamps.clear();
+}
+
 function memoryKey(conversationId: string, tenantId: string): string {
   return `${tenantId}:${conversationId}`;
 }
@@ -208,8 +247,11 @@ export class GoalTracker {
         console.warn(JSON.stringify({ event: 'GOAL_TRACKER_UPDATE_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
       }
 
-      // Selalu cache ke memory untuk fallback offline & concurrency
-      memorySessions.set(memoryKey(conversationId, tenantId), { ...merged });
+      // Selalu cache ke memory untuk fallback offline & concurrency (bounded)
+      const memKey = memoryKey(conversationId, tenantId);
+      memorySessions.set(memKey, { ...merged });
+      memorySessionTimestamps.set(memKey, Date.now());
+      pruneMemoryMap(memorySessions, MAX_MEMORY_SESSIONS);
 
       return merged;
     });
