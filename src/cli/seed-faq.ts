@@ -129,6 +129,14 @@ const faqs = [
   {
     "question": "Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?",
     "answer": "Setelah vaksin atau imunisasi (seperti BCG, Polio, DPT, dll.), si kecil sebaiknya diistirahatkan selama 2–3 hari terlebih dahulu sebelum dipijat, Bunda. Hal ini bertujuan untuk menghindari penekanan pada area bekas suntikan serta mengantisipasi reaksi pasca imunisasi (KIPI) seperti demam atau rewel. Setelah 2–3 hari dan kondisi si kecil sudah fit serta tidak demam, barulah sangat aman dan nyaman untuk dipijat oleh Bidan."
+  },
+  {
+    // SEED DB-DRIVEN (tenant-aware, bisa diedit via dashboard /api/admin/knowledge):
+    // Aturan klinis usia aterm untuk induksi alami + relaksasi bumil capek.
+    // BUKAN hardcode runtime — dibaca dinamis via knowledgeBaseService.searchRelevantChunks.
+    "question": "Panduan Usia Kehamilan untuk Pijat Induksi Alami (Induksi Massage)",
+    "answer": "Pijat induksi alami aman dan sangat dianjurkan dilakukan pada usia kehamilan cukup bulan (aterm), yaitu mulai 37-38 minggu ke atas hingga menjelang HPL. Perawatan ini membantu merangsang hormon oksitosin alami, menstimulasi titik akupresur persalinan, dan melenturkan otot panggul. Untuk ibu hamil yang juga merasakan capek, pegal seluruh tubuh, atau ketegangan otot di trimester akhir, paket Induksi Massage Fullbody (relaksasi seluruh tubuh dipadukan dengan titik induksi) merupakan pilihan yang paling tepat.",
+    "keywords": "38 weeks, 37 weeks, induksi, induksi alami, pijat induksi, capek, hamil trimester 3, aterm, cukup bulan, hpl"
   }
 ];
 

@@ -63,6 +63,24 @@ export function sanitizeQueryForFts(userQuery: string): string {
   return text;
 }
 
+/**
+ * Deteksi error skema lama: kolom `keywords` belum ter-migrasi di environment tertentu.
+ * - Postgres raw query melempar Code 42703 (`column "keywords" does not exist`, via P2010).
+ * - Prisma typed query (findMany/update) melempar P2022:
+ *   "The column `knowledge_chunks.keywords` does not exist in the current database."
+ * Jika terdeteksi, query diulang TANPA kolom keywords agar tetap berjalan
+ * (graceful degrade) alih-alih jatuh ke fallback kosong.
+ */
+export function isMissingKeywordsColumnError(error: any): boolean {
+  const msg = String((error as Error)?.message || error || '');
+  const code = String((error as any)?.code || '');
+  return (
+    /42703|P2010|P2022/i.test(msg) ||
+    /P2022/i.test(code) ||
+    (/keywords/i.test(msg) && /does not exist/i.test(msg))
+  );
+}
+
 export class KnowledgeBaseService {
   /**
    * Update a chunk directly in memory store (fallback/testing).
@@ -239,7 +257,27 @@ export class KnowledgeBaseService {
         }));
       }
     } catch (error) {
-      console.warn('[FTS QUERY FALLBACK] Postgres DB unavailable or query error, using keyword fallback search:', (error as Error).message);
+      // Defensive handling skema lama: jika kolom keywords belum ter-migrasi (42703),
+      // ulangi FTS TANPA kolom keywords agar pencarian tetap berjalan di DB lama.
+      if (isMissingKeywordsColumnError(error)) {
+        try {
+          const fallbackResults = await this.searchFtsWithoutKeywordsColumn(
+            userQuery,
+            queryToSearch,
+            cleanQuery,
+            limit,
+            tenantId
+          );
+          if (fallbackResults && fallbackResults.length > 0) return fallbackResults;
+        } catch (retryError) {
+          console.warn(
+            '[FTS QUERY FALLBACK] Retry tanpa kolom keywords gagal, lanjut ke in-memory:',
+            (retryError as Error).message
+          );
+        }
+      } else {
+        console.warn('[FTS QUERY FALLBACK] Postgres DB unavailable or query error, using keyword fallback search:', (error as Error).message);
+      }
     }
 
     // In-Memory Keyword Fallback Search — dengan Relevance Gate & skor similarity
@@ -261,6 +299,153 @@ export class KnowledgeBaseService {
       });
 
     return matches.slice(0, limit) as any;
+  }
+
+  /**
+   * FTS kompatibel skema lama (tanpa kolom `keywords`).
+   * Dipakai otomatis bila migrasi `20260907000000_add_knowledge_chunk_keywords` belum applied
+   * di environment tertentu (error 42703). Hanya mengindeks title + content.
+   */
+  private async searchFtsWithoutKeywordsColumn(
+    userQuery: string,
+    queryToSearch: string,
+    cleanQuery: string,
+    limit: number,
+    tenantId: string
+  ): Promise<KnowledgeChunkResult[]> {
+    let rawResults = await prisma.$queryRaw<any[]>`
+      SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
+             ts_rank(to_tsvector('simple', title || ' ' || content), websearch_to_tsquery('simple', ${queryToSearch})) as rank
+      FROM knowledge_chunks
+      WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || content) @@ websearch_to_tsquery('simple', ${queryToSearch})
+      ORDER BY rank DESC
+      LIMIT ${limit};
+    `;
+    if ((!rawResults || rawResults.length === 0) && cleanQuery.length > 0) {
+      const terms = cleanQuery.split(/\s+/).filter((w) => w.length > 2);
+      if (terms.length >= 1) {
+        const orQuery = terms.join(' | ');
+        const orResults = await prisma.$queryRaw<any[]>`
+          SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
+                 ts_rank(to_tsvector('simple', title || ' ' || content), to_tsquery('simple', ${orQuery})) as rank
+          FROM knowledge_chunks
+          WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || content) @@ to_tsquery('simple', ${orQuery})
+          ORDER BY rank DESC
+          LIMIT ${limit};
+        `;
+        rawResults = (orResults || []).slice(0, limit);
+      }
+    }
+    if (!rawResults || rawResults.length === 0) return [];
+    return rawResults.map((r) => ({
+      id: r.id,
+      tenantId: r.tenantId,
+      sourceType: r.sourceType,
+      title: r.title,
+      content: r.content,
+      keywords: null,
+      documentName: r.documentName,
+      similarity: typeof r.rank === 'number' ? r.rank : null,
+      score: typeof r.rank === 'number' ? r.rank : null,
+      rank: typeof r.rank === 'number' ? r.rank : null,
+    }));
+  }
+
+  /**
+   * Upsert generik satu chunk knowledge per tenant berdasarkan kecocokan judul.
+   * Sepenuhnya data-driven (tanpa hardcode bisnis di service): seluruh isi title/content/keywords
+   * berasal dari parameter (seed/script/dashboard), sehingga artikel klinis bisa diedit per tenant
+   * kapan saja tanpa menyentuh kode. Fallback ke in-memory store saat DB offline (unit test).
+   */
+  public async upsertChunk(params: {
+    tenantId: string;
+    title: string;
+    content: string;
+    keywords?: string | null;
+    sourceType?: SourceType;
+    documentName?: string | null;
+  }): Promise<{ id: string; created: boolean }> {
+    const title = (params.title || '').trim();
+    const content = (params.content || '').trim();
+    if (!title || !content) throw new Error('upsertChunk membutuhkan title & content.');
+    const sourceType = params.sourceType || FAQ_SOURCE_TYPE;
+    const keywords = typeof params.keywords === 'string' && params.keywords.trim() ? params.keywords.trim() : null;
+    try {
+      const existing = await prisma.knowledgeChunk.findFirst({
+        where: { tenant_id: params.tenantId, title },
+      });
+      if (existing) {
+        try {
+          await (prisma.knowledgeChunk.update as any)({
+            where: { id: existing.id },
+            data: {
+              content,
+              ...(keywords !== null ? { keywords } : {}),
+              ...(params.documentName ? { document_name: params.documentName } : {}),
+            },
+          });
+        } catch (updateError) {
+          // Skema lama tanpa kolom keywords: update ulang tanpa keywords.
+          if (isMissingKeywordsColumnError(updateError)) {
+            await (prisma.knowledgeChunk.update as any)({
+              where: { id: existing.id },
+              data: { content },
+            });
+          } else {
+            throw updateError;
+          }
+        }
+        return { id: existing.id, created: false };
+      }
+      try {
+        const created = await prisma.knowledgeChunk.create({
+          data: {
+            tenant_id: params.tenantId,
+            source_type: sourceType,
+            title,
+            content,
+            keywords,
+            ...(params.documentName ? { document_name: params.documentName } : {}),
+          },
+        });
+        return { id: created.id, created: true };
+      } catch (createError) {
+        // Skema lama tanpa kolom keywords: buat ulang tanpa keywords.
+        if (isMissingKeywordsColumnError(createError)) {
+          const created = await prisma.knowledgeChunk.create({
+            data: {
+              tenant_id: params.tenantId,
+              source_type: sourceType,
+              title,
+              content,
+            },
+          } as any);
+          return { id: (created as any).id, created: true };
+        }
+        throw createError;
+      }
+    } catch (error) {
+      // Fallback in-memory (offline/test): upsert berdasarkan title + tenant.
+      const idx = memoryKnowledgeChunks.findIndex(
+        (c) => c.tenantId === params.tenantId && c.title.toLowerCase() === title.toLowerCase()
+      );
+      if (idx !== -1) {
+        memoryKnowledgeChunks[idx].content = content;
+        if (keywords !== null) memoryKnowledgeChunks[idx].keywords = keywords;
+        return { id: memoryKnowledgeChunks[idx].id, created: false };
+      }
+      const id = `chunk_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      memoryKnowledgeChunks.push({
+        id,
+        tenantId: params.tenantId,
+        sourceType,
+        title,
+        content,
+        keywords,
+        documentName: params.documentName || null,
+      });
+      return { id, created: true };
+    }
   }
 
   /**
@@ -343,9 +528,27 @@ export class KnowledgeBaseService {
 
     let chunks: KnowledgeChunkResult[] = [];
     try {
-      const dbChunks = await prisma.knowledgeChunk.findMany({
-        where: { tenant_id: tenantId },
-      });
+      let dbChunks;
+      try {
+        dbChunks = await prisma.knowledgeChunk.findMany({
+          where: { tenant_id: tenantId },
+        });
+      } catch (findErr) {
+        // Skema lama tanpa kolom keywords (P2022): baca ulang tanpa kolom tersebut.
+        if (!isMissingKeywordsColumnError(findErr)) throw findErr;
+        dbChunks = await prisma.knowledgeChunk.findMany({
+          where: { tenant_id: tenantId },
+          select: {
+            id: true,
+            tenant_id: true,
+            source_type: true,
+            title: true,
+            content: true,
+            document_name: true,
+            created_at: true,
+          },
+        });
+      }
       chunks = dbChunks.map((c) => ({
         id: c.id,
         tenantId: c.tenant_id,
