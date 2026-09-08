@@ -1,15 +1,18 @@
-import { Client, AddressComponent } from '@googlemaps/google-maps-services-js';
 import axios from 'axios';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
 import { getStringSimilarity } from '../../utils/similarity';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
-import { escapeRegex } from '../../utils/gazetteer';
+import { escapeRegex, getGazetteerData, resolvePrefixMatches } from '../../utils/gazetteer';
 dotenv.config();
+
+interface AddressComponent {
+  long_name: string;
+  short_name: string;
+  types: string[];
+}
 
 const INDONESIAN_STOP_WORDS = new Set([
   'saya', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'anda', 'bunda', 'bund', 'kak', 'kakak', 'min', 'admin', 'sis', 'gan', 'mbak', 'mas', 'ya', 'ampun', 'elah', 'yaelah', 'yaampun', 'kok', 'gitu', 'sih', 'dong', 'saja', 'aja', 'mahal', 'murah', 'ongkir', 'ongkirnya', 'tarif', 'tarifnya', 'biaya', 'biayanya', 'ongkos', 'ongkosnya', 'harga', 'harganya', 'berapa', 'berapaan', 'kena', 'hitung', 'itung', 'cek', 'info', 'tanya', 'lokasi', 'alamat', 'rumah', 'jalan', 'gang', 'no', 'nomor', 'rt', 'rw', 'kelurahan', 'kecamatan', 'kabupaten', 'kota', 'desa', 'dusun', 'provinsi', 'homecare', 'spa', 'treatment', 'massage', 'pijat', 'booking', 'reservasi', 'jadwal', 'hari', 'tanggal', 'bulan', 'tahun', 'jam', 'waktu', 'bisa', 'mau', 'ingin', 'akan', 'sudah', 'belum', 'tidak', 'bukan', 'ada', 'tidakada', 'gratis', 'free', 'promo', 'diskon', 'banget', 'sangat', 'sekali', 'itu', 'ini', 'yang', 'dari', 'ke', 'di', 'pada', 'untuk', 'dengan', 'atau', 'dan', 'adalah', 'seperti', 'kalau', 'kalo', 'jika', 'bila', 'karena', 'sebab', 'tetapi', 'tapi', 'namun', 'melayani', 'panggil', 'datang', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'hola', 'hei', 'helo', 'assalamualaikum', 'salam', 'permisi', 'terima', 'kasih', 'terimakasih', 'thank', 'you'
@@ -30,27 +33,9 @@ export interface ResolvedLocation {
   matchedSpan?: string;
 }
 
-function getSubdistrictsFilePath(): string {
-  const candidates = [
-    path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-    path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-    path.resolve(__dirname, '../../config/surabaya_sidoarjo_subdistricts.json'),
-    path.resolve(__dirname, '../../../src/config/surabaya_sidoarjo_subdistricts.json'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return candidates[0];
-}
-
-const googleMapsClient = new Client({});
-
 /**
  * Service untuk memproses input lokasi teks dari customer.
- * Mengintegrasikan Google Maps Geocoding API sebagai default provider,
- * dengan mock local database fallback untuk testing offline.
+ * LOCAL-FIRST: gazetteer + LLM fallback, Google Maps client dihapus (dead code).
  */
 export class GeocodingService {
   private apiKey: string;
@@ -61,9 +46,7 @@ export class GeocodingService {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
 
     this.geocodeBreaker = new CircuitBreaker(
-      async (params: any) => googleMapsClient.geocode(params),
-      // Cast to any: fallback returns ResolvedLocation which callers detect via 'isPrecise' in response.
-      // This avoids needing to fake GeocodeResponseData shape while preserving runtime correctness.
+      async (params: any) => { throw new Error('Google Maps client removed - use gazetteer/LLM'); },
       async (params: any): Promise<any> => {
         const locationText = params.params.address.replace(', Surabaya', '');
         return this.mockGeocodeText(locationText);
@@ -72,7 +55,7 @@ export class GeocodingService {
     );
 
     this.reverseGeocodeBreaker = new CircuitBreaker(
-      async (params: any) => googleMapsClient.reverseGeocode(params),
+      async (params: any) => { throw new Error('Google Maps client removed'); },
       async (params: any): Promise<any> => {
         const { lat, lng } = params.params.latlng;
         return this.mockReverseGeocode(lat, lng);
@@ -563,19 +546,15 @@ export class GeocodingService {
     // TAPI: kalau user sebut "kelurahan/desa/kel/ds" (di mana pun), jangan ditolak.
     const hasExplicitKelurahanKeyword = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel ') || lower.includes('kelurahan ') || lower.includes('ds ');
 
-    // Kumpulkan daftar nama kecamatan & kota luas langsung dari gazetteer,
-    // bukan hardcoded — supaya semua kecamatan di data ter-cover.
+    // Kumpulkan daftar nama kecamatan & kota luas langsung dari gazetteer (central cache)
     let kecamatanMap = new Map<string, any[]>();
     try {
-      const filePathForGate = getSubdistrictsFilePath();
-      if (fs.existsSync(filePathForGate)) {
-        const dataForGate = JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'));
-        for (const entry of dataForGate) {
-          const kecKey = entry.Kecamatan.toLowerCase().replace(/\s+/g, '');
-          const existing = kecamatanMap.get(kecKey) || [];
-          existing.push(entry);
-          kecamatanMap.set(kecKey, existing);
-        }
+      const dataForGate = getGazetteerData();
+      for (const entry of dataForGate) {
+        const kecKey = entry.Kecamatan.toLowerCase().replace(/\s+/g, '');
+        const existing = kecamatanMap.get(kecKey) || [];
+        existing.push(entry);
+        kecamatanMap.set(kecKey, existing);
       }
     } catch (e) {
       // ignore — fallback ke list statis
@@ -595,22 +574,19 @@ export class GeocodingService {
     let isExactKelurahanName = false;
     let hasAnyKelurahanInText = false;
     try {
-      const filePathForGate = getSubdistrictsFilePath();
-      if (fs.existsSync(filePathForGate)) {
-        const dataForGate = JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'));
-        isExactKelurahanName = dataForGate.some((entry: any) => {
-          const kelKey = entry.Kelurahan_Desa.toLowerCase().replace(/\s+/g, '');
-          return kelKey === cleanNorm;
-        });
+      const dataForGate = getGazetteerData();
+      isExactKelurahanName = dataForGate.some((entry: any) => {
+        const kelKey = entry.Kelurahan_Desa.toLowerCase().replace(/\s+/g, '');
+        return kelKey === cleanNorm;
+      });
 
-        hasAnyKelurahanInText = dataForGate.some((entry: any) => {
-          const kelLower = entry.Kelurahan_Desa.toLowerCase().trim();
-          if (kelLower.length < 3) return false;
-          if (['sidoarjo', 'surabaya', 'kota', 'desa'].includes(kelLower)) return false;
-          const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
-          return reg.test(lower);
-        });
-      }
+      hasAnyKelurahanInText = dataForGate.some((entry: any) => {
+        const kelLower = entry.Kelurahan_Desa.toLowerCase().trim();
+        if (kelLower.length < 3) return false;
+        if (['sidoarjo', 'surabaya', 'kota', 'desa'].includes(kelLower)) return false;
+        const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
+        return reg.test(lower);
+      });
     } catch (_) {}
 
     // Cek apakah cleanText/lowerNorm mencocoki nama kecamatan luas di database (termasuk fuzzy typo)
@@ -684,11 +660,10 @@ export class GeocodingService {
       }
     }
 
-    // 1. Coba cocokkan dengan local subdistricts JSON database
+    // 1. Coba cocokkan dengan local gazetteer (central cache)
     try {
-      const filePath = getSubdistrictsFilePath();
-      if (fs.existsSync(filePath)) {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const data = getGazetteerData();
+      if (data.length > 0) {
         
         // --- PRIORITAS: PREFIX COLLOQUIAL INDEX (Lapis 1) ---
         // Customer bilang "Manukan" → match Manukan Kulon/Wetan via prefix index
@@ -699,7 +674,6 @@ export class GeocodingService {
           const isSinglePrefixCandidate = wordsOnly && !wordsOnly.includes(' ') && wordsOnly.length >= 3;
           if (isSinglePrefixCandidate) {
             try {
-              const { resolvePrefixMatches } = await import('../../utils/gazetteer');
               const prefixKelurahanList = resolvePrefixMatches(wordsOnly);
               if (prefixKelurahanList && prefixKelurahanList.length > 0) {
                 const prefixEntries = data.filter((d: any) => prefixKelurahanList.includes(d.Kelurahan_Desa));
@@ -1208,12 +1182,8 @@ OUTPUT JSON:
     kota?: string | null
   ): ResolvedLocation | null {
     try {
-      const filePath = getSubdistrictsFilePath();
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const data = getGazetteerData();
+      if (data.length === 0) return null;
 
       // Cari berdasarkan kelurahan + kecamatan
       if (kelurahan) {

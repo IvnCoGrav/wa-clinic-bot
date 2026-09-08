@@ -1645,30 +1645,11 @@ export class CustomerService {
           if (geo.isPrecise && geo.lat != null && geo.lng != null) {
             chosen = { lat: geo.lat, lng: geo.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `geocoding ${query}` };
           } else {
-            // fallback gazetteer via local file centroid
-            const { resolveZipcode } = await import('../utils/gazetteer-zipcode-resolver');
-            // Try to get centroid from surabaya_sidoarjo_subdistricts.json directly
+            // fallback gazetteer centroid via central gazetteer service (O(1) cached lookup)
             try {
-              const fs = await import('fs');
-              const path = await import('path');
-              const candidates = [
-                path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-                path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-              ];
-              let coords: { lat: number; lng: number } | null = null;
-              for (const p of candidates) {
-                if (fs.existsSync(p)) {
-                  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
-                  const qLower = query.toLowerCase();
-                  const hit = data.find((d: any) => qLower.includes(d.Kelurahan_Desa.toLowerCase()) || qLower.includes(d.Kecamatan.toLowerCase()));
-                  if (hit && hit.Koordinat) {
-                    const [la, ln] = hit.Koordinat.split(',').map((s: string) => parseFloat(s.trim()));
-                    if (Number.isFinite(la) && Number.isFinite(ln)) coords = { lat: la, lng: ln };
-                    break;
-                  }
-                }
-              }
-              if (coords) chosen = { lat: coords.lat, lng: coords.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `gazetteer centroid ${query}` };
+              const { getGazetteerCoordinates } = await import('../utils/gazetteer');
+              const hit = getGazetteerCoordinates(query);
+              if (hit) chosen = { lat: hit.lat, lng: hit.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `gazetteer centroid ${query}` };
             } catch {}
             if (!chosen) return { success: false, error: `Geocoding tidak presisi untuk "${query}"` };
           }

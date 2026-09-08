@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/slot-engine/few-shot-exemplars';
-import { ExtractedEntities, CustomerSlate } from '../../src/slot-engine/types';
+import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/v3/agent/few-shot-exemplars';
+import { ExtractedEntities, CustomerSlate } from '../../src/types/nlu';
 import { ConversationState } from '@prisma/client';
 
 describe('FewShotExemplarBank (Positive Exemplar Selection)', () => {

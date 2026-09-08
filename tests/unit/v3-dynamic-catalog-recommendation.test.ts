@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeGetCatalog } from '../../src/v3/tools/get-catalog.tool';
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
-import { FewShotExemplarBank } from '../../src/slot-engine/few-shot-exemplars';
+import { FewShotExemplarBank } from '../../src/v3/agent/few-shot-exemplars';
 
 /**
  * Rekomendasi katalog 100% data-driven (Zero-Code Admin):

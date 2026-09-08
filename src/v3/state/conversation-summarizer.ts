@@ -1,6 +1,6 @@
 import { CustomerGoalSession } from './goal-tracker';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
-import type { ExtractedEntities } from '../../slot-engine/types';
+import type { ExtractedEntities } from '../../types/nlu';
 
 export interface V3SummaryOptions {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;

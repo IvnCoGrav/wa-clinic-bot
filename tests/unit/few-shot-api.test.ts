@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
-import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/slot-engine/few-shot-exemplars';
+import { FewShotExemplarBank, DEFAULT_FEW_SHOT_EXEMPLARS } from '../../src/v3/agent/few-shot-exemplars';
 
 // Test API butuh mode non-production agar buildApp() tidak melempar
 // "WAHA_WEBHOOK_SECRET must be defined" — setup.ts global sengaja blank
