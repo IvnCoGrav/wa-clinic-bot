@@ -1318,12 +1318,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   return createPortal(
     <div
       data-modal-active="true"
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
       onClick={onClose}
       style={{ touchAction: 'pan-y' }}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-3xl p-4 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
+        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-none sm:rounded-3xl p-3.5 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: 'pan-y' }}
       >
@@ -1331,13 +1331,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         <button
           data-modal-close="true"
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+          className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-3.5 sm:right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
 
-        {/* Modal Header */}
-        <div className="mb-4 pr-6">
+        {/* Modal Header — safe-area Notch */}
+        <div className="mb-4 pr-6 pt-[calc(0.25rem+env(safe-area-inset-top,0px))] sm:pt-0">
           <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
             <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
             <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
@@ -1374,7 +1374,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         )}
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' as any }}>
           {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky) */}
           {hasDraft && (
             <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
@@ -2300,8 +2300,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             />
           </div>
 
-          {/* Footer Actions */}
-          <div className="pt-3 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between">
+          {/* Footer Actions — safe-area Home Bar */}
+          <div className="pt-3 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between">
             <button
               type="button"
               onClick={saveDraftManually}
