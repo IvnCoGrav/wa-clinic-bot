@@ -39,6 +39,8 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
       const input: GetCatalogInput = {
         category: args.category,
         childAgeMonths: args.childAgeMonths,
+        gestationalWeeks: args.gestationalWeeks,
+        momStage: args.momStage,
         symptoms: args.symptoms,
         specificTreatmentName: args.specificTreatmentName,
         inquirePrice: args.inquirePrice,
@@ -52,11 +54,18 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         chatId: ctx.chatId,
         customerName: args.customerName,
         treatmentName: args.treatmentName,
+        additionalTreatments: args.additionalTreatments,
         bookingDate: args.bookingDate,
         bookingTime: args.bookingTime,
         childName: args.childName,
         childAgeMonths: args.childAgeMonths,
+        children: args.children,
+        gestationalWeeks: args.gestationalWeeks,
+        momStage: args.momStage,
+        momNotes: args.momNotes,
         notes: args.notes,
+        address: args.address,
+        conversationId: ctx.conversationId,
         tenantId: ctx.tenantId,
       };
       return await executeSaveReservation(input);

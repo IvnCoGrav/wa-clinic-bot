@@ -48,9 +48,85 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
   }
 };
 
-const OUTSIDE_CITIES_RE = /\b(malang|jakarta|bandung|semarang|yogyakarta|jogja|bali|denpasar|kediri|blitar|madiun|probolinggo|pasuruan|jember|banyuwangi|bojonegoro|tuban|lamongan|ngawi|magetan|ponorogo|pacitan|trenggalek|tulungagung|lumajang|bondowoso|situbondo)\b/i;
+// ---------------------------------------------------------------------------
+// Validasi batas & wilayah luas — data-driven tanpa regex hafalan (Pilar 5):
+// - Daftar kota luar sebagai DATA (bukan regex); keputusan final tetap berbasis
+//   jarak koordinat riil (distanceKm > 30) + kota hasil geocoding hierarkis.
+// - Wilayah luas dicek via pencocokan token includes terhadap gazetteer/kota,
+//   bukan regex kaku.
+// ---------------------------------------------------------------------------
+const OUTSIDE_CITY_NAMES = [
+  'malang', 'jakarta', 'bandung', 'semarang', 'yogyakarta', 'jogja', 'bali', 'denpasar',
+  'kediri', 'blitar', 'madiun', 'probolinggo', 'pasuruan', 'jember', 'banyuwangi',
+  'bojonegoro', 'tuban', 'lamongan', 'ngawi', 'magetan', 'ponorogo', 'pacitan',
+  'trenggalek', 'tulungagung', 'lumajang', 'bondowoso', 'situbondo', 'medan',
+];
 
-const BROAD_REGION_RE = /^(?:rumah\s+d\s+|rumah\s+di\s+|di\s+|daerah\s+|wilayah\s+)?(?:surabaya\s+(?:barat|timur|selatan|utara|pusat)|surabaya|sidoarjo|gresik)$/i;
+/** Sinyal awal kota luar via includes data-driven (bukan regex). */
+function textMentionsOutsideCity(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return false;
+  return OUTSIDE_CITY_NAMES.some((c) => lower.includes(c));
+}
+
+/** Kota hasil geocoding di luar hierarki cakupan homecare (Surabaya/Sidoarjo/Gresik). */
+function isOutsideCoverageKota(kota: string | undefined): boolean {
+  const lower = (kota || '').toLowerCase();
+  if (!lower) return false;
+  const inside = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda', 'jawa timur'];
+  if (inside.some((k) => lower.includes(k))) return false;
+  return textMentionsOutsideCity(lower);
+}
+
+const COVERAGE_CITY_NAMES = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda'];
+const CITY_DIRECTION_WORDS = ['barat', 'timur', 'selatan', 'utara', 'pusat'];
+const BROAD_PREFIXES = ['rumah d ', 'rumah di ', 'daerah ', 'wilayah ', 'di ', 'ke ', 'kecamatan ', 'kec ', 'kota '];
+
+/** Normalisasi ringan tanpa regex: lowercase + trim + rapikan spasi ganda. */
+function normalizeRegionQuery(text: string): string {
+  let s = (text || '').toLowerCase().trim();
+  let collapsed = '';
+  let prevSpace = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const isSpace = ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
+    if (isSpace) {
+      if (!prevSpace) collapsed += ' ';
+      prevSpace = true;
+    } else {
+      collapsed += ch;
+      prevSpace = false;
+    }
+  }
+  return collapsed.trim();
+}
+
+/**
+ * Deteksi wilayah terlalu luas secara data-driven (pengganti BROAD_REGION_RE):
+ * query yang setelah dikupas prefix-nya hanya tersisa nama kota/kabupaten besar
+ * ("surabaya", "sidoarjo", "gresik") atau kota + arah ("surabaya barat").
+ */
+function isBroadRegionQuery(text: string): boolean {
+  let s = normalizeRegionQuery(text);
+  if (!s) return false;
+  let stripped = true;
+  while (stripped) {
+    stripped = false;
+    for (const p of BROAD_PREFIXES) {
+      if (s.startsWith(p)) {
+        s = s.slice(p.length).trim();
+        stripped = true;
+        break;
+      }
+    }
+  }
+  if (COVERAGE_CITY_NAMES.includes(s)) return true;
+  const parts = s.split(' ').filter((t) => t.length > 0);
+  if (parts.length === 2 && COVERAGE_CITY_NAMES.includes(parts[0]) && CITY_DIRECTION_WORDS.includes(parts[1])) {
+    return true;
+  }
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // Data-driven kecamatan matcher (toleran typo ringan, tanpa regex patchwork):
@@ -103,9 +179,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
   const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName } = input;
   const compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
 
-  // Fast check: Jika customer secara sadar menyebut kota di luar jangkauan (misal Malang, Jakarta)
-  const isExplicitOutsideCity = OUTSIDE_CITIES_RE.test(locationText);
-  
+  // Sinyal awal kota luar (data-driven includes, bukan regex hafalan).
+  // Keputusan final tetap berbasis jarak koordinat riil + hierarki kota geocoding.
+  const isExplicitOutsideCity = textMentionsOutsideCity(locationText);
+
   if (!locationText || locationText.trim().length < 2) {
     return {
       success: false,
@@ -116,7 +193,8 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
   }
 
   // 1. Cek Wilayah Terlalu Luas (Surabaya Barat, Surabaya Timur, Sidoarjo, dll.)
-  if (BROAD_REGION_RE.test(compositeQuery.trim()) || BROAD_REGION_RE.test(locationText.trim())) {
+  // Data-driven via gazetteer level kota (pengganti BROAD_REGION_RE).
+  if (isBroadRegionQuery(compositeQuery) || isBroadRegionQuery(locationText)) {
     return {
       success: false,
       isPrecise: false,
@@ -220,7 +298,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     const distanceKm = deliveryResult.distanceKm;
     const ongkirNormal = deliveryResult.normalPrice;
     const ongkirPromo = deliveryResult.ongkir;
-    const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30 || isExplicitOutsideCity;
+    // Hierarki batas jangkauan: jarak riil > 30 km ATAU kota administratif hasil
+    // geocoding di luar Surabaya/Sidoarjo/Gresik. Sinyal mention kota luar hanya
+    // dipakai bila geocoding tidak mengembalikan kota pembanding.
+    const kotaOutside = isOutsideCoverageKota(resolved.kota);
+    const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30 || kotaOutside
+      || (isExplicitOutsideCity && !resolved.kota);
 
     const suggestedTemplateReply = isOutOfCoverage
       ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm: 30 })

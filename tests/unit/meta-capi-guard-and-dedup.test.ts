@@ -99,7 +99,8 @@ describe('Meta CAPI Guard & Reservation Auto-Deduplication Tests', () => {
     };
 
     // Form 1: no existing pending record -> create new
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    // (Kanal kanonis: 1x findFirst recentPending + 1x create; tanpa findMany bila tanpa bookingDate.)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null);
     vi.mocked(prisma.reservation.create).mockResolvedValueOnce(pendingRecord);
 
     const r1 = await upsertReservationForm({

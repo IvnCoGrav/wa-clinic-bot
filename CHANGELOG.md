@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Redesain Fondasional — Siklus Hidup Reservasi & Integritas Transaksi (2026-09-09)
+
+- **Latar Belakang:** Audit 6 titik mutasi reservasi menemukan 5 akar masalah: fragmentasi domain (6 entry point tanpa standar), tanpa validasi konflik jadwal di backend, dedup naif berbasis `created_at` 24 jam (rekam yatim tetap aktif), parser keuangan global + heuristik `angka ≤500 → ×1000` yang mengkorupsi `Usia >4-6 th` menjadi Rp 46.000, dan penimpaan buta `purchase_value` resmi (Rp 160.000 → Rp 46.000) oleh purchase detection.
+- **Domain Service Kanonis (`src/services/reservation-core.service.ts`, baru):** Single Source of Truth semua mutasi — Customer Conflict Guard + Staff Collision Guard (overlap interval + buffer 20 mnt); channel-aware (`ADMIN_PANEL` → HTTP 409 `DUPLICATE_BOOKING`/`STAFF_COLLISION` kecuali `force:true` + audit `CREATE_RESERVATION_FORCE_OVERRIDE`; `BOT/WEBHOOK/AGENT` → idempotent merge + auto-konsolidasi duplikat ke `cancelled`); lifecycle terstandarisasi (anak, kontak, follow-up bila `confirmed`). Endpoint admin (`parse`, `quick-hold`, manual create) didelegasikan + dukung `force`; `machine.ts`, `save-reservation.tool.ts` (→ `AGENT`) dimigrasi; `upsertReservationForm` jadi wrapper deprecated → core.
+- **Parser Keuangan (`conversation-transaction-extractor.ts`):** isolasi blok pembayaran (cari SETELAH penanda `Payment:/Pembayaran:/Rincian Biaya/Tagihan`); filter token non-mata-uang (`th/tahun/usia/…` tanpa `rp/rb/k` → 0); hapus pelipatgandaan `≤500`; invarian `Total == Treatment + Ongkir − Promo` + auto-rekonsiliasi (`[PAYMENT PARSER RECONCILED]`).
+- **Purchase Detection:** pencocokan `booking_date` dari teks (fallback `created_at desc`) + downside guard (nilai parser lebih kecil dari nilai resmi → pertahankan resmi, tanpa verifikasi invarian).
+- **Dashboard (`CreateReservationModal.tsx`):** banner pre-flight bila customer sudah punya reservasi aktif di tanggal tsb + dialog 409 `[Batal & Buka Jadwal Existing | Tetap Simpan Baru (Force)]` (state React, tanpa `window.confirm/alert`).
+- **Data live (menunggu verifikasi 2-langkah):** script `scripts/cleanup-bunda-bella-duplicates.sql` — cancel `7a6e494a…`, restore `bbbde4bd…` → 160000 + SELECT verifikasi.
+- **Verifikasi:** `npm run build` bersih; `tsc --noEmit` dashboard bersih; test parser 16/16, core 6/6, purchase 19/19 hijau; full suite 1551 passed, 2 failed pre-existing (`live-chat-reply suggest-reply`, `robustness 5-min timeout` — terverifikasi gagal juga di baseline).
+
 #### Optimization — Audit Mikro & Efisiensi Sistem Menyeluruh (Eliminasi Redundansi, Dead Code & Memory Leaks) (2026-09-08)
 
 - **Latar Belakang:** Audit skala mikro terhadap performa runtime, redundansi kode, jejak memori, dan kebersihan dependensi bot. Ditemukan residu dekomisioning V2 yang memicu 35 test crash, dependensi mati (`ssh2`, `meta-capi-param-builder-clientjs`, `@googlemaps/google-maps-services-js`), pembacaan sinkron file 111 KB berulang di 5 lokasi, serta potensi memory leak pada map in-memory tanpa batas.

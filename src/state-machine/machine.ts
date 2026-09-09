@@ -295,30 +295,22 @@ export class ConversationStateMachine {
       if (parseResult.success && parseResult.reservation) {
         const parsed = parseResult.reservation;
         try {
-          const { prisma } = await import('../db/client');
-          const reservation = await prisma.reservation.create({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customer.id,
-              treatment_category: parsed.treatmentCategory,
-              treatment_detail: parsed.treatmentDetail,
-              booking_date: parsed.bookingDate,
-              raw_text: incomingText,
-              status: 'pending',
-            },
-          });
-
-          const { reservationLifecycleService } = await import('../services/reservation-lifecycle.service');
-          await reservationLifecycleService.onReservationCreated({
-            customerId: customer.id,
-            reservationId: reservation.id,
+          const { reservationCoreService } = await import('../services/reservation-core.service');
+          await reservationCoreService.saveReservation({
             tenantId,
+            customerId: customer.id,
             chatId: incomingMessage.chatId || `${customer.phone}@c.us`,
+            bookingDate: parsed.bookingDate,
+            treatmentCategory: parsed.treatmentCategory,
+            treatmentDetail: parsed.treatmentDetail,
+            rawText: incomingText,
             babies: parsed.babies || [],
             customerName: parsed.name,
             kecamatan: parsed.kec,
             kota: parsed.kota,
             kelurahan: parsed.address,
+            source: 'BOT',
+            status: 'pending',
           });
 
           try {

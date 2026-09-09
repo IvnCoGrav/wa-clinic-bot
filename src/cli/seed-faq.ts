@@ -1,4 +1,5 @@
 import { knowledgeBaseService } from '../services/knowledge.service';
+import { resolveChunkKeywords } from '../services/keyword-enrichment.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { prisma } from '../db/client';
 
@@ -139,6 +140,17 @@ const faqs = [
     "keywords": "38 weeks, 37 weeks, induksi, induksi alami, pijat induksi, capek, hamil trimester 3, aterm, cukup bulan, hpl"
   }
 ];
+
+// Selaraskan keywords saat seed ulang: setiap pertanyaan di-resolve ke tabel
+// kurasi keyword-enrichment.service (single source of truth). Item yang sudah
+// punya keywords eksplisit dipertahankan; sisanya diisi otomatis agar FTS
+// 'simple' (tanpa stemming) tetap menemukan artikelnya.
+for (const faq of faqs as Array<{ question: string; answer: string; keywords?: string }>) {
+  if (!faq.keywords) {
+    const resolved = resolveChunkKeywords(faq.question, null);
+    if (resolved) faq.keywords = resolved;
+  }
+}
 
 async function main() {
   console.log('\x1b[36m[SEEDING] Mengosongkan data knowledge_chunks lama...\x1b[0m');

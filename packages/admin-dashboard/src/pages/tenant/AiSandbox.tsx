@@ -783,7 +783,27 @@ export const AiSandbox: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Card 3: Si Kecil & Jadwal */}
+                      {/* Card 3: Pasien adaptif multi-audience (Bunda / Si Kecil / Keduanya) & Jadwal */}
+                      {((gs.momProfile?.gestationalWeeks != null || gs.momProfile?.stage || (gs.momProfile?.complaints || []).length > 0 || gs.targetAudience === 'MOMS' || gs.targetAudience === 'BOTH') && (
+                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
+                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">🤰 Data Kehamilan & Jadwal</span>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                          Usia Kehamilan: <b>{gs.momProfile?.gestationalWeeks != null ? `${gs.momProfile.gestationalWeeks} minggu` : '-'}</b>
+                        </div>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                          Kondisi: <b>{gs.momProfile?.stage === 'PREGNANT' ? 'Ibu Hamil' : gs.momProfile?.stage === 'POSTPARTUM' ? `Paska Salin/Nifas${gs.momProfile?.postpartumPeriod ? ` (${gs.momProfile.postpartumPeriod})` : ''}` : gs.momProfile?.stage === 'GENERAL' ? 'Relaksasi Umum' : (gs.targetAudience === 'MOMS' ? 'Ibu' : '-')}</b>
+                        </div>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                          Keluhan Bunda: <b>{(gs.momProfile?.complaints || []).length > 0 ? gs.momProfile.complaints.join(', ') : '-'}</b>
+                        </div>
+                        {gs.targetAudience && (
+                          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
+                            Subjek: <b className="text-[#111b21] dark:text-[#e9edef]">{gs.targetAudience === 'BOTH' ? 'Bunda & Si Kecil' : gs.targetAudience === 'MOMS' ? 'Bunda (Ibu)' : gs.targetAudience}</b>
+                          </div>
+                        )}
+                      </div>
+                      ))}
+                      {((gs.children && gs.children.length > 0) || gs.childProfile || gs.targetAudience === 'BABY' || gs.targetAudience === 'KIDS' || gs.targetAudience === 'BOTH') && (
                       <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
                         <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">👶 Data Si Kecil & Jadwal</span>
                         {(gs.children && gs.children.length > 1) ? (
@@ -799,10 +819,10 @@ export const AiSandbox: React.FC = () => {
                         ) : (
                           <>
                             <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
-                              Usia: <b>{gs.childProfile?.ageMonths != null ? `${gs.childProfile.ageMonths} bulan` : '-'}</b>
+                              Usia: <b>{(gs.children?.[0]?.ageMonths ?? gs.childProfile?.ageMonths) != null ? `${gs.children?.[0]?.ageMonths ?? gs.childProfile.ageMonths} bulan` : '-'}</b>
                             </div>
                             <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
-                              Keluhan: <b>{(gs.childProfile?.symptoms || []).length > 0 ? gs.childProfile.symptoms.join(', ') : '-'}</b>
+                              Keluhan: <b>{((gs.children?.[0]?.symptoms || gs.childProfile?.symptoms || []) as string[]).length > 0 ? (gs.children?.[0]?.symptoms || gs.childProfile.symptoms).join(', ') : '-'}</b>
                             </div>
                           </>
                         )}
@@ -815,6 +835,20 @@ export const AiSandbox: React.FC = () => {
                           </div>
                         )}
                       </div>
+                      )}
+                      {(!gs.momProfile && !gs.childProfile && (!gs.children || gs.children.length === 0) && !gs.targetAudience && (
+                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
+                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">👶 Data Si Kecil & Jadwal</span>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                          Jadwal: <b>{gs.booking?.preferredDate ? `${gs.booking.preferredDate}${gs.booking.preferredTime ? ` • ${gs.booking.preferredTime}` : ''}` : '-'}</b>
+                        </div>
+                        {gs.selectedTreatment && (
+                          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
+                            Treatment: <b className="text-[#111b21] dark:text-[#e9edef]">{gs.selectedTreatment}</b>
+                          </div>
+                        )}
+                      </div>
+                      ))}
 
                       {/* Card 4: Memori Anti-Amnesia */}
                       <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-2">
@@ -859,7 +893,8 @@ export const AiSandbox: React.FC = () => {
               {/* Reference Chunks section */}
               {inspectorTab === 'chunks' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#667781] block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0})</span>
+                <span className="text-[11px] font-bold text-[#667781] block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0}) — SOP/FAQ + Katalog</span>
+                <span className="text-[10px] text-[#8696a0] block">Ground truth terpadu: artikel SOP/FAQ medis (pre-retrieval deterministik + tool) dan spesifikasi katalog layanan resmi yang dipakai LLM turn ini.</span>
                 <div className="space-y-2.5">
                   {inspectorData.chunks?.map((chunk: any, i: number) => {
                     const chunkId = chunk.id || chunk.title;
@@ -908,9 +943,18 @@ export const AiSandbox: React.FC = () => {
                         ) : (
                           <div className="space-y-1.5">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-[#008069]">{chunk.title}</span>
+                              <span className="text-xs font-bold text-[#008069]">
+                                {String(chunk.title || '').startsWith('[Katalog Layanan]') && (
+                                  <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">KATALOG</span>
+                                )}
+                                {String(chunk.title || '').startsWith('[Katalog Layanan]') ? String(chunk.title).replace('[Katalog Layanan] ', '') : chunk.title}
+                                {!String(chunk.title || '').startsWith('[Katalog Layanan]') && (
+                                  <span className="ml-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">SOP/FAQ</span>
+                                )}
+                              </span>
                               <div className="flex items-center space-x-2">
                                 <span className="text-[10px] text-[#8696a0] font-mono">Similarity: {(chunk.similarity ?? chunk.score ?? 0).toFixed(2)}</span>
+                                {!String(chunk.title || '').startsWith('[Katalog Layanan]') && (
                                 <button
                                   type="button"
                                   onClick={() => handleStartEdit(chunk)}
@@ -919,6 +963,7 @@ export const AiSandbox: React.FC = () => {
                                 >
                                   <Edit3 size={11} />
                                 </button>
+                                )}
                               </div>
                             </div>
                             <p className="text-xs text-[#54656f] leading-relaxed">
@@ -933,7 +978,7 @@ export const AiSandbox: React.FC = () => {
                     <div className="text-xs text-[#8696a0] py-2 italic">
                       {inspectorData.executedTools?.some((t: any) => t.name === 'search_knowledge_faq')
                         ? 'Tool FAQ dipanggil tetapi tidak ada artikel yang cocok.'
-                        : 'Tidak ada tool FAQ yang dipanggil — AI mengandalkan SOP inti & bank contoh chat.'}
+                        : 'Belum ada grounding deterministik untuk turn ini (sapaan murni / tanya harga / lokasi). Pertanyaan konsultatif (keluhan, perbedaan treatment, syarat usia, SOP) otomatis memicu pre-retrieval knowledge base.'}
                     </div>
                   )}
                 </div>

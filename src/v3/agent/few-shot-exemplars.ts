@@ -26,7 +26,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'symptom_flu_consultation',
     scenario: 'Pasien berkonsultasi keluhan batuk / pilek / flu / grok-grok pada bayi',
-    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala'],
+    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'bapil', 'hidung', 'mampet', 'bersin', 'ngorok', 'lendir hidung', 'sesak'],
     customerMessage: 'Anak saya usia 3 bulan lagi grok-grok dan pilek bun, ada pijatnya gak ya?',
     idealResponse:
       'Iya Bunda, untuk membantu melegakan pernapasan dan ketidaknyamanan si kecil, kami ada layanan *Pijat Bayi Pulih Ceria* yang dikombinasikan dengan teknik akupresur dan aromaterapi khusus flu/batuk pilek yaa 😊 Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',
@@ -36,17 +36,17 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'schedule_inquiry_anti_affirmation',
     scenario: 'Pasien menanyakan ketersediaan jadwal di hari tertentu (Anti-Afirmasi Jadwal)',
-    tags: ['ask_schedule', 'schedule', 'jadwal', 'sabtu', 'minggu', 'besok'],
+    tags: ['ask_schedule', 'schedule', 'jadwal', 'sabtu', 'minggu', 'besok', 'tanggal', 'kapan', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'slot kosong'],
     customerMessage: 'Hari Sabtu ini bu bidan bisa datang ke rumah?',
     idealResponse:
-      'Untuk ketersediaan jadwal di hari Sabtu, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊 Nanti jadwal hari dan jam kunjungannya akan kami infokan setelah Admin CS kami cekkan ya 🙏',
+      'Untuk ketersediaan jadwal di hari Sabtu, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊🙏',
     isActive: true,
     sortOrder: 2,
   },
   {
     id: 'price_inquiry',
     scenario: 'Pasien menanyakan tarif/harga layanan',
-    tags: ['ask_price', 'price', 'harga', 'tarif', 'biaya'],
+    tags: ['ask_price', 'price', 'harga', 'tarif', 'biaya', 'pricelist', 'rp', 'ribu', 'rb', 'ongkos', 'total'],
     customerMessage: 'Untuk tarif pijat batuk pilek kena berapa ya bun?',
     idealResponse:
       'Untuk layanan *Pijat Bayi Pulih Ceria*, tarif promonya saat ini *Rp 70.000* (durasi ±40 menit) ya Bunda 😊 Mau kami bantu cekkan ketersediaan jadwal Bidan untuk kunjungan ke rumah?',
@@ -56,7 +56,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'payment_method_inquiry',
     scenario: 'Pasien menanyakan metode pembayaran (Transfer / QRIS / Cash)',
-    tags: ['payment', 'qris', 'transfer', 'cash'],
+    tags: ['payment', 'qris', 'transfer', 'cash', 'tunai', 'bayar', 'bca', 'mandiri', 'bri', 'tf', 'rekening', 'metode', 'pake', 'pakai', 'shopeepay', 'dana', 'gopay', 'ovo', 'bayar pake apa'],
     customerMessage: 'Pembayarannya bisa transfer atau harus cash kak?',
     idealResponse:
       'Untuk pembayaran sangat fleksibel ya Bunda, bisa melalui Transfer Bank (BCA, Mandiri, BRI), QRIS Universal, ataupun Tunai (Cash) setelah treatment selesai dilakukan 😊 Mau kami bantu cekkan jadwal Bidan?',
@@ -66,7 +66,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'location_ongkir_confirmation',
     scenario: 'Customer menyebutkan lokasi/kecamatan untuk cek layanan & ongkir',
-    tags: ['lokasi', 'domisili', 'alamat', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'ongkir', 'jarak'],
+    tags: ['lokasi', 'domisili', 'alamat', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'ongkir', 'jarak', 'dimana', 'mana', 'daerah', 'kota', 'datang'],
     customerMessage: 'Saya di Balongdowo Candi Sidoarjo kak',
     idealResponse:
       'Baik Bunda 😊 Jika dilihat dari Waru jaraknya kurang lebih 23 km dengan ongkir promo Rp 25.000 yaa. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
@@ -75,18 +75,18 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   },
   {
     id: 'schedule_check_admin_handoff_sync',
-    scenario: 'Customer bertanya ketersediaan jadwal besok saat lokasi sudah diketahui — cekkan Admin, tanya perkiraan jam, tanpa tanya alamat',
-    tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'treatment', 'admin', 'jam'],
+    scenario: 'Customer bertanya ketersediaan jadwal besok saat lokasi sudah diketahui — cekkan tim Bidan, tanpa tanya alamat/nama/jam',
+    tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'treatment', 'bisa', 'kapan', 'tanggal', 'lusa', 'slot'],
     customerMessage: 'Treatment nya semisal besok apa bisa ya bu ?',
     idealResponse:
-      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏 Mau kami bantu catatkan untuk perkiraan jamnya (pagi atau siang), Bunda? 🤗',
+      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏',
     isActive: true,
     sortOrder: 34,
   },
   {
     id: 'maternal_lactation_inquiry',
     scenario: 'Pasien menanyakan pijat laktasi / oksitosin untuk Ibu Menyusui',
-    tags: ['laktasi', 'oksitosin', 'ibu', 'moms'],
+    tags: ['laktasi', 'oksitosin', 'ibu', 'moms', 'asi', 'menyusui', 'nifas', 'payudara', 'breast', 'bengkak', 'sumbatan', 'lancar', 'ibu menyusui', 'perawatan_ibu'],
     customerMessage: 'Pijat oksitosin itu untuk apa ya bun? Bisa buat lancarin ASI?',
     idealResponse:
       'Benar sekali Bunda 😊 *Pijat Oksitosin* khusus untuk Bunda menyusui/nifas guna merangsang hormon oksitosin alami, membantu melancarkan aliran ASI, serta merilekskan otot punggung dan leher yang tegang. Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',

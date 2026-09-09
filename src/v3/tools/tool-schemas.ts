@@ -8,6 +8,8 @@ export const CalculateDeliveryArgsSchema = z.object({
 export const GetCatalogArgsSchema = z.object({
   category: z.enum(['BABY', 'KIDS', 'MOMS', 'BOTH']).optional(),
   childAgeMonths: z.number().nonnegative().optional(),
+  gestationalWeeks: z.number().min(4).max(45).optional(),
+  momStage: z.enum(['PREGNANT', 'POSTPARTUM', 'GENERAL']).optional(),
   symptoms: z.array(z.string()).optional().default([]),
   specificTreatmentName: z.string().optional(),
   inquirePrice: z.boolean().optional().default(false),
@@ -22,7 +24,11 @@ export const SaveReservationArgsSchema = z.object({
   childName: z.string().optional(),
   childAgeMonths: z.number().nonnegative().optional(),
   children: z.array(z.object({ name: z.string().optional(), ageMonths: z.number().optional() })).optional(),
+  gestationalWeeks: z.number().min(4).max(45).optional(),
+  momStage: z.enum(['PREGNANT', 'POSTPARTUM', 'GENERAL']).optional(),
+  momNotes: z.string().optional(),
   notes: z.string().optional(),
+  address: z.string().optional(),
 });
 
 export const EscalateHumanArgsSchema = z.object({

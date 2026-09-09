@@ -22,6 +22,23 @@ export interface ChildState {
   symptoms: string[];
 }
 
+/** Subjek layanan multi-audience (Moms & Baby Spa): ibu, bayi, anak, atau keduanya. */
+export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
+
+/** Kondisi klinis ibu: hamil, paska salin/nifas, atau relaksasi umum. */
+export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
+
+/** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
+export interface MomProfileState {
+  stage?: MomStage;
+  /** Usia kehamilan dalam minggu (misal: 38 untuk "uk 38 weeks"). */
+  gestationalWeeks?: number;
+  /** Durasi paska salin (misal: "2 minggu") — teks bebas dari customer. */
+  postpartumPeriod?: string;
+  /** Keluhan ibu (misal: pegal, kaki bengkak, capek, asi). */
+  complaints: string[];
+}
+
 export interface BookingState {
   preferredDate?: string;
   preferredTime?: string;
@@ -48,6 +65,10 @@ export interface CustomerGoalSession {
   customerName?: string;
   genderGreeting: 'Bunda' | 'Bapak';
   location?: LocationState;
+  /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
+  targetAudience?: TargetAudienceType;
+  /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */
+  momProfile?: MomProfileState;
   /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
   childProfile?: ChildState;
   /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
@@ -172,6 +193,8 @@ export class GoalTracker {
       return {
         customerName: custName || undefined,
         genderGreeting: isMale ? 'Bapak' : (prefs.genderGreeting || 'Bunda'),
+        targetAudience: prefs.targetAudience || undefined,
+        momProfile: prefs.momProfile || undefined,
         location: prefs.location || (conv.customer?.kelurahan ? {
           rawText: conv.customer.kelurahan,
           kelurahan: conv.customer.kelurahan || undefined,
@@ -214,7 +237,18 @@ export class GoalTracker {
         ...current,
         ...updates,
         location: updates.location ? { ...current.location, ...updates.location } : current.location,
-        childProfile: updates.childProfile ? { ...current.childProfile, ...updates.childProfile } : current.childProfile,
+        childProfile: updates.childProfile ? { ...current.childProfile, ...updates.childProfile } as ChildState : current.childProfile,
+        momProfile: updates.momProfile
+          ? {
+              ...current.momProfile,
+              ...updates.momProfile,
+              complaints: [
+                ...((current.momProfile?.complaints || []) as string[]),
+                ...((updates.momProfile?.complaints || []) as string[]),
+              ].filter((s, i, arr) => arr.indexOf(s) === i),
+            } as MomProfileState
+          : current.momProfile,
+        children: updates.children ? [...updates.children] : current.children,
         booking: updates.booking ? { ...current.booking, ...updates.booking } : current.booking,
       };
 
@@ -383,7 +417,16 @@ export class GoalTracker {
       const text = (history[i]?.content || '').toLowerCase();
       if (!text || GoalTracker.isDurationOnlyQuestion(text)) continue;
       // 1. Nama persis selalu dihitung (semua yang cocok, termasuk pesan asisten).
-      const exactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
+      //    Filter Substring Overlap: bila nama layanan A adalah substring dari
+      //    layanan B yang sama-sama cocok (mis. "Induksi Massage" vs
+      //    "Induksi Massage Fullbody"), A gugur — yang spesifik/panjang menang
+      //    agar keranjang tidak tertimpa harga yang salah (Rp 50k vs Rp 105k).
+      const rawExactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
+      const exactHits = rawExactHits.filter((s) =>
+        !rawExactHits.some((other) =>
+          other !== s && other.name.toLowerCase().includes(s.name.toLowerCase())
+        )
+      );
       // 2. Tanpa nama persis, parafrasa hanya mengambil SATU yang terpanjang
       //    (paling spesifik) agar tidak mengotori keranjang dengan kandidat umum.
       //    Pesan asisten (role === 'assistant') DILARANG memicu fuzzyHits — sapaan
@@ -414,12 +457,205 @@ export class GoalTracker {
    * usia ("2 bulan", "3 tahun", "baru lahir"), gejala, dan peran (Adik/Kakak).
    * Mengembalikan children baru (tidak mutasi session).
    */
+  /**
+   * Guard anti-kontaminasi silang: pesan yang murni membahas kehamilan ibu
+   * (usia kehamilan mingguan) DILARANG ditulis ke profil anak.
+   * Tanpa guard ini "uk 38 weeks" bocor menjadi childProfile.ageMonths = 9.
+   */
+  public static isMaternalOnlyMessage(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+    const hasMaternalSignal = lower.includes('hamil')
+      || lower.includes('bumil')
+      || lower.includes('kehamilan')
+      || lower.includes('week')
+      || lower.includes('wks')
+      || lower.includes('trimester')
+      || lower.includes('nifas')
+      || lower.includes('menyusui')
+      || lower.includes('laktasi')
+      || lower.includes('induksi')
+      || lower.includes('oksitosin')
+      || lower.includes('perineum')
+      || lower.includes('uk ')
+      || lower.includes(' uk')
+      || lower.includes('usia kandungan');
+    if (!hasMaternalSignal) return false;
+    const hasChildSignal = lower.includes('bayi')
+      || lower.includes('baby')
+      || lower.includes('anak saya')
+      || lower.includes('adik')
+      || lower.includes('adek')
+      || lower.includes('kakak')
+      || lower.includes('si kecil')
+      || lower.includes('newborn')
+      || lower.includes('selapan');
+    return !hasChildSignal;
+  }
+
+  /**
+   * Deteksi subjek layanan multi-audience dari teks (data-driven includes, tanpa regex):
+   * MOMS (ibu), BABY/KIDS (anak), BOTH (keduanya), atau undefined bila netral.
+   */
+  public static detectTargetAudience(text: string): TargetAudienceType | undefined {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return undefined;
+    const momHit = lower.includes('hamil') || lower.includes('bumil') || lower.includes('kehamilan')
+      || lower.includes('week') || lower.includes('nifas') || lower.includes('menyusui')
+      || lower.includes('laktasi') || lower.includes('induksi') || lower.includes('oksitosin')
+      || lower.includes('untuk saya') || lower.includes('buat saya') || lower.includes('saya sendiri')
+      || lower.includes('bunda sendiri') || lower.includes('perineum') || lower.includes('prenatal')
+      || lower.includes('postpartum') || lower.includes('paska') || lower.includes('pasca melahirkan');
+    const babyHit = lower.includes('bayi') || lower.includes('baby') || lower.includes('newborn')
+      || lower.includes('selapan') || lower.includes('adik') || lower.includes('adek')
+      || lower.includes('si kecil');
+    const kidsHit = lower.includes('kakak') || lower.includes('anak pertama') || lower.includes('anak ke')
+      || lower.includes('balita') || lower.includes('kids') || lower.includes('anak saya');
+    const childHit = babyHit || kidsHit;
+    if (momHit && childHit) return 'BOTH';
+    if (momHit) return 'MOMS';
+    if (kidsHit && !babyHit) return 'KIDS';
+    if (childHit) return 'BABY';
+    return undefined;
+  }
+
+  /**
+   * Ekstrak usia kehamilan (minggu) dari teks tanpa regex semantik:
+   * pindai token angka di sekitar penanda minggu (weeks/week/minggu/wks).
+   * Contoh: "uk 38 weeks" -> 38, "usia kehamilan 38 minggu" -> 38.
+   */
+  public static parseGestationalWeeks(text: string): number | undefined {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return undefined;
+    const weekMarkers = ['weeks', 'week', 'minggu', 'wks', 'wk', ' mgg'];
+    const hasWeekMarker = weekMarkers.some((mk) => lower.includes(mk));
+    if (!hasWeekMarker) return undefined;
+    // Tokenisasi sederhana: pisahkan non alfanumerik menjadi spasi lalu split
+    let normalized = '';
+    for (let i = 0; i < lower.length; i++) {
+      const ch = lower[i];
+      const isAlnum = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+      normalized += isAlnum ? ch : ' ';
+    }
+    const tokens = normalized.split(' ').filter((t) => t.length > 0);
+    const isWeekToken = (t: string): boolean => t === 'weeks' || t === 'week' || t === 'minggu' || t === 'wks' || t === 'wk' || t === 'mgg' || t === 'w';
+    const parseLeadingNumber = (t: string): number | undefined => {
+      let numStr = '';
+      for (let i = 0; i < t.length; i++) {
+        const c = t[i];
+        if (c >= '0' && c <= '9') numStr += c;
+        else break;
+      }
+      if (!numStr) return undefined;
+      const n = parseInt(numStr, 10);
+      return Number.isFinite(n) && n >= 4 && n <= 45 ? n : undefined;
+    };
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (isWeekToken(tok)) {
+        // Cari angka mundur hingga 3 token ke belakang (misal "uk 38 weeks")
+        for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+          const n = parseLeadingNumber(tokens[j]);
+          if (n !== undefined) return n;
+          // Token gabungan seperti "38weeks" sudah terpisah karena normalisasi; tangani "38w"
+          if (tokens[j].length > 1 && tokens[j].endsWith('w')) {
+            const inner = parseLeadingNumber(tokens[j]);
+            if (inner !== undefined) return inner;
+          }
+        }
+      }
+      // Token gabungan "38weeks"/"38minggu" tanpa spasi sudah terpisah oleh normalisasi?
+      // Tangani pola "38w" / "38wk" langsung
+      if ((tok.endsWith('w') || tok.endsWith('wk') || tok.endsWith('wks')) && tok.length <= 5) {
+        const n = parseLeadingNumber(tok);
+        if (n !== undefined) {
+          // Pastikan konteks maternal di sekitarnya
+          const window = tokens.slice(Math.max(0, i - 3), i + 3).join(' ');
+          if (window.includes('uk') || window.includes('hamil') || window.includes('kehamilan') || hasWeekMarker) return n;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Ekstraksi profil ibu otomatis dari satu pesan (deterministik, 0 token):
+   * usia kehamilan (minggu), stage (PREGNANT/POSTPARTUM/GENERAL), keluhan ibu.
+   * Mengembalikan momProfile baru (tidak mutasi session) atau undefined bila
+   * tidak ada sinyal maternal.
+   */
+  public static syncMomProfile(
+    session: CustomerGoalSession,
+    text: string
+  ): MomProfileState | undefined {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return session.momProfile;
+    const audience = GoalTracker.detectTargetAudience(text);
+    const gestationalWeeks = GoalTracker.parseGestationalWeeks(text);
+    const mentionsPostpartum = lower.includes('nifas') || lower.includes('paska') || lower.includes('pasca')
+      || lower.includes('baru melahirkan') || lower.includes('postpartum') || lower.includes('menyusui');
+    const mentionsPregnant = lower.includes('hamil') || lower.includes('bumil') || lower.includes('kehamilan')
+      || lower.includes('usia kandungan') || lower.includes('trimester') || gestationalWeeks !== undefined
+      || lower.includes('induksi') || lower.includes('perineum') || lower.includes('prenatal');
+    const mentionsMomRelax = lower.includes('untuk saya') || lower.includes('buat saya') || lower.includes('saya sendiri')
+      || lower.includes('bunda sendiri') || lower.includes('relaksasi ibu') || lower.includes('pijat ibu');
+    if (!mentionsPregnant && !mentionsPostpartum && !mentionsMomRelax && audience !== 'MOMS' && audience !== 'BOTH') {
+      return session.momProfile;
+    }
+    const MOM_COMPLAINT_WORDS = ['pegal', 'capek', 'lelah', 'letih', 'bengkak', 'nyeri', 'ngilu', 'kram', 'pinggang', 'punggung', 'kaki', 'tangan kesemutan', 'susah tidur', 'tidak bisa tidur', 'mual', 'pusing', 'kontraksi', 'kencang', 'asi', 'laktasi', 'menyusui', 'puting', 'bendungan', 'stres', 'cemas', 'sakit pinggang', 'boyok'];
+    const foundComplaints = MOM_COMPLAINT_WORDS.filter((s) => lower.includes(s));
+    const prev = session.momProfile || { complaints: [] };
+    let stage: MomStage = prev.stage || 'GENERAL';
+    if (mentionsPregnant) stage = 'PREGNANT';
+    else if (mentionsPostpartum) stage = 'POSTPARTUM';
+    else if (prev.stage) stage = prev.stage;
+    else stage = 'GENERAL';
+    const mergedComplaints = [...(prev.complaints || [])];
+    for (const c of foundComplaints) {
+      if (!mergedComplaints.includes(c)) mergedComplaints.push(c);
+    }
+    const next: MomProfileState = {
+      stage,
+      complaints: mergedComplaints,
+    };
+    if (gestationalWeeks !== undefined) next.gestationalWeeks = gestationalWeeks;
+    else if (prev.gestationalWeeks !== undefined) next.gestationalWeeks = prev.gestationalWeeks;
+    if (prev.postpartumPeriod) next.postpartumPeriod = prev.postpartumPeriod;
+    // Deteksi durasi paska salin sederhana: cari pola "N minggu/bulan" di dekat kata nifas/paska
+    if (stage === 'POSTPARTUM' && !next.postpartumPeriod) {
+      let normalized = '';
+      for (let i = 0; i < lower.length; i++) {
+        const ch = lower[i];
+        normalized += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+      }
+      const tokens = normalized.split(' ').filter((t) => t.length > 0);
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i] === 'minggu' || tokens[i] === 'bulan' || tokens[i] === 'hari') {
+          const prevTok = tokens[i - 1] || '';
+          let numStr = '';
+          for (let k = 0; k < prevTok.length; k++) {
+            const c = prevTok[k];
+            if (c >= '0' && c <= '9') numStr += c;
+            else break;
+          }
+          if (numStr) {
+            next.postpartumPeriod = `${numStr} ${tokens[i]}`;
+            break;
+          }
+        }
+      }
+    }
+    return next;
+  }
+
   public static syncChildrenProfiles(
     session: CustomerGoalSession,
     text: string
   ): ChildState[] {
     const lower = (text || '').toLowerCase();
     if (!lower) return [...(session.children || [])];
+    // Anti-kontaminasi silang: pesan murni maternal DILARANG menyentuh profil anak.
+    if (GoalTracker.isMaternalOnlyMessage(text)) return [...(session.children || [])];
     const children: ChildState[] = (session.children || []).map((c) => ({
       ...c,
       symptoms: [...(c.symptoms || [])],
@@ -504,17 +740,27 @@ export class GoalTracker {
    * status agar LLM terpandu — bahkan bila tool_choice dilewati model.
    */
   public static formatGoalSessionForPrompt(session: CustomerGoalSession): string {
-    // Pre-grounding deterministik (Zero-Code): rekomendasi dari katalog aktif
-    const allSymptoms: string[] = [
+    // Pre-grounding deterministik (Zero-Code) — audience-aware:
+    // keluhan ibu (momProfile.complaints) dan keluhan anak digabung sesuai subjek.
+    const childSymptoms: string[] = [
       ...(session.childProfile?.symptoms || []),
       ...((session.children || []).flatMap((c) => c.symptoms || [])),
     ].filter((s, i, arr) => arr.indexOf(s) === i);
+    const momComplaints: string[] = [...(session.momProfile?.complaints || [])]
+      .filter((s, i, arr) => arr.indexOf(s) === i);
+    const isMomSubject = session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH' || Boolean(session.momProfile?.gestationalWeeks != null || session.momProfile?.stage);
+    const allSymptoms: string[] = isMomSubject && momComplaints.length > 0 && childSymptoms.length === 0
+      ? momComplaints
+      : [...childSymptoms, ...(session.targetAudience === 'BOTH' ? momComplaints : [])]
+        .filter((s, i, arr) => arr.indexOf(s) === i);
     let pregroundedRecommendation: string | null = null;
     if (allSymptoms.length > 0 && !session.selectedTreatment) {
       try {
-        const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null);
+        const categoryHint = session.targetAudience === 'MOMS' ? 'MOMS' as any : session.targetAudience === 'BOTH' ? undefined : session.targetAudience as any;
+        const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint);
         if (rec) {
-          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk keluhan si kecil ini. DILARANG mengganti dengan nama paket lain!]`;
+          const subjectLabel = isMomSubject && momComplaints.length > 0 && childSymptoms.length === 0 ? 'keluhan Bunda' : 'keluhan si kecil';
+          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]`;
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
@@ -577,21 +823,39 @@ export class GoalTracker {
       lines.push(`• Total Akumulasi Biaya: ${fmtRp(subtotal + ongkir)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
     }
 
+    // ── Audience-aware patient summary (anti pediatric-centric myopia) ──
+    // MOMS/BOTH: tampilkan Data Bunda; BABY/KIDS: tampilkan Data Si Kecil; BOTH: keduanya.
+    const hasMom = Boolean(session.momProfile && (session.momProfile.gestationalWeeks != null || session.momProfile.stage || (session.momProfile.complaints || []).length > 0 || session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH'));
     const kids = session.children && session.children.length > 0
       ? session.children
       : (session.childProfile ? [session.childProfile] : []);
-    if (kids.length > 1) {
-      const kidLines = kids.map((k) => {
-        const label = k.roleLabel || 'Anak';
-        const age = k.ageMonths != null
-          ? (k.ageMonths >= 12 && k.ageMonths % 12 === 0 ? `${Math.round(k.ageMonths / 12)} tahun (${k.ageMonths} bulan)` : `${k.ageMonths} bulan`)
-          : 'usia belum diketahui';
-        const sym = (k.symptoms && k.symptoms.length > 0) ? `, Keluhan: ${k.symptoms.join(', ')}` : ', Sehat/Relaksasi';
-        return `  - ${label}: Usia ${age}${sym}`;
-      });
-      lines.push(`• Data Si Kecil (${kids.length} Anak):\n${kidLines.join('\n')}`);
-    } else if (session.childProfile) {
-      lines.push(`• Data Si Kecil: Usia ${session.childProfile.ageMonths != null ? session.childProfile.ageMonths + ' bulan' : 'belum spesifik'}${session.childProfile.symptoms.length > 0 ? `, Keluhan: ${session.childProfile.symptoms.join(', ')}` : ''}`);
+    const hasKids = kids.length > 0 && (kids.some((k) => k.ageMonths != null || (k.symptoms || []).length > 0) || session.targetAudience === 'BABY' || session.targetAudience === 'KIDS' || session.targetAudience === 'BOTH');
+    if (session.targetAudience) {
+      lines.push(`• Subjek Perawatan: ${session.targetAudience === 'MOMS' ? 'Bunda (Ibu)' : session.targetAudience === 'BOTH' ? 'Bunda & Si Kecil (Mom & Baby)' : session.targetAudience === 'KIDS' ? 'Anak (Kids)' : 'Bayi (Baby)'}`);
+    }
+    if (hasMom) {
+      const mp = session.momProfile || { complaints: [] as string[] };
+      const stageLabel = mp.stage === 'PREGNANT' ? 'Ibu Hamil' : mp.stage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : 'Ibu (Relaksasi Umum)';
+      const gestLabel = mp.gestationalWeeks != null ? `Usia Kehamilan ${mp.gestationalWeeks} minggu` : (mp.stage === 'PREGNANT' ? 'Usia kehamilan belum spesifik' : `Kondisi: ${stageLabel}`);
+      const postpartumLabel = mp.postpartumPeriod ? `, Paska salin: ${mp.postpartumPeriod}` : '';
+      const complaintLabel = (mp.complaints || []).length > 0 ? `, Keluhan Bunda: ${mp.complaints.join(', ')}` : '';
+      lines.push(`• Data Bunda (Pasien): ${gestLabel}${mp.stage && mp.gestationalWeeks == null && mp.stage !== 'PREGNANT' ? ` (${stageLabel})` : mp.stage === 'PREGNANT' && mp.gestationalWeeks != null ? ` (${stageLabel})` : ''}${postpartumLabel}${complaintLabel} [STATUS: SUDAH DIKETAHUI - DILARANG MENGONVERSI KE USIA ANAK!]`);
+    }
+    if (hasKids) {
+      if (kids.length > 1) {
+        const kidLines = kids.map((k) => {
+          const label = k.roleLabel || 'Anak';
+          const age = k.ageMonths != null
+            ? (k.ageMonths >= 12 && k.ageMonths % 12 === 0 ? `${Math.round(k.ageMonths / 12)} tahun (${k.ageMonths} bulan)` : `${k.ageMonths} bulan`)
+            : 'usia belum diketahui';
+          const sym = (k.symptoms && k.symptoms.length > 0) ? `, Keluhan: ${k.symptoms.join(', ')}` : ', Sehat/Relaksasi';
+          return `  - ${label}: Usia ${age}${sym}`;
+        });
+        lines.push(`• Data Si Kecil (${kids.length} Anak):\n${kidLines.join('\n')}`);
+      } else if (kids.length === 1) {
+        const cp = kids[0];
+        lines.push(`• Data Si Kecil: Usia ${cp.ageMonths != null ? cp.ageMonths + ' bulan' : 'belum spesifik'}${(cp.symptoms || []).length > 0 ? `, Keluhan: ${cp.symptoms.join(', ')}` : ''}`);
+      }
     }
 
     if (session.selectedTreatment) {
