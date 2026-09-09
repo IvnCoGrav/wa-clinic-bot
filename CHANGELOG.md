@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Pembenahan Fondasi & Root Cause Alur Konfirmasi Reservasi (HOLD & PENDING) (2026-09-09)
+
+- **Latar Belakang:** Tombol "Konfirmasi" pada banner `HOLD` (slot kunci 3 detik, dummy `[HOLD] Slot Ditawarkan`) dan `PENDING` (booking riil belum lunas) sama-sama melempar ke `ReservationDetailModal` pasif, sehingga data bolong (`Bunda ()`, `Rp 0`, `status undefined`) dan modal salah alamat. Backend `live-chat.service.ts` emit stub `{id, booking_date, notes}` tanpa kontrak kanonikal, serta hold kedaluwarsa (2 jam lewat) masih tampil sebagai banner aktif.
+- **Stage 1 — DTO Kanonikal (`live-chat.service.ts`, `customers.subroute.ts`):** Standardisasi `formatReservationItem` ke kontrak lengkap (`status`, `duration_minutes`, `purchase_value`, `payment_method`, `assigned_staff`, `customer:{id,name,phone,kelurahan,kecamatan,kota,children,ongkir}`); `isHoldValid` temporal (booking_date > now-2jam) + pruning konsisten; `customers/:id` mapper jaminan `r.customer` tidak pernah `undefined`.
+- **Stage 2 — Mesin Status (`LiveChatMonitor.tsx`):** Pisah semantik: HOLD → `handleConvertHoldToBooking` (prefill `CreateReservationModal` dengan customer aktif + tanggal/jam hold + terapis, `Lengkapi Booking`, auto `release-hold` saat simpan) vs PENDING → `handleConfirmPendingBooking` (dialog atomik `Ya, Konfirmasi Lunas` → `PATCH /confirm` + Google Calendar); selector `activeHoldReservation` + `handleReservationUpdate` kini pakai `isHoldValid` yang sama.
+- **Stage 3 — Deep Hydration Guard (`ReservationDetailModal.tsx`, `CreateReservationModal.tsx`):** Jika `reservation.customer` kosong, auto-fetch `GET /reservation/:id` / `GET /customers/:id` sebelum render, sehingga form tidak pernah tampil bolong.
+- **Verifikasi:** `tsc --noEmit` bersih, `vite build` 2450 modules, `admin-quick-hold.test.ts` 8 passed; manual HOLD→Lengkapi Booking→Simpan (hold hilang, booking riil tercipta) & PENDING→Konfirmasi Lunas (confirmed + Calendar) hijau.
+
 #### Perbaikan Layout Mobile iPhone & Redesain Footer Icon Buttons (2026-09-09)
 
 - **Latar Belakang:** Footer teks panjang overflow di iPhone 375px, header & footer terpotong Notch/Dynamic Island & Home Bar, serta viewport tidak full-screen saat keyboard muncul.

@@ -566,6 +566,23 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       } else if (res.customer_id) {
         setCustomerId(res.customer_id);
       }
+      // Deep hydration: jika customer kosong tapi customer_id ada, fetch penuh
+      if (!cust && res.customer_id) {
+        apiRequest(`/api/admin/customers/${res.customer_id}`)
+          .then((r: any) => {
+            const c = r?.data || r?.customer || r;
+            if (c?.id) {
+              setCustomerId(c.id);
+              setSelectedCustomerInfo(c);
+              setCustomerSearch(`${c.name || 'Bunda'} (${c.phone || ''})`);
+              if (c.ongkir != null && !isNaN(Number(c.ongkir))) setOngkir(Number(c.ongkir));
+              if (c.children && c.children.length > 0) {
+                setBabies(c.children.map((child: any) => ({ name: child.name, ageText: child.current_age || child.raw_age_text || '' })));
+              }
+            }
+          })
+          .catch(() => {});
+      }
 
       if (res.treatment_category) {
         const cat = res.treatment_category as any;
