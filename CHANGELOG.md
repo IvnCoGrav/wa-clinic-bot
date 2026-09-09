@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Redesain Fondasional — Klasifikasi Lifecycle Pasien & Active Appointment Guard (2026-09-09)
+
+- **Latar Belakang:** insiden Bunda Retno (`6282132249740`) — bot AI membalas pasien yang treatment pertamanya sudah `completed` dan pasien berjadwal aktif H-0 ("Sdh smp mana ya?") dengan template marketing generik. Akar sistemik: gate buta status `completed`, properti hantu `purchase_count` / `status='repeat'` (tak pernah ada di schema), tanpa pelindung jadwal aktif, label `repeat` hanya hitung `confirmed`, dan test lama mem-passing mock fiktif (false confidence).
+- **Service Kanonis (`patient-lifecycle.service.ts`, baru):** `hasTreatmentHistory` (`confirmed`/`completed`, fallback `ltv_cache`), `getActiveAppointment` (`pending`/`confirmed`/`hold`, jendela [now-12 jam, now+24 jam]), `getPatientClinicalProfile`. Tenant-aware, best-effort.
+- **Eligibility & Scope Gate:** kontrak input valid + reason baru `ACTIVE_APPOINTMENT_MANUAL` (guard wajib: silence + eskalasi, exempt auto-release 6 jam); properti hantu dihapus; eskalasi operasional "jadwal treatment aktif hari ini (Manual Handling CS - Koordinasi Operasional)".
+- **Sinkronisasi label & modul:** `repeat` (lifecycle + reconciliation), `hasPriorConfirmed` (machine), review H+1 (cron) kini hitung `in ['confirmed','completed']`.
+- **Data live (menunggu instruksi operasional):** runbook `scripts/cleanup-bunda-retno-reservation.sql` — BLOK 1 (cancel) atau BLOK 2 (confirm), jalankan salah satu via SSH + verifikasi 2-langkah.
+- **Verifikasi:** `tsc --noEmit` bersih; test ditulis ulang tanpa mock fiktif + simulasi Retno; full suite **201 file, 1618 passed, 0 failed**.
+
+#### Audit Sesi 435731 — Anti-Todong Jadwal, Anti-Halusinasi Domisili & Sinkronisasi Keranjang (2026-09-09)
+
+- **Latar Belakang:** 12 dari 14 balasan bot diakhiri pertanyaan (todong jadwal 6x, termasuk setelah jadwal Sabtu final & reservasi tercatat); halusinasi "Kecamatan Waru ini cukup luas..." ke customer Kedungkendo-Candi; `cartItems` kehilangan `Pijat Bayi Ceria` karena nama resmi berkurung gagal exact-match.
+- **Keranjang (`goal-tracker.ts`):** normalisasi nama katalog tanpa regex (buang `(...)` akhir) — cocok utuh ATAU bersih; hanya full-match yang menekan fuzzy; kandidat fuzzy wajib bawa ≥2 token signifikan yang belum dijelaskan exact-hit. Skenario sesi: Induksi 105k + Ceria 60k + ongkir 25k = Rp 190.000.
+- **Persona:** hapus "Closing CTA WAJIB" → statement-only untuk pertanyaan teknis (durasi/persiapan/biaya/bayar); contoh durasi tanpa todong jadwal; Waru = basecamp, dilarang asumsikan domisili; larangan tanya hari bila jadwal final. **Summarizer:** guard `booking.preferredDate/reservationId` + cooldown jadwal anti-sebutan-hari-bypass.
+- **Diverifikasi:** test baru `cart-sync-parentheses` (5) + `v3-anti-todong-jadwal` (7) hijau; `npm run build` bersih; full suite 199/200 file, 1601 passed (1 flaky timeout LLM `live-chat-reply suggest-reply`, lolos solo 10/10). Komponen gate-alamat & keyword-enrichment sudah live sesi lalu (lihat #34), kontrak test tetap hijau.
+
 #### Redesain Fondasional — Siklus Hidup Reservasi & Integritas Transaksi (2026-09-09)
 
 - **Latar Belakang:** Audit 6 titik mutasi reservasi menemukan 5 akar masalah: fragmentasi domain (6 entry point tanpa standar), tanpa validasi konflik jadwal di backend, dedup naif berbasis `created_at` 24 jam (rekam yatim tetap aktif), parser keuangan global + heuristik `angka ≤500 → ×1000` yang mengkorupsi `Usia >4-6 th` menjadi Rp 46.000, dan penimpaan buta `purchase_value` resmi (Rp 160.000 → Rp 46.000) oleh purchase detection.
