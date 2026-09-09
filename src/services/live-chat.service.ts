@@ -921,7 +921,14 @@ export class LiveChatService {
     }
 
     const reservations: any[] = c.customer?.reservations || [];
-    const isHoldValid = (r: any) => r.status === 'hold';
+    const isHoldValid = (r: any) => {
+      if (!r || r.status !== 'hold') return false;
+      if (!r.booking_date) return false;
+      const bd = new Date(r.booking_date).getTime();
+      // Hold kedaluwarsa jika booking_date sudah lewat >2 jam
+      if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
+      return true;
+    };
     const hasActiveHold = reservations.some((r: any) => isHoldValid(r));
     const hasUpcomingBooking = reservations.some((r: any) => r.status === 'confirmed');
     const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
@@ -931,16 +938,28 @@ export class LiveChatService {
       return {
         id: res.id,
         booking_date: res.booking_date
-          ? typeof res.booking_date === 'string'
-            ? res.booking_date
-            : (res.booking_date as Date).toISOString()
+          ? (typeof res.booking_date === 'string' ? res.booking_date : (res.booking_date as Date).toISOString())
           : null,
+        status: res.status || 'pending',
         treatment_category: res.treatment_category || 'BABY',
         treatment_detail: res.treatment_detail || null,
+        duration_minutes: (res as any).duration_minutes || 60,
+        purchase_value: Number(res.purchase_value) || 0,
+        payment_method: (res as any).payment_method || null,
         assigned_staff_id: res.assigned_staff_id || null,
         assigned_staff: res.assigned_staff ? { id: res.assigned_staff.id, name: res.assigned_staff.name } : null,
         notes: res.notes || null,
         customer_id: res.customer_id || c.customer_id,
+        customer: {
+          id: c.customer?.id || c.customer_id,
+          name: c.customer?.name || 'Bunda',
+          phone: c.customer?.phone || '',
+          kelurahan: c.customer?.kelurahan || null,
+          kecamatan: c.customer?.kecamatan || null,
+          kota: c.customer?.kota || null,
+          children: c.customer?.children || [],
+          ongkir: (c.customer as any)?.ongkir || 0,
+        },
       };
     };
 

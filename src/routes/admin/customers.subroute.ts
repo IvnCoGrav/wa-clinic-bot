@@ -138,6 +138,23 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Fondasi DTO kanonikal: pastikan r.customer tidak pernah undefined
+        if (Array.isArray((customer as any).reservations)) {
+          (customer as any).reservations = (customer as any).reservations.map((r: any) => ({
+            ...r,
+            customer: r.customer || {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              kelurahan: customer.kelurahan,
+              kecamatan: customer.kecamatan,
+              kota: customer.kota,
+              children: customer.children || [],
+              ongkir: (customer as any).ongkir || 0,
+            },
+          }));
+        }
+
         let ltv = 0;
         try {
           const { resolveTreatmentValue } = await import('../../services/capi.service');

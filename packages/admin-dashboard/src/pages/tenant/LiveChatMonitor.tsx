@@ -442,6 +442,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
   const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
+  const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
+  const [quickBookingTargetSlot, setQuickBookingTargetSlot] = useState<any>(null);
   const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -2709,7 +2711,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       try {
         const res = await apiRequest(`/api/admin/customers/${cid}`);
         const reservations = res?.data?.reservations || [];
-        const activeHold = reservations.find((r: any) => r.status === 'hold') || null;
+        const isHoldValidLocal = (r: any) => {
+          if (!r || r.status !== 'hold') return false;
+          if (!r.booking_date) return false;
+          const bd = new Date(r.booking_date).getTime();
+          if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
+          return true;
+        };
+        const activeHold = reservations.find((r: any) => isHoldValidLocal(r)) || null;
         const activeConfirmed = reservations.find((r: any) => r.status === 'confirmed') || null;
         const activePending = reservations.find((r: any) => r.status === 'pending') || null;
         const hasActiveHold = Boolean(activeHold);
@@ -2803,15 +2812,57 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     await handleOpenQuickHold();
   };
 
+  const handleConvertHoldToBooking = (holdRes: any) => {
+    const d = new Date(holdRes.booking_date);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    setConvertingHoldId(holdRes.id);
+    setQuickBookingTargetSlot({
+      date: `${yyyy}-${mm}-${dd}`,
+      hour: d.getHours(),
+      timeStr: `${hh}:${min}`,
+      staffId: holdRes.assigned_staff_id,
+    });
+    setShowQuickBookingModal(true);
+  };
+
+  const handleConfirmPendingBooking = async (pendingRes: any) => {
+    const dateStr = pendingRes.booking_date
+      ? new Date(pendingRes.booking_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : 'jadwal terpilih';
+    const ok = await confirm({
+      title: 'Konfirmasi Pembayaran & Jadwal?',
+      message: `Konfirmasi reservasi untuk ${pendingRes.customer?.name || selectedChat?.customerName || 'Bunda'} pada ${dateStr} (${pendingRes.treatment_detail || 'Treatment'}) menjadi Terkonfirmasi (Lunas)?`,
+      confirmText: 'Ya, Konfirmasi Lunas',
+      cancelText: 'Batal',
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/api/admin/reservation/${pendingRes.id}/confirm`, { method: 'PATCH' });
+      toast('Reservasi berhasil dikonfirmasi dan disinkronkan ke Google Calendar! ✨', 'success');
+      await handleReservationUpdate();
+    } catch (err: any) {
+      toast(`Gagal konfirmasi: ${err.message}`, 'error');
+    }
+  };
+
+  const isHoldValid = (r: any) => {
+    if (!r || r.status !== 'hold') return false;
+    if (!r.booking_date) return false;
+    const bd = new Date(r.booking_date).getTime();
+    if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
+    return true;
+  };
   const activeHoldReservation = useMemo(() => {
     if (!selectedChat) return null;
-    // Jika customerDetailData sudah dimuat untuk customer ini, gunakan sebagai Single Source of Truth
     if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => r.status === 'hold') || null;
+      return customerDetailData.reservations?.find((r: any) => isHoldValid(r)) || null;
     }
-    // Fallback awal (0ms) sebelum customer detail selesai di-fetch
     const fromChat = (selectedChat as any).activeHoldReservation;
-    if (fromChat) return fromChat;
+    if (fromChat && isHoldValid(fromChat)) return fromChat;
     return null;
   }, [selectedChat, customerDetailData]);
 
@@ -4126,13 +4177,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedReservation(activeHoldReservation);
-                        }}
+                        onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
                         className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Lihat Detail Reservasi"
+                        title="Lengkapi Booking"
                       >
-                        Konfirmasi
+                        Lengkapi Booking
                       </button>
                       <button
                         type="button"
@@ -4236,11 +4285,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedReservation(activePendingReservation);
-                        }}
+                        onClick={() => handleConfirmPendingBooking(activePendingReservation)}
                         className={`bg-sky-600 hover:bg-sky-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Lihat Detail Reservasi"
+                        title="Konfirmasi Lunas"
                       >
                         Konfirmasi
                       </button>
@@ -5510,8 +5557,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {showQuickBookingModal && (
         <CreateReservationModal
           isOpen={showQuickBookingModal}
-          onClose={() => setShowQuickBookingModal(false)}
+          onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setQuickBookingTargetSlot(null); }}
           staffList={reservationStaffList}
+          initialSlotTarget={quickBookingTargetSlot}
           initialCustomer={
             (customerDetailData && customerDetailData.id === selectedChat?.customerId)
               ? customerDetailData
@@ -5530,6 +5578,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           initialCustomerId={selectedChat?.customerId}
           onSuccess={async (newRes) => {
             setShowQuickBookingModal(false);
+            if (convertingHoldId) {
+              try {
+                await apiRequest(`/api/admin/reservation/${convertingHoldId}/release-hold`, { method: 'PATCH' });
+              } catch {}
+              setConvertingHoldId(null);
+              setQuickBookingTargetSlot(null);
+            }
             await handleReservationUpdate();
             if (newRes) {
               handleGenerateAndInsertInvoice(newRes);
