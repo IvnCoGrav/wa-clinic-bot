@@ -115,6 +115,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const [discountPct, setDiscountPct] = useState<number | ''>(0);
   const [copied, setCopied] = useState(false);
   const [mobileTab, setMobileTab] = useState<'setting' | 'preview'>('setting');
+  const [activeButtonTip, setActiveButtonTip] = useState<string | null>(null);
+  const tipTimeoutRef = React.useRef<any>(null);
+  const showButtonTip = (label: string) => {
+    if (tipTimeoutRef.current) clearTimeout(tipTimeoutRef.current);
+    setActiveButtonTip(label);
+    tipTimeoutRef.current = setTimeout(() => setActiveButtonTip(null), 1800);
+  };
 
   // Sync state whenever initialData or isOpen changes — guard terhadap override restore
   useEffect(() => {
@@ -492,14 +499,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const handleSelectService = (_s: any) => { /* replaced by handleAddServiceInstance matching Buat Reservasi */ };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
       <div
-        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-[#e9edef] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
+        className="bg-white w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-[#e9edef] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
         style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any, maxWidth: 'min(100vw - 24px, 56rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header — tipis minimalis 36px */}
-        <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
+        {/* Modal Header — tipis minimalis 36px + safe-area Notch */}
+        <div className="px-4 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 sm:px-4 sm:py-2.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
           <h3 className="font-bold text-sm flex items-center gap-2">
             <Receipt size={16} className="text-white" />
             <span>Invoice WA</span>
@@ -1063,44 +1070,87 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Footer — Pinned & Accessible */}
-        <div className="px-5 py-3 bg-[#f0f2f5] border-t border-[#e9edef] flex flex-col sm:flex-row justify-between items-center gap-2 shrink-0 z-10 sticky bottom-0">
-          <div className="text-[11px] text-[#667781] text-center sm:text-left">
-            Total Tagihan: <strong className="text-[#008069] font-bold">Rp {formatRp(totalPrice)}</strong>
+        {/* Modal Footer — Ramping, Ikonik, Aman Notch/Home Bar */}
+        <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-[#f0f2f5] border-t border-[#e9edef] flex items-center justify-between gap-3 shrink-0 z-10 sticky bottom-0 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
+          {/* Total Tagihan */}
+          <div className="text-xs text-[#54656f]">
+            Total: <strong className="text-[#008069] font-bold text-sm sm:text-base">Rp {formatRp(totalPrice)}</strong>
           </div>
-          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={saveDraftManually}
-              className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#54656f] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-              title="Simpan draf lokal selama 1 jam"
-            >
-              <BookmarkPlus size={14} className="text-amber-600" />
-              <span>Simpan Draf</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#54656f] hover:bg-[#f8fafc] hover:text-[#111b21] transition cursor-pointer shadow-2xs"
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="px-4 py-2 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] text-xs font-bold text-[#008069] hover:bg-[#c2e7e0] transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-            >
-              <Copy size={14} />
-              <span>Salin Format</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleInsert}
-              className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
-            >
-              <Send size={14} />
-              <span>Masukkan ke Chat WA</span>
-            </button>
+
+          {/* Deretan Tombol Ikon dengan Floating Press Label */}
+          <div className="flex items-center space-x-2 relative">
+            {/* Tombol 1: Simpan Draf */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { showButtonTip('Draf Disimpan'); saveDraftManually(); }}
+                onTouchStart={() => showButtonTip('Simpan Draf')}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-[#d1d7db] text-amber-700 hover:bg-amber-50 active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                title="Simpan Draf"
+              >
+                <BookmarkPlus size={18} />
+              </button>
+              {activeButtonTip === 'Simpan Draf' && (
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                  Simpan Draf
+                </div>
+              )}
+            </div>
+
+            {/* Tombol 2: Batal / Tutup */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={onClose}
+                onTouchStart={() => showButtonTip('Batal')}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc] hover:text-[#111b21] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                title="Batal"
+              >
+                <X size={18} />
+              </button>
+              {activeButtonTip === 'Batal' && (
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                  Batal
+                </div>
+              )}
+            </div>
+
+            {/* Tombol 3: Salin Format */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { showButtonTip(copied ? 'Tersalin!' : 'Salin Format'); handleCopy(); }}
+                onTouchStart={() => showButtonTip('Salin Format')}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                title="Salin Format Invoice"
+              >
+                {copied ? <Check size={18} className="text-emerald-600" /> : <Copy size={18} />}
+              </button>
+              {activeButtonTip === 'Salin Format' && (
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                  Salin Format
+                </div>
+              )}
+            </div>
+
+            {/* Tombol 4: Masukkan ke Chat WA (Primary CTA) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { showButtonTip('Mengirim ke Chat...'); handleInsert(); }}
+                onTouchStart={() => showButtonTip('Masukkan ke Chat WA')}
+                className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white active:scale-95 transition flex items-center space-x-1.5 shadow-md cursor-pointer"
+                title="Masukkan ke Chat WhatsApp"
+              >
+                <Send size={16} />
+                <span className="text-xs font-bold hidden xs:inline sm:inline">Kirim ke WA</span>
+              </button>
+              {activeButtonTip === 'Masukkan ke Chat WA' && (
+                <div className="absolute -top-8 right-0 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                  Masukkan ke Chat WA
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

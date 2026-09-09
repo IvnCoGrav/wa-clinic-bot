@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Perbaikan Layout Mobile iPhone & Redesain Footer Icon Buttons (2026-09-09)
+
+- **Latar Belakang:** Footer teks panjang overflow di iPhone 375px, header & footer terpotong Notch/Dynamic Island & Home Bar, serta viewport tidak full-screen saat keyboard muncul.
+- **Invoice WA (`InvoiceGeneratorModal.tsx`):** Overlay `p-3` → `p-0 sm:p-4` + `items-end sm:items-center`, modal `rounded-3xl` → `rounded-none sm:rounded-2xl`, header `px-3.5 py-2` → `px-4 pt-[calc(0.5rem+env(safe-area-inset-top))]` (~36px tetap tipis + aman Notch), footer teks → **icon-only 40×40** (`w-9 h-9 sm:w-10 sm:h-10`) dengan **floating pill tooltip** 1800ms saat `onTouchStart`/`onClick` (Simpan/Batal/Salin/Kirim WA), footer `pb-[calc(0.6rem+env(safe-area-inset-bottom))]` aman Home Bar, total lebar footer ~180px anti-overflow.
+- **Reservasi (`CreateReservationModal.tsx`):** Overlay & dialog sinkron `p-0 sm:p-4` + `rounded-none sm:rounded-3xl` + `h-[100dvh]`, tombol tutup & header `safe-area-top`, footer `safe-area-bottom`, form `WebkitOverflowScrolling: touch` untuk inertia iOS.
+- **Verifikasi:** `tsc --noEmit` bersih, `vite build` 2450 modules; manual 375px/390px — 4 ikon rapi tanpa scroll horizontal, pill muncul saat tap, header/footer tidak terpotong Notch/Home Bar, scroll form mulus saat keyboard aktif.
+
 #### Pembenahan Fondasi Fitur Draf & Redesain UI Mobile Invoice WA (2026-09-09)
 
 - **Latar Belakang:** Tabrakan draf antar-customer (key statis `'create_reservation'`), ghost auto-save (customer bawaan dianggap draf), state leak saat modal ditutup, kehilangan data paket multi-sesi, key draf invoice pecah per ketukan digit HP, banner draf sticky mengunci layar mobile, dan header invoice tebal ~70px yang memakan viewport saat keyboard muncul.
