@@ -514,8 +514,50 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lat: -7.359218,
     lng: 112.738914,
   },
+  // --- KLASTER SPESIFIK PURI SURYA JAYA (SIDOARJO) ---
+  // Cluster-First: entri klaster dalam WAJIB di atas entri gerbang utama
+  // karena findPopularLandmark() first-match-wins. Alamat berklaster
+  // ("Valencia spring puri surya jaya") memetakan ke titik dalam (~10.7 km),
+  // BUKAN terpangkas ke gerbang depan Ketajen (8.5 km).
   {
-    name: 'Puri Surya Jaya',
+    name: 'Puri Surya Jaya - Cluster Valencia (Spring, Icon, Residence)',
+    patterns: [
+      /\bvalencia\s*(spring|icon|residence)?\b/i,
+      /\bpuri\s*surya\s*jaya\b.*\bvalencia\b/i,
+      /\bvalencia\b.*\bpuri\s*surya\s*jaya\b/i,
+    ],
+    kelurahan: 'Punggul',
+    kecamatan: 'Gedangan',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.393858,
+    lng: 112.745941,
+  },
+  {
+    name: 'Puri Surya Jaya - Cluster Sydney & Boston',
+    patterns: [
+      /\b(sydney|boston)\s*(puri|psj)?\b/i,
+      /\bpuri\s*surya\s*jaya\b.*\b(sydney|boston)\b/i,
+    ],
+    kelurahan: 'Ketajen',
+    kecamatan: 'Gedangan',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.389200,
+    lng: 112.741500,
+  },
+  {
+    name: 'Puri Surya Jaya - Cluster Osaka & Vancouver',
+    patterns: [
+      /\b(osaka|vancouver)\b/i,
+      /\bpuri\s*surya\s*jaya\b.*\b(osaka|vancouver)\b/i,
+    ],
+    kelurahan: 'Ketajen',
+    kecamatan: 'Gedangan',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.386500,
+    lng: 112.744200,
+  },
+  {
+    name: 'Puri Surya Jaya (Gerbang Utama)',
     patterns: [
       /\bpuri\s*surya\s*jaya\b/i,
     ],
