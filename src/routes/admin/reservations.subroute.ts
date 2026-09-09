@@ -2008,26 +2008,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const occurredDate = customer.mql_triggered_at || customer.created_at || new Date();
           const occurredAt = new Date(occurredDate);
 
-          capiService
-            .sendCapiEvent({
-              eventName: 'Lead',
-              customer,
-              adClick: customer.adClick || undefined,
-              tenantId: DEFAULT_TENANT_ID,
-              eventTime: Math.floor(occurredAt.getTime() / 1000),
-              customData: {
-                source: 'ADMIN_MODERATION_APPROVE_LEAD',
-                mql_bubble_count: customer.mql_bubble_count || 5,
-              },
-            })
-            .then((result) => {
-              if (!result.success) {
-                console.error(`[CAPI ERROR] Approved Lead send failed for ${id}: ${result.message}`);
-              }
-            })
-            .catch((err) => {
-              console.error('[CAPI ERROR] Failed to send approved Lead event:', err.message);
+          const leadCapiResult = await capiService.sendCapiEvent({
+            eventName: 'Lead',
+            customer,
+            adClick: customer.adClick || undefined,
+            tenantId: DEFAULT_TENANT_ID,
+            eventTime: Math.floor(occurredAt.getTime() / 1000),
+            customData: {
+              source: 'ADMIN_MODERATION_APPROVE_LEAD',
+              mql_bubble_count: customer.mql_bubble_count || 5,
+            },
+          });
+
+          if (!leadCapiResult.success) {
+            console.error(`[CAPI ERROR] Approved Lead send failed for ${id}: ${leadCapiResult.message}`);
+            return reply.status(502).send({
+              success: false,
+              error: `Meta CAPI menolak Lead event: ${leadCapiResult.message || 'unknown error'}`,
+              metaResponse: leadCapiResult.metaResponse,
             });
+          }
 
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
@@ -2052,10 +2052,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (!existing) {
           throw new Error('Reservation not found');
         }
-        if (existing.purchase_review_status !== 'pending') {
+        // Izinkan re-send jika force=true, bahkan jika status sudah approved
+        const forceResend = (request.body as any)?.force === true;
+        if (existing.purchase_review_status !== 'pending' && !forceResend) {
           return reply.status(400).send({
             success: false,
-            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}).`,
+            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}). Gunakan force: true untuk mengirim ulang.`,
           });
         }
 
@@ -2134,25 +2136,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           } catch {}
         }
 
-        capiService
-          .sendCapiEvent({
-            eventName,
-            customer: existing.customer,
-            adClick: existing.customer?.adClick || undefined,
-            value: resolvedVal,
-            currency: customPayload?.custom_data?.currency || 'IDR',
-            tenantId: DEFAULT_TENANT_ID,
-            eventTime,
-            customData,
-          })
-          .then((result) => {
-            if (!result.success) {
-              console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${result.message}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[CAPI ERROR] Failed to send approved Purchase event:', err.message);
+        // 5. AWAIT CAPI — hanya set approved jika Meta benar-benar menerima event.
+        const capiResult = await capiService.sendCapiEvent({
+          eventName,
+          customer: existing.customer,
+          adClick: existing.customer?.adClick || undefined,
+          value: resolvedVal,
+          currency: customPayload?.custom_data?.currency || 'IDR',
+          tenantId: DEFAULT_TENANT_ID,
+          eventTime,
+          customData,
+        });
+
+        if (!capiResult.success) {
+          console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${capiResult.message}`);
+          return reply.status(502).send({
+            success: false,
+            error: `Meta CAPI menolak event: ${capiResult.message || 'unknown error'}`,
+            metaResponse: capiResult.metaResponse,
           });
+        }
 
         const reservation = await prisma.reservation.update({
           where: { id },

@@ -850,12 +850,60 @@ export class StaffReservationService {
       }
 
       // Update data Reservasi menjadi Lunas
+      // Normalisasi status: 'confirmed' tidak standar, gunakan 'pending' atau 'approved'
+      // berdasarkan auto_send_purchase_capi tenant.
+      let purchaseReviewStatus: 'pending' | 'approved' = 'pending';
+      let purchaseEventSentAt: Date | null = null;
+
+      // Cek apakah tenant mengaktifkan auto-send CAPI
+      try {
+        const { prisma: dbClient } = await import('../db/client');
+        const tenant = await dbClient.tenant.findUnique({ where: { id: tenantId } });
+        const autoSend = (tenant as any)?.auto_send_purchase_capi === true;
+
+        if (autoSend) {
+          // Kirim CAPI event, jika sukses set 'approved'
+          const { capiService } = await import('./capi.service');
+          const customer = reservation.customer;
+          const adClickResult = await dbClient.adClick.findFirst({
+            where: { customer_id: customer.id },
+            orderBy: { created_at: 'desc' },
+          });
+
+          const capiResult = await capiService.sendCapiEvent({
+            eventName: 'Purchase',
+            customer,
+            adClick: adClickResult || undefined,
+            value: totalPaid,
+            currency: 'IDR',
+            tenantId,
+            eventTime: Math.floor(now.getTime() / 1000),
+            customData: {
+              source: 'STAFF_RECORD_PAYMENT',
+              payment_method: paymentMethod,
+            },
+          });
+
+          if (capiResult.success) {
+            purchaseReviewStatus = 'approved';
+            purchaseEventSentAt = new Date();
+            console.log(`[STAFF CAPI] Purchase event sent successfully for reservation ${reservationId}`);
+          } else {
+            console.warn(`[STAFF CAPI] Purchase event failed for reservation ${reservationId}, status set to pending`);
+          }
+        }
+      } catch (capiErr: any) {
+        console.error(`[STAFF CAPI] Error sending CAPI event: ${capiErr.message}`);
+        // Tetap lanjut dengan status 'pending' jika CAPI gagal
+      }
+
       const updated = await prisma.reservation.update({
         where: { id: reservationId },
         data: {
           purchase_occurred_at: now,
           purchase_value: totalPaid,
-          purchase_review_status: 'confirmed',
+          purchase_review_status: purchaseReviewStatus,
+          purchase_event_sent_at: purchaseEventSentAt,
           status: 'completed',
           payment_method: paymentMethod,
           proof_url: proofUrl,
