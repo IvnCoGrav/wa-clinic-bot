@@ -169,6 +169,88 @@ describe('purchase-detection.service', () => {
       expect(prisma.reservation.update).not.toHaveBeenCalled();
     });
 
+    it('RE-DESAIN: mencocokkan reservasi berdasarkan booking_date dari teks (bukan created_at terakhir)', async () => {
+      mockTenantAutoSend(false);
+      const dated = new Date('2026-09-09T02:30:00.000Z'); // 09:30 WIB
+      vi.mocked(prisma.reservation.findMany).mockResolvedValue([
+        {
+          id: 'r_dated',
+          customer_id: 'c1',
+          tenant_id: 'default-tenant',
+          status: 'pending',
+          treatment_detail: 'Pijat Bayi Ceria',
+          treatment_category: 'BABY',
+          booking_date: dated,
+          purchase_value: null,
+          purchase_event_sent_at: null,
+          purchase_occurred_at: null,
+          purchase_review_status: 'pending',
+          customer: { id: 'c1', adClick: null },
+        } as any,
+      ]);
+      // Fallback (created_at desc) menunjuk reservasi yang SALAH — tidak boleh dipakai bila tanggal cocok.
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r_wrong',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'pending',
+        treatment_detail: 'Lain',
+        purchase_value: null,
+        purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
+        customer: { id: 'c1', adClick: null },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Hari dan tanggal : Rabu, 9 september 2026 jam 09.30\nNama Bunda: Bella\nAlamat : Jl. Mawar 1\nKec : Sidoarjo\nTreatment : Pijat Bayi Ceria\nPayment : Total = 160.000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(true);
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'r_dated' },
+        data: expect.objectContaining({ purchase_value: 160000 }),
+      });
+    });
+
+    it('RE-DESAIN: downside guard — nilai parser korup (46rb) tidak menimpa purchase_value resmi (160rb)', async () => {
+      mockTenantAutoSend(true);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r_official',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'confirmed',
+        treatment_detail: 'Pijat Bayi Ceria + Pijat Kids Ceria',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
+        purchase_value: 160000,
+        customer: { id: 'c1', adClick: null },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+      const fireSpy = vi.spyOn(capi, 'fireCapiEvent').mockImplementation(() => {});
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment 46000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(true);
+      // Nilai resmi dipertahankan, bukan 46000.
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'r_official' },
+        data: expect.objectContaining({ purchase_value: 160000 }),
+      });
+      expect(fireSpy).toHaveBeenCalledWith(expect.objectContaining({ value: 160000 }));
+    });
+
     it('mendukung ekstraksi nominal murni dari financial equation (Total = 70rb + ongkir 15rb = 85rb)', async () => {
       mockTenantAutoSend(false);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue({

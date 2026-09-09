@@ -217,111 +217,33 @@ export interface UpsertReservationFormParams {
 }
 
 /**
- * Helper terstandarisasi untuk membuat atau memperbarui reservasi pending (Anti-Deduplikasi Queue Purchase).
- * Jika customer sudah memiliki reservasi berstatus 'pending' yang dibuat dalam 24 jam terakhir,
- * fungsi ini akan meng-update reservasi tersebut (mengganti raw_text, treatment, dan purchase_value)
- * alih-alih membuat kartu baru yang duplikat di Moderation Queue.
+ * Helper terstandarisasi (DEPRECATED — delegasi ke Canonical Reservation Core).
+ * Dipertahankan agar 4 titik auto-capture webhook + tool lama tetap berfungsi
+ * sambil mewarisi perbaikan fondasional: pencocokan booking_date (bukan
+ * created_at 24 jam naif), idempotent merge, dan auto-konsolidasi duplikat.
+ * Kode baru WAJIB memanggil `reservationCoreService.saveReservation()` langsung.
  */
 export async function upsertReservationForm(params: UpsertReservationFormParams): Promise<{
   reservation: any;
   isNew: boolean;
   isUpdate: boolean;
 }> {
-  const {
-    tenantId,
-    customerId,
-    chatId,
-    treatmentCategory,
-    treatmentDetail,
-    bookingDate,
-    rawText,
-    purchaseValue,
-    babies = [],
-    customerName,
-    kecamatan,
-    kota,
-    kelurahan,
-    address,
-    source,
-  } = params;
-
-  // 1. Cari apakah ada reservasi yang masih pending untuk customer ini dalam 24 jam terakhir
-  const recentPending = await prisma.reservation.findFirst({
-    where: {
-      customer_id: customerId,
-      tenant_id: tenantId,
-      created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      purchase_event_sent_at: null,
-      purchase_review_status: 'pending',
-      status: { not: 'cancelled' },
-    },
-    orderBy: { created_at: 'desc' },
+  const { source, ...rest } = params;
+  const { reservationCoreService } = await import('./reservation-core.service');
+  // Petakan source lama ke kanal kanonis: admin-outbound & webhook-* → WEBHOOK,
+  // V3 tool → AGENT, selain itu → WEBHOOK (idempoten, aman untuk bot).
+  const upper = String(source || 'WEBHOOK').toUpperCase();
+  const mappedSource = upper.includes('AGENT') || upper.includes('V3_NATIVE')
+    ? 'AGENT'
+    : upper.includes('ADMIN_PANEL')
+      ? 'ADMIN_PANEL'
+      : upper.includes('BOT')
+        ? 'BOT'
+        : 'WEBHOOK';
+  const result = await reservationCoreService.saveReservation({
+    ...rest,
+    source: mappedSource as 'BOT' | 'WEBHOOK' | 'AGENT' | 'ADMIN_PANEL',
+    status: 'pending',
   });
-
-  let reservation: any;
-  let isUpdate = false;
-  let isNew = false;
-
-  const validCategory = (treatmentCategory as TreatmentCategory) || TreatmentCategory.BABY;
-  const effectiveRawText = rawText || `[RESERVATION] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0,10) : '-'} | ${customerName || '-'} | ${babies.map(b=>b.name).join(',') || '-'}`;
-
-  if (recentPending) {
-    // UPDATE reservasi pending yang ada agar tidak muncul kartu dobel di queue Purchase
-    reservation = await prisma.reservation.update({
-      where: { id: recentPending.id },
-      data: {
-        treatment_category: treatmentCategory ? (treatmentCategory as TreatmentCategory) : recentPending.treatment_category,
-        treatment_detail: treatmentDetail !== undefined ? treatmentDetail : recentPending.treatment_detail,
-        booking_date: bookingDate !== undefined ? bookingDate : recentPending.booking_date,
-        raw_text: effectiveRawText,
-        purchase_value: purchaseValue !== undefined ? purchaseValue : recentPending.purchase_value,
-      },
-    });
-    isUpdate = true;
-    console.log(`[RESERVATION AUTO-DEDUP] Updated existing pending reservation ${reservation.id} for customer ${customerId} (New Value: ${reservation.purchase_value}, Source: ${source || 'WEBHOOK'})`);
-  } else {
-    // Cek apakah persis sama dalam 24 jam (exact match) untuk menghindari duplikasi id
-    const exactExisting = await prisma.reservation.findFirst({
-      where: {
-        customer_id: customerId,
-        tenant_id: tenantId,
-        created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-        treatment_detail: treatmentDetail || undefined,
-      },
-    });
-
-    if (exactExisting) {
-      reservation = exactExisting;
-    } else {
-      reservation = await prisma.reservation.create({
-        data: {
-          tenant_id: tenantId,
-          customer_id: customerId,
-          treatment_category: validCategory,
-          treatment_detail: treatmentDetail,
-          booking_date: bookingDate,
-          raw_text: effectiveRawText,
-          status: 'pending',
-          purchase_value: purchaseValue,
-        },
-      });
-      isNew = true;
-      console.log(`[RESERVATION CREATE] Created new reservation ${reservation.id} for customer ${customerId} (Value: ${reservation.purchase_value}, Source: ${source || 'WEBHOOK'})`);
-    }
-  }
-
-  // Jalankan efek samping lifecycle (update nama Bunda, update lokasi, sync Google Contacts, follow-up, baby entities)
-  await reservationLifecycleService.onReservationCreated({
-    customerId,
-    reservationId: reservation.id,
-    tenantId,
-    chatId,
-    babies,
-    customerName,
-    kecamatan,
-    kota,
-    kelurahan: kelurahan || address,
-  });
-
-  return { reservation, isNew, isUpdate };
+  return { reservation: result.reservation, isNew: result.isNew, isUpdate: result.isUpdate };
 }

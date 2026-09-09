@@ -4,6 +4,15 @@
  * CJK Mandarin/Kanji dan Cyrillic Rusia). DeepSeek & model lain kadang menyelipkan
  * karakter Mandarin/Rusia di tengah kalimat Indonesia. Ini lapisan post-processing
  * terakhir agar customer tidak pernah melihat teks asing.
+ *
+ * CATATAN ARSITEKTUR (Pilar 6 — Sanitizer Pruning, varian aman):
+ * Fungsi-fungsi di modul ini TIDAK terpasang di jalur outbound aktif V3
+ * (agent-runner hanya memakai OutputSanitizer + normalizeWhatsAppFormat).
+ * Ekspor dipertahankan untuk kompatibilitas impor historis & cakupan unit test
+ * (language-sanitizer.test.ts, language-sanitizer-fixes.test.ts,
+ * lead-greeting-preservation.test.ts); penghapusan total akan mematahkan test
+ * tanpa manfaat runtime. Kendali perilaku LLM diselesaikan di level
+ * Prompt/Grounding/Few-Shot sesuai mandat AGENTS.md.
  */
 
 // Blok aksara yang dianggap asing & harus dibuang dari jawaban LLM:
@@ -96,6 +105,9 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
  * Membersihkan istilah halusinasi penerjemahan LLM yang aneh
  * (seperti "antimeminjamkan", "biaya pinjam" alih-alih "ongkir",
  * serta halusinasi nama panggilan anak seperti "Bunny").
+ *
+ * @deprecated Tidak dipasang di jalur outbound V3 — dipertahankan hanya untuk
+ * kompatibilitas test/impor historis. Kendali istilah diselesaikan di level prompt.
  */
 export function sanitizeHallucinatedTerms(text: string): string {
   if (!text) return text;
@@ -139,8 +151,10 @@ export function sanitizeRepetitiveGreetings(text: string): string {
 
 /**
  * Menghilangkan karakter em-dash (—) sesuai pedoman anti-slop (design.md §9 EM-DASH BAN).
- * LLM sering menyelipkan em-dash di tengah jawaban; WhatsApp & gaya chat santai
- * persona tidak memakainya. Penggantian kontekstual:
+ * AKTIF via normalizeWhatsAppFormat (whatsapp-format.ts) — satu-satunya sanitizer
+ * modul ini yang tetap terpasang di jalur produksi. TIDAK dihapus / TIDAK dipindah
+ * agar tidak mengaduk impor produksi & cakupan test.
+ * Penggantian kontekstual:
  * - Rentang angka ("jam 9—11")  -> hyphen "-"   ("jam 9-11")
  * - Bullet list di awal baris   -> "- "         ("- Gratis ongkir")
  * - Pemisah antar klausa        -> koma ", "    ("Halo—mau tanya" -> "Halo, mau tanya")
@@ -156,6 +170,9 @@ export function sanitizeEmDash(text: string): string {
 /**
  * Membersihkan backslash liar (\) dan typo JSON escaping yang menempel di kata,
  * seperti "\Bundlebih" -> "Bunda lebih", "\Bund" -> "Bunda", "\n" mentah, dll.
+ *
+ * @deprecated Tidak dipasang di jalur outbound V3 — dipertahankan hanya untuk
+ * kompatibilitas test/impor historis (sanitasi teknis murni bila dibutuhkan).
  */
 export function sanitizeStrayBackslashes(text: string): string {
   if (!text) return text;
@@ -242,6 +259,9 @@ export function formatParagraphsAfterEmoji(text: string): string {
 
 /**
  * Membersihkan pertanyaan ganda yang menumpuk di kalimat penutup jika LLM menanyakan jam SEKALIGUS kelurahan rumah.
+ *
+ * @deprecated Tidak dipasang di jalur outbound V3 — dipertahankan hanya untuk
+ * kompatibilitas test/impor historis. Kontrol pertanyaan penutup hidup di prompt persona §6.
  * Contoh: "Boleh tahu preferensi jam kunjungannya range pagi/siang/sore? Serta daerah atau kelurahan rumah Bunda agar kami bisa sekaligus bantu cek ongkirnya? 😊"
  * -> "Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya? 😊"
  */

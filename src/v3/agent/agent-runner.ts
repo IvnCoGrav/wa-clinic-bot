@@ -14,6 +14,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
 import { validateToolArgs } from '../tools/tool-schemas';
 import { validateNumericFacts } from '../guardrails/numeric-fact-validator';
+import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { maskPhoneNumber, maskToolArgsForLogging } from '../../utils/pii-masker';
 
@@ -158,6 +159,38 @@ export class V3AgentRunner {
     return null;
   }
 
+  /**
+   * Penentu pesan substantif untuk Hybrid RAG pre-retrieval (deterministik, 0 token).
+   * Data-driven includes (tanpa regex intent gatekeeper): keluhan, perbedaan layanan,
+   * syarat usia/SOP, kehamilan/induksi. Sapaan/harga murni/ongkir/jadwal dikecualikan
+   * agar tidak membebani FTS.
+   */
+  public static isSubstantiveForPreGrounding(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower || lower.trim().length < 8) return false;
+    // Sapaan murni tidak perlu grounding
+    const greetingOnly = ['halo', 'hallo', 'hai', 'pagi', 'siang', 'sore', 'malam', 'assalamualaikum', 'permisi', 'tes', 'test', 'oke', 'ok', 'siap', 'makasih', 'terima kasih'];
+    const tokens = lower.split(' ').filter((t) => t.length > 0);
+    if (tokens.length <= 3 && greetingOnly.some((g) => lower.includes(g))) return false;
+    const substantiveSignals = [
+      // Keluhan fisik ibu & anak
+      'sakit', 'nyeri', 'pegal', 'capek', 'lelah', 'bengkak', 'kembung', 'kolik', 'batuk', 'pilek', 'bapil',
+      'flu', 'demam', 'rewel', 'grok', 'diare', 'gtm', 'susah makan', 'susah tidur', 'kontraksi', 'mual',
+      'pusing', 'asi', 'laktasi', 'menyusui',
+      // Perbedaan / pemilihan layanan
+      'beda', 'perbedaan', 'pilih', 'rekomendasi', 'cocok', 'bagus', 'mending', 'sebaiknya',
+      // Syarat usia / SOP klinik
+      'usia', 'umur', 'bulan', 'tahun', 'minggu', 'week', 'boleh', 'aman', 'syarat', 'minimal',
+      'mandi', 'susu', 'minyak', 'telon', 'balsem', 'cukur', 'gundul', 'tumbuh gigi', 'vaksin',
+      'fisioterapi', 'newborn', 'hamil', 'kehamilan', 'nifas', 'induksi', 'oksitosin', 'prenatal',
+      'perineum', 'kontraksi', 'pembukaan', 'hpl',
+      // Penjelasan terapi / khasiat
+      'fungsi', 'manfaat', 'khasiat', 'cara kerja', 'gimana', 'bagaimana', 'maksudnya', 'seperti apa',
+      'treatment', 'terapi', 'moksa', 'inframerah', 'laktasi', 'pijat',
+    ];
+    return substantiveSignals.some((s) => lower.includes(s));
+  }
+
   private static async executeChatCompletion(params: {
     payload: any;
     tenantId: string;
@@ -273,6 +306,7 @@ export class V3AgentRunner {
 
     // Ekstraksi profil anak otomatis dari pesan masuk (usia, gejala, peran Adik/Kakak),
     // sinkron ke session.children (+ mirror childProfile) sebelum pemanggilan LLM.
+    // Guard maternal-only di dalam syncChildrenProfiles mencegah "38 weeks" bocor ke usia anak.
     if (conversationId && cleanIncomingText) {
       try {
         const nextChildren = GoalTracker.syncChildrenProfiles(session, cleanIncomingText);
@@ -283,6 +317,30 @@ export class V3AgentRunner {
             childProfile: firstChild
               ? { name: firstChild.name, roleLabel: firstChild.roleLabel, ageMonths: firstChild.ageMonths, symptoms: [...(firstChild.symptoms || [])] }
               : session.childProfile,
+          }, tenantId);
+        }
+      } catch (e) {}
+    }
+
+    // Ekstraksi profil ibu multi-audience (kehamilan/nifas/keluhan Bunda) + subjek perawatan.
+    // First-class MomProfileState — terpisah 100% dari data anak (anti kontaminasi silang).
+    if (conversationId && cleanIncomingText) {
+      try {
+        const nextMom = GoalTracker.syncMomProfile(session, cleanIncomingText);
+        const nextAudience = GoalTracker.detectTargetAudience(cleanIncomingText);
+        const momChanged = JSON.stringify(nextMom || null) !== JSON.stringify(session.momProfile || null);
+        // Naikkan ke BOTH bila kedua sinyal hadir di turn berbeda (misal turn 1 MOMS, turn 2 anak)
+        let resolvedAudience = nextAudience || session.targetAudience;
+        if (session.targetAudience && nextAudience && session.targetAudience !== nextAudience) {
+          const oneMom = session.targetAudience === 'MOMS' || nextAudience === 'MOMS';
+          const oneChild = session.targetAudience === 'BABY' || session.targetAudience === 'KIDS' || nextAudience === 'BABY' || nextAudience === 'KIDS';
+          if (oneMom && oneChild) resolvedAudience = 'BOTH';
+          else resolvedAudience = nextAudience;
+        }
+        if (momChanged || (resolvedAudience && resolvedAudience !== session.targetAudience)) {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            ...(momChanged ? { momProfile: nextMom } : {}),
+            ...(resolvedAudience ? { targetAudience: resolvedAudience } : {}),
           }, tenantId);
         }
       } catch (e) {}
@@ -434,18 +492,54 @@ export class V3AgentRunner {
       } catch {}
     };
 
+    // ── Hybrid RAG: Deterministic Semantic Pre-Retrieval (Pre-Call 1 Grounding) ──
+    // Pertanyaan konsultatif (keluhan, perbedaan treatment, syarat usia, SOP klinik,
+    // kehamilan/induksi) otomatis dicarikan artikel resmi knowledge_chunks SEBELUM Call 1.
+    // LLM dijamin memegang SOP resmi klinik tanpa bergantung pada insting tool-calling.
+    try {
+      if (V3AgentRunner.isSubstantiveForPreGrounding(cleanIncomingText)) {
+        const { knowledgeBaseService } = await import('../../services/knowledge.service');
+        const preChunks = await knowledgeBaseService.searchRelevantChunks(cleanIncomingText, 2, tenantId);
+        if (preChunks && preChunks.length > 0) {
+          const groundingBlock = `[PANDUAN & KNOWLEDGE BASE RESMI KLINIK - WAJIB DIPATUHI]\n`
+            + `Berikut panduan resmi klinik yang RELEVAN dengan pertanyaan customer saat ini. Jadikan sebagai acuan utama jawaban (grounded), jangan mengarang di luar panduan ini:\n`
+            + preChunks.map((c: any, i: number) => `Artikel ${i + 1} — ${c.title}:\n${c.content}`).join('\n\n');
+          messages[0].content = `${messages[0].content}\n\n${groundingBlock}`;
+          for (const c of preChunks as any[]) {
+            const key = String((c as any)?.id || (c as any)?.title || '');
+            if (key && !retrievedChunkIds.has(key)) {
+              retrievedChunkIds.add(key);
+              const realScore = typeof (c as any)?.similarity === 'number' ? (c as any).similarity
+                : (typeof (c as any)?.score === 'number' ? (c as any).score
+                : (typeof (c as any)?.rank === 'number' ? (c as any).rank : 0.9));
+              retrievedChunks.push({
+                id: String((c as any)?.id || key),
+                title: String((c as any)?.title || ''),
+                content: String((c as any)?.content || ''),
+                similarity: realScore,
+                score: realScore,
+              } as any);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+
     try {
       // 4. Panggilan Pertama: Model mengevaluasi apakah perlu memanggil Tools
       const detectedIntents = extractFastIntents(cleanIncomingText);
 
+      // Autonomous tool routing: hanya lokasi yang di-forcing deterministik
+      // (ongkir wajib hitung via calculate_delivery). Pertanyaan harga/konsultasi/FAQ
+      // dibiarkan 'auto' agar Call 1 bebas memilih get_catalog_and_price ATAU
+      // search_knowledge_faq sesuai kebutuhan — forcing katalog berbasis substring
+      // "berapa" sebelumnya memblokir pemanggilan FAQ (mis. "berapa minggu ... induksi?").
       let dynamicToolChoice: any = 'auto';
 
       // Prioritaskan lokasi (ongkir) bila gazetteer match, karena kalimat "berapa ongkir ke X"
       // mengandung dua sinyal (ask_price + provide_location) namun intent utamanya adalah cek ongkir
       if (detectedIntents.includes('provide_location')) {
         dynamicToolChoice = { type: 'function', function: { name: 'calculate_delivery' } };
-      } else if (detectedIntents.includes('ask_price')) {
-        dynamicToolChoice = { type: 'function', function: { name: 'get_catalog_and_price' } };
       }
 
       const firstPayload: any = {
@@ -490,6 +584,21 @@ export class V3AgentRunner {
               ? JSON.parse(tc.function.arguments)
               : tc.function?.arguments || {};
           } catch (_) {}
+
+          // Pengayaan deterministik: bila LLM memanggil save_reservation tanpa
+          // data ibu padahal session.momProfile sudah diketahui dari turn
+          // sebelumnya, suntikkan agar usia kehamilan tidak hilang saat booking.
+          if (fnName === 'save_reservation' && session.momProfile) {
+            if (fnArgs.gestationalWeeks == null && session.momProfile.gestationalWeeks != null) {
+              fnArgs.gestationalWeeks = session.momProfile.gestationalWeeks;
+            }
+            if (fnArgs.momStage == null && session.momProfile.stage != null) {
+              fnArgs.momStage = session.momProfile.stage;
+            }
+            if ((fnArgs.momNotes == null || fnArgs.momNotes === '') && (session.momProfile.complaints || []).length > 0) {
+              fnArgs.momNotes = session.momProfile.complaints.join(', ');
+            }
+          }
 
           console.log(`[V3 AGENT TOOL EXECUTE] Tool: "${fnName}", Args:`, JSON.stringify(maskToolArgsForLogging(fnName, fnArgs)));
 
@@ -551,6 +660,26 @@ export class V3AgentRunner {
               session = await GoalTracker.markOngkirQuoted(conversationId, tenantId);
             }
           } else if (fnName === 'get_catalog_and_price' && toolResult.success) {
+            // Unified Knowledge Observability: daftarkan spesifikasi katalog resmi
+            // ke trace retrievedChunks agar Inspector menampilkan seluruh ground truth
+            // (artikel SOP + katalog layanan) yang dipakai LLM di Call 2.
+            try {
+              if (Array.isArray(toolResult.treatments)) {
+                for (const t of toolResult.treatments.slice(0, 5)) {
+                  const key = `catalog-${String(t?.id || t?.name || '')}`;
+                  if (key && !retrievedChunkIds.has(key)) {
+                    retrievedChunkIds.add(key);
+                    retrievedChunks.push({
+                      id: key,
+                      title: `[Katalog Layanan] ${String(t?.name || '')}`,
+                      content: `${String(t?.description || '')}\nKategori: ${String(t?.category || '')}, Durasi: ${Number(t?.durationMinutes || 0)} menit, Promo: Rp ${Number(t?.promoPrice || 0).toLocaleString('id-ID')}`,
+                      similarity: 1.0,
+                      score: 1.0,
+                    } as any);
+                  }
+                }
+              }
+            } catch (_) {}
             if (fnArgs.specificTreatmentName) {
               session = await GoalTracker.updateGoalSession(conversationId, {
                 selectedTreatment: fnArgs.specificTreatmentName,
@@ -565,25 +694,70 @@ export class V3AgentRunner {
                 }, tenantId);
               }
             }
-            if (fnArgs.childAgeMonths || (fnArgs.symptoms && fnArgs.symptoms.length > 0)) {
+            // Audience-aware routing (anti cross-contamination 100% di tingkat tool):
+            // MOMS/gestationalWeeks/momStage -> momProfile; BABY/KIDS/childAgeMonths -> children.
+            const isMomArgs = fnArgs.category === 'MOMS' || fnArgs.category === 'BOTH'
+              || fnArgs.gestationalWeeks != null || fnArgs.momStage != null;
+            const isChildArgs = fnArgs.category === 'BABY' || fnArgs.category === 'KIDS' || fnArgs.category === 'BOTH'
+              || fnArgs.childAgeMonths != null;
+            if (isMomArgs) {
+              const prevMom = session.momProfile || { complaints: [] as string[] };
+              const mergedComplaints = [...(prevMom.complaints || [])];
+              for (const s of (fnArgs.symptoms || [])) {
+                if (s && !mergedComplaints.includes(s)) mergedComplaints.push(s);
+              }
+              const patch: any = { complaints: mergedComplaints };
+              if (fnArgs.gestationalWeeks != null) patch.gestationalWeeks = fnArgs.gestationalWeeks;
+              if (fnArgs.momStage != null) patch.stage = fnArgs.momStage;
+              else if (!prevMom.stage && fnArgs.category === 'MOMS') patch.stage = 'GENERAL';
               session = await GoalTracker.updateGoalSession(conversationId, {
-                childProfile: {
-                  ageMonths: fnArgs.childAgeMonths,
-                  symptoms: fnArgs.symptoms || [],
-                },
+                momProfile: { ...prevMom, ...patch },
+                ...(fnArgs.category ? { targetAudience: fnArgs.category as any } : {}),
               }, tenantId);
             }
+            if (isChildArgs && (fnArgs.childAgeMonths != null || (fnArgs.symptoms && fnArgs.symptoms.length > 0))) {
+              // BOTH: gejala anak tetap dicatat ke anak; MOMS-only: JANGAN timpa anak.
+              const shouldWriteChild = fnArgs.category !== 'MOMS' || fnArgs.childAgeMonths != null;
+              if (shouldWriteChild) {
+                const childSymptoms = fnArgs.category === 'BOTH' ? (fnArgs.symptoms || []) : (fnArgs.category === 'MOMS' ? [] : (fnArgs.symptoms || []));
+                if (fnArgs.childAgeMonths != null || childSymptoms.length > 0) {
+                  const prevChild = session.childProfile || { symptoms: [] as string[] };
+                  const merged = [...(prevChild.symptoms || [])];
+                  for (const s of childSymptoms) {
+                    if (s && !merged.includes(s)) merged.push(s);
+                  }
+                  session = await GoalTracker.updateGoalSession(conversationId, {
+                    childProfile: {
+                      ageMonths: fnArgs.childAgeMonths ?? (prevChild as any).ageMonths,
+                      symptoms: merged,
+                    } as any,
+                  }, tenantId);
+                }
+              }
+            } else if (!isMomArgs && !isChildArgs && fnArgs.symptoms && fnArgs.symptoms.length > 0) {
+              // Fallback lama: tanpa kategori eksplisit, perlakukan sebagai gejala anak
+              // KECUALI pesan murni maternal (sudah ditangani momProfile via syncMomProfile).
+              if (!GoalTracker.isMaternalOnlyMessage(cleanIncomingText)) {
+                session = await GoalTracker.updateGoalSession(conversationId, {
+                  childProfile: {
+                    ageMonths: fnArgs.childAgeMonths,
+                    symptoms: fnArgs.symptoms || [],
+                  },
+                }, tenantId);
+              }
+            }
           } else if (fnName === 'save_reservation' && toolResult.success) {
+            // Reservasi tercatat sebagai pending (ketersediaan dicekkan tim Bidan);
+            // isConfirmed tetap false agar state = RESERVATION_SENT, bukan COMPLETED.
             session = await GoalTracker.updateGoalSession(conversationId, {
               selectedTreatment: fnArgs.treatmentName,
               booking: {
                 preferredDate: fnArgs.bookingDate,
                 preferredTime: fnArgs.bookingTime,
                 reservationId: toolResult.reservationId,
-                isConfirmed: true,
+                isConfirmed: false,
               },
             }, tenantId);
-            session = await GoalTracker.markOngkirConfirmed(conversationId, tenantId);
           } else if (fnName === 'escalate_to_human') {
             isEscalated = true;
             shouldSendReply = false;
@@ -664,7 +838,7 @@ export class V3AgentRunner {
       // 7. Sanitasi Balasan
       finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText, isFollowUp);
 
-      const numCheck = validateNumericFacts(finalReply, executedTools);
+      const numCheck = validateNumericFacts(finalReply, executedTools, { tenantId, session });
       if (!numCheck.isValid && executedTools.length > 0) {
         console.warn(JSON.stringify({ event: 'NUMERIC_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: numCheck.violations, timestamp: new Date().toISOString() }));
         // Gunakan suggestedPriceReply / suggestedTemplateReply dari tool jika ada
@@ -673,6 +847,11 @@ export class V3AgentRunner {
           finalReply = fallbackToolReply;
         }
       }
+
+      // Post-processor deterministik: konversi Markdown ganda (**tebal**) ke
+      // format WhatsApp tunggal (*tebal*) untuk SEMUA output agent — berlaku di
+      // simulator, dashboard, log LLM, maupun WAHA (sebelum validasi & logging).
+      finalReply = normalizeWhatsAppFormat(finalReply);
 
       if (!OutputSanitizer.isValidReply(finalReply)) {
         console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));

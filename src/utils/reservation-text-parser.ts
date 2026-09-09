@@ -17,6 +17,15 @@ export interface ParsedReservation {
   bookingDate: Date | null;
   rawText: string;
   babies: BabyDetail[];
+  /**
+   * Profil ibu multi-audience (first-class, terpisah dari babies):
+   * usia kehamilan tidak boleh dibuang maupun bocor ke usia anak.
+   */
+  momProfile?: {
+    gestationalWeeks?: string;
+    stage?: string;
+    notes?: string;
+  };
   payment?: {
     treatmentPrice: number;
     ongkir: number;
@@ -405,6 +414,20 @@ export function parseReservationText(rawText: string): ParseResult {
     payment = parsePaymentSection(rawText);
   }
 
+  // Profil ibu: usia kehamilan WAJIB dipertahankan (tidak dibuang).
+  // Tahap & catatan diisi defensif dari konteks MOMS yang tersedia.
+  const momStage = hasMomsTreatment
+    ? (/nifas|paska|pasca|postpartum|menyusui|laktasi/i.test(`${momsTreatment} ${momsPregnancyAge}`) ? 'POSTPARTUM'
+      : (/hamil|kehamilan|uk\b|weeks?|minggu|trimester|induksi|perineum|prenatal/i.test(`${momsTreatment} ${momsPregnancyAge}`) ? 'PREGNANT' : 'GENERAL'))
+    : undefined;
+  const momProfile = (momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) || momStage
+    ? {
+        gestationalWeeks: (momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) ? momsPregnancyAge : undefined,
+        stage: momStage,
+        notes: momsTreatment && !isPlaceholderText(momsTreatment) ? momsTreatment : undefined,
+      }
+    : undefined;
+
   return {
     success: true,
     reservation: {
@@ -418,6 +441,7 @@ export function parseReservationText(rawText: string): ParseResult {
       bookingDate,
       rawText,
       babies,
+      momProfile,
       payment,
     },
   };
@@ -760,8 +784,37 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     return null;
   }
 
-  const babies: BabyDetail[] = babyName ? [{ name: babyName, age: babyAge || '-' }] : [];
+  // Sinyal maternal multi-audience (tanpa regex baru): usia kehamilan milik ibu,
+  // DILARANG jatuh ke babyAge/babies (anti bocor "38 weeks" → anak 9 bulan).
+  const hasMaternalSignal = lower.includes('hamil') || lower.includes('kehamilan') || lower.includes('week')
+    || lower.includes('bumil') || lower.includes('nifas') || lower.includes('menyusui') || lower.includes('laktasi')
+    || lower.includes('induksi') || lower.includes('oksitosin') || lower.includes('perineum') || lower.includes('prenatal');
+  const hasChildSignal = lower.includes('bayi') || lower.includes('baby') || lower.includes('anak saya')
+    || lower.includes('adik') || lower.includes('kakak') || lower.includes('si kecil') || lower.includes('newborn');
+  let momProfile: ParsedReservation['momProfile'];
+  let effectiveBabyAge = babyAge;
+  if (hasMaternalSignal && !hasChildSignal) {
+    // Usia kehamilan mingguan → momProfile, bukan usia anak.
+    effectiveBabyAge = '';
+    const weekIdx = lower.indexOf('week') !== -1 ? lower.indexOf('week') : lower.indexOf('minggu');
+    let gestPhrase: string | undefined;
+    if (weekIdx !== -1) {
+      const before = lower.slice(Math.max(0, weekIdx - 12), weekIdx);
+      const numMatch = before.match(/(\d{1,2})\s*$/);
+      if (numMatch) {
+        gestPhrase = lower.includes('week') ? `${numMatch[1]} weeks` : `${numMatch[1]} minggu`;
+      }
+    }
+    const stageText = `${treatmentDetail} ${rawText}`.toLowerCase();
+    const stage = stageText.includes('nifas') || stageText.includes('paska') || stageText.includes('pasca') || stageText.includes('menyusui') || stageText.includes('laktasi')
+      ? 'POSTPARTUM'
+      : (stageText.includes('hamil') || stageText.includes('kehamilan') || gestPhrase ? 'PREGNANT' : 'GENERAL');
+    momProfile = { gestationalWeeks: gestPhrase, stage, notes: undefined };
+  }
+
+  const babies: BabyDetail[] = babyName ? [{ name: babyName, age: effectiveBabyAge || '-' }] : [];
   const bookingDate = dateStr ? tryParseIndonesianDate(dateStr) : null;
+  const treatmentCategory = momProfile && babies.length > 0 ? TreatmentCategory.BOTH : (momProfile ? TreatmentCategory.MOMS : TreatmentCategory.BABY);
 
   return {
     name,
@@ -769,11 +822,12 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     address,
     kec: '',
     kota: '',
-    treatmentCategory: TreatmentCategory.BABY,
+    treatmentCategory,
     treatmentDetail: treatmentDetail,
     bookingDate,
     rawText,
     babies,
+    momProfile,
   };
 }
 

@@ -301,6 +301,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
   const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
   const initializedEditIdRef = useRef<string | null>(null);
+  // Double-booking conflict UX (409 DUPLICATE_BOOKING / STAFF_COLLISION)
+  const [conflictInfo, setConflictInfo] = useState<{ code: string; message: string; existingReservation: any } | null>(null);
+  const [showConflictModal, setShowConflictModal] = useState(false);
 
   // Form Draft Persistence Hook (1-hour TTL)
   const currentFormPayload = useMemo(() => ({
@@ -829,6 +832,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     });
   }, [loadedReservations, existingReservations, bookingDate]);
 
+  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini.
+  const customerConflictsForDate = useMemo(() => {
+    if (!customerId || bookedReservationsForDate.length === 0) return [];
+    return bookedReservationsForDate.filter((r: any) => {
+      const rid = r.customer_id || (r.customer as any)?.id;
+      return rid === customerId;
+    });
+  }, [bookedReservationsForDate, customerId]);
+
   // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
   const handleGenerateRecommendations = () => {
     if (!bookingDate) {
@@ -1028,6 +1040,59 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     toast(`Jam diatur ke ${rec.startTime} WIB dengan terapis ${rec.staffName}. Estimasi tiba: ${rec.arrivalTime} WIB.`, 'success');
   };
 
+  const buildCreatePayload = (force = false) => {
+    let fullBookingIso: string | undefined = undefined;
+    if (bookingDate && bookingTime) {
+      fullBookingIso = new Date(`${bookingDate}T${bookingTime}:00`).toISOString();
+    }
+    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
+    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
+    const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
+    const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
+    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
+    const computedCategory: 'BABY' | 'MOMS' | 'BOTH' =
+      rawCategory === 'BUNDLE' ? 'BOTH' :
+      rawCategory === 'KIDS' ? 'BABY' :
+      (rawCategory as any) || 'BABY';
+    return {
+      fullBookingIso, finalTreatmentDetail, computedCategory, treatmentSummary,
+      payload: {
+        customerId,
+        treatmentCategory: computedCategory,
+        treatmentDetail: finalTreatmentDetail,
+        bookingDate: fullBookingIso,
+        durationMinutes: totalScheduledDurationMinutes,
+        assignedStaffId: assignedStaffId || undefined,
+        status,
+        notes: notes.trim() || undefined,
+        babies: babies.filter((b) => b.name.trim().length > 0),
+        purchaseValue: totalPaymentAmount,
+        ...(force ? { force: true } : {}),
+      },
+    };
+  };
+
+  const handleForceCreate = async () => {
+    setSubmitting(true);
+    try {
+      const { payload } = buildCreatePayload(true);
+      const res = await apiRequest('/api/admin/reservation', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast('Jadwal baru disimpan dengan override konflik (force).', 'success');
+      setShowConflictModal(false);
+      setConflictInfo(null);
+      discardDraft(true);
+      onSuccess(res?.reservation || res?.data || res);
+      onClose();
+    } catch (err: any) {
+      toast(`Gagal menyimpan dengan force: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId) {
@@ -1106,26 +1171,30 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         onSuccess(res?.data || res);
         onClose();
       } else {
-        const res = await apiRequest('/api/admin/reservation', {
-          method: 'POST',
-          body: JSON.stringify({
-            customerId,
-            treatmentCategory: computedCategory,
-            treatmentDetail: finalTreatmentDetail,
-            bookingDate: fullBookingIso,
-            durationMinutes: totalScheduledDurationMinutes,
-            assignedStaffId: assignedStaffId || undefined,
-            status,
-            notes: notes.trim() || undefined,
-            babies: babies.filter((b) => b.name.trim().length > 0),
-            purchaseValue: totalPaymentAmount,
-          }),
-        });
-
-        toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
-        discardDraft(true);
-        onSuccess(res?.reservation || res?.data || res);
-        onClose();
+        const { payload } = buildCreatePayload(false);
+        try {
+          const res = await apiRequest('/api/admin/reservation', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
+          discardDraft(true);
+          onSuccess(res?.reservation || res?.data || res);
+          onClose();
+        } catch (createErr: any) {
+          const code = createErr?.code || createErr?.error;
+          const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
+          if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || /409/.test(String(createErr?.message || ''))) {
+            setConflictInfo({
+              code: code || 'DUPLICATE_BOOKING',
+              message: createErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
+              existingReservation: existing || null,
+            });
+            setShowConflictModal(true);
+            return;
+          }
+          throw createErr;
+        }
       }
     } catch (err: any) {
       toast(`Gagal ${mode === 'edit' ? 'memperbarui' : 'membuat'} jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
@@ -1241,6 +1310,30 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 Buang
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Pre-flight double-booking warning */}
+        {mode !== 'edit' && customerConflictsForDate.length > 0 && (
+          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+            <p className="font-bold flex items-center space-x-1.5">
+              <span>⚠️ {(selectedCustomerInfo?.name || 'Customer')} sudah memiliki {customerConflictsForDate.length} reservasi aktif pada tanggal ini</span>
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {customerConflictsForDate.slice(0, 3).map((r: any) => {
+                let timeLabel = '-';
+                try {
+                  const d = new Date(r.booking_date);
+                  timeLabel = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} WIB`;
+                } catch {}
+                return (
+                  <li key={r.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate">• Pukul {timeLabel} — {r.treatment_detail || r.status}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-1.5 text-[11px]"> Disarankan alihkan ke mode edit jadwal yang sudah ada daripada membuat duplikat.</p>
           </div>
         )}
 
@@ -2264,6 +2357,45 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
                   Tutup Pratinjau
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 409 Conflict resolution dialog */}
+        {showConflictModal && conflictInfo && (
+          <div className="fixed inset-0 bg-black/70 z-[100000] flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
+            <div className="w-full max-w-md bg-white dark:bg-[#111b21] rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">
+                {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
+              </h4>
+              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1.5">
+                {conflictInfo.message}
+                {conflictInfo.existingReservation?.booking_date && (
+                  <span> Jadwal existing: {new Date(conflictInfo.existingReservation.booking_date).toLocaleString('id-ID')}.</span>
+                )}
+              </p>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConflictModal(false);
+                    setConflictInfo(null);
+                    toast('Batalkan duplikat — silakan buka & edit jadwal yang sudah ada.', 'info');
+                    onClose();
+                  }}
+                  className="px-3 py-2 rounded-xl border border-[#d1d7db] text-xs font-bold text-[#111b21] hover:bg-[#f0f2f5] cursor-pointer"
+                >
+                  Batal & Buka Jadwal Existing
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleForceCreate}
+                  className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                >
+                  {submitting ? 'Menyimpan...' : 'Tetap Simpan Baru (Force)'}
                 </button>
               </div>
             </div>

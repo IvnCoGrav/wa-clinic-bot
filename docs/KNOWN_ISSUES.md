@@ -716,12 +716,133 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 34. [V3 Retrieval] Keyword enrichment KB & bank chat + hapus penodongan alamat (2026-09-09)
+
+- **Status:** resolved (kode + data live termigrasi).
+- **Konteks:** 44/48 `knowledge_chunks.keywords` NULL + FTS 'simple' tanpa stemming
+  (`persiapan` ≠ `disiapkan`) membuat artikel yang ADA gagal ter-retrieve; bot
+  menodong nama/alamat ("bolehkah kami tahu nama Bunda dan alamat lengkap...")
+  padahal lokasi wilayah sudah ada — atas arahan user, penodongan dihapus
+  (form reservasi + Admin yang menangani kelengkapan titik).
+- **Yang dilakukan:**
+  1. `src/services/keyword-enrichment.service.ts` (single source of truth) +
+     `scripts/enrich-kb-and-bank-chat-keywords.ts` (`--tenant`, `--dry-run`):
+     live 48/48 chunks + 25/25 exemplars ter-update, 0 tak cocok. Verifikasi FTS:
+     "persiapan sebelum pijat induksi" → chunk persiapan + induksi;
+     "apa yang perlu disiapkan" → 2 chunk persiapan; "bayar pake apa" → 3 chunk pembayaran.
+  2. `src/cli/seed-faq.ts` mengisi keywords otomatis via resolver (seed ulang aman).
+  3. Tags in-memory (7 default + gold) sinkron dengan kurasi (kontrak test).
+  4. Persona aturan 21 + panduan `save_reservation` baru: konfirmasi cek jadwal
+     tanpa todong nama/alamat/shareloc, tanpa sebut "Admin CS" (termasuk
+     string LLM-visible di clinic-faq/escalate-human + 4 respons exemplar).
+  5. Gate `save_reservation` tidak lagi menolak booking; selalu simpan pending +
+     konfirmasi cek jadwal. `booking.isConfirmed` kini false (state RESERVATION_SENT).
+- **Sisa:** seed maternal-prep (`scripts/seed-maternal-prep-faq.ts`) tetap perlu
+  dijalankan per tenant bila artikelnya belum ada; util `hasStreetDetail` /
+  `isGenericCustomerName` dipertahankan sebagai util non-pemblokir.
+
+---
+
+## 33. [V3 Reservasi] Sisa tech-debt audit homecare Agent V3 (2026-09-09)
+
+- **Status:** open (tech debt ringan, by-design — fungsi inti live & teruji).
+- **Konteks:** Perbaikan fondasional audit sesi 567292 (kategori MOMS, anti-collision
+  keranjang, purchaseValue, validation gate, aturan jam, normalisasi `**`, seed FAQ persiapan).
+- **Sisa yang diketahui:**
+  1. `resolveTreatmentCategory` memakai fallback `includes` dua arah bila nama tidak
+     persis sama — untuk nama layanan yang sangat pendek/umum bisa salah pasang.
+     Mitigasi: kecocokan exact diprioritaskan; fallback entity pasien terstruktur.
+  2. Validation gate aktif hanya bila `conversationId` tersedia (jalur agent).
+     Pemanggilan langsung `executeSaveReservation` tanpa session (test, skrip) tetap
+     berperilaku lama — by design agar kompatibel mundur.
+  3. Gate alamat memakai daftar penanda `STREET_DETAIL_MARKERS` (data-driven
+     includes). Alamat tanpa penanda umum namun valid (mis. "Kedungkendo 12" tanpa
+     kata jalan — tercakup via digit check; murni nama dusun tanpa nomor akan
+     diminta dilengkapi, sesuai SOP homecare).
+  4. Seed `scripts/seed-maternal-prep-faq.ts` perlu dijalankan per tenant live
+     (`npx tsx scripts/seed-maternal-prep-faq.ts`) agar artikel persiapan tersedia
+     di FTS — kode bertahan tanpa artikel (fallback grounding katalog).
+- **Rencana Tindak Lanjut:** perluas sinonim/alias katalog bila nama layanan baru
+  bermunculan; jalankan seed maternal di live; verifikasi manual 5 input sesuai
+  Verification Plan (total Rp 130.000 Kedungkendo, gate "boleh bund").
+
+---
+
+## 32. [V3 Fondasional] Deviasi Pilar 6 & sisa regex teritorial geocoding (2026-09-09)
+
+- **Status:** open/by-design (keputusan arsitektur tercatat, bukan bug).
+- **Konteks:** Master Plan Pilar 6 memerintahkan DELETE `sanitizeHallucinatedTerms`,
+  `sanitizeStrayBackslashes`, `sanitizeDoubleQuestions` (language-sanitizer.ts) serta
+  `stripEnglishLeakage`/`sanitizeFirstPersonPronoun` (sanitizer.ts), dan memindah
+  `sanitizeEmDash`.
+- **Temuan audit (mengapa TIDAK dihapus):**
+  1. Keempat fungsi language-sanitizer dicakup aktif oleh
+     `tests/unit/language-sanitizer.test.ts`, `language-sanitizer-fixes.test.ts`, dan
+     `lead-greeting-preservation.test.ts`; `sanitizeEmDash` diimpor produksi oleh
+     `src/utils/whatsapp-format.ts`. Audit `src/` membuktikan tidak satu pun fungsi
+     tersebut terpasang di jalur outbound V3 (agent-runner hanya memakai
+     `OutputSanitizer` + `normalizeWhatsAppFormat`) — penghapusan mematahkan test
+     tanpa manfaat runtime.
+  2. Kedua method sanitizer.ts dicakup `tests/unit/v3-persona-rules.test.ts` dan sudah
+     dikeluarkan dari pipeline `cleanOutboundReply` sebelumnya.
+- **Yang dilakukan (varian aman):** ekspor dipertahankan; fungsi yang tidak terpasang
+  ditandai `@deprecated` eksplisit + catatan modul; `sanitizeEmDash` dinyatakan tetap
+  aktif via `normalizeWhatsAppFormat`. Kendali perilaku LLM tetap di level
+  Prompt/Grounding/Few-Shot sesuai mandat AGENTS.md.
+- **Sisa regex teritorial:** `src/integrations/google-maps/geocoding.ts:103`
+  (`hasExplicitOutsideCity`, bias Surabaya/Sidoarjo) dan beberapa pola teknis
+  (`hasSpecificStreetOrEstate`, dx `escapeRegex` gazetteer) sengaja TIDAK diubah —
+  di luar scope Pilar 5 (hanya `calculate-delivery.tool.ts`) dan terikat perilaku
+  Territory-biased geocoding yang diuji test perbatasan. Penghapusan butuh proyek
+  geocoding tersendiri dengan evaluasi live.
+- **Rencana Tindak Lanjut:** hapus ekspor mati hanya bila (a) test yang mencakupnya
+  dihapus/dipindah lebih dulu, dan (b) tidak ada impor produksi; audit ulang saat
+  refactor geocoding.
+
+---
+
+## 31. [V3 Domain] Sisa tech-debt Multi-Audience & Hybrid RAG (Agent V3, 2026-09-09)
+
+- **Status:** open (tech debt ringan, by-design — fungsi inti sudah live).
+- **Ditemukan:** 2026-09-09, saat redesign Multi-Audience Patient Domain & Hybrid RAG Grounding.
+- **Yang sudah fixed:** `uk 38 weeks` tidak lagi bocor ke `childProfile.ageMonths`; `momProfile`/`targetAudience` first-class; pre-retrieval FTS deterministik + katalog terdaftar di `retrievedChunks`; Inspector `AiSandbox` adaptif (🤰/👶).
+- **Sisa yang diketahui:**
+  1. `syncChildrenProfiles` masih memakai regex usia warisan (`/(\d+...)\s*(bulan|bln|tahun|thn|th)/`) — dipertahankan untuk backward-compat; parser maternal baru (`parseGestationalWeeks`) sudah tanpa regex semantik. Guard `isMaternalOnlyMessage` mencegah kontaminasi silang.
+  2. Sugesti summarizer untuk keluhan ibu generik (mis. "capek") memakai kandidat MOMS pertama bila skor semantik 0 — bukan halusinasi, tapi belum sepresisi skor gejala anak. Perlu perluasan sinonim katalog MOMS bila keluhan ibu bertambah.
+  3. Pre-retrieval hanya berjalan untuk pesan substantif (`isSubstantiveForPreGrounding`); artikel induksi harus ada di live DB (47 chunks) agar Inspector terisi — jalankan seed maternal bila chunk belum ada.
+- **Rencana Tindak Lanjut:** (a) migrasi parser usia anak ke tokenizer tanpa regex saat refactor berikutnya; (b) tambah sinonim MOMS (`capek→relaksasi/oksitosin`) di `treatment-catalog.service`; (c) verifikasi manual Sandbox Turn 1/2 sesuai Verification Plan proposal.
+
+---
+
 ## 30. [Migrations] Live `tenants.settings` tidak ada di DB (P2022 di log app)
 
 - **Status:** open (pre-existing drift, bot tetap jalan — error ter-catch).
 - **Ditemukan:** 2026-09-08, saat verifikasi log pasca-deploy `b56864f` di live server.
 - **Gejala:** log app live berulang: `Invalid prisma.tenant.findUnique()/findFirst() ... The column tenants.settings does not exist in the current database.` Alur pesan tetap berjalan (HUMAN_HANDLING + web push normal).
 - **Akar masalah (dugaan):** drift baseline yang sama seperti #1 — migrasi penambah kolom `tenants.settings` tidak ada / belum applied di live, sementara `migrate deploy` melaporkan no pending. Perlu audit `prisma/migrations` vs `information_schema` untuk tabel `tenants`.
-- **Rencana Tindak Lanjut (proyek terpisah):** audit kolom `tenants` live vs schema, buat migrasi penambahan kolom yang hilang, verifikasi `migrate diff --from-url` empty. Jangan ubah manual tanpa rencana per-env.
+- **Mitigasi kode 2026-09-09:** query terpanas (`reservations.subroute.ts:2300`, CAPI queue) kini memakai `select: { id, landing_domain }` eksplisit sehingga tidak lagi memicu P2022 apa pun status kolom `settings`. Puluhan `prisma.tenant.*` lain tanpa `select` masih berisiko memicu log yang sama — sengaja TIDAK diubah massal karena banyak test menegaskan argumen panggilan eksak (`toHaveBeenCalledWith({ where })`).
+- **Rencana Tindak Lanjut (proyek terpisah):** audit kolom `tenants` live vs schema, buat migrasi penambahan kolom yang hilang, verifikasi `migrate diff --from-url` empty. Jangan ubah manual tanpa rencana per-env. Penyembuh cepat per-DB (bila diperlukan): `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB;`.
+
+---
+
+## 33. [Reservasi] Redesain Fondasional Lifecycle & Integritas Transaksi (2026-09-09)
+
+- **Status:** implemented (2026-09-09); sisa: eksekusi SQL live menunggu verifikasi 2-langkah + 2 kegagalan test pre-existing.
+- **Konteks:** audit 6 titik mutasi (`reservations.subroute.ts`, `reservation-lifecycle.service.ts`, `machine.ts`, `webhook.route.ts`, `save-reservation.tool.ts`, `conversation-transaction-extractor.ts`) menemukan 5 akar masalah: fragmentasi domain mutasi, tanpa validasi konflik jadwal, dedup naif berbasis `created_at`, parser keuangan global + heuristik `num<=500 → *1000` (korupsi `Usia >4-6 th` → 46000), dan penimpaan buta `purchase_value` resmi oleh parser.
+- **Yang sudah dikerjakan:**
+  1. `src/services/reservation-core.service.ts` (baru, kanonis): Customer Conflict Guard + Staff Collision Guard (overlap interval + buffer 20 mnt), channel-aware (`ADMIN_PANEL` → 409 kecuali `force:true`; `BOT/WEBHOOK/AGENT` → idempotent merge + auto-consolidate duplikat ke `cancelled`), lifecycle terstandarisasi (children, follow-up bila `confirmed`).
+  2. `conversation-transaction-extractor.ts`: isolasi blok pembayaran (cari SETELAH `Payment:/Pembayaran:/Rincian Biaya/Tagihan`), filter token non-mata-uang (`th/tahun/usia/...` tanpa `rp/rb/k` → 0), hapus pelipatgandaan `<=500`, invarian `Total == Treatment + Ongkir - Promo` + auto-rekonsiliasi.
+  3. `purchase-detection.service.ts`: pencocokan `booking_date` dari teks (fallback `created_at desc`) + downside guard (nilai baru < nilai resmi → pertahankan resmi).
+  4. `CreateReservationModal.tsx`: banner pre-flight + dialog 409 `[Batal & Buka Existing | Tetap Simpan (Force)]` (tanpa `window.confirm/alert`, via state React).
+  5. `upsertReservationForm` dipertahankan sebagai wrapper deprecated → delegasi ke core (4 situs webhook + test lama tetap jalan).
+- **Sisa / limitasi yang diketahui:**
+  1. Pembersihan data live Bunda Bella (cancel `7a6e494a…`, restore `bbbde4bd…` → 160000) BELUM dieksekusi — user menyetujui eksekusi, tetapi gate server mewajibkan verifikasi 2-langkah; script siap di `scripts/cleanup-bunda-bella-duplicates.sql` (jalankan via SSH ke Postgres live, lalu verifikasi SELECT).
+  2. Conflict guard fail-open saat lookup DB gagal (dianggap tak ada konflik; kegagalan tulis ditangani fallback memory pemanggil) — by-design agar offline-fallback admin tetap jalan; di produksi read-fail hampir selalu diikuti write-fail sehingga risiko duplikat lolos minimal.
+  3. `extractRupiahAmount` (purchase-detection) TIDAK diubah — masih mengambil nominal terbesar pola umum; korupsi angka dilindungi downside guard + parser yang sudah diperbaiki.
+  4. Test lama `conversation-transaction-extractor.test.ts` bagian `parseCurrencyValue('70') → 70000` SENGAJA diubah ke `0` (perilaku lama adalah akar korupsi; kasus `Total = 100 + 70 + …` tetap lolos via invarian rekonsiliasi).
+- **Kegagalan test pre-existing (terverifikasi di baseline via `git stash`, bukan dari redesign):**
+  - `tests/integration/live-chat-reply.test.ts` → `suggest-reply menghasilkan draf saran AI`.
+  - `tests/integration/robustness.test.ts` → `5-Minute Passive Confirmation Timeout`.
+- **Verifikasi redesign:** `npm run build` bersih; `tsc --noEmit` dashboard bersih; 7 file test reservasi 52+19+16 tes hijau; full suite 1551 passed / 2 failed (pre-existing di atas).
 
 

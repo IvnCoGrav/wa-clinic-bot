@@ -19,7 +19,7 @@ export const ESCALATE_HUMAN_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'escalate_to_human',
-    description: 'Mengalihkan percakapan ke Bidan / Admin CS manusia dan menghentikan respon otomatis bot. Wajib dipanggil saat ada gejala darurat medis (kejang, biru, sesak napas, pendarahan), komplain berat, atau permintaan eksplisit customer untuk bicara dengan manusia.',
+    description: 'Mengalihkan percakapan ke tim Bidan kami (manusia) dan menghentikan respon otomatis bot. Wajib dipanggil saat ada gejala darurat medis (kejang, biru, sesak napas, pendarahan), komplain berat, atau permintaan eksplisit customer untuk bicara dengan manusia.',
     parameters: {
       type: 'object',
       properties: {

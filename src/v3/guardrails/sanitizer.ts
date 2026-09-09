@@ -97,6 +97,10 @@ export class OutputSanitizer {
 
   /**
    * Menghilangkan sisa-sisa istilah bahasa Inggris.
+   *
+   * @deprecated Dikeluarkan dari pipeline cleanOutboundReply (ditangani via
+   * Few-Shot Exemplars + prompt persona). Dipertahankan sebagai wrapper publik
+   * karena dicakup unit test (v3-persona-rules.test.ts) & impor historis.
    */
   public static stripEnglishLeakage(text: string): string {
     if (!text) return '';
@@ -114,6 +118,10 @@ export class OutputSanitizer {
    * Mengoreksi penggunaan kata ganti klinik (saya/aku → kami).
    * Catatan: grup verba dibuat capturing agar 'kami $1' menyimpan kata kerja,
    * bukan literal "$1" (grup non-capturing tidak mengisi $1).
+   *
+   * @deprecated Dikeluarkan dari pipeline cleanOutboundReply (ditangani via
+   * Few-Shot Exemplars + prompt persona). Dipertahankan sebagai wrapper publik
+   * karena dicakup unit test (v3-persona-rules.test.ts) & impor historis.
    */
   public static sanitizeFirstPersonPronoun(text: string): string {
     if (!text) return '';

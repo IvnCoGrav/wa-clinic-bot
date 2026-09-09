@@ -21,7 +21,10 @@ export interface ExtractedTransaction {
 
 /**
  * Normalisasi nominal mata uang fleksibel:
- * Menangani format: '130.000', '130000', '70rb', '25k', '70 rb', '95', dsb.
+ * Menangani format: '130.000', '130000', '70rb', '25k', '70 rb'.
+ * MANDAT ANTI-KORUPSI ANGKA: angka usia / non-keuangan (mis. 'Usia >4-6 th')
+ * TIDAK BOLEH dilipatgandakan menjadi puluhan ribu. Hanya simbol mata uang
+ * eksplisit (rp / rb / k / ribu / titik-ribuan) yang boleh menghasilkan nominal.
  * Menghindari kontaminasi angka jarak km (misal '11km (15.000)').
  */
 export function parseCurrencyValue(valStr: string | null | undefined): number {
@@ -31,14 +34,32 @@ export function parseCurrencyValue(valStr: string | null | undefined): number {
   let raw = valStr.replace(/\b\d+\s*km\b/gi, '').replace(/\b\d+\s*kilometer\b/gi, '').trim().toLowerCase();
   if (!raw) return 0;
 
+  // 2. Filter token non-mata-uang (usia / satuan fisik / komparator).
+  //    Jika ada token ini TANPA simbol mata uang eksplisit → tolak (return 0).
+  //    Contoh: 'pijat kids ceria (usia >4-6 th)' → 0, bukan 46000.
+  const hasNonCurrencyToken =
+    /\b(th|tahun|yrs|yo|bln|bulan|hr|hari|m|mnt|menit|kg|km|cm|usia|umur|minggu|week)\b/i.test(raw) ||
+    /[><]/.test(raw);
+  const hasCurrencyMarker =
+    /rp\b/i.test(raw) ||
+    /\brb\b/i.test(raw) ||
+    /\bribu\b/i.test(raw) ||
+    /(^|[^a-z])k\b/i.test(raw) ||
+    /\d\s*k\b/i.test(raw) ||
+    /\d{1,3}([.]\d{3})+/.test(raw) ||
+    /\d{5,}/.test(raw);
+  if (hasNonCurrencyToken && !hasCurrencyMarker) {
+    return 0;
+  }
+
   // Jika ada angka di dalam kurung (misal "(15.000)" atau "(25rb)"), utamakan angka tersebut
   const parenMatch = raw.match(/\((?:rp\.?\s*)?([\d\.]+)\s*(?:rb|k|ribu)?\)/i);
   if (parenMatch) {
     raw = parenMatch[0];
   }
 
-  // Cek apakah ada unit 'rb', 'k', 'ribu'
-  const isRibuan = /\b(rb|k|ribu)\b/i.test(raw) || /[\d]+(rb|k)/i.test(raw);
+  // Cek apakah ada unit 'rb', 'k', 'ribu' yang EKSPLISIT
+  const isRibuan = /\b(rb|ribu)\b/i.test(raw) || /[\d]+(rb|ribu)/i.test(raw) || /\d\s*k\b/i.test(raw);
 
   // Bersihkan karakter selain angka
   const digitsOnly = raw.replace(/[^\d]/g, '');
@@ -47,9 +68,14 @@ export function parseCurrencyValue(valStr: string | null | undefined): number {
   let num = parseInt(digitsOnly, 10);
   if (isNaN(num)) return 0;
 
-  // Jika eksplisit ada 'rb' / 'k' atau jika angka <= 500 (misal 60, 70, 85, 95, 105, 145)
-  if (isRibuan || (num > 0 && num <= 500)) {
+  // Hanya lipatgandakan bila ada penanda ribuan eksplisit (70rb, 25k).
+  // DILARANG melipatgandakan angka polos <= 500 (aturan lama num*1000 dihapus
+  // karena mengkorupsi 'Usia 4-6 th' → 46000).
+  if (isRibuan) {
     num = num * 1000;
+  } else if (num > 0 && num <= 500) {
+    // Angka kecil tanpa penanda mata uang = bukan nominal (usia/jumlah) → tolak.
+    return 0;
   }
 
   // Safety Cap: Jika angka > 5 juta (misal kontaminasi no hp atau rekening), kembalikan 0
@@ -76,7 +102,14 @@ export function parsePaymentSection(paymentText: string): {
   }
 
   // Bersihkan markdown formatting WhatsApp (*, _, ~)
-  const clean = paymentText.replace(/[*_~`]/g, '').trim();
+  const cleanFull = paymentText.replace(/[*_~`]/g, '').trim();
+
+  // ISOLASI BLOK PEMBAYARAN: pencarian baris harga HANYA pada substring SETELAH
+  // penanda 'Payment : / Pembayaran : / Rincian Biaya / Tagihan'. Mencegah baris
+  // header medis/profil anak (mis. 'Treatment : Pijat Kids Ceria (Usia >4-6 th)')
+  // dicocokkan sebagai baris harga treatment.
+  const markerMatch = cleanFull.match(/(?:payment|pembayaran|rincian\s+biaya|tagihan)\s*[:=]?\s*([\s\S]+)/i);
+  const clean = (markerMatch ? markerMatch[1] : cleanFull).trim();
 
   let treatmentPrice = 0;
   let ongkir = 0;
@@ -139,6 +172,27 @@ export function parsePaymentSection(paymentText: string): {
       treatmentPrice = Math.max(0, totalPrice - ongkir + promo);
     } else {
       treatmentPrice = totalPrice;
+    }
+  }
+
+  // 4. Invarian Matematika & Auto-Reconciliation:
+  //    Total invoice HARUS = Treatment + Ongkir - Promo. Jika treatment yang
+  //    terekstrak menyimpang jauh dari nilai ekspektasi (anomali parser,
+  //    mis. 46.000 padahal ekspektasi 140.000 dari Total 160.000 - Ongkir 20.000),
+  //    gunakan nilai ekspektasi agar purchase_value tidak korup.
+  if (totalPrice > 0) {
+    const expectedTreatment = Math.max(0, totalPrice - ongkir + promo);
+    if (expectedTreatment > 0 && treatmentPrice > 0) {
+      const deviation = Math.abs(treatmentPrice - expectedTreatment);
+      const tolerance = Math.max(10000, expectedTreatment * 0.2);
+      if (deviation > tolerance) {
+        console.warn(
+          `[PAYMENT PARSER RECONCILED] Corrected anomalous treatment price ${treatmentPrice} -> ${expectedTreatment} based on total invoice invariant (total=${totalPrice}, ongkir=${ongkir}, promo=${promo}).`
+        );
+        treatmentPrice = expectedTreatment;
+      }
+    } else if (expectedTreatment > 0 && treatmentPrice === 0) {
+      treatmentPrice = expectedTreatment;
     }
   }
 
