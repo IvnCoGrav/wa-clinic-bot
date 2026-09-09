@@ -9,7 +9,7 @@ export interface ResolvedCoordinates {
   error?: string;
 }
 
-const GOOGLE_MAPS_URL_REGEX = /https?:\/\/(?:(?:maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\/[^\s)>]+)/gi;
+const GOOGLE_MAPS_URL_REGEX = /https?:\/\/(?:(?:maps\.app\.goo\.gl|goo\.gl\/maps|share\.google|www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\/[^\s)>]+)/gi;
 
 /**
  * Mencari semua link Google Maps yang ada di dalam teks (chat/alamat/form).
@@ -93,8 +93,10 @@ function isValidCoordinate(lat: number, lng: number): boolean {
 }
 
 /**
- * Merefleksikan shortlink Google Maps (maps.app.goo.gl / goo.gl/maps) ke URL tujuan
- * dan mengambil koordinat latitude & longitude presisinya.
+ * Merefleksikan shortlink Google Maps (maps.app.goo.gl / goo.gl/maps /
+ * share.google) ke URL tujuan dan mengambil koordinat latitude & longitude
+ * presisinya. Redirect HTTP di-follow generik (max 5) sehingga domain pendek
+ * baru tetap ter-resolve tanpa perubahan kode tambahan.
  */
 export async function resolveGoogleMapsUrl(url: string, timeoutMs = 2500): Promise<ResolvedCoordinates> {
   if (!url || typeof url !== 'string') {

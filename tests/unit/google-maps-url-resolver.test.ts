@@ -40,4 +40,19 @@ describe('Google Maps URL Resolver Utility', () => {
     const text = 'Alamat di Jl. Raya Darmo No 10 Surabaya';
     expect(extractGoogleMapsUrls(text)).toEqual([]);
   });
+
+  it('extracts new share.google shortlinks (kasus Bunda Retno)', () => {
+    const text = 'Shareloc rumah saya https://share.google/Ef30htzIpVPKEwdWP ya kak';
+    const urls = extractGoogleMapsUrls(text);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toBe('https://share.google/Ef30htzIpVPKEwdWP');
+  });
+
+  it('extracts share.google links alongside legacy shortlinks', () => {
+    const text = 'Titik 1 https://share.google/Ef30htzIpVPKEwdWP dan titik 2 https://maps.app.goo.gl/DGusQAqJDvPWznBV6';
+    const urls = extractGoogleMapsUrls(text);
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toBe('https://share.google/Ef30htzIpVPKEwdWP');
+    expect(urls[1]).toBe('https://maps.app.goo.gl/DGusQAqJDvPWznBV6');
+  });
 });

@@ -900,6 +900,20 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 38. [GPS] Redesign fondasional parsing pin, klaster hierarki & sticky GPS (kasus Valencia Retno, 2026-09-09)
+
+- **Status:** implemented (2026-09-09); verifikasi ORS live 10.92 km + survei koordinat klaster non-PSJ di luar jangkauan offline.
+- **Konteks:** alamat "Valencia spring puri surya jaya DD 3 no.28" terhitung 8.5 km (gerbang depan) padahal titik klaster ~10.7–10.9 km rute ORS. Akar: 1 titik/coarse per mega-estate; payload Baileys (`_data.message.locationMessage.degreesLatitude`) tak terbaca → NaN; `share.google` tak terekstrak; flag `share_location_sent` tak pernah menyala sehingga guard sticky tak bekerja.
+- **Yang sudah dikerjakan:**
+  1. `src/utils/waha-location-parser.ts` (baru, murni/testable): `_data/message.locationMessage` + `liveLocationMessage` (`latitude`/`degreesLatitude`), 0,0 dibuang, tipe-tanpa-koordinat → false (anti bocor NaN). `webhook.route.ts:643-654` didelegasikan (downstream `incomingMessage.location` + `enrichSync` tak berubah).
+  2. `google-maps-url-resolver.ts`: regex + `share.google` (redirect follow generik sudah ada, tanpa kode tambahan).
+  3. `landmarks.ts`: 3 entri klaster PSJ (Valencia/Sydney-Boston/Osaka-Vancouver, koordinat terverifikasi rencana) SEBELUM gerbang utama (first-match-wins = cluster-first). E2E offline: `geocodeText("Valencia spring…")` → presisi, (-7.393858, 112.745941, Punggul/Gedangan); Haversine lurus 5.04 km (vs gerbang 4.44 km, arah benar); 10.92 km → Tier 11–15 (normal 25000, promo 15000).
+  4. Sticky invariant: SUDAH ada & terverifikasi (`updateCustomerLocation` + memory fallback + skip teks di enrich 295/411); override admin via jalur tulis dashboard langsung (bypass service, tak terblokir guard). Test `sticky-gps` 4/4.
+- **Sisa / limitasi yang diketahui:**
+  1. Klaster CitraHarmoni / Kahuripan Nirwana / CitraLand (Riverside, Stamford, Babatan, North West, …) SENGAJA belum ditambah — koordinat titik dalam belum tersurvei; dilarang memfabrikasi. Butuh survei/pin GPS per klaster, lalu tambah entri (mekanisme cluster-first sudah siap).
+  2. Angka ORS 10.92 km dari audit (live); ekuivalen offline = Haversine 5.04 km × 1.6 ≈ 8.06 km (estimasi). Verifikasi tarif live 10.92 km → Tier 15/25k/15k perlu konfirmasi sekali via ORS saat ada API key.
+- **Verifikasi:** test baru `waha-location-parser` (9) + `cluster-geocoding` (7) + `sticky-gps` (4) + 2 share.google hijau; full suite **204 file, 1640 passed, 0 failed**; `npm run build` bersih.
+
 ## 37. [Pasien] Audit live: pola Retno di customer lain (2026-09-09 13:15 WIB / 05:15 UTC)
 
 - **Status:** audit read-only selesai; tindakan data menunggu keputusan operasional.
