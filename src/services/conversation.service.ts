@@ -2,7 +2,7 @@ import { prisma } from '../db/client';
 import { ConversationState } from '@prisma/client';
 import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
-import { AI_ELIGIBILITY_ESCALATION_REASON } from './ai-eligibility.service';
+import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON } from './ai-eligibility.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 const memoryConversations = new Map<string, any>();
@@ -246,10 +246,13 @@ export class ConversationService {
 
     // EXPLICIT GUARD: Legacy & Repeat customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
     // kembali ke bot — customer ini memang diarahkan ke human handling permanen.
+    // ACTIVE_APPOINTMENT_MANUAL juga dikecualikan: pasien yang menunggu terapis
+    // TIDAK boleh dibalikkan ke bot oleh timer 6 jam (koordinasi operasional CS).
     if (
       conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON ||
       conversation.escalation_reason === 'LEGACY_CUSTOMER_MANUAL' ||
-      conversation.escalation_reason === 'EXISTING_PATIENT_MANUAL'
+      conversation.escalation_reason === 'EXISTING_PATIENT_MANUAL' ||
+      conversation.escalation_reason === ACTIVE_APPOINTMENT_ESCALATION_REASON
     ) {
       console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${conversation.escalation_reason}. Auto-release is DISABLED.`);
       return { released: false, updatedConversation: conversation };

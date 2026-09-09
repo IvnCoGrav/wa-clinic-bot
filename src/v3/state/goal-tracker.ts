@@ -412,31 +412,95 @@ export class GoalTracker {
       });
       inCart.add(keyOf(s.name, scope));
     };
+    // Normalisasi nama katalog: buang kualifikasi dalam kurung di AKHIR nama
+    // resmi (mis. 'Pijat Bayi Ceria (Rileksasi)' -> 'pijat bayi ceria') agar
+    // sebutan chat tanpa kurung tetap cocok presisi. Operasi string murni pada
+    // label katalog terstruktur (BUKAN mutilasi kalimat bahasa alami).
+    const cleanNameOf = (name: string): string => {
+      const t = (name || '').trim();
+      if (t.endsWith(')')) {
+        const open = t.lastIndexOf('(');
+        if (open > 0) return t.slice(0, open).trim().toLowerCase();
+      }
+      return t.toLowerCase();
+    };
+    // Bentuk nama yang cocok di teks: nama resmi utuh dulu, lalu nama bersih.
+    // HANYA kecocokan nama utuh yang menekan jalur fuzzy (perilaku lama
+    // dipertahankan); kecocokan nama-bersih bersifat tambahan (push saja) agar
+    // parafrasa pendamping (mis. "pulih ceria" + "sinar moksa") tetap tertangkap.
+    const fullFormOf = (haystack: string, s: (typeof services)[number]): string | null => {
+      const full = s.name.toLowerCase();
+      return haystack.includes(full) ? full : null;
+    };
+    const cleanFormOf = (haystack: string, s: (typeof services)[number]): string | null => {
+      const full = s.name.toLowerCase();
+      if (haystack.includes(full)) return null;
+      const clean = cleanNameOf(s.name);
+      if (clean.length >= 4 && clean !== full && haystack.includes(clean)) return clean;
+      return null;
+    };
+    const matchedFormOf = (haystack: string, s: (typeof services)[number]): string | null =>
+      fullFormOf(haystack, s) || cleanFormOf(haystack, s);
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
       if (!text || GoalTracker.isDurationOnlyQuestion(text)) continue;
       // 1. Nama persis selalu dihitung (semua yang cocok, termasuk pesan asisten).
-      //    Filter Substring Overlap: bila nama layanan A adalah substring dari
-      //    layanan B yang sama-sama cocok (mis. "Induksi Massage" vs
-      //    "Induksi Massage Fullbody"), A gugur — yang spesifik/panjang menang
-      //    agar keranjang tidak tertimpa harga yang salah (Rp 50k vs Rp 105k).
-      const rawExactHits = services.filter((s) => text.includes(s.name.toLowerCase()));
-      const exactHits = rawExactHits.filter((s) =>
-        !rawExactHits.some((other) =>
+      //    Filter Substring Overlap: bila bentuk cocok layanan A adalah substring
+      //    dari bentuk cocok layanan B yang sama-sama cocok (mis. "Induksi
+      //    Massage" vs "Induksi Massage Fullbody"), A gugur — yang
+      //    spesifik/panjang menang agar keranjang tidak tertimpa harga yang
+      //    salah (Rp 50k vs Rp 105k). Perbandingan memakai bentuk yang benar-benar
+      //    cocok (utuh/bersih) agar nama berkurung ikut tercakup.
+      const rawFullHits = services.filter((s) => fullFormOf(text, s) !== null);
+      const fullHits = rawFullHits.filter((s) =>
+        !rawFullHits.some((other) =>
           other !== s && other.name.toLowerCase().includes(s.name.toLowerCase())
         )
       );
-      // 2. Tanpa nama persis, parafrasa hanya mengambil SATU yang terpanjang
+      const fullHitSet = new Set(fullHits);
+      const rawCleanHits = services.filter((s) => !fullHitSet.has(s) && cleanFormOf(text, s) !== null);
+      const acceptedForms = new Map<string, (typeof services)[number]>();
+      for (const s of fullHits) acceptedForms.set(s.name.toLowerCase(), s);
+      const cleanHits = rawCleanHits.filter((s) => {
+        const mine = cleanFormOf(text, s) as string;
+        for (const [, other] of acceptedForms) {
+          const theirs = matchedFormOf(text, other) as string;
+          if (theirs.length > mine.length && theirs.includes(mine)) return false;
+        }
+        for (const other of rawCleanHits) {
+          if (other === s) continue;
+          const theirs = cleanFormOf(text, other) as string;
+          if (theirs.length > mine.length && theirs.includes(mine)) return false;
+        }
+        acceptedForms.set(mine, s);
+        return true;
+      });
+      // 2. Tanpa nama resmi UTUH, parafrasa hanya mengambil SATU yang terpanjang
       //    (paling spesifik) agar tidak mengotori keranjang dengan kandidat umum.
       //    Pesan asisten (role === 'assistant') DILARANG memicu fuzzyHits — sapaan
       //    bot ("Treatment moms & Baby...") tidak boleh memasukkan phantom item;
-      //    asisten hanya boleh mencocokkan nama layanan resmi utuh (exactHits).
+      //    asisten hanya boleh mencocokkan nama layanan resmi utuh.
+      //    Anti-kompetisi: kandidat fuzzy WAJIB membawa ≥2 token signifikan yang
+      //    BELUM dijelaskan exact-hit pesan ini — sebutan "Pijat Bayi Ceria"
+      //    (exact) tidak boleh tertimpa "Pijat Bayi Pulih Ceria" (fuzzy), namun
+      //    "pulih ceria" tetap lolos mendampingi "sinar moksa" (exact lain).
       const isAssistant = (history[i]?.role || '').toLowerCase() === 'assistant';
-      const fuzzyHits = (exactHits.length === 0 && !isAssistant)
-        ? services.filter((s) => fuzzyMatches(text, s.name)).sort((a, b) => b.name.length - a.name.length).slice(0, 2)
+      const coveredTokens = new Set<string>();
+      for (const s of [...fullHits, ...cleanHits]) {
+        const form = matchedFormOf(text, s);
+        if (form) for (const t of significantTokens(form)) coveredTokens.add(t);
+      }
+      const fuzzyHits = (fullHits.length === 0 && !isAssistant)
+        ? services
+            .filter((s) => {
+              if (!fuzzyMatches(text, s.name)) return false;
+              const uncovered = significantTokens(s.name).filter((t) => !coveredTokens.has(t));
+              return uncovered.length >= 2;
+            })
+            .sort((a, b) => b.name.length - a.name.length).slice(0, 2)
         : [];
-      for (const s of [...exactHits, ...fuzzyHits]) {
+      for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) {
         pushService(s, GoalTracker.detectRecipientScope(text, s));
       }
     }

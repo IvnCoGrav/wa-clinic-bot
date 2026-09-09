@@ -716,6 +716,41 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 35. [V3 UX] Audit sesi 435731: over-questioning, halusinasi Waru, cart putus (2026-09-09)
+
+- **Status:** implemented (kode + test); verifikasi simulator skenario 1/2/4
+  (balasan LLM aktual) dan eksekusi skrip enrich ke live DB di luar
+  jangkauan offline — butuh runs manual sesuai Verification Plan.
+- **Konteks:** 14 balasan bot, 12 diakhiri pertanyaan, todong jadwal 6x
+  (termasuk Turn 14 setelah jadwal Sabtu final + reservasi tercatat 2x);
+  halusinasi "Kecamatan Waru ini cukup luas..." padahal customer di
+  Kedungkendo-Candi; `cartItems` kehilangan `Pijat Bayi Ceria` (Rp 60rb)
+  karena nama resmi `Pijat Bayi Ceria (Rileksasi)` gagal exact-match.
+- **Yang dilakukan:**
+  1. `goal-tracker.ts` (`syncCartItems`): normalisasi nama katalog tanpa
+     regex (buang `(...)` akhir via operasi string) — cocok utuh ATAU bersih;
+     HANYA full-match yang menekan fuzzy; kandidat fuzzy wajib bawa ≥2 token
+     signifikan yang belum dijelaskan exact-hit (anti-kompetisi
+     Ceria-vs-Pulih; "pulih ceria" tetap lolos mendampingi "sinar moksa").
+  2. `persona.ts`: hapus "Closing CTA WAJIB" (baris 189/196) → panduan
+     statement-only untuk pertanyaan teknis; contoh durasi tanpa todong
+     jadwal; Waru ditegaskan basecamp (aturan 3 + constraint #11);
+     larangan tanya hari bila jadwal sudah final (aturan 6).
+  3. `conversation-summarizer.ts`: guard `booking.preferredDate/reservationId`
+     → larangan eksplisit tanya hari lagi; cooldown jadwal tetap aktif walau
+     ada sebutan hari bila jadwal sudah final.
+  4. Komponen 3 (gate alamat longgar) & 4 (keyword enrichment + live 48/48
+     chunks + 25/25 exemplars): SUDAH ada dari sesi sebelumnya (lihat #34);
+     diverifikasi tetap hijau (kontrak test + spot-check resolver).
+- **Sisa / limitasi yang diketahui:**
+  1. Aturan fuzzy ≥2-token: pesan yang menyebut exact-clean + 1 token lepas
+     layanan lain (mis. exact "Ceria" + kata "pulih" tanpa "ceria") TIDAK
+     menambah item kedua — by-design (mencegah phantom); user bisa sebut
+     nama lebih lengkap.
+  2. `live-chat-reply.test.ts` (suggest-reply) gagal timeout 5 dtk SEKALI
+     saat full-suite load; lolos solo (10/10). Flaky LLM-timing, tak terkait
+     perubahan ini (mirip pola isolasi #22).
+
 ## 34. [V3 Retrieval] Keyword enrichment KB & bank chat + hapus penodongan alamat (2026-09-09)
 
 - **Status:** resolved (kode + data live termigrasi).
@@ -844,5 +879,23 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `tests/integration/live-chat-reply.test.ts` → `suggest-reply menghasilkan draf saran AI`.
   - `tests/integration/robustness.test.ts` → `5-Minute Passive Confirmation Timeout`.
 - **Verifikasi redesign:** `npm run build` bersih; `tsc --noEmit` dashboard bersih; 7 file test reservasi 52+19+16 tes hijau; full suite 1551 passed / 2 failed (pre-existing di atas).
+
+---
+
+## 36. [Pasien] Redesain Fondasional Klasifikasi Lifecycle & Active Appointment Guard (insiden Bunda Retno, 2026-09-09)
+
+- **Status:** implemented (2026-09-09); sisa: eksekusi SQL Retno menunggu instruksi operasional admin + verifikasi 2-langkah.
+- **Konteks:** bot AI membalas pasien lama (treatment pertama `completed` 29 Agu) dan pasien berjadwal aktif H-0 ("Sdh smp mana ya?") dengan template marketing generik. Akar: gate hanya cek `confirmed`; properti hantu `purchase_count` / `status='repeat'` (tidak pernah ditulis production); tanpa guard jadwal aktif; label `repeat` hanya hitung `confirmed`; test lama mem-passing mock fiktif.
+- **Yang sudah dikerjakan:**
+  1. `src/services/patient-lifecycle.service.ts` (baru, kanonis): `hasTreatmentHistory` (`confirmed`/`completed`, fallback `ltv_cache`), `getActiveAppointment` (`pending`/`confirmed`/`hold`, jendela [now-12 jam, now+24 jam]), `getPatientClinicalProfile`. Tenant-aware, best-effort (DB gagal → default aman).
+  2. `ai-eligibility.service.ts`: kontrak valid (`has_treatment_history`, `has_active_appointment`, `ltv_cache`; `has_confirmed_reservation` deprecated-alias); properti hantu DIHAPUS; reason baru `ACTIVE_APPOINTMENT_MANUAL` (guard wajib tanpa toggle, di bawah FORCE_*).
+  3. `ai-scope-gate.service.ts`: baca profil kanonis (flag eksplisit OR DB OR ltv; tanpa fallback `status='repeat'`); pesan eskalasi operasional baru. `conversation.service.ts`: `ACTIVE_APPOINTMENT_MANUAL` exempt dari auto-release 6 jam.
+  4. `reservation-lifecycle` (label `repeat`), `label-reconciliation`, `machine.ts` (`hasPriorConfirmed`), `cron` (review H+1): `confirmed` → `in ['confirmed','completed']`.
+  5. Test ditulis ulang tanpa mock fiktif (`legacy-and-repeat-bypass.test.ts`) + `patient-lifecycle.test.ts` baru (10) + simulasi Retno (DB `completed` → silence `EXISTING_PATIENT_MANUAL`; jadwal aktif → silence `ACTIVE_APPOINTMENT_MANUAL`).
+- **Sisa / limitasi yang diketahui:**
+  1. Runbook `scripts/cleanup-bunda-retno-reservation.sql` SIAP (BLOK 1 cancel / BLOK 2 confirm — jalankan salah satu) — eksekusi menunggu pilihan operasional + verifikasi 2-langkah.
+  2. `status === 'legacy'` dipertahankan sebagai sinyal legacy (konvensi riil `migration.service.ts`), berdampingan dengan kolom `is_legacy_source`.
+  3. Lookup jadwal aktif fail-open saat DB down (tidak silence); fail-closed tetap dijaga langkah scope (`NEW_ONLY` + cutoff) di resolver.
+- **Verifikasi:** `tsc --noEmit` bersih; full suite **201 file, 1618 passed, 0 failed**.
 
 
