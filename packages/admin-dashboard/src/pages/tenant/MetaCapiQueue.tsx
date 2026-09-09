@@ -463,28 +463,43 @@ export const MetaCapiQueue: React.FC = () => {
     const effectivePayload = customPayload || customPayloads[item.id];
     const eventName = (effectivePayload && effectivePayload.event_name) || item.eventType || 'Purchase';
     const isCustom = !!effectivePayload;
+    const isResend = item.purchase_review_status === 'approved';
 
-    const ok = item.metaDropRisk
-      ? await confirm({
-          title: '⚠️ Event Lebih dari 7 Hari',
-          message:
-            `Event terjadi pada ${formatDateTime(item.purchase_occurred_at)} (${item.daysOld} hari lalu). ` +
-            `Meta CAPI kemungkinan akan mengabaikan event historis yang terlalu lama. Tetap kirim ke Meta${isCustom ? ' dengan JSON custom' : ''}?`,
-          confirmText: 'Ya, Tetap Kirim',
-        })
-      : await confirm({
-          title: `Kirim ${eventName} ke Meta CAPI?`,
-          message:
-            `Event ${eventName} akan dikirim ke Meta CAPI${isCustom ? ' menggunakan JSON kustom yang telah disesuaikan' : ' dengan event_time historis'}. Lanjutkan?`,
-          confirmText: 'Ya, Kirim',
-        });
-    if (!ok) return;
+    if (isResend) {
+      const ok = await confirm({
+        title: 'Kirim Ulang ke Meta CAPI?',
+        message: `Event ${eventName} sebelumnya sudah dikirim. Kirim ulang ke Meta CAPI?`,
+        confirmText: 'Ya, Kirim Ulang',
+      });
+      if (!ok) return;
+    } else if (item.metaDropRisk) {
+      const ok = await confirm({
+        title: 'Event Lebih dari 7 Hari',
+        message:
+          `Event terjadi pada ${formatDateTime(item.purchase_occurred_at)} (${item.daysOld} hari lalu). ` +
+          `Meta CAPI akan menjepit event_time ke waktu sekarang agar konversi tetap tercatat di Meta Pixel (ROAS). ` +
+          `Tanggal transaksi asli dicatat di custom_data.original_event_time.${isCustom ? ' Menggunakan JSON custom.' : ''} Lanjutkan?`,
+        confirmText: 'Ya, Kirim dengan Timestamp Sekarang',
+      });
+      if (!ok) return;
+    } else {
+      const ok = await confirm({
+        title: `Kirim ${eventName} ke Meta CAPI?`,
+        message:
+          `Event ${eventName} akan dikirim ke Meta CAPI${isCustom ? ' menggunakan JSON kustom yang telah disesuaikan' : ' dengan event_time historis'}. Lanjutkan?`,
+        confirmText: 'Ya, Kirim',
+      });
+      if (!ok) return;
+    }
 
     try {
       setLoading(true);
+      // Kirim force: true untuk re-sends agar server mengizinkan pengiriman ulang
+      const body: any = effectivePayload ? { customPayload: effectivePayload } : {};
+      if (isResend) body.force = true;
       const res = await apiRequest(`/api/admin/reservation/${item.id}/approve-purchase`, {
         method: 'POST',
-        body: effectivePayload ? JSON.stringify({ customPayload: effectivePayload }) : undefined,
+        body: JSON.stringify(body),
       });
       if (res && res.success === false) {
         toast(res.error || `Gagal approve ${eventName} event.`, 'error');
@@ -495,12 +510,7 @@ export const MetaCapiQueue: React.FC = () => {
       } else {
         toast(`Event ${eventName} disetujui & dikirim ke Meta CAPI.`, 'success');
       }
-      // Optimistic update: langsung ubah status di UI agar tombol Approve hilang seketika
-      setItems((prev) =>
-        prev.map((p) =>
-          p.id === item.id ? { ...p, purchase_review_status: 'approved', purchase_event_sent_at: new Date().toISOString() } : p
-        )
-      );
+      // Hapus optimistic update — muat ulang data dari server untuk memastikan konsistensi
       if (selectedJsonItem?.id === item.id) {
         setSelectedJsonItem(null);
         setIsEditingJson(false);
@@ -821,10 +831,25 @@ export const MetaCapiQueue: React.FC = () => {
                               <span>Abaikan</span>
                             </button>
                           </div>
+                        ) : item.purchase_review_status === 'approved' ? (
+                          <div className="flex flex-col gap-1.5 items-end">
+                            <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
+                              <Zap size={12} className="text-[#008069]" />
+                              <span>Selesai</span>
+                            </span>
+                            <button
+                              onClick={() => handleApprove(item, undefined)}
+                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-blue-200 dark:hover:border-blue-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-[10px] font-medium transition shadow-xs whitespace-nowrap"
+                              title="Kirim ulang event ke Meta CAPI (berguna jika event sebelumnya sempat gagal)"
+                            >
+                              <RefreshCw size={10} />
+                              <span>Kirim Ulang</span>
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
-                            <Zap size={12} className="text-[#008069]" />
-                            <span>Selesai</span>
+                            <Zap size={12} className="text-rose-500" />
+                            <span>Ditolak</span>
                           </span>
                         )}
                       </td>
@@ -1013,8 +1038,9 @@ export const MetaCapiQueue: React.FC = () => {
       })()}
 
       <p className="text-xs text-[#8696a0]">
-        Catatan: event Purchase &amp; Lead hanya dapat dikirim ke Meta dalam jendela ±7 hari sejak transaksi/interaksi. Event yang
-        di-approve di luar jendela berisiko di-drop Meta — keputusan tetap tercatat di database.
+        Catatan: event Purchase &amp; Lead dikirim ke Meta dalam jendela ±7 hari sejak transaksi/interaksi. Event yang
+        berusia lebih dari 7 hari akan dijepit event_time-nya ke waktu sekarang agar konversi tetap tercatat di Meta Pixel (ROAS).
+        Tanggal transaksi asli tersimpan di custom_data.original_event_time. Keputusan tetap tercatat di database.
       </p>
     </div>
   );

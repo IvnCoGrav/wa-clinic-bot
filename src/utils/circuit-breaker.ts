@@ -1,5 +1,42 @@
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
+/**
+ * Predikat deteksi error infrastruktur yang dihitung sebagai kegagalan circuit breaker.
+ * Error validasi client (4xx selain 429) DIKECUALIKAN — tidak menjatuhkan circuit breaker.
+ */
+export function isInfrastructureError(err: any): boolean {
+  const status = err?.response?.status || err?.status;
+  const code = err?.code || '';
+
+  // Network errors — selalu infrastruktur
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
+    return true;
+  }
+
+  // Timeout via message
+  if (err?.message?.toLowerCase().includes('timeout')) {
+    return true;
+  }
+
+  // HTTP 429 (rate limit) — infrastruktur
+  if (status === 429) {
+    return true;
+  }
+
+  // HTTP 5xx — infrastruktur
+  if (typeof status === 'number' && status >= 500) {
+    return true;
+  }
+
+  // HTTP 4xx (selain 429) — error validasi client, BUKAN infrastruktur
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    return false;
+  }
+
+  // Jika tidak ada status/code yang bisa diklasifikasi, asumsikan infrastruktur
+  return true;
+}
+
 export class CircuitBreaker<TArgs extends any[], TResult> {
   private state: CircuitState = 'CLOSED';
   private failureThreshold = 0.5; // 50%
@@ -119,12 +156,26 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
         reasonCategory = `SERVER_ERROR (Server Pihak Ketiga Error ${status})`;
       } else if (code === 'ENOTFOUND' || code === 'ECONNREFUSED') {
         reasonCategory = 'NETWORK_ERROR (Koneksi Server / DNS bermasalah)';
+      } else if (typeof status === 'number' && status >= 400 && status < 500) {
+        reasonCategory = `CLIENT_ERROR (Validasi Input ${status})`;
       }
+
+      const isInfra = isInfrastructureError(err);
 
       console.error(
         `[Circuit Breaker: ${this.name}] Request Failure! Reason: [${reasonCategory}] | HTTP Status: ${status} | Code: ${code} | Message: ${errMsg}` +
         this.formatResponseBody(err)
       );
+
+      // Hanya infrastruktur error yang mencatat kegagalan dan menggunakan fallback.
+      // Error validasi client (4xx selain 429) diteruskan asli agar root cause terbaca.
+      if (!isInfra) {
+        console.warn(
+          `[Circuit Breaker: ${this.name}] Client validation error (HTTP ${status}) — tidak dihitung sebagai kegagalan circuit breaker. Error diteruskan ke caller.`
+        );
+        throw err;
+      }
+
       this.recordResult(false);
       this.usedFallback = true;
       return this.fallbackFunction(...args);
