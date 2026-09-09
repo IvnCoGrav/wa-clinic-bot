@@ -116,8 +116,12 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [mobileTab, setMobileTab] = useState<'setting' | 'preview'>('setting');
 
-  // Sync state whenever initialData or isOpen changes
+  // Sync state whenever initialData or isOpen changes — guard terhadap override restore
   useEffect(() => {
+    if (!isOpen) {
+      hasRestoredDraftRef.current = false;
+    }
+    if (hasRestoredDraftRef.current) return;
     if (isOpen && initialData) {
       setDateDisplay(initialData.dateDisplay || '');
       setTimeDisplay(initialData.timeDisplay || '12.00-12.30');
@@ -386,6 +390,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
 
   const handleRestoreDraft = useCallback((restored: any) => {
     if (!restored) return;
+    hasRestoredDraftRef.current = true;
     if (restored.dateDisplay !== undefined) setDateDisplay(restored.dateDisplay);
     if (restored.timeDisplay !== undefined) setTimeDisplay(restored.timeDisplay);
     if (restored.bundaName !== undefined) setBundaName(restored.bundaName);
@@ -406,6 +411,38 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     if (restored.discountPct !== undefined) setDiscountPct(restored.discountPct);
   }, []);
 
+  const resetInvoiceState = useCallback(() => {
+    setDateDisplay('');
+    setTimeDisplay('12.00-12.30');
+    setBundaName('');
+    setPhone('');
+    setAddress('');
+    setKecamatan('');
+    setKota('');
+    setCategory('BABY');
+    setChildName('');
+    setChildAge('');
+    setBabies([]);
+    setTreatmentName('Pijat Ceria');
+    setTreatmentPrice(60000);
+    setSelectedTreatments([]);
+    setServiceSearch('');
+    setIsServiceDropdownOpen(false);
+    setDistanceKmInput('3.0');
+    setOngkir(0);
+    setPromoOngkir(0);
+    setDiscountPct(0);
+    setCopied(false);
+    setMobileTab('setting');
+    hasRestoredDraftRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetInvoiceState();
+    }
+  }, [isOpen]);
+
   const isInvoiceDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
     if (!data) return false;
     const hasBunda = Boolean(data.bundaName && data.bundaName.trim().length > 0);
@@ -419,7 +456,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     return hasBunda || hasPhone || hasAddress || hasChild || hasTreatment || hasTreatmentsList || hasBabies;
   }, []);
 
-  const draftKey = `invoice_${phone || initialData?.phone || 'active'}`;
+  const stableTargetId = (initialData as any)?.phone || (initialData as any)?.bundaName || 'active';
+  const draftKey = `invoice_${String(stableTargetId).replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const hasRestoredDraftRef = React.useRef(false);
   const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
     draftKey,
     currentFormPayload,
@@ -455,90 +494,74 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
       <div
-        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-[#e9edef] flex flex-col max-h-[92vh] overflow-hidden overscroll-contain"
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-[#e9edef] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
         style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any, maxWidth: 'min(100vw - 24px, 56rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="px-5 py-3.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-xs">
-              <Receipt size={18} className="text-white" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base leading-tight flex items-center gap-2">
-                <span>Draft Rincian Reservasi & Invoice WA</span>
-                {initialData?.isExtractedFromChat && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 font-extrabold flex items-center gap-1 shadow-2xs">
-                    <Sparkles size={10} />
-                    <span>Auto-Extracted dari Chat</span>
-                  </span>
-                )}
-              </h3>
-              <p className="text-[11px] text-white/80">
-                Verifikasi atau edit rincian reservasi sebelum dikirim ke box chat WhatsApp.
-              </p>
-            </div>
-          </div>
+        {/* Modal Header — tipis minimalis 36px */}
+        <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
+          <h3 className="font-bold text-sm flex items-center gap-2">
+            <Receipt size={16} className="text-white" />
+            <span>Invoice WA</span>
+          </h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            className="p-1 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Draft Restore Notification Banner */}
-        {hasDraft && (
-          <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 animate-in fade-in shrink-0">
-            <div className="flex items-center space-x-2">
-              <FileText size={15} className="text-amber-600 shrink-0" />
-              <span>
-                Ditemukan draf invoice yang tersimpan <strong>{draftTimeAgo}</strong>.
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 shrink-0">
-              <button
-                type="button"
-                onClick={restoreDraft}
-                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
-              >
-                Pulihkan
-              </button>
-              <button
-                type="button"
-                onClick={() => discardDraft(false)}
-                className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
-              >
-                Buang
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Modal Body: 2 Columns — di mobile jadi tab Setting / Preview agar keduanya reachable */}
         <div className="flex flex-1 flex-col min-h-0 bg-[#f8fafc] lg:grid lg:grid-cols-12 lg:divide-x divide-[#e9edef] overflow-hidden">
-          {/* Mobile Tabs */}
+          {/* Mobile Tabs — ramping */}
           <div className="flex lg:hidden shrink-0 border-b border-[#e9edef] bg-white p-1 gap-1">
             <button
               type="button"
               onClick={() => setMobileTab('setting')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold border transition ${mobileTab === 'setting' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'setting' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
             >
               ⚙️ Pengaturan
             </button>
             <button
               type="button"
               onClick={() => setMobileTab('preview')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold border transition ${mobileTab === 'preview' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'preview' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
             >
               📱 Live Preview WA
             </button>
           </div>
 
-          {/* Left Column: Form Settings — Scrollable */}
-          <div className={`${mobileTab === 'preview' ? 'hidden' : ''} lg:!block lg:col-span-7 p-4 sm:p-5 overflow-y-auto space-y-4 max-h-[60vh] lg:max-h-[68vh]`}>
+          {/* Left Column: Form Settings — Scrollable, banner di dalam */}
+          <div className={`${mobileTab === 'preview' ? 'hidden' : ''} lg:!block lg:col-span-7 p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 min-h-0`}>
+            {/* Draft Restore Banner — di dalam scroll agar ikut tergulir */}
+            {hasDraft && (
+              <div className="p-2 sm:p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 animate-in fade-in">
+                <div className="flex items-center space-x-2">
+                  <FileText size={15} className="text-amber-600 shrink-0" />
+                  <span>
+                    Ditemukan draf invoice yang tersimpan <strong>{draftTimeAgo}</strong>.
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={restoreDraft}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
+                  >
+                    Pulihkan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => discardDraft(false)}
+                    className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
+                  >
+                    Buang
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Section 1: Jadwal & Waktu */}
             <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
               <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
