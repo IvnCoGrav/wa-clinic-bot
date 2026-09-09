@@ -254,7 +254,9 @@ export class CronService {
 
     const yesterdayReservations = await prisma.reservation.findMany({
       where: {
-        status: 'confirmed',
+        // `completed` ikut dihitung: admin yang menandai Treatment Selesai di
+        // hari-H tidak boleh membuat review H+1 hilang (kanonis patient-lifecycle).
+        status: { in: ['confirmed', 'completed'] },
         booking_date: {
           gte: startOfYesterday,
           lte: endOfYesterday,
@@ -268,7 +270,7 @@ export class CronService {
       },
     });
 
-    console.log(`[Cron Service] Found ${yesterdayReservations.length} confirmed reservations completed yesterday.`);
+    console.log(`[Cron Service] Found ${yesterdayReservations.length} confirmed/completed reservations booked yesterday.`);
 
     for (const res of yesterdayReservations) {
       if (!res.customer || !res.booking_date) continue;

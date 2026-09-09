@@ -161,18 +161,21 @@ export class ReservationLifecycleService {
    * - selalu hapus 'new customer'
    * - TIDAK pernah melepas label 'legacy'
    * Semua best-effort (opsi label WA tidak pernah menggagalkan operasi inti).
+   *
+   * Riwayat = `confirmed` ATAU `completed` (kanonis patient-lifecycle):
+   * pasien yang reservasi sebelumnya sudah `completed` tetap 'repeat'.
    */
   private async applyLifecycleLabels(params: { customerId: string; tenantId: string; chatId: string }): Promise<void> {
     const { customerId, tenantId, chatId } = params;
 
-    // Hitung reservasi confirmed/confirmed-sebelumnya milik customer (di luar reservasi barusan).
+    // Hitung reservasi confirmed/completed-sebelumnya milik customer (di luar reservasi barusan).
     let priorConfirmedCount = 0;
     try {
       priorConfirmedCount = await prisma.reservation.count({
         where: {
           customer_id: customerId,
           tenant_id: tenantId,
-          status: 'confirmed',
+          status: { in: ['confirmed', 'completed'] },
         },
       });
     } catch (err: any) {

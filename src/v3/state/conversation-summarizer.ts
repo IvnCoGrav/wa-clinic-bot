@@ -102,6 +102,15 @@ export class V3ConversationSummarizer {
       janganDiulang.push('Mengirim ulang teks formulir reservasi panjang (cukup ingatkan melengkapi data)');
     }
 
+    // 4b. Jadwal final anti-todong: hari yang sudah disepakati & tercatat
+    // DILARANG ditanyakan/ditawarkan ulang dalam bentuk apa pun.
+    const scheduleAgreed = Boolean(session.booking?.preferredDate || session.booking?.reservationId);
+    if (scheduleAgreed) {
+      const when = session.booking?.preferredDate || 'yang sudah disepakati';
+      sudahDibahas.push(`Hari kunjungan (${when}) sudah disepakati dan tercatat`);
+      janganDiulang.push(`Menanyakan atau menawarkan hari jadwal lagi (karena hari ${when} sudah final disepakati)!`);
+    }
+
     // 5. Sapaan pembuka
     if (botRepliesCount > 0) {
       janganDiulang.push('Sapaan pembuka "Halo Bunda!" atau perkenalan diri "Perkenalkan saya Bidan Yusi..." (ini percakapan lanjutan, langsung jawab inti)');
@@ -127,7 +136,7 @@ export class V3ConversationSummarizer {
       const c = (m.content || '').toLowerCase();
       return c.includes('di hari apa') || c.includes('jadwal kunjungan') || c.includes('jadwal bidan') || c.includes('ketersediaan jadwal') || c.includes('rencana mau treatment di hari apa');
     });
-    if (askedScheduleRecently && !hasDayMention) {
+    if (askedScheduleRecently && (!hasDayMention || scheduleAgreed)) {
       janganDiulang.push('Menanyakan "mau treatment di hari apa" atau menodong jadwal kunjungan lagi (karena baru saja ditanyakan). Jawab dengan ramah tanpa menodong!');
     }
 

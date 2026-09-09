@@ -164,7 +164,7 @@ export class ConversationStateMachine {
       let hasPriorConfirmed = false;
       try {
         const confirmedCount = await prisma.reservation.count({
-          where: { customer_id: customer.id, status: 'confirmed', tenant_id: tenantId },
+          where: { customer_id: customer.id, status: { in: ['confirmed', 'completed'] }, tenant_id: tenantId },
         });
         hasPriorConfirmed = confirmedCount > 0;
       } catch (err: any) {}

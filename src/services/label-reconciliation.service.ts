@@ -28,9 +28,10 @@ export class LabelReconciliationService {
         select: { id: true, phone: true },
       });
 
-      // 2. Customer dengan ≥1 reservasi confirmed (riwayat pembelian)
+      // 2. Customer dengan ≥1 reservasi confirmed/completed (riwayat pembelian;
+      //    kanonis patient-lifecycle — reservasi `completed` ikut dihitung)
       const confirmedCustomers = await prisma.customer.findMany({
-        where: { tenant_id: tenantId, reservations: { some: { status: 'confirmed' } } },
+        where: { tenant_id: tenantId, reservations: { some: { status: { in: ['confirmed', 'completed'] } } } },
         select: { id: true, phone: true },
       });
       const confirmedPhoneSet = new Set(confirmedCustomers.map((c) => c.phone));
