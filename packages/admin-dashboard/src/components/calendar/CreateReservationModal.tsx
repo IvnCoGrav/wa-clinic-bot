@@ -305,7 +305,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [conflictInfo, setConflictInfo] = useState<{ code: string; message: string; existingReservation: any } | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
 
-  // Form Draft Persistence Hook (1-hour TTL)
+  // Form Draft Persistence Hook (1-hour TTL) — payload lengkap termasuk multi-sesi & kustom
   const currentFormPayload = useMemo(() => ({
     customerId,
     customerSearch,
@@ -320,6 +320,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     discount,
     babies,
     selectedTreatments,
+    isMultiSession,
+    multiSessionTotal,
+    multiSessionSchedule,
+    customServiceName,
+    customServiceDuration,
+    customServicePrice,
+    customCategory,
+    customIsAddon,
+    showCustomServiceInput,
   }), [
     customerId,
     customerSearch,
@@ -334,6 +343,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     discount,
     babies,
     selectedTreatments,
+    isMultiSession,
+    multiSessionTotal,
+    multiSessionSchedule,
+    customServiceName,
+    customServiceDuration,
+    customServicePrice,
+    customCategory,
+    customIsAddon,
+    showCustomServiceInput,
   ]);
 
   const handleRestoreDraft = (restored: any) => {
@@ -351,26 +369,72 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.discount !== undefined) setDiscount(restored.discount);
     if (restored.babies !== undefined) setBabies(restored.babies);
     if (restored.selectedTreatments !== undefined) setSelectedTreatments(restored.selectedTreatments);
+    if (restored.isMultiSession !== undefined) setIsMultiSession(restored.isMultiSession);
+    if (restored.multiSessionTotal !== undefined) setMultiSessionTotal(restored.multiSessionTotal);
+    if (restored.multiSessionSchedule !== undefined) setMultiSessionSchedule(restored.multiSessionSchedule);
+    if (restored.customServiceName !== undefined) setCustomServiceName(restored.customServiceName);
+    if (restored.customServiceDuration !== undefined) setCustomServiceDuration(restored.customServiceDuration);
+    if (restored.customServicePrice !== undefined) setCustomServicePrice(restored.customServicePrice);
+    if (restored.customCategory !== undefined) setCustomCategory(restored.customCategory);
+    if (restored.customIsAddon !== undefined) setCustomIsAddon(restored.customIsAddon);
+    if (restored.showCustomServiceInput !== undefined) setShowCustomServiceInput(restored.showCustomServiceInput);
   };
+
+  const resetModalState = useCallback(() => {
+    setCustomerId('');
+    setCustomerSearch('');
+    setSelectedCustomerInfo(null);
+    setCustomerResults([]);
+    setSelectedTreatments([]);
+    setCustomServiceName('');
+    setCustomServiceDuration(60);
+    setCustomServicePrice(0);
+    setCustomCategory('BABY');
+    setCustomIsAddon(false);
+    setShowCustomServiceInput(false);
+    setBookingDate('');
+    setBookingTime('09:00');
+    setAssignedStaffId('');
+    setStatus('pending');
+    setNotes('');
+    setOngkir(0);
+    setDiscount(0);
+    setIsMultiSession(false);
+    setMultiSessionTotal(0);
+    setMultiSessionSchedule([]);
+    setBabies([]);
+    setRecommendations([]);
+    setHasCalculatedRecommendations(false);
+    setConflictInfo(null);
+    setShowConflictModal(false);
+    setServiceSearch('');
+    setIsServiceDropdownOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetModalState();
+      initializedEditIdRef.current = null;
+    }
+  }, [isOpen]);
 
   const isReservationDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
     if (!data) return false;
-    const hasCustomer = Boolean(
-      (data.customerId && data.customerId.trim().length > 0) ||
-      (data.customerSearch && data.customerSearch.trim().length > 0) ||
-      data.selectedCustomerInfo
-    );
     const hasTreatments = Array.isArray(data.selectedTreatments) && data.selectedTreatments.length > 0;
     const hasBabies = Array.isArray(data.babies) && data.babies.some((b: any) => b?.name?.trim() || b?.ageText?.trim());
     const hasNotes = Boolean(data.notes && data.notes.trim().length > 0);
     const hasDiscount = typeof data.discount === 'number' && data.discount > 0;
     const hasAssignedStaff = Boolean(data.assignedStaffId && data.assignedStaffId.trim().length > 0);
+    const hasMultiSession = Boolean((data as any).isMultiSession || (Array.isArray((data as any).multiSessionSchedule) && (data as any).multiSessionSchedule.length > 0));
+    const hasCustom = Boolean((data as any).customServiceName && String((data as any).customServiceName).trim().length > 0);
 
-    return hasCustomer || hasTreatments || hasBabies || hasNotes || hasDiscount || hasAssignedStaff;
+    return hasTreatments || hasBabies || hasNotes || hasDiscount || hasAssignedStaff || hasMultiSession || hasCustom;
   }, []);
 
+  const effectiveCustomerId = customerId || (initialCustomer as any)?.id || initialCustomerId || '';
+  const draftKey = effectiveCustomerId ? `reservation_cust_${effectiveCustomerId}` : 'reservation_new';
   const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
-    'create_reservation',
+    draftKey,
     currentFormPayload,
     handleRestoreDraft,
     {
@@ -1259,7 +1323,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       style={{ touchAction: 'pan-y' }}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-3xl p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
+        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-3xl p-4 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: 'pan-y' }}
       >
@@ -1284,34 +1348,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               : 'Mendukung multi-treatment, reservasi 2 anak (kembar/kakak-adik), add-on tanpa buffer (moksa), dan rekomendasi jam'}
           </p>
         </div>
-
-        {/* Draft Restore Notification Banner */}
-        {hasDraft && (
-          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 animate-in fade-in shrink-0">
-            <div className="flex items-center space-x-2">
-              <FileText size={15} className="text-amber-600 shrink-0" />
-              <span>
-                Ditemukan draf reservasi yang tersimpan <strong>{draftTimeAgo}</strong>.
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 shrink-0">
-              <button
-                type="button"
-                onClick={restoreDraft}
-                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
-              >
-                Pulihkan
-              </button>
-              <button
-                type="button"
-                onClick={() => discardDraft(false)}
-                className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
-              >
-                Buang
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Pre-flight double-booking warning */}
         {mode !== 'edit' && customerConflictsForDate.length > 0 && (
@@ -1338,7 +1374,34 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         )}
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 w-full max-w-full touch-pan-y overscroll-contain">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain">
+          {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky) */}
+          {hasDraft && (
+            <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
+              <div className="flex items-center space-x-2">
+                <FileText size={15} className="text-amber-600 shrink-0" />
+                <span>
+                  Ditemukan draf reservasi yang tersimpan <strong>{draftTimeAgo}</strong>.
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={restoreDraft}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
+                >
+                  Pulihkan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => discardDraft(false)}
+                  className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
+                >
+                  Buang
+                </button>
+              </div>
+            </div>
+          )}
           {/* Section 1: Customer Picker */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
