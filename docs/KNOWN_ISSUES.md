@@ -884,7 +884,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 36. [Pasien] Redesain Fondasional Klasifikasi Lifecycle & Active Appointment Guard (insiden Bunda Retno, 2026-09-09)
 
-- **Status:** implemented (2026-09-09); sisa: eksekusi SQL Retno menunggu instruksi operasional admin + verifikasi 2-langkah.
+- **Status:** implemented + deployed live (2026-09-09 13:09 WIB); runbook Retno DIEKSEKUSI (`cancelled`, terverifikasi).
 - **Konteks:** bot AI membalas pasien lama (treatment pertama `completed` 29 Agu) dan pasien berjadwal aktif H-0 ("Sdh smp mana ya?") dengan template marketing generik. Akar: gate hanya cek `confirmed`; properti hantu `purchase_count` / `status='repeat'` (tidak pernah ditulis production); tanpa guard jadwal aktif; label `repeat` hanya hitung `confirmed`; test lama mem-passing mock fiktif.
 - **Yang sudah dikerjakan:**
   1. `src/services/patient-lifecycle.service.ts` (baru, kanonis): `hasTreatmentHistory` (`confirmed`/`completed`, fallback `ltv_cache`), `getActiveAppointment` (`pending`/`confirmed`/`hold`, jendela [now-12 jam, now+24 jam]), `getPatientClinicalProfile`. Tenant-aware, best-effort (DB gagal → default aman).
@@ -893,7 +893,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   4. `reservation-lifecycle` (label `repeat`), `label-reconciliation`, `machine.ts` (`hasPriorConfirmed`), `cron` (review H+1): `confirmed` → `in ['confirmed','completed']`.
   5. Test ditulis ulang tanpa mock fiktif (`legacy-and-repeat-bypass.test.ts`) + `patient-lifecycle.test.ts` baru (10) + simulasi Retno (DB `completed` → silence `EXISTING_PATIENT_MANUAL`; jadwal aktif → silence `ACTIVE_APPOINTMENT_MANUAL`).
 - **Sisa / limitasi yang diketahui:**
-  1. Runbook `scripts/cleanup-bunda-retno-reservation.sql` SIAP (BLOK 1 cancel / BLOK 2 confirm — jalankan salah satu) — eksekusi menunggu pilihan operasional + verifikasi 2-langkah.
+  1. Runbook `scripts/cleanup-bunda-retno-reservation.sql` DIEKSEKUSI 2026-09-09 13:09 WIB (BLOK 1 cancel, `UPDATE 1`, verifikasi `cancelled`). State akhir Retno: 1 `completed` (riwayat 29 Agu, guard aktif) + 1 `cancelled` (jadwal AI 9 Sept). Deploy: commit `5c0f06f` push master → live pull + rebuild app (WAHA tak tersentuh, up 3 minggu); app boot bersih, full suite lokal 201 file / 1618 passed / 0 failed.
   2. `status === 'legacy'` dipertahankan sebagai sinyal legacy (konvensi riil `migration.service.ts`), berdampingan dengan kolom `is_legacy_source`.
   3. Lookup jadwal aktif fail-open saat DB down (tidak silence); fail-closed tetap dijaga langkah scope (`NEW_ONLY` + cutoff) di resolver.
 - **Verifikasi:** `tsc --noEmit` bersih; full suite **201 file, 1618 passed, 0 failed**.
