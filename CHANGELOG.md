@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Redesign Fondasional — Parsing GPS Pin, Klaster Hierarki & Sticky GPS (2026-09-09)
+
+- **Latar Belakang:** alamat "Valencia spring puri surya jaya DD 3 no.28" terhitung 8.5 km (gerbang depan) padahal titik klaster ~10.7–10.9 km rute ORS. Akar: 1 titik per mega-estate; payload Baileys (`degreesLatitude`) tak terbaca → NaN; `share.google` tak terekstrak; flag GPS tak pernah menyala.
+- **Perbaikan:** util kanonis `waha-location-parser.ts` (Baileys `locationMessage`/`liveLocationMessage`, 0,0 dibuang, anti bocor NaN) dipakai `webhook.route.ts`; regex URL + `share.google`; 3 klaster PSJ (Valencia/Sydney-Boston/Osaka-Vancouver) sebelum gerbang utama (cluster-first); invarian sticky terverifikasi tetap berlaku (override admin via dashboard langsung).
+- **Sengaja ditunda jujur:** klaster CitraHarmoni/Kahuripan/CitraLand menunggu survei koordinat (tanpa fabrikasi); angka ORS 10.92 km butuh konfirmasi live sekali.
+- **Verifikasi:** test baru 9+7+4+2 hijau; E2E `geocodeText` → klaster presisi; full suite **204 file, 1640 passed, 0 failed**; `npm run build` bersih.
+
 #### Redesain Fondasional — Klasifikasi Lifecycle Pasien & Active Appointment Guard (2026-09-09)
 
 - **Latar Belakang:** insiden Bunda Retno (`6282132249740`) — bot AI membalas pasien yang treatment pertamanya sudah `completed` dan pasien berjadwal aktif H-0 ("Sdh smp mana ya?") dengan template marketing generik. Akar sistemik: gate buta status `completed`, properti hantu `purchase_count` / `status='repeat'` (tak pernah ada di schema), tanpa pelindung jadwal aktif, label `repeat` hanya hitung `confirmed`, dan test lama mem-passing mock fiktif (false confidence).

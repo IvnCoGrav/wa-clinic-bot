@@ -19,6 +19,7 @@ import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { normalizeWahaJid, extractRealPhoneFromWahaPayload } from '../utils/jid';
+import { extractWahaLocation } from '../utils/waha-location-parser';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
 dotenv.config();
@@ -642,12 +643,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // meski timestamp telat (reconnect/QR burst) dan tetap muncul di LiveChat.
       const pAny = payload as any;
 
-      // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG)
-      const rawLoc = payload.location || pAny._data?.location || pAny.location;
-      const rawLat = rawLoc?.latitude != null ? Number(rawLoc.latitude) : NaN;
-      const rawLng = rawLoc?.longitude != null ? Number(rawLoc.longitude) : NaN;
-      const isLocationMsgType = payload.type === 'location' || pAny.type === 'location' || pAny._data?.type === 'location';
-      const hasRealLocation = (!isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0) || isLocationMsgType;
+      // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG).
+      // Normalisasi via util kanonis: mendukung payload WAHA NOWEB/Baileys
+      // (`_data.message.locationMessage.degreesLatitude/degreesLongitude` dan
+      // `liveLocationMessage`) selain `payload.location` lawas.
+      const {
+        rawLat,
+        rawLng,
+        hasRealLocation,
+        isLocationMsgType,
+      } = extractWahaLocation(payload);
 
       const isInboundImage = !hasRealLocation && (
         payload.hasMedia ||
