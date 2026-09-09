@@ -898,4 +898,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Lookup jadwal aktif fail-open saat DB down (tidak silence); fail-closed tetap dijaga langkah scope (`NEW_ONLY` + cutoff) di resolver.
 - **Verifikasi:** `tsc --noEmit` bersih; full suite **201 file, 1618 passed, 0 failed**.
 
+---
+
+## 37. [Pasien] Audit live: pola Retno di customer lain (2026-09-09 13:15 WIB / 05:15 UTC)
+
+- **Status:** audit read-only selesai; tindakan data menunggu keputusan operasional.
+- **Cakupan:** 638 customer; 310 `completed`, 13 `pending`, 1 `cancelled` (Retno, dieksekusi sesi ini).
+- **Temuan (existing-patient + pending, pola Retno):**
+  1. **Bunda Bella (6289670370062)** — KOMBO duplikat + nilai korup, slot 09:30 WIB hari ini (sudah lewat, keduanya masih `pending`): `bbbde4bd` = 46000 (tertulis dari teks bot "Selamat Malam bunda Bella!..." → signature overwrite buta `maybeFirePurchaseEvent` pra-fix, relasi 2 anak) vs `7a6e494a` = 160000 (`[Admin Manual]`, tanpa anak). Rencana approved sebelumnya (cancel `7a6e49…`, restore `bbbd…`→160000) BELUM pernah dieksekusi. Perlu keputusan: batalkan salah satu + status baris kept (completed bila treatment tadi pagi terjadi / tetap pending / cancel).
+  2. **Bunda Devia (6285850166929, histori 12)** — 2 pending Newborn (`[Admin Manual]`, dibuat selisih 2 menit): booking kemarin 08:00 WIB (overdue) + hari ini 08:00 WIB (overdue). Dugaan double-entry admin. Rekomendasi: cancel baris kemarin, konfirmasi status baris hari ini ke CS.
+  3. **Bunda Fitria Wonokromo (628563567095, histori 2)** — 2 pending 13 Sept: 09:00 WIB form customer (165k) + 13:00 WIB admin (180k), detail berbeda. Belum jelas duplikat vs 2 sesi sah. Rekomendasi: klarifikasi CS dulu, JANGAN eksekusi buta.
+- **Normal (tanpa tindakan):** 7 pending milik new-lead (tanpa riwayat) — booking sah; 1 upcoming aktif hari ini (Agnes 13:30 WIB, guard kini melindungi); Retno bersih (1 completed + 1 cancelled).
+- **Kronologi eksekusi Bella + admin konkuren (UTC, 2026-09-09, dari `audit_logs`):**
+  - 04:12 admin `REJECT_PURCHASE_OUTLIER` pada `7a6e49…` (duplikat yatim Bella).
+  - ~05:2x sesi ini: `UPDATE 1` — `7a6e49…` → `cancelled` (sesuai rencana approved).
+  - 05:36:49 admin `DELETE_RESERVATION_PERMANENT` pada `a0c5e10c…` (reservasi AI Retno — admin memilih hapus permanen, lebih kuat dari cancel sesi ini; state Retno akhir: hanya riwayat `completed`, bersih).
+  - 05:39:50 admin `DELETE_RESERVATION_PERMANENT` pada `bbbde4bd…` (baris korup 46000 Bella) — terjadi SESAAT setelah audit read-only sesi ini, menjelaskan `UPDATE 0` + baris hilang saat verifikasi. BUKAN error skrip.
+  - 05:40:31/45 admin `CONFIRM` → `COMPLETE` pada `f37579…` (Newborn Devia hari ini — treatment terjadi; rencana cancel Devia BATAL relevansinya untuk baris ini).
+  - Dampak relasi: `children.reservation_id` = `SetNull` — Arhan/Ardhan tetap ada (NULL), tidak ikut terhapus. Tidak ada tabrakan tulis (UPDATE kondisional sesi ini hanya menyentuh baris yatim yang memang ditargetkan).
+- **Pelajaran operasional:** dashboard admin aktif konkuren saat runbook dieksekusi — untuk runbook berikutnya, kunci dulu pembagian tugas (siapa mengeksekusi apa) atau bekukan edit dashboard selama jendela eksekusi.
+
 
