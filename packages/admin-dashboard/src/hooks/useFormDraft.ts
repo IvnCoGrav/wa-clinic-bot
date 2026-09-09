@@ -51,6 +51,23 @@ function defaultIsMeaningful(data: any): boolean {
     'customCategory',
     'customIsAddon',
     'showCustomServiceInput',
+    'customerId',
+    'customerSearch',
+    'selectedCustomerInfo',
+    'bundaName',
+    'phone',
+    'address',
+    'kecamatan',
+    'kota',
+    'childName',
+    'childAge',
+    'treatmentName',
+    'treatmentPrice',
+    'distanceKm',
+    'distanceKmInput',
+    'ongkir',
+    'promoOngkir',
+    'discountPct',
   ]);
 
   for (const [key, val] of Object.entries(data)) {
@@ -96,6 +113,7 @@ export function useFormDraft<T>(
   } = options;
 
   const storageKey = `wa_clinic_draft_${draftKey}`;
+  const prevStorageKeyRef = useRef<string>(storageKey);
   const [hasDraft, setHasDraft] = useState(false);
   const [draftTimeAgo, setDraftTimeAgo] = useState('');
   const isInitialMount = useRef(true);
@@ -135,6 +153,21 @@ export function useFormDraft<T>(
       }
     }
   }, [enabled, refreshDraftStatus]);
+
+  // Bersihkan timer & refresh saat draftKey berganti (isolasi per-customer)
+  useEffect(() => {
+    if (prevStorageKeyRef.current !== storageKey) {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      prevStorageKeyRef.current = storageKey;
+      isInitialMount.current = true;
+      if (enabled) {
+        isDiscardedRef.current = false;
+        refreshDraftStatus();
+      }
+    }
+  }, [storageKey, enabled, refreshDraftStatus]);
 
   // Simpan draf ke localStorage
   const saveDraftToStorage = useCallback(

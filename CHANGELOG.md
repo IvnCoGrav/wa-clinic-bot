@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Pembenahan Fondasi Fitur Draf & Redesain UI Mobile Invoice WA (2026-09-09)
+
+- **Latar Belakang:** Tabrakan draf antar-customer (key statis `'create_reservation'`), ghost auto-save (customer bawaan dianggap draf), state leak saat modal ditutup, kehilangan data paket multi-sesi, key draf invoice pecah per ketukan digit HP, banner draf sticky mengunci layar mobile, dan header invoice tebal ~70px yang memakan viewport saat keyboard muncul.
+- **Lapisan 1 — Fondasi Draf & Anti-Ghost (`useFormDraft.ts`, `CreateReservationModal.tsx`, `InvoiceGeneratorModal.tsx`):** Isolasi key per-customer (`reservation_cust_${customerId}` / `reservation_new`; `invoice_${stableTargetId}`), perketat `isMeaningful` (hanya treatment/anak/notes/diskon/staff/multi-sesi/kustom — bukan sekadar `customerId`), perluas payload draf (`isMultiSession`, `multiSessionSchedule`, `customService*`), stabilkan key invoice dari `bundaName/phone` + `hasRestoredDraftRef` guard agar tidak tertimpa sinkronisasi `initialData`.
+- **Lapisan 2 — Siklus Hidup State (`CreateReservationModal.tsx`, `InvoiceGeneratorModal.tsx`):** Fungsi terpusat `resetModalState()` / `resetInvoiceState()` yang mengembalikan seluruh field ke nilai awal bersih saat `isOpen` → `false`; cegah state leak antar-bukaan modal.
+- **Lapisan 3 — Scroll & Viewport (`CreateReservationModal.tsx`, `InvoiceGeneratorModal.tsx`):** Pindahkan banner draf dari posisi `shrink-0` statis di luar form ke **dalam** kontainer scrollable (`overflow-y-auto`) sehingga ikut tergulir (*scrolls away*); ganti `max-h-[92vh]` / `max-h-[60vh]` menjadi `h-[100dvh] sm:h-auto sm:max-h-[90vh]` + `flex-1 min-h-0` agar keyboard virtual tidak mengunci layout; rampingkan tab mobile `py-1.5 text-[11px]`.
+- **Lapisan 4 — Header Minimalis (`InvoiceGeneratorModal.tsx`):** Judul `Draft Rincian Reservasi & Invoice WA` → `Invoice WA`; hapus badge `Auto-Extracted dari Chat` & paragraf verifikasi; padding `px-5 py-3.5` → `px-3.5 py-2 sm:px-4 sm:py-2.5`; icon box tebal `w-8 h-8` → icon inline `Receipt size={16}`; tombol tutup `p-1 rounded-md`; tinggi header terpangkas ~50% (70px → 36px).
+- **Verifikasi:** `tsc --noEmit` bersih, `vite build` 2450 modules, `language-sanitizer` 13 tests passed; uji manual anti-kontaminasi draf, ghost auto-save, multi-sesi restore, dan viewport mobile 375px dengan keyboard aktif.
+
 #### Redesign Fondasional — Parsing GPS Pin, Klaster Hierarki & Sticky GPS (2026-09-09)
 
 - **Latar Belakang:** alamat "Valencia spring puri surya jaya DD 3 no.28" terhitung 8.5 km (gerbang depan) padahal titik klaster ~10.7–10.9 km rute ORS. Akar: 1 titik per mega-estate; payload Baileys (`degreesLatitude`) tak terbaca → NaN; `share.google` tak terekstrak; flag GPS tak pernah menyala.
