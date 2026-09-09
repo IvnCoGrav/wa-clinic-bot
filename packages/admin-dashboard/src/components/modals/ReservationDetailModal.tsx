@@ -129,6 +129,22 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 }) => {
   if (!reservation) return null;
 
+  const [activeRes, setActiveRes] = useState<any>(reservation);
+  useEffect(() => {
+    setActiveRes(reservation);
+    if ((reservation as any)?.id && !((reservation as any).customer?.phone)) {
+      apiRequest(`/api/admin/reservation/${(reservation as any).id}`)
+        .then((res: any) => {
+          const full = res?.reservation || res?.data || res;
+          if (full) setActiveRes(full);
+        })
+        .catch(() => {});
+    }
+  }, [reservation]);
+
+  // Gunakan hydrasi penuh jika tersedia
+  const displayReservation: any = activeRes || reservation;
+
   const { toast, confirm } = useUiFeedback();
   const [editDate, setEditDate] = useState('');
   const [assigningStaff, setAssigningStaff] = useState(false);
@@ -140,8 +156,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    if (reservation?.booking_date) {
-      const d = new Date(reservation.booking_date);
+    if (displayReservation?.booking_date) {
+      const d = new Date(displayReservation.booking_date);
       const tzOffset = d.getTimezoneOffset() * 60000;
       const localIso = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
       setEditDate(localIso);
@@ -186,7 +202,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         toast('Format tanggal tidak valid', 'error');
         return;
       }
-      await onSetDate(reservation.id, parsed.toISOString());
+      await onSetDate(displayReservation.id, parsed.toISOString());
       toast('Jadwal reservasi berhasil diperbarui.', 'success');
       onUpdate();
     } catch (err: any) {
@@ -199,7 +215,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     const staffId = e.target.value || null;
     setAssigningStaff(true);
     try {
-      await onAssignStaff?.(reservation.id, staffId);
+      await onAssignStaff?.(displayReservation.id, staffId);
       toast(staffId ? 'Staff berhasil ditugaskan ke reservasi.' : 'Penugasan staff telah dilepas.', 'success');
       onUpdate();
     } catch (err: any) {
@@ -213,28 +229,28 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   const handleConfirmClick = async () => {
     if (!onConfirm) return;
-    await onConfirm(reservation.id);
+    await onConfirm(displayReservation.id);
     toast('Reservasi ditandai lunas & disinkronkan ke Google Calendar', 'success');
     onUpdate();
   };
 
   const handleCompleteClick = async () => {
     if (!onComplete) return;
-    await onComplete(reservation.id);
+    await onComplete(displayReservation.id);
     toast('Reservasi berhasil ditandai Selesai Treatment!', 'success');
     onUpdate();
   };
 
   const handleStatusChangeClick = async (newStatus: string) => {
     if (!onStatusChange) return;
-    await onStatusChange(reservation.id, newStatus);
+    await onStatusChange(displayReservation.id, newStatus);
     toast(`Status reservasi diubah menjadi ${newStatus}.`, 'success');
     onUpdate();
   };
 
   const handleCancelClick = async () => {
     if (onCancel) {
-      await onCancel(reservation.id);
+      await onCancel(displayReservation.id);
       return;
     }
     const ok = await confirm({
@@ -245,9 +261,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     });
     if (!ok) return;
     if (onStatusChange) {
-      await onStatusChange(reservation.id, 'cancelled');
+      await onStatusChange(displayReservation.id, 'cancelled');
     } else if (onDelete) {
-      await onDelete(reservation.id);
+      await onDelete(displayReservation.id);
     }
     toast('Reservasi berhasil dibatalkan.', 'success');
     onClose();
@@ -256,7 +272,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   const handleDeletePermanentClick = async () => {
     if (onDeletePermanent) {
-      await onDeletePermanent(reservation.id);
+      await onDeletePermanent(displayReservation.id);
       return;
     }
     const ok = await confirm({
@@ -267,7 +283,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     });
     if (!ok) return;
     try {
-      await apiRequest(`/api/admin/reservation/${reservation.id}?hard=true`, {
+      await apiRequest(`/api/admin/reservation/${displayReservation.id}?hard=true`, {
         method: 'DELETE',
       });
       toast('Reservasi berhasil dihapus permanen.', 'success');
@@ -297,7 +313,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     try {
       const text = generateReservationInvoiceText({
         reservation,
-        customer: reservation.customer as any,
+        customer: displayReservation.customer as any,
       });
       await navigator.clipboard.writeText(text);
       setCopiedInvoice(true);
@@ -408,19 +424,19 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-[#667781] font-bold block uppercase">Data Pasien</span>
-                    {getStatusBadge(reservation.status)}
+                    {getStatusBadge(displayReservation.status)}
                   </div>
                   <div className="flex items-center space-x-2 text-[#111b21]">
                     <User size={15} className="text-[#8696a0] flex-shrink-0" />
                     <span className="font-semibold break-all">
-                      {reservation.customer?.name || 'Bunda'} ({reservation.customer?.phone})
+                      {displayReservation.customer?.name || 'Bunda'} ({displayReservation.customer?.phone})
                     </span>
                   </div>
-                  {reservation.customer?.kelurahan && (
+                  {displayReservation.customer?.kelurahan && (
                     <div className="flex items-center space-x-2 text-[#54656f] text-[11px]">
                       <MapPin size={13} className="text-[#8696a0] flex-shrink-0" />
                       <span className="break-words">
-                        {reservation.customer?.kelurahan}, {reservation.customer?.kecamatan}, {reservation.customer?.kota}
+                        {displayReservation.customer?.kelurahan}, {displayReservation.customer?.kecamatan}, {displayReservation.customer?.kota}
                       </span>
                     </div>
                   )}
@@ -454,13 +470,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-[#667781]">Jarak dari Cabang</span>
                     <span className="text-[#111b21] font-bold">
-                      {reservation.customer?.distance_km?.toFixed(2) || '0.0'} km
+                      {displayReservation.customer?.distance_km?.toFixed(2) || '0.0'} km
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-[#667781]">Ongkir</span>
                     <span className="text-[#111b21] font-bold">
-                      {reservation.customer?.ongkir ? `Rp ${reservation.customer.ongkir.toLocaleString()}` : 'Gratis / Belum dihitung'}
+                      {displayReservation.customer?.ongkir ? `Rp ${displayReservation.customer.ongkir.toLocaleString()}` : 'Gratis / Belum dihitung'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-[#008069]">
@@ -470,11 +486,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                   {/* Foto Depan Rumah & Landmark Patokan */}
                   {(() => {
-                    const prefs = reservation.customer?.preferences as any;
+                    const prefs = displayReservation.customer?.preferences as any;
                     const housePhoto = prefs?.house_photo_url;
                     const landmark = prefs?.landmark;
-                    const lat = reservation.customer?.lat;
-                    const lng = reservation.customer?.lng;
+                    const lat = displayReservation.customer?.lat;
+                    const lng = displayReservation.customer?.lng;
                     const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
 
                     if (!housePhoto && !landmark && !mapsUrl) {
@@ -573,16 +589,16 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 {/* Bukti Bayar (upload + lihat) */}
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                   <span className="text-[11px] text-[#667781] font-bold block uppercase">Bukti Bayar</span>
-                  {reservation.proof_url ? (
+                  {displayReservation.proof_url ? (
                     <div className="flex items-center space-x-2.5">
                       <img
-                        src={reservation.proof_url}
+                        src={displayReservation.proof_url}
                         alt="Bukti bayar"
                         className="h-14 w-14 object-cover rounded-lg border border-[#e9edef] shadow-xs bg-white"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-[#54656f] truncate">
-                          Metode: <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(reservation.payment_method)}</span>
+                          Metode: <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
                         </p>
                         <p className="text-[10px] text-[#8696a0]">Bukti tersimpan (versi ringan)</p>
                       </div>
@@ -632,21 +648,21 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-[#667781] font-bold block uppercase">Layanan &amp; Jadwal</span>
                     <span className="font-bold text-xs text-[#008069] font-mono">
-                      {reservation.purchase_value ? `Rp ${reservation.purchase_value.toLocaleString('id-ID')}` : 'Rp -'}
+                      {displayReservation.purchase_value ? `Rp ${displayReservation.purchase_value.toLocaleString('id-ID')}` : 'Rp -'}
                     </span>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white border border-[#e9edef] space-y-1">
                     <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
-                      {reservation.treatment_category}
+                      {displayReservation.treatment_category}
                     </span>
                     <p className="text-xs font-semibold text-[#111b21]">
-                      {getCleanTreatmentName(reservation.treatment_detail)}
+                      {getCleanTreatmentName(displayReservation.treatment_detail)}
                     </p>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {getTotalDurationLabel(reservation.treatment_detail) && (
+                      {getTotalDurationLabel(displayReservation.treatment_detail) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f0f2f5] border border-[#e9edef] text-[10px] font-bold text-[#54656f]">
-                          {getTotalDurationLabel(reservation.treatment_detail)}
+                          {getTotalDurationLabel(displayReservation.treatment_detail)}
                         </span>
                       )}
                     </div>
@@ -671,7 +687,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-[#667781] font-bold block uppercase">Penugasan Staff / Terapis</span>
-                    {user?.id && reservation.assigned_staff_id !== user.id && (
+                    {user?.id && displayReservation.assigned_staff_id !== user.id && (
                       <button
                         type="button"
                         onClick={() => handleAssignStaffClick(user.id)}
@@ -683,23 +699,23 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     )}
                   </div>
                   <select
-                    value={reservation.assigned_staff_id || ''}
+                    value={displayReservation.assigned_staff_id || ''}
                     onChange={(e) => handleAssignStaffClick(e.target.value || null)}
                     disabled={assigningStaff}
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   >
                     <option value="">-- Belum Ditugaskan --</option>
                     {staffList
-                      .filter((s) => s.active !== false || s.id === reservation.assigned_staff_id)
+                      .filter((s) => s.active !== false || s.id === displayReservation.assigned_staff_id)
                       .map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name} {s.active === false ? '(Nonaktif)' : ''}
                         </option>
                       ))}
                   </select>
-                  {reservation.assigned_staff && (
+                  {displayReservation.assigned_staff && (
                     <p className="text-xs text-[#008069] font-bold">
-                      Ditugaskan ke: {reservation.assigned_staff.name}
+                      Ditugaskan ke: {displayReservation.assigned_staff.name}
                     </p>
                   )}
                 </div>
@@ -726,7 +742,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 <span>Format Teks Chat Asli / Detail</span>
               </span>
               <pre className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[11px] text-[#54656f] font-mono overflow-auto max-h-28 whitespace-pre-wrap break-all">
-                {reservation.raw_text}
+                {displayReservation.raw_text}
               </pre>
             </div>
 
@@ -756,7 +772,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
             <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-between items-stretch sm:items-center">
               {/* Left Action Group: Batalkan & Hapus */}
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {reservation.status !== 'cancelled' && (
+                {displayReservation.status !== 'cancelled' && (
                   <button
                     onClick={handleCancelClick}
                     className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
@@ -788,13 +804,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <span>Edit Reservasi</span>
                 </button>
 
-                {reservation.customer?.id && onOpenChatHistory && (
+                {displayReservation.customer?.id && onOpenChatHistory && (
                   <button
                     onClick={() =>
                       onOpenChatHistory(
-                        reservation.customer?.id!,
-                        reservation.customer?.name || undefined,
-                        reservation.customer?.phone || undefined
+                        displayReservation.customer?.id!,
+                        displayReservation.customer?.name || undefined,
+                        displayReservation.customer?.phone || undefined
                       )
                     }
                     className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
@@ -818,17 +834,17 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
                 </button>
 
-                {(reservation.status === 'pending' || (reservation.status as string) === 'hold') && (
+                {(displayReservation.status === 'pending' || (displayReservation.status as string) === 'hold') && (
                   <button
                     onClick={handleConfirmClick}
                     className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-[#008069] text-white hover:bg-[#00a884] text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
                   >
                     <Check size={14} />
-                    <span>{(reservation.status as string) === 'hold' ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
+                    <span>{(displayReservation.status as string) === 'hold' ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
                   </button>
                 )}
 
-                {reservation.status === 'confirmed' && (
+                {displayReservation.status === 'confirmed' && (
                   <button
                     onClick={handleCompleteClick}
                     className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
@@ -838,7 +854,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   </button>
                 )}
 
-                {reservation.status === 'completed' && (
+                {displayReservation.status === 'completed' && (
                   <div className="flex items-center space-x-2">
                     <span className="px-3 py-1.5 rounded-xl bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold flex items-center space-x-1">
                       <CheckCheck size={14} className="text-sky-600" />
