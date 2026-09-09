@@ -1049,11 +1049,26 @@ export class CapiService {
 
       const eventSourceUrl = resolveCanonicalLandingUrl(effectiveAdClick?.landingUrl, tenantDomain);
 
+      // 4a. TEMPORAL GUARD — Meta CAPI menolak event_time >7 hari (HTTP 400 subcode 2804003).
+      //     Jika eventTime lebih tua dari 6.9 hari (596.160 detik), jepit ke waktu sekarang
+      //     agar konversi tetap diterima Meta. Simpan waktu asli di custom_data.
+      const META_7DAY_LIMIT_SEC = 596160; // 6.9 hari dalam detik
+      const nowSec = Math.floor(Date.now() / 1000);
+      let effectiveEventTime = eventTime ?? nowSec;
+      const originalEventTime = effectiveEventTime;
+      const eventAgeSec = nowSec - effectiveEventTime;
+
+      if (eventAgeSec > META_7DAY_LIMIT_SEC) {
+        console.warn(
+          `[CAPI TEMPORAL GUARD] event_time ${effectiveEventTime} melampaui batas 7 hari Meta ` +
+          `(usia ${Math.floor(eventAgeSec / 86400)} hari). Dijepit ke waktu sekarang agar konversi tetap diterima Meta.`
+        );
+        effectiveEventTime = nowSec;
+      }
+
       const eventData: any = {
         event_name: eventName,
-        // eventTime opsional (Unix seconds) → dipakai moderator saat mengirim
-        // event Purchase historis; default = waktu saat ini.
-        event_time: eventTime ?? Math.floor(Date.now() / 1000),
+        event_time: effectiveEventTime,
         event_source_url: eventSourceUrl,
         action_source: 'chat',
         user_data: userData,
@@ -1061,6 +1076,10 @@ export class CapiService {
           ...(customData || {}),
           delivery_category: 'home_delivery',
           traffic_source: isPaid ? 'paid' : 'organic',
+          // Simpan waktu asli jika dijepit agar jejak audit tetap ada
+          ...(effectiveEventTime !== originalEventTime
+            ? { original_event_time: originalEventTime }
+            : {}),
           ...(effectiveAdClick?.utmSource ? { utm_source: effectiveAdClick.utmSource } : {}),
           ...(effectiveAdClick?.utmMedium ? { utm_medium: effectiveAdClick.utmMedium } : {}),
           ...(effectiveAdClick?.utmCampaign ? { utm_campaign: effectiveAdClick.utmCampaign } : {}),

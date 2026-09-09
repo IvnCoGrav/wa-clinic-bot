@@ -148,4 +148,81 @@ describe('Meta CAPI Guard & Reservation Auto-Deduplication Tests', () => {
     expect(r2.reservation.purchase_value).toBe(140000);
     expect(r2.reservation.treatment_detail).toBe('Pulih Ceria | Paket Laktasi');
   });
+
+  it('4. Temporal Guard: event >7 hari dijepit ke waktu sekarang', async () => {
+    const customer = {
+      id: 'cust_temporal_test',
+      phone: '6282199887700',
+      name: 'Bunda Temporal',
+    };
+
+    // Mock successful execution in breaker
+    const { capiBreaker } = await import('../../src/services/capi.service');
+    let capturedPayload: any = null;
+    vi.spyOn(capiBreaker, 'execute').mockImplementation(async (url: string, payload: any) => {
+      capturedPayload = payload;
+      return {
+        status: 200,
+        data: { events_received: 1, fbtrace_id: 'test_trace' },
+      } as any;
+    });
+
+    // Event 10 hari yang lalu (melebihi batas 7 hari)
+    const tenDaysAgo = Math.floor(Date.now() / 1000) - (10 * 24 * 60 * 60);
+
+    const result = await capiService.sendCapiEvent({
+      eventName: 'Purchase',
+      customer,
+      tenantId,
+      eventTime: tenDaysAgo,
+      value: 100000,
+    });
+
+    expect(result.success).toBe(true);
+
+    // Verifikasi event_time dijepit ke waktu sekarang (±2 detik toleransi)
+    const nowSec = Math.floor(Date.now() / 1000);
+    expect(capturedPayload.data[0].event_time).toBeGreaterThanOrEqual(nowSec - 2);
+    expect(capturedPayload.data[0].event_time).toBeLessThanOrEqual(nowSec + 2);
+
+    // Verifikasi original_event_time tersimpan di custom_data
+    expect(capturedPayload.data[0].custom_data.original_event_time).toBe(tenDaysAgo);
+  });
+
+  it('5. Temporal Guard: event <7 hari tidak dijepit', async () => {
+    const customer = {
+      id: 'cust_temporal_ok',
+      phone: '6282199887701',
+      name: 'Bunda Recent',
+    };
+
+    const { capiBreaker } = await import('../../src/services/capi.service');
+    let capturedPayload: any = null;
+    vi.spyOn(capiBreaker, 'execute').mockImplementation(async (url: string, payload: any) => {
+      capturedPayload = payload;
+      return {
+        status: 200,
+        data: { events_received: 1, fbtrace_id: 'test_trace' },
+      } as any;
+    });
+
+    // Event 3 hari yang lalu (dalam batas 7 hari)
+    const threeDaysAgo = Math.floor(Date.now() / 1000) - (3 * 24 * 60 * 60);
+
+    const result = await capiService.sendCapiEvent({
+      eventName: 'Purchase',
+      customer,
+      tenantId,
+      eventTime: threeDaysAgo,
+      value: 100000,
+    });
+
+    expect(result.success).toBe(true);
+
+    // Verifikasi event_time tetap sama (tidak dijepit)
+    expect(capturedPayload.data[0].event_time).toBe(threeDaysAgo);
+
+    // Verifikasi original_event_time TIDAK ada di custom_data
+    expect(capturedPayload.data[0].custom_data.original_event_time).toBeUndefined();
+  });
 });
