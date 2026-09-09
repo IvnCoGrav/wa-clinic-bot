@@ -37,9 +37,24 @@ export class V3ConversationSummarizer {
       }
     }
 
-    // 2. Usia anak
+    // 2. Konteks audiens multi-subjek (ibu vs anak vs keduanya) — anti amnesia & anti bocor
+    const isMomSubject = session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH' || Boolean(session.momProfile?.gestationalWeeks != null || session.momProfile?.stage);
     const ageMonths = session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null;
-    if (ageMonths != null && ageMonths > 0) {
+    if (session.momProfile?.gestationalWeeks != null) {
+      sudahDibahas.push(`Usia kehamilan Bunda: ${session.momProfile.gestationalWeeks} minggu`);
+      janganDiulang.push('Menanyakan usia kehamilan Bunda');
+    } else if (session.momProfile?.stage === 'POSTPARTUM') {
+      sudahDibahas.push(`Kondisi Bunda: paska salin/nifas${session.momProfile.postpartumPeriod ? ` (${session.momProfile.postpartumPeriod})` : ''}`);
+      janganDiulang.push('Menanyakan kondisi persalinan Bunda');
+    } else if (session.momProfile?.stage === 'PREGNANT') {
+      sudahDibahas.push('Kondisi Bunda: sedang hamil (usia kehamilan belum spesifik)');
+      janganDiulang.push('Menanyakan usia kehamilan Bunda');
+    }
+    if ((session.momProfile?.complaints || []).length > 0) {
+      sudahDibahas.push(`Keluhan Bunda: ${session.momProfile!.complaints.join(', ')}`);
+      janganDiulang.push('Menanyakan ulang keluhan fisik Bunda');
+    }
+    if (ageMonths != null && ageMonths > 0 && (!isMomSubject || (session.children || []).length > 0 || session.childProfile?.ageMonths != null)) {
       sudahDibahas.push(`Usia si kecil: ${ageMonths} bulan`);
       janganDiulang.push('Menanyakan usia atau umur anak (sudah diketahui)');
     }
@@ -53,13 +68,31 @@ export class V3ConversationSummarizer {
         ...(session.childProfile?.symptoms || []),
         ...((session.children || []).flatMap((c) => c.symptoms || [])),
       ].filter((s, i, arr) => arr.indexOf(s) === i);
-      if (symptoms.length > 0) {
-        const candidates = ageMonths != null
-          ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(true), { ageMonths })
-          : treatmentCatalogService.getAllServices(true);
-        const suggested = candidates.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates[0]?.name || 'treatment sesuai katalog';
-        sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
-        janganDiulang.push('Menanyakan ulang keluhan si kecil');
+      const momComplaints = [...(session.momProfile?.complaints || [])].filter((s, i, arr) => arr.indexOf(s) === i);
+      const activeSymptoms = session.targetAudience === 'MOMS' ? momComplaints : symptoms;
+      if (activeSymptoms.length > 0) {
+        const allServices = treatmentCatalogService.getAllServices(true);
+        const candidates = session.targetAudience === 'MOMS'
+          ? treatmentCatalogService.filterServicesByAudience(allServices, { audienceIntent: 'MOMS', isMaternalKeyword: true })
+          : ageMonths != null
+            ? treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths })
+            : allServices;
+        const suggested = session.targetAudience === 'MOMS'
+          ? (candidates[0]?.name || 'treatment ibu sesuai katalog')
+          : (candidates.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates[0]?.name || 'treatment sesuai katalog');
+        if (session.targetAudience === 'MOMS') {
+          sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          janganDiulang.push('Menanyakan ulang keluhan Bunda');
+        } else if (session.targetAudience === 'BOTH') {
+          const parts: string[] = [];
+          if (momComplaints.length > 0) parts.push(`Bunda: ${momComplaints.join(', ')}`);
+          if (symptoms.length > 0) parts.push(`Si kecil: ${symptoms.join(', ')}`);
+          sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')} (disarankan *${suggested}* dari katalog aktif)`);
+          janganDiulang.push('Menanyakan ulang keluhan Bunda maupun si kecil');
+        } else {
+          sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          janganDiulang.push('Menanyakan ulang keluhan si kecil');
+        }
       }
     }
 

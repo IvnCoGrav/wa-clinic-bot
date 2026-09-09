@@ -21,11 +21,19 @@ describe('Conversation Transaction Extractor Unit Tests', () => {
       expect(parseCurrencyValue('95 rb')).toBe(95000);
     });
 
-    it('should multiply isolated numbers <= 500 by 1000', () => {
-      expect(parseCurrencyValue('70')).toBe(70000);
-      expect(parseCurrencyValue('95')).toBe(95000);
-      expect(parseCurrencyValue('105')).toBe(105000);
-      expect(parseCurrencyValue('145')).toBe(145000);
+    it('RE-DESAIN: angka polos <= 500 tanpa penanda mata uang DITOLAK (anti-korupsi usia→rupiah)', () => {
+      // Mandat fondasional: aturan lama num*1000 mengkorupsi 'Usia >4-6 th' → 46000.
+      // Angka kecil tanpa rp/rb/k/titik-ribuan = bukan nominal (usia/jumlah) → 0.
+      expect(parseCurrencyValue('70')).toBe(0);
+      expect(parseCurrencyValue('95')).toBe(0);
+      expect(parseCurrencyValue('105')).toBe(0);
+      expect(parseCurrencyValue('145')).toBe(0);
+    });
+
+    it('RE-DESAIN: token usia / non-mata-uang tanpa simbol rupiah DITOLAK', () => {
+      expect(parseCurrencyValue('Pijat Kids Ceria (Usia >4-6 th)')).toBe(0);
+      expect(parseCurrencyValue('4-6 th')).toBe(0);
+      expect(parseCurrencyValue('Usia 5 tahun')).toBe(0);
     });
 
     it('should handle zero or invalid gracefully', () => {
@@ -91,6 +99,38 @@ Total = 95.000
       expect(res.ongkir).toBe(25000);
       expect(res.totalPrice).toBe(95000);
       expect(res.treatmentPrice).toBe(70000);
+    });
+
+    it('RE-DESAIN: isolasi blok pembayaran — header medis bukan harga treatment', () => {
+      const text = [
+        'Treatment : Pijat Bayi Ceria + Pijat Kids Ceria (Usia >4-6 th)',
+        'Payment :',
+        'Treatment = 140.000',
+        'Ongkir = 20.000',
+        'Total = 160.000',
+      ].join('\n');
+      const fin = parsePaymentSection(text);
+      expect(fin.treatmentPrice).toBe(140000);
+      expect(fin.ongkir).toBe(20000);
+      expect(fin.totalPrice).toBe(160000);
+    });
+
+    it('RE-DESAIN: invarian matematika mengoreksi anomali 46.000 → 140.000', () => {
+      const text = [
+        'Payment :',
+        'Treatment = 46.000',
+        'Ongkir = 20.000',
+        'Total = 160.000',
+      ].join('\n');
+      const fin = parsePaymentSection(text);
+      expect(fin.treatmentPrice).toBe(140000);
+      expect(fin.totalPrice).toBe(160000);
+    });
+
+    it('RE-DESAIN: teks usia acak tanpa harga tidak menghasilkan ribuan liar', () => {
+      const fin = parsePaymentSection('Usia anak 4-6 th, kakak 8 tahun');
+      expect(fin.treatmentPrice).toBe(0);
+      expect(fin.totalPrice).toBe(0);
     });
   });
 

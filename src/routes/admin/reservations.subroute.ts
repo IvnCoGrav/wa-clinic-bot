@@ -588,8 +588,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/reservation/parse',
-    async (request: FastifyRequest<{ Body: { customerId: string; rawText: string } }>, reply: FastifyReply) => {
-      const { customerId, rawText } = request.body || {};
+    async (request: FastifyRequest<{ Body: { customerId: string; rawText: string; force?: boolean } }>, reply: FastifyReply) => {
+      const { customerId, rawText, force } = request.body || {};
       if (!customerId || !rawText) {
         return reply.status(400).send({ error: 'customerId and rawText are required' });
       }
@@ -605,39 +605,50 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       const parsed = parseResult.reservation;
       try {
-        const reservation = await prisma.reservation.create({
-          data: {
-            tenant_id: DEFAULT_TENANT_ID,
-            customer_id: customerId,
-            treatment_category: parsed.treatmentCategory,
-            treatment_detail: parsed.treatmentDetail,
-            booking_date: parsed.bookingDate,
-            raw_text: rawText,
+        const { reservationCoreService, ReservationConflictError } = await import('../../services/reservation-core.service');
+        let reservation: any;
+        try {
+          const result = await reservationCoreService.saveReservation({
+            tenantId: DEFAULT_TENANT_ID,
+            customerId,
+            chatId: (await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID))?.phone
+              ? `${(await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID))?.phone}@c.us`
+              : '',
+            bookingDate: parsed.bookingDate,
+            treatmentCategory: parsed.treatmentCategory,
+            treatmentDetail: parsed.treatmentDetail,
+            rawText,
+            babies: parsed.babies || [],
+            customerName: parsed.name,
+            kecamatan: parsed.kec,
+            kota: parsed.kota,
+            kelurahan: parsed.address,
+            address: parsed.address,
+            source: 'ADMIN_PANEL',
+            force: force === true,
             status: 'pending',
-          },
-        });
-
-        const parsedCustomer = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
-        const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
-        await reservationLifecycleService.onReservationCreated({
-          customerId,
-          reservationId: reservation.id,
-          tenantId: DEFAULT_TENANT_ID,
-          chatId: parsedCustomer?.phone ? `${parsedCustomer.phone}@c.us` : '',
-          babies: parsed.babies || [],
-          customerName: parsed.name,
-          kecamatan: parsed.kec,
-          kota: parsed.kota,
-          kelurahan: parsed.address,
-          address: parsed.address,
-        });
+          });
+          reservation = result.reservation;
+        } catch (conflictErr: any) {
+          if (conflictErr instanceof ReservationConflictError) {
+            return reply.status(409).send({
+              success: false,
+              error: conflictErr.code,
+              message: conflictErr.code === 'DUPLICATE_BOOKING'
+                ? 'Customer sudah memiliki reservasi aktif pada tanggal & jam yang sama.'
+                : 'Terapis sudah memiliki jadwal lain yang tumpang tindih.',
+              existingReservation: conflictErr.existingReservation,
+            });
+          }
+          throw conflictErr;
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION',
           targetId: reservation.id,
-          payload: { customerId, rawText },
+          payload: { customerId, rawText, force: force === true },
           ipAddress: request.ip,
         });
 
@@ -683,6 +694,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           treatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
           treatmentDetail?: string;
           durationMinutes?: number;
+          force?: boolean;
         };
       }>,
       reply: FastifyReply
@@ -698,6 +710,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         treatmentDetail = '[HOLD] Slot Ditawarkan',
       } = request.body || {};
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
+      const force = (request.body as any)?.force === true;
 
       if (!bookingDate) {
         return reply.status(400).send({ success: false, error: 'bookingDate wajib diisi.' });
@@ -731,30 +744,55 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const rawText = `[Admin Quick Hold] Ditawarkan: ${parsedDate.toLocaleString('id-ID')}${rawNotes}`;
 
       try {
-        const reservation = await prisma.reservation.create({
-          data: {
-            tenant_id: DEFAULT_TENANT_ID,
-            customer_id: customerId,
-            treatment_category: dbCategory,
-            treatment_detail: treatmentDetail,
-            booking_date: parsedDate,
-            duration_minutes: durationMinutes,
-            assigned_staff_id: assignedStaffId || null,
-            raw_text: rawText,
+        const { reservationCoreService, ReservationConflictError } = await import('../../services/reservation-core.service');
+        let coreResult: any;
+        try {
+          coreResult = await reservationCoreService.saveReservation({
+            tenantId: DEFAULT_TENANT_ID,
+            customerId,
+            bookingDate: parsedDate,
+            treatmentCategory: dbCategory,
+            treatmentDetail,
+            durationMinutes,
+            assignedStaffId: assignedStaffId || null,
+            rawText,
+            customerName,
+            source: 'ADMIN_PANEL',
+            force,
             status: 'hold',
-          },
-          include: {
-            customer: { include: { children: true } },
-            assigned_staff: { select: { id: true, name: true, phone: true } },
-          },
-        });
+          });
+        } catch (conflictErr: any) {
+          if (conflictErr instanceof ReservationConflictError) {
+            return reply.status(409).send({
+              success: false,
+              error: conflictErr.code,
+              message: conflictErr.code === 'DUPLICATE_BOOKING'
+                ? 'Customer sudah memiliki reservasi aktif pada slot yang sama.'
+                : 'Terapis sudah memiliki jadwal lain yang tumpang tindih.',
+              existingReservation: conflictErr.existingReservation,
+            });
+          }
+          throw conflictErr;
+        }
+        // Ambil ulang lengkap dengan relasi untuk respons dashboard.
+        let reservation: any = coreResult.reservation;
+        try {
+          const full = await prisma.reservation.findFirst({
+            where: { id: coreResult.reservation.id },
+            include: {
+              customer: { include: { children: true } },
+              assigned_staff: { select: { id: true, name: true, phone: true } },
+            },
+          });
+          if (full) reservation = full;
+        } catch {}
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_QUICK_HOLD_RESERVATION',
           targetId: reservation.id,
-          payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold', durationMinutes },
+          payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold', durationMinutes, force },
           ipAddress: request.ip,
         });
 
@@ -848,12 +886,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           babies?: Array<{ name: string; ageText?: string }>;
           purchaseValue?: number;
           durationMinutes?: number;
+          force?: boolean;
         };
       }>,
       reply: FastifyReply
     ) => {
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
+      const force = (request.body as any)?.force === true;
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
@@ -890,37 +930,54 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
 
       try {
-        const reservation = await prisma.reservation.create({
-          data: {
-            tenant_id: DEFAULT_TENANT_ID,
-            customer_id: customerId,
-            treatment_category: dbCategory,
-            treatment_detail: treatmentDetail,
-            booking_date: parsedDate,
-            duration_minutes: durationMinutes,
-            assigned_staff_id: assignedStaffId || null,
-            purchase_value: finalPurchaseValue,
-            raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
-            status: reservationStatus,
-          },
-          include: {
-            customer: { include: { children: true } },
-            assigned_staff: { select: { id: true, name: true, phone: true } },
-          },
-        });
-
-        const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
-        await reservationLifecycleService.onReservationCreated({
-          customerId,
-          reservationId: reservation.id,
-          tenantId: DEFAULT_TENANT_ID,
-          chatId: `${customer.phone}@c.us`,
-          babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
-          customerName: customer.name,
-          kecamatan: customer.kecamatan || undefined,
-          kota: customer.kota || undefined,
-          kelurahan: customer.kelurahan || undefined,
-        });
+        const { reservationCoreService, ReservationConflictError } = await import('../../services/reservation-core.service');
+        let coreResult: any;
+        try {
+          coreResult = await reservationCoreService.saveReservation({
+            tenantId: DEFAULT_TENANT_ID,
+            customerId,
+            chatId: `${customer.phone}@c.us`,
+            bookingDate: parsedDate,
+            treatmentCategory: dbCategory,
+            treatmentDetail,
+            durationMinutes,
+            assignedStaffId: assignedStaffId || null,
+            purchaseValue: finalPurchaseValue,
+            rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
+            babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
+            customerName: customer.name,
+            kecamatan: customer.kecamatan || undefined,
+            kota: customer.kota || undefined,
+            kelurahan: customer.kelurahan || undefined,
+            source: 'ADMIN_PANEL',
+            force,
+            status: reservationStatus as 'pending' | 'confirmed',
+          });
+        } catch (conflictErr: any) {
+          if (conflictErr instanceof ReservationConflictError) {
+            return reply.status(409).send({
+              success: false,
+              error: conflictErr.code,
+              message: conflictErr.code === 'DUPLICATE_BOOKING'
+                ? 'Customer sudah memiliki reservasi aktif pada tanggal & jam yang sama.'
+                : 'Terapis sudah memiliki jadwal lain yang tumpang tindih.',
+              existingReservation: conflictErr.existingReservation,
+            });
+          }
+          throw conflictErr;
+        }
+        // Ambil ulang lengkap dengan relasi untuk respons dashboard.
+        let reservation: any = coreResult.reservation;
+        try {
+          const full = await prisma.reservation.findFirst({
+            where: { id: coreResult.reservation.id },
+            include: {
+              customer: { include: { children: true } },
+              assigned_staff: { select: { id: true, name: true, phone: true } },
+            },
+          });
+          if (full) reservation = full;
+        } catch {}
 
         if (assignedStaffId) {
           const { staffNotificationService } = await import('../../services/staff-notification.service');
@@ -929,29 +986,25 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           });
         }
 
-        if (reservationStatus === 'confirmed' && parsedDate) {
-          try {
-            const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.createReservationFollowUps({
-              reservationId: reservation.id,
-              customerId,
-              bookingDate: parsedDate,
-              treatmentCategory: dbCategory,
-              tenantId: DEFAULT_TENANT_ID,
-            });
-          } catch (fuErr: any) {
-            console.warn('[Admin API] Failed to create follow-ups for manual reservation:', fuErr.message);
-          }
-        }
-
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_MANUAL',
           targetId: reservation.id,
-          payload: { customerId, treatmentCategory, assignedStaffId, status: reservationStatus, source: 'admin_panel' },
+          payload: { customerId, treatmentCategory, assignedStaffId, status: reservationStatus, source: 'admin_panel', force },
           ipAddress: request.ip,
         });
+        // Override disengaja (force) dicatat khusus agar mudah diaudit.
+        if (force) {
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'CREATE_RESERVATION_FORCE_OVERRIDE',
+            targetId: reservation.id,
+            payload: { customerId, bookingDate: parsedDate, assignedStaffId, reason: 'admin force override konflik jadwal' },
+            ipAddress: request.ip,
+          }).catch(() => {});
+        }
 
         return reply.status(201).send({ success: true, data: reservation });
       } catch (error: any) {
@@ -2244,7 +2297,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       let tenantLandingDomain = '';
       try {
-        const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        // Select eksplisit: kolom tenants.settings belum ada di sebagian DB
+        // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) — select-* memicu P2022.
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: DEFAULT_TENANT_ID },
+          select: { id: true, landing_domain: true },
+        });
         if ((tenant as any)?.landing_domain) {
           tenantLandingDomain = (tenant as any).landing_domain.trim();
         }

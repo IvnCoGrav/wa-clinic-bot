@@ -82,18 +82,64 @@ export async function maybeFirePurchaseEvent(params: {
     return false;
   }
 
-  // Cari reservasi terakhir customer yang belum purchase-event (non-cancelled).
+  // Cari reservasi customer — utamakan kecocokan booking_date dari teks pesan,
+  // fallback ke created_at desc bila tanggal tidak tertera (anti-penimpaan buta).
   try {
-    const reservation = await prisma.reservation.findFirst({
-      where: {
-        customer_id: customer.id,
-        tenant_id: tenantId,
-        status: { not: 'cancelled' },
-      },
-      orderBy: { created_at: 'desc' },
-      include: { customer: { include: { adClick: true } } },
-    });
+    let reservation: any = null;
+    let extractedBookingDate: Date | null = null;
+    try {
+      const { parseReservationText } = await import('../utils/reservation-text-parser');
+      const pr = parseReservationText(text);
+      if (pr.success && pr.reservation?.bookingDate) extractedBookingDate = pr.reservation.bookingDate;
+    } catch {}
+    if (extractedBookingDate && !isNaN(extractedBookingDate.getTime())) {
+      try {
+        const candidates = await prisma.reservation.findMany({
+          where: { customer_id: customer.id, tenant_id: tenantId, status: { not: 'cancelled' } },
+          orderBy: { booking_date: 'desc' },
+          take: 10,
+          include: { customer: { include: { adClick: true } } },
+        });
+        const targetDay = extractedBookingDate.toISOString().slice(0, 10);
+        const dayMatch = (candidates || []).find((r: any) => {
+          if (!r.booking_date) return false;
+          try {
+            return new Date(r.booking_date).toISOString().slice(0, 10) === targetDay;
+          } catch { return false; }
+        });
+        if (dayMatch) {
+          reservation = dayMatch;
+          console.log(`[PURCHASE MATCH] Matched reservation ${reservation.id} by booking_date ${targetDay}.`);
+        }
+      } catch (matchErr: any) {
+        console.warn('[PURCHASE MATCH] Booking-date lookup failed, fallback to latest:', matchErr.message);
+      }
+    }
+    if (!reservation) {
+      reservation = await prisma.reservation.findFirst({
+        where: {
+          customer_id: customer.id,
+          tenant_id: tenantId,
+          status: { not: 'cancelled' },
+        },
+        orderBy: { created_at: 'desc' },
+        include: { customer: { include: { adClick: true } } },
+      });
+    }
     if (!reservation) return false;
+
+    // Downside Protection Guard: jangan pernah menimpa purchase_value resmi
+    // (mis. Rp 160.000 input admin) dengan nilai parser yang lebih kecil
+    // (mis. Rp 46.000 korup) tanpa verifikasi invarian matematika.
+    const shouldProtectExisting = (newVal: number | undefined): boolean => {
+      const existing = Number((reservation as any).purchase_value) || 0;
+      if (!newVal || newVal <= 0 || existing <= 0) return false;
+      if (newVal >= existing) return false;
+      console.warn(
+        `[PURCHASE DOWNSIDE GUARD] Menolak penimpaan purchase_value ${existing} -> ${newVal} pada reservasi ${reservation.id} (nilai baru lebih kecil tanpa verifikasi invarian).`
+      );
+      return true;
+    };
 
     // Sudah ditahan menunggu review admin → perbarui nilainya jika ada revisi nominal baru, tapi jangan re-queue
     if (reservation.purchase_review_status === 'pending' && reservation.purchase_occurred_at) {
@@ -110,7 +156,7 @@ export async function maybeFirePurchaseEvent(params: {
         const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
         value = pureTreatmentVal ?? amount;
       }
-      if (value && value !== reservation.purchase_value) {
+      if (value && value !== reservation.purchase_value && !shouldProtectExisting(value)) {
         await prisma.reservation.update({
           where: { id: reservation.id },
           data: { purchase_value: value },
@@ -144,9 +190,16 @@ export async function maybeFirePurchaseEvent(params: {
     // admin approve/reject di dashboard. Hanya true → kirim langsung.
     const autoSend = await getTenantAutoSendPurchaseCapi(tenantId);
 
+    // Terapkan downside guard pada jalur utama juga: pertahankan nilai resmi
+    // bila parser menghasilkan angka lebih kecil yang tidak terverifikasi.
+    let finalValue = value;
+    if (shouldProtectExisting(value)) {
+      finalValue = Number((reservation as any).purchase_value) || value;
+    }
+
     const updateData: any = {
       purchase_occurred_at: new Date(),
-      purchase_value: value,
+      purchase_value: finalValue,
     };
 
     if (autoSend) {
@@ -154,7 +207,7 @@ export async function maybeFirePurchaseEvent(params: {
         eventName: 'Purchase',
         customer,
         adClick: reservation.customer?.adClick || customer.adClick || undefined,
-        value,
+        value: finalValue,
         currency: 'IDR',
         tenantId,
         customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
@@ -164,7 +217,7 @@ export async function maybeFirePurchaseEvent(params: {
     } else {
       updateData.purchase_review_status = 'pending';
       console.log(
-        `[CAPI HELD] Purchase event queued for admin review (reservation ${reservation.id}, customer ${customer.id}, value ${value})`
+        `[CAPI HELD] Purchase event queued for admin review (reservation ${reservation.id}, customer ${customer.id}, value ${finalValue})`
       );
     }
 

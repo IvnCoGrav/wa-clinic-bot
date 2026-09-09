@@ -5,6 +5,10 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 export interface GetCatalogInput {
   category?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
   childAgeMonths?: number;
+  /** Usia kehamilan Ibu (minggu) bila pasien adalah Ibu Hamil (kategori MOMS). JANGAN diisi untuk bayi/anak. */
+  gestationalWeeks?: number;
+  /** Kondisi Ibu: Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum. */
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
   symptoms?: string[];
   specificTreatmentName?: string;
   /**
@@ -50,12 +54,21 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         },
         childAgeMonths: {
           type: 'number',
-          description: 'Usia bayi/anak dalam hitungan bulan jika diketahui (misal: 6 untuk 6 bulan, 0.5 untuk 2 minggu).'
+          description: 'Usia bayi/anak (bulan) jika pasien adalah bayi/anak. JANGAN diisi untuk kehamilan ibu.'
+        },
+        gestationalWeeks: {
+          type: 'number',
+          description: 'Usia kehamilan Ibu (minggu) jika pasien adalah Ibu Hamil (kategori MOMS).'
+        },
+        momStage: {
+          type: 'string',
+          enum: ['PREGNANT', 'POSTPARTUM', 'GENERAL'],
+          description: 'Kondisi Ibu (Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum).'
         },
         symptoms: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Daftar keluhan bayi/anak yang disebutkan customer (misal: ["batuk", "pilek", "flu", "rewel", "nangis terus", "susah tidur", "kembung", "kolik", "susah makan"]).'
+          description: 'Daftar keluhan klinis (berlaku universal untuk bayi maupun ibu).'
         },
         specificTreatmentName: {
           type: 'string',
@@ -71,7 +84,9 @@ export const GET_CATALOG_TOOL_SCHEMA = {
 };
 
 export async function executeGetCatalog(input: GetCatalogInput, tenantId: string = DEFAULT_TENANT_ID): Promise<GetCatalogOutput> {
-  const { category, childAgeMonths, symptoms = [], specificTreatmentName, inquirePrice } = input;
+  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice } = input;
+  void gestationalWeeks;
+  void momStage;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
   const showPrices = inquirePrice === true;
