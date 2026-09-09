@@ -866,8 +866,8 @@ export class StaffReservationService {
           const { capiService } = await import('./capi.service');
           const customer = reservation.customer;
           const adClickResult = await dbClient.adClick.findFirst({
-            where: { customer_id: customer.id },
-            orderBy: { created_at: 'desc' },
+            where: { customerId: customer.id },
+            orderBy: { createdAt: 'desc' },
           });
 
           const capiResult = await capiService.sendCapiEvent({
