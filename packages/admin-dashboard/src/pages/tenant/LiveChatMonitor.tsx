@@ -4312,20 +4312,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onClick={() => {
                           setSelectedReservation(activeConfirmedReservation);
                         }}
-                        className={`inline-flex items-center justify-center bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 rounded-full transition-all shadow-2xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Lihat detail reservasi"
                       >
-                        <Eye size={chatBotActive ? 11 : 13} className="shrink-0" />
+                        <Eye size={chatBotActive ? 12 : 14} className="shrink-0" />
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedReservation(activeConfirmedReservation);
                         }}
-                        className={`inline-flex items-center justify-center bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 text-white rounded-full transition-all shadow-xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Kelola / Edit detail reservasi"
                       >
-                        <PenLine size={chatBotActive ? 11 : 13} className="shrink-0" />
+                        <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
                       </button>
                       <button
                         type="button"
@@ -4345,10 +4345,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className={`inline-flex items-center justify-center bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 rounded-full transition-all shadow-2xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Tandai reservasi telah selesai treatment"
                       >
-                        <CheckCircle size={chatBotActive ? 11 : 13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <CheckCircle size={chatBotActive ? 12 : 14} className="shrink-0" />
                       </button>
                       <button
                         type="button"
