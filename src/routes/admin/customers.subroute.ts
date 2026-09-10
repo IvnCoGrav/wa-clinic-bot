@@ -155,26 +155,51 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           }));
         }
 
+        // Hydrate children dengan current_age dinamis
+        let enrichedChildren = customer.children || [];
+        try {
+          const { childService } = await import('../../services/child.service');
+          enrichedChildren = await childService.getChildrenWithCurrentAge(customer.id);
+        } catch (e) {
+          enrichedChildren = customer.children || [];
+        }
+
         let ltv = 0;
+        let purchaseCount = 0;
         try {
           const { resolveTreatmentValue } = await import('../../services/capi.service');
           for (const r of customer.reservations || []) {
-            const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
-            ltv += val || 0;
+            if (['cancelled', 'rejected'].includes(String(r.status || '').toLowerCase())) continue;
+            let val: number | null | undefined = null;
+            if (r.purchase_value != null && Number.isFinite(Number(r.purchase_value))) {
+              val = Number(r.purchase_value);
+            } else {
+              val = (await resolveTreatmentValue(r.treatment_detail || r.raw_text)) ?? null;
+            }
+            if (val) {
+              ltv += val;
+              purchaseCount++;
+            } else if (r.purchase_value != null) {
+              purchaseCount++;
+            }
           }
         } catch (e) {
           ltv = 0;
+          purchaseCount = 0;
         }
+
+        const customerAddress = (customer as any).address || (customer as any).preferences?.address || (customer as any).preferences?.full_address || null;
 
         return reply.status(200).send({
           success: true,
           data: {
             ...customer,
-            children: customer.children || [],
+            address: customerAddress,
+            children: enrichedChildren,
             reservations: customer.reservations || [],
             labels: customerLabels,
-            ltv: customer.ltv ?? ltv,
-            purchaseCount: customer.purchaseCount ?? (customer.reservations?.length || 0),
+            ltv: ((customer as any).ltv_cache ?? ltv) as any,
+            purchaseCount: purchaseCount as any,
           },
         });
       } catch (err: any) {

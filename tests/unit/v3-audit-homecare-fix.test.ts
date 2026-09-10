@@ -97,7 +97,7 @@ describe('Layer 1 — Tanpa penolakan booking (aturan 21: wilayah sesi cukup)', 
     } as any);
   });
 
-  it('"boleh bund" + lokasi wilayah sesi → TETAP tersimpan pending + konfirmasi cek jadwal', async () => {
+  it('"boleh bund" + lokasi wilayah sesi → TETAP tersimpan terjadwal (confirmed)', async () => {
     await GoalTracker.updateGoalSession('gate-conv-1', {
       genderGreeting: 'Bunda',
       location: { rawText: 'Desa kedungkendo candi sidoarjo' },
@@ -111,11 +111,11 @@ describe('Layer 1 — Tanpa penolakan booking (aturan 21: wilayah sesi cukup)', 
     } as any);
     expect(res.success).toBe(true);
     expect(res.needsInfo).toBeUndefined();
-    expect(res.message).toContain('cekkan');
+    expect(res.message).toContain('terjadwal');
     expect(res.message).not.toContain('nama Bunda dan alamat lengkap');
     expect(res.message).not.toContain('Admin CS');
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
-    expect(called.status).not.toBe('confirmed');
+    expect(called.status).toBe('confirmed');
     expect(String(called.rawText)).toContain('kedungkendo');
   });
 
