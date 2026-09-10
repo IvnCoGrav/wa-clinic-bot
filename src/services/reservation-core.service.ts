@@ -36,7 +36,7 @@ export interface ReservationMutationParams {
   source: ReservationSource;
   /** Override disengaja dari admin (dashboard mengirim { force: true }). */
   force?: boolean;
-  /** Status awal untuk jalur admin (default 'pending'). */
+  /** Status awal untuk jalur admin (default 'confirmed' / terjadwal). */
   status?: 'pending' | 'confirmed' | 'hold';
 }
 
@@ -58,7 +58,7 @@ export class ReservationConflictError extends Error {
   }
 }
 
-const ACTIVE_STATUSES = ['pending', 'confirmed', 'hold'];
+const ACTIVE_STATUSES = ['confirmed', 'hold'];
 const STAFF_BUFFER_MINUTES = 20;
 
 function effectiveDuration(v: unknown, fallback = 60): number {
@@ -162,7 +162,7 @@ export class ReservationCoreService {
       address,
       source,
       force = false,
-      status = 'pending',
+      status = 'confirmed',
     } = params;
 
     const duration = durationMinutes != null ? effectiveDuration(durationMinutes, 60) : null;

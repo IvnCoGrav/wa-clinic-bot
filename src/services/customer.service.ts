@@ -1120,24 +1120,32 @@ export class CustomerService {
       if (segment === 'purchased') {
         where.reservations = { some: { status: { notIn: ['cancelled', 'rejected'] } } };
       } else if (segment === 'prospect') {
-        where.reservations = { none: {} };
+        where.reservations = { none: { status: { notIn: ['cancelled', 'rejected'] } } };
       }
       if (search) {
+        const rawSearch = String(search || '').trim();
+        const digitsOnly = rawSearch.replace(/[^0-9]/g, '');
+        let normalized = digitsOnly;
+        if (normalized.startsWith('0')) normalized = '62' + normalized.slice(1);
+        else if (normalized.startsWith('8')) normalized = '62' + normalized;
+        const phoneVariants: any[] = [{ phone: { contains: rawSearch } }];
+        if (normalized && normalized !== rawSearch) phoneVariants.push({ phone: { contains: normalized } });
+        if (digitsOnly && digitsOnly !== rawSearch && digitsOnly !== normalized) phoneVariants.push({ phone: { contains: digitsOnly } });
         // Phase 4: Search guard — short queries only scan indexed fields (name/phone/trackingCode)
-        const isShortQuery = search.length < 4;
+        const isShortQuery = rawSearch.length < 4;
         where.OR = isShortQuery
           ? [
-              { name: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search } },
-              { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
+              { name: { contains: rawSearch, mode: 'insensitive' } },
+              ...phoneVariants,
+              { adClick: { trackingCode: { contains: rawSearch, mode: 'insensitive' } } },
             ]
           : [
-              { name: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search } },
-              { kecamatan: { contains: search, mode: 'insensitive' } },
-              { kota: { contains: search, mode: 'insensitive' } },
-              { kelurahan: { contains: search, mode: 'insensitive' } },
-              { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
+              { name: { contains: rawSearch, mode: 'insensitive' } },
+              ...phoneVariants,
+              { kecamatan: { contains: rawSearch, mode: 'insensitive' } },
+              { kota: { contains: rawSearch, mode: 'insensitive' } },
+              { kelurahan: { contains: rawSearch, mode: 'insensitive' } },
+              { adClick: { trackingCode: { contains: rawSearch, mode: 'insensitive' } } },
             ];
       }
 

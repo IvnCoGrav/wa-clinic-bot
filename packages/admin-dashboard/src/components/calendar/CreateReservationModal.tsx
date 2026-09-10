@@ -258,7 +258,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   // Staff & Status
   const [assignedStaffId, setAssignedStaffId] = useState('');
-  const [status, setStatus] = useState<'pending' | 'confirmed'>('pending');
+  const [status, setStatus] = useState<'hold' | 'confirmed'>('confirmed');
   const [notes, setNotes] = useState('');
 
   // Payment Breakdown & Discounts
@@ -608,7 +608,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         setAssignedStaffId(res.assigned_staff_id || res.assigned_staff?.id || '');
       }
 
-      setStatus(res.status === 'confirmed' ? 'confirmed' : 'pending');
+      setStatus(res.status === 'hold' ? 'hold' : 'confirmed');
       const extractedNotes = res.notes || (() => {
         if (!res.raw_text) return '';
         const match = res.raw_text.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
@@ -2088,8 +2088,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
               >
-                <option value="pending">Pending (Menunggu Pembayaran)</option>
-                <option value="confirmed">Confirmed (Lunas / Terkonfirmasi)</option>
+                <option value="confirmed">Terjadwal (Confirmed)</option>
+                <option value="hold">Hold / Ditawarkan Sementara</option>
               </select>
             </div>
           </div>

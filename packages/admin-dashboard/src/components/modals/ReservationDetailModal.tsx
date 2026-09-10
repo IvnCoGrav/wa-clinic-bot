@@ -834,13 +834,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
                 </button>
 
-                {(displayReservation.status === 'pending' || (displayReservation.status as string) === 'hold') && (
+                {displayReservation.status === 'hold' && (
                   <button
                     onClick={handleConfirmClick}
                     className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-[#008069] text-white hover:bg-[#00a884] text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
                   >
                     <Check size={14} />
-                    <span>{(displayReservation.status as string) === 'hold' ? 'Konfirmasi Reservasi' : 'Tandai Lunas'}</span>
+                    <span>Konfirmasi / Jadwalkan</span>
                   </button>
                 )}
 

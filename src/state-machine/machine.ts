@@ -310,7 +310,7 @@ export class ConversationStateMachine {
             kota: parsed.kota,
             kelurahan: parsed.address,
             source: 'BOT',
-            status: 'pending',
+            status: 'confirmed',
           });
 
           try {
