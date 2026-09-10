@@ -120,7 +120,7 @@ class ReservationSeriesService {
               treatment_category: resolvedCategory,
               treatment_detail: `${treatmentName} [Sesi ${s.sessionNumber}/${totalSessions}]`,
               booking_date: bookingDate,
-              status: 'pending',
+              status: 'confirmed',
               assigned_staff_id: sessionStaffId,
               purchase_value: purchaseValue ? Math.round(purchaseValue / totalSessions) : null,
               series_id: series.id,
@@ -311,7 +311,7 @@ class ReservationSeriesService {
       ...pausedReservations.map((r) =>
         prisma.reservation.update({
           where: { id: r.id },
-          data: { status: 'pending' },
+          data: { status: 'confirmed' },
         })
       ),
     ]);

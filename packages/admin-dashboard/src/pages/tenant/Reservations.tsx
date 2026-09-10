@@ -649,13 +649,13 @@ export const Reservations: React.FC = () => {
       case 'hold':
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-2xs">⏳ Hold</span>;
       case 'confirmed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">Confirmed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">📅 Terjadwal</span>;
       case 'completed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">Completed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">✅ Selesai</span>;
       case 'cancelled':
-        return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">Cancelled</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">❌ Batal</span>;
       default:
-        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">Pending</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Hold</span>;
     }
   };
 
@@ -1145,8 +1145,7 @@ export const Reservations: React.FC = () => {
               <option value="upcoming">📅 Aktif &amp; Mendatang ({stats.upcoming})</option>
               <option value="overdue">⚠️ Perlu Verifikasi ({stats.overdue})</option>
               <option value="hold">⏳ Hold / Ditawarkan ({stats.hold})</option>
-              <option value="pending">Pending ({stats.pending})</option>
-              <option value="confirmed">Confirmed / Lunas ({stats.confirmed})</option>
+                            <option value="confirmed">📅 Terjadwal ({stats.confirmed})</option>
               <option value="completed">Completed / Selesai ({stats.completed})</option>
               <option value="cancelled">Cancelled / Batal ({stats.cancelled})</option>
             </select>
@@ -1174,8 +1173,7 @@ export const Reservations: React.FC = () => {
                 { key: 'upcoming', label: '📅 Aktif & Mendatang', count: stats.upcoming },
                 { key: 'overdue', label: '⚠️ Perlu Verifikasi', count: stats.overdue, isAlert: true },
                 { key: 'hold', label: '⏳ Hold (Ditawarkan)', count: stats.hold },
-                { key: 'pending', label: 'Pending', count: stats.pending },
-                { key: 'confirmed', label: 'Confirmed (Lunas)', count: stats.confirmed },
+                                { key: 'confirmed', label: '📅 Terjadwal', count: stats.confirmed },
                 { key: 'completed', label: 'Completed (Selesai)', count: stats.completed },
                 { key: 'cancelled', label: 'Cancelled (Batal)', count: stats.cancelled },
               ].map((tab) => (

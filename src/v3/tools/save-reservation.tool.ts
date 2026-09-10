@@ -94,7 +94,7 @@ export const SAVE_RESERVATION_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'save_reservation',
-    description: 'Mencatat jadwal booking/reservasi treatment homecare yang telah disepakati bersama customer ke database klinik (status pending; ketersediaan dicekkan tim Bidan kami). Dipanggil bila hari/tanggal dan treatment sudah disepakati — nama Bunda dan alamat detail jalan TIDAK wajib di tahap chat (dilengkapi via form reservasi). Alamat wilayah sesi (desa/kelurahan dari perhitungan ongkir) sudah cukup. Mendukung multi-treatment & multi-pasien (Mom+Baby, 2 anak): isi additionalTreatments dan children bila ada lebih dari 1 layanan/pasien.',
+    description: 'Mencatat jadwal booking/reservasi treatment homecare yang telah disepakati bersama customer ke database klinik (status langsung terjadwal/confirmed). Dipanggil bila hari/tanggal dan treatment sudah disepakati — nama Bunda dan alamat detail jalan TIDAK wajib di tahap chat (dilengkapi via form reservasi). Alamat wilayah sesi (desa/kelurahan dari perhitungan ongkir) sudah cukup. Mendukung multi-treatment & multi-pasien (Mom+Baby, 2 anak): isi additionalTreatments dan children bila ada lebih dari 1 layanan/pasien.',
     parameters: {
       type: 'object',
       properties: {
@@ -341,16 +341,16 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       address: effectiveAddress || undefined,
       purchaseValue,
       source: 'AGENT',
-      status: 'pending',
+      status: 'confirmed',
     });
 
-    const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (pending, menunggu cek ketersediaan jadwal).`;
+    const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (terjadwal).`;
 
     return {
       success: true,
       reservationId: result.reservation?.id,
       summary,
-      message: `${summary} Ketersediaan jadwal akan kami bantu cekkan terlebih dahulu ya Bunda 😊🙏`
+      message: `${summary} Jadwal akan kami bantu konfirmasi dan siap dijadwalkan ya Bunda 😊🙏`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_RESERVATION_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

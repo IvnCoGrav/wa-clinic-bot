@@ -266,9 +266,11 @@ export const CustomerDatabase: React.FC = () => {
       const res = await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}`);
       if (res?.data) {
         setDetailData({ ...res.data, labels: detailData?.labels || [] });
+        setActiveDetailCustomer((prev: any) => prev ? { ...prev, ...res.data } : prev);
       }
       setDetailEditMode(false);
       toast('Profil customer berhasil diperbarui!', 'success');
+      loadCustomers();
     } catch (err: any) {
       toast(`Gagal menyimpan: ${err.message}`, 'error');
     }
@@ -346,6 +348,7 @@ export const CustomerDatabase: React.FC = () => {
         if (data) setSelectedReservation(data);
       } catch {}
     }
+    loadCustomers();
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -1454,7 +1457,7 @@ export const CustomerDatabase: React.FC = () => {
                                       ? 'bg-rose-100 text-rose-800 border border-rose-200'
                                       : 'bg-amber-100 text-amber-800 border border-amber-200'
                                   }`}>
-                                    {res.status}
+                                    {res.status === 'completed' ? 'Selesai' : res.status === 'confirmed' ? 'Terjadwal' : res.status === 'cancelled' ? 'Batal' : res.status === 'hold' ? 'Hold' : res.status}
                                   </span>
                                 </td>
                               </tr>

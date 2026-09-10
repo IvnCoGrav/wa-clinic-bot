@@ -264,7 +264,7 @@ model Reservation {
   booking_date             DateTime?
   duration_minutes         Int?
   raw_text                 String?
-  status                   String            @default("pending")
+  status                   String            @default("confirmed")
   google_calendar_event_id String?
   purchase_event_sent_at   DateTime?
   purchase_occurred_at     DateTime?

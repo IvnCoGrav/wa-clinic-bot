@@ -114,7 +114,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           where: {
             tenant_id: DEFAULT_TENANT_ID,
             booking_date: { gte: dayStart, lte: dayEnd },
-            status: { in: ['confirmed', 'hold', 'pending'] },
+            status: { in: ['confirmed', 'hold'] },
           },
           include: {
             customer: { select: { name: true, kelurahan: true, kecamatan: true } },
@@ -349,7 +349,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             prisma.reservation.count({ where }),
           ]);
         } else {
-          const [fetchedRows, fetchedTotal, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount, holdCount] =
+          const [fetchedRows, fetchedTotal, totalCount, upcomingCount, overdueCount, confirmedCount, completedCount, cancelledCount, holdCount] =
             await Promise.all([
               prisma.reservation.findMany({
                 where,
@@ -387,7 +387,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                   status: { notIn: ['completed', 'cancelled', 'rejected'] },
                 },
               }),
-              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'pending' } }),
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'confirmed' } }),
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'completed' } }),
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'cancelled' } }),
@@ -400,7 +399,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             total: totalCount,
             upcoming: upcomingCount,
             overdue: overdueCount,
-            pending: pendingCount,
             confirmed: confirmedCount,
             completed: completedCount,
             cancelled: cancelledCount,
@@ -572,7 +570,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 total: allMemory.length,
                 upcoming: allMemory.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= overdueThreshold.getTime()).length,
                 overdue: allMemory.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < overdueThreshold.getTime() && r.status !== 'completed' && r.status !== 'cancelled').length,
-                pending: allMemory.filter((r) => r.status === 'pending').length,
+                pending: 0,
                 confirmed: allMemory.filter((r) => r.status === 'confirmed').length,
                 completed: allMemory.filter((r) => r.status === 'completed').length,
                 cancelled: allMemory.filter((r) => r.status === 'cancelled').length,
@@ -626,7 +624,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             address: parsed.address,
             source: 'ADMIN_PANEL',
             force: force === true,
-            status: 'pending',
+            status: 'confirmed',
           });
           reservation = result.reservation;
         } catch (conflictErr: any) {
@@ -662,7 +660,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           treatment_detail: parsed.treatmentDetail,
           booking_date: parsed.bookingDate,
           raw_text: rawText,
-          status: 'pending',
+          status: 'confirmed',
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -881,7 +879,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           treatmentDetail: string;
           bookingDate?: string;
           assignedStaffId?: string;
-          status?: 'pending' | 'confirmed';
+          status?: 'hold' | 'confirmed';
           notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
           purchaseValue?: number;
@@ -925,7 +923,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         treatmentCategory === 'BUNDLE' ? 'BOTH' : 
         (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
 
-      const reservationStatus = status === 'confirmed' ? 'confirmed' : 'pending';
+      const reservationStatus = status === 'confirmed' ? 'confirmed' : status;
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
       const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
 
@@ -951,7 +949,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             kelurahan: customer.kelurahan || undefined,
             source: 'ADMIN_PANEL',
             force,
-            status: reservationStatus as 'pending' | 'confirmed',
+            status: reservationStatus as 'hold' | 'confirmed',
           });
         } catch (conflictErr: any) {
           if (conflictErr instanceof ReservationConflictError) {
@@ -1258,7 +1256,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           bookingDate?: string | null;
           assignedStaffId?: string | null;
           purchaseValue?: number;
-          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+          status?: 'hold' | 'confirmed' | 'completed' | 'cancelled';
           notes?: string;
           rawText?: string;
           paymentMethod?: 'CASH' | 'TRANSFER' | 'QRIS' | null;
@@ -1567,22 +1565,22 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * PATCH /api/admin/reservation/:id/status
-   * Mengubah status reservasi secara fleksibel ('pending' | 'confirmed' | 'completed' | 'cancelled')
+   * Mengubah status reservasi secara fleksibel ('hold' | 'confirmed' | 'completed' | 'cancelled')
    */
   fastify.patch(
     '/api/admin/reservation/:id/status',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body: { status: 'pending' | 'confirmed' | 'completed' | 'cancelled' };
+        Body: { status: 'hold' | 'confirmed' | 'completed' | 'cancelled' };
       }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
       const { status } = request.body || {};
 
-      if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(status)) {
-        return reply.status(400).send({ error: 'Status tidak valid. Pilihan: pending, confirmed, completed, cancelled.' });
+      if (!['hold', 'confirmed', 'completed', 'cancelled'].includes(status)) {
+        return reply.status(400).send({ error: 'Status tidak valid. Pilihan: hold, confirmed, completed, cancelled.' });
       }
 
       try {
@@ -1902,6 +1900,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             where: { id },
           });
 
+          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
@@ -1918,6 +1918,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           where: { id },
           data: { status: 'cancelled' },
         });
+
+        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
 
         const activeNoPurchaseFollowUps = await prisma.followUp.findFirst({
           where: {
@@ -1966,11 +1968,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
           if (isHardDelete) {
             memoryReservations.delete(id);
+            await customerService.recalculateCustomerLtv(mock.customer_id, DEFAULT_TENANT_ID).catch(() => {});
             return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen (memory).' });
           }
           mock.status = 'cancelled';
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
+          await customerService.recalculateCustomerLtv(mock.customer_id, DEFAULT_TENANT_ID).catch(() => {});
           return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
         }
         return reply.status(404).send({ success: false, error: 'Reservation not found' });
