@@ -4170,36 +4170,38 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
 
                 {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
-                {/* Smart Micro-Pill (mobile saja): banner menciut setelah 3 detik, tap untuk buka lagi */}
+                {/* Smart Micro-Pill (mobile saja): mengapung tanpa background bar yang menutupi livechat */}
                 {isBannerCollapsed && (activeHoldReservation || activeConfirmedReservation || activePendingReservation) && (
-                  <div className="md:hidden flex justify-center mx-auto mb-1 shrink-0 animate-fadeIn bg-transparent">
-                    <button
-                      type="button"
-                      onClick={expandBanner}
-                      className={`h-6 px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all border ${
-                        activeHoldReservation
-                          ? 'bg-amber-500/15 border-amber-400/40 text-amber-900 dark:text-amber-200'
-                          : activeConfirmedReservation
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-900 dark:text-emerald-200'
-                            : 'bg-sky-500/15 border-sky-400/40 text-sky-900 dark:text-sky-200'
-                      }`}
-                      title="Tampilkan banner"
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
-                        activeHoldReservation ? 'bg-amber-500' : activeConfirmedReservation ? 'bg-emerald-500' : 'bg-sky-500'
-                      }`} />
-                      <span>
-                        {(() => {
-                          const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
-                          if (!r?.booking_date) return '';
-                          const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-                          const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                          const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
-                          return `${d} ${t}${dur}`;
-                        })()}
-                      </span>
-                      <ChevronDown size={12} className="stroke-[2.5]" />
-                    </button>
+                  <div className="md:hidden h-0 overflow-visible relative z-30 flex justify-center pointer-events-none animate-fadeIn">
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={expandBanner}
+                        className={`pointer-events-auto h-[26px] px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-md backdrop-blur-md cursor-pointer active:scale-95 transition-all border ${
+                          activeHoldReservation
+                            ? 'bg-amber-50/95 dark:bg-amber-950/90 border-amber-300/80 text-amber-900 dark:text-amber-200 shadow-amber-500/10'
+                            : activeConfirmedReservation
+                              ? 'bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-300/80 text-emerald-900 dark:text-emerald-200 shadow-emerald-500/10'
+                              : 'bg-sky-50/95 dark:bg-sky-950/90 border-sky-300/80 text-sky-900 dark:text-sky-200 shadow-sky-500/10'
+                        }`}
+                        title="Tampilkan detail banner"
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
+                          activeHoldReservation ? 'bg-amber-500' : activeConfirmedReservation ? 'bg-emerald-500' : 'bg-sky-500'
+                        }`} />
+                        <span>
+                          {(() => {
+                            const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
+                            if (!r?.booking_date) return '';
+                            const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+                            const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                            const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
+                            return `${d} ${t}${dur}`;
+                          })()}
+                        </span>
+                        <ChevronDown size={12} className="stroke-[2.5]" />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -4304,17 +4306,26 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className={`flex items-center shrink-0 ${chatBotActive ? 'gap-2' : 'gap-1.5'}`}>
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedReservation(activeConfirmedReservation);
                         }}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        className={`inline-flex items-center justify-center bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 rounded-full transition-all shadow-2xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        title="Lihat detail reservasi"
+                      >
+                        <Eye size={chatBotActive ? 11 : 13} className="shrink-0" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedReservation(activeConfirmedReservation);
+                        }}
+                        className={`inline-flex items-center justify-center bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 text-white rounded-full transition-all shadow-xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Kelola / Edit detail reservasi"
                       >
-                        <PenLine size={13} className="shrink-0" />
-                        <span>Kelola</span>
+                        <PenLine size={chatBotActive ? 11 : 13} className="shrink-0" />
                       </button>
                       <button
                         type="button"
@@ -4334,11 +4345,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 font-bold rounded-full text-xs leading-none transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                        className={`inline-flex items-center justify-center bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 rounded-full transition-all shadow-2xs cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Tandai reservasi telah selesai treatment"
                       >
-                        <CheckCircle size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        <span>Selesai</span>
+                        <CheckCircle size={chatBotActive ? 11 : 13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                       </button>
                       <button
                         type="button"
