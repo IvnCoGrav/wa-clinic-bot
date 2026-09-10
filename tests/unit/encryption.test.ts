@@ -15,7 +15,24 @@ describe('Encryption Utils (AES-256-GCM)', () => {
 
   it('should throw if encryption key not configured', () => {
     delete process.env.WABA_TOKEN_ENCRYPTION_KEY;
-    expect(() => encryptSecret('secret')).toThrow(/not configured/);
+    const savedAdmin = process.env.ADMIN_API_KEY;
+    const savedApp = process.env.APP_SECRET;
+    delete process.env.ADMIN_API_KEY;
+    delete process.env.APP_SECRET;
+    try {
+      expect(() => encryptSecret('secret')).toThrow(/not configured/);
+    } finally {
+      if (savedAdmin !== undefined) process.env.ADMIN_API_KEY = savedAdmin;
+      if (savedApp !== undefined) process.env.APP_SECRET = savedApp;
+    }
+  });
+
+  it('should fallback to ADMIN_API_KEY when WABA key missing', () => {
+    delete process.env.WABA_TOKEN_ENCRYPTION_KEY;
+    process.env.ADMIN_API_KEY = 'fallback-admin-key-for-test';
+    const encrypted = encryptSecret('secret-fallback');
+    expect(encrypted).not.toBe('secret-fallback');
+    expect(decryptSecret(encrypted)).toBe('secret-fallback');
   });
 
   it('should throw if key is not 32 bytes', () => {

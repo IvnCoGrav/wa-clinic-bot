@@ -4156,6 +4156,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
                       <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse shrink-0" />
                       <span className="font-extrabold text-amber-900 dark:text-amber-300 shrink-0 tracking-wide text-[10px]">HOLD:</span>
+                      <Clock size={11} className="text-amber-700 dark:text-amber-300 shrink-0" />
                       <span className="font-medium truncate text-amber-950 dark:text-amber-100 text-[10px] min-w-0">
                         {activeHoldReservation.booking_date
                           ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
@@ -4167,10 +4168,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
                               hour: '2-digit',
                               minute: '2-digit',
-                            }) +
-                            ' WIB'
+                            })
                           : 'Slot belum ditentukan'}
-                        {activeHoldReservation.assigned_staff?.name ? ` • ${activeHoldReservation.assigned_staff.name}` : ''}
                         {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
                       </span>
                     </div>
@@ -4178,10 +4177,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
-                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
+                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
                         title="Lengkapi Booking"
                       >
-                        Lengkapi Booking
+                        <PenLine size={12} />
                       </button>
                       <button
                         type="button"
@@ -4222,6 +4221,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                       <span className="font-extrabold text-emerald-900 dark:text-emerald-300 shrink-0 tracking-wide text-[10px]">TERJADWAL:</span>
+                      <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
                       <span className="font-medium truncate text-emerald-950 dark:text-emerald-100 text-[10px] min-w-0">
                         {activeConfirmedReservation.booking_date
                           ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
@@ -4233,11 +4233,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
                               hour: '2-digit',
                               minute: '2-digit',
-                            }) +
-                            ' WIB'
+                            })
                           : 'Jadwal terkonfirmasi'}
-                        {activeConfirmedReservation.treatment_detail ? ` • ${activeConfirmedReservation.treatment_detail}` : ''}
-                        {activeConfirmedReservation.assigned_staff?.name ? ` • ${activeConfirmedReservation.assigned_staff.name}` : ''}
+                        {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -4246,10 +4244,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onClick={() => {
                           setSelectedReservation(activeConfirmedReservation);
                         }}
-                        className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Lihat Detail Reservasi"
+                        className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
+                        title="Kelola / Edit reservasi"
                       >
-                        Kelola
+                        <PenLine size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: 'Tandai Selesai?',
+                            message: 'Tandai reservasi ini sebagai selesai?',
+                            confirmText: 'Ya, Selesai',
+                            cancelText: 'Batal',
+                          });
+                          if (!ok) return;
+                          try {
+                            await apiRequest(`/api/admin/reservation/${activeConfirmedReservation.id}/complete`, { method: 'PATCH' });
+                            toast('Reservasi ditandai selesai.', 'success');
+                            await handleReservationUpdate();
+                          } catch {
+                            toast('Gagal menandai selesai.', 'error');
+                          }
+                        }}
+                        className={`bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
+                        title="Tandai selesai"
+                      >
+                        <CheckCircle size={12} />
                       </button>
                     </div>
                   </div>
