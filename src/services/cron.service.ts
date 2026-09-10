@@ -492,13 +492,14 @@ export class CronService {
    * P1.4 Auto-Approve Guard — Memeriksa reservasi berstatus `pending` review
    * yang sudah berumur >24 jam dan mengirimkan notifikasi alert Telegram.
    */
-  public async checkPendingPurchaseModerationAlerts(): Promise<void> {
+  public async checkPendingPurchaseModerationAlerts(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
       const twentyFourHoursAgo = new Date();
       twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
       const pendingCount = await prisma.reservation.count({
         where: {
+          tenant_id: tenantId,
           purchase_review_status: 'pending',
           purchase_occurred_at: { lt: twentyFourHoursAgo },
         },

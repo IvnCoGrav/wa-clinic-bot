@@ -183,7 +183,7 @@ describe('Meta Full-Funnel Attribution & Landing URL Preservation', () => {
     expect(result.success).toBe(true);
     const event = sentPayload.data[0];
     expect(event.event_name).toBe('Purchase');
-    expect(event.event_id).toBe('ck');
+    expect(event.event_id.startsWith('ck_pur_')).toBe(true);
     expect(event.event_source_url).toBe('https://kalababyspa.online/reservasionline?utm_source=ig&utm_campaign=120250056175160235&fbclid=PAcGRvZ');
     expect(event.custom_data.value).toBe(85000);
     expect(event.custom_data.currency).toBe('IDR');

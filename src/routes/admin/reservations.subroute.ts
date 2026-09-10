@@ -923,7 +923,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         treatmentCategory === 'BUNDLE' ? 'BOTH' : 
         (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
 
-      const reservationStatus = status === 'confirmed' ? 'confirmed' : status;
+      const reservationStatus = status === 'hold' ? 'hold' : 'confirmed';
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
       const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
 
@@ -2150,6 +2150,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           eventTime,
           customData,
+          customUserData: customPayload?.user_data,
+          customEventId: customPayload?.event_id,
+          reservationId: existing.id,
         });
 
         if (!capiResult.success) {
@@ -2170,6 +2173,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             purchase_event_sent_at: new Date(),
           },
         });
+
+        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -2290,8 +2295,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         where: {
           tenant_id: DEFAULT_TENANT_ID,
           status: { not: 'cancelled' },
+          OR: [
+            { purchase_occurred_at: { not: null } },
+            { status: 'completed' },
+            { purchase_value: { gt: 0 } },
+          ],
         },
         orderBy: { created_at: 'desc' },
+        take: 100,
         include: {
           customer: {
             include: { adClick: true, children: true },
@@ -2365,16 +2376,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
           const value = calculatedValue ?? 60000;
 
-          // Self-heal purchase_value in DB if previously null/0 or stored as total price (including ongkir)
-          if (r.id && value > 0 && r.purchase_value !== value) {
-            prisma.reservation
-              .update({
-                where: { id: r.id },
-                data: { purchase_value: value },
-              })
-              .catch(() => {});
-          }
-
           let distanceKm = r.customer?.distance_km ? `${r.customer.distance_km} km` : null;
           if (!distanceKm && r.raw_text) {
             const m = r.raw_text.match(/ongkir\s*([\d.,]+)\s*km/i);
@@ -2383,16 +2384,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
           const rawLandingUrl = r.customer?.adClick?.landingUrl || null;
           const canonicalLandingUrl = resolveCanonicalLandingUrl(rawLandingUrl, tenantLandingDomain) || rawLandingUrl;
-
-          // Self-heal AdClick record in DB if landingUrl was legacy /cta
-          if (r.customer?.adClick?.id && canonicalLandingUrl && canonicalLandingUrl !== rawLandingUrl) {
-            prisma.adClick
-              .update({
-                where: { id: r.customer.adClick.id },
-                data: { landingUrl: canonicalLandingUrl },
-              })
-              .catch(() => {});
-          }
 
           const childName = (r.customer as any)?.children?.[0]?.name || null;
 
@@ -2439,7 +2430,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         })
       );
 
-      // Unsent MQL Leads
+      // Unsent MQL Leads + riwayat terkirim/ditolak (agar tidak lenyap pasca-moderasi)
       let mqlLeadItems: any[] = [];
       try {
         const leadAuditLogs = await prisma.auditLog.findMany({
@@ -2447,15 +2438,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             tenant_id: DEFAULT_TENANT_ID,
             action: { in: ['MQL_LEAD_EVENT_SENT', 'MQL_LEAD_EVENT_REJECTED'] },
           },
-          select: { target_id: true },
+          select: { target_id: true, action: true, created_at: true },
         });
-        const processedCustomerIds: string[] = Array.from(
-          new Set(
-            leadAuditLogs
-              .map((a) => a.target_id)
-              .filter((id): id is string => typeof id === 'string' && id.length > 0)
-          )
-        );
+        const sentMap = new Map<string, string>();
+        for (const a of leadAuditLogs) {
+          if (a.target_id) sentMap.set(a.target_id, a.action);
+        }
+        const processedCustomerIds: string[] = Array.from(sentMap.keys());
 
         const unsentMqlCustomers = await prisma.customer.findMany({
           where: {
@@ -2482,16 +2471,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
           const rawLandingUrl = c.adClick?.landingUrl || null;
           const canonicalLandingUrl = resolveCanonicalLandingUrl(rawLandingUrl, tenantLandingDomain) || rawLandingUrl;
-
-          // Self-heal AdClick record in DB if landingUrl was legacy /cta
-          if (c.adClick?.id && canonicalLandingUrl && canonicalLandingUrl !== rawLandingUrl) {
-            prisma.adClick
-              .update({
-                where: { id: c.adClick.id },
-                data: { landingUrl: canonicalLandingUrl },
-              })
-              .catch(() => {});
-          }
 
           return {
             id: `lead_${c.id}`,
@@ -2524,6 +2503,51 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             metaDropRisk: daysOld > 7,
           };
         });
+        // Riwayat MQL yang sudah dimoderasi (approved -> Terkirim, rejected -> ignored_outlier)
+        if (processedCustomerIds.length > 0) {
+          try {
+            const processedCustomers = await prisma.customer.findMany({
+              where: { tenant_id: DEFAULT_TENANT_ID, id: { in: processedCustomerIds.slice(0, 50) } },
+              include: { adClick: true },
+            });
+            for (const c of processedCustomers as any[]) {
+              const action = sentMap.get(c.id);
+              const isSent = action === 'MQL_LEAD_EVENT_SENT';
+              const occurredDate = c.mql_triggered_at || c.created_at || new Date();
+              const occurredAt = new Date(occurredDate).getTime();
+              const ageMs = Math.max(0, now - occurredAt);
+              const rawLandingUrl = (c as any).adClick?.landingUrl || null;
+              const canonicalLandingUrl = resolveCanonicalLandingUrl(rawLandingUrl, tenantLandingDomain) || rawLandingUrl;
+              mqlLeadItems.push({
+                id: `lead_${c.id}`,
+                status: 'mql_lead',
+                eventType: 'Lead',
+                treatment_detail: 'Lead Prospek MQL (Percakapan Aktif)',
+                raw_text: `Customer teridentifikasi MQL (${(c as any).mql_bubble_count || 5}+ pesan)`,
+                purchase_occurred_at: occurredDate,
+                purchase_event_sent_at: isSent ? occurredDate : null,
+                purchase_review_status: isSent ? 'approved' : 'ignored_outlier',
+                value: 0,
+                distanceKm: (c as any).distance_km ? `${(c as any).distance_km} km` : null,
+                customer: { name: (c as any).name || 'Bunda', phone: (c as any).phone || '' },
+                attribution: {
+                  isPaid: !!(c as any).adClick,
+                  trackingCode: (c as any).adClick?.trackingCode || null,
+                  landingUrl: canonicalLandingUrl,
+                },
+                utm: {
+                  campaign: (c as any).adClick?.utmCampaign || null,
+                  source: (c as any).adClick?.utmSource || null,
+                  medium: (c as any).adClick?.utmMedium || null,
+                },
+                ageHours: Math.floor(ageMs / (60 * 60 * 1000)),
+                daysOld: Math.floor(ageMs / (24 * 60 * 60 * 1000)),
+                expiresInDays: Math.max(0, 7 - Math.floor(ageMs / (24 * 60 * 60 * 1000))),
+                metaDropRisk: Math.floor(ageMs / (24 * 60 * 60 * 1000)) > 7,
+              });
+            }
+          } catch {}
+        }
       } catch (leadErr) {
         console.warn('[CAPI QUEUE] Could not fetch unsent MQL leads:', leadErr);
       }

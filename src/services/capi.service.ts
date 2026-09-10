@@ -722,6 +722,9 @@ export class CapiService {
     customData?: Record<string, any>;
     eventTime?: number;
     eventId?: string;
+    customUserData?: Record<string, any>;
+    customEventId?: string;
+    reservationId?: string;
   }): Promise<{
     success: boolean;
     message?: string;
@@ -732,7 +735,7 @@ export class CapiService {
     sentPayload?: any;
     pixelId?: string;
   }> {
-    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId } = params;
+    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId } = params;
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard (Pencegahan pencemaran data conversion pixel)
     if (customer?.is_sandbox_test || isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test)) {
@@ -1085,12 +1088,20 @@ export class CapiService {
           ...(effectiveAdClick?.utmCampaign ? { utm_campaign: effectiveAdClick.utmCampaign } : {}),
         },
       };
-      if (eventId) {
+      if (customEventId) {
+        eventData.event_id = customEventId;
+      } else if (eventId) {
         eventData.event_id = eventId;
+      } else if (eventName === 'Purchase') {
+        eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${reservationId || customer.id}_${effectiveEventTime}`;
       } else if (effectiveAdClick?.trackingCode) {
         eventData.event_id = effectiveAdClick.trackingCode;
       } else {
         eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;
+      }
+      // Merge customUserData dari editan admin modal JSON (prioritas admin)
+      if (customUserData && typeof customUserData === 'object') {
+        Object.assign(userData, customUserData);
       }
 
       if (value !== undefined) {

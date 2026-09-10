@@ -5,14 +5,19 @@ const KEY_ENV = 'WABA_TOKEN_ENCRYPTION_KEY';
 
 function getKey(): Buffer {
   const key = process.env[KEY_ENV] || '';
-  if (key.length === 0) {
+  if (key.length > 0) {
+    const keyBuffer = Buffer.from(key, 'hex');
+    if (keyBuffer.length !== 32) {
+      throw new Error(`${KEY_ENV} must be a 32-byte key encoded as 64 hex characters.`);
+    }
+    return keyBuffer;
+  }
+  // Fallback deterministik SHA-256 dari ADMIN_API_KEY / APP_SECRET (decoupling CAPI vs WABA)
+  const fallbackSeed = process.env.ADMIN_API_KEY || process.env.APP_SECRET || '';
+  if (fallbackSeed.length === 0) {
     throw new Error(`${KEY_ENV} not configured. Must be a 32-byte (64 hex chars) key.`);
   }
-  const keyBuffer = Buffer.from(key, 'hex');
-  if (keyBuffer.length !== 32) {
-    throw new Error(`${KEY_ENV} must be a 32-byte key encoded as 64 hex characters.`);
-  }
-  return keyBuffer;
+  return crypto.createHash('sha256').update(fallbackSeed, 'utf8').digest();
 }
 
 export function encryptSecret(plainText: string): string {

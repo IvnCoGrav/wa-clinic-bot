@@ -22,9 +22,9 @@ export class LabelReconciliationService {
     let driftsFixed = 0;
 
     try {
-      // 1. Customer dengan ≥1 reservasi pending (label 'pending payment' / 'repeat')
+      // 1. Customer dengan ≥1 reservasi hold (label 'pending payment' / 'repeat')
       const pendingCustomers = await prisma.customer.findMany({
-        where: { tenant_id: tenantId, reservations: { some: { status: 'pending' } } },
+        where: { tenant_id: tenantId, reservations: { some: { status: 'hold' } } },
         select: { id: true, phone: true },
       });
 
