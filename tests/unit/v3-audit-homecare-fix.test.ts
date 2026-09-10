@@ -176,7 +176,9 @@ describe('Layer 3 — Persona: larangan jam & panduan konfirmasi', () => {
 
   it('prompt tidak menodong alamat/shareloc dan tidak menyebut Admin CS (kecuali aturan larangan)', () => {
     const prompt = PersonaPromptBuilder.buildSystemPrompt({ genderGreeting: 'Bunda' } as any, true);
-    expect(prompt).toContain('akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu');
+    // Audit 337101: contoh baku POV first person (menggantikan frasa lama
+    // "ketersediaan jadwal Bidan yang ready").
+    expect(prompt).toContain('kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda');
     const adminCsOutsideBan = prompt
       .split('\n')
       .filter((line) => line.includes('Admin CS') && !line.includes('DILARANG SEBUT'));

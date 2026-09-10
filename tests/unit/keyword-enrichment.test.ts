@@ -50,6 +50,7 @@ const SEED_QUESTIONS = [
   'Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?',
   'Panduan Usia Kehamilan untuk Pijat Induksi Alami (Induksi Massage)',
   'Apakah terapis/bidan yang memijat si kecil dan Bunda sama atau berbeda orangnya?',
+  'Apakah bayi yang baru jatuh atau terbentur boleh langsung dipijat?',
 ];
 
 describe('resolveChunkKeywords', () => {

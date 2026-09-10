@@ -388,6 +388,54 @@ export class V3AgentRunner {
   }
 
   /**
+   * Sinyal trauma jatuh/terbentur bayi (deterministik, data-driven includes)
+   * untuk clinical-safety routing Call 1 (audit 337101). 'bentur' generik
+   * hanya dihitung bila berkonteks bayi/jatuh (menghindari "kebentur meja
+   * kantor" dewasa yang tak terkait pasien anak — tetap butuh kata bayi).
+   */
+  public static hasFallInjurySignal(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+    const hasAny = (words: string[]): boolean => words.some((w) => lower.includes(w));
+    if (hasAny(['jatuh', 'jatoh', 'terbentur', 'kebentur', 'kejedot', 'habis jatuh', 'baru jatuh'])) return true;
+    return lower.includes('bentur')
+      && hasAny(['bayi', 'baby', 'newborn', 'anak', 'si kecil', 'adik']);
+  }
+
+  /**
+   * Ekstrak petunjuk waktu yang diminta customer (audit 337101): token
+   * waktu deterministik (sekarang/hari ini/besok/lusa/nama hari) untuk
+   * dicatat sebagai booking.requestedTimeHint — anti pengulangan tanya hari.
+   * Kembalikan null bila tidak ada; token pertama yang muncul menang.
+   */
+  public static extractTimeHint(text: string): string | null {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return null;
+    if (lower.includes('minggu depan')) return 'minggu depan';
+    if (lower.includes('hari ini')) return 'hari ini';
+    let norm = '';
+    for (let i = 0; i < lower.length; i++) {
+      const ch = lower[i];
+      norm += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+    }
+    const tokens = norm.split(' ').filter((t) => t.length > 0);
+    const HINTS = ['sekarang', 'besok', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'weekend'];
+    for (const t of tokens) {
+      if (HINTS.includes(t)) {
+        if (t === 'minggu') {
+          const idx = tokens.indexOf(t);
+          if (idx > 0) {
+            const c = tokens[idx - 1].charCodeAt(0);
+            if (c >= 48 && c <= 57) continue; // "3 minggu" = usia, bukan hari
+          }
+        }
+        return t;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Sinyal imunisasi/vaksinasi (deterministik, data-driven includes) untuk
    * clinical-safety routing Call 1. 'suntik' generik hanya dihitung bila
    * berkonteks bayi/vaksin (menghindari "suntik KB" dewasa memicu SOP bayi).
@@ -427,6 +475,9 @@ export class V3AgentRunner {
       // Audit 222655: varian slang imunisasi WAJIB memicu pre-grounding
       // ("habis imunisasi apa sebelum e" tidak mengandung kata "vaksin").
       'vaksinasi', 'imunisasi', 'suntik', 'kipi', 'bcg', 'polio', 'dpt',
+      // Audit 337101: trauma jatuh WAJIB pre-grounding SOP skrining
+      // (mencegah tercatutnya artikel mandi/relaksasi untuk kasus trauma).
+      'jatuh', 'jatoh', 'terbentur', 'kebentur', 'kejedot', 'bentur', 'benjol', 'memar',
       'fisioterapi', 'newborn', 'hamil', 'kehamilan', 'nifas', 'induksi', 'oksitosin', 'prenatal',
       'perineum', 'kontraksi', 'pembukaan', 'hpl',
       // Penjelasan terapi / khasiat
@@ -528,27 +579,34 @@ export class V3AgentRunner {
     if (conversationId) {
       try {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        const syncedCart = GoalTracker.syncCartItems(
-          session,
-          [...conversationHistory, { role: 'user', content: cleanIncomingText }],
-          treatmentCatalogService.getAllServices(true, tenantId).map((s) => ({
-            id: (s as any).id,
-            name: s.name,
-            promoPrice: s.promoPrice,
-            originalPrice: s.originalPrice,
-            category: s.category,
-            // Phase 2 (audit 315036): metadata komposisi bundle untuk
-            // rekonsiliasi bundle vs parsial di syncCartItems (data-driven).
-            bundleItemIds: (s as any).bundleItemIds || [],
-            isAddon: (treatmentCatalogService as any).isAddonService
-              ? (treatmentCatalogService as any).isAddonService(s)
-              : false,
-          }))
-        );
+        const catalogMapped = treatmentCatalogService.getAllServices(true, tenantId).map((s) => ({
+          id: (s as any).id,
+          name: s.name,
+          promoPrice: s.promoPrice,
+          originalPrice: s.originalPrice,
+          category: s.category,
+          // Phase 2 (audit 315036): metadata komposisi bundle untuk
+          // rekonsiliasi bundle vs parsial di syncCartItems (data-driven).
+          bundleItemIds: (s as any).bundleItemIds || [],
+          isAddon: (treatmentCatalogService as any).isAddonService
+            ? (treatmentCatalogService as any).isAddonService(s)
+            : false,
+        }));
+        const cartHistory = [...conversationHistory, { role: 'user', content: cleanIncomingText }];
+        const syncedCart = GoalTracker.syncCartItems(session, cartHistory, catalogMapped);
         if (JSON.stringify(syncedCart) !== JSON.stringify(session.cartItems || [])) {
+          // Audit 854065 (swap): afirmasi tukar → selectedTreatment ikut ke
+          // layanan baru agar grounding & template tidak tertinggal di lama.
+          const swap = GoalTracker.resolveAffirmativeSwap(
+            { ...session, cartItems: session.cartItems } as any, cartHistory, catalogMapped
+          );
+          const swappedNow = swap && syncedCart.some(
+            (c) => c.name.toLowerCase() === swap.newName.toLowerCase()
+          );
           session = await GoalTracker.updateGoalSession(conversationId, {
             cartItems: syncedCart,
             totalPrice: GoalTracker.calcCartTotal({ ...session, cartItems: syncedCart }),
+            ...(swappedNow ? { selectedTreatment: swap.newName } : {}),
           }, tenantId);
         }
       } catch (e) {}
@@ -808,6 +866,31 @@ export class V3AgentRunner {
       await V3AgentRunner.assignInternalScheduleLabel(conversationId, tenantId);
     }
 
+    // Audit 854065 (MODE TRANSASIONAL): pertanyaan harga membuka eksposur
+    // total resmi di grounding (sekali dibuka, berlaku sisa sesi).
+    if (conversationId && !session.priceDiscussed
+      && extractFastIntents(cleanIncomingText).includes('ask_price')) {
+      try {
+        session = await GoalTracker.updateGoalSession(conversationId, { priceDiscussed: true }, tenantId);
+      } catch (e) {}
+    }
+
+    // Audit 337101 (anti CTA-looping): petunjuk waktu yang diminta ("sekarang",
+    // nama hari) dicatat ke booking.requestedTimeHint walau reservasi BELUM
+    // dibuat — agar turn ongkir berikutnya tidak menodong hari lagi.
+    if (conversationId && V3AgentRunner.hasScheduleSignal(cleanIncomingText)
+      && !session.booking?.preferredDate && !session.booking?.requestedTimeHint
+      && !session.booking?.reservationId) {
+      const hint = V3AgentRunner.extractTimeHint(cleanIncomingText);
+      if (hint) {
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            booking: { ...(session.booking || {}), requestedTimeHint: hint, isConfirmed: false },
+          }, tenantId);
+        } catch (e) {}
+      }
+    }
+
     try {
       // 4. Panggilan Pertama: Model mengevaluasi apakah perlu memanggil Tools
       const detectedIntents = extractFastIntents(cleanIncomingText);
@@ -823,6 +906,11 @@ export class V3AgentRunner {
       // mengandung dua sinyal (ask_price + provide_location) namun intent utamanya adalah cek ongkir
       if (detectedIntents.includes('provide_location')) {
         dynamicToolChoice = { type: 'function', function: { name: 'calculate_delivery' } };
+      } else if (V3AgentRunner.hasFallInjurySignal(cleanIncomingText)) {
+        // Audit 337101 (pediatric safety): trauma jatuh WAJIB grounding SOP
+        // skrining — setara prioritas forcing lokasi/vaksin. Mencegah LLM
+        // mencatut artikel mandi/relaksasi untuk kasus trauma fisik.
+        dynamicToolChoice = { type: 'function', function: { name: 'search_knowledge_faq' } };
       } else if (V3AgentRunner.hasVaccineSignal(cleanIncomingText)) {
         // Audit 222655 (fatal medical error): pertanyaan imunisasi/vaksinasi
         // WAJIB di-grounding SOP pasca-vaksin deterministik (clinical safety —
@@ -907,6 +995,18 @@ export class V3AgentRunner {
                 price: it.price,
                 promoPrice: it.promoPrice,
               }));
+              // Audit 337101: snapshot waktu yang diminta (kesepakatan menang
+              // atas petunjuk inquiry) agar CTA ongkir context-aware.
+              toolContext.preferredDateSnapshot =
+                session.booking?.preferredDate || session.booking?.requestedTimeHint || undefined;
+              // Audit 833178: jejak pesan user untuk Day Evidence Gate
+              // save_reservation (anti "Besok" karangan — tanpa bukti = tolak).
+              toolContext.recentUserTexts = [
+                ...conversationHistory
+                  .filter((h) => h.role === 'user')
+                  .map((h) => h.content),
+                cleanIncomingText,
+              ];
               // Phase 4 (audit 222655): snapshot ongkir sesi agar
               // get_catalog_and_price menyusun template total otomatis.
               toolContext.locationSnapshot = session.location
@@ -967,6 +1067,12 @@ export class V3AgentRunner {
               session = await GoalTracker.markOngkirQuoted(conversationId, tenantId);
             }
           } else if (fnName === 'get_catalog_and_price' && toolResult.success) {
+            // Audit 854065: inquirePrice eksplisit dari LLM = sinyal transaksional.
+            if (fnArgs.inquirePrice === true && !session.priceDiscussed) {
+              try {
+                session = await GoalTracker.updateGoalSession(conversationId, { priceDiscussed: true }, tenantId);
+              } catch (e) {}
+            }
             // Unified Knowledge Observability: daftarkan spesifikasi katalog resmi
             // ke trace retrievedChunks agar Inspector menampilkan seluruh ground truth
             // (artikel SOP + katalog layanan) yang dipakai LLM di Call 2.
@@ -1152,7 +1258,10 @@ export class V3AgentRunner {
       finalReply = OutputSanitizer.cleanOutboundReply(finalReply, incomingText, isFollowUp);
 
       const numCheck = validateNumericFacts(finalReply, executedTools, { tenantId, session });
-      if (!numCheck.isValid && executedTools.length > 0) {
+      // Audit 854065 (celah bypass): validasi WAJIB aktif pula saat keranjang
+      // memiliki item walau turn ini tanpa tool call (tanya total langsung).
+      const hasActiveCart = (session?.cartItems || []).length > 0;
+      if (!numCheck.isValid && (executedTools.length > 0 || hasActiveCart)) {
         console.warn(JSON.stringify({ event: 'NUMERIC_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: numCheck.violations, timestamp: new Date().toISOString() }));
         // Re-prompt bersih 1x, sesi 214956 (TANPA mutilasi regex tengah kalimat):
         // minta LLM susun ulang SELURUH balasan dengan angka resmi. Gagal lagi
@@ -1194,7 +1303,23 @@ export class V3AgentRunner {
           const cartTotalFallback = executedTools
             .map((t) => (t as any)?.result?.cartTotalReply)
             .find((s): s is string => typeof s === 'string' && s.trim().length > 0);
-          const fallbackToolReply = cartTotalFallback || executedTools[0]?.result?.suggestedPriceReply || executedTools[0]?.result?.suggestedTemplateReply;
+          // Audit 854065: turn tanpa tool TAK PUNYA template tool — bangun
+          // fallback deterministik dari keranjang sesi (MESIN, bukan LLM):
+          // seluruh item + grand total resmi, anti layanan hilang.
+          let sessionCartFallback: string | undefined = undefined;
+          if ((session.cartItems || []).length > 0) {
+            const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
+            const rows = (session.cartItems || []).map((it) => {
+              const p = typeof it.promoPrice === 'number' ? it.promoPrice : it.price;
+              const who = it.recipientScope === 'MOMS' ? 'Bunda'
+                : it.recipientScope === 'CHILD_2' ? 'Kakak'
+                : it.recipientScope === 'CHILD_1' ? 'Adik' : null;
+              return `- ${who ? `[${who}] ` : ''}${it.name}: ${fmtRp(p)}`;
+            });
+            const grand = GoalTracker.calcCartTotal(session);
+            sessionCartFallback = `Berikut rincian resmi keranjang Bunda ya 😊\n${rows.join('\n')}\nTotal keseluruhan: *${fmtRp(grand)}*\n\nRencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+          }
+          const fallbackToolReply = cartTotalFallback || sessionCartFallback || executedTools[0]?.result?.suggestedPriceReply || executedTools[0]?.result?.suggestedTemplateReply;
           if (fallbackToolReply) {
             finalReply = fallbackToolReply;
           }

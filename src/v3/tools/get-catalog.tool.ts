@@ -48,6 +48,12 @@ export interface GetCatalogOutput {
    * swap saat validator menolak total halusinasi.
    */
   cartTotalReply?: string;
+  /**
+   * Audit 854065 (MODE KONSULTASI): diisi HANYA bila inquirePrice === false —
+   * panduan manfaat klinis tanpa nominal & tanpa todongan jadwal, agar Call 2
+   * punya template konsultasi resmi (bukan menjiplak template transaksional).
+   */
+  suggestedConsultationReply?: string;
   message: string;
 }
 
@@ -208,8 +214,31 @@ export async function executeGetCatalog(
       const s = serviceById.get(id);
       return !!s && (s as any).serviceType === 'STANDARD' && s.name.toLowerCase().includes('pijat');
     };
+    // Audit 337101 (therapy routing, DATA-DRIVEN non-hardcode): bila ada
+    // keluhan, skor overlap token gejala atas nama+deskripsi resmi katalog
+    // menjadi kunci urut sekunder — layanan terapi penanganan keluhan naik,
+    // relaksasi murni (skor 0) tenggelam secara alami TANPA daftar nama
+    // hafalan. Cermin logika recommendServiceBySymptoms, tapi di atas pool
+    // tenant yang sudah terfilter (tenant-correct).
+    const symptomToks = symptoms.length > 0
+      ? symptoms.flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length > 3)
+      : [];
+    const therapyScoreOf = (id: string): number => {
+      if (symptomToks.length === 0) return 0;
+      const s = serviceById.get(id);
+      if (!s) return 0;
+      const nl = s.name.toLowerCase();
+      const dl = (s.description || '').toLowerCase();
+      let sc = 0;
+      for (const tok of symptomToks) {
+        if (nl.includes(tok)) sc += 4;
+        else if (dl.includes(tok)) sc += 2;
+      }
+      return sc;
+    };
     formattedTreatments.sort((a, b) =>
       ((b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0))
+      || (therapyScoreOf(b.id) - therapyScoreOf(a.id))
       || ((isBridgeMassage(b.id) ? 1 : 0) - (isBridgeMassage(a.id) ? 1 : 0))
     );
 
@@ -329,13 +358,26 @@ export async function executeGetCatalog(
       cartTotalReply = `Untuk keranjang saat ini, total resmi yang sudah dihitung sistem adalah *Rp ${grand.toLocaleString('id-ID')}* (${rincian}) ya Bunda 😊`;
     }
 
+    // Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): bila customer TIDAK
+    // bertanya harga, sediakan template konsultasi resmi — fokus manfaat
+    // klinis, TANPA penjumlahan nominal, TANPA todongan jadwal. Komplemen
+    // dari suggestedPriceReply/cartTotalReply yang khusus mode transaksional.
+    let suggestedConsultationReply: string | undefined = undefined;
+    if (!showPrices && formattedTreatments.length > 0) {
+      const focus = formattedTreatments.find((t) => t.isRecommendedForSymptoms) || formattedTreatments[0];
+      if (focus) {
+        suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description} Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗\n\n(Panduan sistem: JANGAN sebut nominal rupiah/lama waktu, JANGAN todong jadwal hari — customer belum bertanya harga, masih tahap konsultasi.)`;
+      }
+    }
+
     return {
       success: true,
       treatments: formattedTreatments.slice(0, 5),
       recommendationReason,
       suggestedPriceReply,
       cartTotalReply,
-      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}${cartTotalReply ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang):\n"${cartTotalReply}"\nBila customer menanyakan total belanjaan, WAJIB kutip angka total resmi di atas persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! WAJIB tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.`
+      suggestedConsultationReply,
+      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}${cartTotalReply ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang):\n"${cartTotalReply}"\nBila customer menanyakan total belanjaan, WAJIB kutip angka total resmi di atas persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}${suggestedConsultationReply ? `\n\nMode Konsultasi (customer BELUM bertanya harga — JANGAN sebut nominal, JANGAN todong jadwal):\n"${suggestedConsultationReply}"` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! WAJIB tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_CATALOG_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

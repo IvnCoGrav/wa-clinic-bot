@@ -22,6 +22,25 @@ export interface CalculateDeliveryInput {
    * + grand total agar Call 2 tidak "kehilangan" total biaya.
    */
   cartSnapshot?: CartSnapshotItem[];
+  /**
+   * Audit 337101 (anti CTA-looping): waktu yang sudah diminta/disepakati
+   * customer ("sekarang"/"hari ini"/nama hari). Bila terisi, template DILARANG
+   * menanyakan "di hari apa" lagi — langsung respon pengecekan waktu tsb.
+   */
+  preferredDate?: string;
+}
+
+/**
+ * Audit 337101: pilih CTA jadwal context-aware (pure function, testable).
+ * Ada waktu yang diminta → akui + cekkan (tanpa tanya hari ulang).
+ * Belum ada → tanya hari santai (perilaku lama).
+ */
+export function buildScheduleCta(preferredDate?: string): string {
+  if (preferredDate && preferredDate.trim()) {
+    const when = preferredDate.trim();
+    return `Untuk ketersediaan jadwal ${when}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`;
+  }
+  return 'Untuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊';
 }
 
 /**
@@ -211,7 +230,7 @@ function findKecamatanInQuery(query: string): string | null {
 }
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
-  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot } = input;
+  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate } = input;
   // `let` agar fallback addressQuery dari link Maps bisa menggantikan query
   // mentah secara transparan (Phase 0 audit 315036).
   let compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
@@ -237,6 +256,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const ongkirPromo = deliveryResult.ongkir;
         const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30;
         const kelurahan = reversed?.kelurahan || 'Titik Lokasi Terpilih';
+        const scheduleCta = !isOutOfCoverage ? buildScheduleCta(preferredDate) : undefined;
         const suggestedTemplateReply = isOutOfCoverage
           ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm: 30 })
           : TEMPLATES.ongkirInfo({
@@ -245,12 +265,15 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
               promoPrice: ongkirPromo,
               freeTierKm: 5,
               candidateTreatmentName,
+              // Audit 337101: override CTA di DALAM template (bukan append)
+              // agar pertanyaan "hari apa" bawaan template ikut terganti.
+              ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
             });
         console.log(JSON.stringify({ event: 'V3_TOOL_DELIVERY_URL_RESOLVED', tenantId, lat, lng, distanceKm, timestamp: new Date().toISOString() }));
         // Phase 2: rekap keranjang + grand total (bila snapshot tersedia).
         const urlCartRecap = isOutOfCoverage ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
         const urlTemplate = urlCartRecap
-          ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}\n\nUntuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`
+          ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
           : suggestedTemplateReply;
         return {
           success: true,
@@ -418,6 +441,9 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           promoPrice: ongkirPromo,
           freeTierKm: 5,
           candidateTreatmentName,
+          // Audit 337101: override CTA di DALAM template (bukan append)
+          // agar pertanyaan "hari apa" bawaan template ikut terganti.
+          ...(preferredDate ? { scheduleCta: buildScheduleCta(preferredDate) } : {}),
         });
 
     // Phase 2 (audit 315036) — Mandat Total Biaya Otomatis: bila keranjang
@@ -425,7 +451,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // Call 2 tidak "kehilangan" total biaya (angka dari snapshot deterministik).
     const cartRecap = isOutOfCoverage ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
     const suggestedTemplateReply = cartRecap
-      ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}\n\nUntuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`
+      ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
       : baseTemplateReply;
 
     return {

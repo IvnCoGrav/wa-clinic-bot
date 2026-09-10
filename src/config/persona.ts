@@ -319,7 +319,22 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     freeTierKm?: number;
     candidateTreatmentName?: string;
     preferredDate?: string;
+    /**
+     * Audit 337101 (anti CTA-looping): override CTA eksplisit — bila waktu
+     * sudah diminta customer, pakai kalimat akui+cekkan ini INSTEAD OF
+     * pertanyaan "hari apa". Opsional; default lestari bila tak diisi.
+     */
+    scheduleCta?: string;
   }) => {
+    // Override eksplisit menang atas semua cabang CTA bawaan (audit 337101).
+    if (params.scheduleCta) {
+      const ctaQuestion = params.scheduleCta;
+      if (params.promoPrice === 0) {
+        return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya, Bunda ☺️\n\n${ctaQuestion}`;
+      }
+      return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
+    }
+
     let ctaQuestion = 'Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗';
 
     const treatment = params.candidateTreatmentName ? params.candidateTreatmentName.trim() : null;

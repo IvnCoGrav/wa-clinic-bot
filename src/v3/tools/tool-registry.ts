@@ -31,6 +31,10 @@ export interface ToolExecutionContext {
   cartSnapshot?: CartSnapshotItem[];
   /** Snapshot ongkir sesi (diisi agent-runner pre-execution) untuk template total katalog. */
   locationSnapshot?: CatalogSessionContext;
+  /** Waktu kunjungan yang diminta/disepakati (anti pengulangan tanya hari). */
+  preferredDateSnapshot?: string;
+  /** Teks pesan user terkini (anti-halusinasi hari save_reservation). */
+  recentUserTexts?: string[];
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -42,6 +46,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         tenantId: ctx.tenantId,
         candidateTreatmentName: ctx.selectedTreatment,
         cartSnapshot: ctx.cartSnapshot,
+        preferredDate: ctx.preferredDateSnapshot,
       };
       return await executeCalculateDelivery(input);
     }
@@ -68,6 +73,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
       const input: SaveReservationInput = {
         customerId: ctx.customerId,
         chatId: ctx.chatId,
+        dayMentionEvidence: ctx.recentUserTexts,
         customerName: args.customerName,
         treatmentName: args.treatmentName,
         additionalTreatments: args.additionalTreatments,
