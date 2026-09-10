@@ -4172,16 +4172,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
                 {/* Smart Micro-Pill (mobile saja): banner menciut setelah 3 detik, tap untuk buka lagi */}
                 {isBannerCollapsed && (activeHoldReservation || activeConfirmedReservation || activePendingReservation) && (
-                  <div className="md:hidden flex justify-center mx-auto mb-1 shrink-0 animate-fadeIn">
+                  <div className="md:hidden flex justify-center mx-auto mb-1 shrink-0 animate-fadeIn bg-transparent">
                     <button
                       type="button"
                       onClick={expandBanner}
-                      className={`px-2 py-0.5 text-[11px] font-bold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all bg-transparent border-transparent drop-shadow-sm ${
+                      className={`h-6 px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all border ${
                         activeHoldReservation
-                          ? 'text-amber-900 dark:text-amber-200'
+                          ? 'bg-amber-500/15 border-amber-400/40 text-amber-900 dark:text-amber-200'
                           : activeConfirmedReservation
-                            ? 'text-emerald-900 dark:text-emerald-200'
-                            : 'text-sky-900 dark:text-sky-200'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-sky-500/15 border-sky-400/40 text-sky-900 dark:text-sky-200'
                       }`}
                       title="Tampilkan banner"
                     >
@@ -4281,26 +4281,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {!activeHoldReservation && activeConfirmedReservation && (
                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 dark:border-emerald-600/40 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        JADWAL
-                      </span>
-                      <Clock size={13} className="text-emerald-700 dark:text-emerald-300 shrink-0 ml-0.5" />
-                      <span className="font-semibold truncate text-emerald-950 dark:text-emerald-100 text-xs min-w-0">
-                        {activeConfirmedReservation.booking_date
-                          ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
-                              weekday: 'short',
-                              day: 'numeric',
-                              month: 'short',
-                            }) +
-                            ' ' +
-                            new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'Jadwal terkonfirmasi'}
-                        {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
-                      </span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">JADWAL</span>
+                        <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
+                          <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
+                          <span className="font-semibold truncate text-[11px]">
+                            {activeConfirmedReservation.booking_date
+                              ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
+                                  weekday: 'short',
+                                  day: 'numeric',
+                                  month: 'short',
+                                }) +
+                                ' ' +
+                                new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Jadwal terkonfirmasi'}
+                            {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
@@ -4354,26 +4356,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/40 dark:border-sky-600/40 text-sky-800 dark:text-sky-300 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
-                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
-                        PENDING
-                      </span>
-                      <Clock size={13} className="text-sky-700 dark:text-sky-300 shrink-0 ml-0.5" />
-                      <span className="font-semibold truncate text-sky-950 dark:text-sky-100 text-xs min-w-0">
-                        {activePendingReservation.booking_date
-                          ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
-                              weekday: 'short',
-                              day: 'numeric',
-                              month: 'short',
-                            }) +
-                            ' ' +
-                            new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'Menunggu konfirmasi jadwal'}
-                        {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
-                      </span>
+                      <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-sky-300">PENDING</span>
+                        <span className="flex items-center gap-1 min-w-0 text-sky-950 dark:text-sky-100">
+                          <Clock size={11} className="text-sky-700 dark:text-sky-300 shrink-0" />
+                          <span className="font-semibold truncate text-[11px]">
+                            {activePendingReservation.booking_date
+                              ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
+                                  weekday: 'short',
+                                  day: 'numeric',
+                                  month: 'short',
+                                }) +
+                                ' ' +
+                                new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Menunggu konfirmasi jadwal'}
+                            {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
