@@ -443,6 +443,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
   const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
   const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
+  // Smart Micro-Pill auto-collapse (mobile <768px): banner penuh 3 detik lalu menciut
+  const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
+  const [userManuallyExpanded, setUserManuallyExpanded] = useState(false);
+  const manualExpandRef = useRef(false);
   const [quickBookingTargetSlot, setQuickBookingTargetSlot] = useState<any>(null);
   const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
@@ -2886,6 +2890,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     return null;
   }, [selectedChat, customerDetailData]);
 
+  // Smart Micro-Pill: reset tiap ganti chat/reservasi; auto-collapse 3 detik khusus mobile
+  useEffect(() => {
+    setIsBannerCollapsed(false);
+    setUserManuallyExpanded(false);
+    manualExpandRef.current = false;
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      const t = setTimeout(() => {
+        if (!manualExpandRef.current) setIsBannerCollapsed(true);
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [selectedChat?.conversationId, activeHoldReservation?.id, activeConfirmedReservation?.id, activePendingReservation?.id]);
+
+  const expandBanner = () => {
+    setIsBannerCollapsed(false);
+    setUserManuallyExpanded(true);
+    manualExpandRef.current = true;
+  };
+
   const handleInsertInvoiceToChat = (text: string) => {
     if (chatInputRef.current) {
       chatInputRef.current.innerText = text;
@@ -4147,17 +4170,49 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
 
                 {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
+                {/* Smart Micro-Pill (mobile saja): banner menciut setelah 3 detik, tap untuk buka lagi */}
+                {isBannerCollapsed && (activeHoldReservation || activeConfirmedReservation || activePendingReservation) && (
+                  <div className="md:hidden flex justify-center mx-auto mb-1 shrink-0 animate-fadeIn">
+                    <button
+                      type="button"
+                      onClick={expandBanner}
+                      className={`h-6 px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all border ${
+                        activeHoldReservation
+                          ? 'bg-amber-500/15 border-amber-400/40 text-amber-900 dark:text-amber-200'
+                          : activeConfirmedReservation
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-sky-500/15 border-sky-400/40 text-sky-900 dark:text-sky-200'
+                      }`}
+                      title="Tampilkan banner"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
+                        activeHoldReservation ? 'bg-amber-500' : activeConfirmedReservation ? 'bg-emerald-500' : 'bg-sky-500'
+                      }`} />
+                      <span>
+                        {activeHoldReservation ? 'HOLD' : activeConfirmedReservation ? 'TERJADWAL' : 'PENDING'}
+                        {' • '}
+                        {(() => {
+                          const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
+                          return r?.booking_date
+                            ? new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+                            : '';
+                        })()}
+                      </span>
+                      <ChevronDown size={12} className="stroke-[2.5]" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Active Hold Slot Alert Banner */}
                 {activeHoldReservation && (
-                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
-                    chatBotActive
-                      ? 'py-0.5 min-h-[22px] bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-500/40 text-amber-950 dark:text-amber-100'
-                      : 'py-1 min-h-[26px] bg-amber-50 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-500/50 text-amber-950 dark:text-amber-100'
-                  }`}>
-                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                      <span className="font-extrabold text-amber-900 dark:text-amber-300 shrink-0 tracking-wide text-[10px]">HOLD:</span>
-                      <Clock size={11} className="text-amber-700 dark:text-amber-300 shrink-0" />
-                      <span className="font-medium truncate text-amber-950 dark:text-amber-100 text-[10px] min-w-0">
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
+                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 dark:border-amber-600/40 text-amber-900 dark:text-amber-200 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        HOLD
+                      </span>
+                      <Clock size={13} className="text-amber-700 dark:text-amber-300 shrink-0 ml-0.5" />
+                      <span className="font-semibold truncate text-amber-950 dark:text-amber-100 text-xs min-w-0">
                         {activeHoldReservation.booking_date
                           ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
                               weekday: 'short',
@@ -4173,14 +4228,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
-                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
-                        title="Lengkapi Booking"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        title="Lengkapi data booking reservasi ini"
                       >
-                        <PenLine size={12} />
+                        <PenLine size={13} className="shrink-0" />
+                        <span>Lengkapi</span>
                       </button>
                       <button
                         type="button"
@@ -4202,10 +4258,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal melepas slot hold.', 'error');
                           }
                         }}
-                        className="px-1.5 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 font-bold rounded text-[10px] leading-none transition cursor-pointer whitespace-nowrap shrink-0"
-                        title="Lepas"
+                        className="inline-flex items-center justify-center h-[30px] w-[30px] bg-white/90 dark:bg-amber-950/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-95 text-amber-800 hover:text-rose-600 dark:text-amber-200 dark:hover:text-rose-300 border border-amber-300/70 dark:border-amber-700/60 hover:border-rose-300 dark:hover:border-rose-700 rounded-full transition-all shadow-2xs cursor-pointer shrink-0"
+                        title="Lepas slot hold"
                       >
-                        ✕
+                        <X size={13} strokeWidth={2.5} className="shrink-0" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsBannerCollapsed(true)}
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        title="Ciutkan banner"
+                      >
+                        <ChevronUp size={14} className="stroke-[2.5]" />
                       </button>
                     </div>
                   </div>
@@ -4213,16 +4277,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                 {/* Active Confirmed / Terjadwal Alert Banner */}
                 {!activeHoldReservation && activeConfirmedReservation && (
-                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
-                    chatBotActive
-                      ? 'py-0.5 min-h-[22px] bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-100'
-                      : 'py-1 min-h-[26px] bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300/70 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-100'
-                  }`}>
-                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <span className="font-extrabold text-emerald-900 dark:text-emerald-300 shrink-0 tracking-wide text-[10px]">TERJADWAL:</span>
-                      <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
-                      <span className="font-medium truncate text-emerald-950 dark:text-emerald-100 text-[10px] min-w-0">
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
+                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 dark:border-emerald-600/40 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        JADWAL
+                      </span>
+                      <Clock size={13} className="text-emerald-700 dark:text-emerald-300 shrink-0 ml-0.5" />
+                      <span className="font-semibold truncate text-emerald-950 dark:text-emerald-100 text-xs min-w-0">
                         {activeConfirmedReservation.booking_date
                           ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
                               weekday: 'short',
@@ -4238,16 +4300,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedReservation(activeConfirmedReservation);
                         }}
-                        className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
-                        title="Kelola / Edit reservasi"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        title="Kelola / Edit detail reservasi"
                       >
-                        <PenLine size={12} />
+                        <PenLine size={13} className="shrink-0" />
+                        <span>Kelola</span>
                       </button>
                       <button
                         type="button"
@@ -4267,10 +4330,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className={`bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'p-1' : 'p-1.5'}`}
-                        title="Tandai selesai"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-white/90 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 active:scale-95 text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 font-bold rounded-full text-xs leading-none transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                        title="Tandai reservasi telah selesai treatment"
                       >
-                        <CheckCircle size={12} />
+                        <CheckCircle size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span>Selesai</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsBannerCollapsed(true)}
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        title="Ciutkan banner"
+                      >
+                        <ChevronUp size={14} className="stroke-[2.5]" />
                       </button>
                     </div>
                   </div>
@@ -4278,15 +4350,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                 {/* Active Pending Alert Banner */}
                 {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
-                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
-                    chatBotActive
-                      ? 'py-0.5 min-h-[22px] bg-sky-50/70 dark:bg-sky-950/40 border-sky-200 dark:border-sky-500/40 text-sky-950 dark:text-sky-100'
-                      : 'py-1 min-h-[26px] bg-sky-50 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-500/50 text-sky-950 dark:text-sky-100'
-                  }`}>
-                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse shrink-0" />
-                      <span className="font-extrabold text-sky-900 dark:text-sky-300 shrink-0 tracking-wide text-[10px]">PENDING:</span>
-                      <span className="font-medium truncate text-sky-950 dark:text-sky-100 text-[10px] min-w-0">
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
+                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/40 dark:border-sky-600/40 text-sky-800 dark:text-sky-300 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
+                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+                        PENDING
+                      </span>
+                      <Clock size={13} className="text-sky-700 dark:text-sky-300 shrink-0 ml-0.5" />
+                      <span className="font-semibold truncate text-sky-950 dark:text-sky-100 text-xs min-w-0">
                         {activePendingReservation.booking_date
                           ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
                               weekday: 'short',
@@ -4297,20 +4368,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
                               hour: '2-digit',
                               minute: '2-digit',
-                            }) +
-                            ' WIB'
+                            })
                           : 'Menunggu konfirmasi jadwal'}
                         {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleConfirmPendingBooking(activePendingReservation)}
-                        className={`bg-sky-600 hover:bg-sky-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
-                        title="Konfirmasi Lunas"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-700 hover:to-sky-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        title="Konfirmasi dan jadwalkan booking ini"
                       >
-                        Konfirmasi
+                        <Check size={13} strokeWidth={2.5} className="shrink-0" />
+                        <span>Konfirmasi</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsBannerCollapsed(true)}
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-sky-300 hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        title="Ciutkan banner"
+                      >
+                        <ChevronUp size={14} className="stroke-[2.5]" />
                       </button>
                     </div>
                   </div>
