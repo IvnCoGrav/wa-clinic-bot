@@ -145,6 +145,14 @@ const faqs = [
     "keywords": "vaksin, vaksinasi, imunisasi, suntik, dpt, bcg, polio, campak, habis vaksin, setelah imunisasi, sebelum imunisasi, kapan boleh pijat, kipi, demam"
   },
   {
+    // Audit 337101 (clinical safety): SOP skrining bayi jatuh/terbentur.
+    // Tenant-aware via seed → knowledge_chunks (bisa diedit di dashboard).
+    // Format entri mengikuti kontrak seed (question/answer/keywords).
+    "question": "Apakah bayi yang baru jatuh atau terbentur boleh langsung dipijat?",
+    "answer": "Jika si kecil baru saja jatuh atau terbentur, wajib dilakukan observasi tanda bahaya (red flags) terlebih dahulu, Bunda. TANDA BAHAYA (PIJAT DILARANG MUTLAK): ada benjolan/memar besar di kepala, muntah menyembur, demam, kejang, lemas/sulit dibangunkan, atau ada bagian tubuh yang menangis histeris saat disentuh (indikasi fraktur/dislokasi). Jika ada salah satu tanda ini, DILARANG DIPIJAT dan wajib segera periksa ke dokter spesialis anak / IGD faskes terdekat! SYARAT PIJAT AMAN: jika si kecil sudah diobservasi minimal 24 jam setelah jatuh, bayi tetap aktif, ceria, menyusu lancar, tidak ada muntah/benjolan, dan hanya rewel karena kaget/otot tegang, pijat relaksasi lembut aman dilakukan untuk menenangkan si kecil, dengan syarat DILARANG memijat atau menekan area tubuh yang terbentur.",
+    "keywords": "jatuh, jatoh, kejedot, bentur, terbentur, kebentur, jatuh dari kasur, cedera, benjol, benjolan, memar, muntah menyembur, rewel setelah jatuh, habis jatuh, baru jatuh"
+  },
+  {
     // SEED DB-DRIVEN (tenant-aware, bisa diedit via dashboard /api/admin/knowledge):
     // Aturan klinis usia aterm untuk induksi alami + relaksasi bumil capek.
     // BUKAN hardcode runtime — dibaca dinamis via knowledgeBaseService.searchRelevantChunks.

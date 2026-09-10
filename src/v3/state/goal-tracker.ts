@@ -44,6 +44,13 @@ export interface BookingState {
   preferredTime?: string;
   reservationId?: string;
   isConfirmed: boolean;
+  /**
+   * Audit 337101 (anti CTA-looping): waktu yang DIMINTA customer
+   * ("sekarang"/"hari ini"/nama hari) — dicatat saat sinyal jadwal terdeteksi
+   * walau reservasi BELUM dibuat. Berbeda dari preferredDate (kesepakatan
+   * yang sudah dikonfirmasi alur reservasi). Dipakai context-aware CTA.
+   */
+  requestedTimeHint?: string;
 }
 
 /** Satu item layanan di keranjang (multi-item cart, deterministik). */
@@ -86,6 +93,12 @@ export interface CustomerGoalSession {
   cartItems?: CartItem[];
   ongkirStatus?: OngkirStatus;
   totalPrice?: number;
+  /**
+   * Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): true bila customer sudah
+   * pernah bertanya harga/total di sesi ini. Mengontrol eksposur angka total
+   * resmi di grounding prompt (disembunyikan selama konsultasi murni).
+   */
+  priceDiscussed?: boolean;
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
@@ -223,6 +236,7 @@ export class GoalTracker {
         cartItems: Array.isArray(prefs.cartItems) ? prefs.cartItems : undefined,
         ongkirStatus: prefs.ongkirStatus || undefined,
         totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
+        priceDiscussed: prefs.priceDiscussed === true ? true : undefined,
       };
     } catch (err: any) {
       console.warn(JSON.stringify({ event: 'GOAL_TRACKER_GET_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
@@ -619,7 +633,114 @@ export class GoalTracker {
         pushService(s, GoalTracker.detectRecipientScope(text, s));
       }
     }
+    // Audit 854065 (pending swap): afirmasi pelanggan atas tawaran tukar
+    // asisten → selesaikan swap di sini (stateless, deterministik).
+    const swap = GoalTracker.resolveAffirmativeSwap({ cartItems: cart } as CustomerGoalSession, history, catalog);
+    if (swap) {
+      const idx = cart.findIndex(
+        (c) => c.name.toLowerCase() === swap.oldName.toLowerCase()
+          && (c.recipientScope || 'GENERAL') === swap.scope
+      );
+      const bSvc = svcByName.get(swap.newName.toLowerCase());
+      if (idx >= 0 && bSvc) {
+        const price = typeof bSvc.originalPrice === 'number' ? bSvc.originalPrice : 0;
+        const keepLabel = cart[idx].recipientLabel;
+        cart[idx] = {
+          name: bSvc.name,
+          price,
+          promoPrice: typeof bSvc.promoPrice === 'number' ? bSvc.promoPrice : price,
+          type: bSvc.isAddon ? 'ADDON' : ((bSvc.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY') as CartItem['type']),
+          category: (bSvc.category as CartItem['category']) || undefined,
+          recipientLabel: keepLabel,
+          recipientScope: swap.scope,
+        };
+        inCart.delete(keyOf(swap.oldName, swap.scope));
+        inCart.add(keyOf(swap.newName, swap.scope));
+      }
+    }
     return cart;
+  }
+
+  /**
+   * Audit 854065 — Affirmative Swap Resolver (STATELESS, deterministik):
+   * bila pesan user TERAKHIR adalah afirmasi pendek ("iya bu saya ambil")
+   * dan pesan asisten TEPAT SEBELUMNYA menawarkan layanan B yang belum ada di
+   * keranjang, sementara keranjang memuat layanan A se-scope → kembalikan
+   * {oldName: A, newName: B, scope} agar cart di-swap (bukan ditumpuk).
+   * Deviasi dari plan: tanpa field pendingTreatmentSwap baru (tanpa migrasi
+   * skema, tanpa state ofer yang bisa basi) — tawaran dibaca langsung dari
+   * riwayat turn sebelumnya. Guard: afirmasi DILARANG memuat kata tanya /
+   * negasi / penundaan; B DILARANG add-on; A harus PRIMARY/SERVICE se-scope.
+   */
+  public static resolveAffirmativeSwap(
+    session: CustomerGoalSession,
+    history: Array<{ role: string; content: string }>,
+    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[] }>
+  ): { oldName: string; newName: string; scope: RecipientScope } | null {
+    if (!history || history.length < 2) return null;
+    const lastUser = history[history.length - 1];
+    if (!lastUser || (lastUser.role || '').toLowerCase() !== 'user') return null;
+    // 1. Afirmasi pendek: token-exact, ≤8 token, tanpa tanya/negasi/tunda.
+    let norm = '';
+    const rawLower = (lastUser.content || '').toLowerCase();
+    for (let i = 0; i < rawLower.length; i++) {
+      const ch = rawLower[i];
+      norm += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+    }
+    const tokens = norm.split(' ').filter((t) => t.length > 0);
+    if (tokens.length === 0 || tokens.length > 8) return null;
+    const AFFIRM = ['iya', 'iyaa', 'ya', 'betul', 'benar', 'ambil', 'mau', 'boleh', 'setuju', 'lanjut', 'deal', 'oke', 'ok', 'ganti', 'jadi', 'sip', 'siap'];
+    const BLOCK = ['apa', 'berapa', 'kapan', 'bagaimana', 'gimana', 'kenapa', 'dimana', 'mana', 'apakah', 'atau',
+      'tidak', 'nggak', 'ngga', 'gak', 'jangan', 'batal', 'nanti', 'pikir', 'tanya', 'tunda', 'dulu', 'belum'];
+    if (!tokens.some((t) => AFFIRM.includes(t))) return null;
+    if (tokens.some((t) => BLOCK.includes(t))) return null;
+    // 2. Tawaran B: nama layanan resmi di pesan asisten TEPAT sebelumnya,
+    //    yang BELUM ada di keranjang (terpanjang = paling spesifik).
+    let offerText: string | null = null;
+    for (let i = history.length - 2; i >= 0; i--) {
+      if ((history[i]?.role || '').toLowerCase() === 'assistant') {
+        offerText = (history[i]?.content || '').toLowerCase();
+        break;
+      }
+      if ((history[i]?.role || '').toLowerCase() === 'user') break;
+    }
+    if (!offerText) return null;
+    const cartNames = new Set((session.cartItems || []).map((c) => c.name.toLowerCase()));
+    // Nama bersih (tanpa kualifikasi kurung akhir) agar tawaran parafrasa
+    // asisten ("Pulih Ceria") tetap terpetakan ke layanan resmi.
+    const cleanOf = (name: string): string => {
+      const t = (name || '').trim();
+      if (t.endsWith(')')) {
+        const open = t.lastIndexOf('(');
+        if (open > 0) return t.slice(0, open).trim().toLowerCase();
+      }
+      return t.toLowerCase();
+    };
+    const candidates = [...(catalog || [])]
+      .filter((s) => s && s.name && s.name.trim().length >= 4 && !s.isAddon)
+      .filter((s) => {
+        if (cartNames.has(s.name.toLowerCase())) return false;
+        if (offerText.includes(s.name.toLowerCase())) return true;
+        const clean = cleanOf(s.name);
+        if (clean.length >= 4 && clean !== s.name.toLowerCase() && offerText.includes(clean)) return true;
+        // Tawaran parafrasa asisten ("Pulih Ceria" tanpa prefix): overlap
+        // ≥2 token signifikan non-generik (aturan fuzzy yang sama dengan cart).
+        const toks = s.name.toLowerCase().split(/[^a-z0-9]+/)
+          .filter((t) => t.length > 3 && !GENERIC_CLINIC_TOKENS.has(t));
+        return toks.filter((t) => offerText.includes(t)).length >= 2;
+      })
+      .sort((a, b) => b.name.length - a.name.length);
+    if (candidates.length === 0) return null;
+    const offered = candidates[0];
+    const scope = GoalTracker.detectRecipientScope(offerText, offered);
+    // 3. Korban A: item PRIMARY/SERVICE se-scope yang namanya berbeda.
+    const victim = (session.cartItems || []).find(
+      (c) => (c.recipientScope || 'GENERAL') === scope
+        && c.name.toLowerCase() !== offered.name.toLowerCase()
+        && (c.type === 'PRIMARY' || c.type === 'SERVICE')
+    );
+    if (!victim) return null;
+    return { oldName: victim.name, newName: offered.name, scope };
   }
 
   /** Total akumulasi: subtotal promo cart + ongkir promo (jika ada). */
@@ -948,7 +1069,10 @@ export class GoalTracker {
     // Usia via helper bersama (bulan/tahun + "baru lahir" + minggu bayi).
     const ages: number[] = GoalTracker.extractAgesMonths(lower);
 
-    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung'];
+    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung',
+      // Audit 337101: riwayat trauma sebagai konteks keluhan (_security path
+      // skrining ditangani persona + RAG; di sini hanya pencatatan konteks).
+      'jatuh', 'jatoh', 'terbentur', 'benjol'];
     const foundSymptoms = SYMPTOM_WORDS.filter((s) => lower.includes(s));
 
     const addSymptoms = (child: ChildState) => {
@@ -969,22 +1093,51 @@ export class GoalTracker {
       });
       if (foundSymptoms.length > 0) addSymptoms(ensureChild(0, 'Adik'));
     } else if (ages.length === 1 || foundSymptoms.length > 0) {
-      // Audit 222655 (amnesia multi-anak): usia baru TANPA label peran pada
-      // pesan yang HANYA menyebut satu usia, sementara anak pertama sudah
-      // tercatat dengan usia BERBEDA → DILARANG menimpa children[0];
-      // alokasikan slot anak kedua (peran by perbandingan usia: termuda Adik).
-      if (ages.length === 1 && !mentionsKakak && !mentionsAdik && !mentionsMulti
-        && children[0]?.ageMonths != null && children[0].ageMonths !== ages[0]) {
-        const newAge = ages[0];
-        const firstAge = children[0].ageMonths as number;
+      const newAge = ages.length === 1 ? ages[0] : null;
+      // Tokenisasi untuk penanda referensial anak-lain (audit 854065).
+      let normRef = '';
+      for (let i = 0; i < lower.length; i++) {
+        const ch = lower[i];
+        normRef += (ch >= 'a' && ch <= 'z') ? ch : ' ';
+      }
+      const refTokens = new Set(normRef.split(' ').filter((t) => t.length > 0));
+      // Penanda kuat anak-LAIN (audit 854065: "kalau anak saya yang umur
+      // 2 tahun"). Bare "yang" SENGAJA dikecualikan — "yang 2 bulan" telanjang
+      // lebih mungkin usia susulan anak yang sama → isi idx0 (cabang e).
+      const hasReferentialMarker = ['kalau', 'satunya', 'kedua'].some((t) => refTokens.has(t));
+      const firstHasCare = (children[0]?.symptoms || []).length > 0
+        || (session.cartItems || []).some((c) => (c.recipientScope || 'GENERAL') === 'CHILD_1');
+      const ageMatchIdx = newAge != null
+        ? children.findIndex((c) => c.ageMonths != null && c.ageMonths === newAge)
+        : -1;
+      if (mentionsKakak || mentionsAdik) {
+        // (a) Peran eksplisit menang ("kakak 3 tahun" → idx1).
+        const idx: 0 | 1 = mentionsKakak ? 1 : 0;
+        const child = ensureChild(idx, idx === 1 ? 'Kakak' : 'Adik');
+        if (newAge != null) child.ageMonths = newAge;
+        addSymptoms(child);
+      } else if (ageMatchIdx === 0 || ageMatchIdx === 1) {
+        // (b) Usia cocok anak existing → update anak itu (anti duplikat).
+        const target = ensureChild(ageMatchIdx as 0 | 1, children[ageMatchIdx].roleLabel || (ageMatchIdx === 1 ? 'Kakak' : 'Adik'));
+        addSymptoms(target);
+      } else if (newAge != null && !mentionsMulti && children[0]
+        && ((children[0].ageMonths != null && children[0].ageMonths !== newAge)
+          || (children[0].ageMonths == null && firstHasCare && hasReferentialMarker))) {
+        // (c) Audit 222655: anak pertama ber-usia beda → slot kedua by usia.
+        // (d) Audit 854065: anak pertama TANPA usia tapi punya keluhan/cart
+        //     + usia baru berpenanda referensial ("kalau anak saya yang...")
+        //     → slot kedua Kakak (DILARANG menimpa konteks pilek adik).
+        //     Tanpa penanda referensial ("umur 2 bulan" telanjang) → isi idx0
+        //     (asumsi usia susulan anak yang sama).
+        const firstAge = children[0].ageMonths as number | undefined;
         if (children[1]?.ageMonths != null) {
           // Slot penuh (2 anak): update anak dengan usia terdekat (cap model Adik/Kakak).
-          const d0 = Math.abs(firstAge - newAge);
+          const d0 = firstAge != null ? Math.abs(firstAge - newAge) : Number.MAX_SAFE_INTEGER;
           const d1 = Math.abs((children[1].ageMonths as number) - newAge);
           const target = d1 < d0 ? ensureChild(1, 'Kakak') : ensureChild(0, children[0].roleLabel || 'Adik');
           target.ageMonths = newAge;
           addSymptoms(target);
-        } else if (newAge < firstAge) {
+        } else if (firstAge != null && newAge < firstAge) {
           // Adik baru lebih muda → selip di depan; kakak lama geser ke idx 1.
           children.unshift({ roleLabel: 'Adik', ageMonths: newAge, symptoms: [] });
           if (!children[1].roleLabel || children[1].roleLabel === 'Si Kecil') {
@@ -1000,11 +1153,9 @@ export class GoalTracker {
           addSymptoms(kakak);
         }
       } else {
-        // Satu usia/gejala → anak berlabel peran bila disebut ("Kakak ... 3 tahun"
-        // tidak boleh menimpa Adik), else anak pertama.
-        const idx: 0 | 1 = mentionsKakak ? 1 : 0;
-        const child = ensureChild(idx, idx === 1 ? 'Kakak' : (mentionsAdik ? 'Adik' : 'Si Kecil'));
-        if (ages.length === 1) child.ageMonths = ages[0];
+        // (e) Default: isi anak pertama (usia susulan / gejala).
+        const child = ensureChild(0, mentionsAdik ? 'Adik' : 'Si Kecil');
+        if (newAge != null) child.ageMonths = newAge;
         addSymptoms(child);
       }
     } else {
@@ -1057,7 +1208,7 @@ export class GoalTracker {
         const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint);
         if (rec) {
           const subjectLabel = isMomSubject && momComplaints.length > 0 && childSymptoms.length === 0 ? 'keluhan Bunda' : 'keluhan si kecil';
-          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]`;
+          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]\n  [MANDAT ANTI-RELAKSASI-MURNI (audit 337101): si kecil ada keluhan fisik di atas — DILARANG merekomendasikan paket relaksasi murni (untuk bayi sehat tanpa keluhan)! WAJIB paket terapi penanganan keluhan di atas.]`;
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
@@ -1119,8 +1270,40 @@ export class GoalTracker {
       const ongkir = session.location?.ongkirPromo ?? 0;
       const grandTotal = subtotal + ongkir;
       const rincian = [...session.cartItems.map((it) => `${it.name} ${fmtRp(it.promoPrice ?? it.price)}`), `Ongkir ${fmtRp(ongkir)}`].join(' + ');
-      lines.push(`• Total Akumulasi Biaya: ${fmtRp(grandTotal)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
-      lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
+      // Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): angka total resmi
+      // HANYA diekspos ke LLM bila customer sudah bertanya harga
+      // (priceDiscussed) — tanpa ini, LLM menjiplak total saat konsultasi
+      // (Turn 3: Rp 95.000 + todong jadwal tanpa ditanya harga).
+      if (session.priceDiscussed) {
+        lines.push(`• Total Akumulasi Biaya: ${fmtRp(grandTotal)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
+        lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
+      } else {
+        lines.push(`[MODE KONSULTASI: customer BELUM bertanya harga/total — DILARANG menyebut atau menjumlahkan nominal uang apa pun (harga treatment, ongkir, grand total)! Fokus pada manfaat klinis tiap layanan di atas. Total resmi (${fmtRp(grandTotal)}) DISEMBUNYIKAN dari balasan hingga customer bertanya harga.]`);
+      }
+      // Audit 854065 Phase 5: estimasi durasi multi-item dari durasi resmi
+      // katalog (data-driven, tanpa tebakan "~40 menit" hafalan). Item yang
+      // tak dikenal katalog dilewati (anti fabrikasi); blok dihilangkan bila
+      // tak ada satupun durasi resmi ditemukan.
+      if (session.cartItems.length >= 2) {
+        try {
+          const allSvc = treatmentCatalogService.getAllServices(true);
+          const durParts: string[] = [];
+          let durTotal = 0;
+          for (const it of session.cartItems) {
+            const svc = allSvc.find((s) => s.name.toLowerCase() === (it.name || '').toLowerCase());
+            const d = svc && typeof svc.durationMinutes === 'number' ? svc.durationMinutes : null;
+            if (d != null && d > 0) {
+              durParts.push(`${it.name} ${d} mnt`);
+              durTotal += d;
+            }
+          }
+          if (durParts.length > 0 && durTotal > 0) {
+            const jam = durTotal >= 60 ? ` (~${(durTotal / 60).toFixed(1).replace('.', ',')} jam)` : '';
+            lines.push(`• Total Estimasi Durasi Perawatan: ~${durTotal} menit${jam} (Rincian: ${durParts.join(' + ')}).`);
+            lines.push(`[MANDAT ESTIMASI WAKTU: Saat customer menanyakan total jam/lama waktu pengerjaan, WAJIB jumlahkan seluruh durasi layanan di keranjang di atas secara utuh, termasuk durasi perawatan Bunda. DILARANG melupakan layanan Bunda!]`);
+          }
+        } catch (_) {}
+      }
     }
 
     // ── Audience-aware patient summary (anti pediatric-centric myopia) ──

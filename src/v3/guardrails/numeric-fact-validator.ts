@@ -26,7 +26,7 @@ export interface NumericValidationOptions {
   tenantId?: string;
   session?: {
     totalPrice?: number;
-    cartItems?: Array<{ price: number; promoPrice?: number | null }>;
+    cartItems?: Array<{ name?: string; price: number; promoPrice?: number | null }>;
     location?: { ongkirPromo?: number | null; ongkirNormal?: number | null };
   };
 }
@@ -176,14 +176,42 @@ export function validateNumericFacts(
 
   // Cek setiap angka di teks (ekstraksi numerik teknis; TANPA penggantian
   // string di tengah kalimat — pelanggaran hanya dilaporkan + re-prompt).
+  const mentioned = new Set<number>();
   for (const m of priceMatches) {
     const rawVal = parseInt(m.replace(/[^0-9]/g, ''), 10);
     // Abaikan jika angka < 5000 (bukan harga)
-    if (rawVal >= 5000 && !authorizedNumbers.has(rawVal)) {
+    if (rawVal >= 5000) {
+      mentioned.add(rawVal);
+      if (!authorizedNumbers.has(rawVal)) {
+        violations.push(
+          expectedSet.length > 0
+            ? `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak sesuai dengan total akumulasi keranjang resmi (${expectedSet.map((n) => `Rp ${n.toLocaleString('id-ID')}`).join(' / ')}).`
+            : `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak ditemukan di data katalog/ongkir tool resmi.`
+        );
+      }
+    }
+  }
+
+  // Audit 854065 — OMISSION detector (Turn 9-10: total 2 anak disebut,
+  // layanan Bunda hilang, validator lama lolos karena 160rb "resmi").
+  // Syarat ketat anti-false-positive (kumulatif):
+  // - balasan mengklaim "total" (klaim kelengkapan),
+  // - keranjang multi-item (≥2 — single-item dicakup cek nominal di atas),
+  // - ≥1 angka resmi keranjang disebut (bot memang merinci, bukan konsultasi),
+  // - grand total resmi TAK SATU PUN disebut → violation + rincian item
+  //   (diteruskan ke attemptNumericReprompt sebagai konteks koreksi).
+  // Konsultasi tanpa angka & jawaban hanya-grand-total → lolos.
+  const cartLen = Array.isArray(sess?.cartItems) ? sess.cartItems.length : 0;
+  if (/total/i.test(replyText) && cartLen >= 2 && expectedSet.length > 0) {
+    const mentionsGrand = expectedSet.some((t) => mentioned.has(t));
+    const mentionsAnyCartNumber = [...mentioned].some((v) => authorizedNumbers.has(v));
+    if (!mentionsGrand && mentionsAnyCartNumber) {
+      const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
+      const itemList = (sess?.cartItems || [])
+        .map((it) => `${it.name} (${fmtRp(typeof it.promoPrice === 'number' ? it.promoPrice : it.price)})`)
+        .join(', ');
       violations.push(
-        expectedSet.length > 0
-          ? `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak sesuai dengan total akumulasi keranjang resmi (${expectedSet.map((n) => `Rp ${n.toLocaleString('id-ID')}`).join(' / ')}).`
-          : `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak ditemukan di data katalog/ongkir tool resmi.`
+        `Balasan mengklaim total tetapi MENGHILANGKAN grand total resmi (${expectedSet.map((n) => fmtRp(n)).join(' / ')}). Keranjang resmi memuat: ${itemList}. WAJIB kutip grand total utuh termasuk seluruh item!`
       );
     }
   }
