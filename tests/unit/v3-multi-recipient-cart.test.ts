@@ -62,6 +62,7 @@ describe('V3 multi-recipient cart (multi-anak & Mom+Baby)', () => {
   it('Uji 5: grounding memuat label penerima + status anti-ulang ongkir', () => {
     const text = GoalTracker.formatGoalSessionForPrompt({
       ...baseSession,
+      priceDiscussed: true,
       location: { rawText: '', kelurahan: 'Pelemwatu', kecamatan: 'Menganti', kota: 'Kabupaten Gresik', distanceKm: 28.5, ongkirPromo: 30000, ongkirNormal: 35000 },
       ongkirStatus: 'QUOTED',
       children: [

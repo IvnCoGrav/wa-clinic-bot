@@ -41,6 +41,86 @@ export interface SaveReservationInput {
    * Bila tidak diisi, gate dilewati (kompatibilitas pemanggilan langsung/test).
    */
   conversationId?: string;
+  /**
+   * Audit 833178 (anti-halusinasi hari): teks pesan USER terkini (riwayat
+   * inbound + pesan masuk) untuk verifikasi bahwa hari/tanggal di bookingDate
+   * benar-benar DISEBUT customer — BUKAN karangan LLM. Diisi agent-runner via
+   * tool-registry; kosong = gate dilewati (kompatibilitas test langsung).
+   */
+  dayMentionEvidence?: string[];
+}
+
+/** Kata waktu yang mengikat hari/tanggal (data-driven includes, tanpa regex). */
+const DAY_EVIDENCE_WORDS = [
+  'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu',
+  'besok', 'lusa', 'sekarang', 'hari ini', 'minggu depan', 'weekend', 'akhir pekan',
+  'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+  'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+  'tanggal',
+];
+
+/**
+ * Audit 833178 — Day Evidence Gate (pure function, testable): pastikan
+ * hari/tanggal pada bookingDate memiliki jejak di pesan user. Kembalikan null
+ * bila terbukti disebut; pesan penolakan (tanpa tulis DB!) bila tidak.
+ * Aturan: (a) kata-waktu di bookingDate wajib muncul di evidence; (b) bila
+ * bookingDate tanpa kata-waktu (mis. ISO "2026-09-10"), angka tanggalnya
+ * wajib muncul sebagai token di evidence. Tokenisasi alnum agar "10" tidak
+ * cocok dengan "100".
+ */
+export function verifyDayMentioned(
+  bookingDate: string | undefined,
+  evidence: string[] | undefined
+): string | null {
+  if (!evidence || evidence.length === 0) return null; // kompatibilitas: tanpa evidence, gate lewat
+  const bd = (bookingDate || '').toLowerCase();
+  if (!bd.trim()) return 'Hari/tanggal belum ditentukan oleh customer. Tanyakan preferensi hari terlebih dahulu, DILARANG memanggil save_reservation!';
+  const normJoin = (texts: string[]): string => {
+    let out = '';
+    for (const t of texts) {
+      const l = (t || '').toLowerCase();
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        out += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+      }
+      out += ' ';
+    }
+    return out;
+  };
+  const evText = normJoin(evidence);
+  const evTokenList = evText.split(' ').filter((t) => t.length > 0);
+  const evTokens = new Set(evTokenList);
+  const isDigitStart = (t: string): boolean => {
+    if (!t) return false;
+    const c = t.charCodeAt(0);
+    return c >= 48 && c <= 57;
+  };
+  // (a) kata waktu eksplisit di bookingDate
+  const bdWords = DAY_EVIDENCE_WORDS.filter((w) => bd.includes(w));
+  if (bdWords.length > 0) {
+    const proven = bdWords.some((w) => {
+      if (w.includes(' ')) return evText.includes(w);
+      if (w === 'minggu') {
+        // "3 minggu" = usia, bukan hari Minggu — butuh kemunculan
+        // tanpa angka di depannya.
+        return evTokenList.some((t, i) => t === 'minggu' && (i === 0 || !isDigitStart(evTokenList[i - 1])));
+      }
+      return evTokens.has(w);
+    });
+    if (proven) return null;
+  } else {
+    // (b) tanpa kata waktu: angka tanggal bookingDate harus muncul di evidence
+    let digits = '';
+    for (let i = 0; i < bd.length; i++) {
+      const ch = bd[i];
+      digits += (ch >= '0' && ch <= '9') ? ch : ' ';
+    }
+    const nums = digits.split(' ').filter((t) => t.length > 0);
+    // Ambil angka tanggal (abaikan tahun 4-digit agar "2026" tak jadi bukti)
+    const dayNums = nums.filter((n) => n.length <= 2);
+    if (dayNums.some((n) => evTokens.has(n) || evTokens.has(String(Number(n))))) return null;
+  }
+  return `Gagal: "${bookingDate}" TIDAK pernah disebutkan customer di chat (verifikasi jejak hari GAGAL). DILARANG mengarang hari! Tanyakan preferensi hari/tanggal kunjungan terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
 }
 
 export interface SaveReservationOutput {
@@ -48,6 +128,11 @@ export interface SaveReservationOutput {
   reservationId?: string;
   summary: string;
   message: string;
+  /**
+   * Audit 337101 (same-day dispatch trap): true bila booking diminta untuk
+   * hari ini — Call 2 wajib memakai copy ekspektasi-aman (tanpa janji OTW).
+   */
+  isSameDay?: boolean;
   /**
    * @deprecated Gate penolakan booking dihapus (aturan 21: alamat wilayah sesi
    * sudah cukup; kelengkapan via form reservasi). Selalu undefined — dipertahankan
@@ -124,7 +209,7 @@ export const SAVE_RESERVATION_TOOL_SCHEMA = {
         },
         bookingDate: {
           type: 'string',
-          description: 'Tanggal atau hari kunjungan yang diinginkan (misal: "Sabtu, 5 September 2026", "Besok pagi").'
+          description: 'Tanggal atau hari kunjungan yang EKSPLISIT DISEBUTKAN OLEH CUSTOMER di chat (misal: "Sabtu, 5 September 2026", "Besok pagi"). DILARANG KERAS memanggil tool ini jika customer belum menyebutkan hari/tanggal sama sekali di chat (misal customer baru bilang "saya ambil treatment nya")! DILARANG menebak atau mengarang hari sendiri (misal mengarang "Besok") — tool ini memverifikasi jejak hari di riwayat dan MENOLAK pemanggilan tanpa bukti!'
         },
         bookingTime: {
           type: 'string',
@@ -254,8 +339,21 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     notes,
     address,
     conversationId,
+    dayMentionEvidence,
     tenantId = DEFAULT_TENANT_ID
   } = input;
+
+  // Audit 833178 — Day Evidence Gate: verifikasi SEBELUM tulis DB apa pun.
+  // Gagal = success:false + arahan tanya hari (reservasi TIDAK tercatat).
+  const dayGateError = verifyDayMentioned(bookingDate, dayMentionEvidence);
+  if (dayGateError) {
+    console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_DAY_GATE_REJECTED', tenantId, bookingDate, timestamp: new Date().toISOString() }));
+    return {
+      success: false,
+      summary: 'Hari/tanggal belum ditentukan oleh customer',
+      message: dayGateError,
+    };
+  }
 
   try {
     // ── Pengayaan data sesi (tanpa penolakan — aturan 21) ──
@@ -302,6 +400,19 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     const parsedResult = parseIndonesianDate(bookingDate);
     const parsedDate = parsedResult.date;
 
+    // Audit 337101 (same-day dispatch trap): permintaan hari ini DILARANG
+    // dijanjikan kedatangan langsung (slot & rute belum terverifikasi admin).
+    // Deteksi: teks booking menyebut sekarang/hari ini, ATAU tanggal parsed
+    // jatuh pada hari kalender yang sama. Status 'pending' + catatan
+    // [SAME_DAY_REQUEST] agar admin memprioritaskan cek rute.
+    const bookingLower = (bookingDate || '').toLowerCase();
+    const sameDayByText = bookingLower.includes('sekarang') || bookingLower.includes('hari ini');
+    const now = new Date();
+    const sameDayByDate = parsedDate.getFullYear() === now.getFullYear()
+      && parsedDate.getMonth() === now.getMonth()
+      && parsedDate.getDate() === now.getDate();
+    const isSameDay = sameDayByText || sameDayByDate;
+
     // Persistensi momProfile ke catatan reservasi (raw_text) agar bidan & admin
     // mengetahui usia kehamilan pasien — tanpa migrasi kolom baru (pola notes→raw_text).
     const momLines: string[] = [];
@@ -335,22 +446,27 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       treatmentCategory: treatmentCategory as any,
       treatmentDetail,
       bookingDate: parsedDate,
-      rawText: effectiveRawText,
+      rawText: isSameDay ? `[SAME_DAY_REQUEST] Perlu cek rute terapis hari ini\n${effectiveRawText}` : effectiveRawText,
       babies,
       customerName: effectiveName || customerName,
       address: effectiveAddress || undefined,
       purchaseValue,
       source: 'AGENT',
-      status: 'confirmed',
+      status: isSameDay ? 'pending' : 'confirmed',
     });
 
-    const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (terjadwal).`;
+    const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (${isSameDay ? 'menunggu cek jadwal hari ini' : 'terjadwal'}).`;
 
     return {
       success: true,
       reservationId: result.reservation?.id,
       summary,
-      message: `${summary} Jadwal akan kami bantu konfirmasi dan siap dijadwalkan ya Bunda 😊🙏`
+      isSameDay,
+      // Copy ekspektasi-aman: same-day TANPA janji Bidan langsung OTW
+      // (kalimat baku pilihan User); non-same-day konfirmasi cek jadwal POV kami.
+      message: isSameDay
+        ? 'Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏'
+        : `${summary} Untuk ketersediaan jadwal ${bookingDate}, kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda 😊🙏 Nanti segera kami infokan ya bund 🤗`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_RESERVATION_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

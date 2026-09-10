@@ -95,6 +95,10 @@ export const KB_KEYWORD_RULES: KeywordRule[] = [
     keywords: K('tumbuh gigi, gigi, gusi, rewel, demam, boleh dipijat, gusinya bengkak') },
   { keys: ['pilihan tambahan'],
     keywords: K('tambahan, paket, kombinasi, moksa, nebulizer, add on, plus') },
+  // SOP trauma jatuh (audit 337101): skrining red flags, bukan relaksasi.
+  // Keys multi-kata agar tidak mencemari artikel bapil/terapi lain.
+  { keys: ['baru jatuh', 'jatuh atau terbentur', 'kejedot', 'terbentur boleh'],
+    keywords: K('jatuh, jatoh, kejedot, bentur, terbentur, kebentur, cedera, benjol, benjolan, memar, muntah menyembur, rewel setelah jatuh, habis jatuh, observasi 24 jam, dilarang pijat, dokter anak') },
   // Baris non-informatif (basa-basi) — keywords minimal khas agar tidak mencemari FTS.
   { keys: ['info lagi', 'tanya tanya', 'tanyakan suami'],
     keywords: K('basa basi, nanti, pending, mikir dulu, kabari lagi') },
