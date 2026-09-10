@@ -246,7 +246,7 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
   const result = await reservationCoreService.saveReservation({
     ...rest,
     source: mappedSource as 'BOT' | 'WEBHOOK' | 'AGENT' | 'ADMIN_PANEL',
-    status: 'pending',
+    status: 'confirmed',
   });
   return { reservation: result.reservation, isNew: result.isNew, isUpdate: result.isUpdate };
 }
