@@ -932,4 +932,38 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Dampak relasi: `children.reservation_id` = `SetNull` — Arhan/Ardhan tetap ada (NULL), tidak ikut terhapus. Tidak ada tabrakan tulis (UPDATE kondisional sesi ini hanya menyentuh baris yatim yang memang ditargetkan).
 - **Pelajaran operasional:** dashboard admin aktif konkuren saat runbook dieksekusi — untuk runbook berikutnya, kunci dulu pembagian tugas (siapa mengeksekusi apa) atau bekukan edit dashboard selama jendela eksekusi.
 
+---
+
+## 38. [Tests] `production_edge_cases.test.ts` #28 flaky pada full-suite run (mock WAHA hold-label bocor antar file)
+
+- **Status:** open (test flakiness), **pre-existing** — bukan regresi perubahan V3 fondational (ditemukan 2026-09-10 saat verifikasi plan Tool Output Scoping / Phase / Cart Scope).
+- **Gejala:** `28. should auto-resume bot handling when webhook receives message and hold label is missing from WAHA` gagal dengan `expected [] to include 'hold'` (getChatLabels mock mengembalikan kosong) HANYA pada `npm test` full-suite; lolos konsisten bila file dijalankan sendiri (`npx vitest run tests/unit/production_edge_cases.test.ts` → 12 passed).
+- **Bukti flaky, bukan regresi:** (1) file yang gagal (`production_edge_cases`, domain WAHA hold-label) tidak tersentuh perubahan (yang diubah: `get-catalog.tool.ts`, `agent-runner.ts`, `goal-tracker.ts`, `conversation-summarizer.ts` + test katalog); (2) pada full-run pertama di sesi yang sama test ini LOLOS, pada full-run kedua GAGAL — dengan delta kode di antaranya (`inquirePrice: true` di `agent-tools.test.ts`) yang mustahil memengaruhi mock WAHA labels; (3) pola klasik kebocoran state mock antar file test pada run paralel/berurutan.
+- **Workaround:** jalankan file tersebut tersendiri untuk verifikasi; abaikan 1 failure ini pada full-suite bila hanya test ini yang merah.
+- **Fix yang disarankan (proyek terpisah):** isolasi mock WAHA client per-file (`vi.resetAllMocks` / factory mock scoped) atau tandai test #28 sebagai serial (`describe.sequential`) agar tidak tergantung urutan eksekusi file lain.
+
+---
+
+## 39. [V3] Multi-lapisan fondasional sesi 214956/222655: disambiguasi multi-anak, integritas matematika, anti-brosur (2026-09-10)
+
+- **Status:** implemented (kode + test, 2026-09-10); seed FAQ live + penonaktifan baris `clinic_services` live MENUNGGU eksekusi gated (backup dulu).
+- **Konteks:** (1) AI menebak 1-vs-2 anak sepihak (17 bln lalu 2 thn); (2) halusinasi aritmatika 75k+105k+15k=120k lolos whitelist; (3) rekomendasi usia format brosur bernomor tanpa pemantik klinis; (4) saran pijat langsung pasca-imunisasi (RAG salah.)
+- **Temuan audit pra-koding (deviasi dari draf rencana):** `extractChildrenState` TIDAK ADA (jalur riil: `syncChildrenProfiles` + alokasi slot kedua sudah ada); total resmi SUDAH disuntik di grounding; tool katalog SUDAH anti-brosur; artikel vaksin + keywords SUDAH di `seed-faq.ts`; persona SUDAH punya aturan 10b + pengecualian vaksin; duplikat kids generik mencakup file + code default + DB live + test yang mengassert-nya. Semua diadaptasi, bukan diabaikan.
+- **Yang sudah dikerjakan:**
+  1. `goal-tracker.ts`: flag `isMultiChildUnconfirmed`, `extractAgesMonths` bersama, `isExplicitChildCountSignal`, `detectUnconfirmedMultiChild`, injeksi `[MANDAT KLARIFIKASI JUMLAH ANAK]` dinamis, `[MANDAT INTEGRITAS MATEMATIKA]` total resmi + rincian; latch di `agent-runner.ts` (naik saat usia-2-tanpa-sinyal, turun HANYA oleh sinyal eksplisit); aturan persona DETEKSI MULTI-ANAK.
+  2. `numeric-fact-validator.ts`: mode strict multi-item (parsial sp+op DITOLAK bila cart ≥2), pesan pelanggaran menyebut total resmi + `expectedTotals`; `agent-runner.ts`: re-prompt bersih 1x (`attemptNumericReprompt`, tereskpos untuk test) lalu fallback swap template (prioritas `cartTotalReply`); `get-catalog.tool.ts`: `cartTotalReply` multi-item dihitung mesin + wiring `cartSnapshot` via `tool-registry.ts`. TANPA regex replace teks (pelanggaran hanya dilaporkan).
+  3. Template tool + persona A.1: narasi 1 paragraf + pemantik klinis; `kids-massage-ceria` generik DINONAKTIFKAN (`isActive:false` di `services_custom.json` + code default; test usia-30-bln dialihkan ke `kids-massage-2-4th`).
+  4. Vaksin: tidak ada perubahan kode dibutuhkan (aturan 10b + seed artikel + test `vaccine-safety` sudah hijau); seed live destruktif (`deleteMany`) DITUNDA ke langkah gated.
+- **Eksekusi live 2026-09-10 14:04–14:07 WIB (SSH, approved):**
+  - Backup `knowledge_chunks_backup_20260910` (43 baris) — rollback: `DELETE FROM knowledge_chunks; INSERT INTO knowledge_chunks SELECT * FROM knowledge_chunks_backup_20260910;`
+  - Temuan pra-eksekusi: live 43 baris (12 ber-keywords; artikel vaksin ADA 2 baris tapi tipis; baris kurasi admin ada → full seed `deleteMany` DITOLAK sebagai terlalu destruktif).
+  - Backfill bedah 43 UPDATE kondisional (`keywords IS NULL`) + 13 UPDATE union (seed-eksplisit + rule + existing; baris terisi tak tersentuh) — hasil: 43/43 ber-keywords.
+  - `clinic_services.kids-massage-ceria` → `is_active=false` (`UPDATE 1`).
+  - Verifikasi FTS persis query service (`websearch_to_tsquery`, judul+keywords+konten): "habis imunisasi boleh pijat" → artikel vaksin ✓ (bukan mandi).
+- **Sisa / limitasi yang diketahui:**
+  1. Kode sesi ini BELUM di-deploy (live masih 18d1f33) — perbaikan data di atas bekerja mandiri; deploy ikut gate server-update terpisah.
+  2. Seed file punya 4 set keywords eksplisit; 1 artikel seed ("terapis/bidan sama atau berbeda") TIDAK ADA di live (insert aman, non-destruktif) — follow-up.
+  3. Frasa konfirmasi "1 anak" ("cuma 1 anak") membersihkan latch TANPA meruntuhkan slot anak kedua — disengaja (non-destruktif); CS/admin resolvasi final di booking.
+- **Verifikasi:** build `tsc` bersih; test baru 3 file (disambiguasi 10, cross-sum 6, anti-brosur 4) + regresi terkait hijau; full suite **222 file, 1756 passed, 0 failed**.
+
 

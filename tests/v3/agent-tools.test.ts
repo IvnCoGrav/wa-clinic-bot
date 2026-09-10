@@ -59,6 +59,7 @@ describe('V3 Native Agent Tools Suite', () => {
       const result = await executeGetCatalog({
         category: 'BABY',
         symptoms: ['batuk', 'pilek', 'rewel'],
+        inquirePrice: true,
       });
 
       expect(result.success).toBe(true);
@@ -71,6 +72,7 @@ describe('V3 Native Agent Tools Suite', () => {
     it('harus mengambil harga resmi untuk Pijat Bayi Ceria', async () => {
       const result = await executeGetCatalog({
         specificTreatmentName: 'Pijat Bayi Ceria',
+        inquirePrice: true,
       });
 
       expect(result.success).toBe(true);

@@ -157,7 +157,11 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     originalPrice: 110000,
     promoPrice: 90000,
     description: 'Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas.',
-    isActive: true,
+    // Sesi 214956 — NONAKTIF: duplikat generik dari varian tiered 2-4/4-6/6-8 th
+    // (rentang 24-96 bln tercakup penuh). Deaktivasi, bukan hapus, agar
+    // referensi historis (reservasi lama, fallback CAPI) tetap resolvable.
+    // Baris clinic_services live perlu penonaktifan yang sama via dashboard/migrasi.
+    isActive: false,
   },
   {
     id: 'moms-prenatal-massage',

@@ -101,7 +101,15 @@ const faqs = [
   },
   {
     "question": "Apa perbedaan antara treatment Pijat Ceria (Rileksasi) dan Pijat Pulih Ceria (Terapi)?",
-    "answer": "Pijat Ceria (Rileksasi) ditujukan untuk bayi sehat tanpa keluhan untuk membantu tidur nyenyak. Pijat Pulih Ceria (Terapi) ditujukan untuk bayi dengan keluhan tertentu (seperti flu, batuk, pilek, rewel, susah BAB, kembung, kolik) menggunakan double aromaterapi dan stimulasi titik akupresur khusus."
+    "answer": "Pijat Ceria (Rileksasi) ditujukan untuk bayi sehat tanpa keluhan untuk membantu tidur nyenyak. Pijat Pulih Ceria (Terapi) ditujukan untuk bayi dengan keluhan tertentu (seperti flu, batuk, pilek, rewel, susah BAB, kembung, kolik) menggunakan double aromaterapi dan stimulasi titik akupresur khusus.",
+    "keywords": "terapi apa saja, terapi apa yang dimaksud, maksudnya terapi, batuk, pilek, flu, kembung, kolik, susah bab, sembelit, akupresur"
+  },
+  {
+    // SOP alokasi tenaga (audit 315036): 1 Bidan berurutan untuk Mom & Baby.
+    // Tenant-aware via seed → DB knowledge_chunks (bisa diedit di dashboard).
+    "question": "Apakah terapis/bidan yang memijat si kecil dan Bunda sama atau berbeda orangnya?",
+    "answer": "Untuk perawatan si kecil dan Bunda dalam satu kunjungan (misal Pijat Bayi dan Paket Laktasi), seluruh perawatan ditangani langsung oleh 1 Bidan profesional kami yang sama dan dikerjakan secara berurutan dalam 1 kunjungan ya Bunda 😊 Sehingga lebih praktis, privat, dan si kecil tetap merasa tenang bersama Bunda.",
+    "keywords": "terapis, bidan, sama, beda, berbeda, orang, siapa, satu orang, dua orang, yang mijat, yang memijat, staf, berdua, sendiri"
   },
   {
     "question": "Bagaimana jika anak rewel atau menangis saat latihan tengkurap (tummy time)?",
@@ -128,8 +136,13 @@ const faqs = [
     "answer": "Jika posisi tindikan kurang pas, anting yang bersangkutan (misal kanan) bisa segera dilepas dulu agar lubangnya menutup kembali secara alami. Pastikan mencuci tangan bersih dan berikan antiseptik di daun telinga bayi agar terhindar dari infeksi. Tindik ulang dapat dibetulkan pada kunjungan berikutnya."
   },
   {
+    // Audit 222655 (fatal medical error Turn 4): keywords FTS eksplisit agar
+    // query slang ("habis vaksin", "sebelum apa sesudah imunisasi") selalu
+    // menemukan artikel ini, bukan artikel mandi. Union dengan rule keywords
+    // via resolveChunkKeywords (existing dipertahankan).
     "question": "Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?",
-    "answer": "Setelah vaksin atau imunisasi (seperti BCG, Polio, DPT, dll.), si kecil sebaiknya diistirahatkan selama 2–3 hari terlebih dahulu sebelum dipijat, Bunda. Hal ini bertujuan untuk menghindari penekanan pada area bekas suntikan serta mengantisipasi reaksi pasca imunisasi (KIPI) seperti demam atau rewel. Setelah 2–3 hari dan kondisi si kecil sudah fit serta tidak demam, barulah sangat aman dan nyaman untuk dipijat oleh Bidan."
+    "answer": "Setelah vaksin atau imunisasi (seperti BCG, Polio, DPT, dll.), si kecil sebaiknya diistirahatkan selama 2–3 hari terlebih dahulu sebelum dipijat, Bunda. Hal ini bertujuan untuk menghindari penekanan pada area bekas suntikan serta mengantisipasi reaksi pasca imunisasi (KIPI) seperti demam atau rewel. Setelah 2–3 hari dan kondisi si kecil sudah fit serta tidak demam, barulah sangat aman dan nyaman untuk dipijat oleh Bidan. Pijat juga sangat aman jika dilakukan SEBELUM jadwal imunisasi.",
+    "keywords": "vaksin, vaksinasi, imunisasi, suntik, dpt, bcg, polio, campak, habis vaksin, setelah imunisasi, sebelum imunisasi, kapan boleh pijat, kipi, demam"
   },
   {
     // SEED DB-DRIVEN (tenant-aware, bisa diedit via dashboard /api/admin/knowledge):

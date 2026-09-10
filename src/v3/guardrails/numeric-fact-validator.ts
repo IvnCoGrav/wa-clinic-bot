@@ -14,6 +14,12 @@ import { treatmentCatalogService } from '../../services/treatment-catalog.servic
 export interface NumericValidationResult {
   isValid: boolean;
   violations: string[];
+  /**
+   * Total resmi keranjang penuh (subtotal + ongkir) bila determinabel dari
+   * session — dipakai re-prompt koreksi agar LLM menulis angka yang benar.
+   * Kosong bila keranjang tidak ada / ongkir belum diketahui.
+   */
+  expectedTotals?: number[];
 }
 
 export interface NumericValidationOptions {
@@ -110,23 +116,33 @@ export function validateNumericFacts(
   // Validasi Aritmatika Komposit:
   // - Layanan Promo + Ongkir Promo / Normal (dan silang, agar tidak false-positive
   //   saat campuran promo treatment + ongkir normal dikutip di turn berbeda).
+  // - PENGECUALIAN MULTI-ITEM (sesi 214956): bila keranjang aktif memuat ≥2
+  //   item, jumlah parsial (1 layanan + ongkir, mis. 105k+15k=120k) DILARANG
+  //   masuk whitelist — HANYA subtotal penuh + ongkir yang sah. Mencegah model
+  //   "lupa" satu item lalu lolos karena angka parsialnya kebetulan valid.
   const serviceAll = [...servicePromo, ...serviceOriginal];
   const ongkirAll = [...ongkirPromoList, ...ongkirNormalList];
-  for (const sp of serviceAll) {
-    for (const op of ongkirAll) {
-      authorizedNumbers.add(sp + op);
-    }
-  }
-  // - Layanan + Add-on (dan + ongkir): combo resmi katalog.
-  for (const sp of serviceAll) {
-    for (const ap of addonPrices) {
-      authorizedNumbers.add(sp + ap);
+  const cartCount = Array.isArray(sess?.cartItems) ? sess.cartItems.length : 0;
+  const strictMultiItem = cartCount >= 2;
+  if (!strictMultiItem) {
+    for (const sp of serviceAll) {
       for (const op of ongkirAll) {
-        authorizedNumbers.add(sp + ap + op);
+        authorizedNumbers.add(sp + op);
+      }
+    }
+    // - Layanan + Add-on (dan + ongkir): combo resmi katalog.
+    for (const sp of serviceAll) {
+      for (const ap of addonPrices) {
+        authorizedNumbers.add(sp + ap);
+        for (const op of ongkirAll) {
+          authorizedNumbers.add(sp + ap + op);
+        }
       }
     }
   }
   // - Nilai session.totalPrice & akumulasi cartItems (sumber kebenaran keranjang).
+  //   Selalu diotorisasi (termasuk mode strict): ini total PENUH yang benar.
+  const expectedTotals: number[] = [];
   if (typeof sess?.totalPrice === 'number' && Number.isFinite(sess.totalPrice)) {
     authorizedNumbers.add(Math.round(sess.totalPrice));
   }
@@ -143,23 +159,38 @@ export function validateNumericFacts(
     }
     authorizedNumbers.add(Math.round(subPromo));
     authorizedNumbers.add(Math.round(subPrice));
-    for (const op of ongkirAll) {
-      authorizedNumbers.add(Math.round(subPromo + op));
-      authorizedNumbers.add(Math.round(subPrice + op));
+    if (ongkirAll.length > 0) {
+      for (const op of ongkirAll) {
+        const fullPromo = Math.round(subPromo + op);
+        const fullPrice = Math.round(subPrice + op);
+        authorizedNumbers.add(fullPromo);
+        authorizedNumbers.add(fullPrice);
+        expectedTotals.push(fullPromo);
+      }
+      if (!expectedTotals.includes(Math.round(subPrice))) expectedTotals.push(Math.round(subPrice));
+    } else {
+      expectedTotals.push(Math.round(subPromo));
     }
   }
+  const expectedSet = [...new Set(expectedTotals)];
 
-  // Cek setiap angka di teks
+  // Cek setiap angka di teks (ekstraksi numerik teknis; TANPA penggantian
+  // string di tengah kalimat — pelanggaran hanya dilaporkan + re-prompt).
   for (const m of priceMatches) {
     const rawVal = parseInt(m.replace(/[^0-9]/g, ''), 10);
     // Abaikan jika angka < 5000 (bukan harga)
     if (rawVal >= 5000 && !authorizedNumbers.has(rawVal)) {
-      violations.push(`Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak ditemukan di data katalog/ongkir tool resmi.`);
+      violations.push(
+        expectedSet.length > 0
+          ? `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak sesuai dengan total akumulasi keranjang resmi (${expectedSet.map((n) => `Rp ${n.toLocaleString('id-ID')}`).join(' / ')}).`
+          : `Nominal Rp ${rawVal.toLocaleString('id-ID')} tidak ditemukan di data katalog/ongkir tool resmi.`
+      );
     }
   }
 
   return {
     isValid: violations.length === 0,
     violations,
+    expectedTotals: expectedSet,
   };
 }

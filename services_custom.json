@@ -141,7 +141,7 @@
     "originalPrice": 110000,
     "promoPrice": 90000,
     "description": "Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas.",
-    "isActive": true
+    "isActive": false
   },
   {
     "id": "moms-prenatal-massage",

@@ -24,17 +24,29 @@ export class V3ConversationSummarizer {
     const janganDiulang: string[] = [];
     const botRepliesCount = history.filter((h) => h.role === 'assistant').length;
 
-    // 1. Lokasi & ongkir
+    // Helper anti-duplikat larangan (phase-aware, tanpa regex keyword).
+    const banOnce = (entry: string): void => {
+      if (!janganDiulang.some((j) => j.toLowerCase().includes(entry.toLowerCase().slice(0, 24)))) {
+        janganDiulang.push(entry);
+      }
+    };
+
+    // 1. Lokasi & ongkir — PHASE-AWARE (Akar 2/4): saat ongkirStatus QUOTED/
+    // CONFIRMED, larangan hitung-ulang ditambahkan OTOMATIS dari state (tanpa
+    // cek keyword regex), selaras dengan phase directive ONGKIR_QUOTED di Call 1.
     if (session.location?.kelurahan || session.location?.distanceKm != null) {
       const locLabel = session.location.kelurahan || session.location.kecamatan || 'lokasi Bunda';
       const distLabel = session.location.distanceKm != null ? `, ~${session.location.distanceKm} km` : '';
       const promo = session.location.ongkirPromo;
       if (promo != null) {
         sudahDibahas.push(`Ongkir Rp ${promo.toLocaleString('id-ID')} promo (${locLabel}${distLabel})`);
-        janganDiulang.push('Info ongkir atau perhitungan jarak (sudah disampaikan di chat atas)');
+        banOnce('Info ongkir atau perhitungan jarak (sudah disampaikan di chat atas)');
       } else {
         sudahDibahas.push(`Lokasi: ${locLabel}${distLabel}`);
       }
+    }
+    if (session.ongkirStatus === 'QUOTED' || session.ongkirStatus === 'CONFIRMED') {
+      banOnce('Menghitung ulang jarak/ongkir (sudah disampaikan — JANGAN panggil hitung ongkir lagi kecuali alamat baru)');
     }
 
     // 2. Konteks audiens multi-subjek (ibu vs anak vs keduanya) — anti amnesia & anti bocor
@@ -59,10 +71,12 @@ export class V3ConversationSummarizer {
       janganDiulang.push('Menanyakan usia atau umur anak (sudah diketahui)');
     }
 
-    // 3. Keluhan & treatment
+    // 3. Keluhan & treatment — PHASE-AWARE: saat TREATMENT_DISCUSSED,
+    // larangan tanya-ulang menyebut nama treatment spesifik (selaras dengan
+    // phase directive), tanpa bergantung pada regex hasDayMention & sejenisnya.
     if (session.selectedTreatment) {
       sudahDibahas.push(`Treatment yang dipilih/ditanyakan: *${session.selectedTreatment}*`);
-      janganDiulang.push('Menanyakan ulang "rencana mau treatment apa" dari awal');
+      banOnce(`Menanyakan 'rencana mau treatment apa' (sudah dibahas: ${session.selectedTreatment})`);
     } else {
       const symptoms = [
         ...(session.childProfile?.symptoms || []),
