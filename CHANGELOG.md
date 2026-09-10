@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Multi-Lapisan Fondasional V3: Disambiguasi Multi-Anak, Integritas Matematika & Anti-Brosur (2026-09-10)
+
+- **Latar Belakang:** sesi 214956/222655 — AI menebak 1-vs-2 anak sepihak; halusinasi 75k+105k+15k=120k lolos whitelist; rekomendasi usia format brosur bernomor tanpa pemantik klinis; saran pijat langsung pasca-imunisasi.
+- **Perbaikan:** latch `isMultiChildUnconfirmed` + mandat klarifikasi dinamis + aturan persona (klarifikasi lembut 2-anak-1x-ongkir); `[MANDAT INTEGRITAS MATEMATIKA]` total resmi di grounding; validator mode strict multi-item (parsial ditolak, pesan menyebut total resmi) + re-prompt bersih 1x lalu fallback template (tanpa mutilasi regex); template `cartTotalReply` multi-item dihitung mesin; narasi 1 paragraf + pemantik klinis di tool & persona A.1; `kids-massage-ceria` generik dinonaktifkan (bukan dihapus).
+- **Ditunda gated:** seed FAQ live (destruktif — backup dulu) + `is_active=false` baris `clinic_services` live.
+- **Verifikasi:** `tsc` bersih; 3 file test baru + regresi hijau; full suite **222 file, 1756 passed, 0 failed**.
+
 #### Pembenahan Fondasi & Root Cause Alur Konfirmasi Reservasi (HOLD & PENDING) (2026-09-09)
 
 - **Latar Belakang:** Tombol "Konfirmasi" pada banner `HOLD` (slot kunci 3 detik, dummy `[HOLD] Slot Ditawarkan`) dan `PENDING` (booking riil belum lunas) sama-sama melempar ke `ReservationDetailModal` pasif, sehingga data bolong (`Bunda ()`, `Rp 0`, `status undefined`) dan modal salah alamat. Backend `live-chat.service.ts` emit stub `{id, booking_date, notes}` tanpa kontrak kanonikal, serta hold kedaluwarsa (2 jam lewat) masih tampil sebagai banner aktif.

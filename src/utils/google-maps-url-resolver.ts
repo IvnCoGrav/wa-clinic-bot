@@ -6,6 +6,13 @@ export interface ResolvedCoordinates {
   lng?: number;
   rawUrl?: string;
   resolvedUrl?: string;
+  /**
+   * Phase 0 (audit 315036): fallback teks alamat dari parameter query tempat
+   * (mis. `?q=Waterplace Residence Tower A...`) bila koordinat tak ditemukan
+   * di URL maupun body HTML. Diisi hanya bila berupa teks alamat (bukan angka
+   * koordinat) — dipakai transparan oleh geocoding teks biasa.
+   */
+  addressQuery?: string;
   error?: string;
 }
 
@@ -85,7 +92,51 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
     }
   }
 
+  // Pola 5b: protobuf ter-encode URL (%213d / %214d) dari body/redirect HTML.
+  const pbEncMatch = urlString.match(/(?:!3d|%213d)(-?\d+\.\d+)(?:!4d|%214d)(-?\d+\.\d+)/i);
+  if (pbEncMatch) {
+    const lat = parseFloat(pbEncMatch[1]);
+    const lng = parseFloat(pbEncMatch[2]);
+    if (isValidCoordinate(lat, lng)) {
+      return { lat, lng };
+    }
+  }
+
+  // Pola 6 (audit 315036): directions ?daddr=lat,lng / &daddr=lat,lng
+  // (juga saddr= / destination=) — link "rute ke lokasi" dari tombol share.
+  const daddrMatch = urlString.match(/[?&](?:daddr|saddr|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (daddrMatch) {
+    const lat = parseFloat(daddrMatch[1]);
+    const lng = parseFloat(daddrMatch[2]);
+    if (isValidCoordinate(lat, lng)) {
+      return { lat, lng };
+    }
+  }
+
   return null;
+}
+
+/**
+ * Phase 0 (audit 315036): ekstrak teks alamat tempat dari parameter query
+ * URL (mis. `?q=Waterplace+Residence+Tower+A+...`). Kembalikan null bila
+ * nilai q berupa koordinat angka (itu ranah pola koordinat di atas) atau
+ * kosong — ekstraksi query teknis murni, bukan klasifikasi semantik.
+ */
+export function extractAddressQueryFromUrlString(urlString: string): string | null {
+  if (!urlString) return null;
+  const qMatch = urlString.match(/[?&]q=([^&#]*)/i);
+  if (!qMatch || !qMatch[1]) return null;
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(qMatch[1].replace(/\+/g, ' ')).trim();
+  } catch (_) {
+    return null;
+  }
+  if (!decoded) return null;
+  // Nilai q berupa koordinat angka → bukan alamat (sudah ditangani pola koordinat).
+  if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(decoded)) return null;
+  if (decoded.length < 4) return null;
+  return decoded;
 }
 
 function isValidCoordinate(lat: number, lng: number): boolean {
@@ -143,6 +194,19 @@ export async function resolveGoogleMapsUrl(url: string, timeoutMs = 2500): Promi
         lng: coords.lng,
         rawUrl: cleanUrl,
         resolvedUrl: finalUrl,
+      };
+    }
+
+    // Fallback alamat: pin tempat tanpa koordinat (mis. place link
+    // ?q=Nama+Tempat) → kembalikan teks alamat untuk geocoding teks biasa.
+    const addressQuery = extractAddressQueryFromUrlString(finalUrl)
+      || (typeof response.data === 'string' ? extractAddressQueryFromUrlString(response.data) : null);
+    if (addressQuery) {
+      return {
+        success: false,
+        rawUrl: cleanUrl,
+        resolvedUrl: finalUrl,
+        addressQuery,
       };
     }
 

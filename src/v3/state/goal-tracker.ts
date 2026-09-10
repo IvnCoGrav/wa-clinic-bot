@@ -73,6 +73,14 @@ export interface CustomerGoalSession {
   childProfile?: ChildState;
   /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
   children?: ChildState[];
+  /**
+   * Gerbang disambiguasi multi-anak (sesi 214956): true bila 2 usia anak
+   * berbeda terdeteksi TANPA konfirmasi eksplisit ("anak saya 2" / label
+   * peran Adik-Kakak). Selama true, LLM WAJIB bertanya konfirmasi lembut
+   * sebelum mengunci total biaya (lihat mandat grounding). Dibersihkan saat
+   * customer memberi sinyal jumlah eksplisit.
+   */
+  isMultiChildUnconfirmed?: boolean;
   selectedTreatment?: string;
   booking?: BookingState;
   cartItems?: CartItem[];
@@ -292,8 +300,18 @@ export class GoalTracker {
   }
 
   /**
-   * Deteksi scope penerima dari teks pesan (data-driven keyword, tanpa regex):
-   * MOMS (layanan ibu), CHILD_2 (kakak), CHILD_1 (adik/si kecil), GENERAL (netral).
+   * Deteksi scope penerima — CATEGORY-FIRST fondational (Akar 3):
+   * metadata kategori katalog adalah penentu utama scope, bukan keyword teks.
+   * Keyword teks hanya fallback bila kategori kosong/tak dikenal (layanan
+   * custom tanpa kategori). Ini mencegah cross-contamination: kata "Bunda"
+   * (sapaan di hampir semua pesan) atau "oksitosin" di kalimat yang sama
+   * DILARANG memindahkan layanan BABY ke MOMS, dan sebaliknya.
+   *
+   * - MOMS → selalu 'MOMS'
+   * - BABY/KIDS → slot anak (CHILD_2 bila eksplisit "kakak", else CHILD_1);
+   *   DILARANG 'MOMS' walau teks mengandung "Bunda"/"oksitosin".
+   * - BUNDLE (paket keluarga) → 'GENERAL'
+   * - ADDON/ADD_ON → 'GENERAL' (tambahan menempel ke total, bukan pasien spesifik)
    */
   public static detectRecipientScope(
     text: string,
@@ -301,8 +319,20 @@ export class GoalTracker {
   ): RecipientScope {
     const lower = (text || '').toLowerCase();
     const hasAny = (words: string[]) => words.some((w) => lower.includes(w));
+
+    // RULE 1 (FONDATIONAL): kategori katalog menentukan scope.
+    const cat = (service?.category || '').toUpperCase();
+    if (cat === 'MOMS') return 'MOMS';
+    if (cat === 'BABY' || cat === 'KIDS') {
+      if (hasAny(['kakak', 'kaka', 'anak pertama', 'anak ke-1', 'anak ke 1', 'si kakak'])) return 'CHILD_2';
+      return 'CHILD_1';
+    }
+    if (cat === 'BUNDLE') return 'GENERAL';
+    if (cat === 'ADDON' || cat === 'ADD_ON' || service?.isAddon === true) return 'GENERAL';
+
+    // RULE 2 (FALLBACK): hanya bila kategori tidak ada/kosong/tak dikenal —
+    // logika keyword lama dipertahankan untuk layanan custom tanpa metadata.
     if (
-      service?.category === 'MOMS' ||
       hasAny(['oksitosin', 'laktasi', 'nifas', 'hamil', 'menyusui', 'buat saya', 'untuk saya', 'saya sendiri', 'bunda sendiri'])
     ) {
       return 'MOMS';
@@ -339,14 +369,75 @@ export class GoalTracker {
   public static syncCartItems(
     session: CustomerGoalSession,
     history: Array<{ role: string; content: string }>,
-    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean }>
+    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[] }>
   ): CartItem[] {
-    const cart: CartItem[] = [...(session.cartItems || [])];
+    // Phase 2 (audit 315036) — rekonsiliasi hierarki bundle vs parsial via
+    // metadata katalog (bundleItemIds), BUKAN daftar nama hardcode:
+    // - bundle yang baru dipilih menyerap komponen parsialnya (exact id match)
+    //   + standalone se-famili di jalur anak (mencegah inflasi cart);
+    // - standalone MOMS tidak pernah terserap kecuali komponen exact
+    //   (jalur klinis ibu terpisah);
+    // - item warisan DB (session.cartItems) di-seed ulang lewat aturan yang
+    //   sama sehingga inflasi lama ikut bersih + totalPrice terkalkulasi ulang.
+    const cart: CartItem[] = [];
     const keyOf = (name: string, scope: RecipientScope) => `${scope}::${name.toLowerCase()}`;
-    const inCart = new Set(cart.map((c) => keyOf(c.name, c.recipientScope || 'GENERAL')));
+    const inCart = new Set<string>();
     const services = [...(catalog || [])]
       .filter((s) => s && s.name && s.name.trim().length >= 4)
       .sort((a, b) => b.name.length - a.name.length);
+    const svcById = new Map<string, (typeof services)[number]>();
+    const svcByName = new Map<string, (typeof services)[number]>();
+    for (const s of services) {
+      if (s.id) svcById.set(s.id.toLowerCase(), s);
+      svcByName.set(s.name.toLowerCase(), s);
+    }
+    const compIdsOf = (svc: (typeof services)[number]): Set<string> =>
+      new Set((svc.bundleItemIds || []).map((id) => (id || '').toLowerCase()));
+    const familyOf = (svc: (typeof services)[number]): Set<string> => {
+      const f = new Set<string>();
+      if (svc.category) f.add(svc.category.toUpperCase());
+      for (const cid of compIdsOf(svc)) {
+        const c = svcById.get(cid);
+        if (c?.category) f.add(c.category.toUpperCase());
+      }
+      return f;
+    };
+    const isBundleSvc = (svc: (typeof services)[number]): boolean =>
+      (svc.category || '').toUpperCase() === 'BUNDLE' || (svc.bundleItemIds || []).length > 0;
+    const scopeCompatible = (bundleScope: RecipientScope, xScope: RecipientScope): boolean =>
+      xScope === bundleScope || bundleScope === 'GENERAL' || xScope === 'GENERAL';
+    // Bundle yang baru masuk menyerap item lama yang diduplikasinya.
+    const absorbIntoBundle = (bundleSvc: (typeof services)[number], bundleScope: RecipientScope): void => {
+      const comps = compIdsOf(bundleSvc);
+      const family = familyOf(bundleSvc);
+      for (let i = cart.length - 1; i >= 0; i--) {
+        const it = cart[i];
+        if (it.type === 'ADDON') continue;
+        const xSvc = svcByName.get((it.name || '').toLowerCase());
+        if (!xSvc || isBundleSvc(xSvc)) continue;
+        const xScope = it.recipientScope || 'GENERAL';
+        if (!scopeCompatible(bundleScope, xScope)) continue;
+        const isComponent = xSvc.id != null && comps.has(xSvc.id.toLowerCase());
+        const xChildTrack = xScope === 'CHILD_1' || xScope === 'CHILD_2' || xScope === 'GENERAL';
+        const xCat = (xSvc.category || '').toUpperCase();
+        if (isComponent || (xChildTrack && xCat !== 'MOMS' && family.has(xCat))) {
+          inCart.delete(keyOf(it.name, xScope));
+          cart.splice(i, 1);
+        }
+      }
+    };
+    // Standalone yang komponennya sudah terwakili bundle se-scope → lewati.
+    const isAbsorbedByExistingBundle = (svc: (typeof services)[number], scope: RecipientScope): boolean => {
+      const xid = (svc.id || '').toLowerCase();
+      if (!xid) return false;
+      for (const c of cart) {
+        const bSvc = svcByName.get((c.name || '').toLowerCase());
+        if (!bSvc || !isBundleSvc(bSvc)) continue;
+        if (!scopeCompatible(c.recipientScope || 'GENERAL', scope)) continue;
+        if (compIdsOf(bSvc).has(xid)) return true;
+      }
+      return false;
+    };
     if (services.length === 0) return cart;
     const significantTokens = (name: string): string[] =>
       name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
@@ -382,6 +473,11 @@ export class GoalTracker {
       const type = s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
       const category = (s.category as CartItem['category']) || (s.isAddon ? 'ADDON' : undefined);
       const recipientLabel = scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil' : undefined;
+      // Phase 2 (audit 315036): standalone yang komponennya sudah terwakili
+      // bundle se-scope → lewati (parsial terserap bundle, anti inflasi).
+      if (type !== 'ADDON' && !isBundleSvc(s) && isAbsorbedByExistingBundle(s, scope)) return;
+      // Phase 2: bundle yang baru dipilih menyerap item lama yang diduplikasinya.
+      if (isBundleSvc(s) && !s.isAddon) absorbIntoBundle(s, scope);
       // Domain rule: Single PRIMARY per recipient (1 anak = 1 layanan utama)
       // Jika PRIMARY baru untuk scope yang sama dan beda layanan -> replace (tanpa keyword)
       if (type === 'PRIMARY') {
@@ -441,6 +537,25 @@ export class GoalTracker {
     };
     const matchedFormOf = (haystack: string, s: (typeof services)[number]): string | null =>
       fullFormOf(haystack, s) || cleanFormOf(haystack, s);
+    // Phase 2 (audit 315036): seed ulang item warisan DB lewat aturan yang
+    // SAMA (termasuk absorb bundle) agar inflasi lama ikut bersih; label
+    // penerima tersimpan dipertahankan bila ada (mis. "Adik (2 bln)").
+    // Item tak dikenal katalog dipertahankan apa adanya (anti data-loss).
+    for (const stored of (session.cartItems || [])) {
+      const svc = svcByName.get((stored.name || '').toLowerCase());
+      if (!svc) {
+        const k = keyOf(stored.name, stored.recipientScope || 'GENERAL');
+        if (!inCart.has(k)) {
+          cart.push({ ...stored });
+          inCart.add(k);
+        }
+        continue;
+      }
+      const scope = stored.recipientScope || GoalTracker.detectRecipientScope(stored.name, svc);
+      pushService(svc, scope);
+      const cur = cart.find((c) => c.name.toLowerCase() === svc.name.toLowerCase() && (c.recipientScope || 'GENERAL') === scope);
+      if (cur && stored.recipientLabel) cur.recipientLabel = stored.recipientLabel;
+    }
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
@@ -529,6 +644,16 @@ export class GoalTracker {
   public static isMaternalOnlyMessage(text: string): boolean {
     const lower = (text || '').toLowerCase();
     if (!lower) return false;
+    // 'uk' (usia kehamilan, mis. "uk 38") WAJIB token mandiri — includes
+    // lepas ("uk "/" uk") false-fire pada kata berakhiran -uk ("batuk "),
+    // yang membungkam pencatatan gejala anak (bug ditemukan via test
+    // adversarial audit 222655: "lagi batuk pilek" dikira maternal-only).
+    let normalizedUk = '';
+    for (let i = 0; i < lower.length; i++) {
+      const ch = lower[i];
+      normalizedUk += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+    }
+    const hasUkToken = normalizedUk.split(' ').some((t) => t === 'uk');
     const hasMaternalSignal = lower.includes('hamil')
       || lower.includes('bumil')
       || lower.includes('kehamilan')
@@ -541,8 +666,7 @@ export class GoalTracker {
       || lower.includes('induksi')
       || lower.includes('oksitosin')
       || lower.includes('perineum')
-      || lower.includes('uk ')
-      || lower.includes(' uk')
+      || hasUkToken
       || lower.includes('usia kandungan');
     if (!hasMaternalSignal) return false;
     const hasChildSignal = lower.includes('bayi')
@@ -712,6 +836,92 @@ export class GoalTracker {
     return next;
   }
 
+  /**
+   * Ekstraksi angka usia → bulan dari teks lowercased (bersama untuk sync &
+   * detektor disambiguasi; pola satuan teknis bulan/tahun/minggu + "baru lahir",
+   * BUKAN gatekeeper intent). "2 bulan"→2, "3 tahun"→36, "baru lahir"→0.
+   */
+  public static extractAgesMonths(lower: string): number[] {
+    const ages: number[] = [];
+    const ageRe = /(\d+(?:[.,]\d+)?)\s*(bulan|bln|tahun|thn|th)\b/g;
+    let m: RegExpExecArray | null;
+    while ((m = ageRe.exec(lower)) !== null) {
+      const val = parseFloat(m[1].replace(',', '.'));
+      if (!Number.isFinite(val)) continue;
+      const unit = m[2];
+      ages.push(unit.startsWith('tahun') || unit.startsWith('thn') || unit === 'th' ? Math.round(val * 12) : Math.round(val));
+    }
+    if (lower.includes('baru lahir')) ages.push(0);
+    // Usia bayi dalam minggu ("bayi 3 minggu", "newborn 2 weeks"): guard ketat
+    // agar tak menelan usia kehamilan — hanya bila ada sinyal eksplisit
+    // bayi/anak DAN tidak ada sinyal proyeksi kehamilan.
+    // Konversi satuan teknis (1 bulan = 4.345 minggu).
+    if (ages.length === 0) {
+      const hasBabySignal = lower.includes('bayi') || lower.includes('baby')
+        || lower.includes('newborn') || lower.includes('anak') || lower.includes('adik')
+        || lower.includes('adek') || lower.includes('si kecil');
+      const hasPregnancyProjection = lower.includes('hamil') || lower.includes('lahiran')
+        || lower.includes('kandungan') || lower.includes('trimester') || lower.includes('hpl')
+        || lower.includes('persalinan') || lower.includes('pembukaan');
+      if (hasBabySignal && !hasPregnancyProjection) {
+        const weekRe = /(\d+(?:[.,]\d+)?)\s*(minggu|mgg|weeks?|wk|w)\b/g;
+        let wm: RegExpExecArray | null;
+        while ((wm = weekRe.exec(lower)) !== null) {
+          const val = parseFloat(wm[1].replace(',', '.'));
+          if (!Number.isFinite(val) || val <= 0 || val > 60) continue;
+          ages.push(Math.round(val / 4.345));
+        }
+      }
+    }
+    return ages;
+  }
+
+  /**
+   * Sinyal eksplisit jumlah anak (data-driven includes, tanpa regex intent):
+   * penegas multi ("anak saya 2"), label peran (Adik/Kakak), atau penegas
+   * satu anak ("1 anak saja"). Dipakai untuk membersihkan latch
+   * `isMultiChildUnconfirmed` — BUKAN gatekeeper perilaku LLM.
+   */
+  public static isExplicitChildCountSignal(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+    const multiWords = ['anak saya 2', 'dua anak', '2 anak', 'keduanya',
+      'adik kakak', 'kakak adik', 'adik dan kakak', 'kakak dan adik'];
+    if (multiWords.some((w) => lower.includes(w))) return true;
+    if (lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'))
+      || lower.includes('adik') || lower.includes('adek')) return true;
+    const oneChild = ['1 anak', 'satu anak', 'cuma satu', 'hanya satu',
+      'cuman satu', 'anak tunggal', 'anaknya satu', 'satu aja'];
+    if (oneChild.some((w) => lower.includes(w))) return true;
+    return false;
+  }
+
+  /**
+   * Gerbang disambiguasi multi-anak, sesi 214956 (murni, tanpa mutasi):
+   * true bila pesan ini memunculkan kandidat anak KEDUA yang belum
+   * dikonfirmasi — 2 usia berbeda dalam satu pesan, ATAU satu usia baru yang
+   * berbeda dari anak tercatat — TANPA sinyal jumlah eksplisit. Pesan
+   * maternal murni tidak pernah memicu (anti kontaminasi silang).
+   */
+  public static detectUnconfirmedMultiChild(
+    prevChildren: ChildState[] | undefined,
+    text: string
+  ): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+    if (GoalTracker.isMaternalOnlyMessage(text)) return false;
+    if (GoalTracker.isExplicitChildCountSignal(text)) return false;
+    const distinct = [...new Set(GoalTracker.extractAgesMonths(lower))];
+    if (distinct.length >= 2) return true;
+    if (distinct.length === 1) {
+      const prevAges = (prevChildren || [])
+        .map((c) => c.ageMonths)
+        .filter((n): n is number => typeof n === 'number');
+      if (prevAges.length >= 1 && !prevAges.includes(distinct[0])) return true;
+    }
+    return false;
+  }
+
   public static syncChildrenProfiles(
     session: CustomerGoalSession,
     text: string
@@ -735,17 +945,8 @@ export class GoalTracker {
     const mentionsAdik = lower.includes('adik') || lower.includes('adek');
     const mentionsMulti = lower.includes('anak saya 2') || lower.includes('dua anak') || lower.includes('2 anak') || lower.includes('keduanya');
 
-    // Usia: "2 bulan", "3 tahun", "4 bln", "baru lahir" (=0 bulan).
-    const ages: number[] = [];
-    const ageRe = /(\d+(?:[.,]\d+)?)\s*(bulan|bln|tahun|thn|th)\b/g;
-    let m: RegExpExecArray | null;
-    while ((m = ageRe.exec(lower)) !== null) {
-      const val = parseFloat(m[1].replace(',', '.'));
-      if (!Number.isFinite(val)) continue;
-      const unit = m[2];
-      ages.push(unit.startsWith('tahun') || unit.startsWith('thn') || unit === 'th' ? Math.round(val * 12) : Math.round(val));
-    }
-    if (lower.includes('baru lahir')) ages.push(0);
+    // Usia via helper bersama (bulan/tahun + "baru lahir" + minggu bayi).
+    const ages: number[] = GoalTracker.extractAgesMonths(lower);
 
     const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung'];
     const foundSymptoms = SYMPTOM_WORDS.filter((s) => lower.includes(s));
@@ -768,12 +969,44 @@ export class GoalTracker {
       });
       if (foundSymptoms.length > 0) addSymptoms(ensureChild(0, 'Adik'));
     } else if (ages.length === 1 || foundSymptoms.length > 0) {
-      // Satu usia/gejala → anak berlabel peran bila disebut ("Kakak ... 3 tahun"
-      // tidak boleh menimpa Adik), else anak pertama.
-      const idx: 0 | 1 = mentionsKakak ? 1 : 0;
-      const child = ensureChild(idx, idx === 1 ? 'Kakak' : (mentionsAdik ? 'Adik' : 'Si Kecil'));
-      if (ages.length === 1) child.ageMonths = ages[0];
-      addSymptoms(child);
+      // Audit 222655 (amnesia multi-anak): usia baru TANPA label peran pada
+      // pesan yang HANYA menyebut satu usia, sementara anak pertama sudah
+      // tercatat dengan usia BERBEDA → DILARANG menimpa children[0];
+      // alokasikan slot anak kedua (peran by perbandingan usia: termuda Adik).
+      if (ages.length === 1 && !mentionsKakak && !mentionsAdik && !mentionsMulti
+        && children[0]?.ageMonths != null && children[0].ageMonths !== ages[0]) {
+        const newAge = ages[0];
+        const firstAge = children[0].ageMonths as number;
+        if (children[1]?.ageMonths != null) {
+          // Slot penuh (2 anak): update anak dengan usia terdekat (cap model Adik/Kakak).
+          const d0 = Math.abs(firstAge - newAge);
+          const d1 = Math.abs((children[1].ageMonths as number) - newAge);
+          const target = d1 < d0 ? ensureChild(1, 'Kakak') : ensureChild(0, children[0].roleLabel || 'Adik');
+          target.ageMonths = newAge;
+          addSymptoms(target);
+        } else if (newAge < firstAge) {
+          // Adik baru lebih muda → selip di depan; kakak lama geser ke idx 1.
+          children.unshift({ roleLabel: 'Adik', ageMonths: newAge, symptoms: [] });
+          if (!children[1].roleLabel || children[1].roleLabel === 'Si Kecil') {
+            children[1].roleLabel = 'Kakak';
+          }
+          addSymptoms(children[0]);
+        } else {
+          const kakak = ensureChild(1, 'Kakak');
+          kakak.ageMonths = newAge;
+          if (!children[0].roleLabel || children[0].roleLabel === 'Si Kecil') {
+            children[0].roleLabel = 'Adik';
+          }
+          addSymptoms(kakak);
+        }
+      } else {
+        // Satu usia/gejala → anak berlabel peran bila disebut ("Kakak ... 3 tahun"
+        // tidak boleh menimpa Adik), else anak pertama.
+        const idx: 0 | 1 = mentionsKakak ? 1 : 0;
+        const child = ensureChild(idx, idx === 1 ? 'Kakak' : (mentionsAdik ? 'Adik' : 'Si Kecil'));
+        if (ages.length === 1) child.ageMonths = ages[0];
+        addSymptoms(child);
+      }
     } else {
       if (mentionsAdik) ensureChild(0, 'Adik');
       if (mentionsKakak) ensureChild(1, 'Kakak');
@@ -884,7 +1117,10 @@ export class GoalTracker {
       lines.push(`• Keranjang Layanan Terpilih:\n${rows.join('\n')}`);
       const subtotal = session.cartItems.reduce((s, it) => s + (it.promoPrice ?? it.price), 0);
       const ongkir = session.location?.ongkirPromo ?? 0;
-      lines.push(`• Total Akumulasi Biaya: ${fmtRp(subtotal + ongkir)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
+      const grandTotal = subtotal + ongkir;
+      const rincian = [...session.cartItems.map((it) => `${it.name} ${fmtRp(it.promoPrice ?? it.price)}`), `Ongkir ${fmtRp(ongkir)}`].join(' + ');
+      lines.push(`• Total Akumulasi Biaya: ${fmtRp(grandTotal)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
+      lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
     }
 
     // ── Audience-aware patient summary (anti pediatric-centric myopia) ──
@@ -907,19 +1143,63 @@ export class GoalTracker {
     }
     if (hasKids) {
       if (kids.length > 1) {
-        const kidLines = kids.map((k) => {
+        // Audit 222655: grounding multi-pasien — treatment per anak dari cart
+        // (CHILD_1→anak idx0, CHILD_2→anak idx1) + aturan 1 kunjungan 1 ongkir.
+        const cartTreatmentFor = (idx: 0 | 1): string => {
+          const scope = idx === 0 ? 'CHILD_1' : 'CHILD_2';
+          const hit = (session.cartItems || []).find((it) => it.recipientScope === scope);
+          return hit ? ` — Treatment terpilih: ${hit.name} (${`Rp ${(hit.promoPrice ?? hit.price).toLocaleString('id-ID')}`})` : '';
+        };
+        const kidLines = kids.map((k, i) => {
           const label = k.roleLabel || 'Anak';
           const age = k.ageMonths != null
             ? (k.ageMonths >= 12 && k.ageMonths % 12 === 0 ? `${Math.round(k.ageMonths / 12)} tahun (${k.ageMonths} bulan)` : `${k.ageMonths} bulan`)
             : 'usia belum diketahui';
           const sym = (k.symptoms && k.symptoms.length > 0) ? `, Keluhan: ${k.symptoms.join(', ')}` : ', Sehat/Relaksasi';
-          return `  - ${label}: Usia ${age}${sym}`;
+          return `  - ${label}: Usia ${age}${sym}${i <= 1 ? cartTreatmentFor(i as 0 | 1) : ''}`;
         });
-        lines.push(`• Data Si Kecil (${kids.length} Anak):\n${kidLines.join('\n')}`);
+        lines.push(`[DATA PASIEN: MULTI-ANAK (${kids.length} ANAK DALAM 1 KUNJUNGAN)]\n${kidLines.join('\n')}\n  • Aturan Kunjungan: Keduanya bisa dikerjakan berurutan dalam 1x kunjungan dengan 1x ongkir promo.`);
       } else if (kids.length === 1) {
         const cp = kids[0];
         lines.push(`• Data Si Kecil: Usia ${cp.ageMonths != null ? cp.ageMonths + ' bulan' : 'belum spesifik'}${(cp.symptoms || []).length > 0 ? `, Keluhan: ${cp.symptoms.join(', ')}` : ''}`);
       }
+    }
+
+    // Gerbang disambiguasi multi-anak, sesi 214956: bila 2 usia berbeda
+    // tercatat TANPA konfirmasi eksplisit dan customer mulai membahas
+    // pemesanan/paket, WAJIB tanya konfirmasi lembut SEBELUM mengunci total —
+    // DILARANG menebak 1 vs 2 anak atau membuang salah satu sepihak.
+    // Label usia dirender dinamis dari state (bukan hafalan angka).
+    if (session.isMultiChildUnconfirmed === true) {
+      const agedKids = (session.children || []).filter((k) => k.ageMonths != null);
+      const bookingContext = (session.cartItems || []).length > 0
+        || Boolean(session.selectedTreatment)
+        || Boolean(session.booking?.preferredDate)
+        || session.targetAudience === 'BOTH' || session.targetAudience === 'MOMS';
+      if (agedKids.length >= 2 && bookingContext) {
+        const ageLabel = (months: number): string =>
+          months < 24 ? `${months} bln` : `${Math.round(months / 12)} th`;
+        const kidDesc = agedKids.slice(0, 2).map((k, i) =>
+          `${i === 0 ? 'Adik' : 'Kakak'} ${ageLabel(k.ageMonths as number)}`).join(' & ');
+        lines.push(`[MANDAT KLARIFIKASI JUMLAH ANAK - WAJIB KONFIRMASI SEBELUM MENTOTAL]\n  • Customer terdeteksi menyebutkan 2 usia anak berbeda (${kidDesc}) tanpa konfirmasi eksplisit.\n  • DILARANG MENEBAK ATAU MEMBUANG SALAH SATU ANAK SECARA SEPIHAK!\n  • WAJIB tanyakan dengan ramah apakah booking ini untuk 2 anak sekaligus (${kidDesc}) bersama Bunda, atau hanya untuk 1 anak.\n  • Edukasikan keuntungan promo: jika pesan untuk 2 anak + Bunda, seluruhnya dikerjakan berurutan dalam 1 kunjungan dan tetap hemat 1x ongkir promo saja!`);
+      }
+    }
+
+    // Phase 2 — Clinical linkage (bayi lahir → fase Bunda OTOMATIS postpartum):
+    // usia si kecil yang tercatat berarti bayi SUDAH lahir; kecuali Bunda
+    // sedang hamil lagi (momProfile PREGNANT/gestationalWeeks), fase klinis
+    // Bunda adalah PASCA MELAHIRKAN/NIFAS/MENYUSUI — Prenatal DILARANG.
+    // Grounding deterministik ini memandu LLM mengisi momStage: 'POSTPARTUM'
+    // pada tool get_catalog_and_price kategori MOMS.
+    const babyAgeMonths = session.children?.[0]?.ageMonths ?? session.childProfile?.ageMonths ?? null;
+    const momIsPregnant = session.momProfile?.stage === 'PREGNANT' || session.momProfile?.gestationalWeeks != null;
+    if (babyAgeMonths != null && !momIsPregnant) {
+      const ageText = babyAgeMonths >= 12 && babyAgeMonths % 12 === 0
+        ? `${Math.round(babyAgeMonths / 12)} tahun`
+        : babyAgeMonths < 1
+          ? `${Math.max(1, Math.round(babyAgeMonths * 4.345))} minggu`
+          : `${babyAgeMonths} bulan`;
+      lines.push(`• Fase Bunda: PASCA MELAHIRKAN / NIFAS / MENYUSUI (Si kecil sudah lahir, usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage (Pijat Hamil) untuk Bunda yang bayinya sudah lahir! Tawarkan Oksitosin Massage Fullbody atau Paket Laktasi untuk pemulihan dan kelancaran ASI. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'POSTPARTUM'.]`);
     }
 
     if (session.selectedTreatment) {

@@ -15,6 +15,7 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 
 - **Run offline — no DB or network required.** `tests/setup.ts` mocks `src/db/client` (all Prisma calls reject with "Database offline") which triggers the in-memory fallback stores, and blanks `ORS_API_KEY` to force the Haversine fallback. Don't start Postgres or change the mocks for unit tests.
 - Only `tests/**/*.test.ts` is discovered; services intentionally degrade silently (try/catch fallback) when DB is down — green tests can mask runtime DB failures.
+- **Prinsip Adversarial & Real Edge-Case Testing (MANDATORY)**: Pengujian dan unit test tidak boleh hanya menguji *happy path* (jalan pintas agar test hijau). Wajib merancang pengujian berbasis skenario nyata pengguna, kasus batas (*edge cases*), dan uji ketahanan adversial untuk memastikan sistem tidak rapuh di produksi.
 
 ## Prisma / migrations (known traps)
 
@@ -33,44 +34,27 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 
 ## Repo conventions (mandatory)
 
-- **SaaS-readiness**: any new feature/config/tuning must be tenant-aware — business data (brand names, message templates, system prompts) MUST come from DB, never hardcoded. Pengecualian (hardcode sementara / tunda tenant-aware) WAJIB lewat **Confirmation Gate** — stop & konfirmasi ke user dengan pros/cons — bila solusi tenant-aware butuh infrastruktur baru / LOC sangat besar / migrasi berisiko. See `.agents/skills/saas-readiness/SKILL.md` and `docs/SAAS_READINESS_AUDIT.md`.
-- **Admin dashboard** (`packages/admin-dashboard`, React): never `window.confirm`/`alert` — use `useUiFeedback`. See `.agents/skills/no-native-confirm-alert/SKILL.md`.
+- **SaaS-readiness**: any new feature/config/tuning must be tenant-aware — business data (brand names, message templates, system prompts) MUST come from DB, never hardcoded. Pengecualian (hardcode sementara / tunda tenant-aware) WAJIB lewat **Confirmation Gate** — stop & konfirmasi ke user dengan pros/cons — bila solusi tenant-aware butuh infrastruktur baru / LOC sangat besar / migrasi berisiko.
+- **Admin dashboard** (`packages/admin-dashboard`, React): never `window.confirm`/`alert` — use `useUiFeedback`.
 - **Known Issues Mandate**: Setiap temuan issue, bug, limitation, atau tech debt yang belum terselesaikan / sengaja ditunda WAJIB dicatat di satu tempat terpusat di `docs/KNOWN_ISSUES.md`.
-- **Mandat Minimalisasi Regex & Larangan Mutilasi Semantik (MANDATORY)**: DILARANG KERAS menggunakan regex sebagai gatekeeper intent pengguna atau untuk memotong/mengamputasi kata/nominal di tengah-tengah kalimat bahasa alami LLM (*Mid-Sentence Mutilation Ban* seperti kasus `danya` dan `menjadi ,`). Kendali perilaku LLM WAJIB diselesaikan di level Prompt/Grounding/Few-Shot. Regex HANYA diizinkan untuk pembersihan teknis mesin non-semantik (tag thinking AI, format 1-bintang markdown, tag iklan, nomor telepon).
+- **Mandat Non-Hardcode & Data-Driven Architecture (MANDATORY)**: DILARANG KERAS melakukan hardcode data bisnis, daftar kata kunci hafalan, katalog layanan, tarif, rincian SOP, dan template respon ke dalam file TypeScript runtime. Seluruh data bisnis, katalog, SOP klinis, dan kebijakan WAJIB bersumber dari basis data (PostgreSQL/Prisma: tabel `Treatment`, `KnowledgeChunk`, `ClinicPolicy`, `TenantPromptConfig`), sehingga dapat diperbarui secara dinamis oleh admin tanpa perlu merubah atau men-deploy ulang kode. Parsing parameter teknis (seperti URL Google Maps) WAJIB menggunakan API standar (`URL`, `URLSearchParams`) daripada regex hafalan yang rapuh.
+- **Mandat Solusi Fondasional & Larangan Solusi Kosmetik / "Make-up" (MANDATORY)**: Setiap rencana perbaikan bug dan optimasi WAJIB menyentuh akar masalah sistemik di lapisan paling dasar (Data/DB schema, State Machine, Tool Contract, RAG/Retrieval). DILARANG KERAS memberikan solusi permukaan/tambal-sulam yang rapuh (seperti sekadar menambah negative constraints di prompt "DILARANG...", menambah regex ad-hoc per-kasus, atau menyembunyikan error per skenario kalimat / "make-up"). Wajib menyertakan analisis akar masalah lintas lapisan (*multi-layer root cause audit*) dan audit posibilitas ke depan (*future implications & regression risks*).
+- **Mandat Staged-Phase & Micro-Task Implementation Plan (MANDATORY)**: Setiap penyusunan *Implementation Plan* WAJIB dipecah menjadi tahapan berurutan (*staged phases*) berdasarkan *dependency* (apa yang harus beres terlebih dahulu) dan *blast radius*. Setiap fase WAJIB dirinci hingga tingkat tugas mikro (*micro-tasks*) yang sepenuhnya prosedural: lokasi file pasti, baris kode, blok kode pengganti, perintah eksekusi terminal, dan *acceptance criteria* otomatis tanpa memerlukan interpretasi atau tebak-tebakan saat eksekusi. Dilengkapi gerbang regresi (*regression gate*) sebelum berpindah ke fase berikutnya.
+- **Strict Investigation Gate ("Investigasi Tuntas Sebelum Koding") (MANDATORY)**: Saat menerima laporan anomali atau bug, AI DILARANG LANGSUNG MENGEDIT KODE. Wajib melakukan investigasi read-only terlebih dahulu: inspeksi log pemanggilan tool (`logs/`), verifikasi payload prompt, periksa state session di database, dan buktikan dengan data konkret. Laporkan hasil audit root cause dan ajukan rencana tindakan terstruktur sebelum menyentuh atau memodifikasi file source code.
+- **Mandat Minimalisasi Regex & Larangan Mutilasi Semantik (MANDATORY)**: DILARANG KERAS menggunakan regex sebagai gatekeeper intent pengguna atau untuk memotong/mengamputasi/mengganti kata/nominal di tengah-tengah kalimat bahasa alami LLM (*Mid-Sentence Mutilation Ban* seperti kasus `danya`, `menjadi ,`, atau menimpa angka di kalimat yang sudah dirangkai model). Kendali perilaku LLM WAJIB diselesaikan di level State Machine/Prompt/Grounding/Few-Shot. Regex HANYA diizinkan untuk pembersihan teknis mesin non-semantik (tag thinking AI, format 1-bintang markdown, tag iklan, nomor telepon).
+- **Zero New Runtime Dependencies (MANDATORY)**: DILARANG menambah dependency baru di `package.json` runtime tanpa persetujuan eksplisit user. Maksimalkan modul yang sudah ada (`zod`, `crypto`, `fastify`, `@prisma/client`, dll).
+- **Larangan Menyentuh Label WAHA (MANDATORY)**: DILARANG KERAS memanggil atau memodifikasi label WhatsApp di WAHA (seperti `wahaClient.addLabel`, `removeLabel`, atau sinkronisasi label WAHA lainnya). Seluruh penandaan label, tag, atau status (seperti "tanya jadwal", MQL, status percakapan) HANYA BOLEH dilakukan di **level internal sistem / database** (tabel `Customer`, session DB, atau livechat internal tag), BUKAN ke WAHA.
 
 ## Monorepo (no npm workspaces)
 
 - Root `package.json` = bot engine. Each `packages/*` has its own install/lockfile — run `npm install` inside them.
 - `packages/admin-dashboard`: React + Vite + Tailwind. The bot serves its built `dist/` at `/admin/*` — **rebuild it** (`npm run build` in that dir) and restart the bot to see UI changes; or `npm run dev` (Vite) for standalone UI dev.
-- `packages/click-catcher`: **RETIRED** — landing page kini di-serve langsung oleh bot (`src/routes/landing.route.ts` + `src/landing/public/go.html`). Paket ini dibiarkan di repo untuk referensi, tidak lagi dipakai di docker-compose.
 
 ## Tooling
-
-- `rtk` is a 9router model-layer feature, **not a shell command** — `rtk git ...` fails with CommandNotFoundException. Run plain commands; token filtering happens automatically at the model layer.
 - graphify knowledge graph in `graphify-out/` (gitignored): use `graphify query/explain/path` for codebase questions and run `graphify update .` after editing code.
-- Agent instruction sources: `.agents/` (skills + rules).
 
 ## Deploy
 
 - docker-compose pins `devlikeapro/waha:noweb-2026.7.2` (Postgres 16). Never use `:latest` for WAHA; validate WAHA upgrades in staging first. Notes: `deploy_config.txt`, README.
 - `.env` holds live credentials and is gitignored — never commit it or its values.
-- **Server update & Meta gate**: Testing on live server with potential Meta event triggers requires 2-step verification (Pixel is real). Standard safe deploys require 1-step verification. Any deploy/action with risk of touching/disrupting WAHA requires 2-step verification + explicit WARNING. See `.agents/rules/server-update-gate.md` and `.agents/skills/server-access/SKILL.md` for SSH, database queries, container logs, and deployment runbook.
-
-## LLM Intelligence Improvement Roadmap (Agustus 2026)
-
-Audit arsitektur (28/08/2026) mengidentifikasi bahwa **148 regex + 71 negative constraints** digunakan untuk mengekang LLM karena kurangnya konteks yang diberikan. Tiga peningkatan berikut bertujuan **mengurangi ketergantungan pada regex/larangan** tanpa menghapus safety net SOP.
-
-### Prinsip Arsitektur
-- **SOP kritis tetap deterministik** (greeting template, format ongkir, penolakan out-of-coverage, form reservasi) — JANGAN dipindahkan ke LLM.
-- **Perkaya konteks LLM** agar ia tidak perlu dikekang sebanyak sekarang — beri tahu LLM *apa yang sudah dibahas* dan *contoh jawaban ideal*.
-- **Adaptive model** — gunakan model pintar hanya saat dibutuhkan (konsultasi klinis multi-keluhan), model cepat untuk sapaan/FAQ.
-
-### Roadmap (urutan prioritas)
-1. **Conversation State Summary** (`src/slot-engine/conversation-summarizer.ts`) — ringkasan deterministik (0 token) tentang apa yang sudah dibahas, disisipkan ke prompt Call 2. Mengurangi pengulangan info tanpa perlu regex stripper.
-2. **Few-Shot Exemplar Bank** (`src/slot-engine/few-shot-exemplars.ts`) — 5-7 contoh percakapan ideal SOP admin, di-inject ke prompt. Menggantikan sebagian negative constraints dengan contoh positif.
-3. **Adaptive Model Selector** (`src/slot-engine/adaptive-model-selector.ts`) — pemilihan model cepat vs pintar berdasarkan kompleksitas slate. Env var `AI_MODEL_CHAT_DEEP` untuk kasus berat.
-
-### Metrik Keberhasilan
-- Pengurangan regex count di `language-sanitizer.ts` dari 85 → target <50
-- Pengurangan negative constraints di prompt dari 71 → target <40
-- Rasio knowledge:restriction di prompt dari 1:1.4 → target 2:1
+- **Server update & Meta gate**: Testing on live server with potential Meta event triggers requires 2-step verification (Pixel is real). Standard safe deploys require 1-step verification. Any deploy/action with risk of touching/disrupting WAHA requires 2-step verification + explicit WARNING.

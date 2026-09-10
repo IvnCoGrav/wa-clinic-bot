@@ -83,6 +83,10 @@ export const KB_KEYWORD_RULES: KeywordRule[] = [
     keywords: K('susu, asi, formula, minum, sebelum pijat, muntah, gumoh, jeda, kenyang, boleh minum') },
   { keys: ['perbedaan', 'ceria'],
     keywords: K('ceria, pulih ceria, terapi, relaksasi, perbedaan, beda, banding, pilih, mana, jenis pijat') },
+  // SOP alokasi tenaga (audit 315036): pertanyaan ORANG/bidan, bukan jenis layanan.
+  // Keys multi-kata agar tidak mencemari artikel lain (rule 'beda' milik perbedaan treatment).
+  { keys: ['sama atau berbeda', 'sama atau beda', 'satu orang', 'yang memijat', 'terapis/bidan'],
+    keywords: K('terapis, bidan, sama, beda, berbeda, orang, siapa, satu orang, dua orang, yang mijat, yang memijat, staf, berdua, sendiri, berurutan, satu kunjungan') },
   { keys: ['ongkir', 'transport'],
     keywords: K('ongkir, ongkos, transport, jarak, biaya, promo, gratis, wilayah, surabaya, sidoarjo, antar, kirim, berapa ongkir') },
   { keys: ['60rb', '60 rb'],

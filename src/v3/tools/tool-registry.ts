@@ -1,5 +1,5 @@
 import { CALCULATE_DELIVERY_TOOL_SCHEMA, executeCalculateDelivery, CalculateDeliveryInput } from './calculate-delivery.tool';
-import { GET_CATALOG_TOOL_SCHEMA, executeGetCatalog, GetCatalogInput } from './get-catalog.tool';
+import { GET_CATALOG_TOOL_SCHEMA, executeGetCatalog, GetCatalogInput, CatalogSessionContext } from './get-catalog.tool';
 import { SAVE_RESERVATION_TOOL_SCHEMA, executeSaveReservation, SaveReservationInput } from './save-reservation.tool';
 import { ESCALATE_HUMAN_TOOL_SCHEMA, executeEscalateHuman, EscalateHumanInput } from './escalate-human.tool';
 import { GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA, executeGetClinicFaq, GetClinicFaqInput } from './clinic-faq.tool';
@@ -14,6 +14,12 @@ export const ALL_V3_TOOLS = [
   SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA,
 ];
 
+export interface CartSnapshotItem {
+  name: string;
+  price: number;
+  promoPrice?: number | null;
+}
+
 export interface ToolExecutionContext {
   tenantId: string;
   customerId: string;
@@ -21,6 +27,10 @@ export interface ToolExecutionContext {
   phone: string;
   chatId: string;
   selectedTreatment?: string;
+  /** Snapshot keranjang terbaru (diisi agent-runner pre-execution) untuk agregasi total. */
+  cartSnapshot?: CartSnapshotItem[];
+  /** Snapshot ongkir sesi (diisi agent-runner pre-execution) untuk template total katalog. */
+  locationSnapshot?: CatalogSessionContext;
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -31,6 +41,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         streetDetail: args.streetDetail,
         tenantId: ctx.tenantId,
         candidateTreatmentName: ctx.selectedTreatment,
+        cartSnapshot: ctx.cartSnapshot,
       };
       return await executeCalculateDelivery(input);
     }
@@ -45,7 +56,12 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         specificTreatmentName: args.specificTreatmentName,
         inquirePrice: args.inquirePrice,
       };
-      return await executeGetCatalog(input, ctx.tenantId);
+      return await executeGetCatalog(input, ctx.tenantId, {
+        ...(ctx.locationSnapshot || {}),
+        cartItems: Array.isArray(ctx.cartSnapshot)
+          ? ctx.cartSnapshot.map((c) => ({ name: c.name, promoPrice: c.promoPrice ?? null, price: c.price ?? null }))
+          : undefined,
+      });
     }
 
     case 'save_reservation': {
