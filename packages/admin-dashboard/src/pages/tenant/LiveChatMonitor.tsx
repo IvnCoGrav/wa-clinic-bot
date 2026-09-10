@@ -4176,12 +4176,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <button
                       type="button"
                       onClick={expandBanner}
-                      className={`h-6 px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all border ${
+                      className={`px-2 py-0.5 text-[11px] font-bold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all bg-transparent border-transparent drop-shadow-sm ${
                         activeHoldReservation
-                          ? 'bg-amber-500/15 border-amber-400/40 text-amber-900 dark:text-amber-200'
+                          ? 'text-amber-900 dark:text-amber-200'
                           : activeConfirmedReservation
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-900 dark:text-emerald-200'
-                            : 'bg-sky-500/15 border-sky-400/40 text-sky-900 dark:text-sky-200'
+                            ? 'text-emerald-900 dark:text-emerald-200'
+                            : 'text-sky-900 dark:text-sky-200'
                       }`}
                       title="Tampilkan banner"
                     >
@@ -4189,13 +4189,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         activeHoldReservation ? 'bg-amber-500' : activeConfirmedReservation ? 'bg-emerald-500' : 'bg-sky-500'
                       }`} />
                       <span>
-                        {activeHoldReservation ? 'HOLD' : activeConfirmedReservation ? 'TERJADWAL' : 'PENDING'}
-                        {' • '}
                         {(() => {
                           const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
-                          return r?.booking_date
-                            ? new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
-                            : '';
+                          if (!r?.booking_date) return '';
+                          const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+                          const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                          const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
+                          return `${d} ${t}${dur}`;
                         })()}
                       </span>
                       <ChevronDown size={12} className="stroke-[2.5]" />
@@ -4207,26 +4207,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {activeHoldReservation && (
                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 dark:border-amber-600/40 text-amber-900 dark:text-amber-200 font-extrabold text-[10px] uppercase tracking-wider shrink-0">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        HOLD
-                      </span>
-                      <Clock size={13} className="text-amber-700 dark:text-amber-300 shrink-0 ml-0.5" />
-                      <span className="font-semibold truncate text-amber-950 dark:text-amber-100 text-xs min-w-0">
-                        {activeHoldReservation.booking_date
-                          ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
-                              weekday: 'short',
-                              day: 'numeric',
-                              month: 'short',
-                            }) +
-                            ' ' +
-                            new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'Slot belum ditentukan'}
-                        {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
-                      </span>
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-amber-300">HOLD</span>
+                        <span className="flex items-center gap-1 min-w-0 text-amber-950 dark:text-amber-100">
+                          <Clock size={11} className="text-amber-700 dark:text-amber-300 shrink-0" />
+                          <span className="font-semibold truncate text-[11px]">
+                            {activeHoldReservation.booking_date
+                              ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
+                                  weekday: 'short',
+                                  day: 'numeric',
+                                  month: 'short',
+                                }) +
+                                ' ' +
+                                new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Slot belum ditentukan'}
+                            {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
