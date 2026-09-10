@@ -395,7 +395,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setBookingDate('');
     setBookingTime('09:00');
     setAssignedStaffId('');
-    setStatus('pending');
+    setStatus('confirmed');
     setNotes('');
     setOngkir(0);
     setDiscount(0);
