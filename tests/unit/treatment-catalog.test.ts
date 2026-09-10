@@ -32,9 +32,11 @@ describe('Treatment Catalog Service Unit Tests', () => {
     expect(threeMonthServices.some((s) => s.id === 'baby-massage-ceria')).toBe(true);
     expect(threeMonthServices.some((s) => s.id === 'kids-massage-ceria')).toBe(false);
 
-    // 30 months old toddler (2.5 yrs) -> should match 2-7 years treatment
+    // 30 months old toddler (2.5 yrs) -> tiered 2-4th variant (sesi 214956:
+    // generic kids-massage-ceria dinonaktifkan agar tak ganda dengan tiered)
     const thirtyMonthServices = treatmentCatalogService.getServicesByAge(30);
-    expect(thirtyMonthServices.some((s) => s.id === 'kids-massage-ceria')).toBe(true);
+    expect(thirtyMonthServices.some((s) => s.id === 'kids-massage-2-4th')).toBe(true);
+    expect(thirtyMonthServices.some((s) => s.id === 'kids-massage-ceria')).toBe(false);
     expect(thirtyMonthServices.some((s) => s.id === 'baby-massage-ceria')).toBe(false);
   });
 

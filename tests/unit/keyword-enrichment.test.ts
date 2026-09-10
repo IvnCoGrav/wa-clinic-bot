@@ -49,6 +49,7 @@ const SEED_QUESTIONS = [
   'Bagaimana penanganan lubang tindikan telinga bayi yang posisinya tidak pas (ketinggian)?',
   'Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?',
   'Panduan Usia Kehamilan untuk Pijat Induksi Alami (Induksi Massage)',
+  'Apakah terapis/bidan yang memijat si kecil dan Bunda sama atau berbeda orangnya?',
 ];
 
 describe('resolveChunkKeywords', () => {
