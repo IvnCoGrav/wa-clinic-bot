@@ -4,6 +4,32 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Pembenahan Fondasional UI Edit Reservasi & Integrasi Backend (2026-09-12)
+
+- **Latar Belakang:** 8 bug arsitektural pada Edit Reservasi: status `pending` terpaksa jadi `confirmed` (state sempit `'hold'|'confirmed'`), rekomendasi jam self-collision (jadwal sendiri dianggap bentrok), reservasi tanpa tanggal terisi paksa hari ini 09:00, `Pijat Ceria` → `Paket Selapan` via substring `normS.includes(normTarget)`, LTV & CAPI bengkak karena `purchaseValue` tercampur ongkir (Rp 125k), banner draf hantu di mode edit, assignedChildIndex 0 paksa, dan ganti customer silent-failure.
+- **FASE 1 — Kontrak & State Machine:** `types/index.ts` sudah union lengkap; `reservations.subroute.ts` `status` + `ongkir` (sinkron `Customer.ongkir`), `CreateReservationModal.tsx` state `pending|confirmed|completed|cancelled|hold` + `validStatus` + select 5 opsi + banner `mode!=='edit'` & tombol Simpan Draf hidden di edit.
+- **FASE 2 — Self-Collision:** `bookedReservationsForDate` & `customerConflictsForDate` kecualikan `initialReservation.id` saat `mode==='edit'`; `handleGenerateRecommendations` & `Lihat Jadwal Terisi` tidak lagi anggap diri sendiri bentrok.
+- **FASE 3 — Tanggal & Katalog:** Guard `else if (isOpen && !bookingDate && mode!=='edit')`; `parseTreatmentsFromDetail` hierarkis (exact → non-bundle → fallback) + `childNameInParen` → `assignedChildIndex` via `babiesForChildMatch`, panggil `parseTreatments(..., rawBabies)`.
+- **FASE 4 — Akuntansi & Customer Lock:** `purchaseValue` = `subtotalTreatments - discount` (murni medis), `ongkir` terpisah ke `Customer.ongkir`; Customer Picker terkunci di edit (Info Card `Terkunci (Mode Edit)`), `customerId` tak lagi silent-failure.
+- **Verifikasi:** `tsc --noEmit` bersih, `vite build` 2450 modules, `admin-quick-hold` 8 passed; manual pending tetap pending, self-collision hilang, tanpa tanggal tetap kosong, `Pijat Ceria` tidak jadi Selapan, LTV Rp100k/ongkir Rp25k terpisah.
+
+#### Pembaruan Menyeluruh Katalog Treatment & Pricelist (Revisi Final 35 Layanan) (2026-09-11)
+
+- **Latar Belakang:** Pembaruan katalog resmi layanan dan pricelist klinik Kala Moms and Baby Spa sesuai tabel revisi: penyesuaian promo Paket Pra-Kelahiran Duo menjadi Rp 85.000, pemecahan Pijat Bayi Ceria menjadi tier usia Newborn (0-6 bulan, Rp 60k promo) dan Bayi (7-24 bulan, Rp 70k promo), penambahan tier usia Pijat Kids Pulih Ceria (2-4 th, 4-6 th, 6-8 th), aktivasi resmi layanan Memandikan Bayi & Cukur/Tindik, serta penambahan variasi Paket Selapan (Full, Terapi, Terapi Full).
+- **Katalog & Konfigurasi (`services_custom.json`):**
+  - 35 layanan baru terstruktur per kategori: Bayi (8 layanan), Anak (6 layanan), Ibu & Hamil (9 layanan), Paket Bundling Hemat (11 paket), dan Add-on Medis (3 layanan).
+  - Melestarikan paket berseri `Newborn Treatment (14 Sesi Kunjungan)` (`NewBorn`, 120m, Rp 700k/Rp 500k) yang aktif di live database.
+  - Normalisasi teks dan tanda baca (ASCII hyphens) untuk mencegah malformasi karakter di konsol / PostgreSQL.
+- **Basis Data Live PostgreSQL (`clinic_services`):**
+  - Sinkronisasi atomik via transaksi `BEGIN ... COMMIT` dengan `ON CONFLICT (tenant_id, service_id) DO UPDATE` per tenant `default-tenant`.
+  - 40 record layanan aktif tersinkronisasi sempurna di VM live (43.157.197.148:1403).
+- **AI NLU & Entity Extractor (`entity-extractor.service.ts`):**
+  - Menghapus "memandikan bayi" dan "tindik telinga" dari contoh `ask_unlisted_service` agar AI bot mengenali kedua layanan tersebut sebagai layanan katalog resmi klinik.
+- **Verifikasi Unit Tests (`vitest`):**
+  - Pembaruan validasi perhitungan paket bundle pada `treatment-catalog-bundle-addon.test.ts` (penyesuaian total normal Cukur 35k + Pulih Ceria 100k = 135k).
+  - Penyesuaian matcher nama layanan pada `treatment-catalog-search.test.ts`.
+  - `npm run build` (`tsc`) lulus 100% tanpa error, seluruh test suite katalog hijau.
+
 #### Multi-Lapisan Fondasional V3: Disambiguasi Multi-Anak, Integritas Matematika & Anti-Brosur (2026-09-10)
 
 - **Latar Belakang:** sesi 214956/222655 — AI menebak 1-vs-2 anak sepihak; halusinasi 75k+105k+15k=120k lolos whitelist; rekomendasi usia format brosur bernomor tanpa pemantik klinis; saran pijat langsung pasca-imunisasi.
