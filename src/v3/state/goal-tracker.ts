@@ -369,10 +369,13 @@ export class GoalTracker {
     const hasAny = (words: string[]) => words.some((w) => lower.includes(w));
 
     // RULE 1 (FONDATIONAL): kategori katalog menentukan scope.
+    // Honorifik "kakak sebutkan" DILARANG memindahkan layanan BABY/KIDS ke CHILD_2.
+    const isHonorific = GoalTracker.isKakakHonorific(text);
+    const hasRealKakak = hasAny(['kakak', 'kaka', 'anak pertama', 'anak ke-1', 'anak ke 1', 'si kakak']) && !isHonorific;
     const cat = (service?.category || '').toUpperCase();
     if (cat === 'MOMS') return 'MOMS';
     if (cat === 'BABY' || cat === 'KIDS') {
-      if (hasAny(['kakak', 'kaka', 'anak pertama', 'anak ke-1', 'anak ke 1', 'si kakak'])) return 'CHILD_2';
+      if (hasRealKakak) return 'CHILD_2';
       return 'CHILD_1';
     }
     if (cat === 'BUNDLE') return 'GENERAL';
@@ -385,7 +388,7 @@ export class GoalTracker {
     ) {
       return 'MOMS';
     }
-    if (hasAny(['kakak', 'kaka', 'anak pertama', 'anak ke-1', 'anak ke 1', 'si kakak'])) return 'CHILD_2';
+    if (hasRealKakak) return 'CHILD_2';
     if (hasAny(['adik', 'adek', 'anak kedua', 'anak ke-2', 'anak ke 2', 'si kecil', 'bayi', 'baby', 'anak saya'])) return 'CHILD_1';
     return 'GENERAL';
   }
@@ -654,7 +657,7 @@ export class GoalTracker {
         const form = matchedFormOf(text, s);
         if (form) for (const t of significantTokens(form)) coveredTokens.add(t);
       }
-      const fuzzyHits = (fullHits.length === 0 && !isAssistant)
+      let fuzzyHits = (fullHits.length === 0 && !isAssistant)
         ? services
             .filter((s) => {
               if (!fuzzyMatches(text, s.name)) return false;
@@ -663,6 +666,44 @@ export class GoalTracker {
             })
             .sort((a, b) => b.name.length - a.name.length).slice(0, 2)
         : [];
+      // Anti-duplikasi famili Baby vs Kids (audit 983902): "pulih ceria" DILARANG
+      // memasukkan 2 varian sekaligus untuk anak yang sama — pilih 1 sesuai audiens.
+      if (fuzzyHits.length > 1) {
+        // Famili didefinisikan oleh irisan token "pulih" + "ceria" (bukan sigKey exact
+        // karena "Pijat Bayi Pulih Ceria" vs "Pijat Kids Pulih Ceria" beda token kids/bayi).
+        const isSameFamily = (a: string, b: string): boolean => {
+          const ta = new Set(significantTokens(a).filter((t) => !GENERIC_CLINIC_TOKENS.has(t)));
+          const tb = new Set(significantTokens(b).filter((t) => !GENERIC_CLINIC_TOKENS.has(t)));
+          // famili pulih-ceria: kedua nama mengandung pulih & ceria
+          if (ta.has('pulih') && ta.has('ceria') && tb.has('pulih') && tb.has('ceria')) return true;
+          const inter = [...ta].filter((t) => tb.has(t));
+          return inter.length >= 2;
+        };
+        // Kelompokkan dengan union-find sederhana
+        const groups: Array<typeof fuzzyHits> = [];
+        for (const s of fuzzyHits) {
+          let placed = false;
+          for (const g of groups) {
+            if (g.some((m) => isSameFamily(m.name, s.name))) { g.push(s); placed = true; break; }
+          }
+          if (!placed) groups.push([s]);
+        }
+        const deduped: typeof fuzzyHits = [];
+        for (const arr of groups) {
+          if (arr.length === 1) { deduped.push(arr[0]); continue; }
+          const audience = (session.targetAudience || '').toUpperCase();
+          let winner: typeof arr[number] | null = null;
+          const hasRealKakakInText = !GoalTracker.isKakakHonorific(text) && (text.includes('kakak') || text.includes('kaka'));
+          const hasBabySignal = text.includes('adik') || text.includes('adek') || text.includes('bayi') || text.includes('si kecil');
+          if (audience === 'BABY' || audience === 'MOMS') winner = arr.find((s) => (s.category||'').toUpperCase()==='BABY') || arr[0];
+          else if (audience === 'KIDS') winner = arr.find((s) => (s.category||'').toUpperCase()==='KIDS') || arr[0];
+          else if (hasBabySignal && !hasRealKakakInText) winner = arr.find((s) => (s.category||'').toUpperCase()==='BABY') || arr[0];
+          else if (hasRealKakakInText && !hasBabySignal) winner = arr.find((s) => (s.category||'').toUpperCase()==='KIDS') || arr[0];
+          else winner = arr.find((s) => (s.category||'').toUpperCase()==='BABY') || arr[0];
+          deduped.push(winner!);
+        }
+        fuzzyHits = deduped;
+      }
       for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) {
         pushService(s, GoalTracker.detectRecipientScope(text, s));
       }
@@ -1032,10 +1073,40 @@ export class GoalTracker {
   }
 
   /**
+   * Heuristik sapaan honorifik CS "kakak" (bukan pasien anak).
+   * Contoh: "yg kakak sebutkan", "kakak sebutkan", "makasih kakak", "halo kakak".
+   * Dipakai untuk anti-false-positive CHILD_2 (audit 983902).
+   */
+  public static isKakakHonorific(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower || !lower.includes('kakak') && !lower.includes('kaka ')) return false;
+    // Pola: kata depan + kakak (yg/yang/dari/kata/tanya/ke/sama/halo/hai/makasih/terima kasih + kakak)
+    if (/(?:\byg\b|\byang\b|\bdari\b|\bkata\b|\btanya\b|\bke\b|\bsama\b|\bhalo\b|\bhai\b|\bmakasih\b|terima\s+kasih)\s+kaka?k\b/i.test(lower)) return true;
+    // Pola: kakak + kata kerja CS (sebutkan/jelaskan/bilang/info/sarankan/maksud/ada/ready/bisa/dong/ya)
+    if (/\bkaka?k\b\s+(?:sebutkan|jelaskan|bilang|info|infokan|sarankan|maksud|ada|ready|bisa|dong|ya)\b/i.test(lower)) return true;
+    // Sapaan langsung
+    if (/\b(?:halo|hai|makasih|terima kasih)\s+kaka?k\b/i.test(lower)) return true;
+    if (/\bmakasih\s+kaka?k\b/i.test(lower) || /\bterima\s+kasih\s+kaka?k\b/i.test(lower)) return true;
+    return false;
+  }
+
+  private static isKakakFamilyContext(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+    return lower.includes('anak saya 2') || lower.includes('dua anak') || lower.includes('2 anak')
+      || lower.includes('adik kakak') || lower.includes('kakak adik')
+      || lower.includes('adik dan kakak') || lower.includes('kakak dan adik')
+      || lower.includes('kakaknya umur') || lower.includes('kaka umur')
+      || lower.includes('buat kakak') || lower.includes('untuk kakak')
+      || lower.includes('kakak sama adik') || lower.includes('adik sama kakak');
+  }
+
+  /**
    * Sinyal eksplisit jumlah anak (data-driven includes, tanpa regex intent):
    * penegas multi ("anak saya 2"), label peran (Adik/Kakak), atau penegas
    * satu anak ("1 anak saja"). Dipakai untuk membersihkan latch
    * `isMultiChildUnconfirmed` — BUKAN gatekeeper perilaku LLM.
+   * Honorifik "kakak sebutkan" DILARANG dihitung sebagai sinyal anak kedua.
    */
   public static isExplicitChildCountSignal(text: string): boolean {
     const lower = (text || '').toLowerCase();
@@ -1043,8 +1114,8 @@ export class GoalTracker {
     const multiWords = ['anak saya 2', 'dua anak', '2 anak', 'keduanya',
       'adik kakak', 'kakak adik', 'adik dan kakak', 'kakak dan adik'];
     if (multiWords.some((w) => lower.includes(w))) return true;
-    if (lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'))
-      || lower.includes('adik') || lower.includes('adek')) return true;
+    const hasKakak = (lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'))) && !GoalTracker.isKakakHonorific(text);
+    if (hasKakak || lower.includes('adik') || lower.includes('adek')) return true;
     const oneChild = ['1 anak', 'satu anak', 'cuma satu', 'hanya satu',
       'cuman satu', 'anak tunggal', 'anaknya satu', 'satu aja'];
     if (oneChild.some((w) => lower.includes(w))) return true;
@@ -1096,7 +1167,10 @@ export class GoalTracker {
     };
 
     // Sinyal peran & multi-anak dibaca DULU (tanpa mutasi) agar penetapan usia tepat sasaran.
-    const mentionsKakak = lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'));
+    // Honorifik "kakak sebutkan / yg kakak ..." adalah sapaan CS, BUKAN pasien anak kedua.
+    const rawMentionsKakak = lower.includes('kakak') || (lower.includes('kaka') && !lower.includes('kakak'));
+    const isHonorific = rawMentionsKakak && GoalTracker.isKakakHonorific(text);
+    const mentionsKakak = rawMentionsKakak && !isHonorific;
     const mentionsAdik = lower.includes('adik') || lower.includes('adek');
     const mentionsMulti = lower.includes('anak saya 2') || lower.includes('dua anak') || lower.includes('2 anak') || lower.includes('keduanya');
 

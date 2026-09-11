@@ -1036,6 +1036,31 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Limitasi sadar:** nominal diekstrak LLM router ke `targetPrice` (tanpa parser regex deterministik — sesuai mandat minimal-regex); `tolerance` default exact-match 0.
 - **Verifikasi:** `npm run build` exit 0; tests baru `catalog-price-matching` (6) + `simulator-100rb-replay` (4) hijau; inti 30/30; full suite **245 file, 1868 passed, 0 failed** (19 skipped = baseline).
 
+---
 
+## 45. [V3] Deadlock validator faktual D2↔D3 + pembajakan sanitizer eskalasi (simulator 446090, 2026-09-12)
+
+- **Status:** implemented (2026-09-12, fondasional 4 fase — guardrail + runner + FTS + test).
+- **Kejadian:** pertanyaan SOP vaksin ("pijat habis imunisasi apa sebelum ya?") dijawab sapaan Turn-0 tak relevan, bukan SOP vaksin.
+- **Akar (audit read-only, terbukti di kode):**
+  1. `persona.ts:369` mewajibkan vaksin via `get_clinic_policy_faq` (JANGAN `search_knowledge_faq`), tetapi D3 (`factual-claim-validator.ts:168-175`) hanya mengakui chunk `search_knowledge_faq` dan argumen `_retrievedChunks` (`:109`) adalah dead parameter — deadlock mutlak.
+  2. `agent-runner.ts:1448` sanitizer menimpa `finalReply=''` eskalasi dengan sapaan Turn-0 (tanpa guard `!isEscalated`); brand hardcoded di fallback.
+  3. `knowledge.service.ts:233-243` Step 3 `plainto_tsquery` tanpa Relevance Gate (Step 2 punya) — artikel skor 0.015 lolos sebagai noise.
+- **Perbaikan:** D2/D3 mengakui policy-tool + `retrievedChunks` substantif; guard `!isEscalated && shouldSendReply` + `replyText ''` saat eskalasi + brand dinamis `getBrandIdentity()` (tanpa argumen — signature belum per-tenant, lihat brand.ts:25); gate token+`rank>=0.025` di Step 3 dan fallback tanpa-kolom; test baru `tests/unit/vaccine-sop-flow.test.ts` (5).
+- **Sengaja TIDAK disentuh:** `persona.ts` (aturan vaksin sudah konsisten), seed vaksin sudah ada (`seed-faq.ts:139-145`) — Fase seed = verifikasi sinkronisasi DB saja, dan `npm run seed:faq` (deleteMany destruktif) DILARANG jalan di live tanpa backup+staging.
+- **Pre-existing (terbukti di tree bersih via stash, BUKAN regresi perubahan ini):** full suite `npm test` gagal 19-23 test keluarga harga katalog (Pulih Ceria 70rb→75k, nama Prenatal/Ceria/Sinar Moksa di `services_custom.json` drift tanpa update ekspektasi test: `agent-tools`, `catalog-price-matching`, `treatment-swap-cart-sync`, `catalog-session-total`, `consultation-mode-no-premature-price`, `cross-sum-math-integrity`, `v3-audit-homecare-fix`, `v3-fondasional-pilar`, `cart-dedup-total`, `cart-single-primary-domain`, `treatment-followup-personal`, `simulator-100rb-replay` + 1 flaky `production_edge_cases` label). Targeted suites perubahan ini hijau: vaccine-sop-flow 5/5, factual 9/9, knowledge 3/3, agent-runner 7/7; `npm run build` exit 0.
+- **Tindak lanjut:** selaraskan ekspektasi test harga dengan data katalog dinamis (jangan hardcode nominal — mandat non-hardcode) ATAU kunci ulang `services_custom.json`; verifikasi manual Sandbox 2 query vaksin setelah deploy.
+
+---
+
+## 46. [Data] Drift live↔seed: RAG 43 vs 34, bank 26 vs 37 (2026-09-12)
+
+- **Status:** open (tech debt) — snapshot live diarsipkan di `docs/live-snapshots/` (`knowledge-chunks-2026-09-12.json`, `few-shot-exemplars-2026-09-12.json`); live TIDAK diubah.
+- **Temuan (bukti: dump `row_to_json` live vs `seed-faq.ts` + bank lokal):**
+  - 14 judul live tidak ada di seed lokal (kurasi admin via dashboard: mandi, susu, minyak, tumbuh-gigi+bapil, cukur-gundul, paket ibu komplit, "Mending mana pijat sebelum/sesudah imunisasi", dll).
+  - 5 seed lokal tidak ada di live (lokasi, durasi, bapil-boleh, terapis sama/bebeda, **artikel "bayi jatuh"**).
+  - 2 skenario bank live tidak ada di file lokal ("Treatment setelah/sebelum imunisasi", "Treatment untuk susah makan"); 16 skenario default lokal tidak ada di live (bank live dari seed versi lama).
+- **Risiko:** `npm run seed:faq` (deleteMany) akan MENGHAPUS 14 kurasi admin live; seed ulang bank bisa menimpa koreksi admin. Jangan seed live tanpa backup + merge kurasi dulu.
+- **Tindak lanjut:** putuskan apakah 14 baris live di-merge ke `seed-faq.ts` + 2 skenario ke bank default (perlu konfirmasi owner).
 
 

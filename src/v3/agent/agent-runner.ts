@@ -1445,9 +1445,12 @@ export class V3AgentRunner {
       // simulator, dashboard, log LLM, maupun WAHA (sebelum validasi & logging).
       finalReply = normalizeWhatsAppFormat(finalReply);
 
-      if (!OutputSanitizer.isValidReply(finalReply)) {
+      // Sanitizer fallback HANYA boleh berjalan jika pesan BUKAN hasil eskalasi senyap.
+      if (!isEscalated && shouldSendReply && !OutputSanitizer.isValidReply(finalReply)) {
         console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
-        finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di Kala Moms & Baby Spa. Ada yang bisa Bidan Yusi bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
+        const { getBrandIdentity } = await import('../../config/brand');
+        const brand = getBrandIdentity();
+        finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di ${brand.businessName}. Ada yang bisa Bidan kami bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
       }
 
       if (conversationId && !input.skipDbLogging) {
@@ -1473,7 +1476,7 @@ export class V3AgentRunner {
 
       await traceExecution({ reply: finalReply, status: 'SUCCESS', tools: executedTools });
       return {
-        replyText: finalReply,
+        replyText: isEscalated ? '' : finalReply,
         executedTools,
         updatedSession: session,
         shouldSendReply: shouldSendReply && !isEscalated,
