@@ -310,6 +310,10 @@ export class V3AgentRunner {
       .filter((n) => n && n.trim().length >= 4)
       .sort((a, b) => b.length - a.length);
     for (let i = history.length - 1; i >= 0; i--) {
+      // Fondasional sesi 973126: HANYA pesan customer (role === 'user') yang boleh
+      // mengklaim persetujuan paket. Pesan asisten yang menyebut nama treatment
+      // (rekomendasi/brosur) DILARANG dihitung sebagai customer setuju.
+      if (history[i]?.role !== 'user') continue;
       const text = (history[i]?.content || '').toLowerCase();
       if (!text) continue;
       for (const name of names) {
@@ -1151,20 +1155,14 @@ export class V3AgentRunner {
                 }
               }
             } catch (_) {}
-            if (fnArgs.specificTreatmentName) {
-              session = await GoalTracker.updateGoalSession(conversationId, {
-                selectedTreatment: fnArgs.specificTreatmentName,
-              }, tenantId);
-            } else if (!session.selectedTreatment && Array.isArray(toolResult.treatments) && toolResult.treatments.length > 0) {
-              // Jika belum ada treatment terpilih tetapi AI mencari katalog/gejala,
-              // simpan kandidat rekomendasi teratas agar konteks tidak amnesia pada turn berikutnya
-              const topTreatment = toolResult.treatments.find((t: any) => t.isRecommendedForSymptoms) || toolResult.treatments[0];
-              if (topTreatment?.name) {
-                session = await GoalTracker.updateGoalSession(conversationId, {
-                  selectedTreatment: topTreatment.name,
-                }, tenantId);
-              }
-            }
+            // Fondasional sesi 973126: get_catalog_and_price adalah tool READ-ONLY.
+            // Tanya katalog/harga/konsultasi gejala DILARANG mengunci
+            // session.selectedTreatment. Status paket HANYA diset via
+            // persetujuan eksplisit customer (GoalTracker.detectAgreedTreatment
+            // khusus pesan user, afirmasi swap, atau save_reservation).
+            // Blok auto-locking warisan (treatments[0] fallback) dihapus total.
+            void fnArgs;
+            void toolResult;
             // Audience-aware routing (anti cross-contamination 100% di tingkat tool):
             // MOMS/gestationalWeeks/momStage -> momProfile; BABY/KIDS/childAgeMonths -> children.
             const isMomArgs = fnArgs.category === 'MOMS' || fnArgs.category === 'BOTH'

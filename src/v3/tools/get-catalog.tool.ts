@@ -4,6 +4,12 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 export interface GetCatalogInput {
   category?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
+  /**
+   * Nominal harga yang disebut customer dalam rupiah (sesi 973126, mis. "100rb" -> 100000).
+   * Diisi LLM router dari angka nominal di pesan customer. Pencocokan dilakukan
+   * data-driven terhadap promoPrice/originalPrice katalog per-tenant lintas kategori.
+   */
+  targetPrice?: number;
   childAgeMonths?: number;
   /** Usia kehamilan Ibu (minggu) bila pasien adalah Ibu Hamil (kategori MOMS). JANGAN diisi untuk bayi/anak. */
   gestationalWeeks?: number;
@@ -112,6 +118,10 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         inquirePrice: {
           type: 'boolean',
           description: 'Set true HANYA jika customer eksplisit menanyakan ANGKA biaya (kata: harga, tarif, ongkos, biaya, pricelist, berapa, diskon, promo, atau menyebut nominal seperti "60rb ya"). WAJIB false untuk: penjelasan cara kerja/khasiat ("gimana ya / seperti apa"), DAN untuk pertanyaan ketersediaan/nama paket ("dipaket apa ya", "ada paket apa", "paket ibu apa saja", "bisa treatment apa") — itu BUKAN pertanyaan harga, jawab dengan narasi manfaat tanpa nominal.'
+        },
+        targetPrice: {
+          type: 'number',
+          description: 'Nominal rupiah yang disebut customer (mis. "100rb" -> 100000, "60 ribu" -> 60000). WAJIB diisi bila customer menyebut angka nominal tanpa nama paket. Tool mencocokkan promoPrice/originalPrice katalog lintas kategori (MOMS/BABY/KIDS) dan mengembalikan klarifikasi paket mana yang sesuai nominal.'
         }
       }
     }
@@ -123,15 +133,20 @@ export async function executeGetCatalog(
   tenantId: string = DEFAULT_TENANT_ID,
   sessionCtx?: CatalogSessionContext
 ): Promise<GetCatalogOutput> {
-  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice } = input;
+  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice } = input;
   void gestationalWeeks;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
-  const showPrices = inquirePrice === true;
+  // Menyebut nominal ("100rb") = bertanya harga → paksa showPrices true.
+  const hasTargetPrice = typeof targetPrice === 'number' && Number.isFinite(targetPrice) && targetPrice > 0;
+  const showPrices = inquirePrice === true || hasTargetPrice;
 
   try {
     const allServices = treatmentCatalogService.getAllServices(true, tenantId);
     let filtered: ClinicServiceItem[] = [...allServices];
+    // Sesi 973126: klarifikasi nominal lintas kategori (data-driven dari katalog
+    // per-tenant, bukan hafalan). Diisi bila targetPrice cocok dengan ≥1 layanan.
+    let priceClarification: string | undefined = undefined;
 
     // 1. Filter kategori
     // Audit 222655 (0-24 Months Bridge): balita < 24 bulan yang terquery KIDS
@@ -161,6 +176,34 @@ export async function executeGetCatalog(
         if (tier.maxAgeMonths !== null && tier.maxAgeMonths < childAgeMonths) return false;
         return true;
       });
+    }
+
+    // 2b. Pencocokan nominal harga lintas kategori (sesi 973126):
+    // bila targetPrice diisi dan TANPA specificTreatmentName/symptoms yang
+    // eksplisit, JANGAN kunci ke satu kategori tebakan (mis. BABY). Cari di
+    // seluruh katalog per-tenant yang promo/normal-nya == targetPrice, lalu
+    // jadikan pool utama agar Prenatal 100rb tidak terfilter keluar.
+    if (hasTargetPrice && !specificTreatmentName?.trim() && (symptoms || []).length === 0) {
+      const priceHits = treatmentCatalogService.findServicesByPrice(Number(targetPrice), 0, tenantId);
+      if (priceHits.length > 0) {
+        const hitIds = new Set(priceHits.map((s) => s.id));
+        // Pool utama = yang cocok nominal; sisakan 1 pembanding lintas-audiens
+        // (mis. bayi vs ibu) agar LLM bisa mengklarifikasi, bukan mengarang.
+        const comparator = allServices.find((s) =>
+          !hitIds.has(s.id)
+          && (s.category === 'BABY' || s.category === 'MOMS')
+          && !treatmentCatalogService.isAddonService(s)
+        );
+        filtered = comparator ? [...priceHits, comparator] : [...priceHits];
+        const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
+        const hitLines = priceHits.slice(0, 4).map((s) =>
+          `${s.name} ${fmtRp(s.promoPrice)} promo (normal ${fmtRp(s.originalPrice)}, ${s.durationMinutes} mnt)`
+        ).join('; ');
+        priceClarification = `Nominal ${fmtRp(Number(targetPrice))} sesuai dengan: ${hitLines}.`
+          + (comparator
+            ? ` Pembanding: ${comparator.name} ${fmtRp(comparator.promoPrice)} promo (${comparator.durationMinutes} mnt) — tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`
+            : ` Tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`);
+      }
     }
 
     // 3. Pencarian nama spesifik jika customer menanyakan paket tertentu
@@ -370,6 +413,11 @@ export async function executeGetCatalog(
       }
     }
 
+    // Sesi 973126: bila nominal dicocokkan, tutup pemantik klinis generik diganti
+    // klarifikasi subjek pasien (Bunda vs si kecil) — paket belum dipilih.
+    const closingGuide = priceClarification
+      ? 'Wajib sebutkan paket yang sesuai nominal di atas beserta durasinya, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).'
+      : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.';
     return {
       success: true,
       treatments: formattedTreatments.slice(0, 5),
@@ -377,7 +425,7 @@ export async function executeGetCatalog(
       suggestedPriceReply,
       cartTotalReply,
       suggestedConsultationReply,
-      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}${cartTotalReply ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang):\n"${cartTotalReply}"\nBila customer menanyakan total belanjaan, WAJIB kutip angka total resmi di atas persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}${suggestedConsultationReply ? `\n\nMode Konsultasi (customer BELUM bertanya harga — JANGAN sebut nominal, JANGAN todong jadwal):\n"${suggestedConsultationReply}"` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! WAJIB tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.`
+      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${priceClarification ? `\n\nKlarifikasi Nominal (data katalog — WAJIB dikutip, DILARANG mengarang):\n"${priceClarification}"` : ''}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}${cartTotalReply ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang):\n"${cartTotalReply}"\nBila customer menanyakan total belanjaan, WAJIB kutip angka total resmi di atas persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}${suggestedConsultationReply ? `\n\nMode Konsultasi (customer BELUM bertanya harga — JANGAN sebut nominal, JANGAN todong jadwal):\n"${suggestedConsultationReply}"` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! ${closingGuide}`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_CATALOG_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
