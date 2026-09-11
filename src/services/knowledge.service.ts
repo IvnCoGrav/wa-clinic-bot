@@ -230,7 +230,8 @@ export class KnowledgeBaseService {
         }
       }
 
-      // 3. Fallback to plainto_tsquery with raw userQuery if clean search yields no results
+      // 3. Fallback to plainto_tsquery with raw userQuery if clean search yields no results.
+      // Relevance Gate (konsisten Step 2): buang hasil tanpa token substantif / rank marjinal.
       if (!rawResults || rawResults.length === 0) {
         rawResults = await prisma.$queryRaw<any[]>`
           SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, keywords, document_name as "documentName",
@@ -238,8 +239,23 @@ export class KnowledgeBaseService {
           FROM knowledge_chunks
           WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || coalesce(keywords, '') || ' ' || content) @@ plainto_tsquery('simple', ${userQuery})
           ORDER BY rank DESC
-          LIMIT ${limit};
+          LIMIT ${limit * 2};
         `;
+        if (rawResults && rawResults.length > 0) {
+          const substantiveTokens = (cleanQuery || userQuery)
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((w) => w.length > 2);
+          if (substantiveTokens.length > 0) {
+            const filtered = rawResults.filter((r: any) => {
+              const text = `${r.title} ${r.keywords || ''} ${r.content}`.toLowerCase();
+              const hasToken = substantiveTokens.some((tok) => text.includes(tok));
+              const rank = typeof r.rank === 'number' ? r.rank : 0;
+              return hasToken && rank >= 0.025;
+            });
+            rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
+          }
+        }
       }
 
       if (rawResults && rawResults.length > 0) {
@@ -331,9 +347,20 @@ export class KnowledgeBaseService {
           FROM knowledge_chunks
           WHERE tenant_id = ${tenantId} AND to_tsvector('simple', title || ' ' || content) @@ to_tsquery('simple', ${orQuery})
           ORDER BY rank DESC
-          LIMIT ${limit};
+          LIMIT ${limit * 2};
         `;
-        rawResults = (orResults || []).slice(0, limit);
+        if (orResults && orResults.length > 0) {
+          const substantiveTokens = terms.map((t) => t.toLowerCase());
+          const filtered = orResults.filter((r: any) => {
+            const text = `${r.title} ${r.content}`.toLowerCase();
+            const hasToken = substantiveTokens.some((tok) => text.includes(tok));
+            const rank = typeof r.rank === 'number' ? r.rank : 0;
+            return hasToken && rank >= 0.025;
+          });
+          rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
+        } else {
+          rawResults = [];
+        }
       }
     }
     if (!rawResults || rawResults.length === 0) return [];

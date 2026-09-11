@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Sinkronisasi Penuh Knowledge Chunks (FAQ) & Chat Bank (Few-Shot Exemplars) dari Live Server ke Lokal (2026-09-12)
+
+- **Latar Belakang:** Kebutuhan pengguna agar data RAG Chunks (`knowledge_chunks`) dan Chat Bank (`few_shot_exemplars`) di lingkungan lokal sama persis dengan yang ada di server produksi live (43.157.197.148:1403). Sebelumnya di lokal terdapat selisih (49 FAQ lama vs 43 FAQ kurasi live, dan hanya 7 exemplar default vs 26 exemplar live).
+- **Aksi & Sinkronisasi:**
+  - Dump data langsung dari PostgreSQL server produksi (`wa-clinic-bot-postgres-1`): 43 record `knowledge_chunks` dan 26 record `few_shot_exemplars` diekspor bersih dengan encoding UTF-8 (mempertahankan emoji natural WhatsApp Bidan Yusi tanpa mojibake).
+  - Snapshot data disimpan ke `storage/live_data.sql`, `storage/live_knowledge_chunks.json`, dan `storage/live_few_shot_exemplars.json`.
+  - Database PostgreSQL lokal di container `wa-clinic-bot-postgres-1` disinkronkan: tabel `knowledge_chunks` dan `few_shot_exemplars` kini berisi 100% data riil produksi yang identik.
+- **Verifikasi:**
+  - Query SQL lokal membuktikan: `knowledge_chunks` = 43 baris, `few_shot_exemplars` = 26 baris (identik dengan server live).
+  - Test suite `tests/unit/knowledge.test.ts` (3 passed) dan `tests/v3/agent-runner.test.ts` (7 passed) hijau tanpa regresi.
+
+#### Resolusi Deadlock Validator Faktual & Pembajakan Sanitizer Eskalasi (2026-09-12)
+
+- **Latar Belakang:** pertanyaan SOP vaksin dijawab sapaan Turn-0 tak relevan. Akar: deadlock D2↔D3 (prompt mewajibkan policy-tool, validator hanya mengakui search-chunks, `_retrievedChunks` dead parameter); sanitizer menimpa `finalReply=''` eskalasi dengan sapaan hardcoded; Step 3 FTS tanpa Relevance Gate meloloskan artikel skor 0.015.
+- **Fixed:** D2/D3 di `src/v3/guardrails/factual-claim-validator.ts` kini mengakui `get_clinic_policy_faq`, artikel vaksin di `search_knowledge_faq`, dan `retrievedChunks` substantif; guard `!isEscalated && shouldSendReply` + `replyText ''` saat eskalasi + brand dinamis di `src/v3/agent/agent-runner.ts`; cek `shouldSendReply` di `src/routes/admin/evaluations.subroute.ts`; gate token substantif + `rank>=0.025` di Step 3 dan fallback tanpa-kolom `src/services/knowledge.service.ts`; test baru `tests/unit/vaccine-sop-flow.test.ts` (5).
+- **Verifikasi:** vaccine-sop-flow 5/5, factual 9/9, knowledge 3/3, agent-runner 7/7 hijau; `npm run build` exit 0. Full suite menyisakan 19 gagal pre-existing keluarga harga katalog (terbukti di tree bersih, dicatat di `docs/KNOWN_ISSUES.md` #45).
+
 #### Pembenahan Fondasional UI Edit Reservasi & Integrasi Backend (2026-09-12)
 
 - **Latar Belakang:** 8 bug arsitektural pada Edit Reservasi: status `pending` terpaksa jadi `confirmed` (state sempit `'hold'|'confirmed'`), rekomendasi jam self-collision (jadwal sendiri dianggap bentrok), reservasi tanpa tanggal terisi paksa hari ini 09:00, `Pijat Ceria` → `Paket Selapan` via substring `normS.includes(normTarget)`, LTV & CAPI bengkak karena `purchaseValue` tercampur ongkir (Rp 125k), banner draf hantu di mode edit, assignedChildIndex 0 paksa, dan ganti customer silent-failure.
