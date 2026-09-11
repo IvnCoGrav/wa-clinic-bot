@@ -103,6 +103,18 @@ function knowledgeHasChunks(tools: ToolExec[]): boolean {
   );
 }
 
+function policyToolCalled(tools: ToolExec[]): boolean {
+  return tools.some((t) => t?.name === 'get_clinic_policy_faq' && t?.result?.success !== false);
+}
+
+function hasSubstantiveChunks(chunks?: Array<{ content?: string; title?: string }>): boolean {
+  return Array.isArray(chunks) && chunks.some((c) => !!(c?.content && c.content.trim().length > 20));
+}
+
+function mentionsVaccine(text: string): boolean {
+  return /vaksin|imunisasi/i.test(text || '');
+}
+
 export function validateFactualClaims(
   replyText: string,
   executedTools: ToolExec[],
@@ -118,9 +130,19 @@ export function validateFactualClaims(
     violations.push('Klaim efikasi absolut ("menyembuhkan/dijamin/100%/tanpa efek samping") tanpa landasan data tool.');
   }
 
-  // D2 — klaim vaksin wajib berlandaskan tool kebijakan klinik.
-  if (VACCINE_RE.test(reply) && !toolCalled(executedTools, 'get_clinic_policy_faq')) {
-    violations.push('Pembahasan vaksin/imunisasi tanpa memanggil get_clinic_policy_faq.');
+  // D2 — klaim vaksin wajib berlandaskan tool kebijakan klinik ATAU artikel
+  // knowledge vaksin (search_knowledge_faq / pre-grounding retrievedChunks).
+  const vaccineGrounded =
+    toolCalled(executedTools, 'get_clinic_policy_faq') ||
+    (Array.isArray(_retrievedChunks) &&
+      _retrievedChunks.some((c: any) => mentionsVaccine(`${c?.title || ''} ${c?.content || ''}`))) ||
+    executedTools.some(
+      (t) =>
+        t?.name === 'search_knowledge_faq' &&
+        mentionsVaccine(JSON.stringify(t?.result || ''))
+    );
+  if (VACCINE_RE.test(reply) && !vaccineGrounded) {
+    violations.push('Pembahasan vaksin/imunisasi tanpa landasan tool get_clinic_policy_faq atau artikel knowledge.');
   }
 
   // D1 — nama layanan di-bold/dikutip wajib ada di katalog turn ini.
@@ -163,15 +185,20 @@ export function validateFactualClaims(
     }
   }
 
-  // D3 — anjuran SOP substantif wajib berlandaskan artikel knowledge.
+  // D3 — anjuran SOP substantif wajib berlandaskan artikel knowledge ATAU
+  // kebijakan klinik (get_clinic_policy_faq) ATAU pre-grounding retrievedChunks.
   // Penolakan sopan ("belum tersedia, diteruskan ke CS") dikecualikan.
+  const hasSopGrounding =
+    knowledgeHasChunks(executedTools) ||
+    policyToolCalled(executedTools) ||
+    hasSubstantiveChunks(_retrievedChunks);
   if (
     reply.length > 80 &&
     ADVISORY_RE.test(reply) &&
     !REFUSAL_FRAME_RE.test(reply) &&
-    !knowledgeHasChunks(executedTools)
+    !hasSopGrounding
   ) {
-    violations.push('Anjuran klinis/SOP tanpa landasan artikel search_knowledge_faq.');
+    violations.push('Anjuran klinis/SOP tanpa landasan artikel knowledge atau kebijakan klinik.');
   }
 
   // D6 — anti-halu domisili (kasus simulator 725870): bila sesi belum memuat

@@ -250,7 +250,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               originalText: combinedRawText,
             });
 
-            const answer = v3Result.isEscalated && !v3Result.replyText
+            const answer = (v3Result.isEscalated && (!v3Result.replyText || !v3Result.shouldSendReply))
               ? '🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]'
               : v3Result.replyText;
 

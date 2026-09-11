@@ -62,20 +62,24 @@ export class OutputSanitizer {
 
   /**
    * Memotong teks secara elegan di batas kalimat terakhir sebelum maxChars (default 500).
+   * Prioritas: 1) batas paragraf \n\n, 2) akhir kalimat (./!? atau emoji penutup), 3) spasi.
    */
   public static truncateToMaxChars(text: string, maxChars: number = 500): string {
     if (!text || text.length <= maxChars) return text;
     const rawSlice = text.slice(0, maxChars);
-    // Cari akhir kalimat yang valid: titik WAJIB didahului huruf kata (bukan angka —
-    // titik pada nomor daftar "3." atau desimal "70.000" BUKAN akhir kalimat) dan
-    // diikuti spasi/newline/akhir teks. Tanda ! dan ? selalu valid.
+    // 1. Prioritas Utama: potong di pemisah paragraf ganda terdekat sebelum batas
+    const lastParagraphEnd = rawSlice.lastIndexOf('\n\n');
+    if (lastParagraphEnd > 100) {
+      return rawSlice.slice(0, lastParagraphEnd).trimEnd();
+    }
+    // 2. Prioritas Kedua: cari akhir kalimat valid (./!? ATAU emoji penutup diikuti spasi/newline)
     let lastSentenceEnd = -1;
     const punctRe = /[.!?]/g;
     let m: RegExpExecArray | null;
     while ((m = punctRe.exec(rawSlice)) !== null) {
       const idx = m.index;
       const ch = m[0];
-      if (ch === '.' ) {
+      if (ch === '.') {
         const prev = idx > 0 ? rawSlice[idx - 1] : '';
         const next = idx + 1 < rawSlice.length ? rawSlice[idx + 1] : '';
         const prevIsLetter = /[a-zA-Z\u00C0-\u024F]/.test(prev);
@@ -84,10 +88,17 @@ export class OutputSanitizer {
       }
       lastSentenceEnd = idx;
     }
+    // Emoji penutup sebagai batas kalimat (mis. "Bunda 😊\n\nApakah...")
+    const emojiRe = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+(?=\s|\n|$)/gu;
+    let em: RegExpExecArray | null;
+    while ((em = emojiRe.exec(rawSlice)) !== null) {
+      const endIdx = em.index + em[0].length - 1;
+      if (endIdx > lastSentenceEnd) lastSentenceEnd = endIdx;
+    }
     if (lastSentenceEnd > 0) {
       return rawSlice.slice(0, lastSentenceEnd + 1).trimEnd();
     }
-    // Fallback: potong di spasi terakhir agar tidak memutus kata di tengah
+    // 3. Fallback: potong di spasi terakhir agar tidak memutus kata di tengah
     const lastSpace = rawSlice.lastIndexOf(' ');
     if (lastSpace > 0) {
       return rawSlice.slice(0, lastSpace).trimEnd();
