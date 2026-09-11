@@ -60,41 +60,19 @@ export class ConversationStateMachine {
       };
     }
 
-    // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
-    const { commandService } = await import('../services/command.service');
-    const cmdResult = await commandService.tryHandle(ctx, tenantId);
-    if (cmdResult) {
-      const cmdChatId = `${customer.phone}@c.us`;
-      const cmdSent = await this.typingSvc.simulateHumanReply({
-        chatId: cmdChatId,
-        incomingMessageId: incomingMessage.id,
-        incomingText: incomingMessage.text?.body || '',
-        replyText: cmdResult.replyText,
-      });
-      if (cmdSent.success) {
-        await messageService.logMessage({
-          tenantId,
-          conversationId: cmdResult.conversationId,
-          direction: Direction.OUTBOUND,
-          content: cmdResult.replyText,
-        });
-      }
-      return {
-        nextState: cmdResult.nextState ?? ConversationState.INITIAL,
-        shouldSendReply: false,
-      };
-    }
+    // (Slash commands diproses SETELAH gate medis/domain — lihat di bawah —
+    //  agar "/reset" tak memulihkan state darurat/eskalasi.)
 
-    // --- GATE 🚫: OPT-OUT MARKETING (WABA only) ---
+    // --- GATE 🚫: OPT-OUT MARKETING (semua provider — WAHA & WABA) ---
     const rawInboundText = incomingMessage.text?.body || '';
-    if ((incomingMessage as any)._provider === 'WABA') {
+    {
       const { wabaOptOutService } = await import('../services/waba-optout.service');
       const optOutDetect = wabaOptOutService.isOptOutMessage(rawInboundText);
       if (optOutDetect.matched) {
-        console.log(`[WABA OPT-OUT] Customer ${customer.phone} sent "${optOutDetect.keyword}". Processing global opt-out (tenant=${tenantId}).`);
+        console.log(`[OPT-OUT] Customer ${customer.phone} sent "${optOutDetect.keyword}". Processing global opt-out (tenant=${tenantId}).`);
         try {
           const result = await wabaOptOutService.handleOptOut(customer.id, tenantId);
-          console.log(`[WABA OPT-OUT] Customer ${customer.phone} opted out. Cancelled ${result.cancelledFollowUps} scheduled follow-ups.`);
+          console.log(`[OPT-OUT] Customer ${customer.phone} opted out. Cancelled ${result.cancelledFollowUps} scheduled follow-ups.`);
 
           const gateway = await resolveGatewayForTenant(tenantId);
           const ackText = wabaOptOutService.getAckMessage();
@@ -108,7 +86,7 @@ export class ConversationStateMachine {
             waMessageId: sendResult.messageId,
           });
         } catch (optOutErr: any) {
-          console.error('[WABA OPT-OUT ERROR] Failed to process opt-out:', optOutErr.message);
+          console.error('[OPT-OUT ERROR] Failed to process opt-out:', optOutErr.message);
         }
         return {
           nextState: conversation.current_state,
@@ -356,6 +334,12 @@ export class ConversationStateMachine {
         activeConversation.is_human_handling = true;
         activeConversation.current_state = ConversationState.HUMAN_HANDLING;
 
+        // Fase E: form valid → reset penghitung tak-lengkap.
+        try {
+          const { GoalTracker } = await import('../v3/state/goal-tracker');
+          await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: 0 }, tenantId);
+        } catch {}
+
         const { TEMPLATES } = await import('../config/persona');
         const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
         const replyText = `Baik Bunda, data reservasi sudah kami terima ya bund. Kami cek dulu ya bund. 😊${shareNote}`;
@@ -379,6 +363,38 @@ export class ConversationStateMachine {
         if (hasFormHeaderOrColonFields) {
           const missing = parseResult.missingFields || [];
           const missingStr = missing.join(', ');
+          // Fase E: anti loop minta-lengkapi selamanya — 2x diminta, ke-3x eskalasi sunyi.
+          let retryCount = 0;
+          try {
+            const { GoalTracker } = await import('../v3/state/goal-tracker');
+            const sess = await GoalTracker.getGoalSession(activeConversation.id, tenantId);
+            retryCount = sess.formRetryCount || 0;
+          } catch {}
+          if (retryCount >= 2) {
+            try {
+              const { GoalTracker } = await import('../v3/state/goal-tracker');
+              await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: 0 }, tenantId);
+            } catch {}
+            activeConversation.is_human_handling = true;
+            activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+            await conversationService.escalateToHumanHandling(
+              activeConversation,
+              customer.phone,
+              `Formulir reservasi tak lengkap berulang (${retryCount + 1}x) — butuh bantuan manusia`,
+              tenantId,
+              'reservation_incomplete'
+            );
+            return {
+              nextState: ConversationState.HUMAN_HANDLING,
+              shouldSendReply: false,
+              isHumanHandling: true,
+              aiReasoning: 'Customer submitted incomplete reservation form 3x -> Silent escalation to human.',
+            };
+          }
+          try {
+            const { GoalTracker } = await import('../v3/state/goal-tracker');
+            await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: retryCount + 1 }, tenantId);
+          } catch {}
           const incompleteReply = `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`;
           return {
             nextState: ConversationState.RESERVATION_SENT,
@@ -390,6 +406,17 @@ export class ConversationStateMachine {
       }
     }
 
+    // --- Sapaan data-driven: simpan deklarasi identitas eksplisit customer
+    // ("saya bapak", "panggil ibu") — BUKAN tebakan dari nama. Tersimpan di
+    // preferences sesi dan dibaca GoalTracker; tanpa deklarasi = default produk.
+    try {
+      const { GoalTracker } = await import('../v3/state/goal-tracker');
+      const declared = GoalTracker.detectExplicitGenderPreference(incomingText);
+      if (declared) {
+        await GoalTracker.updateGoalSession(activeConversation.id, { genderGreeting: declared }, tenantId);
+      }
+    } catch {}
+
     // --- 🚀 4. EKSEKUSI UTAMA: V3 AGENTIC (DEFAULT) / V2 SLOT-FILLING ENGINE ---
     const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
     const historyFormatted = recentDbMsgs.map((m) => ({
@@ -397,7 +424,98 @@ export class ConversationStateMachine {
       content: m.content || '',
     }));
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
+
+    // --- GATE DOMAIN + KELUHAN + MINTA MANUSIA: eskalasi sunyi SEBELUM V3
+    //     (fondasional, bukan daftar kata). NLU LLM (EntityExtractor) menilai
+    //     keanggotaan domain terhadap data layanan DB; deterministik cepat
+    //     dilewati bila sudah ada sinyal.
+    //     Fail-open: LLM offline → baseline chitchat → lanjut ke V3 seperti semula.
+    let preExtractedIntents: string[] = [];
+    try {
+      const { extractFastIntents } = await import('../v3/agent/persona');
+      const fast = extractFastIntents(incomingText);
+      if (fast && fast.length > 0) {
+        preExtractedIntents = fast;
+      } else {
+        const { EntityExtractor } = await import('../services/entity-extractor.service');
+        const extraction = await EntityExtractor.extract(incomingText, {
+          history: historyFormatted.slice(-4).map((h) => ({
+            role: h.role as 'user' | 'assistant',
+            content: h.content,
+          })),
+          customerPhone: customer.phone,
+          conversationId: activeConversation.id,
+          tenantId,
+          incomingMessage,
+        });
+        preExtractedIntents = extraction?.intents || [];
+      }
+    } catch {}
+    // Intent yang memaksa eskalasi sunyi + reason tercatat untuk CS/admin.
+    const SILENT_ESCALATE_REASONS: Record<string, { reason: string; note: string }> = {
+      out_of_domain: {
+        reason: 'out_of_domain',
+        note: 'Topik di luar layanan klinik (out_of_domain) — diteruskan ke tim manusia',
+      },
+      complaint: {
+        reason: 'complaint',
+        note: 'Keluhan eksplisit terhadap layanan — diteruskan ke tim manusia',
+      },
+      human_agent: {
+        reason: 'manual_request',
+        note: 'Permintaan bicara dengan manusia — diteruskan ke tim manusia',
+      },
+    };
+    const silentMatched = preExtractedIntents.find((i) => SILENT_ESCALATE_REASONS[i]);
+    if (silentMatched) {
+      const { reason: silentReason, note: silentNote } = SILENT_ESCALATE_REASONS[silentMatched];
+      console.log(`[SILENT GATE] ${silentMatched} untuk ${customer.phone} — eskalasi sunyi tanpa V3.`);
+      activeConversation.is_human_handling = true;
+      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      await conversationService.escalateToHumanHandling(
+        activeConversation,
+        customer.phone,
+        silentNote,
+        tenantId,
+        silentReason
+      );
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        shouldSendReply: false,
+        isHumanHandling: true,
+      };
+    }
     
+    // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
+    // Sengaja SETELAH gate medis/domain (Fase C3): perintah tak boleh memulihkan
+    // state darurat atau eskalasi. Saat is_human_handling, guard di atas sudah
+    // return sunyi lebih dulu sehingga /reset tak menyela CS.
+    {
+      const { commandService } = await import('../services/command.service');
+      const cmdResult = await commandService.tryHandle(ctx, tenantId);
+      if (cmdResult) {
+        const cmdChatId = `${customer.phone}@c.us`;
+        const cmdSent = await this.typingSvc.simulateHumanReply({
+          chatId: cmdChatId,
+          incomingMessageId: incomingMessage.id,
+          incomingText: incomingMessage.text?.body || '',
+          replyText: cmdResult.replyText,
+        });
+        if (cmdSent.success) {
+          await messageService.logMessage({
+            tenantId,
+            conversationId: cmdResult.conversationId,
+            direction: Direction.OUTBOUND,
+            content: cmdResult.replyText,
+          });
+        }
+        return {
+          nextState: cmdResult.nextState ?? ConversationState.INITIAL,
+          shouldSendReply: false,
+        };
+      }
+    }
+
     let result: StateHandlerResult;
     // Eksekusi Tunggal V3 Agent Runner (V2 slot-engine telah didekomisioning)
     const { V3AgentRunner } = await import('../v3/agent/agent-runner');
@@ -418,17 +536,23 @@ export class ConversationStateMachine {
       originalText: (incomingMessage as any).originalText || inboundContent,
       history: historyFormatted,
       skipDbLogging: true,
+      preExtractedIntents,
     });
 
     if (v3Result.isEscalated) {
       activeConversation.is_human_handling = true;
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      // Reason presisi untuk learning loop: eskalasi LLM non-medis dicatat
+      // sebagai 'unresolved_faq' agar masuk antrean kurasi admin (/unanswered).
+      const escTool = (v3Result.executedTools || []).find((t: any) => t?.name === 'escalate_to_human');
+      const escSeverity = (escTool as any)?.args?.severity;
+      const escReason = escSeverity === 'CRITICAL_MEDICAL' ? 'medical_concern' : 'unresolved_faq';
       await conversationService.escalateToHumanHandling(
         activeConversation,
         customer.phone,
         'Eskalasi otomatis oleh V3 Agent',
         tenantId,
-        'v3_agent_escalation'
+        escReason
       );
     }
 
@@ -579,6 +703,25 @@ export class ConversationStateMachine {
         metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
         metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
       });
+    }
+
+    // --- LEARNING LOOP (Fase A): turn dengan grounding kosong tetap dibalas,
+    // tapi dicatat 'unresolved_faq' agar admin mengkurasi via /unanswered.
+    // Dilakukan SETELAH pengiriman agar balasan tidak tertahan.
+    if ((v3Result as any).unresolvedFaq && !v3Result.isEscalated) {
+      try {
+        activeConversation.is_human_handling = true;
+        activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+        await conversationService.escalateToHumanHandling(
+          activeConversation,
+          customer.phone,
+          'Jawaban tanpa grounding knowledge (perlu kurasi admin)',
+          tenantId,
+          'unresolved_faq'
+        );
+        result.nextState = ConversationState.HUMAN_HANDLING;
+        (result as any).isHumanHandling = true;
+      } catch {}
     }
 
     return result;

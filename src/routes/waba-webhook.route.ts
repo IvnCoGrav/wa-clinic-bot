@@ -189,7 +189,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       const mergeWabaMedia = (raw: any) => (msgMedia ? { ...raw, media: msgMedia } : raw);
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
-      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
+      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '300', 10);
       if (maxAgeSeconds > 0 && msg.timestamp) {
         const rawTs = Number(msg.timestamp);
         if (!isNaN(rawTs) && rawTs > 0) {

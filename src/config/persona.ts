@@ -234,6 +234,11 @@ export async function savePersonaToDb(
 // =========================================================================
 
 export const TEMPLATES = {
+  // Template netral tanya domisili (Fase D6): TANPA nama kecamatan/kota —
+  // dipakai sebagai fallback aman bila validator domisili memblokir draf
+  // yang mengarang lokasi customer.
+  askDomicileNeutral: () =>
+    `Kalau boleh tahu rumah Bunda di daerah mana ya, biar kami bantu cekkan jangkauan jarak dan Bidan kami yang ready? 🤗`,
   // Header greeting wajib untuk pesan pertama ke customer baru.
   // Dipakai sebagai prefix ketika customer mengirim pertanyaan di awal chat
   // agar jawaban AI tetap diawali sapaan resmi.

@@ -66,6 +66,7 @@ export interface ExtractedEntities {
     | 'complaint'
     | 'human_agent'
     | 'ask_unlisted_service'
+    | 'out_of_domain'
     | 'compare_locations'
     | 'chitchat'
   >;

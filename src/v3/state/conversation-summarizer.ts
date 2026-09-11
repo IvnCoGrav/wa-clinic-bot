@@ -159,7 +159,7 @@ export class V3ConversationSummarizer {
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
     if (hasDayMention) {
       sedangDibahas = 'Bunda menanyakan ketersediaan jadwal';
-      yangPerluDijawab = 'Sampaikan bahwa ketersediaan jadwal Bidan yang bertugas akan dibantu cekkan terlebih dahulu (DILARANG bilang "Tentu bisa" sepihak).';
+      yangPerluDijawab = 'Pola "cekkan/infokan" HANYA bila lokasi Bunda sudah diketahui; bila lokasi BELUM diketahui, tanyakan domisili netral dulu (aturan persona 5a) dan DILARANG berjanji mengecek jadwal. (DILARANG bilang "Tentu bisa" sepihak).';
     } else if (rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama')) {
       sedangDibahas = 'Bunda menanyakan durasi waktu pelaksanaan perawatan';
       yangPerluDijawab = 'Sebutkan durasi pelaksanaan secara jelas beserta manfaat relaksasinya.';
