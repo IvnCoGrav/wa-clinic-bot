@@ -120,6 +120,16 @@ export const CustomerDatabase: React.FC = () => {
   // Reservation detail dari riwayat (klik row/card)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
+  useEffect(() => {
+    if (reservationStaffList.length === 0) {
+      apiRequest('/api/admin/staff')
+        .then((res: any) => {
+          const list = res?.data || (Array.isArray(res) ? res : []);
+          if (Array.isArray(list) && list.length > 0) setReservationStaffList(list);
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   // Chat History Modal State
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<CustomerItem | null>(null);

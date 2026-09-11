@@ -283,6 +283,24 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold'>('confirmed');
   const [notes, setNotes] = useState('');
 
+  // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
+  const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
+  useEffect(() => {
+    if (staffList && staffList.length > 0) {
+      setInternalStaffList(staffList);
+    } else if (isOpen) {
+      apiRequest('/api/admin/staff')
+        .then((res: any) => {
+          const list = res?.data || (Array.isArray(res) ? res : []);
+          if (Array.isArray(list) && list.length > 0) setInternalStaffList(list);
+        })
+        .catch(() => {});
+    }
+  }, [staffList, isOpen]);
+  const effectiveStaffList = useMemo(() => {
+    return internalStaffList && internalStaffList.length > 0 ? internalStaffList : (staffList || []);
+  }, [internalStaffList, staffList]);
+
   // Payment Breakdown & Discounts
   const [ongkir, setOngkir] = useState<number | ''>(0);
   const [discount, setDiscount] = useState<number | ''>(0);
@@ -627,9 +645,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         } catch {}
       }
 
-      if (res.assigned_staff_id || res.assigned_staff?.id) {
-        setAssignedStaffId(res.assigned_staff_id || res.assigned_staff?.id || '');
-      }
+      // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
+      setAssignedStaffId(res.assigned_staff_id || (res as any).assigned_staff?.id || '');
 
       const validStatus = ['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status)
         ? res.status
@@ -959,14 +976,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     // Filter staff: If specific staff chosen in dropdown, recommend for that staff.
     // Otherwise, strictly filter for active field therapists (role === 'THERAPIST').
-    let targetStaffList = staffList.filter((s) => {
+    let targetStaffList = effectiveStaffList.filter((s) => {
       if (s.active === false) return false;
       if (assignedStaffId) return s.id === assignedStaffId;
       return s.role === 'THERAPIST' || (s.role || '').toLowerCase().includes('therapist');
     });
 
     if (targetStaffList.length === 0) {
-      targetStaffList = staffList.filter((s) => s.active !== false);
+      targetStaffList = effectiveStaffList.filter((s) => s.active !== false);
     }
 
     if (targetStaffList.length === 0) {
@@ -2095,7 +2112,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <UserCheck size={12} />
                   <span>Penugasan Terapis</span>
                 </label>
-                {user?.id && (
+                {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
                   <button
                     type="button"
                     onClick={() => setAssignedStaffId(user.id)}
@@ -2111,11 +2128,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
               >
                 <option value="">-- Otomatis / Belum Ditugaskan --</option>
-                {staffList
-                  .filter((s) => s.active !== false)
+                {effectiveStaffList
+                  .filter((s) => s.active !== false || s.id === assignedStaffId)
                   .map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} {s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
+                      {s.name} {s.active === false ? '(Nonaktif)' : s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
                     </option>
                   ))}
               </select>
