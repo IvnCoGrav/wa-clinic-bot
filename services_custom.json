@@ -1,7 +1,7 @@
 [
   {
-    "id": "baby-massage-ceria",
-    "name": "Pijat Bayi Ceria (Rileksasi)",
+    "id": "baby-mandi",
+    "name": "Memandikan Bayi",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -9,42 +9,10 @@
       "maxAgeMonths": 24,
       "label": "0 - 24 Bulan"
     },
-    "durationMinutes": 40,
-    "originalPrice": 80000,
-    "promoPrice": 60000,
-    "description": "Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks.",
-    "isActive": true
-  },
-  {
-    "id": "baby-massage-pulih-ceria",
-    "name": "Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)",
-    "category": "BABY",
-    "serviceType": "STANDARD",
-    "ageTier": {
-      "minAgeMonths": 0.5,
-      "maxAgeMonths": 24,
-      "label": "Minimal 2 Minggu (0.5 - 24 Bulan)"
-    },
-    "durationMinutes": 40,
-    "originalPrice": 90000,
-    "promoPrice": 70000,
-    "description": "Pijat terapi khusus bayi flu, batuk, pilek, rewel, susah BAB, kembung atau kolik dengan menggunakan double aromaterapi dan titik pijat khusus.",
-    "isActive": true
-  },
-  {
-    "id": "baby-massage-lahap-juara",
-    "name": "Pijat Lahap Juara (Nafsu Makan)",
-    "category": "BABY",
-    "serviceType": "STANDARD",
-    "ageTier": {
-      "minAgeMonths": 0,
-      "maxAgeMonths": 24,
-      "label": "0 - 24 Bulan"
-    },
-    "durationMinutes": 40,
-    "originalPrice": 95000,
-    "promoPrice": 75000,
-    "description": "Pijat khusus untuk membantu meningkatkan nafsu makan si kecil dan menjaga kebugaran tubuh.",
+    "durationMinutes": 25,
+    "originalPrice": 40000,
+    "promoPrice": 30000,
+    "description": "Memandikan bayi secara higienis, lembut, dan steril oleh bidan langsung di rumah.",
     "isActive": true
   },
   {
@@ -55,12 +23,12 @@
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": 12,
-      "label": "Bayi 0 - 12 Bulan"
+      "label": "0 - 12 Bulan"
     },
     "durationMinutes": 15,
-    "originalPrice": 30000,
+    "originalPrice": 35000,
     "promoPrice": 25000,
-    "description": "Layanan mencukur rambut bayi dengan alat steril / milik customer sendiri secara bersih.",
+    "description": "Cukur gundul/bersih rambut bayi menggunakan alat steril atau milik customer sendiri.",
     "isActive": true
   },
   {
@@ -71,17 +39,97 @@
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": 12,
-      "label": "Bayi 0 - 12 Bulan"
+      "label": "0 - 12 Bulan"
     },
     "durationMinutes": 15,
     "originalPrice": 70000,
     "promoPrice": 50000,
-    "description": "Layanan tindik telinga bayi secara manual menggunakan anting steril langsung secara aman.",
+    "description": "Tindik telinga higienis & aman oleh bidan langsung dengan anting steril.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-ceria-newborn",
+    "name": "Pijat Bayi Ceria Newborn",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 6,
+      "label": "0 - 6 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 80000,
+    "promoPrice": 60000,
+    "description": "Pijat relaksasi untuk membantu tidur lebih nyenyak, meredakan kelelahan, dan membuat tubuh lebih rileks.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-ceria",
+    "name": "Pijat Bayi Ceria (Rileksasi)",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 24,
+      "label": "7 - 24 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 80000,
+    "promoPrice": 70000,
+    "description": "Pijat relaksasi tubuh bayi usia aktif merangkak/berjalan untuk meredakan pegal, tidur nyenyak & stimulasi motorik.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-pulih-ceria",
+    "name": "Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 24,
+      "label": "7 - 24 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 100000,
+    "promoPrice": 75000,
+    "description": "Terapi khusus batuk, pilek, flu, rewel, susah BAB, kembung/kolik dengan double aromaterapi & titik akupresur.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-lahap-juara",
+    "name": "Pijat Lahap Juara (< 2 thn)",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 24,
+      "label": "0 - 24 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 100000,
+    "promoPrice": 75000,
+    "description": "Pijat stimulasi pencernaan untuk membantu meningkatkan nafsu makan dan kebugaran tubuh si kecil.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-lahap-juara-gt2",
+    "name": "Pijat Lahap Juara (> 2 thn)",
+    "category": "KIDS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 24,
+      "maxAgeMonths": 96,
+      "label": "> 2 Tahun"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 110000,
+    "promoPrice": 80000,
+    "description": "Pijat stimulasi pencernaan & titik akupresur penambah nafsu makan untuk anak usia di atas 2 tahun.",
     "isActive": true
   },
   {
     "id": "kids-massage-2-4th",
-    "name": "Pijat Kids Ceria (Usia 2-4 th)",
+    "name": "Pijat Kids Ceria (2 - 4 Tahun)",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -90,14 +138,14 @@
       "label": "2 - 4 Tahun"
     },
     "durationMinutes": 45,
-    "originalPrice": 90000,
-    "promoPrice": 70000,
-    "description": "Pijat relaksasi tubuh anak usia 2 hingga 4 tahun untuk meredakan kelelahan dan mendukung kenyamanan tumbuh kembang.",
+    "originalPrice": 85000,
+    "promoPrice": 75000,
+    "description": "Pijat kebugaran & relaksasi anak toddler untuk meredakan pegal dan meningkatkan kualitas tidur.",
     "isActive": true
   },
   {
     "id": "kids-massage-4-6th",
-    "name": "Pijat Kids Ceria (Usia >4-6 th)",
+    "name": "Pijat Kids Ceria (4 - 6 Tahun)",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -105,15 +153,15 @@
       "maxAgeMonths": 72,
       "label": "4 - 6 Tahun"
     },
-    "durationMinutes": 45,
-    "originalPrice": 100000,
+    "durationMinutes": 50,
+    "originalPrice": 90000,
     "promoPrice": 80000,
-    "description": "Pijat relaksasi tubuh anak usia di atas 4 hingga 6 tahun untuk meredakan kelelahan setelah beraktivitas aktif.",
+    "description": "Pijat kebugaran & relaksasi anak usia pra-sekolah setelah aktif beraktivitas.",
     "isActive": true
   },
   {
     "id": "kids-massage-6-8th",
-    "name": "Pijat Kids Ceria (Usia >6-8 th)",
+    "name": "Pijat Kids Ceria (6 - 8 Tahun)",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -121,47 +169,95 @@
       "maxAgeMonths": 96,
       "label": "6 - 8 Tahun"
     },
-    "durationMinutes": 45,
-    "originalPrice": 110000,
+    "durationMinutes": 50,
+    "originalPrice": 100000,
     "promoPrice": 90000,
-    "description": "Pijat relaksasi tubuh anak usia 6 sampai 8 tahun untuk mendukung pertumbuhan tulang dan otot yang sehat.",
+    "description": "Pijat relaksasi & kebugaran anak usia sekolah untuk melemaskan otot tegang dan pegal.",
     "isActive": true
   },
   {
-    "id": "kids-massage-ceria",
-    "name": "Pijat Kids Ceria",
+    "id": "kids-pulih-2-4th",
+    "name": "Pijat Kids Pulih Ceria (2 - 4 Tahun)",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 24,
-      "maxAgeMonths": 96,
-      "label": "2 - 8 Tahun"
+      "maxAgeMonths": 48,
+      "label": "2 - 4 Tahun"
     },
     "durationMinutes": 45,
+    "originalPrice": 100000,
+    "promoPrice": 85000,
+    "description": "Terapi khusus bapil, flu, kembung, sembelit untuk anak usia 2-4 tahun dengan akupresur & aromaterapi.",
+    "isActive": true
+  },
+  {
+    "id": "kids-pulih-4-6th",
+    "name": "Pijat Kids Pulih Ceria (4 - 6 Tahun)",
+    "category": "KIDS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 48,
+      "maxAgeMonths": 72,
+      "label": "4 - 6 Tahun"
+    },
+    "durationMinutes": 50,
     "originalPrice": 110000,
     "promoPrice": 90000,
-    "description": "Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas.",
-    "isActive": false
+    "description": "Terapi khusus bapil, flu, kembung, sembelit untuk anak usia 4-6 tahun dengan akupresur & aromaterapi.",
+    "isActive": true
+  },
+  {
+    "id": "kids-pulih-6-8th",
+    "name": "Pijat Kids Pulih Ceria (6 - 8 Tahun)",
+    "category": "KIDS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 72,
+      "maxAgeMonths": 96,
+      "label": "6 - 8 Tahun"
+    },
+    "durationMinutes": 50,
+    "originalPrice": 120000,
+    "promoPrice": 100000,
+    "description": "Terapi khusus bapil, flu, kembung, sembelit untuk anak usia 6-8 tahun dengan akupresur & aromaterapi.",
+    "isActive": true
   },
   {
     "id": "moms-prenatal-massage",
-    "name": "Prenatal Massage (Pijat Hamil)",
+    "name": "Pijat Ibu Hamil / Prenatal Gentle Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil (Trimester 2 & 3)"
+      "label": "Trimester 2 & 3 (Min. 14 Minggu)"
     },
     "durationMinutes": 60,
-    "originalPrice": 125000,
+    "originalPrice": 120000,
+    "promoPrice": 90000,
+    "description": "Pijat khusus ibu hamil posisi miring aman untuk meredakan pegal pinggang, kaki bengkak & relaksasi.",
+    "isActive": true
+  },
+  {
+    "id": "moms-postpartum-massage",
+    "name": "Pijat Ibu Pasca Melahirkan / Postpartum Massage",
+    "category": "MOMS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Pasca Melahirkan (Normal/SC)"
+    },
+    "durationMinutes": 60,
+    "originalPrice": 130000,
     "promoPrice": 100000,
-    "description": "Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres.",
+    "description": "Pijat pemulihan stamina tubuh ibu pasca persalinan, melancarkan peredaran darah dan relaksasi.",
     "isActive": true
   },
   {
     "id": "moms-paket-laktasi",
-    "name": "Paket Laktasi (Breast Massage)",
+    "name": "Pijat Laktasi / Breast Care Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -170,9 +266,25 @@
       "label": "Ibu Menyusui"
     },
     "durationMinutes": 40,
-    "originalPrice": 70000,
-    "promoPrice": 50000,
-    "description": "Pijat area payudara untuk memperlancar sumbatan ASI dan meningkatkan produksi ASI secara optimal.",
+    "originalPrice": 110000,
+    "promoPrice": 85000,
+    "description": "Perawatan payudara untuk melancarkan sumbatan ASI, meredakan payudara bengkak & stimulasi ASI.",
+    "isActive": true
+  },
+  {
+    "id": "moms-oksitosin",
+    "name": "Pijat Oksitosin",
+    "category": "MOMS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Menyusui"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 90000,
+    "promoPrice": 75000,
+    "description": "Pijat punggung, leher & bahu untuk merangsang hormon oksitosin dan memperlancar aliran ASI.",
     "isActive": true
   },
   {
@@ -186,10 +298,11 @@
       "label": "Ibu Menyusui"
     },
     "durationMinutes": 40,
-    "originalPrice": 70000,
-    "promoPrice": 50000,
-    "description": "Pijat punggung parsial untuk merangsang produksi ASI.",
-    "isActive": true
+    "originalPrice": 90000,
+    "promoPrice": 75000,
+    "description": "Pijat punggung, leher & bahu untuk merangsang hormon oksitosin dan memperlancar aliran ASI.",
+    "isActive": true,
+    "isAddon": false
   },
   {
     "id": "moms-oksitosin-fullbody",
@@ -199,127 +312,121 @@
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Pasca Melahirkan / Nifas"
+      "label": "Ibu Menyusui"
     },
     "durationMinutes": 60,
-    "originalPrice": 130000,
+    "originalPrice": 140000,
     "promoPrice": 105000,
-    "description": "Pijat punggung dan leher fullbody untuk membantu merangsang hormon oksitosin sehingga produksi ASI lebih lancar dan badan ibu lebih rileks.",
+    "description": "Pijat relaksasi seluruh tubuh dipadukan dengan stimulasi oksitosin untuk kelancaran ASI.",
+    "isActive": true
+  },
+  {
+    "id": "moms-relaksasi",
+    "name": "Pijat Relaksasi Ibu (Women Relaxation Massage)",
+    "category": "MOMS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Khusus Wanita / Ibu"
+    },
+    "durationMinutes": 60,
+    "originalPrice": 110000,
+    "promoPrice": 85000,
+    "description": "Pijat relaksasi seluruh tubuh untuk wanita/ibu yang lelah beraktivitas harian.",
     "isActive": true
   },
   {
     "id": "moms-perineum-massage",
-    "name": "Perineum Massage",
+    "name": "Pijat Perineum (Perineal Massage)",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil Trimester 3"
+      "label": "Ibu Hamil (Min. 34-36 Minggu)"
     },
     "durationMinutes": 30,
-    "originalPrice": 60000,
-    "promoPrice": 45000,
-    "description": "Pijat area perineum khusus ibu hamil trimester 3 untuk meningkatkan elastisitas otot dan membantu kelancaran persalinan normal.",
-    "isActive": true
-  },
-  {
-    "id": "moms-induksi-massage",
-    "name": "Induksi Massage",
-    "category": "MOMS",
-    "serviceType": "STANDARD",
-    "ageTier": {
-      "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Ibu Hamil Aterm (37+ Minggu)"
-    },
-    "durationMinutes": 40,
     "originalPrice": 70000,
     "promoPrice": 50000,
-    "description": "Pijat stimulasi titik akupresur khusus untuk membantu merangsang kontraksi dan proses induksi alami persalinan pada usia kehamilan aterm.",
-    "isActive": true
-  },
-  {
-    "id": "moms-induksi-fullbody",
-    "name": "Induksi Massage Fullbody",
-    "category": "MOMS",
-    "serviceType": "STANDARD",
-    "ageTier": {
-      "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Ibu Hamil Aterm (37+ Minggu)"
-    },
-    "durationMinutes": 60,
-    "originalPrice": 130000,
-    "promoPrice": 105000,
-    "description": "Pijat relaksasi seluruh tubuh dipadukan dengan titik stimulasi induksi alami untuk ibu hamil menjelang HPL.",
+    "description": "Pijat elastisitas area perineum menjelang persalinan normal untuk meminimalkan robekan jalan lahir.",
     "isActive": true
   },
   {
     "id": "moms-prenatal-yoga",
-    "name": "Prenatal Yoga",
+    "name": "Prenatal Gentle Yoga",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil (Trimester 2 & 3)"
+      "label": "Trimester 2 & 3 (Min. 14 Minggu)"
     },
-    "durationMinutes": 45,
+    "durationMinutes": 30,
     "originalPrice": 70000,
     "promoPrice": 50000,
-    "description": "Sesi latihan pernapasan, postur, dan peregangan yoga hamil dipandu bidan bersertifikasi untuk mempersiapkan fisik dan mental persalinan.",
+    "description": "Latihan peregangan, pernapasan, dan postur lembut untuk mempersiapkan tubuh menghadapi persalinan.",
     "isActive": true
   },
   {
-    "id": "add-on-sinar-moksa",
-    "name": "Sinar Moksa (Add-on)",
-    "category": "ADD_ON",
-    "serviceType": "ADD_ON",
-    "isAddon": true,
+    "id": "baby-paket-selapan",
+    "name": "Paket Selapan (Cukur + Pijat Ceria)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "baby-cukur",
+      "baby-massage-ceria"
+    ],
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Semua Usia"
+      "maxAgeMonths": 12,
+      "label": "Bayi 0 - 12 Bulan"
     },
-    "durationMinutes": 15,
-    "originalPrice": 15000,
-    "promoPrice": 10000,
-    "description": "[ADDON] Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan.",
+    "durationMinutes": 55,
+    "originalPrice": 115000,
+    "promoPrice": 80000,
+    "description": "[BUNDLE:baby-cukur,baby-massage-ceria] Paket tradisi selapanan: cukur rambut steril + pijat bayi ceria relaksasi.",
     "isActive": true
   },
   {
-    "id": "add-on-nebulizer",
-    "name": "Nebulizer (Terapi Uap Add-on)",
-    "category": "ADD_ON",
-    "serviceType": "ADD_ON",
-    "isAddon": true,
+    "id": "baby-paket-selapan-full",
+    "name": "Paket Selapan Full (Cukur + Ceria + Mandi)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "baby-cukur",
+      "baby-massage-ceria",
+      "baby-mandi"
+    ],
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Semua Usia"
+      "maxAgeMonths": 12,
+      "label": "Bayi 0 - 12 Bulan"
     },
-    "durationMinutes": 20,
-    "originalPrice": 50000,
-    "promoPrice": 35000,
-    "description": "[ADDON] Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak.",
+    "durationMinutes": 80,
+    "originalPrice": 155000,
+    "promoPrice": 100000,
+    "description": "[BUNDLE:baby-cukur,baby-massage-ceria,baby-mandi] Paket lengkap selapanan: cukur gundul steril + pijat ceria + memandikan bayi bersih & harum.",
     "isActive": true
   },
   {
-    "id": "add-on-nebulizer-obat",
-    "name": "Nebulizer + Obat (Terapi Uap Lengkap)",
-    "category": "ADD_ON",
-    "serviceType": "ADD_ON",
-    "isAddon": true,
+    "id": "baby-paket-selapan-terapi",
+    "name": "Paket Selapan Terapi (Cukur + Terapi Bapil)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "baby-cukur",
+      "baby-massage-pulih-ceria"
+    ],
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Semua Usia"
+      "maxAgeMonths": 12,
+      "label": "Bayi 0 - 12 Bulan"
     },
-    "durationMinutes": 20,
-    "originalPrice": 85000,
-    "promoPrice": 65000,
-    "description": "[ADDON] Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas.",
+    "durationMinutes": 55,
+    "originalPrice": 135000,
+    "promoPrice": 90000,
+    "description": "[BUNDLE:baby-cukur,baby-massage-pulih-ceria] Paket selapanan saat bayi sedang batuk pilek/kembung: cukur steril + pijat terapi pulih ceria.",
     "isActive": true
   },
   {
@@ -337,49 +444,151 @@
       "label": "Bayi 0 - 12 Bulan"
     },
     "durationMinutes": 55,
-    "originalPrice": 95000,
-    "promoPrice": 85000,
+    "originalPrice": 135000,
+    "promoPrice": 90000,
     "description": "[BUNDLE:baby-cukur,baby-massage-pulih-ceria] Paket hemat kombinasi cukur rambut bayi dan pijat terapi bayi.",
-    "isActive": true
+    "isActive": true,
+    "isAddon": false
   },
   {
-    "id": "baby-paket-selapan",
-    "name": "Paket Selapan (Cukur + Pijat Ceria)",
+    "id": "baby-paket-selapan-terapi-full",
+    "name": "Paket Selapan Terapi Full (Cukur + Terapi + Mandi)",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "bundleItemIds": [
       "baby-cukur",
-      "baby-massage-ceria"
+      "baby-massage-pulih-ceria",
+      "baby-mandi"
     ],
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": 2,
-      "label": "Newborn (0 - 40 Hari)"
+      "maxAgeMonths": 12,
+      "label": "Bayi 0 - 12 Bulan"
     },
-    "durationMinutes": 55,
-    "originalPrice": 85000,
-    "promoPrice": 80000,
-    "description": "[BUNDLE:baby-cukur,baby-massage-ceria] Pijat khusus bayi baru lahir (newborn) usia 0-40 hari dikombinasikan dengan cukur rambut bayi.",
+    "durationMinutes": 80,
+    "originalPrice": 175000,
+    "promoPrice": 110000,
+    "description": "[BUNDLE:baby-cukur,baby-massage-pulih-ceria,baby-mandi] Paket komplit saat selapanan bayi bapil/kembung: cukur + pijat pulih ceria + memandikan bayi.",
     "isActive": true
   },
   {
     "id": "bundle-laktasi-oksitosin",
-    "name": "Paket Laktasi (Breast + Oksitosin)",
+    "name": "Paket Laktasi Booster (Breast + Oksitosin)",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "bundleItemIds": [
       "moms-paket-laktasi",
-      "moms-oksitosin-partial"
+      "moms-oksitosin"
     ],
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
       "label": "Ibu Menyusui"
     },
-    "durationMinutes": 75,
-    "originalPrice": 100000,
-    "promoPrice": 80000,
-    "description": "[BUNDLE:moms-paket-laktasi,moms-oksitosin-partial] Paket hemat kombinasi pijat payudara (laktasi) dan pijat oksitosin untuk melancarkan ASI.",
+    "durationMinutes": 80,
+    "originalPrice": 200000,
+    "promoPrice": 140000,
+    "description": "[BUNDLE:moms-paket-laktasi,moms-oksitosin] Kombinasi breast care massage + pijat oksitosin punggung untuk booster kelancaran ASI maksimal.",
+    "isActive": true
+  },
+  {
+    "id": "bundle-mom-baby-ceria",
+    "name": "Paket Mom & Baby Ceria Duo",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-relaksasi",
+      "baby-massage-ceria"
+    ],
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "1 Ibu + 1 Bayi"
+    },
+    "durationMinutes": 100,
+    "originalPrice": 190000,
+    "promoPrice": 140000,
+    "description": "[BUNDLE:moms-relaksasi,baby-massage-ceria] Pijat relaksasi ibu (60 mnt) + Pijat Bayi Ceria (40 mnt) dalam 1 sesi kunjungan bidan.",
+    "isActive": true
+  },
+  {
+    "id": "moms-laktasi-oksitosin-full",
+    "name": "Breast + Oksitosin Fullbody Massage",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-paket-laktasi",
+      "moms-oksitosin-fullbody"
+    ],
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Menyusui"
+    },
+    "durationMinutes": 100,
+    "originalPrice": 250000,
+    "promoPrice": 155000,
+    "description": "[BUNDLE:moms-paket-laktasi,moms-oksitosin-fullbody] Breast care + pijat oksitosin seluruh badan (full body) untuk relaksasi total ibu menyusui.",
+    "isActive": true
+  },
+  {
+    "id": "bundle-perineum-yoga",
+    "name": "Paket Pra Kelahiran (Perineum + Yoga)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-perineum-massage",
+      "moms-prenatal-yoga"
+    ],
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Hamil (Min. 34-36 Minggu)"
+    },
+    "durationMinutes": 60,
+    "originalPrice": 140000,
+    "promoPrice": 85000,
+    "description": "[BUNDLE:moms-perineum-massage,moms-prenatal-yoga] Kombinasi pijat perineum + gentle yoga untuk kelenturan jalan lahir dan stamina persalinan.",
+    "isActive": true
+  },
+  {
+    "id": "bundle-perineum-breast",
+    "name": "Paket Pra Kelahiran (Perineum + Breast)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-perineum-massage",
+      "moms-paket-laktasi"
+    ],
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Hamil (Min. 36 Minggu)"
+    },
+    "durationMinutes": 70,
+    "originalPrice": 180000,
+    "promoPrice": 85000,
+    "description": "[BUNDLE:moms-perineum-massage,moms-paket-laktasi] Kombinasi pijat perineum + persiapan laktasi dini menjelang hari persalinan.",
+    "isActive": true
+  },
+  {
+    "id": "bundle-yoga-breast",
+    "name": "Paket Pra Kelahiran (Yoga + Breast)",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-prenatal-yoga",
+      "moms-paket-laktasi"
+    ],
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Hamil (Min. 36 Minggu)"
+    },
+    "durationMinutes": 70,
+    "originalPrice": 180000,
+    "promoPrice": 85000,
+    "description": "[BUNDLE:moms-prenatal-yoga,moms-paket-laktasi] Gentle yoga kehamilan + perawatan payudara untuk persiapan kelahiran dan menyusui.",
     "isActive": true
   },
   {
@@ -395,93 +604,82 @@
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil Trimester 3"
+      "label": "Ibu Hamil (Min. 36 Minggu)"
     },
-    "durationMinutes": 105,
-    "originalPrice": 185000,
-    "promoPrice": 135000,
-    "description": "[BUNDLE:moms-perineum-massage,moms-prenatal-yoga,moms-paket-laktasi] Paket persiapan persalinan lengkap mencakup pijat perineum, prenatal yoga, dan pijat laktasi.",
+    "durationMinutes": 100,
+    "originalPrice": 250000,
+    "promoPrice": 150000,
+    "description": "[BUNDLE:moms-perineum-massage,moms-prenatal-yoga,moms-paket-laktasi] Paket 3-in-1 persiapan persalinan & menyusui paling komplit: Perineum + Yoga + Breast Care.",
     "isActive": true
   },
   {
-    "id": "bundle-yoga-breast",
-    "name": "Paket Pra Kelahiran (Yoga + Breast)",
-    "category": "BUNDLE",
-    "serviceType": "BUNDLE",
-    "bundleItemIds": [
-      "moms-prenatal-yoga",
-      "moms-paket-laktasi"
-    ],
+    "id": "add-on-sinar-moksa",
+    "name": "Sinar Moksa (Infrared / Moxa)",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil Trimester 3"
+      "label": "Bayi & Anak"
     },
-    "durationMinutes": 80,
-    "originalPrice": 100000,
-    "promoPrice": 80000,
-    "description": "[BUNDLE:moms-prenatal-yoga,moms-paket-laktasi] Kombinasi relaksasi yoga hamil dan stimulasi laktasi persiapan menyusui.",
+    "durationMinutes": 15,
+    "originalPrice": 35000,
+    "promoPrice": 25000,
+    "description": "Terapi hangat infra merah/moksa alami untuk melegakan pernapasan batuk pilek dan menghangatkan tubuh.",
     "isActive": true
   },
   {
-    "id": "bundle-perineum-yoga",
-    "name": "Paket Pra Kelahiran (Perineum + Yoga)",
-    "category": "BUNDLE",
-    "serviceType": "BUNDLE",
-    "bundleItemIds": [
-      "moms-perineum-massage",
-      "moms-prenatal-yoga"
-    ],
+    "id": "add-on-nebulizer",
+    "name": "Nebulizer (Uap Tanpa Obat)",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil Trimester 3"
+      "label": "Bayi & Anak"
     },
-    "durationMinutes": 75,
-    "originalPrice": 95000,
-    "promoPrice": 80000,
-    "description": "[BUNDLE:moms-perineum-massage,moms-prenatal-yoga] Kombinasi peregangan panggul yoga hamil dan pemijatan elastisitas perineum.",
+    "durationMinutes": 20,
+    "originalPrice": 45000,
+    "promoPrice": 35000,
+    "description": "Terapi inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
     "isActive": true
   },
   {
-    "id": "bundle-perineum-breast",
-    "name": "Paket Pra Kelahiran (Perineum + Breast)",
-    "category": "BUNDLE",
-    "serviceType": "BUNDLE",
-    "bundleItemIds": [
-      "moms-perineum-massage",
-      "moms-paket-laktasi"
-    ],
+    "id": "add-on-nebulizer-obat",
+    "name": "Nebulizer + Obat",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
-      "label": "Ibu Hamil Trimester 3"
+      "label": "Bayi & Anak"
     },
-    "durationMinutes": 70,
-    "originalPrice": 95000,
-    "promoPrice": 80000,
-    "description": "[BUNDLE:moms-perineum-massage,moms-paket-laktasi] Perawatan persiapan persalinan untuk melenturkan perineum dan merangsang produksi ASI.",
+    "durationMinutes": 20,
+    "originalPrice": 60000,
+    "promoPrice": 50000,
+    "description": "Terapi inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
     "isActive": true
   },
   {
-    "id": "moms-laktasi-oksitosin-full",
-    "name": "Breast + Oksitoksin Fullbody Massage",
-    "category": "BUNDLE",
-    "serviceType": "BUNDLE",
-    "bundleItemIds": [
-      "moms-paket-laktasi",
-      "moms-oksitosin-fullbody"
-    ],
+    "id": "NewBorn",
+    "name": "Newborn Treatment (14 Sesi Kunjungan)",
+    "category": "BABY",
+    "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Ibu Menyusui / Nifas"
+      "maxAgeMonths": 6,
+      "label": "0 - 6 Bulan"
     },
-    "durationMinutes": 75,
-    "originalPrice": 200000,
-    "promoPrice": 155000,
-    "description": "[BUNDLE:moms-paket-laktasi,moms-oksitosin-fullbody] Paket hemat kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.",
-    "isActive": true
+    "durationMinutes": 120,
+    "originalPrice": 700000,
+    "promoPrice": 500000,
+    "description": "Paket pendampingan intensif ibu & newborn pasca lahir selama 14 sesi (perawatan tali pusat, memandikan, jemur, pijat).",
+    "isActive": true,
+    "totalSessions": 14,
+    "sessionScheduleType": "manual"
   },
   {
     "id": "custom-kids-spa",
@@ -496,6 +694,8 @@
     "originalPrice": 160000,
     "promoPrice": 130000,
     "description": "Layanan mandi berbusa dan pijat relaksasi anak.",
-    "isActive": true
+    "isActive": false,
+    "serviceType": "STANDARD",
+    "isAddon": false
   }
 ]

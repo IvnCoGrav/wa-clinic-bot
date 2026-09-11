@@ -479,10 +479,7 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "affirmation": Persetujuan/jawaban positif singkat (boleh, iya, siap, mau).
 - "negation": Penolakan/jawaban negatif (tidak, bukan, jangan).
 - "medical_emergency": Kondisi kritis fatal (kejang, biru, tidak sadar, perdarahan hebat).
-- "complaint": Keluhan/ketidakpuasan eksplisit terhadap layanan ("saya kecewa", "pelayanan buruk", "saya komplain"). BUKAN keluhan gejala fisik (itu "consult_symptom").
-- "human_agent": Permintaan eksplisit bicara dengan manusia/admin ("minta admin", "bicara dengan orangnya", "hubungkan ke bidan").
 - "ask_unlisted_service": Menanyakan layanan/tindakan di luar katalog resmi klinik (seperti memandikan bayi harian, penitipan anak/baby sitting, tindik telinga, imunisasi, sunat, perawatan newborn mandiri).
-- "out_of_domain": Pertanyaan substantif yang jawabannya tidak ada di katalog layanan, knowledge base, maupun kebijakan klinik — topik di luar layanan Mom & Baby Home Care. BUKAN sapaan, BUKAN tanya jadwal/harga/lokasi/keluhan, BUKAN layanan unlisted (itu "ask_unlisted_service").
 - "compare_locations": Menanyakan perbandingan jarak, ongkir, atau mana yang lebih dekat antara 2 atau lebih lokasi (contoh: "lebih dekat mana wiguna selatan atau jojoran baru 1", "antara rungkut sama kenjeran deket mana"). Masukkan nama-nama lokasi yang dibandingkan ke "comparison_locations" (array of string) dan biarkan "location_text" tetap null.
 - "chitchat": Sapaan atau basa-basi umum.
 
@@ -496,8 +493,6 @@ ATURAN EKSTRAKSI (SANGAT KETAT):
 7. Tangkap semua keluhan fisik/anak ke dalam array "symptoms".
 8. Pecahkan rujukan anaphora ("yang tadi", "yang kedua") ke "treatment_referenced" jika ada riwayat percakapan.
 9. Jika pesan terbaru menanyakan ketersediaan jadwal/waktu (contoh: "hari ini tersedia kah?", "bisa hari ini?", "ada jadwal hari ini?", "Jumat apakah bisa?", "bisa besok jam 3?", "ada slot kosong hari ini?"), masukkan intent "ask_schedule" dan ekstrak waktu/hari tersebut (contoh: "hari ini", "Jumat", "besok") ke "preferred_date_text".
- 9b. BATAS DOMAIN (WAJIB): Jika yang ditanyakan ketersediaannya BUKAN layanan/jadwal/treatment klinik — subjek di luar layanan Mom & Baby Home Care atau tak dapat dipadankan ke katalog, knowledge base, maupun kebijakan klinik — gunakan intent "out_of_domain". DILARANG menebaknya sebagai "ask_schedule" hanya karena ada kata "tersedia"/"masih ada"/"ready"/"kosong". Contoh: ketersediaan treatment/jadwal ("pijat bayi hari ini tersedia kah?", "besok masih ada slot kosong?") → "ask_schedule"; ketersediaan hal di luar layanan klinik → "out_of_domain".
- 9c. KELUHAN & MINTA MANUSIA (WAJIB, eskalasi sunyi): "complaint" HANYA untuk ketidakpuasan terhadap layanan/klinik ("komplain", "kecewa", "buruk", "tidak puas", "mengecewakan") — DILARANG untuk gejala fisik ("batuk", "ruam", "demam", "rewel" → "consult_symptom"). "human_agent" HANYA untuk permintaan bicara dengan manusia ("minta admin", "bicara langsung", "hubungkan ke orangnya", "saya mau ngomong sama bidannya"). Keduanya TIDAK BOLEH dicampur dengan intent layanan lain dalam satu pesan komplain/minta-manusia.
 10. Jika customer mengatakan peralihan target audiens (contoh "untuk baby aja kak", "buat adeknya aja", "ambil yg bayi aja"), dan di riwayat chat sebelumnya ada keluhan spesifik bayi (seperti flu, batuk, pilek, grok-grok) atau paket bayi yang dibahas (misal "Pijat Pulih Ceria"), masukkan paket atau keluhan tersebut ke "treatment_referenced" atau "symptoms" agar konteks tetap terjaga.
 11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
 12. AREA LAYANAN (SURABAYA & SIDOARJO) & NORMALISASI TYPO WILAYAH:
@@ -505,7 +500,7 @@ Klinik berlokasi di Sidoarjo dan melayani area Surabaya & Sidoarjo. Jika terdapa
 13. ALIAS TREATMENT STANDAR / BIASA (DINAMIS):
 Jika customer menyebutkan "pijat bayi", "massage bayi", "pijat baby", "pijat newborn", "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah sebutan generik untuk perawatan kebugaran umum si kecil. Ekstrak intent "select_treatment" dan isi "treatment_referenced" dengan alias generik "pijat bayi" saja — JANGAN paksa menjadi "Pijat Bayi Ceria" atau "Pijat Kids Ceria". Nama spesifik akan dipadankan secara dinamis dengan katalog aktif dari database (treatmentCatalogService) berdasarkan usia pasien.
 14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE) VS KONSULTASI PASCA VAKSIN:
-Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "bisa suntik vaksin/imunisasi?"), sertakan intent "ask_unlisted_service".
+Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan layanan klinik (contoh: "bisa baby sitting?", "bisa suntik vaksin/imunisasi?"), sertakan intent "ask_unlisted_service".
 NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!
 14b. ANTI FALSE-POSITIVE ONGKIR/LOKASI (WAJIB):
 Jika pesan mengandung kata ongkir/ongkos kirim/biaya kirim/jarak/lokasi/patokan NAMA LOKASI atau slang daerah Sunda/Jawa untuk harga ("sabaraha", "sabaraha ongkir", "piro", "piro ongkir", "ongkir e", "piroan", "pinten"), DILARANG KERAS diklasifikasikan sebagai "ask_unlisted_service"! Ini adalah kombinasi intent "provide_location" + "ask_price" (atau "compare_locations" jika membandingkan 2 lokasi). Contoh: "Klo yg di jojoran ongkirnya berapa kak" => intents ["provide_location","ask_price"], location_text "Jojoran", comparison_locations null. Slang "jojoran baru ongkir sabaraha" => sama, location_text "Jojoran Baru".
@@ -546,20 +541,6 @@ CONTOH FEW-SHOT EKSTRAKSI (GUNAKAN SEBAGAI ACUAN POLA KONSISTEN):
   Output: {"intents":["provide_location","ask_price"],"location_text":"Jojoran","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
 - Input: "jojoran baru ongkir sabaraha"
   Output: {"intents":["provide_location","ask_price"],"location_text":"Jojoran Baru","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
-- Input: "Mau tanya, ada info kos dekat sini?"
-  Output: {"intents":["out_of_domain"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":null}
-- Input: "Kak jual stroller bekas tidak?"
-  Output: {"intents":["out_of_domain"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":null}
-- Input: "Besok masih ada slot kosong?"
-  Output: {"intents":["ask_schedule"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":"besok","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
-- Input: "Saya kecewa dengan pelayanan kemarin, saya mau komplain"
-  Output: {"intents":["complaint"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
-- Input: "Pijatnya tidak memuaskan, mengecewakan"
-  Output: {"intents":["complaint"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":null}
-- Input: "Bisa bicara dengan adminnya langsung?"
-  Output: {"intents":["human_agent"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
-- Input: "Tolong hubungkan saya dengan bidannya"
-  Output: {"intents":["human_agent"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {

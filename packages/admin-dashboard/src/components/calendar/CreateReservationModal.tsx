@@ -110,7 +110,8 @@ export const DEFAULT_CLINIC_SERVICES_FALLBACK: ClinicServiceItem[] = [
 export function parseTreatmentsFromDetail(
   detail: string | null | undefined,
   catalog: ClinicServiceItem[] = [],
-  initialPurchaseValue?: number | null
+  initialPurchaseValue?: number | null,
+  babiesForChildMatch?: Array<{ name: string }> | null
 ): SelectedTreatmentItem[] {
   if (!detail) return [];
   const effectiveCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_CLINIC_SERVICES_FALLBACK;
@@ -126,6 +127,10 @@ export function parseTreatmentsFromDetail(
     const durationMatch = p.match(/\[\s*(\d+)\s*m.*?\s*\]/i);
     const durationMinutes = durationMatch ? parseInt(durationMatch[1], 10) : 60;
     
+    // Ekstrak nama anak dari kurung sebelum dibersihkan (misal "Pijat Bayi (Nadira)")
+    const childNameInParenMatch = p.match(/\(\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)\s*$/);
+    const childNameInParen = childNameInParenMatch ? childNameInParenMatch[1].trim() : null;
+
     // Bersihkan tag durasi kurung siku [..] dan nama anak opsional (Anak #1 / Nama), tapi pertahankan nama medis (Rileksasi/Terapi)
     let cleanName = p.replace(/\[.*?\]/g, '').trim();
     cleanName = cleanName.replace(/\(\s*(?:Anak\s*#?\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)$/i, '').trim();
@@ -134,17 +139,28 @@ export function parseTreatmentsFromDetail(
 
     const normTarget = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // Cari di katalog yang diberikan atau default fallback
-    let matchedService = effectiveCatalog.find((s) => {
-      const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
-    });
-
-    if (!matchedService) {
-      matchedService = DEFAULT_CLINIC_SERVICES_FALLBACK.find((s) => {
+    const findHierarchical = (cat: ClinicServiceItem[]) => {
+      // Tingkat 1: exact
+      let m = cat.find((s) => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === normTarget);
+      if (m) return m;
+      // Tingkat 2: non-bundle yang termuat di target (prioritas layanan tunggal)
+      m = cat.find((s) => {
+        if ((s.category as any) === 'BUNDLE') return false;
         const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
+        return normTarget.includes(normS);
       });
+      if (m) return m;
+      // Tingkat 3: fallback umum (termasuk bundle jika tidak ada yang cocok)
+      m = cat.find((s) => {
+        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return normTarget.includes(normS);
+      });
+      return m;
+    };
+
+    let matchedService = findHierarchical(effectiveCatalog);
+    if (!matchedService) {
+      matchedService = findHierarchical(DEFAULT_CLINIC_SERVICES_FALLBACK);
     }
 
     let price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
@@ -159,6 +175,12 @@ export function parseTreatmentsFromDetail(
     const category = matchedService ? matchedService.category : 'BABY';
     const isAddon = matchedService ? (matchedService.isAddon || isAddonService(matchedService)) : isAddonService({ name: cleanName });
 
+    let assignedChildIndex = 0;
+    if (childNameInParen && babiesForChildMatch && babiesForChildMatch.length > 0) {
+      const idx = babiesForChildMatch.findIndex((b) => b.name.trim().toLowerCase() === childNameInParen.toLowerCase());
+      if (idx >= 0) assignedChildIndex = idx;
+    }
+
     items.push({
       instanceId: `edit-treatment-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
       serviceId: matchedService?.id || `custom-${i + 1}`,
@@ -167,7 +189,7 @@ export function parseTreatmentsFromDetail(
       durationMinutes: durationMinutes || matchedService?.durationMinutes || 60,
       price: price || 0,
       isAddon: isAddon,
-      assignedChildIndex: 0,
+      assignedChildIndex,
     });
   }
 
@@ -256,9 +278,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('09:00');
 
-  // Staff & Status
+  // Staff & Status — fondasional: dukung semua state pembayaran
   const [assignedStaffId, setAssignedStaffId] = useState('');
-  const [status, setStatus] = useState<'hold' | 'confirmed'>('confirmed');
+  const [status, setStatus] = useState<'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold'>('confirmed');
   const [notes, setNotes] = useState('');
 
   // Payment Breakdown & Discounts
@@ -522,7 +544,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
       const hh = String(initialSlotTarget.hour || 9).padStart(2, '0');
       setBookingTime(`${hh}:00`);
-    } else if (isOpen && !bookingDate) {
+    } else if (isOpen && !bookingDate && mode !== 'edit') {
+      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit!
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -530,7 +553,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setBookingDate(`${yyyy}-${mm}-${dd}`);
       setBookingTime('09:00');
     }
-  }, [isOpen, initialSlotTarget]);
+  }, [isOpen, initialSlotTarget, mode]);
 
   // Auto-populate customer if initialCustomer is provided
   useEffect(() => {
@@ -608,7 +631,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         setAssignedStaffId(res.assigned_staff_id || res.assigned_staff?.id || '');
       }
 
-      setStatus(res.status === 'hold' ? 'hold' : 'confirmed');
+      const validStatus = ['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status)
+        ? res.status
+        : 'confirmed';
+      setStatus(validStatus as any);
       const extractedNotes = res.notes || (() => {
         if (!res.raw_text) return '';
         const match = res.raw_text.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
@@ -627,10 +653,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         );
       }
 
-      // Treatments pre-fill
+      // Treatments pre-fill — sertakan babies untuk mapping assignedChildIndex yang benar
       if (res.treatment_detail) {
         try {
-          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services, res.purchase_value);
+          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services, res.purchase_value, rawBabies as any);
           if (parsed.length > 0) {
             setSelectedTreatments(parsed);
           }
@@ -890,13 +916,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setBabies((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Filter existing reservations for selected date (accurately matching date across timezones and string formats)
+  // Filter existing reservations for selected date — fondasional: kecualikan diri sendiri saat edit agar tidak self-collision
   const bookedReservationsForDate = useMemo(() => {
     if (!bookingDate) return [];
     const targetDateStr = bookingDate.trim(); // "YYYY-MM-DD"
     const sourceList = loadedReservations.length > 0 ? loadedReservations : existingReservations;
 
     return sourceList.filter((r) => {
+      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
       if (!r.booking_date || (r.status as string) === 'cancelled' || (r.status as string) === 'rejected') return false;
       
       if (typeof r.booking_date === 'string' && r.booking_date.startsWith(targetDateStr)) {
@@ -911,16 +938,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       const dd = String(rDate.getDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}` === targetDateStr;
     });
-  }, [loadedReservations, existingReservations, bookingDate]);
+  }, [loadedReservations, existingReservations, bookingDate, mode, (initialReservation as any)?.id]);
 
-  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini.
+  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini — kecualikan diri sendiri saat edit.
   const customerConflictsForDate = useMemo(() => {
     if (!customerId || bookedReservationsForDate.length === 0) return [];
     return bookedReservationsForDate.filter((r: any) => {
+      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
       const rid = r.customer_id || (r.customer as any)?.id;
       return rid === customerId;
     });
-  }, [bookedReservationsForDate, customerId]);
+  }, [bookedReservationsForDate, customerId, mode, (initialReservation as any)?.id]);
 
   // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
   const handleGenerateRecommendations = () => {
@@ -1218,7 +1246,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             status,
             notes: notes.trim() ? notes.trim() : null,
             babies: babies.filter((b) => b.name.trim().length > 0),
-            purchaseValue: totalPaymentAmount,
+            purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+            ongkir: Number(ongkir) || 0,
           }),
         });
 
@@ -1392,8 +1421,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-          {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky) */}
-          {hasDraft && (
+          {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
+          {mode !== 'edit' && hasDraft && (
             <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
               <div className="flex items-center space-x-2">
                 <FileText size={15} className="text-amber-600 shrink-0" />
@@ -1424,45 +1453,57 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
               Customer / Pasien *
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={customerSearch}
-                onChange={(e) => handleCustomerSearch(e.target.value)}
-                placeholder="Cari nama atau nomor WhatsApp customer..."
-                enterKeyHint="search"
-                inputMode="search"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck="false"
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-              />
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0] pointer-events-none">
-                <Search size={14} />
-              </span>
-              {customerId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomerId('');
-                    setCustomerSearch('');
-                    setSelectedCustomerInfo(null);
-                  }}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8696a0] hover:text-rose-500 cursor-pointer"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+            {mode === 'edit' ? (
+              <div className="p-3 bg-[#f0f2f5] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef]">{selectedCustomerInfo?.name || 'Bunda'}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold">Terkunci (Mode Edit)</span>
+                  </div>
+                  <p className="text-xs text-[#667781] dark:text-[#8696a0] font-mono">{selectedCustomerInfo?.phone}</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={customerSearch}
+                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                    placeholder="Cari nama atau nomor WhatsApp customer..."
+                    enterKeyHint="search"
+                    inputMode="search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0] pointer-events-none">
+                    <Search size={14} />
+                  </span>
+                  {customerId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerId('');
+                        setCustomerSearch('');
+                        setSelectedCustomerInfo(null);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8696a0] hover:text-rose-500 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
 
-            {searchingCustomer && (
-              <p className="text-[11px] text-[#008069] font-semibold animate-pulse">
-                Mencari data customer...
-              </p>
-            )}
+                {searchingCustomer && (
+                  <p className="text-[11px] text-[#008069] font-semibold animate-pulse">
+                    Mencari data customer...
+                  </p>
+                )}
 
-            {/* Customer search results dropdown */}
-            {customerResults.length > 0 && !customerId && (
+                {/* Customer search results dropdown */}
+                {customerResults.length > 0 && !customerId && (
               <div className="border border-[#e9edef] dark:border-[#2a3942] rounded-xl bg-white dark:bg-[#111b21] max-h-48 overflow-y-auto divide-y divide-[#e9edef] dark:divide-[#2a3942] shadow-lg z-20">
                 {customerResults.map((c) => (
                   <button
@@ -1487,9 +1528,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 ))}
               </div>
             )}
+              </>
+            )}
 
             {/* Selected Customer Details Banner */}
-            {selectedCustomerInfo && (
+            {mode !== 'edit' && selectedCustomerInfo && (
               <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl flex items-start justify-between text-xs text-[#008069]">
                 <div className="space-y-0.5">
                   <p className="font-bold">{selectedCustomerInfo.name || 'Bunda'} ({selectedCustomerInfo.phone})</p>
@@ -2088,8 +2131,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
               >
-                <option value="confirmed">Terjadwal (Confirmed)</option>
+                <option value="pending">Menunggu Pembayaran (Pending)</option>
+                <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
                 <option value="hold">Hold / Ditawarkan Sementara</option>
+                <option value="completed">Selesai Treatment (Completed)</option>
+                <option value="cancelled">Dibatalkan (Cancelled)</option>
               </select>
             </div>
           </div>
@@ -2319,15 +2365,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
           {/* Footer Actions — safe-area Home Bar */}
           <div className="pt-3 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between">
-            <button
-              type="button"
-              onClick={saveDraftManually}
-              className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-              title="Simpan draf lokal selama 1 jam"
-            >
-              <BookmarkPlus size={14} className="text-amber-600" />
-              <span>Simpan Draf</span>
-            </button>
+            {mode !== 'edit' ? (
+              <button
+                type="button"
+                onClick={saveDraftManually}
+                className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                title="Simpan draf lokal selama 1 jam"
+              >
+                <BookmarkPlus size={14} className="text-amber-600" />
+                <span>Simpan Draf</span>
+              </button>
+            ) : (
+              <div />
+            )}
             <div className="flex items-center space-x-2">
               <button
                 type="button"

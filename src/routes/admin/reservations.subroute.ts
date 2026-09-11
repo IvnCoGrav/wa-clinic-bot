@@ -1256,7 +1256,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           bookingDate?: string | null;
           assignedStaffId?: string | null;
           purchaseValue?: number;
-          status?: 'hold' | 'confirmed' | 'completed' | 'cancelled';
+          status?: 'pending' | 'hold' | 'confirmed' | 'completed' | 'cancelled';
+          ongkir?: number | null;
           notes?: string;
           rawText?: string;
           paymentMethod?: 'CASH' | 'TRANSFER' | 'QRIS' | null;
@@ -1376,6 +1377,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         if (assignedStaffId !== undefined) {
           updateData.assigned_staff_id = assignedStaffId || null;
+        }
+
+        // Fondasional: jika ongkir dikirim saat edit, sinkronkan ke Customer.ongkir
+        if ((body as any).ongkir !== undefined && (body as any).ongkir !== null && existing.customer_id) {
+          try {
+            await prisma.customer.update({
+              where: { id: existing.customer_id },
+              data: { ongkir: Number((body as any).ongkir) },
+            });
+          } catch (e) {
+            console.warn('[Admin API] Failed to update Customer.ongkir on edit:', (e as Error).message);
+          }
         }
 
         let parsedBookingDate: Date | null | undefined = undefined;
