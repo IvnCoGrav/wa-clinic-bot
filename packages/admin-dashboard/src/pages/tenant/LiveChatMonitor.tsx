@@ -438,6 +438,17 @@ export const LiveChatMonitor: React.FC = () => {
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
 
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
+  // Prefetch staff list on mount agar modal edit tidak kosong saat diklik
+  useEffect(() => {
+    if (reservationStaffList.length === 0) {
+      apiRequest('/api/admin/staff')
+        .then((res: any) => {
+          const list = res?.data || (Array.isArray(res) ? res : []);
+          if (Array.isArray(list) && list.length > 0) setReservationStaffList(list);
+        })
+        .catch(() => {});
+    }
+  }, []);
   const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
