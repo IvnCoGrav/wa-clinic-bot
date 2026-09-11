@@ -24,7 +24,7 @@ function runSsh(command) {
   const sshKey = resolveSshKey();
   const b64 = Buffer.from(command).toString('base64');
   const sshCmd = `ssh -i "${sshKey}" -p 1403 -o StrictHostKeyChecking=no ubuntu@43.157.197.148 "echo ${b64} | base64 -d | bash"`;
-  return execSync(sshCmd, { encoding: 'utf8' });
+  return execSync(sshCmd, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 }
 
 async function deploy() {
