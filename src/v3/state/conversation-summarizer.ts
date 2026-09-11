@@ -155,11 +155,37 @@ export class V3ConversationSummarizer {
     }
 
     // 8. Topik sedang dibahas (simplified)
+    // Sesi 973126: deteksi nominal berbasis token kata (bukan substring mentah
+    // — substring 'rp' menelan kata 'bRp'/'beRapa'). Tokenisasi teknis: pecah per
+    // kata, kupas tanda baca di ujung, lalu cek satuan nominal. Tanpa regex
+    // semantik / tanpa memotong kalimat — murni branching summary.
+    const hasNominalToken = (lower: string): boolean => {
+      const tokens = lower.split(' ').map((t) => t.trim()).filter(Boolean);
+      for (let raw of tokens) {
+        const t = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (!t) continue;
+        if (t === 'rp' || t === 'rb' || t === 'rbu' || t === 'ribu' || t === 'juta') return true;
+        // Suffix nominal dengan prefix angka: 100rb, 60ribu, 100rbu, 2juta, 100k
+        const startsDigit = t.length > 0 && t[0] >= '0' && t[0] <= '9';
+        if (startsDigit && (t.endsWith('rb') || t.endsWith('rbu') || t.endsWith('ribu') || t.endsWith('juta'))) return true;
+        if (startsDigit && t.endsWith('k') && t.length >= 3) return true;
+        if (startsDigit && t.startsWith('rp') && t.length > 2) return true;
+      }
+      return false;
+    };
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
     if (hasDayMention) {
       sedangDibahas = 'Bunda menanyakan ketersediaan jadwal';
       yangPerluDijawab = 'Pola "cekkan/infokan" HANYA bila lokasi Bunda sudah diketahui; bila lokasi BELUM diketahui, tanyakan domisili netral dulu (aturan persona 5a) dan DILARANG berjanji mengecek jadwal. (DILARANG bilang "Tentu bisa" sepihak).';
+    } else if ((rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama'))
+      && hasNominalToken(rawInputLower)) {
+      // Sesi 973126: pertanyaan komposit nominal + durasi tanpa nama paket pasti
+      // (mis. "100rb berapa menit pijetnya"). BUKAN durasi paket yang sudah dipilih.
+      // Paket BELUM dipilih → DILARANG menyuntik larangan "rencana mau treatment apa"
+      // (larangan itu hanya dari selectedTreatment yang kini customer-agreed only).
+      sedangDibahas = 'Bunda menanyakan paket dan durasi untuk nominal tertentu (tanpa nama paket pasti)';
+      yangPerluDijawab = 'Jelaskan paket apa yang sesuai nominal tersebut dari hasil tool get_catalog_and_price (kutip klarifikasi nominal: promo/normal + durasi), sebutkan durasinya, dan tanyakan ramah apakah perawatan untuk Bunda atau si kecil.';
     } else if (rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama')) {
       sedangDibahas = 'Bunda menanyakan durasi waktu pelaksanaan perawatan';
       yangPerluDijawab = 'Sebutkan durasi pelaksanaan secara jelas beserta manfaat relaksasinya.';

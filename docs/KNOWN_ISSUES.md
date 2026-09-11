@@ -1021,6 +1021,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Perbaikan:** Fase 1 hierarki 5a>5b+aturan 21 + direktif GENERAL + summarizer kondisional (prompt-only, keputusan owner); Fase 2 validator D6 (`factual-claim-validator.ts`, daftar kecamatan dari `getGazetteerKecamatanNames`, kecuali homebase) + `TEMPLATES.askDomicileNeutral` + wiring blok 7b (D6-murni → template netral + `unresolvedFaq`); Fase 3 `simulator-minggu-waru-replay.test.ts` (MERAH 2/2 sebelum fix → HIJAU sesudah) + unit D6 + perluasan test statis.
 - **Verifikasi:** `npm run build` bersih; `tsc --noEmit` 0 error; replay test MERAH 2/2 sebelum fix → HIJAU sesudah; full suite **243 file, 1858 passed, 0 failed** (19 skipped = baseline).
 
+---
+
+## 44. [V3] Auto-locking selectedTreatment + salah jawab nominal 100rb (simulator 973126, 2026-09-11)
+
+- **Status:** implemented (2026-09-11, fondasional 4 fase — state machine + tool contract + summarizer + prompt).
+- **Kejadian:** customer "Mba 100rb berapa menit pijetnya?" dijawab "Pijat Bayi Ceria ... 40 menit" padahal Ceria promo 60rb/normal 80rb; yang promo 100rb adalah Prenatal Massage 60 mnt.
+- **Akar (audit read-only, terbukti di kode):**
+  1. `agent-runner.ts:1158-1166` — tool read-only `get_catalog_and_price` menulis `selectedTreatment = treatments[0]` (auto-locking warisan).
+  2. `detectAgreedTreatment (:304-320)` + auto-capture (`:593-606`) memindai semua role — sebutan asisten dianggap persetujuan customer.
+  3. Tool contract tanpa `targetPrice`; router menebak `category BABY` hingga MOMS terfilter keluar; service tanpa pencocokan nominal.
+  4. `conversation-summarizer.ts:163-165` hanya cek substring menit/durasi → dikaitkan ke paket yang dibajak; `summarizer:77-79` + fase `TREATMENT_DISCUSSED` melarang tanya treatment.
+- **Perbaikan:** Fase 1 hapus total auto-locking (customer-agreed only) + filter `role==='user'`; Fase 2 `findServicesByPrice()` tenant-aware + `targetPrice` di `GetCatalogInput`/`GET_CATALOG_TOOL_SCHEMA`/zod + pool lintas kategori + `priceClarification` + `showPrices` paksa; Fase 3 cabang komposit nominal+durasi berbasis token kata (anti false-positive "bRp"); Fase 4 router guidance targetPrice + few-shot 100rb (klarifikasi Bunda vs si kecil).
+- **Limitasi sadar:** nominal diekstrak LLM router ke `targetPrice` (tanpa parser regex deterministik — sesuai mandat minimal-regex); `tolerance` default exact-match 0.
+- **Verifikasi:** `npm run build` exit 0; tests baru `catalog-price-matching` (6) + `simulator-100rb-replay` (4) hijau; inti 30/30; full suite **245 file, 1868 passed, 0 failed** (19 skipped = baseline).
+
 
 
 
