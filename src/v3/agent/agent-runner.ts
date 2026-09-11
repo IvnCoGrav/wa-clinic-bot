@@ -74,6 +74,12 @@ export interface AgentRunnerInput {
   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   forceModel?: string;
   skipDbLogging?: boolean;
+  /**
+   * Intents pra-ekstraksi dari state machine (EntityExtractor). Bila memuat
+   * 'out_of_domain', runner berhenti sebelum LLM Call 1/2 (0 token) dan
+   * mengembalikan eskalasi — kontrak anti-jawab-tanpa-domain di level tool.
+   */
+  preExtractedIntents?: string[];
 }
 
 export interface V3RetrievedChunk {
@@ -96,6 +102,12 @@ export interface AgentRunnerOutput {
   updatedSession: CustomerGoalSession;
   shouldSendReply: boolean;
   isEscalated: boolean;
+  /**
+   * Learning loop: true bila turn ini menjawab dengan grounding kosong
+   * (search_knowledge_faq dipanggil tapi chunks[] kosong) — balasan tetap
+   * terkirim, tapi machine mencatat reason 'unresolved_faq' agar admin kurasi.
+   */
+  unresolvedFaq?: boolean;
   /** Observability: RAG chunks yang diambil via tool search_knowledge_faq. */
   retrievedChunks: V3RetrievedChunk[];
   /** Observability: contoh chat dinamis yang disuntikkan ke system prompt. */
@@ -242,6 +254,7 @@ export class V3AgentRunner {
       case 'GENERAL':
       default:
         lines.push('• Jawab pertanyaan customer saat ini berdasar konteks yang sudah diketahui.');
+        lines.push('• Bila pertanyaan soal jadwal dan lokasi customer belum diketahui: dahulukan tanya domisili netral (aturan persona 5a) di atas pola "cekkan/infokan".');
         break;
     }
 
@@ -520,6 +533,26 @@ export class V3AgentRunner {
     // 1. Ambil session state saat ini
     let session = await GoalTracker.getGoalSession(conversationId, tenantId);
 
+    // Kontrak domain: out_of_domain pra-ekstraksi (dari state machine atau
+    // pemanggil lain) dihentikan di sini sebelum LLM berjalan — eskalasi sunyi.
+    if (input.preExtractedIntents?.includes('out_of_domain')) {
+      console.log(`[V3 DOMAIN GATE] out_of_domain pra-ekstraksi untuk ${phone} — eskalasi sunyi tanpa LLM.`);
+      return {
+        replyText: '',
+        executedTools: [],
+        updatedSession: session,
+        shouldSendReply: false,
+        isEscalated: true,
+        retrievedChunks: [],
+        fewShotExemplars: [],
+        systemPrompt: '',
+        reasoning: null,
+        tokens: { prompt: 0, completion: 0, total: 0 },
+        costIdr: 0,
+        nextState: ConversationState.HUMAN_HANDLING,
+      };
+    }
+
     const toolContext: ToolExecutionContext = {
       tenantId,
       customerId,
@@ -663,14 +696,6 @@ export class V3AgentRunner {
       } catch (e) {}
     }
 
-    // System prompt ASYNC: contoh chat dimuat dinamis dari bank few_shot_exemplars
-    // (DB Koleksi Emas, fallback statis). Exemplar terpilih diekspor untuk observability.
-    const dynamicPrompt = await PersonaPromptBuilder.buildSystemPromptAsync(session, isFollowUp, {
-      tenantId,
-      incomingText: cleanIncomingText,
-    });
-    const systemPrompt = dynamicPrompt.systemPrompt;
-    const fewShotExemplars = dynamicPrompt.exemplars;
     // Ringkasan konteks deterministik (0 token): apa yang SUDAH dibahas, FOKUS saat ini,
     // dan apa yang DILARANG diulang — anti kaset-rusak & anti amnesia antar turn.
     // Closure agar bisa dihitung ulang dari session terbaru sebelum Call 2 (refresh prompt
@@ -701,14 +726,27 @@ export class V3AgentRunner {
       }
     };
     let lastPhaseDirective = buildPhaseDirective();
+
+    // Call 1 Router: prompt ringkas khusus tool routing (~800-1.200 token)
+    const routerPrompt = PersonaPromptBuilder.buildRouterPrompt(session, isFollowUp, {
+      contextSummary,
+      phaseDirective: lastPhaseDirective,
+    });
+    let currentSystemPrompt = routerPrompt;
+    let fewShotExemplars: any[] = [];
+    let preGroundingBlock = '';
+
+    // Jendela 8 pesan terakhir (4 turn) — data sesi penting sudah tercatat di GoalSession
+    const recentHistory = conversationHistory.slice(-8).map((h) => ({ role: h.role, content: h.content }));
+    const userMessage = {
+      role: 'user',
+      content: `<customer_message>\n${cleanIncomingText}\n</customer_message>`,
+    };
+
     const messages: any[] = [
-      { role: 'system', content: [systemPrompt, contextSummary, lastPhaseDirective].filter(Boolean).join('\n\n') },
-      // Jendela 14 pesan terakhir (7 turn) agar lokasi & ongkir turn awal tidak terpotong amnesia.
-      ...conversationHistory.slice(-14).map((h) => ({ role: h.role, content: h.content })),
-      {
-        role: 'user',
-        content: `<customer_message>\n${cleanIncomingText}\n</customer_message>`,
-      },
+      { role: 'system', content: routerPrompt },
+      ...recentHistory,
+      userMessage,
     ];
 
     const emptyTokens: V3TokenUsage = { prompt: 0, completion: 0, total: 0 };
@@ -746,7 +784,7 @@ export class V3AgentRunner {
           isEscalated: false,
           retrievedChunks: [],
           fewShotExemplars,
-          systemPrompt,
+          systemPrompt: currentSystemPrompt,
           reasoning: null,
           tokens: emptyTokens,
           costIdr: 0,
@@ -763,6 +801,8 @@ export class V3AgentRunner {
     // Observability turn-level: chunks RAG, reasoning model, agregat token.
     const retrievedChunks: V3RetrievedChunk[] = [];
     const retrievedChunkIds = new Set<string>();
+    // Penanda grounding kosong (Fase A): search_knowledge_faq → chunks[].
+    let emptyKnowledgeResult = false;
     let reasoning: string | null = null;
     const totalTokens: V3TokenUsage = { prompt: 0, completion: 0, total: 0 };
     const addUsage = (usage: any): void => {
@@ -808,7 +848,7 @@ export class V3AgentRunner {
           customerPhone: phone,
           customerInput: incomingText,
           bubbleCorrelationId: chatId,
-          promptPayload: { model: selectedModel, systemPrompt, messageCount: messages.length },
+          promptPayload: { model: selectedModel, systemPrompt: currentSystemPrompt, messageCount: messages.length },
           reasoning,
           groundTruthUsed: {
             retrievedChunks,
@@ -834,10 +874,11 @@ export class V3AgentRunner {
         // terapi") tidak memotong artikel definisi terapi.
         const preChunks = await knowledgeBaseService.searchRelevantChunks(cleanIncomingText, 3, tenantId);
         if (preChunks && preChunks.length > 0) {
-          const groundingBlock = `[PANDUAN & KNOWLEDGE BASE RESMI KLINIK - WAJIB DIPATUHI]\n`
+          preGroundingBlock = `[PANDUAN & KNOWLEDGE BASE RESMI KLINIK - WAJIB DIPATUHI]\n`
             + `Berikut panduan resmi klinik yang RELEVAN dengan pertanyaan customer saat ini. Jadikan sebagai acuan utama jawaban (grounded), jangan mengarang di luar panduan ini:\n`
             + preChunks.map((c: any, i: number) => `Artikel ${i + 1} — ${c.title}:\n${c.content}`).join('\n\n');
-          messages[0].content = `${messages[0].content}\n\n${groundingBlock}`;
+          messages[0].content = `${messages[0].content}\n\n${preGroundingBlock}`;
+          currentSystemPrompt = messages[0].content;
           for (const c of preChunks as any[]) {
             const key = String((c as any)?.id || (c as any)?.title || '');
             if (key && !retrievedChunkIds.has(key)) {
@@ -919,10 +960,22 @@ export class V3AgentRunner {
         dynamicToolChoice = { type: 'function', function: { name: 'get_clinic_policy_faq' } };
       }
 
+      // Tool Schema Filtering untuk Call 1:
+      // Jika di-forcing ke 1 tool spesifik, kirim HANYA tool tersebut (hemat ~1.500 token).
+      // Jika 'auto', kirim seluruh ALL_V3_TOOLS agar router bebas memilih.
+      let toolsForCall1: any[] = ALL_V3_TOOLS;
+      if (typeof dynamicToolChoice === 'object' && dynamicToolChoice?.function?.name) {
+        const forcedName = dynamicToolChoice.function.name;
+        const matchingTool = ALL_V3_TOOLS.find((t: any) => t.function?.name === forcedName);
+        if (matchingTool) {
+          toolsForCall1 = [matchingTool];
+        }
+      }
+
       const firstPayload: any = {
         model: selectedModel,
         messages,
-        tools: ALL_V3_TOOLS,
+        tools: toolsForCall1,
         tool_choice: dynamicToolChoice,
         temperature: 0.2,
       };
@@ -1029,6 +1082,11 @@ export class V3AgentRunner {
           }
 
           executedTools.push({ name: fnName, args: fnArgs, result: toolResult });
+
+          // Grounding kosong: tool dipanggil tapi knowledge base tak punya jawaban.
+          if (fnName === 'search_knowledge_faq' && Array.isArray(toolResult?.chunks) && toolResult.chunks.length === 0) {
+            emptyKnowledgeResult = true;
+          }
 
           // Observability: tampung RAG chunks — pakai skor riil (similarity/score/rank) jika ada, fallback 0.90 hanya bila tidak ada.
           if (fnName === 'search_knowledge_faq' && Array.isArray(toolResult?.chunks)) {
@@ -1195,7 +1253,7 @@ export class V3AgentRunner {
             isEscalated: true,
             retrievedChunks,
             fewShotExemplars,
-            systemPrompt,
+            systemPrompt: currentSystemPrompt,
             reasoning,
             tokens: { ...totalTokens },
             costIdr: await finishCost(),
@@ -1210,19 +1268,23 @@ export class V3AgentRunner {
           tenantId,
           incomingText: cleanIncomingText,
         });
-        messages[0].content = refreshedPrompt.systemPrompt;
+        fewShotExemplars = refreshedPrompt.exemplars;
+
         // Tempel ulang ringkasan + phase directive dari session terbaru
-        // (refresh menimpa messages[0]).
         const refreshedSummary = buildContextSummary();
-        if (refreshedSummary) {
-          messages[0].content = `${messages[0].content}\n\n${refreshedSummary}`;
-          lastContextSummary = refreshedSummary;
-        }
+        if (refreshedSummary) lastContextSummary = refreshedSummary;
         const refreshedPhase = buildPhaseDirective();
-        if (refreshedPhase) {
-          messages[0].content = `${messages[0].content}\n\n${refreshedPhase}`;
-          lastPhaseDirective = refreshedPhase;
-        }
+        if (refreshedPhase) lastPhaseDirective = refreshedPhase;
+
+        const fullSystemPrompt = [
+          refreshedPrompt.systemPrompt,
+          refreshedSummary,
+          refreshedPhase,
+          preGroundingBlock,
+        ].filter(Boolean).join('\n\n');
+
+        messages[0].content = fullSystemPrompt;
+        currentSystemPrompt = fullSystemPrompt;
 
         const secondPayload: any = {
           model: selectedModel,
@@ -1326,6 +1388,60 @@ export class V3AgentRunner {
         }
       }
 
+      // 7b. Validator klaim faktual non-angka (Fase D + D6): silang draf balasan
+      // vs output tool turn ini. Gagal → re-prompt bersih 1x → masih gagal →
+      // SUNYI TOTAL + eskalasi, KECUALI murni D6 (halu domisili) → template
+      // netral tanya domisili (keputusan) + tandai unresolvedFaq untuk kurasi.
+      const { validateFactualClaims } = await import('../guardrails/factual-claim-validator');
+      const locationKnown = !!(session?.location?.kelurahan || (session?.location as any)?.kecamatan);
+      const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown });
+      if (!factCheck.isValid && shouldSendReply && !isEscalated && finalReply.trim()) {
+        console.warn(JSON.stringify({ event: 'FACTUAL_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factCheck.violations, timestamp: new Date().toISOString() }));
+        let factRepromptOk = false;
+        try {
+          const correctionNote = `KOREKSI FAKTUAL — tulis ulang SELURUH balasan HANYA dari data tool resmi turn ini (katalog, knowledge, kebijakan). LARANGAN:\n- ${factCheck.violations.join('\n- ')}\nJika data tidak ada, JANGAN mengarang — jawab jujur bahwa info pastinya akan dicek tim kami.`;
+          const factRetryData = await V3AgentRunner.executeChatCompletion({
+            payload: { model: selectedModel, messages: [...messages, { role: 'user', content: correctionNote }], temperature: 0.3 },
+            tenantId,
+            phone,
+            conversationId,
+            baseUrl,
+            apiKey,
+            selectedModel,
+          });
+          addUsage((factRetryData as any)?.usage);
+          const factRetryText = (factRetryData?.choices?.[0]?.message?.content || '').trim();
+          if (factRetryText) {
+            const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp);
+            const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown });
+            if (factRecheck.isValid) {
+              finalReply = factCleaned;
+              factRepromptOk = true;
+            } else {
+              console.warn(JSON.stringify({ event: 'FACTUAL_REPROMPT_STILL_INVALID', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factRecheck.violations, timestamp: new Date().toISOString() }));
+            }
+          }
+        } catch (repromptErr: any) {
+          console.warn(JSON.stringify({ event: 'FACTUAL_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message || String(repromptErr), timestamp: new Date().toISOString() }));
+        }
+        if (!factRepromptOk) {
+          const onlyDomicile = factCheck.violations.length > 0
+            && factCheck.violations.every((v) => v.startsWith('Domicile'));
+          if (onlyDomicile) {
+            // D6 murni: ganti template netral (tanpa nama kecamatan), tetap
+            // terkirim + masuk kurasi admin via unresolvedFaq.
+            const { TEMPLATES } = await import('../../config/persona');
+            finalReply = TEMPLATES.askDomicileNeutral();
+            shouldSendReply = true;
+            emptyKnowledgeResult = true;
+          } else {
+            isEscalated = true;
+            shouldSendReply = false;
+            finalReply = '';
+          }
+        }
+      }
+
       // Post-processor deterministik: konversi Markdown ganda (**tebal**) ke
       // format WhatsApp tunggal (*tebal*) untuk SEMUA output agent — berlaku di
       // simulator, dashboard, log LLM, maupun WAHA (sebelum validasi & logging).
@@ -1364,9 +1480,10 @@ export class V3AgentRunner {
         updatedSession: session,
         shouldSendReply: shouldSendReply && !isEscalated,
         isEscalated,
+        unresolvedFaq: emptyKnowledgeResult && !isEscalated,
         retrievedChunks,
         fewShotExemplars,
-        systemPrompt,
+        systemPrompt: currentSystemPrompt,
         reasoning,
         tokens: { ...totalTokens },
         costIdr: await finishCost(),
@@ -1393,8 +1510,9 @@ export class V3AgentRunner {
         });
       } catch {}
 
-      // Fallback ramah jika terjadi outage koneksi
-      const fallbackReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi Kala Moms & Baby Spa. Kami siap membantu layanan Homecare treatment untuk Bunda dan si kecil. Boleh dibantu info daerah tempat tinggalnya ya Bund? 🙏`;
+      // Outage LLM total (Fase B): TANPA balasan generik. Jawaban "tanya alamat"
+      // yang lama menyesatkan (termasuk untuk konteks medis/eskalasi).
+      // Kembalikan eskalasi sunyi — machine mencatat reason & memberi tahu CS.
 
       try {
         const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
@@ -1405,7 +1523,7 @@ export class V3AgentRunner {
           bubbleCorrelationId: chatId,
           promptPayload: { model: selectedModel },
           reasoning,
-          finalReply: fallbackReply,
+          finalReply: '',
           modelUsed: selectedModel,
           durationMs: Date.now() - turnStartedAt,
           status: 'ERROR',
@@ -1413,17 +1531,18 @@ export class V3AgentRunner {
       } catch {}
 
       return {
-        replyText: fallbackReply,
+        replyText: '',
         executedTools: [],
         updatedSession: session,
-        shouldSendReply: true,
-        isEscalated: false,
+        shouldSendReply: false,
+        isEscalated: true,
         retrievedChunks,
         fewShotExemplars,
-        systemPrompt,
+        systemPrompt: currentSystemPrompt,
         reasoning,
         tokens: { ...totalTokens },
         costIdr: 0,
+        nextState: ConversationState.HUMAN_HANDLING,
       };
     }
   }

@@ -74,7 +74,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         where: {
           tenant_id: DEFAULT_TENANT_ID,
           is_human_handling: true,
-          escalation_reason: 'unresolved_faq',
+          escalation_reason: { in: ['unresolved_faq', 'out_of_domain'] },
         },
         include: {
           customer: true,
