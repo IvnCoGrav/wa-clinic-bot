@@ -99,6 +99,12 @@ export interface CustomerGoalSession {
    * resmi di grounding prompt (disembunyikan selama konsultasi murni).
    */
   priceDiscussed?: boolean;
+  /**
+   * Fase E: penghitung form reservasi tak lengkap berurutan. Direset ke 0
+   * saat form valid masuk; mencapai 2 → form tak lengkap berikutnya
+   * dieskalasi sunyi (anti loop minta-lengkapi selamanya).
+   */
+  formRetryCount?: number;
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
@@ -188,6 +194,30 @@ async function withConversationLock<T>(conversationId: string, fn: () => Promise
 
 export class GoalTracker {
   /**
+   * Deklarasi identitas eksplisit orang-pertama ("saya bapak", "panggil ibu").
+   * BUKAN inferensi dari nama — hanya frasa di mana customer MENYATAKAN
+   * dirinya sendiri. Mengembalikan 'Bapak' | 'Bunda' | null (null = tak ada
+   * deklarasi; sapaan tidak boleh ditebak dari null ini).
+   */
+  public static detectExplicitGenderPreference(text: string): 'Bapak' | 'Bunda' | null {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return null;
+    // Hanya deklarasi diri orang-pertama. "panggil bapak saya" (rujuk ayah
+    // kandung) SENGAJA tidak cocok — butuh "saya/aku" atau penegas "aja".
+    const selfMale = /\b(saya|aku|gue|gua)\s+(bapak|pak|ayah|papa|suami)\b/i.test(lower)
+      || /\b(saya|aku)\s+(ayah|bapak)nya\b/i.test(lower)
+      || /\bpanggil\s+(saya|aku)\s+(bapak|pak|ayah)\b/i.test(lower)
+      || /\bpanggil\s+(bapak|pak|ayah)\s+aja\b/i.test(lower);
+    if (selfMale) return 'Bapak';
+    const selfFemale = /\b(saya|aku|gue|gua)\s+(ibu|bunda|bund|mama|istri)\b/i.test(lower)
+      || /\b(saya|aku)\s+(ibu|bunda)nya\b/i.test(lower)
+      || /\bpanggil\s+(saya|aku)\s+(ibu|bunda|bund)\b/i.test(lower)
+      || /\bpanggil\s+(ibu|bunda|bund)\s+aja\b/i.test(lower);
+    if (selfFemale) return 'Bunda';
+    return null;
+  }
+
+  /**
    * Mengambil session state dari database (kolom preferences di Conversation atau Customer).
    */
   public static async getGoalSession(
@@ -206,14 +236,17 @@ export class GoalTracker {
       }
 
       const prefs: any = (conv.customer?.preferences as any) || {};
-      
-      // Deteksi sapaan Bapak jika nama customer menunjukkan pria
+
+      // Sapaan data-driven: HANYA dari preferensi eksplisit tersimpan.
+      // DILARANG menebak gender dari nama (mis. "dwi" unisex) — default produk "Bunda".
+      const storedGreeting = prefs.genderGreeting === 'Bapak' || prefs.genderGreeting === 'Bunda'
+        ? prefs.genderGreeting
+        : 'Bunda';
       const custName = conv.customer?.name || prefs.customerName || '';
-      const isMale = /\b(bapak|pak|ayah|papa|bapake|naufal|ahmad|budi|agus|dwi|eko|adi|ivan)\b/i.test(custName);
 
       return {
         customerName: custName || undefined,
-        genderGreeting: isMale ? 'Bapak' : (prefs.genderGreeting || 'Bunda'),
+        genderGreeting: storedGreeting,
         targetAudience: prefs.targetAudience || undefined,
         momProfile: prefs.momProfile || undefined,
         location: prefs.location || (conv.customer?.kelurahan ? {
@@ -237,6 +270,7 @@ export class GoalTracker {
         ongkirStatus: prefs.ongkirStatus || undefined,
         totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
         priceDiscussed: prefs.priceDiscussed === true ? true : undefined,
+        formRetryCount: typeof prefs.formRetryCount === 'number' ? prefs.formRetryCount : undefined,
       };
     } catch (err: any) {
       console.warn(JSON.stringify({ event: 'GOAL_TRACKER_GET_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));

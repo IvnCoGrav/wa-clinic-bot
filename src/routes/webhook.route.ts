@@ -744,7 +744,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
       // Pesan lama tetap dicatat ke database (audit trail & Live Chat) dengan media jika ada,
       // tetapi dilewati dari bot auto-reply & API eksternal.
-      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
+      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '300', 10);
       if (maxAgeSeconds > 0 && payload.timestamp) {
         const rawTs = Number(payload.timestamp);
         if (!isNaN(rawTs) && rawTs > 0) {

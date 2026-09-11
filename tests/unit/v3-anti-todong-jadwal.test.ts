@@ -61,8 +61,7 @@ describe('V3 anti-todong jadwal & anti-halusinasi domisili (sesi 435731)', () =>
     expect(s).toContain('sudah final disepakati');
   });
 
-  it('summarizer: cooldown jadwal tetap aktif walau ada sebutan hari bila jadwal final', () => {
-    const s = V3ConversationSummarizer.summarize(
+  it('summarizer: cooldown jadwal tetap aktif walau ada sebutan hari bila jadwal final', () => {    const s = V3ConversationSummarizer.summarize(
       {
         genderGreeting: 'Bunda',
         booking: { preferredDate: 'Sabtu', reservationId: 'res-1', isConfirmed: false },
@@ -77,5 +76,22 @@ describe('V3 anti-todong jadwal & anti-halusinasi domisili (sesi 435731)', () =>
       }
     );
     expect(s).toContain('tanpa menodong');
+  });
+
+  it('hierarki 5a > 5b (kasus simulator 725870): lokasi-unknown mengalahkan pola cekkan', () => {
+    const p = prompt();
+    expect(p).toContain('PRIORITAS 1');
+    expect(p).toContain('LOKASI BELUM DIKETAHUI');
+    expect(p).toMatch(/ABAIKAN pola "cekkan\/infokan"/);
+    expect(p).toContain('TUNDUK PADA HIERARKI ATURAN 5');
+  });
+
+  it('summarizer: tanya hari → cekkan hanya bila lokasi diketahui, selain itu tanya domisili', () => {
+    const s = V3ConversationSummarizer.summarize(
+      { genderGreeting: 'Bunda' } as any,
+      'Hari Minggu pagi kosong tidak ya?',
+      { history: [], customerInput: 'Hari Minggu pagi kosong tidak ya?' }
+    );
+    expect(s).toMatch(/tanyakan domisili netral/i);
   });
 });

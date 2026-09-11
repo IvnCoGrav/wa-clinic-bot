@@ -966,4 +966,61 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Frasa konfirmasi "1 anak" ("cuma 1 anak") membersihkan latch TANPA meruntuhkan slot anak kedua — disengaja (non-destruktif); CS/admin resolvasi final di booking.
 - **Verifikasi:** build `tsc` bersih; test baru 3 file (disambiguasi 10, cross-sum 6, anti-brosur 4) + regresi terkait hijau; full suite **222 file, 1756 passed, 0 failed**.
 
+---
+
+## 40. [V3] Bot menjawab pertanyaan lowongan kerja dengan jawaban jadwal bidan + buta isi gambar (kasus 6289681655911, 2026-09-11)
+
+- **Status:** implemented (2026-09-11, plan v2 — mekanisme fondasional; BUKAN tambal per-kasus).
+- **Kronologi live (fakta DB + log + WAHA store, read-only via SSH):** customer Rizki Dwi S kirim 3x foto flyer loker + caption ("Pagi kak mau tanya lokernya masih tersedia ?", 00:19/00:22/00:24 UTC). Bot menjawab di luar domain — preview log: "Halo Bapak! ✨ Terima kasih sudah menghubungi..." lalu 2x "Bapak, mohon maaf untuk hari ini jadwal Bidan..." (completion 97/40/41 token, `retrievedChunks` 2-3, `toolCount` 0). `admin@kalamomsspa.com` menarik ketiga balasan via Live Chat (`REVOKE_MESSAGE` 00:28:33–39 UTC), `manual_takeover` 00:29:43 + balasan manual berisi link Google Form rekrutmen; customer mengisi form 00:36. Teks lengkap balasan bot tak terpulihkan (DB ditimpa placeholder oleh `markMessageDeleted`, WAHA store terprune).
+- **Akar masalah (multi-layer):**
+  1. **Retrieval:** `knowledge_chunks` live 0 artikel rekrutmen; pre-retrieval grounding (`agent-runner.ts:826-858`) tidak punya cabang grounding-miss — kekosongan dianggap tetap jawab dari prior.
+  2. **Domain:** tak ada konsep batas-domain; `entity-extractor.service.ts:469-484` + `persona.ts:64` diam untuk kalimat ini, LLM menebak `ask_schedule` dari pola "…tersedia"; `escalate_to_human` (`persona.ts:366-367`) tidak mencakup topik non-klinis; `ask_unlisted_service` nol hit di `agent-runner.ts`.
+  3. **Vision:** `src/v3/` nol referensi media/gambar; V3 hanya menerima caption (`machine.ts:411-421` tidak meneruskan `media`), isi foto flyer tak pernah dibaca.
+  4. **Sapaan:** regex nama `goal-tracker.ts:212` (`dwi` → "Bapak"; `dwi` unisex).
+- **Penutup struktural (plan v2):** Mekanisme A grounding-miss→eskalasi (Retrieval); Mekanisme B gate `out_of_domain` di state machine + gambar tak-tergrounding ikut jalur sama; Mekanisme C sapaan data-driven (hapus regex, default `Bunda` per keputusan D1, simpan koreksi eksplisit); learning loop via filter `GET /unanswered` (`knowledge.subroute.ts:71-101`). Keputusan: tanpa vision (eskalasi saja), tanpa data rekrutmen di sistem (eskalasi saja), eskalasi silent (D2).
+- **Verifikasi:** `npm run build` bersih; `npx tsc --noEmit` 0 error; test baru 3 file (`out-of-domain-intent` 7, `out-of-domain-gate` 5, `gender-greeting-neutral` 17) + regresi terkait hijau (extractor/machine/v3 44 file-254 test, greeting 5 file-33 test); full suite **237 file, 1833 passed, 0 failed** (baseline 1803 passed + 1 flaky `migration.test.ts` yang lolos solo maupun full-run pasca-perubahan); `grep loker|lowongan src/` nol hit runtime; `grep` daftar nama regex lama nol hit; log test membuktikan `LABEL SKIP` (tanpa mutasi label WAHA).
+
+---
+
+## 41. [Audit] Temuan audit penanganan customer 2026-09-11 — status keputusan & tindak lanjut
+
+- **Konteks:** audit mendalam 4-agen (alur end-to-end, NLU, grounding, sesi/handoff) menghasilkan 12 temuan. Keputusan owner 2026-09-11:
+- **By design / dibiarkan (BUKAN kekurangan):**
+  1. Handoff permanen ke manusia (tanpa auto-release kembali ke bot) — disengaja: LLM belum dilatih menangani pasca-reservasi, perlu human touch. Konsekuensi sadar: CS wajib `release` manual; notifikasi eskalasi wajib kuat.
+  2. Follow-up tetap jalan saat `is_human_handling` (hanya cooldown 72 jam) — dibiarkan. Koreksi analisis: `NO_PURCHASE` tak mungkin terkirim pasca-treatment (skip saat pembuatan `follow-up.service.ts:300-312` + auto-CANCEL saat eksekusi `:1100-1117`); sisa risiko hanya eskalasi pra-pembelian (LOW, diterima).
+  3. Sapaan kembali default saat DB offline/restart — dibiarkan (degradasi sementara yang sadar).
+- **Backlog paling belakang (dicatat, belum dikerjakan):** voice note/stiker/video/dokumen tidak ditranskripsi/dijawab bermakna (`webhook.route.ts:824-852` arsip saja; grep `transcrib/whisper` nihil). Akan dikerjakan terpisah, prioritas terakhir.
+- **Diteliti tanpa plan (belum diputuskan):** pesan basi >180 dtk hanya dicatat DB tanpa sapaan pemulihan (`webhook.route.ts:748-798`); sebagai langkah kecil, default `MAX_INBOUND_MESSAGE_AGE_SECONDS` 180→300 dtk (2026-09-11, override env tetap bisa).
+- **Dieksekusi 2026-09-11 (Fase A–G, lihat kode):**
+  1. Learning loop `unresolved_faq` disambung (penulis: grounding kosong + eskalasi LLM non-medis; medis → `medical_concern`).
+  2. Outage LLM total → eskalasi sunyi TANPA balasan (hapus fallback tanya-alamat; `agent-runner.ts` catch).
+  3. Intent `complaint`/`human_agent` dihidupkan → eskalasi sunyi (`complaint`/`manual_request`); opt-out STOP berlaku semua provider; slash-command dipindah setelah gate medis/domain.
+  4. `factual-claim-validator.ts`: silang nama layanan/durasi/vaksin/anjuran/efikasi vs output tool; gagal pasca re-prompt → sunyi + `unresolved_faq`.
+  5. Form tak lengkap 3x → eskalasi sunyi `reservation_incomplete` (counter `formRetryCount` di sesi).
+- **Verifikasi:** `npm run build` bersih; `npx tsc --noEmit` 0 error; test baru 6 file (unresolved-faq 4, outage 1, fase-c 5, factual 7, fase-e 2, + perbaikan 1 test lama); full suite **242 file, 1852 passed, 0 failed** (19 skipped, sama seperti baseline). Satu regresi tertangkap gate Fase C (`medical-silent-escalation` — mock lapisan salah, diperbaiki) + satu false-positive D3 (penolakan sopan, diperketat) — keduanya hijau kembali.
+
+---
+
+## 42. [Tests] `medical-silent-escalation.test.ts` "Non-medical" memalsukan LLM di lapisan salah (2026-09-11)
+
+- **Fakta:** test memock `model-fallback` namun runner memakai `v3LlmCircuitBreaker` langsung — V3 selalu throw (`LLM_FALLBACK_API_KEY not configured`) dan lolos via fallback tanya-alamat lama. Setelah Fase B (outage → eskalasi), test ini gagal dengan benar.
+- **Perbaikan:** test 3 kini memock `V3AgentRunner.executeChatCompletion` (lapisan yang benar) agar menguji normal flow sungguhan; skenario outage dicakup `llm-outage-silent.test.ts`.
+- **Pelajaran:** mock di lapisan yang salah menyembunyikan perilaku outage — waspadai pola ini di test V3 lain.
+
+---
+
+## 43. [V3] Halusinasi domisili "Kecamatan Waru" + janji cek-jadwal buta (simulator 725870, 2026-09-11)
+
+- **Status:** implemented (2026-09-11, fondasional — hierarki prompt + gate kode D6 + replay test).
+- **Kejadian:** customer "galo" → "Hari Minggu pagi kosong tidak ya ?" → bot janji "cekkan... Nanti kami infokan" tanpa tanya lokasi/treatment; customer "baik kak" → bot "Area Kecamatan Waru ini masih cukup luas..." padahal lokasi tak pernah disebut.
+- **Bukti (bukan tebakan):** `logs/llm-2026-09-11.jsonl` entry `llm_1789098711706` + `llm_1789098754163` (customer `6289999725870`): kedua turn `TOOLS: []`, ringkasan sesi `Lokasi: Belum diketahui`. Dieliminasi: seed simulator, default GoalTracker, substring gazetteer (nol hit), bocoran extractor (guard aktif), state basi.
+- **Akar:**
+  1. RC-1 slot-fill: pola `persona.ts:155` ("Kecamatan [Kecamatan]...") + primer basecamp Waru (`:150-151`) vs larangan (`:156`, aturan 11 `:334`) — prompt-level tanpa enforcement; model mengisi slot dengan satu-satunya kecamatan yang dikenalnya.
+  2. RC-2 konflik aturan: pola cekkan (aturan 5/21) vs tanya-lokasi (`:327`) tanpa precedence; summarizer mem-prime "cekkan"; fast-intent gagal tandai `ask_schedule`; fase GENERAL lemah; "baik kak" bukan afirmasi deterministik.
+  3. RC-3 fixing lama tak mempan: `v3-anti-todong-jadwal.test.ts` hanya cek string prompt, tak pernah replay 2-turn.
+- **Perbaikan:** Fase 1 hierarki 5a>5b+aturan 21 + direktif GENERAL + summarizer kondisional (prompt-only, keputusan owner); Fase 2 validator D6 (`factual-claim-validator.ts`, daftar kecamatan dari `getGazetteerKecamatanNames`, kecuali homebase) + `TEMPLATES.askDomicileNeutral` + wiring blok 7b (D6-murni → template netral + `unresolvedFaq`); Fase 3 `simulator-minggu-waru-replay.test.ts` (MERAH 2/2 sebelum fix → HIJAU sesudah) + unit D6 + perluasan test statis.
+- **Verifikasi:** `npm run build` bersih; `tsc --noEmit` 0 error; replay test MERAH 2/2 sebelum fix → HIJAU sesudah; full suite **243 file, 1858 passed, 0 failed** (19 skipped = baseline).
+
+
+
 
