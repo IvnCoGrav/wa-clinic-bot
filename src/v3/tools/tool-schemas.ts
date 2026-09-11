@@ -13,6 +13,7 @@ export const GetCatalogArgsSchema = z.object({
   symptoms: z.array(z.string()).optional().default([]),
   specificTreatmentName: z.string().optional(),
   inquirePrice: z.boolean().optional().default(false),
+  targetPrice: z.number().positive().optional(),
 });
 
 export const SaveReservationArgsSchema = z.object({

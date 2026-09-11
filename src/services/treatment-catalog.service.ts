@@ -1289,6 +1289,28 @@ export class TreatmentCatalogService {
   }
 
   /**
+   * Pencocokan nominal harga (sesi 973126, data-driven tenant-aware):
+   * kembalikan layanan aktif yang harga promo ATAU harga normalnya sama
+   * dengan targetPrice (toleransi opsional, default exact-match).
+   * Sumber 100% dari katalog DB per-tenant — tanpa daftar harga hafalan.
+   */
+  public findServicesByPrice(
+    targetPrice: number,
+    tolerance = 0,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): ClinicServiceItem[] {
+    if (!Number.isFinite(targetPrice) || targetPrice <= 0) return [];
+    const tol = Number.isFinite(tolerance) && tolerance >= 0 ? tolerance : 0;
+    return this.getAllServices(true, tenantId).filter((s) => {
+      const promoHit = typeof s.promoPrice === 'number'
+        && Math.abs(s.promoPrice - targetPrice) <= tol;
+      const normalHit = typeof s.originalPrice === 'number'
+        && Math.abs(s.originalPrice - targetPrice) <= tol;
+      return promoHit || normalHit;
+    });
+  }
+
+  /**
    * Mencocokkan keluhan gejala customer ke layanan yang relevan di katalog secara dinamis
    */
   public matchServicesBySymptoms(symptoms: string[]): ClinicServiceItem[] {
