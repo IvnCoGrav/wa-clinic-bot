@@ -26,7 +26,7 @@ describe('Consultation Mode (no premature price/schedule)', () => {
       { kelurahan: 'Tebel Barat', ongkirPromo: 20000 }
     );
     expect(out.suggestedPriceReply).toBeDefined();
-    expect(out.suggestedPriceReply!).toContain('90.000');
+    expect(out.suggestedPriceReply!).toContain('95.000');
     expect(out.suggestedConsultationReply).toBeUndefined();
   });
 

@@ -3,10 +3,14 @@ import fs from 'fs';
 import path from 'path';
 
 export type LlmFlowType =
-  | 'SLOT_EXTRACTOR'
-  | 'SLOT_GENERATOR'
-  | 'SLOT_FAST_FAQ'
-  | 'V3_AGENT';
+  | 'NLU_EXTRACTOR'
+  | 'SLOT_EXTRACTOR' // legacy alias NLU
+  | 'V3_ROUTING' // Call 1: tool routing & intent
+  | 'V3_GENERATION' // Call 2: natural reply generation
+  | 'V3_REPROMPT' // Call 3+: hallucination correction
+  | 'V3_AGENT' // legacy fallback (monolitik)
+  | 'SLOT_GENERATOR' // legacy
+  | 'SLOT_FAST_FAQ'; // legacy
 
 export interface LlmExecutionRecord {
   id: string;
@@ -26,6 +30,12 @@ export interface LlmExecutionRecord {
   modelUsed?: string;
   durationMs?: number;
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  costIdr?: number;
+  toolsCalled?: Array<{ name: string; args: any }>;
+  callSequence?: number;
 }
 
 export interface GroupedBubbleChat {
@@ -99,7 +109,8 @@ async function flushLlmWriteQueue(): Promise<void> {
     const filePath = getLlmLogFilePath();
     await fs.promises.appendFile(filePath, chunk.join('\n') + '\n', 'utf8');
   } catch (_) {
-    // Best-effort file writing, never throw or interrupt execution
+    // Jangan silent-drop: kembalikan chunk ke antrean agar tidak hilang diam-diam
+    llmWriteQueue.unshift(...chunk);
   } finally {
     isLlmFlushing = false;
     if (llmWriteQueue.length > 0) {
@@ -132,6 +143,12 @@ export function recordLlmExecution(
     modelUsed: data.modelUsed,
     durationMs: data.durationMs,
     status: data.status || 'SUCCESS',
+    promptTokens: data.promptTokens,
+    completionTokens: data.completionTokens,
+    totalTokens: data.totalTokens,
+    costIdr: data.costIdr,
+    toolsCalled: data.toolsCalled,
+    callSequence: data.callSequence,
   };
 
   llmExecutionBuffer.unshift(entry);
@@ -169,10 +186,12 @@ export async function rehydrateLlmBuffer(): Promise<void> {
     const todayPath = getLlmLogFilePath();
     const loadedRecords: LlmExecutionRecord[] = [];
 
-    const readRecordsFromFile = async (filePath: string) => {
+    // Tail-only: hanya 500 baris terakhir agar tidak membaca 10MB sinkron
+    const readRecordsFromFile = async (filePath: string, maxLines = 500) => {
       if (!fs.existsSync(filePath)) return [];
       const content = await fs.promises.readFile(filePath, 'utf8');
-      const lines = content.trim().split('\n').filter(Boolean);
+      const allLines = content.trim().split('\n').filter(Boolean);
+      const lines = allLines.slice(-maxLines);
       const records: LlmExecutionRecord[] = [];
       for (const line of lines) {
         try {
@@ -259,11 +278,23 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
   const result: GroupedCustomerLlmLogs[] = [];
 
+  // Korelasi JID kontak umum (xxx@c.us) BUKAN ID pesan spesifik —
+  // jangan dipakai sebagai korelasi eksak lintas pesan.
+  const isExactCorrelationId = (id?: string): boolean => {
+    if (!id) return false;
+    if (id.endsWith('@c.us') || id.endsWith('@g.us')) return false;
+    return true;
+  };
+
   const FLOW_ORDER: Record<string, number> = {
+    NLU_EXTRACTOR: 1,
     SLOT_EXTRACTOR: 1,
+    V3_ROUTING: 2,
     SLOT_GENERATOR: 2,
     SLOT_FAST_FAQ: 2,
-    V3_AGENT: 3,
+    V3_GENERATION: 3,
+    V3_REPROMPT: 4,
+    V3_AGENT: 5,
   };
 
   for (const [phone, phoneLogs] of phoneMap.entries()) {
@@ -279,10 +310,12 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
       let targetBubble: GroupedBubbleChat | null = null;
 
-      if (log.bubbleCorrelationId && correlationMap.has(log.bubbleCorrelationId)) {
-        targetBubble = correlationMap.get(log.bubbleCorrelationId)!;
+      const hasExactId = isExactCorrelationId(log.bubbleCorrelationId);
+      if (hasExactId && correlationMap.has(log.bubbleCorrelationId!)) {
+        targetBubble = correlationMap.get(log.bubbleCorrelationId!)!;
       } else {
         // Fallback: check most recent bubble for heuristic merge
+        // (dipakai bila tanpa ID eksak ATAU ID generik JID @c.us)
         const lastBubble = bubbles[0] || null; // bubbles is unshifted, so bubbles[0] is latest
         if (lastBubble) {
           const isTimeClose = Math.abs(logTime - new Date(lastBubble.timestamp).getTime()) < 35000;
@@ -293,7 +326,7 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
             cleanInput.includes(lastBubble.customerInput) ||
             lastBubble.customerInput.includes(cleanInput);
 
-          if (!log.bubbleCorrelationId && isTimeClose && isInputMatching) {
+          if (!hasExactId && isTimeClose && isInputMatching) {
             targetBubble = lastBubble;
           }
         }
@@ -307,13 +340,14 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
         if (cleanInput && (!targetBubble.customerInput || targetBubble.customerInput.startsWith('[DRAFT QC]') || targetBubble.customerInput === '(Input)')) {
           targetBubble.customerInput = cleanInput;
         }
-        if (log.bubbleCorrelationId) {
-          correlationMap.set(log.bubbleCorrelationId, targetBubble);
+        if (isExactCorrelationId(log.bubbleCorrelationId)) {
+          correlationMap.set(log.bubbleCorrelationId!, targetBubble);
         }
       } else {
         const bubbleHash = cleanInput ? crypto.createHash('md5').update(cleanInput).digest('hex').slice(0, 6) : log.id;
         const timeBucket = Math.floor(logTime / 30000);
-        const deterministicId = log.bubbleCorrelationId || `bubble_${phone.replace(/[^\w]/g, '_')}_${bubbleHash}_${timeBucket}`;
+        const exactId = isExactCorrelationId(log.bubbleCorrelationId) ? log.bubbleCorrelationId! : null;
+        const deterministicId = exactId || `bubble_${phone.replace(/[^\w]/g, '_')}_${bubbleHash}_${timeBucket}`;
 
         const newBubble: GroupedBubbleChat = {
           correlationId: deterministicId,
@@ -323,14 +357,14 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
           aiCalls: [log],
         };
 
-        if (log.bubbleCorrelationId) {
-          correlationMap.set(log.bubbleCorrelationId, newBubble);
+        if (isExactCorrelationId(log.bubbleCorrelationId)) {
+          correlationMap.set(log.bubbleCorrelationId!, newBubble);
         }
         bubbles.unshift(newBubble); // newest bubble first
       }
     }
 
-    // Urutkan tahapan AI: Extractor -> Generator / Fast FAQ
+    // Urutkan tahapan AI: NLU Extractor -> Routing (Call 1) -> Generation (Call 2) -> Reprompt
     for (const b of bubbles) {
       b.aiCalls.sort((a, b) => {
         const orderA = FLOW_ORDER[a.flowType] || 99;
@@ -359,7 +393,16 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
 /**
  * Bersihkan buffer log eksekusi LLM (untuk testing/reset).
+ * Mengosongkan memori + truncate berkas JSONL hari ini agar reboot tidak memunculkan data lama.
  */
 export function clearLlmExecutionLogs(): void {
   llmExecutionBuffer.length = 0;
+  llmWriteQueue.length = 0;
+  try {
+    ensureLogsDir();
+    const todayPath = getLlmLogFilePath();
+    if (fs.existsSync(todayPath)) {
+      fs.writeFileSync(todayPath, '', 'utf8');
+    }
+  } catch {}
 }

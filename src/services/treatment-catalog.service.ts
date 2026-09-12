@@ -964,6 +964,17 @@ export class TreatmentCatalogService {
         else if (descLower.includes(tok)) score += 2;
       }
       if (score > bestScore) { bestScore = score; best = item; }
+      else if (score === bestScore && score > 0 && best) {
+        // Default tier usia tak diketahui (sesi 138207): bila skor seri antara
+        // varian BABY (< 2 thn) vs KIDS (> 2 thn) — mis. Lahap Juara — dahulukan
+        // BABY selaras spesialisasi Kala Moms and Baby Spa. Filter usia eksplisit
+        // di atas tetap menang bila umur diketahui (pool sudah menyempit).
+        const bestIsKids = (best.category || '').toUpperCase() === 'KIDS';
+        const itemIsBaby = (item.category || '').toUpperCase() === 'BABY';
+        if (bestIsKids && itemIsBaby && (ageMonths == null || ageMonths <= 0)) {
+          best = item;
+        }
+      }
     }
     return bestScore > 0 ? best : undefined;
   }

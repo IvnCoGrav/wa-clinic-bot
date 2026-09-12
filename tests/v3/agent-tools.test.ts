@@ -65,7 +65,7 @@ describe('V3 Native Agent Tools Suite', () => {
       expect(result.success).toBe(true);
       expect(result.treatments.length).toBeGreaterThan(0);
       expect(result.treatments[0].name).toContain('Pulih Ceria');
-      expect(result.treatments[0].promoPrice).toBe(70000);
+      expect(result.treatments[0].promoPrice).toBe(75000);
       expect(result.recommendationReason).toContain('Pulih Ceria');
     });
 

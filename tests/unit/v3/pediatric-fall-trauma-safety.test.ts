@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { V3AgentRunner } from '../../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../../src/v3/agent/pipeline/context-grounder';
 import { PersonaPromptBuilder } from '../../../src/v3/agent/persona';
 import { resolveChunkKeywords } from '../../../src/services/keyword-enrichment.service';
 
@@ -9,20 +9,20 @@ import { resolveChunkKeywords } from '../../../src/services/keyword-enrichment.s
  */
 describe('Pediatric Fall Trauma Safety', () => {
   it('varian bahasa jatuh terdeteksi sinyal trauma', () => {
-    expect(V3AgentRunner.hasFallInjurySignal('kemarin anak saya baru jatuh, itu bisa nggak ya')).toBe(true);
-    expect(V3AgentRunner.hasFallInjurySignal('si kecil kejedot meja semalam')).toBe(true);
-    expect(V3AgentRunner.hasFallInjurySignal('habis jatuh dari kasur')).toBe(true);
-    expect(V3AgentRunner.hasFallInjurySignal('bayinya terbentur pintu')).toBe(true);
+    expect(ContextGrounder.hasFallInjurySignal('kemarin anak saya baru jatuh, itu bisa nggak ya')).toBe(true);
+    expect(ContextGrounder.hasFallInjurySignal('si kecil kejedot meja semalam')).toBe(true);
+    expect(ContextGrounder.hasFallInjurySignal('habis jatuh dari kasur')).toBe(true);
+    expect(ContextGrounder.hasFallInjurySignal('bayinya terbentur pintu')).toBe(true);
   });
 
   it('non-trauma TIDAK terdeteksi (sapaan, harga, jadwal)', () => {
-    expect(V3AgentRunner.hasFallInjurySignal('halo kak selamat pagi')).toBe(false);
-    expect(V3AgentRunner.hasFallInjurySignal('harganya berapa ya?')).toBe(false);
-    expect(V3AgentRunner.hasFallInjurySignal('untuk jumat besok apakah bisa?')).toBe(false);
+    expect(ContextGrounder.hasFallInjurySignal('halo kak selamat pagi')).toBe(false);
+    expect(ContextGrounder.hasFallInjurySignal('harganya berapa ya?')).toBe(false);
+    expect(ContextGrounder.hasFallInjurySignal('untuk jumat besok apakah bisa?')).toBe(false);
   });
 
   it('query jatuh memicu pre-grounding RAG', () => {
-    expect(V3AgentRunner.isSubstantiveForPreGrounding('kemarin anak saya baru jatuh, itu bisa nggak ya')).toBe(true);
+    expect(ContextGrounder.isSubstantiveForPreGrounding('kemarin anak saya baru jatuh, itu bisa nggak ya')).toBe(true);
   });
 
   it('judul SOP jatuh ter-resolve ke keywords skrining', () => {

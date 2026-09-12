@@ -43,7 +43,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     tags: ['jam_operasional', 'jam', 'operasional', 'buka', 'tutup', 'batas', 'malam', 'pukul', 'siang', 'sore', 'pagi', 'malam hari'],
     customerMessage: 'Kak, kalau homecare ada batas jamnya nggak? Bisa malam nggak?',
     idealResponse:
-      'Layanan homecare kami buka setiap hari (Senin–Minggu) mulai pukul 08.00 sampai 17.00 WIB ya Bunda 😊 Untuk ketersediaan jam kunjungan akan kami bantu cekkan jadwal Bidan yang ready. Rencana Bunda ingin berkunjung di hari apa? 🤗',
+      'Layanan homecare kami buka setiap hari (Senin–Minggu) mulai pukul 08.00 sampai 17.00 WIB ya Bunda 😊 Untuk ketersediaan jam kunjungan akan kami bantu cekkan ketersediaan jadwal kami. Rencana Bunda ingin berkunjung di hari apa? 🤗',
     isActive: true,
     sortOrder: 9,
   },
@@ -276,7 +276,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'bisa', 'treatment'],
     customerMessage: 'Treatment nya semisal besok apa bisa ya bu ?',
     idealResponse:
-      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏',
+      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal kami terlebih dahulu ya Bunda 😊🙏',
     isActive: true,
     sortOrder: 33,
   },

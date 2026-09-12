@@ -6,7 +6,7 @@ import { executeGetCatalog } from '../../../src/v3/tools/get-catalog.tool';
  * otomatis digabung ke template harga katalog (anti amnesia total biaya).
  */
 describe('Catalog Session-Aware Total Price', () => {
-  it('Pulih Ceria 70rb + ongkir quoted 20rb -> template memuat Rp 90.000', async () => {
+  it('Pulih Ceria 75rb + ongkir quoted 20rb -> template memuat Rp 95.000', async () => {
     const out = await executeGetCatalog(
       { specificTreatmentName: 'Pijat Bayi Pulih Ceria', inquirePrice: true },
       'default-tenant',
@@ -14,7 +14,7 @@ describe('Catalog Session-Aware Total Price', () => {
     );
     expect(out.success).toBe(true);
     expect(out.suggestedPriceReply).toBeDefined();
-    expect(out.suggestedPriceReply!).toContain('90.000');
+    expect(out.suggestedPriceReply!).toContain('95.000');
     expect(out.suggestedPriceReply!).toContain('Tebel Barat');
     expect(out.suggestedPriceReply!).toContain('total keseluruhan');
   });

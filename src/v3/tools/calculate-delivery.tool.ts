@@ -28,6 +28,12 @@ export interface CalculateDeliveryInput {
    * menanyakan "di hari apa" lagi — langsung respon pengecekan waktu tsb.
    */
   preferredDate?: string;
+  /**
+   * Audit 694493 (anti-premature invoicing): gatekeeper mode konsultasi vs
+   * transaksional. Rekap keranjang + grand total HANYA bila true (customer
+   * sudah pernah tanya harga/total). Bila false/undefined: HANYA jarak + ongkir.
+   */
+  priceDiscussed?: boolean;
 }
 
 /**
@@ -230,7 +236,10 @@ function findKecamatanInQuery(query: string): string | null {
 }
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
-  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate } = input;
+  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate, priceDiscussed } = input;
+  // Audit 694493: gatekeeper mode konsultasi vs transaksional — rekap nota
+  // HANYA bila customer sudah tanya harga/total.
+  const shouldShowCartRecap = priceDiscussed === true;
   // `let` agar fallback addressQuery dari link Maps bisa menggantikan query
   // mentah secara transparan (Phase 0 audit 315036).
   let compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
@@ -270,8 +279,9 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
               ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
             });
         console.log(JSON.stringify({ event: 'V3_TOOL_DELIVERY_URL_RESOLVED', tenantId, lat, lng, distanceKm, timestamp: new Date().toISOString() }));
-        // Phase 2: rekap keranjang + grand total (bila snapshot tersedia).
-        const urlCartRecap = isOutOfCoverage ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
+        // Phase 2 (audit 315036) diharmonisasikan audit 694493: rekap nota
+        // HANYA bila priceDiscussed (mode transaksional).
+        const urlCartRecap = isOutOfCoverage || !shouldShowCartRecap ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
         const urlTemplate = urlCartRecap
           ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
           : suggestedTemplateReply;
@@ -446,10 +456,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           ...(preferredDate ? { scheduleCta: buildScheduleCta(preferredDate) } : {}),
         });
 
-    // Phase 2 (audit 315036) — Mandat Total Biaya Otomatis: bila keranjang
-    // terisi, template + message WAJIB memuat rekap item + grand total agar
-    // Call 2 tidak "kehilangan" total biaya (angka dari snapshot deterministik).
-    const cartRecap = isOutOfCoverage ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
+    // Phase 2 (audit 315036) diharmonisasikan audit 694493:
+    // Rekap keranjang + grand total HANYA bila priceDiscussed (transaksional).
+    // Mode konsultasi: HANYA jarak + ongkir promo.
+    const cartRecap = isOutOfCoverage || !shouldShowCartRecap ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
     const suggestedTemplateReply = cartRecap
       ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
       : baseTemplateReply;
@@ -468,7 +478,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       suggestedTemplateReply,
       message: isOutOfCoverage
         ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks 30 km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
-        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}. Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
+        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.${shouldShowCartRecap ? ' Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.' : ' DILARANG menyebut harga treatment / grand total (mode konsultasi) — sampaikan jarak + ongkir promo saja.'}` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_DELIVERY_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

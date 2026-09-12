@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GoalTracker } from '../../src/v3/state/goal-tracker';
-import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../src/v3/agent/pipeline/context-grounder';
 import { V3ConversationSummarizer } from '../../src/v3/state/conversation-summarizer';
 import { validateToolArgs } from '../../src/v3/tools/tool-schemas';
 
@@ -66,8 +66,8 @@ describe('Multi-Audience Patient Domain (Agent V3)', () => {
   });
 
   it('pre-grounding substantif terpicu untuk pertanyaan induksi 38 weeks', () => {
-    expect(V3AgentRunner.isSubstantiveForPreGrounding('Kak, bedanya pregnant massage dengan induksi massage fullbody apa ya ? Saya uk 38 weeks')).toBe(true);
-    expect(V3AgentRunner.isSubstantiveForPreGrounding('halo')).toBe(false);
+    expect(ContextGrounder.isSubstantiveForPreGrounding('Kak, bedanya pregnant massage dengan induksi massage fullbody apa ya ? Saya uk 38 weeks')).toBe(true);
+    expect(ContextGrounder.isSubstantiveForPreGrounding('halo')).toBe(false);
   });
 
   it('summarizer audience-aware: ibu hamil tidak mengulang tanya usia anak', () => {

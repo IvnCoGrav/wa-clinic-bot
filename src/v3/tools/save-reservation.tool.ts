@@ -57,6 +57,18 @@ const DAY_EVIDENCE_WORDS = [
   'januari', 'februari', 'maret', 'april', 'mei', 'juni',
   'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
   'tanggal',
+  // Varian waktu same-day (sesi 138207: "kalau siang ini bisa?" adalah jejak
+  // hari INI — dipetakan via SAME_DAY_EVIDENCE_ALIASES di bawah).
+  'siang ini', 'pagi ini', 'sore ini', 'malam ini', 'nanti siang', 'nanti sore', 'hari ini juga',
+];
+
+/**
+ * Frasa same-day yang membuktikan booking "hari ini"/"sekarang" walau kata
+ * "hari ini" tak disebut harfiah (sesi 138207: "kalau siang ini bisa?").
+ * Data-driven includes atas teks evidence yang dinormalisasi.
+ */
+const SAME_DAY_EVIDENCE_ALIASES = [
+  'siang ini', 'pagi ini', 'sore ini', 'malam ini', 'nanti siang', 'nanti sore', 'hari ini juga',
 ];
 
 /**
@@ -108,6 +120,11 @@ export function verifyDayMentioned(
       return evTokens.has(w);
     });
     if (proven) return null;
+    // Alias same-day (sesi 138207): booking "hari ini"/"sekarang" terbukti
+    // bila evidence memuat varian waktu hari-ini ("siang ini", "pagi ini",
+    // "sore ini", "malam ini", "nanti siang/sore", "hari ini juga").
+    const bdIsSameDay = bd.includes('hari ini') || bd.includes('sekarang');
+    if (bdIsSameDay && SAME_DAY_EVIDENCE_ALIASES.some((a) => evText.includes(a))) return null;
   } else {
     // (b) tanpa kata waktu: angka tanggal bookingDate harus muncul di evidence
     let digits = '';
@@ -120,7 +137,7 @@ export function verifyDayMentioned(
     const dayNums = nums.filter((n) => n.length <= 2);
     if (dayNums.some((n) => evTokens.has(n) || evTokens.has(String(Number(n))))) return null;
   }
-  return `Gagal: "${bookingDate}" TIDAK pernah disebutkan customer di chat (verifikasi jejak hari GAGAL). DILARANG mengarang hari! Tanyakan preferensi hari/tanggal kunjungan terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
+  return `Hari/tanggal "${bookingDate}" belum punya jejak eksplisit di pesan customer. Ketersediaan jadwal masih dalam tahap pengecekan — sampaikan dengan hangat bahwa tim sedang mengecek jadwal yang ready, jangan memarahi customer atau meminta tanggal secara kaku. Tanyakan preferensi hari/tanggal kunjungan dengan santai terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
 }
 
 export interface SaveReservationOutput {
@@ -462,11 +479,11 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       reservationId: result.reservation?.id,
       summary,
       isSameDay,
-      // Copy ekspektasi-aman: same-day TANPA janji Bidan langsung OTW
-      // (kalimat baku pilihan User); non-same-day konfirmasi cek jadwal POV kami.
+      // Copy ekspektasi-aman (audit 694493): transparan tanpa klaim finalisasi
+      // sepihak — permintaan ditampung untuk dicek slot oleh tim Bidan.
       message: isSameDay
         ? 'Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏'
-        : `${summary} Untuk ketersediaan jadwal ${bookingDate}, kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda 😊🙏 Nanti segera kami infokan ya bund 🤗`
+        : `Permintaan jadwal kunjungan ${treatmentDetail} pada hari ${bookingDate} sudah kami tampung ya Bunda 😊 Untuk ketersediaan slot pastinya, kami bantu cekkan ketersediaan jadwal tim Bidan kami dulu ya Bunda 🙏 Nanti segera kami kabari ya bund 🤗`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_RESERVATION_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

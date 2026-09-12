@@ -39,7 +39,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     tags: ['ask_schedule', 'schedule', 'jadwal', 'sabtu', 'minggu', 'besok', 'tanggal', 'kapan', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'slot kosong'],
     customerMessage: 'Hari Sabtu ini bu bidan bisa datang ke rumah?',
     idealResponse:
-      'Untuk ketersediaan jadwal di hari Sabtu, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊🙏',
+      'Untuk ketersediaan jadwal di hari Sabtu, akan kami bantu cekkan ketersediaan jadwal kami terlebih dahulu ya Bunda 😊🙏',
     isActive: true,
     sortOrder: 2,
   },
@@ -79,7 +79,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     tags: ['ask_schedule', 'jadwal', 'hari', 'besok', 'cek', 'ketersediaan', 'treatment', 'bisa', 'kapan', 'tanggal', 'lusa', 'slot'],
     customerMessage: 'Treatment nya semisal besok apa bisa ya bu ?',
     idealResponse:
-      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal Bidan kami yang ready terlebih dahulu ya Bunda 😊🙏',
+      'Untuk ketersediaan jadwal di hari besok, akan kami bantu cekkan ketersediaan jadwal kami terlebih dahulu ya Bunda 😊🙏',
     isActive: true,
     sortOrder: 34,
   },

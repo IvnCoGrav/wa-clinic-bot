@@ -71,9 +71,9 @@ describe('Personal Treatment Follow-Up (20 Test Cases)', () => {
   });
 
   // ============ B. Extract nama treatment dari searchCatalog ============
-  it('11. "moksa itu apa" → searchCatalog mengembalikan Sinar Moksa (Add-on)', () => {
+  it('11. "moksa itu apa" → searchCatalog mengembalikan Sinar Moksa (Infrared / Moxa)', () => {
     const res = treatmentCatalogService.searchCatalog('moksa itu apa ya');
-    expect(res).toContain('Sinar Moksa (Add-on)');
+    expect(res).toContain('Sinar Moksa (Infrared / Moxa)');
   });
 
   it('12. Extract nama resmi dari line pertama hasil searchCatalog', () => {
@@ -100,20 +100,20 @@ describe('Personal Treatment Follow-Up (20 Test Cases)', () => {
     expect(clean).toBe('Nebulizer');
   });
 
-  it('15. "pijat bayi ceria" → extract nama clean "Pijat Bayi Ceria"', () => {
+  it('15. "pijat bayi ceria" → extract nama clean "Pijat Bayi Ceria Newborn"', () => {
     const res = treatmentCatalogService.searchCatalog('pijat bayi ceria itu apa');
     const firstLine = res.split('\n').find((l) => l.startsWith('• *'))!;
     const m = firstLine.match(/• \*([^*]+)\*/)!;
     const clean = m[1].trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-    expect(clean).toBe('Pijat Bayi Ceria');
+    expect(clean).toBe('Pijat Bayi Ceria Newborn');
   });
 
-  it('16. "prenatal massage" → extract nama clean "Prenatal Massage"', () => {
+  it('16. "prenatal massage" → extract nama clean "Pijat Ibu Hamil / Prenatal Gentle Massage"', () => {
     const res = treatmentCatalogService.searchCatalog('prenatal massage');
     const firstLine = res.split('\n').find((l) => l.startsWith('• *'))!;
     const m = firstLine.match(/• \*([^*]+)\*/)!;
     const clean = m[1].trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-    expect(clean).toBe('Prenatal Massage');
+    expect(clean).toBe('Pijat Ibu Hamil / Prenatal Gentle Massage');
   });
 
   it('17. "cukur rambut bayi" → extract nama clean "Cukur Rambut Bayi"', () => {

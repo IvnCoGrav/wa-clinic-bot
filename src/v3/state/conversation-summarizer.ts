@@ -93,7 +93,11 @@ export class V3ConversationSummarizer {
             : allServices;
         const suggested = session.targetAudience === 'MOMS'
           ? (candidates[0]?.name || 'treatment ibu sesuai katalog')
-          : (candidates.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates[0]?.name || 'treatment sesuai katalog');
+          : (treatmentCatalogService.recommendServiceBySymptoms(
+              activeSymptoms,
+              ageMonths,
+              undefined
+            )?.name || candidates[0]?.name || 'treatment sesuai katalog');
         if (session.targetAudience === 'MOMS') {
           sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
           janganDiulang.push('Menanyakan ulang keluhan Bunda');

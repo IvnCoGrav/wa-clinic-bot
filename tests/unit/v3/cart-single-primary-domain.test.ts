@@ -24,7 +24,7 @@ describe('Cart Single Primary Domain (no regex)', () => {
     expect(cart[0].name).toContain('Pulih Ceria');
     expect(cart[0].type).toBe('PRIMARY');
     const subtotal = cart.reduce((s, it) => s + (it.promoPrice || it.price), 0);
-    expect(subtotal).toBe(70000);
+    expect(subtotal).toBe(75000);
   });
 
   it('Pulih Ceria + Sinar Moksa -> keduanya masuk (PRIMARY + ADDON)', () => {

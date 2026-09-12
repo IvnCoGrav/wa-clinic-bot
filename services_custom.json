@@ -694,8 +694,6 @@
     "originalPrice": 160000,
     "promoPrice": 130000,
     "description": "Layanan mandi berbusa dan pijat relaksasi anak.",
-    "isActive": false,
-    "serviceType": "STANDARD",
-    "isAddon": false
+    "isActive": true
   }
 ]

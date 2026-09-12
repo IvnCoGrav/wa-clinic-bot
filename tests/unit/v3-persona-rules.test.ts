@@ -170,7 +170,7 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(out.length).toBeLessThanOrEqual(500);
     // Tidak boleh berakhir menggantung tepat di belakang angka daftar
     expect(out).not.toMatch(/\d+\.\s*$/);
-    expect(out).toMatch(/[.!?…]\s*$/u);
+    expect(out).toMatch(/[.!?…\p{Extended_Pictographic}]\s*$/u);
   });
 
   it('Test 12: stripEnglishLeakage membersihkan "full body massage bayi"', () => {

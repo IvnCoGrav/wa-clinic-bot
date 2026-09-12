@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../src/v3/agent/pipeline/context-grounder';
 import { V3ConversationSummarizer } from '../../src/v3/state/conversation-summarizer';
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 
@@ -23,7 +23,7 @@ describe('Simulator 973126 replay: nominal + durasi tanpa nama paket', () => {
     ];
     // Sebutan asisten DILARANG dianggap customer setuju; user tak menyebut
     // nama paket apa pun → null.
-    expect(V3AgentRunner.detectAgreedTreatment(history, names)).toBeNull();
+    expect(ContextGrounder.detectAgreedTreatment(history, names)).toBeNull();
   });
 
   it('detectAgreedTreatment tetap menangkap persetujuan eksplisit user', () => {
@@ -33,7 +33,7 @@ describe('Simulator 973126 replay: nominal + durasi tanpa nama paket', () => {
       { role: 'assistant', content: 'Ada beberapa pilihan Bunda' },
       { role: 'user', content: `Saya ambil ${agreed} ya` },
     ];
-    expect(V3AgentRunner.detectAgreedTreatment(history, names)).toBe(agreed);
+    expect(ContextGrounder.detectAgreedTreatment(history, names)).toBe(agreed);
   });
 
   it('summarizer komposit nominal+durasi → klarifikasi paket, bukan durasi paket terkunci', () => {

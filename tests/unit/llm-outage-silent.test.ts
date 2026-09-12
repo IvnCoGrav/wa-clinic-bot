@@ -4,6 +4,7 @@ import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
@@ -30,7 +31,7 @@ describe('LLM outage — eskalasi sunyi tanpa balasan', () => {
     const phone = `62892${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Sari', DEFAULT_TENANT_ID);
     const escSpy = vi.spyOn(conversationService, 'escalateToHumanHandling');
-    vi.spyOn(V3AgentRunner, 'executeChatCompletion').mockRejectedValue(new Error('LLM outage simulasi'));
+    vi.spyOn(GenerationStage, 'executeChatCompletion').mockRejectedValue(new Error('LLM outage simulasi'));
 
     const result = await testStateMachine.processMessage({
       tenantId: DEFAULT_TENANT_ID,

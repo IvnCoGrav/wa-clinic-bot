@@ -44,6 +44,14 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 - **Mandat Minimalisasi Regex & Larangan Mutilasi Semantik (MANDATORY)**: DILARANG KERAS menggunakan regex sebagai gatekeeper intent pengguna atau untuk memotong/mengamputasi/mengganti kata/nominal di tengah-tengah kalimat bahasa alami LLM (*Mid-Sentence Mutilation Ban* seperti kasus `danya`, `menjadi ,`, atau menimpa angka di kalimat yang sudah dirangkai model). Kendali perilaku LLM WAJIB diselesaikan di level State Machine/Prompt/Grounding/Few-Shot. Regex HANYA diizinkan untuk pembersihan teknis mesin non-semantik (tag thinking AI, format 1-bintang markdown, tag iklan, nomor telepon).
 - **Zero New Runtime Dependencies (MANDATORY)**: DILARANG menambah dependency baru di `package.json` runtime tanpa persetujuan eksplisit user. Maksimalkan modul yang sudah ada (`zod`, `crypto`, `fastify`, `@prisma/client`, dll).
 - **Larangan Menyentuh Label WAHA (MANDATORY)**: DILARANG KERAS memanggil atau memodifikasi label WhatsApp di WAHA (seperti `wahaClient.addLabel`, `removeLabel`, atau sinkronisasi label WAHA lainnya). Seluruh penandaan label, tag, atau status (seperti "tanya jadwal", MQL, status percakapan) HANYA BOLEH dilakukan di **level internal sistem / database** (tabel `Customer`, session DB, atau livechat internal tag), BUKAN ke WAHA.
+- **Mandat Audit Percakapan Menyeluruh & Kepatuhan Rules (MANDATORY)**: Bila user meminta analisa atau audit terhadap hasil percakapan chatbot (simulator, transkrip chat, maupun log live):
+  1. AI Agent WAJIB melakukan audit menyeluruh per-putaran (*turn-by-turn deep audit*) dan investigasi log mesin/tool, BUKAN sekadar membaca kesan teks di permukaan.
+  2. AI Agent WAJIB secara aktif menguji kepatuhan setiap jawaban asisten terhadap **seluruh rules yang telah ditanamkan di sistem**:
+     - **21 Aturan Emas / Negative Constraints Mutlak**: batasan 2-3 kalimat, larangan menyebut harga/biaya tanpa ditanya, larangan durasi menit tanpa ditanya, larangan menodong usia, kepatuhan hierarki jadwal & SOP same-day jadwal penuh, penggunaan kata ganti "kami"/"Bidan kami" (bukan "saya"), anti-overuse "Bunda", anti-kaset rusak, anti-amnesia lokasi/keluhan, anti-tanya jarak km, dsb.
+     - **Kontrak Tool & Alur Pemesanan**: keabsahan pemanggilan `calculate_delivery`, `get_catalog_and_price`, dan larangan keras pemanggilan `save_reservation` sebelum kesepakatan final; pencegahan penguncian layanan secara sepihak atas jawaban ambigu customer (*"boleh deh yang itu"*).
+     - **SOP Medis & Katalog Klinis**: validitas rekomendasi terapi sesuai keluhan (misal GTM wajib ke penambah nafsu makan, bukan bapil), aturan pasca-vaksinasi, dsb.
+  3. Laporkan audit secara tegas, jujur, dan berani: pisahkan antara aspek yang sudah patuh vs seluruh pelanggaran rules (kritis, sedang, minor), sertakan bukti teknis log pemanggilan tool/state machine, dan ajukan solusi perbaikan fondasional.
+
 
 ## Monorepo (no npm workspaces)
 
