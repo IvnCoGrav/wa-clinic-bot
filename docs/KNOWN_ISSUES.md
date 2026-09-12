@@ -1074,4 +1074,130 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Workaround sekarang:** `git checkout -- services_custom.json` setelah run test bila diff hanya artifak test.
 - **Fix yang disarankan:** mock `saveServices`/isolasi file katalog saat test, atau pindahkan katalog test ke fixture temp (butuh persetujuan — menyentuh harness test global).
 
+---
+
+## 48. [Retrieval] Skor token tunggal ambigu: "susah makan" seri vs "susah BAB" (sesi 138207, 2026-09-12)
+
+- **Status:** open (limitation, by-design trade-off), **bukan regresi**.
+- **Fakta:** `recommendServiceBySymptoms` (dan cerminannya `therapyScoreOf` di `get-catalog.tool.ts`) memakai overlap token tunggal: gejala `susah makan` → token `susah` cocok dengan "susah BAB" di deskripsi *Pijat Bayi Pulih Ceria* (+2), seri dengan `makan` → deskripsi *Pijat Lahap Juara* (+2). Pemenang seri ditentukan urutan katalog.
+- **Dampak saat ini:** TIDAK mengenai jalur produksi sesi 138207 — ekstraksi gejala produksi menghasilkan `['gtm','makan']` (tanpa `susah`), sehingga Lahap Juara menang mutlak dan kini dikunci oleh test `tests/unit/symptom-gtm-recommendation.test.ts`.
+- **Risiko:** bila ekstraktor suatu saat mengeluarkan gejala mentah `susah makan`, rekomendasi bisa jatuh ke Pulih Ceria (terapi bapil) padahal keluhannya nafsu makan.
+- **Fix yang disarankan (butuh desain):** penilaian frasa multi-kata / pencocokan objek kata benda (`makan` vs `BAB`) di scorer terpusat — menyentuh retrieval global, wajib gerbang regresi `symptoms-therapy-routing` + `catalog-price-matching` sebelum diterapkan.
+
+---
+
+## 49. [Simulator] 4 anomali sesi 138207 — FIXED 2026-09-12 (lapisan fondasional, tanpa dependency baru)
+
+- **Status:** fixed, dikunci 8 unit test baru (`symptom-gtm-recommendation`, `numeric-validator-session-ongkir`, `day-evidence-sameday`).
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (prompt payload turn 10–12) + `logs/app-2026-09-12.log` (`NUMERIC_HALLUCINATION_DETECTED` Rp 20.000, `V3_TOOL_RESERVATION_DAY_GATE_REJECTED` bookingDate "Hari ini").
+- **Akar & perbaikan:**
+  1. Summarizer hardcode `includes('pulih')` vs grounding goal-tracker (Lahap < 2 thn) → grounding kontradiktif. Fix: summarizer kini memanggil `recommendServiceBySymptoms` yang sama (`src/v3/state/conversation-summarizer.ts`).
+  2. Ongkir promo sesi tak diotorisasi sebagai angka mandiri → false-positive + fallback kaku. Fix: ongkir session masuk `authorizedNumbers` (`src/v3/guardrails/numeric-fact-validator.ts`).
+  3. Keranjang mengunci varian `> 2 thn` (usia dikarang 24 bln) + label `[Adik]` anak tunggal. Fix: kebijakan default tier BABY saat usia tak diketahui (tie-break di `treatment-catalog.service.ts` + `get-catalog.tool.ts`), prefix kinship hanya bila ≥2 anak (`src/v3/agent/agent-runner.ts`).
+  4. `save_reservation` prematur saat "siap bund" + gate menolak "siang ini". Fix: alias same-day (`SAME_DAY_EVIDENCE_ALIASES`) + pesan penolakan hangat + larangan routing eksplisit (`save-reservation.tool.ts`, `persona.ts`).
+- **Sisa yang disengaja:** harga paket dasar bayi-sehat disembunyikan dari grounding sampai customer bertanya harga (`goal-tracker.ts`); nominal tetap mengalir via `get_catalog_and_price` saat `inquirePrice=true` (tidak ada kehilangan data harga).
+
+---
+
+## 50. [Tests] Ekspektasi harga test usang vs `services_custom.json` — RESOLVED 2026-09-12
+
+- **Status:** resolved (2026-09-12) — 10 berkas test disinkronkan ke katalog aktif; full suite 263/263 files, 1936 passed + 19 skipped (0 failures).
+- **Fakta awal:** 9 file / 12+ test gagal karena drift DATA (Pulih Ceria 70k→75k, Moksa Add-on 10k→Infrared/Moxa 25k, nomenklatur bundle/follow-up), bukan regresi logika.
+- **Fix:** ekspektasi promo/total/nama resmi diselaraskan (`agent-tools`, `cart-single-primary-domain`, `catalog-session-total` 95k, `consultation-mode` 95k, `treatment-swap-cart-sync` 75k, `v3-fondasional-pilar` 70k+25k=95k, `treatment-followup-personal` Infrared/Moxa + Newborn + Prenatal Gentle, `cart-dedup-total` nama resmi + `priceDiscussed: true`, `v3-audit-homecare-fix` Oksitosin Fullbody + copy `tampung`/`cekkan`, `v3-persona-rules` regex emoji penutup).
+
+---
+
+## 51. [Tool Contract] `targetPrice` LLM tidak diteruskan ke `executeGetCatalog` — RESOLVED 2026-09-12
+
+- **Status:** resolved (2026-09-12).
+- **Fakta:** router prompt memerintahkan LLM mengisi `targetPrice` untuk nominal tanpa nama paket ("100rb berapa menit"), dan schema tool + zod mendukungnya — tetapi `executeToolByName` (`src/v3/tools/tool-registry.ts`) membangun `GetCatalogInput` manual TANPA `targetPrice`, sehingga `hasTargetPrice` selalu false di produksi dan jalur `priceClarification` mati.
+- **Fix:** satu baris `targetPrice: args.targetPrice` di `tool-registry.ts` + bug swap varian se-famili di `GoalTracker.resolveAffirmativeSwap` (proteksi Covered Tokens: token milik item cart yang disebut asisten tidak boleh memicu fuzzy-match varian sibling seperti Kids Pulih Ceria). Verifikasi: full suite 263/263 files hijau (0 failures), `npm run build` 0 error.
+
+---
+
+## 53. [Simulator] Direct reply Call 1 kehilangan persona (sesi 309274) — FIXED 2026-09-12
+
+- **Status:** fixed, dikunci 3 unit test (`v3-call1-direct-reply-natural`).
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (`customerPhone 6289999309274`, Turn-0 "siang kak untuk pijat dengan sinar moksa apa bisa homecare ya?", `executedTools: []`, `modelUsed gpt-4o-mini`) → `finalReply` birokratis tanpa sapaan/perkenalan ("Sebelum melanjutkan, bolehkah Bunda memberitahukan ... Ini penting untuk ...").
+- **Akar:** jalur direct-reply Call 1 (`finalReply = assistantMessage?.content`, `temperature: 0.2` di `agent-runner.ts:984`) hanya memakai `buildRouterPrompt` yang dirampingkan untuk routing — tanpa panduan sapaan Turn-0 (param `isFollowUp` tidak dipakai), tanpa panduan gaya WhatsApp, tanpa larangan frasa birokrasi.
+- **Fix (prompt-level, sesuai User Review Required):** butir 2 `buildRouterPrompt` kini memuat panduan sapaan Turn-0 kondisional (`isFollowUp`), contoh nada luwes, dan daftar hitam frasa birokratis — tetap ringkas (±4 baris) agar router tidak girmuk.
+- **Catatan jujur:** pertanyaan "apa bisa homecare" secara ideal memicu `get_clinic_policy_faq` — model memilih jawab langsung. Sensitivitas routing tidak diubah (di luar cakupan; berisiko over-triggering tool).
+- **Fase 834128 yang diusulkan ulang di plan ini TIDAK dikerjakan ulang** — sudah live di working tree dan terverifikasi (offer-confirmation gate, core-first durasi, `asksDuration`, pronoun validator). Usulan plan yang tetap ditolak demi mandat: helper regex `isAmbiguousRelativeReference` (gatekeeper intent via regex), daftar nama hardcode, dan sanitasi string `output-sanitizer.ts` (file tidak ada; penggantian kalimat dilarang).
+
+---
+
+## 54. [Simulator] Kaset rusak reprompt + orphan add-on + jam/durasi direct-reply (sesi 188034) — FIXED 2026-09-12
+
+- **Status:** fixed, dikunci 12 unit test baru (`reprompt-payload-integrity`, `cart-orphan-addon-protection`) + 1 butir router di `v3-call1-direct-reply-natural`.
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (`customerPhone 6289999188034`): T5 `calculate_delivery` → rincian Moksa Rp 15k + ongkir Rp 25k = Rp 40k; T6 "Besok apakah bisa kak" (`executedTools: []`) → pengulangan kata-per-kata rincian T5; T7 "Pulih ceria + moksa" → "Estimasi durasi 55 menit" + "kasih tahu jam berapa". `logs/app-2026-09-12.log`: `PRONOUN_SLIP_DETECTED` 02:01:05 + `PRONOUN_REPROMPT_FIXED` 02:01:07 pada turn yang sama — reprompt "berhasil" tetapi output = teks Turn 5 (model merevisi pesan turn salah karena draf tak disertakan).
+- **Akar & perbaikan:**
+  1. Payload reprompt (numerik/faktual/pronoun) = `[...messages, correction]` tanpa draf asisten. Fix: helper pure `buildRepromptMessages` (dengan guard draf-kosong anti HTTP 400) dipakai ketiga jalur + `currentDraft: finalReply` di pemanggil numerik; reprompt berantai tersinkron otomatis karena tiap tahap membaca `finalReply` terbaru.
+  2. `syncCartItems` mem-push ADDON akumulatif tanpa syarat utama. Fix: gate per-turn (keranjang berjalan ATAU pesan se-turn memuat non-addon) + gerbang penutup (tanpa utama → buang semua ADDON). Kasus 3/5/9 terverifikasi hijau (`cart-dedup-total` moksa, `cart-single-primary-domain` combo).
+  3. Router Section 2 belum memuat aturan emas. Fix: blok `ATURAN EMAS MUTLAK BALASAN LANGSUNG` (jam/durasi/harga/pronoun) — tanpa menduplikasi panduan Turn-0/anti-birokrasi yang sudah ada.
+- **Keputusan bisnis/medis (disetujui user):** ADDON (Moksa, Nebulizer) tidak melayani homecare mandiri — dikunci deterministik di state machine; bot menjelaskan edukatif, keranjang tetap `[]`.
+- **Batasan jujur:** ekspektasi nominal plan (Rp 90.000, Rp 115.000) memakai harga lama — test baru menghitung ekspektasi dari katalog aktif (Pulih 75k + Moksa 25k). Simulasi manual `npm run chat` tidak dijalankan (CLI interaktif, tanpa TTY di lingkungan ini) — cakupan diganti replay log + unit test deterministik.
+
+---
+
+## 55. [Simulator] Loop pasca-reservasi + disclaimer same-day + frasa pihak ketiga (sesi 462651) — FIXED 2026-09-12
+
+- **Status:** fixed, dikunci 15 unit test baru (`post-reservation-handoff`, `same-day-disclaimer`, `no-third-party-phrasing`, `symptom-bypass-guard`).
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (`customerPhone 6289999462651`): T4 "untuk perut kembung bisa ya?" (`executedTools: []`) → "Tentu saja bisa ... sangat efektif ... ingin reservasi? hari apa?"; T5 "hari ini jam 16.00" → `save_reservation`, disclaimer "kemungkinan penuh" dibuang Call 2 + "Bidan yang ready"; T6 "oke kak" → T7 "siap" = reassurance nyaris identik (loop).
+- **Akar & perbaikan:**
+  1. Tanpa handoff, ack "oke/siap" memanggil LLM selamanya. Fix: acknowledgement gate deterministik (0 token) — ack pertama → 1x closing + `isEscalated` + `escalationReason: 'pending_reservation_check'` (machine meneruskan ke `escalateToHumanHandling`: antrean live-chat + alert Telegram + web push; guard `machine.ts:51` membisukan turn berikut); ack berikutnya → senyap total. Flag `booking.needsStaffVerification/handoffClosingSent` persist via `customer.preferences` (tanpa migrasi). Non-ack ("bayar pake apa") SENGAJA tidak di-escalate (butuh jawaban; visibilitas staf via rekaman reservasi) — deviasi sadar dari plan.
+  2. Call 2 membuang disclaimer. Fix dua lapis: direktif `[MANDAT SAME-DAY BOOKING]` saat `save_reservation.isSameDay` + safety-net deterministik `ensureSameDayDisclaimer` (append bila tanpa indikasi "penuh").
+  3. "Bidan yang ready" diajarkan contoh BENAR di 4 lokasi (few-shot:42, gold:46, persona:199, config:86) — dibersihkan ke "jadwal kami". Invarian test: frasa hanya boleh di kalimat DILARANG.
+  4. Bypass keluhan: router mewajibkan `get_catalog_and_price` untuk keluhan fisik baru + A.2 melarang afirmasi mutlak/overclaim/todong ganda.
+- **Phase 5 plan (188034) TIDAK dikerjakan ulang** — `buildRepromptMessages` + orphan gate terverifikasi live di working tree.
+
+---
+
+## 56. [Simulator] Reprompt collapse Turn 3 + lokasi ditanya ulang (sesi 310843) — FIXED 2026-09-12
+
+- **Status:** fixed, dikunci 4 unit test (`reprompt-payload-integrity` ditulis ulang ke kontrak isolated) + 1 butir 5b di `v3-call1-direct-reply-natural`.
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (`customerPhone 6289999310843`): T3 "Hari minggu apa bisa ?" (`executedTools: []`) → pengulangan 100% teks Turn 1 (lokasi Waru + todong domisili padahal Wiguna 8.1 km sudah diketahui). Prompt runtime SUDAH memuat seluruh fix sebelumnya (Turn-0, asksDuration, golden router) — kolaps terjadi DI ATAS kode terbaru. `logs/app-2026-09-12.log`: `PRONOUN_SLIP_DETECTED` 02:40:33 → `PRONOUN_REPROMPT_FIXED` 02:40:35 — "fix" yang diadopsi = salinan Turn 1 (lolos recheck karena teks Turn 1 pronoun-clean). Membuktikan `currentDraft` (fix 188034) perlu TAPI tidak cukup: riwayat 8 pesan + draf + koreksi tetap collapse ke pesan salient.
+- **Fix:** `buildIsolatedRepromptMessages` (system editor + user draft, TANPA riwayat) menggantikan `buildRepromptMessages` di 3 jalur (numerik/faktual/pronoun). Ekspektasi perilaku lain dipertahankan: suhu per jalur, fallback sunyi faktual (D6 template), reprompt-tidak-membisu pronoun, kompatibilitas `cross-sum` (last=user, sekali panggil — hijau).
+- **Router 5b:** lokasi-diketahui → DILARANG tanya lokasi lagi; treatment belum dipilih → konfirmasi cek jadwal + tanyakan rencana perawatan (Call-1 direct reply tidak terjangkau aturan 16 Call-2 — ini celah lapisannya).
+- **Trade-off jujur:** retry terisolasi kehilangan konteks gaya percakapan (disangga system editor + draf utuh); efek ke kualitas revisi dipantau via event `*_REPROMPT_FIXED/STILL_INVALID` di log.
+- **Fase 2/3/4/6 plan ini TIDAK dikerjakan ulang** — handoff pasca-reservasi, disclaimer same-day, bersih frasa, guard keluhan, orphan gate terverifikasi live di working tree.
+
+---
+
+## 58. [V3] Anti-premature totaling 694493 + copy reservasi + bundling — DONE 2026-09-12
+
+- **Status:** done (gap-only; Fase 4/5 dilewati karena DONE). `calculate_delivery` kini gating `priceDiscussed` (tool input + registry snapshot + runner wiring + pesan + Bagian 4 persona Mode Konsultasi/Transaksional); copy non-same-day `save_reservation` menjadi "sudah kami tampung ... cekkan slot" (tanpa "berhasil dicatat"); kontrak bundling di Call 1 prompt; micro-template usia 2 kalimat; 3 sisa frasa "yang ready" → "jadwal kami".
+- **Kunci uji:** `anti-premature-invoicing` (2) + `reservation-response-copy` (1) hijau; `consultation-mode` 4/5 — 1 gagal pre-existing drift katalog (test harap 90.000, katalog kini 75.000/95.000 via perubahan `treatment-catalog` di working tree, bukan dari patch ini).
+- **`npm run build` lolos.**
+
+---
+
+## 57. [Tracing] Refaktor fondasional Dedicated LLM Execution Tracing — DONE 2026-09-12
+
+- **Status:** done (5 fase). Kontrak `LlmFlowType` V3 (`NLU_EXTRACTOR/V3_ROUTING/V3_GENERATION/V3_REPROMPT`, legacy tetap diparse), field token/biaya/tools/callSequence, propagasi `bubbleCorrelationId` per-pesan (machine→NLU→V3+sandbox), tracing per-call dengan latensi bersih, UI Debug V3 + filter `customerPhone`.
+- **Sisa tech-debt jujur:** (1) `rehydrate` masih `readFile` penuh lalu slice 500 baris terakhir — aman untuk ≤10MB tapi bukan true streaming tail; (2) reprompt numerik tidak mencatat token per-call detail (hanya durasi + koreksi) karena `attemptNumericReprompt` agregat via `addUsage`; (3) `npm test` 14 gagal di working tree ini vs 51 gagal di HEAD bersih — gagal sisa pre-existing/flaky di luar modul tracing (tracing: 14/14 hijau, `npm run build` lolos).
+- **Regresi:** `tests/unit/hierarchical-debug-logs.test.ts` (3 legacy V2) tetap hijau; heuristik fallback hanya untuk ID generik `@c.us`.
+
+---
+
+## 52. [Simulator] 4 temuan sesi 834128 — FIXED 2026-09-12 (fondasional, tanpa dependency baru)
+
+- **Status:** fixed, dikunci 11 unit test baru (`ambiguous-choice-clarification`, `catalog-promo-core-first`, `pronoun-validator`) + 1 test diperbarui (`tool-output-scoping` → aturan emas 3 via `asksDuration`).
+- **Bukti log:** `logs/llm-2026-09-12.jsonl` (`customerPhone 6289999834128`: turn "apakah ada promo kak ?" → `get_catalog_and_price`, 5 chunk `[Katalog Layanan]` similarity 1.0; turn "boleh deh yang itu" → tanpa tool, cart `Memandikan Bayi Rp 30.000`, balasan "beritahu saya ...").
+- **Akar & perbaikan (menyimpang dari plan awal demi mandat repo):**
+  1. Kunci sepihak BUKAN dari `detectAgreedTreatment` (sudah user-only, mengembalikan null dengan benar) — melainkan pesan asisten sendiri yang ikut di-exact-match `syncCartItems` + single-PRIMARY-replace menyisakan item terpendek. Fix: offer-confirmation gate — tawaran ≥2 PRIMARY hanya masuk keranjang bila user pernah merujuk itemnya (`goal-tracker.ts`); deteksi tanpa daftar frasa hafalan. Prompt klarifikasi di `persona.ts` sebagai pelengkap.
+  2. Etalase support-first: urutan chunk = urutan tool = urutan file katalog (satu titik fix di `executeGetCatalog`). Core-first via heuristik durasi DB (`< 30 mnt` tenggelam, disetujui user) — `category`/`serviceType` tidak membedakan (mandi/cukur/tindik = BABY/STANDARD), `sort_order` DB belum dimuat ke runtime (butuh migrasi + admin UI bila diinginkan kelak).
+  3. Durasi proaktif: kontrak tool baru `asksDuration` (schema + zod + registry + instruksi router); strip durasi di `treatments`, `summaryList`, `priceClarification`, `recommendationReason`, chunk observabilitas, dan template persona KONDISI B/aturan 2/contoh (cakupan "semua balasan harga" sesuai pilihan user).
+  4. "beritahu saya": TANPA regex-replace kalimat (penggantian string `saya→kami` sengaja sudah dihapus dari pipeline sanitizer — `sanitizer.ts:38-44`). Fix: validator deteksi `pronoun-validator.ts` + reprompt 1x di `agent-runner.ts` (kegagalan reprompt TIDAK membisukan balasan — pelanggaran gaya, bukan faktual) + penguatan aturan 7 di persona. Plan awal yang menunjuk `src/v3/agent/output-sanitizer.ts` keliru — file itu tidak ada.
+
+---
+
+## 59. [V3] Dekomposisi agent-runner.ts → Deep Pipeline + kolaps split-brain NLU — DONE 2026-09-12
+
+- **Status:** done, full suite 266/266 files hijau (1951 passed + 19 skipped, 0 failures), `npm run build` 0 error.
+- **Struktur baru (`src/v3/agent/pipeline/`):** `context-grounder.ts` (Stage 1: sinyal/fase/RAG/label + FastResponseGate + POST_RESERVATION_*), `tool-pipeline.ts` (Stage 2-3: eksekusi tool + state reducer), `guardrail-pipeline.ts` (Stage 5: 3 reprompt + same-day + fallback), `generation-stage.ts` (transport LLM + Call 1/Call 2 + telemetri + SAME_DAY_DISCLAIMER). `agent-runner.ts` 1928 → 241 baris (orkestrator murni, tanpa re-export).
+- **Phase 5 (machine.ts):** panggilan LLM `EntityExtractor.extract` dipensiunkan; fallback kini `preExtractDeterministic` (0 token, existing). Komplain/permintaan manusia yang luput dari gate deterministik ditangani Call 1 Router via `escalate_to_human` (jalur ini tetap sunyi ke customer: `shouldSendReply=false`).
+- **Perubahan perilaku yang disetujui user:** (a) eskalasi complaint/human_agent/OOD tak lagi sunyi pre-V3 via LLM — mengalir lewat V3 tool-escalation (tetap tanpa balasan ke customer, tapi memakan Call 1+2); (b) tanpa re-export — 12 berkas test dimigrasi ke path modul baru; (c) seam mock LLM pindah ke `GenerationStage.executeChatCompletion` (static, spyOn-able); (d) klaim hemat "~2 detik per turn" hanya berlaku untuk pesan yang luput dari fast intents (mayoritas pesan normal sebelumnya juga 2 calls).
+- **Deviasi dari plan yang WAJIB dicatat (Confirmation Gate, disetujui eksplisit via prompt):** opsi "full plan apa adanya" dipilih user atas temuan audit (overclaim latensi, matinya V3 DOMAIN GATE untuk OOD, konflik mandat non-hardcode pada keyword darurat, target <250 baris). Pengecualian hardcode sementara: TIDAK ada daftar keyword baru yang ditambahkan — darurat medis tetap mengandalkan `preExtractDeterministic` existing + router `escalate_to_human`.
+- **Risiko sisa:** OOD yang hanya terdeteksi semantik LLM kini dijawab V3 dulu (bukan silent-gate pre-V3) kecuali Call 1 memilih `escalate_to_human` — monitor via reason `unresolved_faq`/HUMAN_HANDLING; `EntityExtractor.extract` (LLM) masih dipakai jalur lain bila ada — grep berkala bila ingin dipensiunkan total.
+
 

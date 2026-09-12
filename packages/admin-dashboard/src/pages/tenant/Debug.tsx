@@ -659,7 +659,7 @@ function ConversationsSection() {
 interface LlmLogEntry {
   id: string;
   timestamp: string;
-  flowType: 'SLOT_EXTRACTOR' | 'SLOT_GENERATOR' | 'SLOT_FAST_FAQ' | 'V3_AGENT';
+  flowType: 'NLU_EXTRACTOR' | 'SLOT_EXTRACTOR' | 'SLOT_GENERATOR' | 'SLOT_FAST_FAQ' | 'V3_ROUTING' | 'V3_GENERATION' | 'V3_REPROMPT' | 'V3_AGENT';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -674,6 +674,12 @@ interface LlmLogEntry {
   modelUsed?: string;
   durationMs?: number;
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  costIdr?: number;
+  toolsCalled?: Array<{ name: string; args: any }>;
+  callSequence?: number;
 }
 
 interface GroupedBubbleChat {
@@ -695,14 +701,22 @@ interface GroupedCustomerLlmLogs {
 
 const getFlowBadge = (flowType: string) => {
   switch (flowType) {
+    case 'NLU_EXTRACTOR':
+      return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
     case 'SLOT_EXTRACTOR':
-      return { label: '1. Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
+      return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
+    case 'V3_ROUTING':
+      return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-sky-500/15 text-sky-900 dark:text-sky-300 border-sky-300 dark:border-sky-500/40' };
+    case 'V3_GENERATION':
+      return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
+    case 'V3_REPROMPT':
+      return { label: '4. Reprompt / Self-Correction', short: 'REPROMPT', icon: '🔧', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
     case 'SLOT_GENERATOR':
-      return { label: '2. Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
+      return { label: 'Slot Generator (legacy)', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
     case 'SLOT_FAST_FAQ':
-      return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
+      return { label: 'Fast FAQ (legacy)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
     case 'V3_AGENT':
-      return { label: '3. V3 Agent', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40' };
+      return { label: 'V3 Agent (legacy monolitik)', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40' };
     default:
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
   }
@@ -922,7 +936,7 @@ function LlmLogsSection() {
             </span>
           </div>
           <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
-            Observability slot-engine: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Slot Extractor ➔ Slot Generator / Fast FAQ</span>.
+            Observability V3 Agent Pipeline: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">NLU Extractor ➔ Tool Routing (Call 1) ➔ Tools Executed ➔ Reply Generation (Call 2)</span>.
           </p>
         </div>
 
@@ -1009,8 +1023,8 @@ function LlmLogsSection() {
             <Zap size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Slot Engine</p>
-            <p className="text-base font-extrabold text-emerald-900 dark:text-emerald-300">Extractor → Generator</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">V3 Pipeline</p>
+            <p className="text-base font-extrabold text-emerald-900 dark:text-emerald-300">Routing → Generation</p>
           </div>
         </div>
       </div>
@@ -1021,10 +1035,10 @@ function LlmLogsSection() {
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'all', label: 'Semua Flow' },
-            { id: 'SLOT_EXTRACTOR', label: '🎰 Slot Extractor' },
-            { id: 'SLOT_GENERATOR', label: '🎯 Slot Generator' },
-            { id: 'SLOT_FAST_FAQ', label: '⚡ Fast FAQ' },
-            { id: 'V3_AGENT', label: '🤖 V3 Agent' },
+            { id: 'NLU_EXTRACTOR', label: '🎰 NLU Extractor' },
+            { id: 'V3_ROUTING', label: '🧭 Tool Routing (Call 1)' },
+            { id: 'V3_GENERATION', label: '🎯 Reply Generation (Call 2)' },
+            { id: 'V3_REPROMPT', label: '🔧 Reprompt / Self-Correction' },
           ].map((f) => (
             <button
               key={f.id}
@@ -1290,8 +1304,8 @@ function LlmLogsSection() {
                                         </div>
                                       </div>
 
-                                      {/* STEP BODY — SLOT ENGINE & V3 AGENT */}
-                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_AGENT') && (
+                                      {/* STEP BODY — V3 PIPELINE & LEGACY */}
+                                      {(call.flowType === 'NLU_EXTRACTOR' || call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_ROUTING' || call.flowType === 'V3_GENERATION' || call.flowType === 'V3_REPROMPT' || call.flowType === 'V3_AGENT') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                             <div className="bg-violet-50/70 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/40 rounded-xl p-3 space-y-1">
@@ -1318,6 +1332,33 @@ function LlmLogsSection() {
                                             </div>
                                           )}
 
+                                          {/* Token & biaya per-call */}
+                                          {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined) && (
+                                            <div className="bg-sky-50/70 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/40 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-sky-900 dark:text-sky-300 uppercase tracking-wider block">
+                                                📊 Token & Biaya
+                                              </span>
+                                              <p className="text-sky-950 dark:text-sky-200 font-mono text-[11px] font-semibold">
+                                                📥 {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          {/* Tools yang diputuskan LLM */}
+                                          {Array.isArray((call as any).toolsCalled) && (call as any).toolsCalled.length > 0 && (
+                                            <div className="bg-teal-50/70 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/40 rounded-xl p-3 space-y-1.5">
+                                              <span className="text-[10px] font-bold text-teal-900 dark:text-teal-300 uppercase tracking-wider block">
+                                                🛠️ Tools Called ({(call as any).toolsCalled.length})
+                                              </span>
+                                              {(call as any).toolsCalled.map((t: any, ti: number) => (
+                                                <div key={ti} className="bg-white dark:bg-black/30 border border-teal-200 dark:border-teal-800/40 rounded-lg p-2">
+                                                  <p className="font-mono text-[11px] font-bold text-teal-900 dark:text-teal-200">{t?.name}</p>
+                                                  <pre className="font-mono text-[10px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap overflow-x-auto max-h-28">{JSON.stringify(t?.args ?? {}, null, 2)}</pre>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+
                                           {/* Ground Truth / Fakta DB */}
                                           {call.groundTruthUsed && Object.keys(call.groundTruthUsed).length > 0 && (
                                             <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
@@ -1329,6 +1370,25 @@ function LlmLogsSection() {
                                                   ? call.groundTruthUsed
                                                   : JSON.stringify(call.groundTruthUsed, null, 2)}
                                               </pre>
+                                            </div>
+                                          )}
+
+                                          {/* Full prompt payload */}
+                                          {call.promptPayload && (
+                                            <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleDetail(`${detailKey}_prompt`)}
+                                                className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider flex items-center gap-1"
+                                              >
+                                                {expandedDetails[`${detailKey}_prompt`] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                                <span>Lihat Full Prompt</span>
+                                              </button>
+                                              {expandedDetails[`${detailKey}_prompt`] && (
+                                                <pre className="text-slate-800 dark:text-[#d1d7db] font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-64">
+                                                  {JSON.stringify(call.promptPayload, null, 2)}
+                                                </pre>
+                                              )}
                                             </div>
                                           )}
 
@@ -1356,10 +1416,14 @@ function LlmLogsSection() {
                                         </div>
                                       )}
 
-                                      {/* GENERIC FALLBACK — legacy rehydrate */}
-                                      {call.flowType !== 'SLOT_EXTRACTOR' &&
+                                      {/* GENERIC FALLBACK — tipe tak dikenal */}
+                                      {call.flowType !== 'NLU_EXTRACTOR' &&
+                                        call.flowType !== 'SLOT_EXTRACTOR' &&
                                         call.flowType !== 'SLOT_GENERATOR' &&
                                         call.flowType !== 'SLOT_FAST_FAQ' &&
+                                        call.flowType !== 'V3_ROUTING' &&
+                                        call.flowType !== 'V3_GENERATION' &&
+                                        call.flowType !== 'V3_REPROMPT' &&
                                         call.flowType !== 'V3_AGENT' && (
                                           <div className="space-y-2.5 text-xs">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">

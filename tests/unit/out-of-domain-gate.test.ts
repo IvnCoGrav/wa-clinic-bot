@@ -9,8 +9,9 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
  * Mekanisme B — Gate domain di state machine: intent "out_of_domain" dari NLU
- * → eskalasi sunyi SEBELUM V3 (0 token, 0 balasan). Tanpa daftar kata topik;
- * keputusan berasal dari klasifikasi domain NLU terhadap data layanan DB.
+ * → eskalasi sunyi SEBELUM V3 (0 token, 0 balasan). Pasca kolaps split-brain,
+ * seam NLU adalah preExtractDeterministic (0 token); keputusan domain tetap
+ * berasal dari klasifikasi, bukan daftar kata topik.
  */
 describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
   const sentToCustomer: string[] = [];
@@ -36,22 +37,8 @@ describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
     costIdr: 0,
   } as any;
 
-  function fullExtraction(intents: string[]) {
-    return {
-      intents,
-      locationText: null,
-      comparisonLocations: null,
-      streetDetail: null,
-      childAgeMonths: null,
-      symptoms: [],
-      treatmentReferenced: null,
-      preferredDateText: null,
-      preferredTimeText: null,
-      customerName: null,
-      isMedicalEmergency: false,
-      confidenceScore: 0.9,
-      clearedSlots: null,
-    } as any;
+  function detExtraction(intents: string[]) {
+    return { intents } as any;
   }
 
   async function freshConversation(name: string) {
@@ -85,7 +72,7 @@ describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
 
   it('out_of_domain → HUMAN_HANDLING sunyi, V3 TIDAK dipanggil', async () => {
     const { phone, customer, conversation } = await freshConversation('Rizki Dwi S');
-    const extractSpy = vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['out_of_domain']));
+    const extractSpy = vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['out_of_domain']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const result = await testStateMachine.processMessage({
@@ -107,9 +94,9 @@ describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
     expect(updated.escalation_reason).toBe('out_of_domain');
   });
 
-  it('kontrol fast-path: sinyal deterministik (harga) → LLM extract dilewati, V3 jalan', async () => {
+  it('kontrol fast-path: sinyal deterministik (harga) → NLU dilewati, V3 jalan', async () => {
     const { phone, customer, conversation } = await freshConversation('Bunda Kontrol');
-    const extractSpy = vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['chitchat']));
+    const extractSpy = vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['chitchat']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const result = await testStateMachine.processMessage({
@@ -127,7 +114,7 @@ describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
 
   it('kontrol disambiguasi: fast kosong + hasil chitchat → V3 jalan, tidak tereskalasi', async () => {
     const { phone, customer, conversation } = await freshConversation('Bunda Makasih');
-    const extractSpy = vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['chitchat']));
+    const extractSpy = vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['chitchat']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const result = await testStateMachine.processMessage({
@@ -144,7 +131,7 @@ describe('Domain Gate — out_of_domain → eskalasi sunyi pre-V3', () => {
 
   it('replay 3-turn kasus live: semua sunyi, V3 tak pernah dipanggil, tanpa loop balasan', async () => {
     const { phone, customer } = await freshConversation('Rizki Dwi S');
-    const extractSpy = vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['out_of_domain']));
+    const extractSpy = vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['out_of_domain']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const turns = [

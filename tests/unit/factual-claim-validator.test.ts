@@ -5,6 +5,7 @@ import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
@@ -90,7 +91,7 @@ describe('Factual claim validator', () => {
     vi.restoreAllMocks();
 
     // LLM selalu mengarang klaim absolut — Call-1 maupun re-prompt.
-    vi.spyOn(V3AgentRunner, 'executeChatCompletion').mockResolvedValue({
+    vi.spyOn(GenerationStage, 'executeChatCompletion').mockResolvedValue({
       choices: [{ message: { content: 'Tenang Bunda, treatment kami dijamin menyembuhkan batuk pilek si kecil tanpa efek samping sama sekali.' } }],
     } as any);
 

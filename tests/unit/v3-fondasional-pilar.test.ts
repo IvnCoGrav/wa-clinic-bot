@@ -55,9 +55,9 @@ describe('Pilar 3 — Composite numeric validator (tanpa hardcode Rp 10.000)', (
     expect(r.isValid).toBe(true);
   });
 
-  it('combo layanan + add-on katalog dinamis (70rb + 10rb = 80rb) → VALID', () => {
+  it('combo layanan + add-on katalog dinamis (70rb + 25rb = 95rb) → VALID', () => {
     const r = validateNumericFacts(
-      'Paketnya Rp 70.000 ditambah Sinar Moksa Rp 10.000 total Rp 80.000 ya Bunda',
+      'Paketnya Rp 70.000 ditambah Sinar Moksa Rp 25.000 total Rp 95.000 ya Bunda',
       [treatmentTool] as any
     );
     expect(r.isValid).toBe(true);

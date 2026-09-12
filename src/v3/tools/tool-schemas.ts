@@ -14,6 +14,7 @@ export const GetCatalogArgsSchema = z.object({
   specificTreatmentName: z.string().optional(),
   inquirePrice: z.boolean().optional().default(false),
   targetPrice: z.number().positive().optional(),
+  asksDuration: z.boolean().optional().default(false),
 });
 
 export const SaveReservationArgsSchema = z.object({

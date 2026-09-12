@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { V3AgentRunner } from '../../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../../src/v3/agent/pipeline/context-grounder';
 import {
   executeCalculateDelivery,
   buildScheduleCta,
@@ -11,11 +11,11 @@ import {
  */
 describe('Delivery Schedule CTA Context', () => {
   it('extractTimeHint: sekarang/hari ini/nama hari; "3 minggu" dikecualikan', () => {
-    expect(V3AgentRunner.extractTimeHint('sekarang bisa?')).toBe('sekarang');
-    expect(V3AgentRunner.extractTimeHint('Untuk jumat besok apakah bisa?')).toBe('jumat');
-    expect(V3AgentRunner.extractTimeHint('hari ini bisa jam berapa?')).toBe('hari ini');
-    expect(V3AgentRunner.extractTimeHint('bayi saya umur 3 minggu')).toBeNull();
-    expect(V3AgentRunner.extractTimeHint('harganya berapa ya?')).toBeNull();
+    expect(ContextGrounder.extractTimeHint('sekarang bisa?')).toBe('sekarang');
+    expect(ContextGrounder.extractTimeHint('Untuk jumat besok apakah bisa?')).toBe('jumat');
+    expect(ContextGrounder.extractTimeHint('hari ini bisa jam berapa?')).toBe('hari ini');
+    expect(ContextGrounder.extractTimeHint('bayi saya umur 3 minggu')).toBeNull();
+    expect(ContextGrounder.extractTimeHint('harganya berapa ya?')).toBeNull();
   });
 
   it('buildScheduleCta: ada waktu -> akui+cekkan; kosong -> tanya hari', () => {

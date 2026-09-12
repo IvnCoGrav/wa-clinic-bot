@@ -37,8 +37,8 @@ describe('Cart Bundle Dedup (audit 315036)', () => {
     const cart = GoalTracker.syncCartItems(
       {
         cartItems: [
-          { name: 'Paket Laktasi (Breast Massage)', price: 70000, promoPrice: 50000, type: 'PRIMARY', category: 'MOMS', recipientScope: 'MOMS' },
-          { name: 'Paket Laktasi (Breast + Oksitosin)', price: 100000, promoPrice: 80000, type: 'SERVICE', category: 'BUNDLE', recipientScope: 'GENERAL' },
+          { name: 'Pijat Laktasi / Breast Care Massage', price: 110000, promoPrice: 85000, type: 'PRIMARY', category: 'MOMS', recipientScope: 'MOMS' },
+          { name: 'Breast + Oksitosin Fullbody Massage', price: 250000, promoPrice: 155000, type: 'SERVICE', category: 'BUNDLE', recipientScope: 'GENERAL' },
         ],
       } as any,
       [],
@@ -98,6 +98,7 @@ describe('Cart Total Recap (mandat total otomatis)', () => {
   it('delivery tool + cartSnapshot -> message & template memuat grand total', async () => {
     const out = await executeCalculateDelivery({
       locationText: 'https://www.google.com/maps/@-7.340000,112.720000,17z',
+      priceDiscussed: true,
       cartSnapshot: [
         { name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)', price: 90000, promoPrice: 70000 },
       ],

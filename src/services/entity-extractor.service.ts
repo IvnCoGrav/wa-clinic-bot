@@ -432,6 +432,7 @@ export class EntityExtractor {
       conversationId?: string;
       tenantId?: string;
       incomingMessage?: any;
+      bubbleCorrelationId?: string;
     }
   ): Promise<ExtractedEntities> {
     const tenantId = context?.tenantId || DEFAULT_TENANT_ID;
@@ -681,10 +682,15 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
             ? `[MiniMax CoT Reasoning]:\n${reasoningContent}\n\n[Summary]: Extracted intents: [${result.intents.join(', ')}] | Age: ${result.childAgeMonths} bln | Loc: ${result.locationText || '-'} | Symptoms: [${result.symptoms.join(', ')}]`
             : `Extracted intents: [${result.intents.join(', ')}] | Age: ${result.childAgeMonths} bln | Loc: ${result.locationText || '-'} | Symptoms: [${result.symptoms.join(', ')}]`;
 
+          const bubbleCorrelationId = context?.bubbleCorrelationId || context?.incomingMessage?.id;
+          const nluUsage: any = (callResult.data as any)?.usage;
+          const nluPrompt = Number(nluUsage?.prompt_tokens) || undefined;
+          const nluCompletion = Number(nluUsage?.completion_tokens) || undefined;
           recordLlmExecution({
-            flowType: 'SLOT_EXTRACTOR',
+            flowType: 'NLU_EXTRACTOR',
             customerPhone: context?.customerPhone || 'unknown',
             customerInput: text,
+            bubbleCorrelationId,
             promptPayload: { systemPrompt, userContent },
             reasoning: displayReasoning,
             rawReasoning: reasoningContent || rawContent,
@@ -693,6 +699,10 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
             modelUsed: callResult.model || modelConfig.modelName,
             durationMs: Date.now() - startedAt,
             status: 'SUCCESS',
+            callSequence: 1,
+            promptTokens: nluPrompt,
+            completionTokens: nluCompletion,
+            totalTokens: nluPrompt != null || nluCompletion != null ? (nluPrompt || 0) + (nluCompletion || 0) : undefined,
           });
         } catch {}
 

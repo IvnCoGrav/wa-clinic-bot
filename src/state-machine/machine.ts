@@ -426,10 +426,11 @@ export class ConversationStateMachine {
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
 
     // --- GATE DOMAIN + KELUHAN + MINTA MANUSIA: eskalasi sunyi SEBELUM V3
-    //     (fondasional, bukan daftar kata). NLU LLM (EntityExtractor) menilai
-    //     keanggotaan domain terhadap data layanan DB; deterministik cepat
-    //     dilewati bila sudah ada sinyal.
-    //     Fail-open: LLM offline → baseline chitchat → lanjut ke V3 seperti semula.
+    //     Split-brain NLU dikolaps: TANPA panggilan LLM EntityExtractor.
+    //     extractFastIntents (0 token) dulu; bila kosong, fallback
+    //     deterministik preExtractDeterministic (darurat medis kritis tetap
+    //     terdeteksi tanpa LLM). Komplain/permintaan manusia yang luput dari
+    //     kedua gate ditangani Call 1 Router via tool escalate_to_human.
     let preExtractedIntents: string[] = [];
     try {
       const { extractFastIntents } = await import('../v3/agent/persona');
@@ -438,17 +439,9 @@ export class ConversationStateMachine {
         preExtractedIntents = fast;
       } else {
         const { EntityExtractor } = await import('../services/entity-extractor.service');
-        const extraction = await EntityExtractor.extract(incomingText, {
-          history: historyFormatted.slice(-4).map((h) => ({
-            role: h.role as 'user' | 'assistant',
-            content: h.content,
-          })),
-          customerPhone: customer.phone,
-          conversationId: activeConversation.id,
-          tenantId,
-          incomingMessage,
-        });
-        preExtractedIntents = extraction?.intents || [];
+        const det = EntityExtractor.preExtractDeterministic(incomingText, incomingMessage);
+        const detIntents = (det as any)?.intents || [];
+        preExtractedIntents = detIntents.length > 0 ? detIntents : ['chitchat'];
       }
     } catch {}
     // Intent yang memaksa eskalasi sunyi + reason tercatat untuk CS/admin.
@@ -532,6 +525,7 @@ export class ConversationStateMachine {
       conversationId: activeConversation.id,
       phone: customer.phone,
       chatId: `${customer.phone}@c.us`,
+      bubbleCorrelationId,
       incomingText: effectiveInboundText,
       originalText: (incomingMessage as any).originalText || inboundContent,
       history: historyFormatted,
@@ -546,11 +540,14 @@ export class ConversationStateMachine {
       // sebagai 'unresolved_faq' agar masuk antrean kurasi admin (/unanswered).
       const escTool = (v3Result.executedTools || []).find((t: any) => t?.name === 'escalate_to_human');
       const escSeverity = (escTool as any)?.args?.severity;
-      const escReason = escSeverity === 'CRITICAL_MEDICAL' ? 'medical_concern' : 'unresolved_faq';
+      // Skema 462651: agent boleh menitipkan alasan handoff presisi
+      // (mis. 'pending_reservation_check'); fallback ke pemetaan lama.
+      const escReason = (v3Result as any).escalationReason
+        || (escSeverity === 'CRITICAL_MEDICAL' ? 'medical_concern' : 'unresolved_faq');
       await conversationService.escalateToHumanHandling(
         activeConversation,
         customer.phone,
-        'Eskalasi otomatis oleh V3 Agent',
+        (v3Result as any).escalationNote || 'Eskalasi otomatis oleh V3 Agent',
         tenantId,
         escReason
       );

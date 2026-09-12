@@ -34,22 +34,8 @@ describe('Fase C — keluhan, opt-out lintas provider, urutan command', () => {
     costIdr: 0,
   } as any;
 
-  function fullExtraction(intents: string[]) {
-    return {
-      intents,
-      locationText: null,
-      comparisonLocations: null,
-      streetDetail: null,
-      childAgeMonths: null,
-      symptoms: [],
-      treatmentReferenced: null,
-      preferredDateText: null,
-      preferredTimeText: null,
-      customerName: null,
-      isMedicalEmergency: false,
-      confidenceScore: 0.9,
-      clearedSlots: null,
-    } as any;
+  function detExtraction(intents: string[]) {
+    return { intents } as any;
   }
 
   async function freshConversation(name: string) {
@@ -93,7 +79,7 @@ describe('Fase C — keluhan, opt-out lintas provider, urutan command', () => {
 
   it('C1: "saya mau komplain" → sunyi, reason complaint, V3 tak dipanggil', async () => {
     const { phone, customer } = await freshConversation('Bunda Komplain');
-    const extractSpy = vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['complaint']));
+    const extractSpy = vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['complaint']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const result = await runTurn(customer, sendBody('saya kecewa, mau komplain pelayanan kemarin', phone));
@@ -109,7 +95,7 @@ describe('Fase C — keluhan, opt-out lintas provider, urutan command', () => {
 
   it('C1: "minta admin" → sunyi, reason manual_request', async () => {
     const { phone, customer } = await freshConversation('Bunda Admin');
-    vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['human_agent']));
+    vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['human_agent']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     const result = await runTurn(customer, sendBody('bisa bicara dengan adminnya langsung?', phone));
@@ -123,7 +109,7 @@ describe('Fase C — keluhan, opt-out lintas provider, urutan command', () => {
 
   it('C1: gejala fisik "bayi ruam" TIDAK dianggap complaint (tetap ke V3)', async () => {
     const { phone, customer } = await freshConversation('Bunda Ruam');
-    vi.spyOn(EntityExtractor, 'extract').mockResolvedValue(fullExtraction(['consult_symptom']));
+    vi.spyOn(EntityExtractor, 'preExtractDeterministic').mockReturnValue(detExtraction(['consult_symptom']));
     const v3Spy = vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(v3MockResult);
 
     await runTurn(customer, sendBody('bayi saya ruam setelah pijat', phone));
