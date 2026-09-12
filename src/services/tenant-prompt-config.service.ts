@@ -5,6 +5,7 @@
 
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { isMissingColumnError } from '../utils/prisma-errors';
 
 export interface PromptConfigSections {
   personalityTone: string;
@@ -37,7 +38,10 @@ export class TenantPromptConfigService {
         return config;
       }
     } catch (e: any) {
-      console.warn(`[PROMPT CONFIG SERVICE] Gagal load dari DB, gunakan default code:`, e.message);
+      // Tabel/kolom belum termigrasi (Issue #30) → null senyap (fallback statis).
+      if (!isMissingColumnError(e)) {
+        console.warn(`[PROMPT CONFIG SERVICE] Gagal load dari DB, gunakan default code:`, e.message);
+      }
     }
 
     return null;

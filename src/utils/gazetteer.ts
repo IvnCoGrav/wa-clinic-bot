@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveArteryCorridor } from '../config/landmarks';
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -223,6 +224,22 @@ export function getGazetteerCoordinates(query: string): { lat: number; lng: numb
   if (!query) return null;
   const qLower = query.toLowerCase();
   const qNorm = qLower.replace(/\s+/g, ' ').trim();
+
+  // Koridor arteri (Plan 6 FASE 3, Issue #21): nama jalan populer tanpa "Jl."
+  // langsung terpetakan ke kelurahan induk — tanpa menodong customer.
+  // Koordinat tetap dari dataset (single source); rantai fallback:
+  // kelurahan koridor → kecamatan koridor → logika eksisting di bawah.
+  const corridor = resolveArteryCorridor(query);
+  if (corridor) {
+    const kelHit = coordByKelLower.get(corridor.kelurahan.toLowerCase());
+    if (kelHit) {
+      return { lat: kelHit.lat, lng: kelHit.lng, kelurahan: kelHit.row.Kelurahan_Desa, kecamatan: kelHit.row.Kecamatan, kota: kelHit.row.Kabupaten_Kota, zipcode: kelHit.row.Kode_Pos };
+    }
+    const kecHit = coordByKecLower.get(corridor.kecamatan.toLowerCase());
+    if (kecHit) {
+      return { lat: kecHit.lat, lng: kecHit.lng, kelurahan: kecHit.row.Kelurahan_Desa, kecamatan: kecHit.row.Kecamatan, kota: kecHit.row.Kabupaten_Kota, zipcode: kecHit.row.Kode_Pos };
+    }
+  }
 
   // Fast exact map lookups (O(1))
   const exactKel = coordByKelLower.get(qNorm);

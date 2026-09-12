@@ -30,17 +30,68 @@ export function extractGoogleMapsUrls(text: string): string[] {
 }
 
 /**
+ * Parse string menjadi URL (atau null bila bukan URL — mis. body HTML).
+ * Tanpa skema hanya diterima bila berbentuk host-like (`host.tld/...`);
+ * teks bebas TIDAK boleh lolos via resolusi base relatif.
+ */
+export function parseMapsUrl(urlString: string): URL | null {
+  const s = (urlString || '').trim();
+  if (!s) return null;
+  try {
+    return new URL(s);
+  } catch (_) {
+    // Fallback skema HANYA untuk input host-like (paritas perilaku lama
+    // yang mencocokkan ?q= di URL tanpa skema; body HTML tetap ditolak).
+    if (/^[\w-]+(\.[\w-]+)+([/?#]|$)/.test(s)) {
+      try {
+        return new URL(`https://${s}`);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * Parse pasangan "lat,lng" (ekstraksi numerik teknis) → null bila tak valid.
+ * Mensyaratkan titik desimal per komponen (paritas regex lama `\d+\.\d+`)
+ * agar "1,2" / sisa markup HTML tak pernah menjadi koordinat palsu.
+ */
+export function parseLatLngPair(value: string): { lat: number; lng: number } | null {
+  const parts = (value || '').split(',');
+  if (parts.length < 2) return null;
+  const numRe = /^-?\d+\.\d+$/;
+  const latS = parts[0].trim();
+  const lngS = parts[1].trim();
+  if (!numRe.test(latS) || !numRe.test(lngS)) return null;
+  const lat = parseFloat(latS);
+  const lng = parseFloat(lngS);
+  if (isValidCoordinate(lat, lng)) return { lat, lng };
+  return null;
+}
+
+/**
  * Mengekstrak koordinat lat & lng dari string URL Google Maps.
  * Mendukung format:
- * - /@(-?\d+\.\d+),(-?\d+\.\d+)
- * - ?q=(-?\d+\.\d+),(-?\d+\.\d+)
- * - &ll=(-?\d+\.\d+),(-?\d+\.\d+)
- * - /place/(-?\d+\.\d+),(-?\d+\.\d+)
- * - /dir//(-?\d+\.\d+),(-?\d+\.\d+)
- * - /search/(-?\d+\.\d+),(-?\d+\.\d+)
+ * - query ?q= / ?ll= / ?daddr= (via URL API; fallback regex untuk body HTML)
+ * - /@lat,lng, /place/lat,lng, /search/lat,lng, /dir//lat,lng
+ * - protobuf !3d/!4d (polos maupun ter-encode %213d/%214d)
  */
 export function extractCoordinatesFromUrlString(urlString: string): { lat: number; lng: number } | null {
   if (!urlString) return null;
+
+  // Cabang 0: parameter query via URL API (deterministik untuk encoding
+  // khusus, parameter ganda, dan anchor # — searchParams mengabaikan fragment).
+  const parsed = parseMapsUrl(urlString);
+  if (parsed) {
+    for (const key of ['q', 'll', 'daddr', 'saddr', 'destination']) {
+      const val = parsed.searchParams.get(key);
+      if (!val) continue;
+      const coords = parseLatLngPair(val);
+      if (coords) return coords;
+    }
+  }
 
   // Pola 1: /@lat,lng (format standar Google Maps Web/Mobile)
   const atMatch = urlString.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
@@ -52,7 +103,8 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
     }
   }
 
-  // Pola 2: ?q=lat,lng atau &q=lat,lng
+  // Pola 2 (fallback): ?q=lat,lng mentah di body HTML tak-terparse.
+  // URL terparse sudah ditangani Cabang 0 via URL API di atas.
   const qMatch = urlString.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (qMatch) {
     const lat = parseFloat(qMatch[1]);
@@ -62,7 +114,7 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
     }
   }
 
-  // Pola 3: &ll=lat,lng atau ?ll=lat,lng
+  // Pola 3 (fallback): ?ll=/&ll= mentah di body HTML tak-terparse.
   const llMatch = urlString.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (llMatch) {
     const lat = parseFloat(llMatch[1]);
@@ -102,8 +154,8 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
     }
   }
 
-  // Pola 6 (audit 315036): directions ?daddr=lat,lng / &daddr=lat,lng
-  // (juga saddr= / destination=) — link "rute ke lokasi" dari tombol share.
+  // Pola 6 (fallback, audit 315036): directions ?daddr=lat,lng mentah di body
+  // HTML tak-terparse (juga saddr= / destination=). URL terparse via Cabang 0.
   const daddrMatch = urlString.match(/[?&](?:daddr|saddr|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (daddrMatch) {
     const lat = parseFloat(daddrMatch[1]);
@@ -124,6 +176,14 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
  */
 export function extractAddressQueryFromUrlString(urlString: string): string | null {
   if (!urlString) return null;
+  // Primer: parameter `q` via URL API (decode + abaikan fragment otomatis).
+  const parsed = parseMapsUrl(urlString);
+  if (parsed) {
+    const q = parsed.searchParams.get('q');
+    const cleaned = cleanAddressQuery(q);
+    if (cleaned) return cleaned;
+  }
+  // Fallback: pola `q=` mentah di body HTML tak-terparse.
   const qMatch = urlString.match(/[?&]q=([^&#]*)/i);
   if (!qMatch || !qMatch[1]) return null;
   let decoded = '';
@@ -132,6 +192,12 @@ export function extractAddressQueryFromUrlString(urlString: string): string | nu
   } catch (_) {
     return null;
   }
+  return cleanAddressQuery(decoded);
+}
+
+/** Normalisasi kandidat teks alamat: tolak kosong/koordinat/sangat pendek. */
+function cleanAddressQuery(raw: string | null): string | null {
+  const decoded = (raw || '').trim();
   if (!decoded) return null;
   // Nilai q berupa koordinat angka → bukan alamat (sudah ditangani pola koordinat).
   if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(decoded)) return null;
