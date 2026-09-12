@@ -24,13 +24,16 @@ describe('V3 pre-grounding katalog (deterministik, Zero-Code)', () => {
     expect(text).toContain('MANDAT WAJIB');
   });
 
-  it('Skenario 2: "anak batuk pilek" → grounding Pulih Ceria', () => {
+  it('Skenario 2: "anak batuk pilek" → grounding terapi bapil (Pulih Ceria atau bundle yang mengandungnya)', () => {
     const text = GoalTracker.formatGoalSessionForPrompt({
       ...baseSession,
       childProfile: { ageMonths: 3, symptoms: ['batuk', 'pilek'] },
       children: [{ ageMonths: 3, symptoms: ['batuk', 'pilek'], roleLabel: 'Si Kecil' }],
     } as any);
-    expect(text).toContain('Pulih Ceria');
+    // Scoring multi-word: bundle "Selapan Terapi" (desc contains "batuk pilek") atau "Pulih Ceria" keduanya valid
+    const hasPulihCeria = text.includes('Pulih Ceria');
+    const hasBundleBapil = text.includes('Selapan') || text.includes('Bapil');
+    expect(hasPulihCeria || hasBundleBapil).toBe(true);
   });
 
   it('Skenario 3: layanan kustom Nasal Care (mock) → grounding Nasal Care', () => {

@@ -2,7 +2,16 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
+
+#### Plan 3 — GoalTracker Decomposition, Symptom Semantic Scorer & Test Harness Isolation (2026-09-12)
+
+- **GoalTracker Decomposition**: `goal-tracker.ts` tereduksi dari 1.590 LOC menjadi 542 LOC (66% reduction). Ekstraksi 2 modul domain murni:
+  - `CartManager` (`src/v3/state/cart-manager.ts`): syncCartItems, resolveAffirmativeSwap, calcCartTotal, detectRecipientScope, isDurationOnlyQuestion — zero side-effect, no DB.
+  - `PatientProfileExtractor` (`src/v3/state/patient-extractor.ts`): syncChildrenProfiles, syncMomProfile, extractAgesMonths, isKakakHonorific, detectTargetAudience, parseGestationalWeeks, isMaternalOnlyMessage — zero side-effect, no DB.
+- **Symptom Semantic Scorer (Issue #48 RESOLVED)**: Multi-word phrase matching (+8 bonus) + core complaint noun scoring (+4) + modifier scoring (+1). "susah makan" → Lahap Juara mutlak; "susah BAB" → Pulih Ceria mutlak. 6 unit test baru.
+- **Test Harness Isolation (Issue #47 RESOLVED)**: `saveServices()` bypass saat `NODE_ENV=test` — `services_custom.json` tidak ter-mutasi saat npm test.
+- **Full Regression**: 267 test files, 1957 tests passed, 19 skipped, 0 failures. TSC clean.
 
 #### Selaraskan Unit Test Katalog Dinamis & Dokumentasi Tech Debt Test Suite (2026-09-12)
 

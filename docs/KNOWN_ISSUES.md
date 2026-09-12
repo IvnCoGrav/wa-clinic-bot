@@ -1066,23 +1066,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 47. [Tests] `npm test` mengotori tracked `services_custom.json` (2026-09-12)
+## 47. [Tests] `npm test` mengotori tracked `services_custom.json` (2026-09-12) — RESOLVED
 
-- **Status:** open (tech debt).
-- **Fakta:** setiap full-suite run memutasi `services_custom.json` di working tree (teramati: Bubble Spa `isActive: false` → `true` + field `serviceType`/`isAddon` hilang — test memutasi katalog in-memory lalu `saveServices()` menulis balik ke file tracked).
-- **Risiko:** diff noise / commit tak sengaja berisi perubahan katalog artifisial; harga lokal bisa menyimpang dari DB tanpa disadari.
-- **Workaround sekarang:** `git checkout -- services_custom.json` setelah run test bila diff hanya artifak test.
-- **Fix yang disarankan:** mock `saveServices`/isolasi file katalog saat test, atau pindahkan katalog test ke fixture temp (butuh persetujuan — menyentuh harness test global).
+- **Status:** RESOLVED (Plan 3 Phase 2, 2026-09-12).
+- **Fix:** Guard `saveServices()` di `treatment-catalog.service.ts`: jika `process.env.NODE_ENV === 'test'` atau `process.env.VITEST`, operasi `fs.writeFileSync` di-bypass. Verifikasi: `git status --porcelain services_custom.json` kosong setelah full test suite (1957 tests).
 
 ---
 
-## 48. [Retrieval] Skor token tunggal ambigu: "susah makan" seri vs "susah BAB" (sesi 138207, 2026-09-12)
+## 48. [Retrieval] Skor token tunggal ambigu: "susah makan" seri vs "susah BAB" (sesi 138207, 2026-09-12) — RESOLVED
 
-- **Status:** open (limitation, by-design trade-off), **bukan regresi**.
-- **Fakta:** `recommendServiceBySymptoms` (dan cerminannya `therapyScoreOf` di `get-catalog.tool.ts`) memakai overlap token tunggal: gejala `susah makan` → token `susah` cocok dengan "susah BAB" di deskripsi *Pijat Bayi Pulih Ceria* (+2), seri dengan `makan` → deskripsi *Pijat Lahap Juara* (+2). Pemenang seri ditentukan urutan katalog.
-- **Dampak saat ini:** TIDAK mengenai jalur produksi sesi 138207 — ekstraksi gejala produksi menghasilkan `['gtm','makan']` (tanpa `susah`), sehingga Lahap Juara menang mutlak dan kini dikunci oleh test `tests/unit/symptom-gtm-recommendation.test.ts`.
-- **Risiko:** bila ekstraktor suatu saat mengeluarkan gejala mentah `susah makan`, rekomendasi bisa jatuh ke Pulih Ceria (terapi bapil) padahal keluhannya nafsu makan.
-- **Fix yang disarankan (butuh desain):** penilaian frasa multi-kata / pencocokan objek kata benda (`makan` vs `BAB`) di scorer terpusat — menyentuh retrieval global, wajib gerbang regresi `symptoms-therapy-routing` + `catalog-price-matching` sebelum diterapkan.
+- **Status:** RESOLVED (Plan 3 Phase 1, 2026-09-12).
+- **Fix:** Multi-word phrase matching (+8 bonus) + core complaint noun scoring (+4) + modifier scoring (+1) di `recommendServiceBySymptoms`. Frasa "susah makan" → Lahap Juara mutlak; "susah BAB" → Pulih Ceria mutlak. 6 unit test baru di `tests/unit/v3/symptom-semantic-scorer.test.ts` mengunci skenario kritis.
 
 ---
 
