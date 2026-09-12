@@ -137,7 +137,7 @@ export function verifyDayMentioned(
     const dayNums = nums.filter((n) => n.length <= 2);
     if (dayNums.some((n) => evTokens.has(n) || evTokens.has(String(Number(n))))) return null;
   }
-  return `Hari/tanggal "${bookingDate}" belum punya jejak eksplisit di pesan customer. Ketersediaan jadwal masih dalam tahap pengecekan — sampaikan dengan hangat bahwa tim sedang mengecek jadwal yang ready, jangan memarahi customer atau meminta tanggal secara kaku. Tanyakan preferensi hari/tanggal kunjungan dengan santai terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
+  return `Hari/tanggal "${bookingDate}" belum punya jejak eksplisit di pesan customer. Ketersediaan jadwal masih dalam tahap pengecekan — sampaikan dengan hangat bahwa tim sedang mengecek ketersediaan jadwal, jangan memarahi customer atau meminta tanggal secara kaku. Tanyakan preferensi hari/tanggal kunjungan dengan santai terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
 }
 
 export interface SaveReservationOutput {

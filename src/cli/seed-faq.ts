@@ -1,192 +1,37 @@
 import { knowledgeBaseService } from '../services/knowledge.service';
-import { resolveChunkKeywords } from '../services/keyword-enrichment.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { prisma } from '../db/client';
-
-const faqs = [
-  // --- Daftar dari User (14 FAQ) ---
-  {
-    "question": "Dimana lokasi Kala Moms and Baby Spa?",
-    "answer": "Kami berlokasi di daerah Waru, perbatasan Sidoarjo-Surabaya. Kami melayani homecare, jadi tim kami yang datang langsung ke rumah Bunda, bukan Bunda yang datang ke tempat kami."
-  },
-  {
-    "question": "Apakah yang melakukan pijat adalah bidan bersertifikat?",
-    "answer": "Benar Bunda, treatment dilakukan oleh bidan bersertifikat dan berpengalaman bund."
-  },
-  {
-    "question": "Berapa lama durasi treatment?",
-    "answer": "Untuk treatment pijat bayi sekitar 40 menit. Untuk oksitosin massage fullbody (moms) sekitar 60 menit. Untuk paket laktasi, pijat punggung sekitar 30 menit dan pijat payudara sekitar 20-25 menit."
-  },
-  {
-    "question": "Anak saya sedang pilek/batuk pilek / bapil, apakah masih bisa dipijat?",
-    "answer": "Masih bisa Bunda, kami sarankan pakai treatment pijat bayi pulih ceria untuk membantu meredakan gejala bapil-nya."
-  },
-  {
-    "question": "Apa itu treatment sinar moksa, dan apa bedanya dengan pijat biasa?",
-    "answer": "Sinar moksa adalah tambahan treatment berupa terapi sinar/hangat untuk membantu meredakan bapil (batuk pilek) pada bayi, biasanya dikombinasikan dengan pijat bayi pulih ceria."
-  },
-  {
-    "question": "Apa saja yang perlu disiapkan sebelum treatment?",
-    "answer": "Tidak perlu menyiapkan apa-apa Bunda, semua perlengkapan treatment (minyak pijat, dll) sudah dibawa oleh tim kami."
-  },
-  {
-    "question": "Metode pembayaran apa saja yang bisa dipakai?",
-    "answer": "Bisa cash maupun transfer/QRIS Bunda. Pembayaran bisa dilakukan setelah treatment selesai."
-  },
-  {
-    "question": "Apa saja pilihan treatment untuk bayi/anak?",
-    "answer": "Untuk Baby & Kids kami punya beberapa pilihan seperti pijat bayi ceria, pijat bayi pulih ceria, dan relaksasi. Ada juga tambahan opsi sinar moksa untuk treatment tertentu."
-  },
-  {
-    "question": "Apa saja pilihan treatment untuk ibu (moms)?",
-    "answer": "Untuk Moms kami punya oksitosin massage fullbody and induksi massage fullbody (untuk usia kehamilan tertentu, biasanya 37-38 minggu ke atas)."
-  },
-  {
-    "question": "Bagaimana kalau saya mau reschedule atau membatalkan jadwal?",
-    "answer": "Pembatalan atau reschedule harap dilakukan minimal H-3 jam sebelum jadwal treatment ya Bunda."
-  },
-  {
-    "question": "Apakah saya akan diingatkan sebelum jadwal treatment?",
-    "answer": "Iya Bunda, kami akan mengirimkan reminder di pagi hari pada hari H sebelum tim kami berangkat ke rumah Bunda."
-  },
-  {
-    "question": "Bagaimana cara booking treatment?",
-    "answer": "Bunda bisa chat kami dengan info lokasi rumah, nanti kami bantu cek jarak dan ongkirnya, lalu kami bantu carikan jadwal yang sesuai."
-  },
-  {
-    "question": "Apakah bisa booking untuk anak usia berapa saja?",
-    "answer": "Bisa Bunda, kami melayani dari bayi baru lahir sampai anak usia beberapa tahun. Kalau boleh tau usia anaknya berapa Bunda, biar kami bisa rekomendasikan treatment yang sesuai."
-  },
-  {
-    "question": "Apakah bisa booking lebih dari satu anak dalam satu jadwal?",
-    "answer": "Bisa Bunda, kami bisa treatment lebih dari satu anak dalam satu kunjungan, tinggal infokan detail nama dan usia masing-masing anak ya Bunda."
-  },
-
-  // --- Tambahan FAQ Pelengkap dari Draft Sebelumnya ---
-  {
-    "question": "Apakah bayi sedang flu, batuk, atau pilek (bapil) boleh dipijat?",
-    "answer": "Masih bisa dan sangat dianjurkan, Bunda. Kita bisa menggunakan treatment \"Pijat Bayi Pulih Ceria\" khusus bapil yang dirancang untuk membantu meredakan flu/batuk/pilek, mengencerkan lendir, dan merilekskan otot pernapasan si kecil."
-  },
-  {
-    "question": "Apakah bayi perlu mandi sebelum dipijat?",
-    "answer": "Tidak perlu mandi sebelum pijat, Bunda. Nanti mandinya disarankan setelah pijat saja ya bund, agar minyak pijat/aromaterapi dapat meresap optimal di kulit si kecil terlebih dahulu."
-  },
-  {
-    "question": "Jika bayi sedang tidur saat Bidan Yusi datang, apakah perlu dibangunkan?",
-    "answer": "Tidak usah dibangunkan tidak apa-apa, Bunda. Pijatan tetap bisa dilakukan saat si kecil tidur agar tidak merusak mood atau membuatnya kaget dan rewel. Jika si kecil terbangun sendiri secara alami baru kita sesuaikan ya bund."
-  },
-  {
-    "question": "Berapa lama durasi treatment pijat bayi?",
-    "answer": "Untuk treatment pijat bayi durasinya berkisar sekitar 40 menit, Bunda. Waktu kedatangan yang kami jadwalkan (misal range 09.00-09.30) adalah estimasi jam tiba bidan kami di rumah Bunda."
-  },
-  {
-    "question": "Apakah treatment dikerjakan langsung oleh Bidan?",
-    "answer": "Benar sekali, Bunda. Seluruh treatment (baik untuk Moms maupun Baby & Kids) ditangani langsung oleh bidan profesional kami yang berlatar belakang pendidikan kebidanan terdaftar (Bidan Yusi) sehingga aman bagi Bunda dan si kecil."
-  },
-  {
-    "question": "Di mana lokasi fisik/alamat kantor Kala Moms and Baby Spa?",
-    "answer": "Kami berlokasi di daerah Waru (perbatasan Sidoarjo - Surabaya), Bunda. Kami melayani sistem Homecare (panggilan langsung ke rumah) sehingga Bunda tidak perlu repot keluar rumah."
-  },
-  {
-    "question": "Bagaimana metode pembayaran yang tersedia?",
-    "answer": "Pembayaran bisa dilakukan secara tunai (cash) maupun non-tunai (transfer bank BCA / QRIS ShopeePay), Bunda. Pembayaran dilakukan setelah seluruh treatment selesai dilaksanakan."
-  },
-  {
-    "question": "Bagaimana ketentuan biaya transport (ongkir) untuk wilayah Surabaya & Sidoarjo?",
-    "answer": "Ongkir dihitung berdasarkan jarak dari titik klinik kami di Waru. Di bawah 5 km free ongkir. Untuk jarak 5-30 km berkisar antara Rp 5.000 hingga Rp 25.000 setelah promo (ongkir normal Rp 15.000 - Rp 30.000). Di atas 30 km berada di luar jangkauan homecare kami."
-  },
-  {
-    "question": "Anak saya sedang menjalani fisioterapi, apakah aman dipijat agar tidak kaku?",
-    "answer": "Aman dan sangat bagus, Bunda. Pijatan akan kami fokuskan pada area tubuh yang kaku (seperti tangan, kaki, punggung, dan pundak) dengan gerakan lembut yang bertujuan merilekskan otot-otot si kecil sesuai kondisinya."
-  },
-  {
-    "question": "Apa perbedaan antara treatment Pijat Ceria (Rileksasi) dan Pijat Pulih Ceria (Terapi)?",
-    "answer": "Pijat Ceria (Rileksasi) ditujukan untuk bayi sehat tanpa keluhan untuk membantu tidur nyenyak. Pijat Pulih Ceria (Terapi) ditujukan untuk bayi dengan keluhan tertentu (seperti flu, batuk, pilek, rewel, susah BAB, kembung, kolik) menggunakan double aromaterapi dan stimulasi titik akupresur khusus.",
-    "keywords": "terapi apa saja, terapi apa yang dimaksud, maksudnya terapi, batuk, pilek, flu, kembung, kolik, susah bab, sembelit, akupresur"
-  },
-  {
-    // SOP alokasi tenaga (audit 315036): 1 Bidan berurutan untuk Mom & Baby.
-    // Tenant-aware via seed → DB knowledge_chunks (bisa diedit di dashboard).
-    "question": "Apakah terapis/bidan yang memijat si kecil dan Bunda sama atau berbeda orangnya?",
-    "answer": "Untuk perawatan si kecil dan Bunda dalam satu kunjungan (misal Pijat Bayi dan Paket Laktasi), seluruh perawatan ditangani langsung oleh 1 Bidan profesional kami yang sama dan dikerjakan secara berurutan dalam 1 kunjungan ya Bunda 😊 Sehingga lebih praktis, privat, dan si kecil tetap merasa tenang bersama Bunda.",
-    "keywords": "terapis, bidan, sama, beda, berbeda, orang, siapa, satu orang, dua orang, yang mijat, yang memijat, staf, berdua, sendiri"
-  },
-  {
-    "question": "Bagaimana jika anak rewel atau menangis saat latihan tengkurap (tummy time)?",
-    "answer": "Hal itu sangat wajar karena otot leher/pundak si kecil belum terbiasa, Bunda. Jangan merasa bersalah atau memaksakannya. Bunda bisa melatihnya dengan metode chest-to-chest (menengkurapkan bayi di atas dada Bunda saat Bunda bersandar) selama 1-2 menit secara berkala sambil diajak bernyanyi atau diberi mainan."
-  },
-  {
-    "question": "Apa itu treatment Sinar Moksa / Inframerah hangat?",
-    "answer": "Terapi tambahan sinar inframerah hangat (moksa) digunakan untuk membantu menghangatkan dada/punggung bayi guna mengencerkan dahak, melegakan saluran pernapasan, serta meredakan flu dan batuk secara efektif."
-  },
-  {
-    "question": "Apakah ada terapi untuk membantu mengeluarkan dahak bayi?",
-    "answer": "Ada, Bunda. Kami menyediakan paket Pijat + Moksa (sinar hangat) seharga Rp 80rb - Rp 85rb, Pijat + Nebulizer (terapi uap) seharga Rp 105rb - Rp 150rb, dan paket lengkap Pijat + Nebulizer + Obat seharga Rp 135rb - Rp 180rb."
-  },
-  {
-    "question": "Kapan ibu pasca melahirkan boleh mulai dipijat?",
-    "answer": "Ibu pasca melahirkan boleh langsung dipijat segera setelah melahirkan nifas (kondisi sehat), Bunda. Kami melayani Oksitosin Massage Fullbody untuk membantu pemulihan stamina pasca persalinan."
-  },
-  {
-    "question": "Apa manfaat dari Oksitosin Massage untuk ibu menyusui?",
-    "answer": "Oksitosin Massage bermanfaat untuk merangsang pengeluaran hormon oksitosin yang memperlancar aliran ASI, merilekskan otot-otot punggung yang tegang akibat menyusui/mengdong, meningkatkan mood, serta membantu Bunda tidur lebih nyenyak."
-  },
-  {
-    "question": "Bagaimana penanganan lubang tindikan telinga bayi yang posisinya tidak pas (ketinggian)?",
-    "answer": "Jika posisi tindikan kurang pas, anting yang bersangkutan (misal kanan) bisa segera dilepas dulu agar lubangnya menutup kembali secara alami. Pastikan mencuci tangan bersih dan berikan antiseptik di daun telinga bayi agar terhindar dari infeksi. Tindik ulang dapat dibetulkan pada kunjungan berikutnya."
-  },
-  {
-    // Audit 222655 (fatal medical error Turn 4): keywords FTS eksplisit agar
-    // query slang ("habis vaksin", "sebelum apa sesudah imunisasi") selalu
-    // menemukan artikel ini, bukan artikel mandi. Union dengan rule keywords
-    // via resolveChunkKeywords (existing dipertahankan).
-    "question": "Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?",
-    "answer": "Setelah vaksin atau imunisasi (seperti BCG, Polio, DPT, dll.), si kecil sebaiknya diistirahatkan selama 2–3 hari terlebih dahulu sebelum dipijat, Bunda. Hal ini bertujuan untuk menghindari penekanan pada area bekas suntikan serta mengantisipasi reaksi pasca imunisasi (KIPI) seperti demam atau rewel. Setelah 2–3 hari dan kondisi si kecil sudah fit serta tidak demam, barulah sangat aman dan nyaman untuk dipijat oleh Bidan. Pijat juga sangat aman jika dilakukan SEBELUM jadwal imunisasi.",
-    "keywords": "vaksin, vaksinasi, imunisasi, suntik, dpt, bcg, polio, campak, habis vaksin, setelah imunisasi, sebelum imunisasi, kapan boleh pijat, kipi, demam"
-  },
-  {
-    // Audit 337101 (clinical safety): SOP skrining bayi jatuh/terbentur.
-    // Tenant-aware via seed → knowledge_chunks (bisa diedit di dashboard).
-    // Format entri mengikuti kontrak seed (question/answer/keywords).
-    "question": "Apakah bayi yang baru jatuh atau terbentur boleh langsung dipijat?",
-    "answer": "Jika si kecil baru saja jatuh atau terbentur, wajib dilakukan observasi tanda bahaya (red flags) terlebih dahulu, Bunda. TANDA BAHAYA (PIJAT DILARANG MUTLAK): ada benjolan/memar besar di kepala, muntah menyembur, demam, kejang, lemas/sulit dibangunkan, atau ada bagian tubuh yang menangis histeris saat disentuh (indikasi fraktur/dislokasi). Jika ada salah satu tanda ini, DILARANG DIPIJAT dan wajib segera periksa ke dokter spesialis anak / IGD faskes terdekat! SYARAT PIJAT AMAN: jika si kecil sudah diobservasi minimal 24 jam setelah jatuh, bayi tetap aktif, ceria, menyusu lancar, tidak ada muntah/benjolan, dan hanya rewel karena kaget/otot tegang, pijat relaksasi lembut aman dilakukan untuk menenangkan si kecil, dengan syarat DILARANG memijat atau menekan area tubuh yang terbentur.",
-    "keywords": "jatuh, jatoh, kejedot, bentur, terbentur, kebentur, jatuh dari kasur, cedera, benjol, benjolan, memar, muntah menyembur, rewel setelah jatuh, habis jatuh, baru jatuh"
-  },
-  {
-    // SEED DB-DRIVEN (tenant-aware, bisa diedit via dashboard /api/admin/knowledge):
-    // Aturan klinis usia aterm untuk induksi alami + relaksasi bumil capek.
-    // BUKAN hardcode runtime — dibaca dinamis via knowledgeBaseService.searchRelevantChunks.
-    "question": "Panduan Usia Kehamilan untuk Pijat Induksi Alami (Induksi Massage)",
-    "answer": "Pijat induksi alami aman dan sangat dianjurkan dilakukan pada usia kehamilan cukup bulan (aterm), yaitu mulai 37-38 minggu ke atas hingga menjelang HPL. Perawatan ini membantu merangsang hormon oksitosin alami, menstimulasi titik akupresur persalinan, dan melenturkan otot panggul. Untuk ibu hamil yang juga merasakan capek, pegal seluruh tubuh, atau ketegangan otot di trimester akhir, paket Induksi Massage Fullbody (relaksasi seluruh tubuh dipadukan dengan titik induksi) merupakan pilihan yang paling tepat.",
-    "keywords": "38 weeks, 37 weeks, induksi, induksi alami, pijat induksi, capek, hamil trimester 3, aterm, cukup bulan, hpl"
-  }
-];
-
-// Selaraskan keywords saat seed ulang: setiap pertanyaan di-resolve ke tabel
-// kurasi keyword-enrichment.service (single source of truth). Item yang sudah
-// punya keywords eksplisit dipertahankan; sisanya diisi otomatis agar FTS
-// 'simple' (tanpa stemming) tetap menemukan artikelnya.
-for (const faq of faqs as Array<{ question: string; answer: string; keywords?: string }>) {
-  if (!faq.keywords) {
-    const resolved = resolveChunkKeywords(faq.question, null);
-    if (resolved) faq.keywords = resolved;
-  }
-}
+import { faqs } from './faq-corpus';
 
 async function main() {
-  console.log('\x1b[36m[SEEDING] Mengosongkan data knowledge_chunks lama...\x1b[0m');
-  try {
-    await prisma.knowledgeChunk.deleteMany({
-      where: { tenant_id: DEFAULT_TENANT_ID, source_type: 'FAQ' }
-    });
-    console.log('\x1b[32m[SEEDING] Data knowledge_chunks lama berhasil dikosongkan.\x1b[0m');
-  } catch (err) {
-    console.warn('\x1b[33m[SEEDING] Database kosong atau offline, lanjut ke seeding...\x1b[0m');
+  // Plan 4 Phase 2 — NON-DESTRUKTIF: deleteMany DIHAPUS. Setiap entri di-upsert
+  // idempoten berbasis (tenant_id, title): baris seed yang berubah diperbarui,
+  // baris baru dibuat, kurasi admin di luar daftar seed TIDAK PERNAH disentuh.
+  console.log(`\x1b[36m[SEEDING] Upsert idempoten ${faqs.length} FAQ (tanpa hapus data)...\x1b[0m`);
+  let created = 0;
+  let updated = 0;
+  for (const faq of faqs as Array<{ question: string; answer: string; keywords?: string }>) {
+    const question = (faq.question || '').trim();
+    const answer = (faq.answer || '').trim();
+    if (!question || !answer) continue;
+    try {
+      const res = await knowledgeBaseService.upsertChunk({
+        tenantId: DEFAULT_TENANT_ID,
+        title: question,
+        content: `Pertanyaan: ${question}\nJawaban: ${answer}`,
+        keywords: faq.keywords,
+      });
+      if (res.created) created++;
+      else updated++;
+    } catch (err) {
+      console.warn('\x1b[33m[SEEDING] Upsert gagal, lanjut entri berikut...\x1b[0m', (err as Error).message);
+    }
   }
-
-  console.log(`\x1b[36m[SEEDING] Mengimpor ${faqs.length} FAQ baru...\x1b[0m`);
-  const count = await knowledgeBaseService.importFaqs(faqs, DEFAULT_TENANT_ID);
-  console.log(`\x1b[32m[SEEDING] Sukses! Berhasil mengimpor ${count} pasangan FAQ.\x1b[0m\n`);
+  try {
+    const { faqCacheService } = await import('../services/faq-cache.service');
+    await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+  } catch (_) {}
+  console.log(`\x1b[32m[SEEDING] Sukses! Baru: ${created}, diperbarui: ${updated}.\x1b[0m\n`);
 }
 
 main()

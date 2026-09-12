@@ -123,7 +123,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic,
         factualSummary: 'Layanan homecare buka setiap hari (Senin - Minggu) pukul 08.00 - 17.00 WIB. Pemilihan slot jam kunjungan dikoordinasikan oleh tim Bidan kami berdasarkan ketersediaan rute bidan yang bertugas.',
-        suggestedReply: `Layanan homecare kami buka setiap hari (Senin - Minggu) mulai pukul 08.00 hingga 17.00 WIB ya Bunda 😊\n\nUntuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu slot Bidan kami yang ready 🤗`
+        suggestedReply: `Layanan homecare kami buka setiap hari (Senin - Minggu) mulai pukul 08.00 hingga 17.00 WIB ya Bunda 😊\n\nUntuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu ketersediaan jadwal tim Bidan kami ya Bunda 🤗`
       };
 
     case 'general_homecare_info':

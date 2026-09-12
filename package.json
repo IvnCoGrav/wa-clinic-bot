@@ -17,6 +17,7 @@
     "prisma:migrate": "prisma migrate dev",
     "eval:numeric": "tsx tests/evals/numeric-hallucination-harness.ts",
     "seed:faq": "tsx src/cli/seed-faq.ts",
+    "sync:knowledge": "tsx scripts/sync-live-knowledge.ts",
     "scrape:all": "tsx src/cli/scrape-all.ts",
     "sync:history": "tsx scripts/sync-waha-history.ts",
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts"

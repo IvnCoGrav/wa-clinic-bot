@@ -1058,15 +1058,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 46. [Data] Drift live↔seed: RAG 43 vs 34, bank 26 vs 37 (2026-09-12)
+## 46. [Data] Drift live↔seed: RAG 43 vs 34, bank 26 vs 37 (2026-09-12) — RESOLVED
 
-- **Status:** open (tech debt) — snapshot live diarsipkan di `docs/live-snapshots/` (`knowledge-chunks-2026-09-12.json`, `few-shot-exemplars-2026-09-12.json`); live TIDAK diubah.
-- **Temuan (bukti: dump `row_to_json` live vs `seed-faq.ts` + bank lokal):**
-  - 14 judul live tidak ada di seed lokal (kurasi admin via dashboard: mandi, susu, minyak, tumbuh-gigi+bapil, cukur-gundul, paket ibu komplit, "Mending mana pijat sebelum/sesudah imunisasi", dll).
-  - 5 seed lokal tidak ada di live (lokasi, durasi, bapil-boleh, terapis sama/bebeda, **artikel "bayi jatuh"**).
-  - 2 skenario bank live tidak ada di file lokal ("Treatment setelah/sebelum imunisasi", "Treatment untuk susah makan"); 16 skenario default lokal tidak ada di live (bank live dari seed versi lama).
-- **Risiko:** `npm run seed:faq` (deleteMany) akan MENGHAPUS 14 kurasi admin live; seed ulang bank bisa menimpa koreksi admin. Jangan seed live tanpa backup + merge kurasi dulu.
-- **Tindak lanjut:** putuskan apakah 14 baris live di-merge ke `seed-faq.ts` + 2 skenario ke bank default (perlu konfirmasi owner).
+- **Status:** ~~open~~ **RESOLVED** (Plan 4 Phase 2, 2026-09-12).
+- **Fix:**
+  - Korpus FAQ diekstrak ke `src/cli/faq-corpus.ts` (sumber kebenaran tunggal, 48 artikel: 34 seed + 14 kurasi live via `scripts/sync-live-knowledge.ts`, `npm run sync:knowledge`).
+  - `seed-faq.ts` NON-DESTRUKTIF: `deleteMany` dihapus, diganti loop `upsertChunk` idempoten (kunci `tenant_id+title`); chunk admin di luar daftar seed tidak pernah disentuh. Guard test `knowledge-safe-upsert.test.ts`.
+  - Guard drift: `sync:knowledge --check` exit 1 bila ada judul live yang hilang dari korpus.
+- **Temuan saat merge (mohon dibaca):**
+  1. Snapshot `knowledge-chunks-2026-09-12.json` mengandung **mojibake CP437** (byte UTF-8 dibaca sebagai CP437 saat dump, mis. 😊 → "≡ƒÿè") — dipulihkan eksak saat merge (tabel CP437 terverifikasi 0 mismatch vs codec referensi + self-test). DB live kemungkinan berisi teks benar; yang rusak hanya file snapshot.
+  2. **4 overlap-beda-isi TIDAK ditimpa otomatis** (bidan-bersertifikat, bapil, lokasi-fisik, vaksin): kurasi manual lokal bisa lebih baru — tercantum di laporan merge untuk review manusia.
+  3. Kontrak kepemilikan: seed memiliki 48 judulnya — penghapusan salah satu judul seed via dashboard akan dipulihkan saat seed berikutnya. Chunk non-seed aman.
+- **Sisa di luar plan:** 2 skenario bank live belum di-merge ke bank default + 16 skenario default tidak ada di live (perlu konfirmasi owner, sesuai tindak lanjut awal).
+- **Temuan awal (arsip pra-resolusi, bukti: dump `row_to_json` live vs `seed-faq.ts` + bank lokal):** 14 judul live tidak ada di seed lokal (kurasi admin via dashboard: mandi, susu, minyak, tumbuh-gigi+bapil, cukur-gundul, paket ibu komplit, "Mending mana pijat sebelum/sesudah imunisasi", dll); 5 seed lokal tidak ada di live (lokasi, durasi, bapil-boleh, terapis sama/bebeda, **artikel "bayi jatuh"**); 2 skenario bank live tidak ada di file lokal; 16 skenario default lokal tidak ada di live. Risiko asal: `npm run seed:faq` (deleteMany) akan MENGHAPUS 14 kurasi admin live — kini dihapus mekanismenya.
 
 ---
 
