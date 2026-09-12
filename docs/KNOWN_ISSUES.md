@@ -499,24 +499,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 16. [Reservation / Location] Tautan Google Maps di Alamat Form & Teks Treatment Bebas Menyebabkan Jarak Null & Duplikasi Reservasi
+## 16. [Reservation / Location] Tautan Google Maps di Alamat Form & Teks Treatment Bebas Menyebabkan Jarak Null & Duplikasi Reservasi — OPEN SEBAGIAN (parsing URL DONE)
 
-- **Status:** planned (Implementation Plan siap di `implementation_plan.md`).
-- **Ditemukan:** 2026-08-29, kasus Bunda Ifa Karangpilang (`6281455029665`).
-- **Gejala:**
-  1. Alamat form yang menyertakan tautan Google Maps (`Jl. Griya Kebraon Utama AU 18 (https://maps.app.goo.gl/DGusQAqJDvPWznBV6)`) tersimpan ke kolom `kelurahan` dan gagal di-resolve oleh Google Geocoding API -> `lat`, `lng`, `distance_km`, dan `ongkir` bernilai `NULL`.
-  2. Input treatment bebas pelanggan (`pijat ceria` + `Bundling breast massage+oksitosin`) belum terpetakan ke item resmi di tabel `clinic_services` beserta durasi & harganya.
-  3. Tercipta 2 reservasi pending (Auto-Capture bot vs Input Manual Admin) untuk jadwal kunjungan yang sama dalam selisih 13 detik.
-- **Akar Masalah:**
-  1. Ketiadaan modul ekstraksi dan ekspansi URL Google Maps pendek (`maps.app.goo.gl`) di `reservation-text-parser.ts` & `human-background-enrichment.service.ts`.
-  2. Auto-Capture mencatat string mentah tanpa pencocokan kemiripan (*fuzzy matching*) ke database layanan.
-  3. Endpoint create reservasi manual admin dan webhook bot belum memiliki logika merge/deduplikasi berbasis customer & tanggal 24 jam.
-- **Rencana Tindak Lanjut:**
-  - Eksekusi 4 tahap di `implementation_plan.md`:
-    - Tahap 1: Google Maps URL extractor & cleaner + auto-kalkulasi jarak.
-    - Tahap 2: Fuzzy Treatment Normalizer ke `clinic_services` DB.
-    - Tahap 3: Smart Deduplication & Merge Reservasi.
-    - Tahap 4: UI Admin Dashboard auto-category & price sync.
+- **Status:** open sebagian — **parsing parameter query URL DONE** (Plan 6 FASE 2, 2026-09-12): `?q=/ ?ll= / ?daddr=/saddr=/destination=` kini via API standar `URL`/`URLSearchParams` (`parseMapsUrl` + `parseLatLngPair`); pola pathname/hash (`/@/`, `/place/`, protobuf) tetap regex sesuai plan. Ditemukan & diperbaiki saat implementasi: resolusi base relatif mengubah body HTML jadi URL palsu + `parseFloat` menelan sisa markup ("1,2</body>"→{1,2}) — dikunci paritas ketat (host-like + titik desimal wajib) + 2 test regresi. Test `google-maps-url-resolver.test.ts` 17/17.
+- **Sisa terbuka (tahap 2–4 `implementation_plan.md`):** fuzzy treatment normalizer, dedup/merge reservasi, UI auto-category — di luar cakupan Plan 6.
+- **Konteks asal (arsip, kasus Bunda Ifa Karangpilang 2026-08-29):** alamat form ber-tautan Maps tersimpan ke `kelurahan` → lat/lng/distance/ongkir NULL; treatment bebas belum terpetakan ke `clinic_services`; 2 reservasi pending ganda (bot vs admin, selisih 13 detik). Akar: tanpa modul ekstraksi/ekspansi shortlink, tanpa fuzzy matching, tanpa merge 24 jam.
 
 ---
 
@@ -585,16 +572,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 21. [Geocoding] Resolusi Nama Jalan Lokal Tanpa Indikator Jalan ("Jl." / "Gang") Memerlukan Klarifikasi Kelurahan
+## 21. [Geocoding] Resolusi Nama Jalan Lokal Tanpa Indikator Jalan ("Jl." / "Gang") Memerlukan Klarifikasi Kelurahan — RESOLVED
 
-- **Status:** mitigated / open tech-debt.
-- **Ditemukan:** 2026-09-03, saat backtest 30 percakapan riil pelanggan database.
-- **Gejala:** Pelanggan yang menyebut nama jalan lokal tanpa awalan penanda jalan (contoh: *"Di bronggalan"*, *"Klampis jaya"*) tidak terdaftar di kamus kelurahan/kecamatan `surabaya_sidoarjo_subdistricts.json`. Gazetteer Pre-Validation Gate mengarahkan bot meminta klarifikasi kelurahan: *"Boleh diinfokan detail kelurahan atau desa di Bronggalan Bunda agar kami bantu cekkan ongkir presisinya? 😊"*.
-- **Mitigasi Saat Ini:**
-  - `isStreetOrLandmark` mengizinkan pencarian Google Maps jika ada kata penanda (*"jl"*, *"jalan"*, *"gang"*, *"perumahan"*, *"no"*).
-  - Jika nama jalan berdiri sendiri tanpa kata penanda dan bukan kelurahan, bot secara sopan dan aman meminta kelurahan spesifik, menghindari kesalahan tebak ongkir.
-- **Rencana Tindak Lanjut:**
-  - Tambahkan kamus alias koridor/jalan arteri utama Surabaya & Sidoarjo ke dalam `landmarks.ts` / `gazetteer.ts` agar nama jalan populer seperti Bronggalan, Klampis, Kertajaya langsung terpetakan ke kelurahan induknya tanpa perlu tanya ulang.
+- **Status:** ~~mitigated / open tech-debt~~ **RESOLVED** (Plan 6 FASE 3, 2026-09-12).
+- **Fix:** kamus `ARTERY_CORRIDORS` (10 koridor: Klampis Jaya, Bronggalan, Kertajaya, Mayjen Sungkono, HR Muhammad, Dharmahusada, Raya Darmo, Tropodo, Pepelegi, Pondok Jati) di `landmarks.ts` + `resolveArteryCorridor()`; `getGazetteerCoordinates` mengecek koridor dulu (rantai: kelurahan → kecamatan → logika eksisting). Koordinat tetap dari dataset (single source, tanpa hardcode lat/lng). "Darmo Permai" (perumahan) terbukti tak konflik dengan koridor "raya darmo". Test `artery-corridor-gazetteer.test.ts` (5) termasuk ground-truth 10/10 koridor terhadap dataset.
+- **Gejala asal (arsip, backtest 2026-09-03):** "Di bronggalan"/"Klampis jaya" memicu todongan klarifikasi kelurahan berulang.
+- **Mitigasi lama (digantikan fix di atas):** `isStreetOrLandmark` mengizinkan pencarian Google Maps bila ada kata penanda; nama jalan mandiri tanpa penanda diminta klarifikasi kelurahan (aman tapi berulang).
 
 ---
 
@@ -668,15 +651,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 26. [V3 Guardrail] Multi-Treatment Combo Pricing Arithmetic Ungrounded (TC-24, TC-25)
+## 26. [V3 Guardrail] Multi-Treatment Combo Pricing Arithmetic Ungrounded (TC-24, TC-25) — RESOLVED
 
-- **Status:** open (backlog arsitektur produk — sprint berikutnya).
-- **Ditemukan:** 2026-09-08, saat closure eval harness V3 (`tests/evals/numeric-hallucination-harness.ts`).
-- **Gejala:** Ketika customer menanyakan total harga untuk kombinasi 2+ layanan sekaligus (misal: "Pijat pulih ceria plus sinar moksa totalnya berapa?"), model memanggil tool `get_catalog_and_price` untuk 1 layanan utama. Saat LLM di Call 2 melakukan penjumlahan aritmatika (Rp 70.000 + Rp 10.000 = Rp 80.000), guardrail `NumericFactValidator` mendeteksi nominal Rp 80.000 tidak ada di whitelist hasil tool resmi, menganggapnya halusinasi, dan mengganti balasan ke harga single treatment (Rp 70.000).
-- **Rencana Tindak Lanjut (Sprint Berikutnya):**
-  - Perluas skema `get_catalog_and_price` agar menerima array nama treatment (`treatmentNames: string[]` atau `addons: string[]`).
-  - Tool mengembalikan rincian per-item beserta total resmi terhitung langsung dari database katalog.
-  - Dengan demikian, nominal total combo memiliki grounding resmi sebelum sampai ke `NumericFactValidator`.
+- **Status:** ~~open~~ **RESOLVED** (Plan 6 FASE 1, 2026-09-12).
+- **Fix:** `numeric-fact-validator.ts` kini mengotorisasi jumlah subset 2–3 layanan resmi turn konsultasi (Si+Sj, +Addon, +Ongkir, +keduanya, termasuk triple) dari `servicePromo/serviceOriginal` — pool unik N≤6 (O(N³)≤216). Hanya di luar mode strict (keranjang ≥2 tetap mengunci total penuh + omission detector). Deviasi dari rencana awal (ekspansi skema tool `treatmentNames[]`): dipilih kombinatorik sisi-validator agar NOL perubahan kontrak tool; grounding tetap dari angka resmi turn + katalog. Test `multi-treatment-combo-validator.test.ts` (5).
+- **Gejala asal (arsip):** kombo 2+ layanan ("Pijat pulih ceria plus sinar moksa totalnya berapa?", ditemukan 2026-09-08 via `numeric-hallucination-harness.ts`) — total cerdas LLM (mis. 70k+10k=80k) dituduh halusinasi dan diganti harga single treatment.
 
 ---
 
@@ -849,14 +828,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 30. [Migrations] Live `tenants.settings` tidak ada di DB (P2022 di log app)
+## 30. [Migrations] Live `tenants.settings` tidak ada di DB (P2022 di log app) — IMPLEMENTED (verifikasi deploy menunggu)
 
-- **Status:** open (pre-existing drift, bot tetap jalan — error ter-catch).
-- **Ditemukan:** 2026-09-08, saat verifikasi log pasca-deploy `b56864f` di live server.
-- **Gejala:** log app live berulang: `Invalid prisma.tenant.findUnique()/findFirst() ... The column tenants.settings does not exist in the current database.` Alur pesan tetap berjalan (HUMAN_HANDLING + web push normal).
-- **Akar masalah (dugaan):** drift baseline yang sama seperti #1 — migrasi penambah kolom `tenants.settings` tidak ada / belum applied di live, sementara `migrate deploy` melaporkan no pending. Perlu audit `prisma/migrations` vs `information_schema` untuk tabel `tenants`.
-- **Mitigasi kode 2026-09-09:** query terpanas (`reservations.subroute.ts:2300`, CAPI queue) kini memakai `select: { id, landing_domain }` eksplisit sehingga tidak lagi memicu P2022 apa pun status kolom `settings`. Puluhan `prisma.tenant.*` lain tanpa `select` masih berisiko memicu log yang sama — sengaja TIDAK diubah massal karena banyak test menegaskan argumen panggilan eksak (`toHaveBeenCalledWith({ where })`).
-- **Rencana Tindak Lanjut (proyek terpisah):** audit kolom `tenants` live vs schema, buat migrasi penambahan kolom yang hilang, verifikasi `migrate diff --from-url` empty. Jangan ubah manual tanpa rencana per-env. Penyembuh cepat per-DB (bila diperlukan): `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB;`.
+- **Status:** ~~open~~ **implemented** (Plan 6 FASE 4, 2026-09-12) — verifikasi live (`migrate deploy` + `migrate diff --from-url` empty) menunggu jendela deploy.
+- **Fix kode:** helper terpusat `isMissingColumnError()` (`src/utils/prisma-errors.ts`, pola mengikuti `isMissingKeywordsColumnError`); pembaca `tenants.settings` (`brand.ts getBrandIdentityAsync`, `tenant-prompt-config.service.ts`) kembali ke default SENYAP saat P2022/42703, tetap warn untuk error lain (menghentikan banjir log). Cakupan sadar: puluhan `prisma.tenant.*` full-row lain (capi, alert, daily-report) SENGAJA tak diubah massal — test menegaskan argumen panggilan eksak (catatan mitigasi 2026-09-09 tetap berlaku).
+- **Fix skema:** migrasi idempoten baru `20260912000000_ensure_tenants_settings_column` (`DO $$ IF NOT EXISTS ... ADD COLUMN settings JSONB DEFAULT '{}'`) — aman di DB yang sudah punya kolom maupun yang belum.
+- **Test:** `tenant-settings-resilience.test.ts` (3): P2022 → default/null tanpa throw.
+- **Konteks asal (arsip):** log live pasca-deploy `b56864f` berulang `The column tenants.settings does not exist`; alur pesan tetap jalan (ter-catch). Dugaan drift baseline seperti #1. Penyembuh cepat per-DB: `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB;`.
+- **Mitigasi 2026-09-09 (tetap berlaku):** query terpanas (`reservations.subroute.ts`, CAPI queue) memakai `select` eksplisit sehingga tak memicu P2022 apa pun status kolom.
 
 ---
 
