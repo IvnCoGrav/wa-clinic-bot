@@ -1,5 +1,5 @@
 import { CustomerGoalSession, GoalTracker } from '../state/goal-tracker';
-import { getBrandIdentity } from '../../config/brand';
+import { getBrandIdentity, getBrandIdentityAsync, DEFAULT_BRAND_IDENTITY } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { FewShotExemplarBank } from './few-shot-exemplars';
 import { getGazetteerAreas } from '../../utils/gazetteer';
@@ -150,6 +150,48 @@ ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirectiv
   }
 
   /**
+   * Varian async tenant-aware (Plan 4): Call 1 Router Prompt menyerap konfigurasi
+   * persona dinamis dari DB (`TenantPromptConfigService`) + identitas brand
+   * per-tenant (`getBrandIdentityAsync`).
+   *
+   * Fondasi: base = prompt statis `buildRouterPrompt` (fallback penuh bila DB
+   * offline — perilaku Call 1 eksisting terpin). Bila tenant punya konfigurasi
+   * aktif, section dashboard disuntik sebagai blok overlay; bila brand tenant
+   * di-override, nama bisnis default diganti. Tanpa baris DB → output identik
+   * dengan varian sinkron.
+   */
+  public static async buildRouterPromptAsync(
+    session: CustomerGoalSession,
+    isFollowUp: boolean = false,
+    opts?: {
+      contextSummary?: string;
+      phaseDirective?: string;
+      tenantId?: string;
+    }
+  ): Promise<string> {
+    const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
+    const base = this.buildRouterPrompt(session, isFollowUp, {
+      contextSummary: opts?.contextSummary,
+      phaseDirective: opts?.phaseDirective,
+    });
+
+    const [dbPrompt, brand] = await Promise.all([
+      TenantPromptConfigService.getActivePromptConfig(tenantId).catch(() => null),
+      getBrandIdentityAsync(tenantId).catch(() => getBrandIdentity()),
+    ]);
+
+    let prompt = base;
+    const defaultBiz = DEFAULT_BRAND_IDENTITY.businessName;
+    if (brand.businessName !== defaultBiz) {
+      prompt = prompt.split(defaultBiz).join(brand.businessName);
+    }
+    if (dbPrompt) {
+      prompt += `\n\n[KONFIGURASI PERSONA TENANT (DASHBOARD — BERLAKU MENYELURUH)]\n${dbPrompt.personalityTone}\n\n${dbPrompt.answeringHierarchy}\n\n${dbPrompt.negativeConstraints}\n\n${dbPrompt.medicalOverclaimRules}`;
+    }
+    return prompt;
+  }
+
+  /**
    * Membangun System Prompt Bidan Yusi yang hangat, manusiawi, luwes,
    * dan kontekstual selayaknya Bidan asli di WhatsApp tanpa celah pelanggaran SOP.
    */
@@ -192,7 +234,7 @@ ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirectiv
 2. PERTANYAAN ASAL / LOKASI KLINIK (misal: "Kak ini area mana?", "Kliniknya di mana?", "Dari mana ya?", "sus nya dimana", "bidannya dari mana", "posisi klinik dimana", "asal klinik"):
    • Panggil tool get_clinic_policy_faq (topic: 'homebase_and_coverage').
    • JIKA LOKASI CUSTOMER SUDAH DIKETAHUI (tercantum di grounding [STATUS DATA CUSTOMER SAAT INI] atau sudah dibahas di riwayat): sampaikan bahwa homebase klinik kami di Waru, Sidoarjo dan lokasi Bunda di [Kelurahan/Kecamatan] sudah masuk jangkauan kami ([Jarak] km). DILARANG KERAS menanyakan alamat/daerah rumah lagi! Langsung lanjutkan dengan menanyakan rencana perawatan yang diinginkan.
-   • JIKA LOKASI BELUM DIKETAHUI: jawab langsung dan ramah (homebase Waru, Sidoarjo; layanan Homecare), lalu BARU tanyakan dengan santai: "Kalau boleh tahu rumah Bunda di daerah mana ya, biar kami bantu cekkan jangkauan jarak dan Bidan kami yang ready? 🤗"
+   • JIKA LOKASI BELUM DIKETAHUI: jawab langsung dan ramah (homebase Waru, Sidoarjo; layanan Homecare), lalu BARU tanyakan dengan santai: "Kalau boleh tahu rumah Bunda di daerah mana ya, biar kami bantu cekkan jangkauan jarak dan jadwal kami? 🤗"
    • PERTANYAAN ALOKASI TENAGA BIDAN / TERAPIS (audit 315036 — misal: "Nanti yg pijat sama/beda ya?", "Bidannya sama atau beda?", "Yang mijat 1 orang atau 2 orang?"): subjek pertanyaan adalah ORANG/TENAGA BIDAN, BUKAN perbedaan jenis layanannya! DILARANG KERAS menggurui atau menceramahi bahwa perawatan ibu dan anak adalah jenis pijat yang berbeda! Jawab ramah dan afirmatif: "Untuk perawatan si kecil dan Bunda dalam satu kunjungan (seperti Pijat Bayi dan Paket Laktasi), akan ditangani langsung oleh 1 Bidan profesional kami yang sama ya Bunda 😊 Perawatannya akan dikerjakan secara berurutan agar lebih praktis dan nyaman untuk Bunda dan si kecil."
 3. PERTANYAAN ONGKIR KECAMATAN (misal: "Sedati ada ongkirkah kak?"):
    • Jawab AFIRMATIF terlebih dahulu: "Iya betul ada ongkir ya Bunda 😊"
