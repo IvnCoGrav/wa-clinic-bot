@@ -145,16 +145,8 @@ export class CommandService {
     conversationService.clearConversationMemory(customer.id);
     messageService.clearMessageMemory(conversation.id);
 
-    // 5. Lepas label lifecycle WAHA (best-effort).
-    try {
-      const { wahaClient } = await import('../integrations/waha/client');
-      const chatId = `${phone}@c.us`;
-      for (const label of ['hold', 'pending payment', 'repeat', 'new customer']) {
-        wahaClient.removeLabel(chatId, label).catch(() => {});
-      }
-    } catch (err: any) {
-      console.warn('[COMMAND /reset] Gagal lepas label WAHA:', err.message);
-    }
+    // 5. Mandat Anti-Label WAHA: label lifecycle di-reset via DB internal, zero WAHA label mutation
+    console.log(`[COMMAND /reset] DB-only label lifecycle reset, zero WAHA label mutation.`);
 
     // 6. Re-create customer + conversation sebagai rumah bagi balasan konfirmasi.
     // Propagasikan flag is_sandbox_test agar jalur test tidak mencemari data asli.

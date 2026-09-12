@@ -403,22 +403,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           isHoldLabeled: normalizedLabel === 'hold' ? enabled : undefined,
         });
 
-        // 2. Mirror ke WAHA (best-effort, hanya jika ENABLE_WAHA_HOLD_LABEL === 'true' / test)
-        let wahaOk = true;
-        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
-        if (enableHoldLabel) {
-          try {
-            const { wahaClient } = await import('../../integrations/waha/client');
-            if (enabled) {
-              wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, normalizedLabel);
-            } else {
-              wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, normalizedLabel);
-            }
-          } catch (err: any) {
-            wahaOk = false;
-            console.warn(`[LABEL] Gagal mirror label "${normalizedLabel}" ke WAHA utk ${customer.phone}:`, err.message);
-          }
-        }
+        // 2. Mandat Anti-Label WAHA: label toggle hanya via DB internal (customer.labels)
+        // Zero WAHA label mutation — is_admin_labeled / is_hold_labeled sudah di-sync oleh reconciliation service
 
 
         await auditService.logAdminAction({
@@ -426,14 +412,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: enabled ? 'ADD_LABEL' : 'REMOVE_LABEL',
           targetId: id,
-          payload: { label, enabled, wahaOk },
+          payload: { label, enabled, dbOnly: true },
           ipAddress: request.ip,
         });
 
         return reply.status(200).send({
           success: true,
           message: `Label "${label}" ${enabled ? 'dipasang' : 'dilepas'} untuk ${customer.name || customer.phone}.`,
-          data: { id, phone: customer.phone, label, enabled, wahaOk },
+          data: { id, phone: customer.phone, label, enabled, dbOnly: true },
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -503,15 +489,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               },
               DEFAULT_TENANT_ID
             );
-            const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
-            if (enableHoldLabel) {
-              try {
-                const { wahaClient } = await import('../../integrations/waha/client');
-                await wahaClient.removeLabel(`${updated.phone}@c.us`, 'hold');
-              } catch (labelErr: any) {
-                console.warn('[AI OVERRIDE] Gagal hapus hold label:', labelErr.message);
-              }
-            }
+            // Mandat Anti-Label WAHA: hold release via DB internal (is_human_handling), zero WAHA label
             console.log(
               `[AI OVERRIDE] FORCE_ON utk customer ${updated.phone} — conversation ${silenced.id} di-release dari LEGACY_AI_SCOPE_DISABLED.`
             );

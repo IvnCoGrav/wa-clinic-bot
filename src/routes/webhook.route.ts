@@ -902,10 +902,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               waMessageId,
               payloadRaw: mergeMediaIntoPayload(payload),
             });
-            // Best-effort: addLabel 'hold' (skip pada dry-run)
-            if (process.env.LEGACY_SCRAPE_DRY_RUN !== 'true') {
-              wahaClient.addLabel(chatId, 'hold').catch((err: any) => console.warn('[LEGACY SCRAPE] addLabel hold failed:', err.message));
-            }
+            // Mandat Anti-Label WAHA: penandaan hold via DB internal (is_human_handling), zero WAHA label
             // Fire-and-forget scrape
             import('../services/per-contact-legacy-scrape.service').then(({ perContactLegacyScrapeService }) => {
               perContactLegacyScrapeService.scrapeContactUntilFirstLead(chatId, DEFAULT_TENANT_ID)
@@ -926,14 +923,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Periksa apakah customer baru (belum ada record di database)
       const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
 
-      // --- LABEL "new customer" (Task 3 / flag: ENABLE_LIFECYCLE_LABELS) ---
-      // Hanya untuk customer baru (record baru dibuat) yang BUKAN legacy source —
-      // legacy customer yang melakukan scrape ulang tidak perlu label ini.
-      if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && isNewCustomer && !customer.is_legacy_source) {
-        wahaClient.addLabel(chatId, 'new customer').catch((err: any) =>
-          console.warn('[LIFECYCLE LABEL] addLabel "new customer" failed:', err.message)
-        );
-      }
+      // --- Mandat Anti-Label WAHA: 'new customer' ditandai via DB internal (customer.labels), zero WAHA label ---
+      // Flag is_new_customer sudah tercatat di kolom created_at (record baru < 5 detik)
 
       let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
       conversationService.updateLastCustomerMessageAt(conversation.id, DEFAULT_TENANT_ID).catch(() => {});
