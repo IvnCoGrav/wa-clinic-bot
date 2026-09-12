@@ -1,19 +1,13 @@
 import { prisma } from '../db/client';
-import { wahaClient } from '../integrations/waha/client';
 
 /**
- * LabelReconciliationService (Task 7) — re-sync label WA vs status DB.
+ * LabelReconciliationService — re-sync internal DB flags vs status reservasi.
  *
- * Label lifecycle yang benar:
- * - customer punya reservasi pending TANPA riwayat confirmed → label 'pending payment'
- * - customer punya riwayat confirmed + reservasi pending baru → label 'repeat' (bukan 'pending payment')
- * - 'new customer' dihapus saat reservasi pertama dibuat
- * - 'legacy' tidak pernah disentuh
+ * Mandat Anti-Label WAHA: seluruh penandaan label HANYA di level database internal
+ * (tabel Customer.labels, is_admin_labeled, is_hold_labeled). TIDAK ada pemanggilan
+ * wahaClient.addLabel/removeLabel/getChatLabels.
  *
- * Cron ini membandingkan label yang terpasang di WAHA dengan status DB dan
- * memperbaiki drift (label hilang / salah). Sekaligus berperan sebagai safety-net
- * untuk kolom Customer.is_admin_labeled / is_hold_labeled (Task: event-driven
- * label sync) — meng-copy event webhook label yang mungkin terlewat.
+ * Cron ini membandingkan flag internal DB dengan status reservasi dan memperbaiki drift.
  * Best-effort penuh; tidak pernah melempar error ke pemanggil.
  */
 export class LabelReconciliationService {
@@ -22,87 +16,39 @@ export class LabelReconciliationService {
     let driftsFixed = 0;
 
     try {
-      // 1. Customer dengan ≥1 reservasi hold (label 'pending payment' / 'repeat')
+      // 1. Customer dengan ≥1 reservasi hold → pastikan is_hold_labeled = true
       const pendingCustomers = await prisma.customer.findMany({
         where: { tenant_id: tenantId, reservations: { some: { status: 'hold' } } },
-        select: { id: true, phone: true },
+        select: { id: true, phone: true, is_hold_labeled: true },
       });
-
-      // 2. Customer dengan ≥1 reservasi confirmed/completed (riwayat pembelian;
-      //    kanonis patient-lifecycle — reservasi `completed` ikut dihitung)
-      const confirmedCustomers = await prisma.customer.findMany({
-        where: { tenant_id: tenantId, reservations: { some: { status: { in: ['confirmed', 'completed'] } } } },
-        select: { id: true, phone: true },
-      });
-      const confirmedPhoneSet = new Set(confirmedCustomers.map((c) => c.phone));
 
       for (const customer of pendingCustomers) {
-        const chatId = `${customer.phone}@c.us`;
-        const hasConfirmedHistory = confirmedPhoneSet.has(customer.phone);
-
-        let currentLabels: string[] | null = null;
-        try {
-          currentLabels = await wahaClient.getChatLabelsOrNull(chatId);
-          if (currentLabels === null) {
-            console.warn(`[LABEL RECONCILIATION] getChatLabelsOrNull returned null for ${chatId} (WAHA offline/timeout). Skipping.`);
-            continue;
+        if (!customer.is_hold_labeled) {
+          driftsFound++;
+          try {
+            await prisma.customer.update({ where: { id: customer.id }, data: { is_hold_labeled: true } });
+            driftsFixed++;
+            console.log(`[LABEL RECONCILIATION] Set is_hold_labeled=true for ${customer.phone} (has hold reservation).`);
+          } catch (err: any) {
+            console.warn(`[LABEL RECONCILIATION] DB update failed for ${customer.phone}:`, err.message);
           }
-        } catch (err: any) {
-          console.warn(`[LABEL RECONCILIATION] getChatLabelsOrNull failed for ${chatId}:`, err.message);
-          continue;
         }
+      }
 
-        // Safety-net kolom flag label (Task: event-driven label sync) — sync dari
-        // label yang sudah di-fetch, tanpa HTTP tambahan. Meng-copy event webhook
-        // label.chat.added/deleted yang mungkin terlewat.
+      // 2. Customer TANPA reservasi hold → pastikan is_hold_labeled = false
+      const nonHoldCustomers = await prisma.customer.findMany({
+        where: { tenant_id: tenantId, is_hold_labeled: true, reservations: { none: { status: 'hold' } } },
+        select: { id: true, phone: true },
+      });
+
+      for (const customer of nonHoldCustomers) {
+        driftsFound++;
         try {
-          const isAdmin = currentLabels.some((l) => l.toLowerCase() === 'admin');
-          const isHold = currentLabels.some((l) => l.toLowerCase() === 'hold');
-          await prisma.customer.updateMany({
-            where: { phone: customer.phone },
-            data: { is_admin_labeled: isAdmin, is_hold_labeled: isHold },
-          });
+          await prisma.customer.update({ where: { id: customer.id }, data: { is_hold_labeled: false } });
+          driftsFixed++;
+          console.log(`[LABEL RECONCILIATION] Cleared is_hold_labeled for ${customer.phone} (no hold reservation).`);
         } catch (err: any) {
-          // DB offline — kolom flag tidak bisa di-sync; label WAHA tetap disinkronkan di path lain
-        }
-
-        const hasPendingPayment = currentLabels.some((l) => l.toLowerCase() === 'pending payment');
-        const hasRepeat = currentLabels.some((l) => l.toLowerCase() === 'repeat');
-
-        if (hasConfirmedHistory) {
-          // Harus punya 'repeat', dan TIDAK boleh 'pending payment'
-          if (!hasRepeat) {
-            driftsFound++;
-            try {
-              await wahaClient.addLabel(chatId, 'repeat');
-              driftsFixed++;
-              console.log(`[LABEL RECONCILIATION] Added missing 'repeat' to ${chatId} (confirmed history + pending).`);
-            } catch (err: any) {
-              console.warn(`[LABEL RECONCILIATION] addLabel 'repeat' failed for ${chatId}:`, err.message);
-            }
-          }
-          if (hasPendingPayment) {
-            driftsFound++;
-            try {
-              await wahaClient.removeLabel(chatId, 'pending payment');
-              driftsFixed++;
-              console.log(`[LABEL RECONCILIATION] Removed stale 'pending payment' from ${chatId} (repeat order).`);
-            } catch (err: any) {
-              console.warn(`[LABEL RECONCILIATION] removeLabel 'pending payment' failed for ${chatId}:`, err.message);
-            }
-          }
-        } else {
-          // Customer baru (belum ada riwayat confirmed) → harus punya 'pending payment'
-          if (!hasPendingPayment) {
-            driftsFound++;
-            try {
-              await wahaClient.addLabel(chatId, 'pending payment');
-              driftsFixed++;
-              console.log(`[LABEL RECONCILIATION] Added missing 'pending payment' to ${chatId}.`);
-            } catch (err: any) {
-              console.warn(`[LABEL RECONCILIATION] addLabel 'pending payment' failed for ${chatId}:`, err.message);
-            }
-          }
+          console.warn(`[LABEL RECONCILIATION] DB update failed for ${customer.phone}:`, err.message);
         }
       }
 

@@ -302,22 +302,29 @@ export class ConversationService {
         tenantId
       ).catch((err) => console.error('Failed to sync auto-release to DB:', err));
 
-      // Remove label "hold" from WhatsApp/WAHA chat (default OFF di produksi, aktif jika ENABLE_WAHA_HOLD_LABEL=true)
-      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
-      if (enableHoldLabel) {
+      // Mandat Anti-Label WAHA: clear is_hold_labeled langsung via DB internal —
+      // menggantikan efek samping syncLabelColumn dari wahaClient.removeLabel yang dihapus.
+      // is_human_handling + is_hold_labeled di DB adalah single source of truth.
+      // Fire-and-forget best-effort; tidak pernah melempar ke pemanggil.
+      console.log(`[AUTO-RELEASE DB] Customer conversation released (DB-only, zero WAHA label mutation).`);
+      void (async () => {
         try {
-          const { wahaClient } = require('../integrations/waha/client');
-          prisma.customer.findUnique({ where: { id: conversation.customer_id } })
-            .then((customer: any) => {
-              if (customer) {
-                wahaClient.removeLabel(`${customer.phone}@c.us`, 'hold')
-                  .catch((err: any) => console.error('[LABEL ERROR] Failed to remove hold label on auto-release:', err.message));
-              }
+          let releasePhone: string | undefined = conversation.customer?.phone;
+          if (!releasePhone && conversation.customer_id) {
+            const cust = await prisma.customer.findUnique({
+              where: { id: conversation.customer_id },
+              select: { phone: true },
             });
+            releasePhone = cust?.phone ?? undefined;
+          }
+          if (!releasePhone) return;
+          const { customerService } = await import('./customer.service');
+          await customerService.setLabelFlags(releasePhone, { isHoldLabeled: false });
+          console.log(`[AUTO-RELEASE DB] is_hold_labeled=false untuk ${releasePhone}.`);
         } catch (err: any) {
-          console.error('[LABEL ERROR] Failed to initiate hold label removal on auto-release:', err.message);
+          console.warn('[AUTO-RELEASE DB] Gagal clear is_hold_labeled:', err.message);
         }
-      }
+      })();
 
       return { released: true, updatedConversation: conversation };
     }
@@ -430,19 +437,20 @@ export class ConversationService {
       isSandbox = isDummyOrTestContact(cleanPhone, customerName, isSandbox);
     }
 
-    // 1. Tambahkan label "hold" secara fisik ke chat WAHA jika diaktifkan (default disabled di produksi, lewati untuk sandbox)
-    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
+    // 1. Penandaan hold via DB internal (is_hold_labeled) — single source of truth.
+    //    Menggantikan efek samping syncLabelColumn dari wahaClient.addLabel yang telah
+    //    dihapus per Mandat Anti-Label WAHA. Guard sama seperti semula: lewati sandbox
+    //    & global_bot_disabled. Best-effort; tidak pernah melempar ke pemanggil.
+    console.log(`[ESCALATION DB] Customer ${phone} dialihkan ke penanganan manusia (DB only, zero WAHA label).`);
     const isGlobalDisabled = escalationReason === 'global_bot_disabled' || escalationReason === 'Global bot disabled';
-
-    if (!isSandbox && enableHoldLabel && !isGlobalDisabled) {
+    if (!isSandbox && !isGlobalDisabled) {
       try {
-        const { wahaClient } = await import('../integrations/waha/client');
-        await wahaClient.addLabel(`${phone}@c.us`, 'hold').catch((err: any) => console.warn(`[LABEL ERROR] Failed to auto-add hold label:`, err.message));
+        const { customerService } = await import('./customer.service');
+        await customerService.setLabelFlags(phone, { isHoldLabeled: true });
+        console.log(`[ESCALATION DB] is_hold_labeled=true untuk ${phone}.`);
       } catch (err: any) {
-        console.warn(`[WAHA CLIENT ERROR] Failed to import wahaClient:`, err.message);
+        console.warn(`[ESCALATION DB] Gagal set is_hold_labeled untuk ${phone}:`, err.message);
       }
-    } else {
-      console.log(`[LABEL SKIP] Skipping WAHA hold label mutation (feature flag disabled / UI-managed / sandbox).`);
     }
 
     // 2. Kirim notifikasi alert eskalasi ke Telegram Admin (hanya untuk customer riil, nonaktif untuk sandbox)

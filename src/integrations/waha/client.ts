@@ -53,7 +53,9 @@ export interface IWahaClient {
   sendTextDetailed?(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
   sendImage(chatId: string, url: string, caption?: string, replyTo?: string): Promise<boolean>;
   sendImageDetailed?(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
+  /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
   addLabel(chatId: string, labelName: string): Promise<boolean>;
+  /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
   getChatLabelsOrNull(chatId: string): Promise<string[] | null>;
@@ -645,6 +647,7 @@ export class WahaClient implements IWahaClient {
    * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
    */
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
+    console.warn(`[DEPRECATED] wahaClient.addLabel() called — MANDAT LARANGAN LABEL WAHA aktif. Gunakan DB internal (Customer.labels, is_hold_labeled, is_admin_labeled) instead. Caller stack:`, new Error().stack?.split('\n').slice(1, 4).join(' | '));
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
     const isTest = process.env.NODE_ENV === 'test';
@@ -741,6 +744,7 @@ export class WahaClient implements IWahaClient {
    * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
    */
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
+    console.warn(`[DEPRECATED] wahaClient.removeLabel() called — MANDAT LARANGAN LABEL WAHA aktif. Gunakan DB internal (Customer.labels, is_hold_labeled, is_admin_labeled) instead. Caller stack:`, new Error().stack?.split('\n').slice(1, 4).join(' | '));
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
     const isTest = process.env.NODE_ENV === 'test';

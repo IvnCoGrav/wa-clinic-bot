@@ -66,10 +66,9 @@ describe('WhatsApp Label Lifecycle', () => {
     await seedAiScopeAll();
   });
 
-  it('1. Customer baru (bukan legacy) via webhook → addLabel("new customer") dipanggil', async () => {
+  it('1. Customer baru (bukan legacy) via webhook → DB-only label lifecycle (zero WAHA label)', async () => {
     process.env.ADMIN_API_KEY = 'test_admin_key_123';
     process.env.ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER = 'false';
-    const addLabelSpy = vi.spyOn(wahaClient, 'addLabel');
 
     const phone = `628991${Date.now()}`;
     const app = buildApp();
@@ -90,7 +89,9 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(addLabelSpy).toHaveBeenCalledWith(`${phone}@c.us`, 'new customer');
+    // Mandat Anti-Label WAHA: new customer ditandai via DB internal, bukan wahaClient.addLabel
+    const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    expect(customer).toBeDefined();
   });
 
   it('2. Form reservasi pertama masuk → batchUpdateLabels(add: pending payment, remove: new customer)', async () => {

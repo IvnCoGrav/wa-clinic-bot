@@ -86,36 +86,29 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
     expect(JSON.parse(res.body).status).not.toBe('IGNORED_ADMIN');
   });
 
-  it('[TC 24] Manual Eskalasi → Memanggil addLabel("hold") dan set is_hold_labeled=true', async () => {
+  it('[TC 24] Manual Eskalasi → set is_hold_labeled=true (DB-only, zero WAHA label)', async () => {
     const phone = `6287774${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Escalate Customer', DEFAULT_TENANT_ID);
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
-    const spy = vi.spyOn(wahaClient, 'addLabel');
     await conversationService.escalateToHumanHandling(conv, phone, 'manual escalate test', DEFAULT_TENANT_ID);
 
-    expect(spy).toHaveBeenCalledWith(`${phone}@c.us`, 'hold');
     const updated = await customerService.getCustomerById(customer.id, DEFAULT_TENANT_ID);
     expect(updated.is_hold_labeled).toBe(true);
-    spy.mockRestore();
   });
 
-  it('[TC 25] Release state → Memanggil removeLabel("hold") dan reset is_hold_labeled=false', async () => {
+  it('[TC 25] Release state → reset is_hold_labeled=false (DB-only, zero WAHA label)', async () => {
     const phone = `6287775${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Release Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     await conversationService.updateConversationState(conv.id, { isHumanHandling: true, humanHandlingSince: new Date() }, DEFAULT_TENANT_ID);
 
-    const spy = vi.spyOn(wahaClient, 'removeLabel');
-    await wahaClient.removeLabel(`${phone}@c.us`, 'hold');
     await customerService.setLabelFlags(phone, { isHoldLabeled: false });
     await conversationService.updateConversationState(conv.id, { isHumanHandling: false, humanHandlingSince: null }, DEFAULT_TENANT_ID);
 
-    expect(spy).toHaveBeenCalledWith(`${phone}@c.us`, 'hold');
     const updated = await customerService.getCustomerById(customer.id, DEFAULT_TENANT_ID);
     expect(updated.is_hold_labeled).toBe(false);
-    spy.mockRestore();
   });
 
   it('[TC 26] Perubahan label mendadak di DB → Router langsung mendeteksi tanpa server restart', async () => {
@@ -146,16 +139,15 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
     getLabelsSpy.mockRestore();
   });
 
-  it('[TC 28] Eskalasi berulang → tidak memanggil addLabel ("hold") berulang kali jika sudah hold', async () => {
+  it('[TC 28] Eskalasi berulang → is_hold_labeled tetap true tanpaWAHA label call (idempotent)', async () => {
     const phone = `6287778${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Repeat Escalate Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
-    const spy = vi.spyOn(wahaClient, 'addLabel');
     await conversationService.escalateToHumanHandling(conv, phone, 'second escalate', DEFAULT_TENANT_ID);
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+    const updated = await customerService.getCustomerById(customer.id, DEFAULT_TENANT_ID);
+    expect(updated.is_hold_labeled).toBe(true);
   });
 
   it('[TC 29] Multi-tenant label check → setLabelFlags untuk phone tertentu meng-update secara global', async () => {
