@@ -14,6 +14,7 @@
 
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from './tenant';
+import { isMissingColumnError } from '../utils/prisma-errors';
 
 export interface BrandIdentity {
   botDisplayName: string;
@@ -65,7 +66,11 @@ export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID
       };
     }
   } catch (err: any) {
-    console.warn(`[BRAND] Gagal load override tenant ${tenantId}, gunakan default:`, err.message);
+    // Kolom belum termigrasi (P2022/42703, Issue #30) → default senyap;
+    // error lain tetap di-warn agar masalah riil terlihat di log.
+    if (!isMissingColumnError(err, 'settings')) {
+      console.warn(`[BRAND] Gagal load override tenant ${tenantId}, gunakan default:`, err.message);
+    }
   }
 
   brandCache.set(tenantId, resolved);

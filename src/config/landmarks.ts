@@ -642,3 +642,48 @@ export function findPopularLandmark(text: string): LandmarkEntry | null {
 
   return null;
 }
+
+// =========================================================================
+// KORIDOR ARTERI (Plan 6 FASE 3, Issue #21)
+// Nama jalan arteri populer yang disebut TANPA awalan "Jl." — dipetakan ke
+// kelurahan/kecamatan induk agar ter-resolve tanpa menodong customer.
+// SENGAJA tanpa koordinat: titik referensi diambil dari dataset gazetteer
+// (single source) via resolveArteryCorridor() di gazetteer.ts.
+// Pencocokan substring frasa penuh (tanpa regex) — kunci distinctive, dicek
+// terpanjang-dulu agar "raya darmo" menang atas pola lebih pendek.
+// =========================================================================
+
+export interface ArteryCorridor {
+  /** Frasa kanonis ternormalisasi (lowercase, spasi tunggal). */
+  key: string;
+  kelurahan: string;
+  kecamatan: string;
+}
+
+export const ARTERY_CORRIDORS: ArteryCorridor[] = [
+  { key: 'klampis jaya', kelurahan: 'Klampis Ngasem', kecamatan: 'Sukolilo' },
+  { key: 'bronggalan', kelurahan: 'Pacar Keling', kecamatan: 'Tambaksari' },
+  { key: 'kertajaya', kelurahan: 'Kertajaya', kecamatan: 'Gubeng' },
+  { key: 'mayjen sungkono', kelurahan: 'Gunung Sari', kecamatan: 'Dukuh Pakis' },
+  { key: 'hr muhammad', kelurahan: 'Pradah Kalikendal', kecamatan: 'Dukuh Pakis' },
+  { key: 'dharmahusada', kelurahan: 'Mojo', kecamatan: 'Gubeng' },
+  { key: 'raya darmo', kelurahan: 'Darmo', kecamatan: 'Wonokromo' },
+  { key: 'tropodo', kelurahan: 'Tropodo', kecamatan: 'Waru' },
+  { key: 'pepelegi', kelurahan: 'Pepelegi', kecamatan: 'Waru' },
+  { key: 'pondok jati', kelurahan: 'Pagerwojo', kecamatan: 'Buduran' },
+];
+
+const ARTERY_SORTED = [...ARTERY_CORRIDORS].sort((a, b) => b.key.length - a.key.length);
+
+/**
+ * Resolve teks lokasi ke koridor arteri (atau null). Murni data — tanpa I/O.
+ */
+export function resolveArteryCorridor(text: string): ArteryCorridor | null {
+  if (!text || typeof text !== 'string') return null;
+  const norm = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!norm) return null;
+  for (const c of ARTERY_SORTED) {
+    if (norm.includes(c.key)) return c;
+  }
+  return null;
+}

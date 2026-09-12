@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Plan 6 — Geocoding Resilience, Kombo Aritmatika & Schema Hardening (Issues #26, #21, #30; #16 sebagian) (2026-09-12)
+
+- **Kombo multi-treatment (FASE 1, Issue #26 RESOLVED)**: `numeric-fact-validator.ts` mengotorisasi jumlah subset 2–3 layanan resmi turn konsultasi (Si+Sj/+Addon/+Ongkir/+keduanya, termasuk triple; pool unik N≤6, O(N³)≤216) — hanya di luar mode strict. Deviasi dari rencana awal (ekspansi skema tool): kombinatorik sisi-validator, NOL perubahan kontrak tool. Test `multi-treatment-combo-validator.test.ts` (5).
+- **Parsing Maps URL standar (FASE 2, Issue #16 sebagian)**: `?q=/ ?ll= / ?daddr=/saddr=/destination=` via `URL`/`URLSearchParams` (`parseMapsUrl`, `parseLatLngPair`); pathname/hash tetap regex. Ditemukan saat implementasi: base-relatif memalsukan body HTML jadi URL + `parseFloat` menelan markup ("1,2</body>"→{1,2}) — dikunci paritas (host-like + desimal wajib) + 2 test regresi. Test maps 17/17. Sisa tahap 2–4 `implementation_plan.md` tetap terbuka.
+- **Koridor arteri (FASE 3, Issue #21 RESOLVED)**: `ARTERY_CORRIDORS` 10 koridor + `resolveArteryCorridor()` di `landmarks.ts`; `getGazetteerCoordinates` cek koridor dulu (kelurahan→kecamatan→eksisting), koordinat tetap dari dataset. "Darmo Permai" terbukti tak konflik. Test `artery-corridor-gazetteer.test.ts` (5) incl. ground-truth 10/10.
+- **P2022 resilience (FASE 4, Issue #30 IMPLEMENTED)**: helper `isMissingColumnError()`; pembaca `tenants.settings` kembali default senyap; migrasi idempoten `20260912000000_ensure_tenants_settings_column` (verifikasi live menunggu deploy). Test `tenant-settings-resilience.test.ts` (3).
+- **Full Regression**: 274 files, 1995 tests passed, 19 skipped, 0 failures. TSC clean.
+
 #### Plan 4 — Persona Multi-Tenant Data-Driven, RAG Safe-Merge Non-Destruktif (Issue #46 RESOLVED) & Pembersihan Frasa Broker (2026-09-12)
 
 - **Call 1 Router Prompt tenant-aware (Phase 1)**: `PersonaPromptBuilder.buildRouterPromptAsync` baru menyerap `TenantPromptConfig` (4 section dashboard sebagai blok overlay) + brand per-tenant via `getBrandIdentityAsync` (overlay `Tenant.settings.brand`, cached, pola `as any` mengikuti `few-shot-exemplars.ts` karena generated client lag). Varian sinkron dipertahankan pin; DB offline → output identik (zero behavior change). `agent-runner.ts` beralih ke varian async. Test `dynamic-router-prompt.test.ts` (3). Keputusan SaaS: tanpa migrasi/LOC besar → tanpa Confirmation Gate.

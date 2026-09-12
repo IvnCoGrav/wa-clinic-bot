@@ -3,9 +3,9 @@
  * Memvalidasi apakah semua nominal rupiah di teks balasan cocok dengan data tool resmi.
  *
  * Composite Pricing: selain harga tunggal resmi, total aritmatika yang sah
- * (layanan + ongkir, layanan + add-on, akumulasi keranjang/session) ikut
- * diotorisasi agar balasan cerdas LLM yang menghitung total tidak dibuang
- * sebagai false-positive halusinasi.
+ * (layanan + ongkir, layanan + add-on, KOMBO 2–3 layanan ad-hoc + add-on +
+ * ongkir, akumulasi keranjang/session) ikut diotorisasi agar balasan cerdas
+ * LLM yang menghitung total tidak dibuang sebagai false-positive halusinasi.
  */
 
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -146,6 +146,32 @@ export function validateNumericFacts(
         authorizedNumbers.add(sp + ap);
         for (const op of ongkirAll) {
           authorizedNumbers.add(sp + ap + op);
+        }
+      }
+    }
+    // - Kombo multi-layanan ad-hoc 2–3 treatment (Issue #26): turn konsultasi
+    //   ("Pijat Ceria 75rb + Nafsu Makan 60rb = ?") — jumlah subset layanan resmi
+    //   dari turn ini (Si+Sj, Si+Sj+Addon, Si+Sj+Ongkir, Si+Sj+Addon+Ongkir,
+    //   termasuk triple 3 layanan). Dibatasi N≤6 layanan unik: O(N^3) ≤ 216.
+    //   HANYA di luar mode strict (keranjang ≥2 item tetap mengunci total penuh).
+    const servicePool = [...new Set(serviceAll)].slice(0, 6);
+    const authCombo = (n: number): void => {
+      if (Number.isFinite(n) && n > 0) authorizedNumbers.add(Math.round(n));
+    };
+    const authWithExtras = (base: number): void => {
+      authCombo(base);
+      for (const ap of addonPrices) {
+        authCombo(base + ap);
+        for (const op of ongkirAll) authCombo(base + ap + op);
+      }
+      for (const op of ongkirAll) authCombo(base + op);
+    };
+    for (let i = 0; i < servicePool.length; i++) {
+      for (let j = i + 1; j < servicePool.length; j++) {
+        const pair = servicePool[i] + servicePool[j];
+        authWithExtras(pair);
+        for (let k = j + 1; k < servicePool.length; k++) {
+          authWithExtras(pair + servicePool[k]);
         }
       }
     }
