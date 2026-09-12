@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Selaraskan Unit Test Katalog Dinamis & Dokumentasi Tech Debt Test Suite (2026-09-12)
+
+- **Latar Belakang:** Sesuai mandat non-hardcode data-driven di AGENTS.md, unit test pencarian nominal tidak boleh rapuh/gagal akibat perubahan nama paket atau harga promo dinamis di dashboard oleh admin.
+- **Perubahan:**
+  - `src/v3/agent/persona.ts`: Penegasan disclaimer pada exemplar few-shot 100rb bahwa angka dan nama layanan adalah ilustrasi pola, asisten wajib selalu mengutip hasil tool `get_catalog_and_price`.
+  - `tests/unit/catalog-price-matching.test.ts` & `tests/unit/simulator-100rb-replay.test.ts`: Dirombak dinamis (data-driven) mengambil entri katalog aktif saat runtime, menguji nominal promo/normal riil, dan menambahkan adversarial edge cases (`NaN`, angka negatif).
+  - `docs/KNOWN_ISSUES.md`: Pencatatan Issue #47 mengenai mutasi `services_custom.json` saat `npm test` beserta workaround dan saran perbaikan isolasi fixture test.
+- **Verifikasi:** Targeted tests 10/10 passed, `npm run build` exit 0.
+
 #### Sinkronisasi Penuh Knowledge Chunks (FAQ) & Chat Bank (Few-Shot Exemplars) dari Live Server ke Lokal (2026-09-12)
 
 - **Latar Belakang:** Kebutuhan pengguna agar data RAG Chunks (`knowledge_chunks`) dan Chat Bank (`few_shot_exemplars`) di lingkungan lokal sama persis dengan yang ada di server produksi live (43.157.197.148:1403). Sebelumnya di lokal terdapat selisih (49 FAQ lama vs 43 FAQ kurasi live, dan hanya 7 exemplar default vs 26 exemplar live).

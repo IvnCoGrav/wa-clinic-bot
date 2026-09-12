@@ -1050,6 +1050,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Sengaja TIDAK disentuh:** `persona.ts` (aturan vaksin sudah konsisten), seed vaksin sudah ada (`seed-faq.ts:139-145`) — Fase seed = verifikasi sinkronisasi DB saja, dan `npm run seed:faq` (deleteMany destruktif) DILARANG jalan di live tanpa backup+staging.
 - **Pre-existing (terbukti di tree bersih via stash, BUKAN regresi perubahan ini):** full suite `npm test` gagal 19-23 test keluarga harga katalog (Pulih Ceria 70rb→75k, nama Prenatal/Ceria/Sinar Moksa di `services_custom.json` drift tanpa update ekspektasi test: `agent-tools`, `catalog-price-matching`, `treatment-swap-cart-sync`, `catalog-session-total`, `consultation-mode-no-premature-price`, `cross-sum-math-integrity`, `v3-audit-homecare-fix`, `v3-fondasional-pilar`, `cart-dedup-total`, `cart-single-primary-domain`, `treatment-followup-personal`, `simulator-100rb-replay` + 1 flaky `production_edge_cases` label). Targeted suites perubahan ini hijau: vaccine-sop-flow 5/5, factual 9/9, knowledge 3/3, agent-runner 7/7; `npm run build` exit 0.
 - **Tindak lanjut:** selaraskan ekspektasi test harga dengan data katalog dinamis (jangan hardcode nominal — mandat non-hardcode) ATAU kunci ulang `services_custom.json`; verifikasi manual Sandbox 2 query vaksin setelah deploy.
+- **Update 2026-09-12 sore (sinkron lokal 64b43e7):** `catalog-price-matching` + `simulator-100rb-replay` ditulis ulang data-driven (ekspektasi diturunkan dari katalog aktif, tanpa hafalan nama/nominal) → hijau 10/10 + contoh few-shot 100rb diberi disclaimer ilustrasi (otoritas angka = hasil tool). 16 failures lain di atas tetap pre-existing (terbukti ulang via stash di tree bersih).
 
 ---
 
@@ -1062,5 +1063,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - 2 skenario bank live tidak ada di file lokal ("Treatment setelah/sebelum imunisasi", "Treatment untuk susah makan"); 16 skenario default lokal tidak ada di live (bank live dari seed versi lama).
 - **Risiko:** `npm run seed:faq` (deleteMany) akan MENGHAPUS 14 kurasi admin live; seed ulang bank bisa menimpa koreksi admin. Jangan seed live tanpa backup + merge kurasi dulu.
 - **Tindak lanjut:** putuskan apakah 14 baris live di-merge ke `seed-faq.ts` + 2 skenario ke bank default (perlu konfirmasi owner).
+
+---
+
+## 47. [Tests] `npm test` mengotori tracked `services_custom.json` (2026-09-12)
+
+- **Status:** open (tech debt).
+- **Fakta:** setiap full-suite run memutasi `services_custom.json` di working tree (teramati: Bubble Spa `isActive: false` → `true` + field `serviceType`/`isAddon` hilang — test memutasi katalog in-memory lalu `saveServices()` menulis balik ke file tracked).
+- **Risiko:** diff noise / commit tak sengaja berisi perubahan katalog artifisial; harga lokal bisa menyimpang dari DB tanpa disadari.
+- **Workaround sekarang:** `git checkout -- services_custom.json` setelah run test bila diff hanya artifak test.
+- **Fix yang disarankan:** mock `saveServices`/isolasi file katalog saat test, atau pindahkan katalog test ke fixture temp (butuh persetujuan — menyentuh harness test global).
 
 
