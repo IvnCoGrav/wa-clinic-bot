@@ -5,30 +5,35 @@ import { treatmentCatalogService } from '../../src/services/treatment-catalog.se
 
 /**
  * Replay simulator sesi 973126 (adversarial, bukan happy-path):
- * Turn 2 "Mba 100rb berapa menit pijetnya?" DILARANG membajak
- * session.selectedTreatment ke Pijat Bayi Ceria, dan summarizer wajib
- * mengenali pertanyaan komposit nominal+durasi.
+ * pertanyaan nominal+durasi DILARANG membajak session.selectedTreatment,
+ * dan summarizer wajib mengenali pertanyaan komposit nominal+durasi.
+ * SENGAJA tanpa hafalan nama layanan (katalog dapat di-rename admin via
+ * dashboard) — nama diambil dinamis dari katalog aktif.
  */
-describe('Simulator 973126 replay: 100rb berapa menit', () => {
+describe('Simulator 973126 replay: nominal + durasi tanpa nama paket', () => {
+  const catalogNames = () =>
+    treatmentCatalogService.getAllServices(true).map((s) => s.name);
+
   it('detectAgreedTreatment mengabaikan pesan asisten (role user only)', () => {
-    const catalogNames = treatmentCatalogService.getAllServices(true).map((s) => s.name);
+    const names = catalogNames();
+    expect(names.length).toBeGreaterThan(0);
     const history = [
-      { role: 'assistant', content: 'Kami ada Pijat Bayi Ceria (Rileksasi) yang bagus Bunda' },
+      { role: 'assistant', content: `Kami ada ${names[0]} yang bagus Bunda` },
       { role: 'user', content: 'Mba 100rb berapa menit pijetnya?' },
     ];
-    // Pesan asisten menyebut Ceria → DILARANG dianggap customer setuju
-    expect(V3AgentRunner.detectAgreedTreatment(history, catalogNames)).toBeNull();
+    // Sebutan asisten DILARANG dianggap customer setuju; user tak menyebut
+    // nama paket apa pun → null.
+    expect(V3AgentRunner.detectAgreedTreatment(history, names)).toBeNull();
   });
 
   it('detectAgreedTreatment tetap menangkap persetujuan eksplisit user', () => {
-    const catalogNames = treatmentCatalogService.getAllServices(true).map((s) => s.name);
+    const names = catalogNames();
+    const agreed = names[0];
     const history = [
       { role: 'assistant', content: 'Ada beberapa pilihan Bunda' },
-      { role: 'user', content: 'Saya ambil Prenatal Massage (Pijat Hamil) ya' },
+      { role: 'user', content: `Saya ambil ${agreed} ya` },
     ];
-    expect(V3AgentRunner.detectAgreedTreatment(history, catalogNames)).toBe(
-      'Prenatal Massage (Pijat Hamil)'
-    );
+    expect(V3AgentRunner.detectAgreedTreatment(history, names)).toBe(agreed);
   });
 
   it('summarizer komposit nominal+durasi → klarifikasi paket, bukan durasi paket terkunci', () => {

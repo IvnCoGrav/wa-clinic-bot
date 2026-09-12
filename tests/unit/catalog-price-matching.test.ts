@@ -5,24 +5,40 @@ import { validateToolArgs } from '../../src/v3/tools/tool-schemas';
 
 /**
  * Sesi 973126 — pencarian nominal katalog data-driven per-tenant.
+ * SENGAJA tanpa hafalan nama/harga (admin dapat rename/ganti harga via
+ * dashboard kapan saja — lihat drift services_custom.json 2026-09-12:
+ * 'Prenatal Massage (Pijat Hamil)' -> 'Pijat Ibu Hamil / Prenatal Gentle
+ * Massage'). Semua ekspektasi diturunkan dari katalog aktif saat runtime.
  * Offline, tanpa DB (fallback in-memory catalog).
  */
 describe('Catalog price matching (sesi 973126)', () => {
-  it('findServicesByPrice(100000) memuat Prenatal Massage promo 100rb', () => {
-    const hits = treatmentCatalogService.findServicesByPrice(100000);
-    const names = hits.map((s) => s.name);
-    expect(names).toContain('Prenatal Massage (Pijat Hamil)');
+  const active = () =>
+    treatmentCatalogService.getAllServices(true).filter((s) => !s.isAddon);
+
+  it('findServicesByPrice mengembalikan layanan yang promo-nya == target', () => {
+    const sample = active().find((s) => typeof s.promoPrice === 'number');
+    expect(sample).toBeDefined();
+    const hits = treatmentCatalogService.findServicesByPrice(sample!.promoPrice);
+    expect(hits.map((s) => s.id)).toContain(sample!.id);
+    // Semua hit wajib cocok promo ATAU normal (exact-match, tol 0)
+    for (const h of hits) {
+      expect(h.promoPrice === sample!.promoPrice || h.originalPrice === sample!.promoPrice).toBe(true);
+    }
   });
 
-  it('findServicesByPrice(60000) memuat Pijat Bayi Ceria promo 60rb', () => {
-    const hits = treatmentCatalogService.findServicesByPrice(60000);
-    const names = hits.map((s) => s.name);
-    expect(names).toContain('Pijat Bayi Ceria (Rileksasi)');
+  it('findServicesByPrice mencakup harga normal juga', () => {
+    const sample = active().find(
+      (s) => typeof s.originalPrice === 'number' && s.originalPrice !== s.promoPrice
+    );
+    expect(sample).toBeDefined();
+    const hits = treatmentCatalogService.findServicesByPrice(sample!.originalPrice);
+    expect(hits.map((s) => s.id)).toContain(sample!.id);
   });
 
-  it('findServicesByPrice nominal tak dikenal mengembalikan kosong', () => {
-    expect(treatmentCatalogService.findServicesByPrice(12345)).toEqual([]);
+  it('findServicesByPrice nominal tak dikenal/kacau mengembalikan kosong', () => {
+    expect(treatmentCatalogService.findServicesByPrice(1)).toEqual([]);
     expect(treatmentCatalogService.findServicesByPrice(-5)).toEqual([]);
+    expect(treatmentCatalogService.findServicesByPrice(NaN)).toEqual([]);
   });
 
   it('schema get_catalog_and_price menerima targetPrice', () => {
@@ -30,21 +46,24 @@ describe('Catalog price matching (sesi 973126)', () => {
     expect(res.success).toBe(true);
   });
 
-  it('executeGetCatalog targetPrice 100000 lintas kategori + klarifikasi, tanpa kunci BABY', async () => {
-    const out = await executeGetCatalog({ targetPrice: 100000 } as any);
+  it('executeGetCatalog targetPrice lintas kategori + klarifikasi, tanpa kunci satu kategori', async () => {
+    // Sampel MOMS: tool DILARANG memfilternya keluar walau tanpa category.
+    const moms = active().find((s) => s.category === 'MOMS');
+    expect(moms).toBeDefined();
+    const out = await executeGetCatalog({ targetPrice: moms!.promoPrice } as any);
     expect(out.success).toBe(true);
-    const names = out.treatments.map((t) => t.name);
-    // Paket ibu promo 100rb wajib ada (tidak terfilter keluar oleh tebakan BABY)
-    expect(names).toContain('Prenatal Massage (Pijat Hamil)');
-    // Klarifikasi nominal wajib dikutip di message tool
-    expect(out.message).toContain('100.000');
-    expect(out.message).toContain('Prenatal Massage');
+    expect(out.treatments.map((t) => t.name)).toContain(moms!.name);
+    const nominalLabel = Number(moms!.promoPrice).toLocaleString('id-ID');
+    expect(out.message).toContain(nominalLabel);
+    expect(out.message).toContain(moms!.name);
   });
 
   it('executeGetCatalog targetPrice memaksa showPrices (angka mengalir ke prompt)', async () => {
-    const out = await executeGetCatalog({ targetPrice: 60000 } as any);
-    const first = out.treatments[0];
+    const sample = active().find((s) => typeof s.promoPrice === 'number');
+    const out = await executeGetCatalog({ targetPrice: sample!.promoPrice } as any);
+    const hit = out.treatments.find((t) => t.name === sample!.name);
+    expect(hit).toBeDefined();
     // Harga tidak di-strip saat nominal disebut
-    expect(first.promoPrice).toBeTypeOf('number');
+    expect(hit!.promoPrice).toBeTypeOf('number');
   });
 });
