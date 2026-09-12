@@ -111,9 +111,10 @@ export class V3AgentRunner {
       ContextGrounder.deriveConversationPhase(session, isFollowUp), session
     );
     let lastPhaseDirective = phaseDirective;
-    const routerPrompt = PersonaPromptBuilder.buildRouterPrompt(session, isFollowUp, {
+    const routerPrompt = await PersonaPromptBuilder.buildRouterPromptAsync(session, isFollowUp, {
       contextSummary,
       phaseDirective: lastPhaseDirective,
+      tenantId,
     });
     const currentSystemPrompt = routerPrompt;
     const fewShotExemplars: any[] = [];
