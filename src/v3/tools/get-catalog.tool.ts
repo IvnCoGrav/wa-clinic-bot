@@ -24,6 +24,13 @@ export interface GetCatalogInput {
    * Harga nominal HANYA dialirkan ke prompt bila true.
    */
   inquirePrice?: boolean;
+  /**
+   * Sinyal intensi durasi dari LLM: true HANYA bila customer eksplisit
+   * menanyakan lama waktu/durasi ("berapa menit", "berapa lama",
+   * "durasinya"). False/omit = durasi DISEMBUNYIKAN dari seluruh output tool
+   * (aturan emas 3) — cermin pola showPrices untuk nominal.
+   */
+  asksDuration?: boolean;
 }
 
 export interface CatalogTreatmentDetail {
@@ -119,6 +126,10 @@ export const GET_CATALOG_TOOL_SCHEMA = {
           type: 'boolean',
           description: 'Set true HANYA jika customer eksplisit menanyakan ANGKA biaya (kata: harga, tarif, ongkos, biaya, pricelist, berapa, diskon, promo, atau menyebut nominal seperti "60rb ya"). WAJIB false untuk: penjelasan cara kerja/khasiat ("gimana ya / seperti apa"), DAN untuk pertanyaan ketersediaan/nama paket ("dipaket apa ya", "ada paket apa", "paket ibu apa saja", "bisa treatment apa") — itu BUKAN pertanyaan harga, jawab dengan narasi manfaat tanpa nominal.'
         },
+        asksDuration: {
+          type: 'boolean',
+          description: 'Set true HANYA jika customer eksplisit menanyakan LAMA WAKTU/DURASI ("berapa menit", "berapa lama", "durasinya", "brp menit"). WAJIB false/omit bila tidak ditanya — durasi disembunyikan dari output (aturan emas 3).'
+        },
         targetPrice: {
           type: 'number',
           description: 'Nominal rupiah yang disebut customer (mis. "100rb" -> 100000, "60 ribu" -> 60000). WAJIB diisi bila customer menyebut angka nominal tanpa nama paket. Tool mencocokkan promoPrice/originalPrice katalog lintas kategori (MOMS/BABY/KIDS) dan mengembalikan klarifikasi paket mana yang sesuai nominal.'
@@ -133,13 +144,16 @@ export async function executeGetCatalog(
   tenantId: string = DEFAULT_TENANT_ID,
   sessionCtx?: CatalogSessionContext
 ): Promise<GetCatalogOutput> {
-  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice } = input;
+  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
   void gestationalWeeks;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
   // Menyebut nominal ("100rb") = bertanya harga → paksa showPrices true.
   const hasTargetPrice = typeof targetPrice === 'number' && Number.isFinite(targetPrice) && targetPrice > 0;
   const showPrices = inquirePrice === true || hasTargetPrice;
+  // Aturan emas 3 (sesi 834128): durasi menit HANYA mengalir bila customer
+  // eksplisit menanyakannya (asksDuration === true) — cermin showPrices.
+  const showDuration = asksDuration === true;
 
   try {
     const allServices = treatmentCatalogService.getAllServices(true, tenantId);
@@ -196,12 +210,28 @@ export async function executeGetCatalog(
         );
         filtered = comparator ? [...priceHits, comparator] : [...priceHits];
         const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
-        const hitLines = priceHits.slice(0, 4).map((s) =>
-          `${s.name} ${fmtRp(s.promoPrice)} promo (normal ${fmtRp(s.originalPrice)}, ${s.durationMinutes} mnt)`
+        // Prioritaskan diversitas kategori agar klarifikasi lintas audiens (Ibu vs Bayi vs Anak)
+        // tidak terpotong oleh dominasi satu kategori saat nominal cocok dengan banyak layanan.
+        const diverseHits: ClinicServiceItem[] = [];
+        const seenCats = new Set<string>();
+        for (const s of priceHits) {
+          if (!seenCats.has(s.category)) {
+            seenCats.add(s.category);
+            diverseHits.push(s);
+          }
+        }
+        for (const s of priceHits) {
+          if (diverseHits.length >= 4) break;
+          if (!diverseHits.includes(s)) {
+            diverseHits.push(s);
+          }
+        }
+        const hitLines = diverseHits.map((s) =>
+          `${s.name} ${fmtRp(s.promoPrice)} promo (normal ${fmtRp(s.originalPrice)}${showDuration ? `, ${s.durationMinutes} mnt` : ''})`
         ).join('; ');
         priceClarification = `Nominal ${fmtRp(Number(targetPrice))} sesuai dengan: ${hitLines}.`
           + (comparator
-            ? ` Pembanding: ${comparator.name} ${fmtRp(comparator.promoPrice)} promo (${comparator.durationMinutes} mnt) — tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`
+            ? ` Pembanding: ${comparator.name} ${fmtRp(comparator.promoPrice)} promo${showDuration ? ` (${comparator.durationMinutes} mnt)` : ''} — tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`
             : ` Tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`);
       }
     }
@@ -279,10 +309,36 @@ export async function executeGetCatalog(
       }
       return sc;
     };
+    // Default tier usia tak diketahui (sesi 138207, kebijakan BABY-first):
+    // bila umur anak belum disebut (childAgeMonths null) dan dua varian
+    // se-famili seri (skor terapi sama, mis. Lahap < 2 thn vs > 2 thn),
+    // dahulukan kategori BABY selaras spesialisasi Kala Moms and Baby Spa.
+    // Data-driven via kategori katalog — tanpa hardcode nama layanan.
+    const ageUnknown = childAgeMonths === undefined || childAgeMonths === null;
+    const babyFirstOf = (id: string): number => {
+      if (!ageUnknown) return 0;
+      const s = serviceById.get(id);
+      const c = (s?.category || '').toUpperCase();
+      return c === 'BABY' ? 1 : 0;
+    };
+    // Sesi 834128 (Core Services First, data-driven tanpa hafalan nama):
+    // layanan kilat penunjang (durasi < ambang, mis. mandi/cukur/tindik/
+    // add-on 15–25 mnt) tenggelam di bawah treatment penuh (≥ ambang) pada
+    // seluruh urutan — nilai ambang + durasi 100% dari data katalog
+    // per-tenant (DB), BUKAN daftar nama hardcode. Stabil: hanya memutus
+    // seri setelah skor rekomendasi/terapi/bridge/BABY-first.
+    const QUICK_SUPPORT_MAX_MINUTES = 30;
+    const isQuickSupport = (id: string): boolean => {
+      const s = serviceById.get(id);
+      const d = typeof s?.durationMinutes === 'number' ? s.durationMinutes : 0;
+      return d > 0 && d < QUICK_SUPPORT_MAX_MINUTES;
+    };
     formattedTreatments.sort((a, b) =>
       ((b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0))
       || (therapyScoreOf(b.id) - therapyScoreOf(a.id))
       || ((isBridgeMassage(b.id) ? 1 : 0) - (isBridgeMassage(a.id) ? 1 : 0))
+      || (babyFirstOf(b.id) - babyFirstOf(a.id))
+      || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
     );
 
     // Phase 2 — Clinical linkage: ibu PASCA MELAHIRKAN (bayi sudah lahir)
@@ -327,6 +383,13 @@ export async function executeGetCatalog(
         delete (t as any).durationMinutes;
       }
     }
+    // Aturan emas 3 (sesi 834128): durasi disembunyikan bila tidak ditanya —
+    // independen dari showPrices (harga ditanya ≠ durasi ditanya).
+    if (!showDuration) {
+      for (const t of formattedTreatments) {
+        delete (t as any).durationMinutes;
+      }
+    }
 
     const formatRp = (n: number): string => `Rp ${n.toLocaleString('id-ID')}`;
 
@@ -338,7 +401,7 @@ export async function executeGetCatalog(
       // Catatan: saat !showPrices, field numerik sudah di-strip di atas namun
       // cabang ini tidak memakai angka (priceLine='.', comboLine='') — aman.
       const priceLine = showPrices
-        ? ` promo ${formatRp(Number(topService.promoPrice ?? 0))} (normal ${formatRp(Number(topService.originalPrice ?? 0))}, durasi ${Number(topService.durationMinutes ?? 0)} menit).`
+        ? ` promo ${formatRp(Number(topService.promoPrice ?? 0))} (normal ${formatRp(Number(topService.originalPrice ?? 0))}${showDuration && topService.durationMinutes != null ? `, durasi ${Number(topService.durationMinutes)} menit` : ''}).`
         : '.';
       const moksa = allServices.find((s) => s.id.includes('moksa'));
       const topText = `${topService.name} ${topService.description}`.toLowerCase();
@@ -355,14 +418,16 @@ export async function executeGetCatalog(
     // format tool result, jadi tool result sendiri wajib bernada percakapan.
     const summaryList = formattedTreatments.slice(0, 4).map(t =>
       showPrices
-        ? `• *${t.name}* (Promo ${formatRp(Number(t.promoPrice ?? 0))}, normal ${formatRp(Number(t.originalPrice ?? 0))}, ${Number(t.durationMinutes ?? 0)} menit): ${t.description}`
+        ? `• *${t.name}* (Promo ${formatRp(Number(t.promoPrice ?? 0))}, normal ${formatRp(Number(t.originalPrice ?? 0))}${showDuration && t.durationMinutes != null ? `, ${Number(t.durationMinutes)} menit` : ''}): ${t.description}`
         : `• *${t.name}*: ${t.description}`
     ).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;
     if (showPrices && (formattedTreatments.length === 1 || specificTreatmentName)) {
       const target = formattedTreatments[0];
-      if (target && target.promoPrice != null && target.originalPrice != null && target.durationMinutes != null) {
+      // Aturan emas 3: template harga TETAP disusun tanpa durasi bila durasi
+      // tidak ditanya (guard tidak lagi mensyaratkan durationMinutes).
+      if (target && target.promoPrice != null && target.originalPrice != null) {
         // Audit 222655 (amnesia total biaya): bila ongkir sesi sudah QUOTED,
         // template WAJIB menggabungkan treatment + ongkir promo = total
         // keseluruhan (anti "hanya Rp 70.000 tanpa total"). Tanpa ongkir sesi,
@@ -372,11 +437,12 @@ export async function executeGetCatalog(
         if (quotedOngkir != null && Number.isFinite(Number(quotedOngkir))) {
           const grand = Number(target.promoPrice) + Number(quotedOngkir);
           const area = sessionCtx?.kelurahan ? ` ke ${sessionCtx.kelurahan}` : '';
-          suggestedPriceReply = `Untuk *${target.name}*, durasinya ${target.durationMinutes} menit dan saat ini ada promo jadi *Rp ${Number(target.promoPrice).toLocaleString('id-ID')}* (harga normal *Rp ${Number(target.originalPrice).toLocaleString('id-ID')}*). Ditambah ongkir promo${area} (*Rp ${Number(quotedOngkir).toLocaleString('id-ID')}*), total keseluruhannya menjadi *Rp ${grand.toLocaleString('id-ID')}* ya Bunda 😊`;
+          const durClause = showDuration && target.durationMinutes != null ? `durasinya ${target.durationMinutes} menit dan ` : '';
+          suggestedPriceReply = `Untuk *${target.name}*, ${durClause}saat ini ada promo jadi *Rp ${Number(target.promoPrice).toLocaleString('id-ID')}* (harga normal *Rp ${Number(target.originalPrice).toLocaleString('id-ID')}*). Ditambah ongkir promo${area} (*Rp ${Number(quotedOngkir).toLocaleString('id-ID')}*), total keseluruhannya menjadi *Rp ${grand.toLocaleString('id-ID')}* ya Bunda 😊`;
         } else {
           suggestedPriceReply = TEMPLATES.priceInfo({
             name: target.name,
-            durationMinutes: target.durationMinutes,
+            durationMinutes: showDuration ? target.durationMinutes : undefined,
             normalPrice: target.originalPrice,
             promoPrice: target.promoPrice,
           });
@@ -416,7 +482,7 @@ export async function executeGetCatalog(
     // Sesi 973126: bila nominal dicocokkan, tutup pemantik klinis generik diganti
     // klarifikasi subjek pasien (Bunda vs si kecil) — paket belum dipilih.
     const closingGuide = priceClarification
-      ? 'Wajib sebutkan paket yang sesuai nominal di atas beserta durasinya, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).'
+      ? `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`
       : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.';
     return {
       success: true,

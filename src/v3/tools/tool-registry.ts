@@ -33,6 +33,8 @@ export interface ToolExecutionContext {
   locationSnapshot?: CatalogSessionContext;
   /** Waktu kunjungan yang diminta/disepakati (anti pengulangan tanya hari). */
   preferredDateSnapshot?: string;
+  /** Audit 694493: true bila customer sudah tanya harga/total (mode transaksional). */
+  priceDiscussedSnapshot?: boolean;
   /** Teks pesan user terkini (anti-halusinasi hari save_reservation). */
   recentUserTexts?: string[];
 }
@@ -47,6 +49,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         candidateTreatmentName: ctx.selectedTreatment,
         cartSnapshot: ctx.cartSnapshot,
         preferredDate: ctx.preferredDateSnapshot,
+        priceDiscussed: ctx.priceDiscussedSnapshot,
       };
       return await executeCalculateDelivery(input);
     }
@@ -60,6 +63,8 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         symptoms: args.symptoms,
         specificTreatmentName: args.specificTreatmentName,
         inquirePrice: args.inquirePrice,
+        targetPrice: args.targetPrice,
+        asksDuration: args.asksDuration,
       };
       return await executeGetCatalog(input, ctx.tenantId, {
         ...(ctx.locationSnapshot || {}),

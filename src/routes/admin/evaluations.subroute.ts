@@ -246,6 +246,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               conversationId: conversation.id,
               phone: customer.phone,
               chatId: `${targetPhone}@c.us`,
+              bubbleCorrelationId: incomingMessage.id,
               incomingText,
               originalText: combinedRawText,
             });
@@ -545,7 +546,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/debug/llm-grouped-logs',
     async (
-      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string } }>,
+      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string; customerPhone?: string } }>,
       reply: FastifyReply
     ) => {
       try {
@@ -553,7 +554,11 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
         const limit = Math.max(1, Math.min(500, parseInt(request.query?.limit || '200', 10) || 200));
         const flow = request.query?.flow || 'all';
         const groupedLogs = getGroupedLlmExecutionLogs(limit, flow);
-        return reply.status(200).send({ success: true, data: groupedLogs });
+        const phoneFilter = (request.query?.customerPhone || '').trim();
+        const filtered = phoneFilter
+          ? groupedLogs.filter((g) => g.customerPhone.includes(phoneFilter))
+          : groupedLogs;
+        return reply.status(200).send({ success: true, data: filtered });
       } catch (err: any) {
         return reply.status(500).send({ success: false, message: err?.message });
       }
@@ -570,7 +575,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       try {
         const { clearLlmExecutionLogs } = await import('../../utils/llm-execution-logger');
         clearLlmExecutionLogs();
-        return reply.status(200).send({ success: true, message: 'Buffer LLM execution logs berhasil dibersihkan.' });
+        return reply.status(200).send({ success: true, message: 'Buffer memori dan berkas LLM execution logs hari ini berhasil dibersihkan.' });
       } catch (err: any) {
         return reply.status(500).send({ success: false, message: err?.message });
       }

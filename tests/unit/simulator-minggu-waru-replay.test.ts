@@ -4,6 +4,7 @@ import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
@@ -64,7 +65,7 @@ describe('Replay simulator Minggu-Waru — hierarki jadwal + anti-halu domisili'
   it('Turn 1: prompt membawa hierarki 5a (lokasi-unknown → tanya domisili, bukan cekkan)', async () => {
     const customer = await freshCustomer('Bunda Minggu');
     const execSpy = vi
-      .spyOn(V3AgentRunner, 'executeChatCompletion')
+      .spyOn(GenerationStage, 'executeChatCompletion')
       .mockResolvedValue(mockDraft(BAD_TURN_1));
 
     await turn(customer, 'Hari Minggu pagi kosong tidak ya ?', 1);
@@ -80,7 +81,7 @@ describe('Replay simulator Minggu-Waru — hierarki jadwal + anti-halu domisili'
   it('Turn 2: "baik kak" tanpa lokasi → DILARANG menyebut kecamatan mana pun', async () => {
     const customer = await freshCustomer('Bunda Baik');
     const execSpy = vi
-      .spyOn(V3AgentRunner, 'executeChatCompletion')
+      .spyOn(GenerationStage, 'executeChatCompletion')
       .mockResolvedValueOnce(mockDraft(BAD_TURN_2))
       .mockResolvedValue(mockDraft('Kalau boleh tahu rumah Bunda di daerah mana ya?'));
 

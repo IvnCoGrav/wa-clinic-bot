@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConversationState } from '@prisma/client';
 import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
+import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -133,7 +134,7 @@ describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
   it('Non-medical message → normal flow, tidak ter-escalate', async () => {
     // Kontrak Fase B: V3 yang throw (outage) = eskalasi. Maka uji "normal flow"
     // WAJIB memalsukan LLM di lapisan executeChatCompletion agar V3 sukses.
-    vi.spyOn(V3AgentRunner, 'executeChatCompletion').mockResolvedValue({
+    vi.spyOn(GenerationStage, 'executeChatCompletion').mockResolvedValue({
       choices: [{ message: { content: 'Baik Bunda, berikut info harga paket pijat bayi ya.' } }],
     } as any);
     const phone = `62893${Date.now()}`;

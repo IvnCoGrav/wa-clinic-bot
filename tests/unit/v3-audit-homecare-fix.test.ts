@@ -36,11 +36,11 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     } as any);
   });
 
-  it('"Induksi Massage Fullbody" → MOMS (bukan BABY)', async () => {
+  it('"Oksitosin Massage Fullbody" → MOMS (bukan BABY)', async () => {
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Induksi Massage Fullbody',
+      treatmentName: 'Oksitosin Massage Fullbody',
       bookingDate: '2026-09-10',
       gestationalWeeks: 38,
       momStage: 'PREGNANT',
@@ -59,7 +59,7 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Induksi Massage Fullbody',
+      treatmentName: 'Oksitosin Massage Fullbody',
       additionalTreatments: ['Pijat Bayi Ceria'],
       bookingDate: '2026-09-10',
       gestationalWeeks: 38,
@@ -74,16 +74,16 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Induksi Massage Fullbody',
+      treatmentName: 'Oksitosin Massage Fullbody',
       bookingDate: '2026-09-10',
     } as any);
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
-    // Promo katalog Induksi Massage Fullbody = Rp 105.000
+    // Promo katalog Oksitosin Massage Fullbody = Rp 105.000
     expect(called.purchaseValue).toBe(105000);
   });
 
-  it('calcBookedSubtotal cocok exact & substring ("induksi massage fullbody")', () => {
-    const r = calcBookedSubtotal(['Induksi Massage Fullbody']);
+  it('calcBookedSubtotal cocok exact & substring ("oksitosin massage fullbody")', () => {
+    const r = calcBookedSubtotal(['Oksitosin Massage Fullbody']);
     expect(r.matched).toBe(1);
     expect(r.subtotalPromo).toBe(105000);
   });
@@ -97,7 +97,7 @@ describe('Layer 1 — Tanpa penolakan booking (aturan 21: wilayah sesi cukup)', 
     } as any);
   });
 
-  it('"boleh bund" + lokasi wilayah sesi → TETAP tersimpan terjadwal (confirmed)', async () => {
+  it('"boleh bund" + lokasi wilayah sesi → TETAP tersimpan + ditampung (confirmed)', async () => {
     await GoalTracker.updateGoalSession('gate-conv-1', {
       genderGreeting: 'Bunda',
       location: { rawText: 'Desa kedungkendo candi sidoarjo' },
@@ -105,13 +105,14 @@ describe('Layer 1 — Tanpa penolakan booking (aturan 21: wilayah sesi cukup)', 
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Induksi Massage Fullbody',
+      treatmentName: 'Oksitosin Massage Fullbody',
       bookingDate: 'Sabtu',
       conversationId: 'gate-conv-1',
     } as any);
     expect(res.success).toBe(true);
     expect(res.needsInfo).toBeUndefined();
-    expect(res.message).toContain('terjadwal');
+    expect(res.message).toContain('tampung');
+    expect(res.message).toContain('cekkan');
     expect(res.message).not.toContain('nama Bunda dan alamat lengkap');
     expect(res.message).not.toContain('Admin CS');
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;

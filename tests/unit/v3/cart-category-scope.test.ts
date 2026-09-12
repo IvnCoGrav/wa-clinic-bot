@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GoalTracker } from '../../../src/v3/state/goal-tracker';
-import { V3AgentRunner } from '../../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../../src/v3/agent/pipeline/context-grounder';
 import { V3ConversationSummarizer } from '../../../src/v3/state/conversation-summarizer';
 
 /**
@@ -49,11 +49,11 @@ describe('Conversation Phase (deterministik dari session)', () => {
   const base: any = { genderGreeting: 'Bunda' };
 
   it('GREETING bila bukan follow-up dan state kosong', () => {
-    expect(V3AgentRunner.deriveConversationPhase(base, false)).toBe('GREETING');
+    expect(ContextGrounder.deriveConversationPhase(base, false)).toBe('GREETING');
   });
 
   it('ONGKIR_QUOTED bila ongkirStatus QUOTED', () => {
-    const phase = V3AgentRunner.deriveConversationPhase(
+    const phase = ContextGrounder.deriveConversationPhase(
       { ...base, location: { rawText: 'x', kelurahan: 'Tebel Barat' }, ongkirStatus: 'QUOTED' },
       true
     );
@@ -61,7 +61,7 @@ describe('Conversation Phase (deterministik dari session)', () => {
   });
 
   it('TREATMENT_DISCUSSED bila selectedTreatment terisi', () => {
-    const phase = V3AgentRunner.deriveConversationPhase(
+    const phase = ContextGrounder.deriveConversationPhase(
       { ...base, selectedTreatment: 'Oksitosin Massage' },
       true
     );
@@ -69,7 +69,7 @@ describe('Conversation Phase (deterministik dari session)', () => {
   });
 
   it('SCHEDULING bila booking.preferredDate terisi', () => {
-    const phase = V3AgentRunner.deriveConversationPhase(
+    const phase = ContextGrounder.deriveConversationPhase(
       { ...base, booking: { preferredDate: 'Jumat', isConfirmed: false } },
       true
     );
@@ -77,7 +77,7 @@ describe('Conversation Phase (deterministik dari session)', () => {
   });
 
   it('directive ONGKIR_QUOTED melarang calculate_delivery ulang', () => {
-    const d = V3AgentRunner.buildPhaseDirective('ONGKIR_QUOTED', {
+    const d = ContextGrounder.buildPhaseDirective('ONGKIR_QUOTED', {
       ...base,
       location: { rawText: 'x', kelurahan: 'Tebel Barat', distanceKm: 5 },
       ongkirStatus: 'QUOTED',

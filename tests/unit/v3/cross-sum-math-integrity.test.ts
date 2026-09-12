@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import { validateNumericFacts } from '../../../src/v3/guardrails/numeric-fact-validator';
-import { attemptNumericReprompt } from '../../../src/v3/agent/agent-runner';
+import { attemptNumericReprompt } from '../../../src/v3/agent/pipeline/guardrail-pipeline';
 
 vi.mock('axios');
 

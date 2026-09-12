@@ -45,6 +45,14 @@ export interface BookingState {
   reservationId?: string;
   isConfirmed: boolean;
   /**
+   * Skema human handling pasca-reservasi (sesi 462651): true bila reservasi
+   * tercatat dan ketersediaan masih menunggu verifikasi staf. Mengaktifkan
+   * acknowledgement gate di agent-runner (1x closing + handoff, anti loop).
+   */
+  needsStaffVerification?: boolean;
+  /** True bila closing pasca-reservasi sudah dikirim (ack berikutnya senyap). */
+  handoffClosingSent?: boolean;
+  /**
    * Audit 337101 (anti CTA-looping): waktu yang DIMINTA customer
    * ("sekarang"/"hari ini"/nama hari) — dicatat saat sinyal jadwal terdeteksi
    * walau reservasi BELUM dibuat. Berbeda dari preferredDate (kesepakatan
@@ -607,6 +615,25 @@ export class GoalTracker {
       const cur = cart.find((c) => c.name.toLowerCase() === svc.name.toLowerCase() && (c.recipientScope || 'GENERAL') === scope);
       if (cur && stored.recipientLabel) cur.recipientLabel = stored.recipientLabel;
     }
+    // Sesi 834128 (offer-confirmation gate, anti-kunci sepihak): himpun
+    // layanan yang PERNAH cocok di pesan USER (data-driven via matcher
+    // katalog yang sama — tanpa daftar frasa hafalan). Tawaran asisten yang
+    // memuat ≥2 layanan PRIMARY berbeda DILARANG mengunci keranjang bila
+    // TIDAK SATU PUN di antaranya pernah dirujuk user ("boleh deh yang itu"
+    // = belum memilih). Tawaran =/= pilihan.
+    const userConfirmedNames = new Set<string>();
+    for (let u = 0; u < history.length; u++) {
+      if ((history[u]?.role || '').toLowerCase() !== 'user') continue;
+      const uText = (history[u]?.content || '').toLowerCase();
+      if (!uText || GoalTracker.isDurationOnlyQuestion(uText)) continue;
+      for (const s of services) {
+        if (matchedFormOf(uText, s) !== null || fuzzyMatches(uText, s.name)) {
+          userConfirmedNames.add(s.name.toLowerCase());
+        }
+      }
+    }
+    const primaryTypeOf = (s: (typeof services)[number]): string =>
+      s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
@@ -705,6 +732,33 @@ export class GoalTracker {
         fuzzyHits = deduped;
       }
       for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) {
+        // Sesi 834128: tawaran multi-opsi asisten (≥2 PRIMARY berbeda dalam
+        // satu pesan) hanya boleh masuk keranjang bila user pernah merujuk
+        // itemnya. Tanpa rujukan user, dorong HANYA yang terkonfirmasi;
+        // bila tak ada yang terkonfirmasi, lewati semua (tunggu klarifikasi).
+        if (isAssistant && primaryTypeOf(s) === 'PRIMARY') {
+          const offeredPrimary = new Set(
+            [...fullHits, ...cleanHits]
+              .filter((o) => primaryTypeOf(o) === 'PRIMARY')
+              .map((o) => o.name.toLowerCase())
+          );
+          if (offeredPrimary.size >= 2) {
+            const confirmedOffered = [...offeredPrimary].filter((n) => userConfirmedNames.has(n));
+            if (confirmedOffered.length === 0) continue;
+            if (!userConfirmedNames.has(s.name.toLowerCase())) continue;
+          }
+        }
+        // Sesi 188034 (proteksi orphan ADDON): terapi pendamping (Moksa/
+        // Nebulizer, isAddon) DILARANG menjadi pesanan mandiri. Add-on HANYA
+        // masuk bila (a) keranjang berjalan sudah memuat layanan utama, ATAU
+        // (b) pesan turn ini juga memuat layanan utama. Tanya konsultasi
+        // add-on tanpa paket utama → lewati (SOP: wajib digabung pijat).
+        if (primaryTypeOf(s) === 'ADDON') {
+          const msgHasNonAddon = [...fullHits, ...cleanHits, ...fuzzyHits]
+            .some((x) => primaryTypeOf(x) !== 'ADDON');
+          const cartHasNonAddon = cart.some((c) => c.type !== 'ADDON');
+          if (!msgHasNonAddon && !cartHasNonAddon) continue;
+        }
         pushService(s, GoalTracker.detectRecipientScope(text, s));
       }
     }
@@ -732,6 +786,14 @@ export class GoalTracker {
         inCart.delete(keyOf(swap.oldName, swap.scope));
         inCart.add(keyOf(swap.newName, swap.scope));
       }
+    }
+    // Proteksi Orphan ADDON, gerbang penutup (sesi 188034): bila keranjang
+    // akhir tidak memuat layanan utama apa pun (PRIMARY/SERVICE/BUNDLE),
+    // bersihkan seluruh item ADDON agar tidak ada tagihan mandiri fiktif
+    // (mis. Moksa Rp 15k + ongkir). Add-on yang mendampingi layanan utama
+    // tidak tersentuh (hasNonAddon true).
+    if (!cart.some((it) => it.type !== 'ADDON')) {
+      return cart.filter((it) => it.type !== 'ADDON');
     }
     return cart;
   }
@@ -791,6 +853,22 @@ export class GoalTracker {
       }
       return t.toLowerCase();
     };
+    // Proteksi Covered Tokens (anti salah-swap varian se-famili): token
+    // signifikan milik item keranjang yang namanya (penuh/bersih) disebut
+    // eksplisit oleh asisten di offerText DILARANG memicu fuzzy-match varian
+    // lain — mis. cart berisi "Pijat Bayi Pulih Ceria" + asisten menyebutnya
+    // tidak boleh men-swap ke "Pijat Kids Pulih Ceria" via token bersama.
+    const cartCoveredTokens = new Set<string>();
+    for (const c of (session.cartItems || [])) {
+      const nm = (c?.name || '').toLowerCase();
+      if (!nm) continue;
+      const clean = cleanOf(c.name);
+      if (offerText.includes(nm) || (clean.length >= 4 && offerText.includes(clean))) {
+        for (const t of nm.split(/[^a-z0-9]+/)) {
+          if (t.length > 3 && !GENERIC_CLINIC_TOKENS.has(t)) cartCoveredTokens.add(t);
+        }
+      }
+    }
     const candidates = [...(catalog || [])]
       .filter((s) => s && s.name && s.name.trim().length >= 4 && !s.isAddon)
       .filter((s) => {
@@ -802,7 +880,11 @@ export class GoalTracker {
         // ≥2 token signifikan non-generik (aturan fuzzy yang sama dengan cart).
         const toks = s.name.toLowerCase().split(/[^a-z0-9]+/)
           .filter((t) => t.length > 3 && !GENERIC_CLINIC_TOKENS.has(t));
-        return toks.filter((t) => offerText.includes(t)).length >= 2;
+        const matched = toks.filter((t) => offerText.includes(t));
+        // Varian se-famili yang HANYA cocok lewat token milik item cart yang
+        // sudah disebut asisten (covered) DILARANG jadi kandidat swap.
+        const uncovered = matched.filter((t) => !cartCoveredTokens.has(t));
+        return uncovered.length >= 2;
       })
       .sort((a, b) => b.name.length - a.name.length);
     if (candidates.length === 0) return null;
@@ -1324,7 +1406,7 @@ export class GoalTracker {
       try {
         const def = treatmentCatalogService.getDefaultRelaxationService();
         if (def) {
-          pregroundedRecommendation = `• Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan): *${def.name}* (Promo ${`Rp ${def.promoPrice.toLocaleString('id-ID')}`}) — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk bayi sehat; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]`;
+          pregroundedRecommendation = `• Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan): *${def.name}* — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk bayi sehat; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]\n  [MANDAT: DILARANG memuntahkan harga/promo jika customer belum bertanya harga/biaya!]`;
         }
       } catch (_) {}
     }

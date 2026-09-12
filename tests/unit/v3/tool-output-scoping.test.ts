@@ -29,6 +29,18 @@ describe('Tool Output Scoping (no-price context)', () => {
     expect(out.success).toBe(true);
     expect(out.treatments.length).toBeGreaterThan(0);
     expect(out.treatments.some((t) => typeof t.promoPrice === 'number')).toBe(true);
-    expect(out.treatments.some((t) => typeof t.durationMinutes === 'number')).toBe(true);
+  });
+
+  it('aturan emas 3 (sesi 834128): durasi hanya mengalir bila asksDuration=true', async () => {
+    const noDur = await executeGetCatalog({ inquirePrice: true, symptoms: ['batuk'] });
+    expect(noDur.success).toBe(true);
+    for (const t of noDur.treatments) {
+      expect(t.durationMinutes).toBeUndefined();
+    }
+    expect(noDur.message).not.toMatch(/menit/i);
+    const withDur = await executeGetCatalog({ inquirePrice: true, symptoms: ['batuk'], asksDuration: true });
+    expect(withDur.success).toBe(true);
+    expect(withDur.treatments.some((t) => typeof t.durationMinutes === 'number')).toBe(true);
+    expect(withDur.message).toMatch(/menit/i);
   });
 });

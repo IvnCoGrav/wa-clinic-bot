@@ -108,10 +108,20 @@ export function validateNumericFacts(
     // Katalog offline → lanjut dengan data turn saja (tidak pernah melempar).
   }
 
-  // Ongkir dari session (turn sebelumnya sudah QUOTED) ikut mengotorisasi komposit.
+  // Ongkir dari session (turn sebelumnya sudah QUOTED) ikut mengotorisasi komposit
+  // DAN sebagai angka mandiri (sesi 138207: ongkir promo Rp 20.000 resmi yang
+  // dirinci di pesan biaya DILARANG dituduh halusinasi).
   const sess = opts?.session;
-  if (sess?.location?.ongkirPromo != null) pushNum(ongkirPromoList, sess.location.ongkirPromo);
-  if (sess?.location?.ongkirNormal != null) pushNum(ongkirNormalList, sess.location.ongkirNormal);
+  if (sess?.location?.ongkirPromo != null) {
+    pushNum(ongkirPromoList, sess.location.ongkirPromo);
+    const n = Math.round(Number(sess.location.ongkirPromo));
+    if (Number.isFinite(n) && n > 0) authorizedNumbers.add(n);
+  }
+  if (sess?.location?.ongkirNormal != null) {
+    pushNum(ongkirNormalList, sess.location.ongkirNormal);
+    const n = Math.round(Number(sess.location.ongkirNormal));
+    if (Number.isFinite(n) && n > 0) authorizedNumbers.add(n);
+  }
 
   // Validasi Aritmatika Komposit:
   // - Layanan Promo + Ongkir Promo / Normal (dan silang, agar tidak false-positive

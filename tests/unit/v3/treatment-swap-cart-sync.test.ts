@@ -21,7 +21,7 @@ const LAHAP = 'Pijat Lahap Juara (Nafsu Makan)';
 const PULIH = 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
 
 describe('Affirmative Treatment Swap (audit 854065)', () => {
-  it('tawaran tukar + "iya bu saya ambil" -> Lahap terswap Pulih (70k)', () => {
+  it('tawaran tukar + "iya bu saya ambil" -> Lahap terswap Pulih (75k)', () => {
     const history = [
       { role: 'user', content: 'boleh kak pijat lahap juara' },
       { role: 'assistant', content: `Karena Bunda sudah memilih Pijat Lahap Juara, kami bisa menggantinya dengan ${PULIH} yang lebih cocok untuk pilek. Apakah Bunda ingin melanjutkan?` },
@@ -36,7 +36,7 @@ describe('Affirmative Treatment Swap (audit 854065)', () => {
     expect(names).toContain(PULIH);
     expect(names).not.toContain(LAHAP);
     const pulih = cart.find((c) => c.name === PULIH)!;
-    expect(pulih.promoPrice).toBe(70000);
+    expect(pulih.promoPrice).toBe(75000);
     expect(pulih.recipientScope).toBe('CHILD_1');
   });
 

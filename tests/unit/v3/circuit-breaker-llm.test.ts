@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import { v3LlmCircuitBreaker } from '../../../src/v3/agent/agent-runner';
+import { v3LlmCircuitBreaker } from '../../../src/v3/agent/pipeline/generation-stage';
 
 vi.mock('axios');
 const mockedAxios = axios as unknown as { post: ReturnType<typeof vi.fn> };

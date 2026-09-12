@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { V3AgentRunner } from '../../../src/v3/agent/agent-runner';
+import { ContextGrounder } from '../../../src/v3/agent/pipeline/context-grounder';
 import { PersonaPromptBuilder } from '../../../src/v3/agent/persona';
 import { executeGetClinicFaq } from '../../../src/v3/tools/clinic-faq.tool';
 
@@ -9,20 +9,20 @@ import { executeGetClinicFaq } from '../../../src/v3/tools/clinic-faq.tool';
  */
 describe('Vaccine Safety Guardrails', () => {
   it('slang imunisasi terdeteksi sinyal vaksin', () => {
-    expect(V3AgentRunner.hasVaccineSignal('enaknya pijat e itu habis imunisasi apa sebelum e ya kak?')).toBe(true);
-    expect(V3AgentRunner.hasVaccineSignal('anak habis suntik boleh langsung dipijat?')).toBe(true);
-    expect(V3AgentRunner.hasVaccineSignal('kapan boleh pijat setelah vaksin bcg?')).toBe(true);
+    expect(ContextGrounder.hasVaccineSignal('enaknya pijat e itu habis imunisasi apa sebelum e ya kak?')).toBe(true);
+    expect(ContextGrounder.hasVaccineSignal('anak habis suntik boleh langsung dipijat?')).toBe(true);
+    expect(ContextGrounder.hasVaccineSignal('kapan boleh pijat setelah vaksin bcg?')).toBe(true);
   });
 
   it('non-vaksin TIDAK terdeteksi (suntik KB dewasa, sapaan)', () => {
-    expect(V3AgentRunner.hasVaccineSignal('suntik KB boleh pijat?')).toBe(false);
-    expect(V3AgentRunner.hasVaccineSignal('halo kak selamat pagi')).toBe(false);
-    expect(V3AgentRunner.hasVaccineSignal('harganya berapa ya?')).toBe(false);
+    expect(ContextGrounder.hasVaccineSignal('suntik KB boleh pijat?')).toBe(false);
+    expect(ContextGrounder.hasVaccineSignal('halo kak selamat pagi')).toBe(false);
+    expect(ContextGrounder.hasVaccineSignal('harganya berapa ya?')).toBe(false);
   });
 
   it('slang imunisasi memicu pre-grounding RAG', () => {
-    expect(V3AgentRunner.isSubstantiveForPreGrounding('enaknya pijat e itu habis imunisasi apa sebelum e ya kak?')).toBe(true);
-    expect(V3AgentRunner.isSubstantiveForPreGrounding('anak habis suntik kipi demam boleh pijat?')).toBe(true);
+    expect(ContextGrounder.isSubstantiveForPreGrounding('enaknya pijat e itu habis imunisasi apa sebelum e ya kak?')).toBe(true);
+    expect(ContextGrounder.isSubstantiveForPreGrounding('anak habis suntik kipi demam boleh pijat?')).toBe(true);
   });
 
   it('persona: guardrail vaksin mutlak + imunisasi BUKAN layanan-luar-katalog', () => {
