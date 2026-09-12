@@ -1,8 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../../src/app';
 import { customerService } from '../../src/services/customer.service';
 import { queueService } from '../../src/services/queue.service';
-import { wahaClient } from '../../src/integrations/waha/client';
 import { FastifyInstance } from 'fastify';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -54,8 +53,7 @@ describe('Admin Customer Label (DB-column) API', () => {
     expect(found.isHoldLabeled).toBe(false);
   });
 
-  it('PATCH :id/label { label: hold, enabled: true } → kolom DB true + mirror ke WAHA', async () => {
-    const addSpy = vi.spyOn(wahaClient, 'addLabel');
+  it('PATCH :id/label { label: hold, enabled: true } → kolom DB true + zero WAHA label', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/admin/customers/${customerId}/label`,
@@ -65,18 +63,13 @@ describe('Admin Customer Label (DB-column) API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
-    expect(body.data.wahaOk).toBe(true);
+    expect(body.data.dbOnly).toBe(true);
 
     const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
     expect(refreshed.is_hold_labeled).toBe(true);
-
-    // Mirror WAHA benar: label 'hold' dipanggil dengan jid @c.us
-    expect(addSpy).toHaveBeenCalledWith(`${phone}@c.us`, 'hold');
-    addSpy.mockRestore();
   });
 
-  it('PATCH :id/label { label: hold, enabled: false } → kolom DB false + removeLabel dipanggil', async () => {
-    const removeSpy = vi.spyOn(wahaClient, 'removeLabel');
+  it('PATCH :id/label { label: hold, enabled: false } → kolom DB false + zero WAHA label', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/admin/customers/${customerId}/label`,
@@ -87,8 +80,6 @@ describe('Admin Customer Label (DB-column) API', () => {
 
     const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
     expect(refreshed.is_hold_labeled).toBe(false);
-    expect(removeSpy).toHaveBeenCalledWith(`${phone}@c.us`, 'hold');
-    removeSpy.mockRestore();
   });
 
   it('PATCH :id/label { label: admin, enabled: true } → kolom is_admin_labeled=true', async () => {
@@ -144,8 +135,7 @@ describe('Admin Customer Label (DB-column) API', () => {
     expect([404, 403]).toContain(res.statusCode);
   });
 
-  it('[TC 08] Simulasi WAHA Down → API merespons wahaOk=false tetapi DB tetap di-update secara graceful', async () => {
-    const mockAdd = vi.spyOn(wahaClient, 'addLabel').mockResolvedValueOnce(false);
+  it('[TC 08] DB-only label update → DB tetap di-update tanpa依赖 WAHA (zero WAHA label)', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/admin/customers/${customerId}/label`,
@@ -155,10 +145,9 @@ describe('Admin Customer Label (DB-column) API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
-    expect(body.data.wahaOk).toBe(false);
+    expect(body.data.dbOnly).toBe(true);
     const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
     expect(refreshed.is_hold_labeled).toBe(true);
-    mockAdd.mockRestore();
   });
 
   it('[TC 09] Eksekusi paralel → memanggil API tambah & hapus label bersamaan tetap konsisten', async () => {

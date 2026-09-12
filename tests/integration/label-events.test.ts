@@ -208,7 +208,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
     expect(refreshed.is_admin_labeled).toBe(false);
   });
 
-  it('escalateToHumanHandling → addLabel hold sukses → kolom is_hold_labeled ikut ter-set true', async () => {
+  it('escalateToHumanHandling → is_hold_labeled ter-set true (DB-only, zero WAHA label)', async () => {
     const phone = `6283336${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Escalate Sync', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);

@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Plan 5 — Penegakan Mandat Mutlak Larangan Label WAHA & Resolusi Flaky Test (Issue #38 RESOLVED) (2026-09-12)
+
+- **Penghapusan total mutasi label WAHA dari kode bisnis**: `wahaClient.addLabel/removeLabel` dihapus dari `conversation.service.ts` (eskalasi + auto-release), `label-reconciliation.service.ts` (ditulis ulang DB-only via `is_hold_labeled`), `per-contact-legacy-scrape.service.ts`, `webhook.route.ts` (`hold` + `new customer`), `customers.subroute.ts`, `livechat.subroute.ts`, `command.service.ts`. Guard test `tests/unit/v3/waha-label-ban-invariant.test.ts` (2 tests) mencegah regresi via pemindaian ripgrep. Method `addLabel/removeLabel` di `waha/client.ts` ditandai `@deprecated` + runtime warning dengan caller stack.
+- **Perbaikan fondasional kopling tersembunyi**: `addLabel/removeLabel` memiliki efek samping `syncLabelColumn()` yang menulis `Customer.is_hold_labeled`. `escalateToHumanHandling` kini menulis flag langsung via `customerService.setLabelFlags` (guard `!isSandbox && !isGlobalDisabled` dipertahankan); `checkAndApplyAutoRelease` meng-clear flag fire-and-forget. DB kini single source of truth.
+- **Resolusi flaky test #28**: ditulis ulang berbasis flag DB (`setLabelFlags` sebagai simulasi admin release) + prefix nomor aman `6287772` (menutup sumber flake laten: `628999+random` berpeluang ~1/9 menjadi `6289999xxxxx` yang terdeteksi dummy oleh `isDummyOrTestContact`). Test lama yang mengassert call WAHA (`admin-customer-label`, `label-ai-router` TC 24/25/28, `label-events`, `label-lifecycle` #1) diselaraskan ke semantik DB-only.
+- **Full Regression**: 268 test files, 1959 tests passed, 19 skipped, 0 failures. TSC clean.
+
 #### Plan 3 — GoalTracker Decomposition, Symptom Semantic Scorer & Test Harness Isolation (2026-09-12)
 
 - **GoalTracker Decomposition**: `goal-tracker.ts` tereduksi dari 1.590 LOC menjadi 542 LOC (66% reduction). Ekstraksi 2 modul domain murni:

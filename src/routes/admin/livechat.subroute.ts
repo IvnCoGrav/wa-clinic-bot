@@ -650,18 +650,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           console.warn(`[LABEL ERROR] Failed to auto-clear hold label during manual admin release:`, err.message);
         }
 
-        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
-        if (enableHoldLabel) {
-          try {
-            const { wahaClient } = await import('../../integrations/waha/client');
-            const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
-            if (customer) {
-              await wahaClient.removeLabel(`${customer.phone}@c.us`, 'hold');
-            }
-          } catch (err: any) {
-            console.warn(`[LABEL ERROR] Failed to auto-remove WAHA hold label during manual admin release:`, err.message);
-          }
-        }
+        // Mandat Anti-Label WAHA: hold release via DB internal (is_human_handling), zero WAHA label
+        console.log(`[LABEL SKIP] Manual release: DB-only hold clearance, zero WAHA label mutation.`);
 
         getLiveChatHub()
           .publish({
@@ -781,18 +771,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         console.warn(`[LABEL ERROR] Failed to set hold flag during manual admin takeover:`, err.message);
       }
 
-      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
-      if (enableHoldLabel && updated?.customer_id) {
-        try {
-          const { wahaClient } = await import('../../integrations/waha/client');
-          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
-          if (customer) {
-            await wahaClient.addLabel(`${customer.phone}@c.us`, 'hold');
-          }
-        } catch (err: any) {
-          console.warn(`[LABEL ERROR] Failed to auto-add WAHA hold label during manual admin takeover:`, err.message);
-        }
-      }
+      // Mandat Anti-Label WAHA: hold set via DB internal (is_human_handling), zero WAHA label
+      console.log(`[LABEL SKIP] Manual takeover: DB-only hold set, zero WAHA label mutation.`);
 
       getLiveChatHub()
         .publish({

@@ -1010,20 +1010,22 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(labels).toContain('hold');
   });
 
-  it('28. should auto-resume bot handling when webhook receives message and hold label is missing from WAHA', async () => {
-    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+  it('28. should auto-resume bot handling when hold flag is released in DB (zero WAHA label)', async () => {
+    // Prefix 6287772xx: dijamin BUKAN dummy/sandbox (dummy-filter hanya flag 6289999/129999/dll)
+    // sehingga flag hold selalu ditulis oleh escalateToHumanHandling.
+    const phone = `6287772${Date.now().toString().slice(-7)}`;
     const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
 
-    // Escalate ke human handling (otomatis pasang label 'hold')
+    // Escalate ke human handling (menandai is_hold_labeled=true di DB internal, zero WAHA label)
     await conversationService.escalateToHumanHandling(conversation, phone, 'test escalation', DEFAULT_TENANT_ID);
 
-    // Cek hold label terpasang
-    let labels = await wahaClient.getChatLabels(`${phone}@c.us`);
-    expect(labels).toContain('hold');
+    // Cek flag hold terpasang di DB
+    const flagged = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    expect(flagged.is_hold_labeled).toBe(true);
 
-    // Simulasi admin menghapus label 'hold' di WAHA
-    await wahaClient.removeLabel(`${phone}@c.us`, 'hold');
+    // Simulasi admin melepas hold via DB internal (dulu: hapus label 'hold' di WAHA)
+    await customerService.setLabelFlags(phone, { isHoldLabeled: false });
 
     // Kirim pesan webhook
     const app = buildApp();
@@ -1046,7 +1048,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     });
 
     expect(res.statusCode).toBe(200);
-    // Karena label hold sudah dilepas, pesan diproses (EVENT_PROCESSED)
+    // Karena flag hold sudah dilepas di DB, pesan diproses (EVENT_PROCESSED)
     expect(JSON.parse(res.body)).toEqual({ status: 'EVENT_PROCESSED' });
 
     // Assert database conversation tidak lagi di status HUMAN_HANDLING

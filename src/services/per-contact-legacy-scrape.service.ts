@@ -117,18 +117,15 @@ export class PerContactLegacyScrapeService {
       console.warn(`[LEGACY SCRAPE] LegacyStaging create failed (DB offline?):`, err.message);
     }
 
-    if (!isDryRun) {
-      wahaClient.addLabel(chatId, 'legacy').catch((err: any) =>
-        console.warn('[LEGACY SCRAPE] addLabel "legacy" failed:', err.message)
-      );
-    }
+    // Mandat Anti-Label WAHA: penandaan 'legacy' via is_legacy_source di DB (sudah di-mark di markCustomerScraped)
   }
 
   /**
    * Set Customer.is_legacy_source = true dan legacy_scraped_at = now() (best-effort).
    */
-  private async markCustomerScraped(phoneNum: string, tenantId: string, chatId: string): Promise<void> {
+  private async markCustomerScraped(phoneNum: string, tenantId: string, _chatId: string): Promise<void> {
     const isDryRun = process.env.LEGACY_SCRAPE_DRY_RUN === 'true';
+    if (isDryRun) return;
 
     try {
       await prisma.customer.updateMany({
@@ -137,12 +134,6 @@ export class PerContactLegacyScrapeService {
       });
     } catch (err: any) {
       console.warn('[LEGACY SCRAPE] Failed to mark customer scraped (DB offline?):', err.message);
-    }
-
-    if (!isDryRun) {
-      wahaClient.addLabel(chatId, 'legacy').catch((err: any) =>
-        console.warn('[LEGACY SCRAPE] addLabel "legacy" failed:', err.message)
-      );
     }
   }
 }
