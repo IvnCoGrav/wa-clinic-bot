@@ -18,7 +18,7 @@ describe('WAHA Label Ban Invariant (Mandat Mutlak)', () => {
     let result: string;
     try {
       result = execSync(
-        `rg -n "wahaClient\\.getChatLabels\\(" --glob "!src/routes/webhook.route.ts" --glob "!*.test.ts" --glob "!*.d.ts" src/`,
+        `rg -n "wahaClient\\??\\.(?:addLabel|removeLabel)\\(" --glob "!src/integrations/waha/client.ts" --glob "!*.test.ts" --glob "!*.d.ts" src/`,
         { cwd: path.resolve(srcDir, '..'), encoding: 'utf8', timeout: 15000 }
       );
     } catch (err: any) {
