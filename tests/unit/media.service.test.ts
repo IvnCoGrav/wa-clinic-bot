@@ -151,9 +151,9 @@ describe('MediaService — penyimpanan & pembersihan media Live Chat', () => {
     }
   });
 
-  it('getQuotaBytes: fallback env/default 200MB saat DB offline', async () => {
+  it('getQuotaBytes: fallback env/default 1GB saat DB offline', async () => {
     delete process.env.MEDIA_QUOTA_BYTES;
-    expect(await mediaService.getQuotaBytes(TEST_TENANT_ID)).toBe(200 * 1024 * 1024);
+    expect(await mediaService.getQuotaBytes(TEST_TENANT_ID)).toBe(1024 * 1024 * 1024);
     process.env.MEDIA_QUOTA_BYTES = '1048576';
     expect(await mediaService.getQuotaBytes(TEST_TENANT_ID)).toBe(1048576);
     delete process.env.MEDIA_QUOTA_BYTES;

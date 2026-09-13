@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { extractRealPhoneFromWahaPayload, normalizeWahaJid } from '../../src/utils/jid';
+import { extractRealPhoneFromWahaPayload, normalizeWahaJid, parseJidType } from '../../src/utils/jid';
 import { getCachedLidPhone, setCachedLidPhone, clearLabelCache } from '../../src/integrations/waha/label-cache';
 import { wahaClient } from '../../src/integrations/waha/client';
 
@@ -72,5 +72,40 @@ describe('WAHA Multi-Device LID to Phone Resolution', () => {
 
     const primaryJid = await wahaClient.resolvePrimaryJid('216088545607703@c.us');
     expect(primaryJid).toBe('6281230133633@c.us');
+  });
+
+  it('parseJidType: mengklasifikasikan domain JID secara presisi (Matt Pocock Domain Standard)', () => {
+    expect(parseJidType('628123456789@c.us')).toBe('phone');
+    expect(parseJidType('628123456789@s.whatsapp.net')).toBe('phone');
+    expect(parseJidType('102649175314541@lid')).toBe('lid');
+    expect(parseJidType('256606822854817@lid')).toBe('lid');
+    expect(parseJidType('120363024819284@g.us')).toBe('group');
+    expect(parseJidType('status@broadcast')).toBe('broadcast');
+    expect(parseJidType('12036314@newsletter')).toBe('newsletter');
+    expect(parseJidType('')).toBe('unknown');
+    expect(parseJidType(null)).toBe('unknown');
+  });
+
+  it('Invarian Mutlak: Unresolved LID acak DILARANG dikembalikan sebagai nomor telepon palsu', () => {
+    // Payload dari WhatsApp dengan LID baru tanpa metadata remoteJidAlt
+    const payload = {
+      id: 'false_102649175314541@lid_AB123456',
+      from: '102649175314541@lid',
+      chatId: '102649175314541@lid',
+      body: 'Halo Bidan',
+      _data: {
+        key: {
+          id: 'AB123456',
+          fromMe: false,
+          remoteJid: '102649175314541@lid',
+          // TIDAK ADA remoteJidAlt
+        },
+      },
+    };
+
+    const result = extractRealPhoneFromWahaPayload(payload);
+    // WAJIB mengembalikan phone kosong, BUKAN '102649175314541'
+    expect(result.phone).toBe('');
+    expect(result.resolvedJid).toBe('102649175314541@lid');
   });
 });
