@@ -206,10 +206,12 @@ if (require.main === module) {
     }
 
     // Start media cleanup cron (hapus file media Live Chat yang melebihi retensi)
-    if (process.env.ENABLE_MEDIA_CLEANUP_CRON === 'true') {
+    // Default aktif kecuali eksplisit diset 'false'; jalankan sekali saat startup untuk self-healing.
+    if (process.env.ENABLE_MEDIA_CLEANUP_CRON !== 'false') {
       const intervalHours = parseInt(process.env.MEDIA_CLEANUP_INTERVAL_HOURS || '24', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
+        cron.runMediaCleanup().catch(e => console.warn('[MEDIA CLEANUP BOOT WARNING]', (e as Error).message));
         setInterval(() => cron.runMediaCleanup(), intervalHours * 60 * 60 * 1000);
         console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));

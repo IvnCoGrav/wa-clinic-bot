@@ -11,7 +11,9 @@ const MEDIA_ROOT = path.join(process.cwd(), 'storage', 'media');
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const MAX_OUTBOUND_BYTES = 8 * 1024 * 1024; // 8 MB
-const DEFAULT_QUOTA_BYTES = 200 * 1024 * 1024; // 200 MB per tenant
+const DEFAULT_QUOTA_BYTES = 1024 * 1024 * 1024; // 1 GB default per tenant
+const HIGH_WATERMARK_RATIO = 0.85; // 85% pemicu auto-pruning
+const LOW_WATERMARK_RATIO = 0.65;  // 65% target storage pasca-pruning
 const DEFAULT_MESSAGE_RETENTION_DAYS = 120;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -443,10 +445,51 @@ export class MediaService {
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_MESSAGE_RETENTION_DAYS;
   }
 
+  private mediaUsageCache = new Map<string, { bytes: number; expiresAt: number }>();
+
+  /**
+   * Mengambil pemakaian byte disk secara async dengan in-memory cache (TTL 60s)
+   * untuk mencegah pemblokiran event loop Node.js pada burst upload.
+   */
+  public async getTenantMediaUsageBytesAsync(tenantId: string): Promise<number> {
+    const cached = this.mediaUsageCache.get(tenantId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.bytes;
+    }
+
+    let total = 0;
+    for (const scope of ['outbound', 'inbound'] as const) {
+      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = await fs.promises.readdir(base, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        try {
+          const st = await fs.promises.stat(path.join(base, entry.name));
+          total += st.size;
+        } catch {
+          // best-effort
+        }
+      }
+    }
+
+    this.mediaUsageCache.set(tenantId, { bytes: total, expiresAt: Date.now() + 60_000 });
+    return total;
+  }
+
   /**
    * Total byte media yang dipakai tenant (outbound + inbound) di disk.
+   * Versi sinkron dipertahankan untuk kompatibilitas pemanggil yang ada.
    */
   public getTenantMediaUsageBytes(tenantId: string): number {
+    const cached = this.mediaUsageCache.get(tenantId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.bytes;
+    }
     let total = 0;
     for (const scope of ['outbound', 'inbound'] as const) {
       const base = path.join(MEDIA_ROOT, scope, tenantId);
@@ -465,16 +508,127 @@ export class MediaService {
         }
       }
     }
+    this.mediaUsageCache.set(tenantId, { bytes: total, expiresAt: Date.now() + 60_000 });
     return total;
   }
 
   /**
-   * Tolak penyimpanan bila melewati kuota media tenant.
+   * Auto-pruning cerdas berbasis watermark (High 85% -> Low 65%):
+   * Menghapus file HD inbound terlama hingga sisa pemakaian berada di bawah LOW_WATERMARK_RATIO * quota.
+   * - Thumbnail (_thumb.*) WAJIB dipertahankan agar UI Live Chat tidak broken image.
+   * - Gambar pricelist tenant (pricelist_image_url) diproteksi permanen.
+   * - Berjalan async non-blocking.
+   */
+  public async pruneToLowWatermark(
+    tenantId: string,
+    quota: number
+  ): Promise<{ freedBytes: number; filesRemoved: number }> {
+    const targetUsage = Math.floor(quota * LOW_WATERMARK_RATIO);
+    let currentUsage = await this.getTenantMediaUsageBytesAsync(tenantId);
+    if (currentUsage <= targetUsage) {
+      return { freedBytes: 0, filesRemoved: 0 };
+    }
+
+    let freedBytes = 0;
+    let filesRemoved = 0;
+
+    // Proteksi pricelist image (config tenant permanen)
+    let pricelistRel: string | undefined;
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { pricelist_image_url: true },
+      });
+      if (tenant?.pricelist_image_url) pricelistRel = tenant.pricelist_image_url;
+    } catch {
+      // DB offline
+    }
+
+    // Prioritas pembersihan: inbound (media kiriman customer), baru kemudian outbound
+    for (const scope of ['inbound', 'outbound'] as const) {
+      if (currentUsage <= targetUsage) break;
+
+      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = await fs.promises.readdir(base, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      interface FileCandidate {
+        name: string;
+        fullPath: string;
+        mtimeMs: number;
+        size: number;
+        scope: 'inbound' | 'outbound';
+      }
+
+      const candidates: FileCandidate[] = [];
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (isThumbName(entry.name)) continue; // Thumbnail abadi!
+        const relUrl = toRelativeUrl(scope, tenantId, entry.name);
+        if (pricelistRel && relUrl === pricelistRel) continue; // Proteksi pricelist
+
+        const fullPath = path.join(base, entry.name);
+        try {
+          const st = await fs.promises.stat(fullPath);
+          candidates.push({
+            name: entry.name,
+            fullPath,
+            mtimeMs: st.mtimeMs,
+            size: st.size,
+            scope,
+          });
+        } catch {
+          // file mungkin sudah dihapus
+        }
+      }
+
+      // Urutkan tertua lebih dulu (ascending)
+      candidates.sort((a, b) => a.mtimeMs - b.mtimeMs);
+
+      for (const candidate of candidates) {
+        if (currentUsage <= targetUsage) break;
+
+        // Pastikan thumbnail ada sebelum HD dihapus
+        const thumbRel = await this.ensureThumbForHd(candidate.scope, tenantId, candidate.name, candidate.fullPath);
+        if (!thumbRel) {
+          console.warn(`[MEDIA WATERMARK PRUNE] HD dipertahankan karena thumbnail gagal dibuat: ${candidate.fullPath}`);
+          continue;
+        }
+
+        try {
+          await fs.promises.unlink(candidate.fullPath);
+          currentUsage -= candidate.size;
+          freedBytes += candidate.size;
+          filesRemoved++;
+        } catch {
+          // best-effort
+        }
+      }
+    }
+
+    this.mediaUsageCache.delete(tenantId);
+    console.log(`[MEDIA WATERMARK PRUNE] Tenant ${tenantId}: freed ${(freedBytes / (1024 * 1024)).toFixed(1)} MB (${filesRemoved} files removed). New usage: ${(currentUsage / (1024 * 1024)).toFixed(1)} MB.`);
+    return { freedBytes, filesRemoved };
+  }
+
+  /**
+   * Validasi kuota tenant sebelum menyimpan media baru.
+   * Jika mendekati batas (HIGH_WATERMARK_RATIO) atau melebihi kuota, lakukan auto-pruning ke low watermark.
    */
   private async enforceQuota(tenantId: string, newBytes: number): Promise<void> {
     const quota = await this.getQuotaBytes(tenantId);
     if (quota <= 0) return;
-    const usage = this.getTenantMediaUsageBytes(tenantId);
+    let usage = await this.getTenantMediaUsageBytesAsync(tenantId);
+
+    if (usage + newBytes > quota * HIGH_WATERMARK_RATIO) {
+      await this.pruneToLowWatermark(tenantId, quota);
+      usage = await this.getTenantMediaUsageBytesAsync(tenantId);
+    }
+
     if (usage + newBytes > quota) {
       const quotaMb = Math.ceil(quota / (1024 * 1024));
       const usedMb = (usage / (1024 * 1024)).toFixed(1);

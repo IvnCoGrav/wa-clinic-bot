@@ -4,6 +4,32 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Remediasi Fondasional Koneksi WhatsApp: Media Watermark Pruning, Idempotensi Ad Attribution & Anti-Nomor Palsu LID (2026-09-12)
+
+- **Fase 1 — Watermark-Based Media Pruning & Non-Blocking Quota**:
+  - Batas kuota penyimpanan dinaikkan dari 200 MB ke 1 GB default (`DEFAULT_QUOTA_BYTES = 1024 * 1024 * 1024`), configurable via DB/env.
+  - Implementasi mekanisme auto-pruning cerdas berbasis watermark (High 85% -> Low 65%): saat penyimpanan mencapai 85% kuota, sistem secara otomatis dan async menghapus file HD inbound terlama hingga penggunaan turun ke 65% (`pruneToLowWatermark`).
+  - Jaminan preservasi thumbnail (`_thumb.*`) dan proteksi gambar pricelist permanen (`pricelist_image_url`).
+  - Pemakaian disk di-cache dalam memori (TTL 60 detik) untuk mencegah event loop freezing dari `fs.statSync` berulang.
+  - Media cleanup cron diaktifkan secara default saat startup `app.ts` untuk self-healing media kadaluarsa.
+  - Test baru: `tests/unit/media-watermark-autoprune.test.ts` (3 tests passed).
+
+- **Fase 2 — Relational Idempotency Ad Attribution (Strict Types & Zero Any)**:
+  - Menyelesaikan domain modeling category error pada Click-to-WhatsApp: memisahkan *Shared Campaign Tag* (`utmCampaign: 'IG-BABYSPA'`) dengan *Unique Click Token* (`trackingCode: ctwa_${uuid}`). Dua customer berbeda dengan template iklan yang sama tidak lagi menabrak constraint `@unique trackingCode`.
+  - Menghormati relasi 1:1 `Customer <-> AdClick`: bila customer lama mengklik iklan ulang, sistem melakukan update touchpoint pada record yang sudah ada, mencegah crash `@unique customerId`.
+  - Type strictness: penggantian parameter `any` dengan interface domain `CustomerIdentity`.
+  - Test baru: `tests/unit/ad-attribution-relational.test.ts` (3 tests passed).
+
+- **Fase 3 — Discriminated Union JID & Webhook Early Filter**:
+  - Mengganti seluruh regex heuristik `startsWith('2160')` / `length >= 14` dengan classifier domain `parseJidType`: membedakan `'phone'`, `'lid'`, `'group'`, `'broadcast'`, `'newsletter'`.
+  - Invarian mutlak: JID `@lid` yang belum teresolusi DILARANG dikembalikan sebagai nomor telepon palsu (`phone: ''`). Mencegah pembuatan data pelanggan korup/dummy di database.
+  - Eliminasi redundansi pemrosesan ganda webhook WAHA: event `message.any` inbound (`!fromMe`) diabaikan pada gerbang awal (`IGNORED_REDUNDANT_INBOUND_ANY`).
+  - Unit test `tests/unit/waha-lid-phone-resolution.test.ts` diperluas dan lulus 100%.
+
+- **Regression & Build Verification**:
+  - 33 tests passed di modul terkait, `npm run build` (tsc) exit 0 bersih tanpa error tipe.
+  - Perbaikan Invariant Test Guard WAHA: Koreksi query ripgrep pada `tests/unit/v3/waha-label-ban-invariant.test.ts` agar secara presisi memindai `addLabel`/`removeLabel` (sebelumnya keliru menduplikasi `getChatLabels`).
+
 #### Plan 6 — Geocoding Resilience, Kombo Aritmatika & Schema Hardening (Issues #26, #21, #30; #16 sebagian) (2026-09-12)
 
 - **Kombo multi-treatment (FASE 1, Issue #26 RESOLVED)**: `numeric-fact-validator.ts` mengotorisasi jumlah subset 2–3 layanan resmi turn konsultasi (Si+Sj/+Addon/+Ongkir/+keduanya, termasuk triple; pool unik N≤6, O(N³)≤216) — hanya di luar mode strict. Deviasi dari rencana awal (ekspansi skema tool): kombinatorik sisi-validator, NOL perubahan kontrak tool. Test `multi-treatment-combo-validator.test.ts` (5).

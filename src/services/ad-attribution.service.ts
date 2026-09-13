@@ -1,11 +1,19 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { memoryAdClicks } from '../routes/tracking.route';
 import { capiService } from './capi.service';
 
+export interface CustomerIdentity {
+  id: string;
+  phone: string;
+  tenant_id?: string;
+  [key: string]: unknown;
+}
+
 export interface MatchAdClickParams {
   bodyText: string;
   isNewCustomerRecord: boolean;
-  customer: any;
+  customer: CustomerIdentity;
   tenantId: string;
   referral?: {
     ctwaClid?: string;
@@ -21,7 +29,7 @@ export interface MatchAdClickResult {
   trackingCode?: string;
   ctwaClid?: string;
   strippedText: string;
-  adClick?: any;
+  adClick?: Record<string, unknown> | null;
 }
 
 // In-memory cache untuk mencegah race condition / burst call Contact dari multiple incoming bubbles
@@ -58,22 +66,47 @@ export async function matchAdClickAndFireContact(
   // 1. Priority 1: Native Click-to-WhatsApp (ctwa_clid) from Meta Referral payload (WABA)
   if (ctwaClid) {
     try {
-      const result = await prisma.adClick.create({
-        data: {
-          ctwa_clid: ctwaClid,
-          landingUrl: referral?.sourceUrl || undefined,
-          matchedAt: new Date(),
-          customerId: customer.id,
-          tenant_id: tenantId,
-          phone: customer.phone,
-        },
-      });
-      matched = true;
-      isNewlyLinked = true;
-      matchedAdClick = result;
-      console.log(`[ATTRIBUTION SUCCESS - CTWA] Linked ctwa_clid ${ctwaClid} to customer ${customer.phone}`);
+      let existingAdClick: any = null;
+      try {
+        existingAdClick = await prisma.adClick.findUnique({
+          where: { customerId: customer.id },
+        });
+      } catch {
+        // Best-effort: bila DB offline atau unit test mock
+      }
+
+      if (existingAdClick) {
+        const updated = await prisma.adClick.update({
+          where: { id: existingAdClick.id },
+          data: {
+            ctwa_clid: ctwaClid,
+            landingUrl: referral?.sourceUrl || existingAdClick.landingUrl || undefined,
+            matchedAt: new Date(),
+            phone: customer.phone,
+          },
+        });
+        matched = true;
+        isNewlyLinked = true;
+        matchedAdClick = updated;
+        console.log(`[ATTRIBUTION SUCCESS - CTWA REPEAT] Updated ctwa_clid ${ctwaClid} on existing customer ${customer.phone}`);
+      } else {
+        const result = await prisma.adClick.create({
+          data: {
+            ctwa_clid: ctwaClid,
+            landingUrl: referral?.sourceUrl || undefined,
+            matchedAt: new Date(),
+            customerId: customer.id,
+            tenant_id: tenantId,
+            phone: customer.phone,
+          },
+        });
+        matched = true;
+        isNewlyLinked = true;
+        matchedAdClick = result;
+        console.log(`[ATTRIBUTION SUCCESS - CTWA] Linked ctwa_clid ${ctwaClid} to customer ${customer.phone}`);
+      }
     } catch (err: any) {
-      console.error('[ATTRIBUTION ERROR - CTWA] Failed to create CTWA AdClick:', err.message);
+      console.error('[ATTRIBUTION ERROR - CTWA] Failed to link CTWA AdClick:', err.message);
     }
   }
 
@@ -115,20 +148,48 @@ export async function matchAdClickAndFireContact(
           where: { trackingCode, customerId: customer.id },
         });
       } else {
-        // Cek apakah sudah pernah ter-link ke customer ini sebelumnya (misal repeat chat dengan kode yang sama)
-        const alreadyLinked = await prisma.adClick.findFirst({
-          where: { trackingCode, customerId: customer.id },
-        });
-        if (alreadyLinked) {
-          matched = true;
-          isNewlyLinked = false; // ⚠️ Sudah pernah ter-link, BUKAN touchpoint baru
-          matchedAdClick = alreadyLinked;
+        // Cek apakah customer sudah memiliki AdClick
+        let existingAdClick: any = null;
+        try {
+          existingAdClick = await prisma.adClick.findUnique({
+            where: { customerId: customer.id },
+          });
+        } catch {
+          // Best-effort: bila DB offline atau unit test mock
+        }
+
+        if (existingAdClick) {
+          // Customer sudah memiliki record AdClick.
+          // Cek apakah campaign tag sama persis
+          const isSameCampaign = existingAdClick.utmCampaign === trackingCode || existingAdClick.trackingCode === trackingCode;
+          if (isSameCampaign) {
+            matched = true;
+            isNewlyLinked = false; // Sudah pernah ter-link, BUKAN touchpoint baru
+            matchedAdClick = existingAdClick;
+          } else {
+            // Repeat lead dengan campaign baru -> update record
+            const updated = await prisma.adClick.update({
+              where: { id: existingAdClick.id },
+              data: {
+                utmCampaign: trackingCode,
+                utmSource: 'whatsapp_direct',
+                matchedAt: new Date(),
+                phone: customer.phone,
+              },
+            });
+            matched = true;
+            isNewlyLinked = true;
+            matchedAdClick = updated;
+            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA REPEAT] Updated campaign tag ${trackingCode} on customer ${customer.phone}`);
+          }
         } else {
-          // Direct WAHA CTWA lead (tanpa lewat website /cta) -> Otomatis buat record AdClick baru
+          // Customer baru tanpa AdClick -> Buat record AdClick baru
+          // Generate unique tracking code agar tidak menabrak constraint @unique trackingCode jika kampanye digunakan bersama
+          const uniqueTrackingCode = `ctwa_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
           try {
             const directAdClick = await prisma.adClick.create({
               data: {
-                trackingCode,
+                trackingCode: uniqueTrackingCode,
                 utmCampaign: trackingCode,
                 utmSource: 'whatsapp_direct',
                 matchedAt: new Date(),
@@ -140,7 +201,7 @@ export async function matchAdClickAndFireContact(
             matched = true;
             isNewlyLinked = true;
             matchedAdClick = directAdClick;
-            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} on customer ${customer.phone}`);
+            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} (code: ${uniqueTrackingCode}) on customer ${customer.phone}`);
           } catch (createErr: any) {
             console.warn('[ATTRIBUTION WARNING - DIRECT CTWA] Failed to create direct AdClick:', createErr.message);
           }

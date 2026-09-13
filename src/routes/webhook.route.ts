@@ -18,7 +18,7 @@ import { prisma } from '../db/client';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { normalizeWahaJid, extractRealPhoneFromWahaPayload } from '../utils/jid';
+import { normalizeWahaJid, extractRealPhoneFromWahaPayload, parseJidType } from '../utils/jid';
 import { extractWahaLocation } from '../utils/waha-location-parser';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
@@ -231,6 +231,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
       }
 
+      // Early Filter Inbound Duplikat dari message.any:
+      // WAHA memancarkan 'message' untuk pesan masuk dan 'message.any' untuk semua pesan.
+      // Event 'message.any' yang bukan berasal dari kita (!fromMe) diabaikan di awal agar tidak dobel proses.
+      if (event.event === 'message.any' && !payload.fromMe) {
+        return reply.status(200).send({ status: 'IGNORED_REDUNDANT_INBOUND_ANY' });
+      }
+
       if (payload.fromMe) {
         // Outbound message dari HP WhatsApp asli / Live Chat / Bot
         const customerJid = payload.chatId || (payload as any).to || payload.from;
@@ -241,18 +248,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
 
           let { phone } = extractRealPhoneFromWahaPayload(payload);
-          if (!phone || phone.startsWith('2160') || phone.startsWith('7990')) {
-            if (customerJid.includes('@lid')) {
+          if (!phone || parseJidType(customerJid) === 'lid') {
+            if (parseJidType(customerJid) === 'lid') {
               try {
                 const pn = await wahaClient.getPhoneNumberFromLid(customerJid);
-                if (pn && !pn.startsWith('2160') && !pn.startsWith('7990')) {
+                if (pn && parseJidType(`${pn}@c.us`) === 'phone') {
                   phone = pn;
                 }
               } catch (_) {}
             }
           }
-          if (!phone) {
-            phone = customerJid.replace(/@.*$/, '');
+          if (!phone && parseJidType(customerJid) === 'phone') {
+            phone = normalizeWahaJid(customerJid);
           }
 
           if (phone && /^\d+$/.test(phone) && !phone.startsWith('6289999')) {
@@ -599,11 +606,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       let resolvedJid = payloadResolvedJid;
       let phone = extractedPhone;
 
-      if (!phone || phone.startsWith('2160') || phone.startsWith('7990')) {
+      if (!phone || parseJidType(chatId) === 'lid') {
         const jidFromWaha = await wahaClient.resolvePrimaryJid(chatId);
-        const phoneFromWaha = jidFromWaha.replace(/@.*$/, '');
-        if (phoneFromWaha && !phoneFromWaha.startsWith('2160') && !phoneFromWaha.startsWith('7990')) {
-          phone = phoneFromWaha;
+        if (parseJidType(jidFromWaha) === 'phone') {
+          phone = normalizeWahaJid(jidFromWaha);
           resolvedJid = `${phone}@c.us`;
         }
       }
