@@ -279,6 +279,70 @@ export function getGazetteerZipcode(query: string): string | null {
   return hit ? hit.zipcode : null;
 }
 
+/** Hasil pencocokan spasial terbalik terdekat (reverse geocoding lokal). */
+export interface NearestSubdistrictMatch {
+  kelurahan: string;
+  kecamatan: string;
+  kota: string;
+  zipcode: string;
+  distanceKm: number;
+  lat: number;
+  lng: number;
+}
+
+/** Jarak Haversine antar dua titik koordinat (km). */
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371.0;
+  const toRad = (d: number): number => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * Reverse geocoding lokal: cari kelurahan/desa terdekat dari koordinat
+ * terhadap dataset gazetteer (local-first, tanpa API).
+ * Di luar radius operasional (default 35 km) kembalikan null —
+ * pemanggil WAJIB meneruskan koordinat murni tanpa mengarang nama wilayah.
+ */
+export function findNearestSubdistrict(
+  lat: number,
+  lng: number,
+  maxDistanceKm = 35
+): NearestSubdistrictMatch | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  ensureInit();
+  const data = rawDataCache || [];
+  let best: GazetteerRow | null = null;
+  let bestLat = 0;
+  let bestLng = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const row of data) {
+    const coord = parseKoordinat(row.Koordinat || '');
+    if (!coord) continue;
+    const dist = haversineKm(lat, lng, coord.lat, coord.lng);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = row;
+      bestLat = coord.lat;
+      bestLng = coord.lng;
+    }
+  }
+  if (!best || bestDist > maxDistanceKm) return null;
+  return {
+    kelurahan: (best.Kelurahan_Desa || '').trim(),
+    kecamatan: (best.Kecamatan || '').trim(),
+    kota: (best.Kabupaten_Kota || '').trim(),
+    zipcode: (best.Kode_Pos || '').trim(),
+    distanceKm: bestDist,
+    lat: bestLat,
+    lng: bestLng,
+  };
+}
+
 /** Reset all caches — for tests that mock dataset */
 export function __resetGazetteerCache(): void {
   initialized = false;
