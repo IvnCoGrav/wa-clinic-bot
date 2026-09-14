@@ -366,11 +366,21 @@ export const StaffToday: React.FC = () => {
     }
   }, [isSupervisor]);
 
-  // Auto-poll tasks every 20s
+  // Auto-poll tasks every 20s — pause when tab hidden
   useEffect(() => {
     fetchTasks();
-    const interval = setInterval(() => fetchTasks(true), 20000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      fetchTasks(true);
+    }, 20000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchTasks(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchTasks]);
 
   // Auto-scroll chat viewport to latest message with multi-tick dual execution

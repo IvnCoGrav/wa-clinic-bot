@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
+import { DeliveryTiers } from './DeliveryTiers';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { 
@@ -51,6 +53,8 @@ export interface ClinicServiceItem {
 
 export const ClinicServices: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeMainTab = (searchParams.get('tab') === 'delivery' ? 'DELIVERY' : 'CATALOG') as 'CATALOG' | 'DELIVERY';
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -367,6 +371,26 @@ export const ClinicServices: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Top-level Tabs: Katalog vs Ongkir */}
+      <div className="flex items-center gap-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-0">
+        <button
+          onClick={() => setSearchParams({}, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CATALOG' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Katalog Layanan
+        </button>
+        <button
+          onClick={() => setSearchParams({ tab: 'delivery' }, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'DELIVERY' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Tarif Ongkir &amp; Delivery
+        </button>
+      </div>
+
+      {activeMainTab === 'DELIVERY' ? (
+        <DeliveryTiers />
+      ) : (
+      <>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -1078,6 +1102,8 @@ export const ClinicServices: React.FC = () => {
         </div>
       )}
 
+      </>
+      )}
     </div>
   );
 };

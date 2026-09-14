@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CustomerService } from './CustomerService';
+import { TelegramIntegration } from './TelegramIntegration';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
@@ -49,6 +51,8 @@ import {
 
 export const Settings: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subTab = searchParams.get('tab');
   const [globalBotActive, setGlobalBotActive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'CHANNEL_AI' | 'META_MARKETING' | 'INTEGRATION_REPORTS' | 'APP_OPS'>('ALL');
@@ -737,6 +741,27 @@ export const Settings: React.FC = () => {
       toast(`Failed to save delivery fee tierings: ${err.message}`, 'error');
     }
   };
+
+  if (subTab === 'cs') {
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] hover:underline flex items-center gap-1">
+          ← Kembali ke Settings
+        </button>
+        <CustomerService />
+      </div>
+    );
+  }
+  if (subTab === 'telegram') {
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] hover:underline flex items-center gap-1">
+          ← Kembali ke Settings
+        </button>
+        <TelegramIntegration />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

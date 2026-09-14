@@ -208,7 +208,7 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     vi.mocked(prisma.reservation.update).mockResolvedValue({ ...mockReservation, status: 'cancelled' } as any);
     vi.mocked(prisma.followUp.findFirst).mockResolvedValue(null); // Tidak ada yang aktif
 
-    const followUpCreateSpy = vi.mocked(prisma.followUp.create).mockResolvedValue({} as any);
+    const followUpCreateManySpy = vi.mocked(prisma.followUp.createMany).mockResolvedValue({ count: 3 } as any);
 
     const app = buildApp();
     await app.ready();
@@ -223,9 +223,11 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
 
     expect(res.statusCode).toBe(200);
     
-    // Harus membuat kembali 3 follow-up NO_PURCHASE
-    expect(followUpCreateSpy).toHaveBeenCalledTimes(3);
-    expect(followUpCreateSpy.mock.calls[0][0].data.type).toBe('NO_PURCHASE');
+    // Harus membuat kembali 3 follow-up NO_PURCHASE via batch createMany tenant-aware
+    expect(followUpCreateManySpy).toHaveBeenCalledTimes(1);
+    const batchData = followUpCreateManySpy.mock.calls[0][0].data;
+    expect(batchData).toHaveLength(3);
+    expect(batchData[0].type).toBe('NO_PURCHASE');
     
     await app.close();
   });

@@ -122,22 +122,10 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/labels" element={
-              <ProtectedRoute>
-                <Layout>
-                  <CustomerLabels />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/customer-labels" element={<Navigate to="/admin/labels" replace />} />
-            <Route path="/admin/customer-service" element={
-              <ProtectedRoute>
-                <Layout>
-                  <CustomerService />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/cs" element={<Navigate to="/admin/customer-service" replace />} />
+            <Route path="/admin/labels" element={<Navigate to="/admin/customers?tab=labels" replace />} />
+            <Route path="/admin/customer-labels" element={<Navigate to="/admin/customers?tab=labels" replace />} />
+            <Route path="/admin/customer-service" element={<Navigate to="/admin/settings?tab=cs" replace />} />
+            <Route path="/admin/cs" element={<Navigate to="/admin/settings?tab=cs" replace />} />
 
             <Route path="/admin/financial-analytics" element={
               <ProtectedRoute>
@@ -180,14 +168,8 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/delivery" element={
-              <ProtectedRoute>
-                <Layout>
-                  <DeliveryTiers />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/tiers" element={<Navigate to="/admin/delivery" replace />} />
+            <Route path="/admin/delivery" element={<Navigate to="/admin/services?tab=delivery" replace />} />
+            <Route path="/admin/tiers" element={<Navigate to="/admin/services?tab=delivery" replace />} />
 
             <Route path="/admin/follow-ups" element={
               <ProtectedRoute>
@@ -196,14 +178,8 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/follow-up-templates" element={
-              <ProtectedRoute>
-                <Layout>
-                  <FollowUpTemplates />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/followup-templates" element={<Navigate to="/admin/follow-up-templates" replace />} />
+            <Route path="/admin/follow-up-templates" element={<Navigate to="/admin/follow-ups?tab=templates" replace />} />
+            <Route path="/admin/followup-templates" element={<Navigate to="/admin/follow-ups?tab=templates" replace />} />
 
             <Route path="/admin/knowledge-base" element={
               <ProtectedRoute>
@@ -278,13 +254,7 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/telegram" element={
-              <ProtectedRoute>
-                <Layout>
-                  <TelegramIntegration />
-                </Layout>
-              </ProtectedRoute>
-            } />
+            <Route path="/admin/telegram" element={<Navigate to="/admin/settings?tab=telegram" replace />} />
             <Route path="/admin/quick-replies" element={
               <ProtectedRoute>
                 <Layout>
@@ -303,13 +273,7 @@ export const App: React.FC = () => {
             } />
             <Route path="/admin/evaluations" element={<Navigate to="/admin/ai-evaluations" replace />} />
 
-            <Route path="/admin/chat-export" element={
-              <ProtectedRoute>
-                <Layout>
-                  <ChatExport />
-                </Layout>
-              </ProtectedRoute>
-            } />
+            <Route path="/admin/chat-export" element={<Navigate to="/admin/live-chat?action=export" replace />} />
             <Route path="/admin/debug" element={
               <ProtectedRoute>
                 <Layout>

@@ -63,6 +63,7 @@ import {
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
+import { ChatExport } from './ChatExport';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { extractMedia } from '../../utils/mediaExtractor';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -3070,8 +3071,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
         </div>
 
-        {/* Controls: Internal Chatbot Toggle */}
+        {/* Controls: Internal Chatbot Toggle + Export */}
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => {
+              const p = new URLSearchParams(searchParams.toString());
+              p.set('action', 'export');
+              setSearchParams(p, { replace: true });
+            }}
+            className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069] shadow-2xs transition flex items-center justify-center"
+            title="Ekspor Chat (Daily Export)"
+          >
+            <FileText size={14} />
+          </button>
           <ToggleSwitch
             checked={chatBotActive}
             onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
@@ -5546,6 +5558,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Export Modal (konsolidasi dari page ChatExport — via ?action=export) */}
+      {(searchParams.get('action') === 'export' || searchParams.get('export') === '1') && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl border border-[#e9edef] p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-[#111b21]">Ekspor Chat</h3>
+              <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"><X size={16} /></button>
+            </div>
+            <ChatExport />
           </div>
         </div>
       )}

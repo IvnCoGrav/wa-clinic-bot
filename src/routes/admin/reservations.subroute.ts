@@ -12,6 +12,7 @@ import {
   extractNotesFromRawText,
   mergeNotesIntoRawText,
 } from '../../utils/reservation-text-parser';
+import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
 import { memoryReservations } from './stores';
 import { responseCacheService } from '../../services/response-cache.service';
 
@@ -1962,24 +1963,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (!activeNoPurchaseFollowUps) {
           const stages = [1, 2, 3];
           const days = [3, 7, 14];
-
-          await Promise.all(
-            stages.map((stage, idx) => {
-              const scheduledAt = new Date();
-              scheduledAt.setDate(scheduledAt.getDate() + days[idx]);
-
-              return prisma.followUp.create({
-                data: {
-                  tenant_id: DEFAULT_TENANT_ID,
-                  customer_id: existing.customer_id,
-                  type: 'NO_PURCHASE',
-                  stage,
-                  scheduled_at: scheduledAt,
-                  status: 'PENDING',
-                },
-              });
-            })
-          );
+          const targetTenantId = existing.tenant_id || DEFAULT_TENANT_ID;
+          const followUpRecords = stages.map((stage, idx) => {
+            const scheduledAt = new Date();
+            scheduledAt.setDate(scheduledAt.getDate() + days[idx]);
+            return {
+              tenant_id: targetTenantId,
+              customer_id: existing.customer_id,
+              type: 'NO_PURCHASE' as const,
+              stage,
+              scheduled_at: scheduledAt,
+              status: 'PENDING' as const,
+            };
+          });
+          await prisma.followUp.createMany({ data: followUpRecords });
         }
 
         await auditService.logAdminAction({
@@ -2112,7 +2109,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const raw = existing.raw_text || '';
           if (raw && /payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(raw)) {
             try {
-              const { parsePaymentSection } = await import('../../utils/conversation-transaction-extractor');
               const fin = parsePaymentSection(raw);
               if (fin.treatmentPrice > 0) autoResolvedVal = fin.treatmentPrice;
               else if (fin.totalPrice > 0) autoResolvedVal = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
@@ -2355,6 +2351,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
       } catch {}
 
+      const treatmentPriceCache = new Map<string, number | undefined>();
+      const getCachedTreatmentValue = async (detail: string): Promise<number | undefined> => {
+        if (treatmentPriceCache.has(detail)) return treatmentPriceCache.get(detail);
+        const v = await resolveTreatmentValue(detail);
+        treatmentPriceCache.set(detail, v);
+        return v;
+      };
+
       const reservationData = await Promise.all(
         rows.map(async (r) => {
           const occurredDate = r.purchase_occurred_at || r.created_at || new Date();
@@ -2389,7 +2393,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             const raw = r.raw_text || '';
             if (raw && /payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(raw)) {
               try {
-                const { parsePaymentSection } = await import('../../utils/conversation-transaction-extractor');
                 const fin = parsePaymentSection(raw);
                 if (fin.treatmentPrice > 0) calculatedValue = fin.treatmentPrice;
                 else if (fin.totalPrice > 0) calculatedValue = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
@@ -2399,7 +2402,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               calculatedValue =
                 extractValueByFormat(raw, formats.formatValue) ??
                 extractRupiahAmount(raw, formats.formatValue) ??
-                (await resolveTreatmentValue(sanitizedTreatmentDetail || raw));
+                (await getCachedTreatmentValue(sanitizedTreatmentDetail || raw));
             }
           }
 

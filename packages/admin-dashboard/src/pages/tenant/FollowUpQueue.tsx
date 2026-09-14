@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { Pagination } from '../../components/common/Pagination';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
+import { FollowUpTemplates } from './FollowUpTemplates';
 import {
   Clock,
   Send,
@@ -76,6 +78,8 @@ interface TemplateItem {
 }
 
 export const FollowUpQueue: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeMainTab = (searchParams.get('tab') === 'templates' ? 'TEMPLATES' : 'QUEUE') as 'QUEUE' | 'TEMPLATES';
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -499,6 +503,26 @@ export const FollowUpQueue: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fadeIn pb-12">
+      {/* Top-level Tabs: Queue vs Templates */}
+      <div className="flex items-center gap-2 border-b border-[#e9edef] pb-0">
+        <button
+          onClick={() => setSearchParams({}, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'QUEUE' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Antrean Follow-Up
+        </button>
+        <button
+          onClick={() => setSearchParams({ tab: 'templates' }, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'TEMPLATES' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Template Pesan
+        </button>
+      </div>
+
+      {activeMainTab === 'TEMPLATES' ? (
+        <FollowUpTemplates />
+      ) : (
+      <>
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e9edef]">
         <div className="flex items-center space-x-3.5">
@@ -1252,6 +1276,8 @@ export const FollowUpQueue: React.FC = () => {
             <XCircle size={13} />
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );

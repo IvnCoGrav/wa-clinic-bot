@@ -1192,4 +1192,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Verifikasi manual mobile (scythe viewport iPhone, emoji picker, draf antar-chat, kirim) belum dieksekusi di sesi ini — wajib sebelum klaim "100% lancar" ke user.
   4. Skrip `check-livechat-sync.ts` / `repair-last-message-at.ts` dan endpoint `sync-health` belum dijalankan terhadap DB produksi (lingkungan sesi ini offline).
 
+---
+
+## 61. [Pembersihan Fondasional] Konsolidasi Page Bloat, Shared Utils & Optimasi Backend (2026-09-15)
+
+- **Status:** Fase 1–3 selesai terverifikasi (dashboard build + root tsc exit 0; full suite 276 files, 2003 passed, 0 failures; sidebar 25→20 menu, bukan 25→15 klaim plan — lihat sisa).
+- **Sisa & Tech Debt yang disengaja:**
+  1. **Koordinat klinik fallback hardcode** `CLINIC_COORDS = { lat: -7.34886, lng: 112.751677 }` di `CreateReservationModal.tsx` masih hardcode tech-debt menunggu endpoint `tenant.settings` baru agar tenant-aware penuh. Perlu Confirmation Gate bila solusi tenant-aware butuh infra baru/LOC besar — dicatat sesuai AGENTS.md.
+  2. **Sidebar 25→20, bukan 15** seperti klaim plan: hanya 5 menu dihapus (Customer Labels, CS & CTA, Follow-Up Templates, Daily Chat Export, Telegram) karena Delivery Tiers memang tidak ada di sidebar dan beberapa menu (Chat Migration, Balasan Cepat) dipertahankan sebagai rute mandiri yang masih aktif. Pencapaian 15 butuh keputusan tambahan menghapus rute mandiri lain — butuh konfirmasi user.
+  3. **LocationPickerModal & CustomerProfilePanel** baru (file siap, build lolos) belum menggantikan 800–1100 LOC duplikat lokasi/foto di `TodayTreatments`, `StaffToday`, `CustomerEditForm` secara penuh — integrasi penuh butuh refactoring lanjutan per-konsumen (risiko regresi tinggi bila sekaligus). 
+  4. Old page files (`DeliveryTiers.tsx`, `FollowUpTemplates.tsx`, dll.) tetap ada di repo sebagai source untuk tab — tidak dihapus agar import tab tetap berfungsi; hanya rute `App.tsx` yang di-redirect.
+
 
