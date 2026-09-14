@@ -58,6 +58,7 @@ import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
+import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const Reservations: React.FC = () => {
@@ -73,34 +74,10 @@ export const Reservations: React.FC = () => {
   const [housePhotoModal, setHousePhotoModal] = useState<string | null>(null);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Chat History Modal State
+  // Chat History Modal State — render & fetch dimiliki ChatHistoryModal terpusat.
+  // Selalu zIndex 10000: halaman ini membuka riwayat dari atas
+  // ReservationDetailModal (z-[9999]).
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<{ id: string; name?: string; phone?: string } | null>(null);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyMessages, setHistoryMessages] = useState<any[]>([]);
-  const historyContainerRef = useRef<HTMLDivElement>(null);
-  const historyMessagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollHistoryToBottom = useCallback((smooth = false) => {
-    const doScroll = () => {
-      if (historyContainerRef.current) {
-        historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight + 99999;
-      }
-      if (historyMessagesEndRef.current) {
-        historyMessagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
-      }
-    };
-    doScroll();
-    requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 30);
-    setTimeout(doScroll, 100);
-    setTimeout(doScroll, 250);
-  }, []);
-
-  useEffect(() => {
-    if (activeHistoryCustomer && historyMessages.length > 0 && !loadingHistory) {
-      scrollHistoryToBottom(false);
-    }
-  }, [activeHistoryCustomer, historyMessages, loadingHistory, scrollHistoryToBottom]);
 
   // Edit Location & House Photo Modal (Admin CS)
   const [editLocationModal, setEditLocationModal] = useState<Reservation | null>(null);
@@ -568,21 +545,9 @@ export const Reservations: React.FC = () => {
     await handleCancel(id);
   };
 
-  // Open Chat History
-  const handleOpenChatHistory = async (customerId: string, customerName?: string, customerPhone?: string) => {
+  // Open Chat History — fetch & render dimiliki ChatHistoryModal terpusat.
+  const handleOpenChatHistory = (customerId: string, customerName?: string, customerPhone?: string) => {
     setActiveHistoryCustomer({ id: customerId, name: customerName, phone: customerPhone });
-    setLoadingHistory(true);
-    setHistoryMessages([]);
-    try {
-      const res = await apiRequest(`/api/admin/customers/${customerId}/messages`);
-      if (res && res.success) {
-        setHistoryMessages(res.data || []);
-      }
-    } catch (err: any) {
-      toast(`Gagal memuat riwayat chat: ${err.message}`, 'error');
-    } finally {
-      setLoadingHistory(false);
-    }
   };
 
   // Assign Staff
@@ -1982,108 +1947,13 @@ export const Reservations: React.FC = () => {
           document.body
         )}
 
-      {/* Chat History Stream Modal */}
-      {activeHistoryCustomer &&
-        createPortal(
-          <div
-            data-modal-active="true"
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setActiveHistoryCustomer(null)}
-          >
-            <div
-              className="w-full max-w-lg bg-white border border-[#e9edef] rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-modalScaleUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
-                <div>
-                  <h3 className="font-bold text-sm text-[#111b21] flex items-center space-x-2">
-                    <MessageSquare size={16} className="text-[#008069]" />
-                    <span>Riwayat Chat WhatsApp</span>
-                  </h3>
-                  <p className="text-xs text-[#667781] mt-0.5 font-mono">
-                    {activeHistoryCustomer.name || 'Pasien'} {activeHistoryCustomer.phone ? `• ${activeHistoryCustomer.phone}` : ''}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setActiveHistoryCustomer(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Modal Body: Message Stream with WhatsApp Wallpaper */}
-              <div
-                ref={historyContainerRef}
-                className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
-                style={{
-                  backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
-                  backgroundSize: '16px 16px',
-                }}
-              >
-                {loadingHistory ? (
-                  <div className="flex justify-center items-center py-12">
-                    <Loader className="animate-spin text-[#008069]" size={32} />
-                  </div>
-                ) : historyMessages.length === 0 ? (
-                  <div className="text-center py-12 text-[#667781] text-xs">
-                    Belum ada pesan tercatat untuk customer ini.
-                  </div>
-                ) : (
-                  <>
-                    {historyMessages.map((msg) => {
-                      const isInbound = msg.direction === 'INBOUND';
-                      const typeUpper = (msg.sender_type || '').toUpperCase();
-                      const sender = isInbound
-                        ? 'Customer'
-                        : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
-                        ? msg.sender_name || 'Admin'
-                        : 'Bot';
-
-                      return (
-                        <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                          <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5">
-                            <span className="font-bold text-[#111b21]">{sender}</span>
-                            <span>•</span>
-                            <Clock size={9} />
-                            <span>
-                              {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                          <div
-                            className={`max-w-[80%] p-3 rounded-xl text-xs leading-relaxed shadow-xs ${
-                              isInbound
-                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                                : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                            }`}
-                          >
-                            {msg.content}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div ref={historyMessagesEndRef} className="h-0 w-0 pointer-events-none" />
-                  </>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-3.5 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end">
-                <button
-                  onClick={() => setActiveHistoryCustomer(null)}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Chat History Stream Modal (terpusat — Anti-Bloat) */}
+      <ChatHistoryModal
+        isOpen={!!activeHistoryCustomer}
+        customer={activeHistoryCustomer}
+        zIndex={10000}
+        onClose={() => setActiveHistoryCustomer(null)}
+      />
 
       {/* Comprehensive Create Reservation Modal */}
       <CreateReservationModal

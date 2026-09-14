@@ -237,6 +237,7 @@ export class FollowUpService {
                 is_sandbox_test: true,
                 conversations: {
                   select: {
+                    id: true,
                     last_message_at: true,
                     is_human_handling: true,
                   },
