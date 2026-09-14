@@ -12,6 +12,35 @@ import { ConversationState } from '@prisma/client';
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
   /**
+   * GET /api/admin/geo/areas
+   * Referensi wilayah (kecamatan + kota) dari dataset gazetteer — single source of truth.
+   * Dipakai dashboard untuk mengekstrak Kec/Kota dari teks alamat saat form kosong,
+   * tanpa daftar hafalan di frontend. Data referensi global; penyimpanan tetap per-tenant di Customer.
+   */
+  fastify.get('/api/admin/geo/areas', async (_request, reply) => {
+    try {
+      const { getGazetteerData } = await import('../../utils/gazetteer');
+      const kecSet = new Map<string, string>();
+      const kotaSet = new Map<string, string>();
+      for (const row of getGazetteerData()) {
+        const kec = (row.Kecamatan || '').trim();
+        const kota = (row.Kabupaten_Kota || '').trim();
+        if (kec.length >= 3 && !kecSet.has(kec.toLowerCase())) kecSet.set(kec.toLowerCase(), kec);
+        if (kota.length >= 3 && !kotaSet.has(kota.toLowerCase())) kotaSet.set(kota.toLowerCase(), kota);
+      }
+      return reply.status(200).send({
+        success: true,
+        data: {
+          kecamatan: Array.from(kecSet.values()).sort(),
+          kota: Array.from(kotaSet.values()).sort(),
+        },
+      });
+    } catch (error: any) {
+      return reply.status(200).send({ success: true, data: { kecamatan: [], kota: [] }, note: 'Fallback kosong' });
+    }
+  });
+
+  /**
    * GET /api/admin/human-handling-conversations
    * REST Endpoint untuk melihat daftar percakapan yang aktif diserahkan ke Human Agent.
    */

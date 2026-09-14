@@ -74,7 +74,28 @@ import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
 import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, WilayahReference } from '../../utils/chatScheduleExtractor';
+
+// Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
+let cachedWilayahRef: WilayahReference | null = null;
+let wilayahRefInflight: Promise<WilayahReference | null> | null = null;
+async function getWilayahRef(): Promise<WilayahReference | null> {
+  if (cachedWilayahRef) return cachedWilayahRef;
+  if (!wilayahRefInflight) {
+    wilayahRefInflight = (async () => {
+      try {
+        const res = await apiRequest('/api/admin/geo/areas');
+        const data = res?.data as WilayahReference | undefined;
+        if (data && (Array.isArray(data.kecamatan) || Array.isArray(data.kota))) {
+          cachedWilayahRef = { kecamatan: data.kecamatan || [], kota: data.kota || [] };
+          return cachedWilayahRef;
+        }
+      } catch {}
+      return null;
+    })().finally(() => { wilayahRefInflight = null; });
+  }
+  return wilayahRefInflight;
+}
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime } from '../../utils/dateWib';
 import { emitBootPhase } from '../../lib/bootProgress';
 
@@ -2725,7 +2746,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       dateDisplay: formatIndonesianDate(bookingD),
       timeDisplay: timeStr,
       treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'Pijat Ceria',
-      treatmentPrice: Number(resItem?.purchase_value || resItem?.treatment_price) || 60000,
+      treatmentPrice: Number(resItem?.purchase_value ?? resItem?.treatment_price ?? 0) || 0,
       treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? 'MOMS' : 'BABY',
       childName: resItem?.child_name || custData?.children?.[0]?.name || '',
       childAge: resItem?.child_age || custData?.children?.[0]?.raw_age_text || custData?.children?.[0]?.current_age || '',
@@ -2793,7 +2814,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
 
     // Ekstraksi pintar jadwal & rincian dari obrolan chat
-    let extracted = extractScheduleFromMessages(messages, custData, currentServices);
+    // (referensi wilayah backend agar Kec/Kota kosong tetap terisi dari teks alamat)
+    let wilayahRef: WilayahReference | null = null;
+    try { wilayahRef = await getWilayahRef(); } catch {}
+    let extracted = extractScheduleFromMessages(messages, custData, currentServices, wilayahRef);
 
     // STAGE 2 FIX: Jika ada pesan shareloc terbaru di thread, pakai jarak/ongkir profil terkini (sudah di-sync webhook GPS pin)
     try {
