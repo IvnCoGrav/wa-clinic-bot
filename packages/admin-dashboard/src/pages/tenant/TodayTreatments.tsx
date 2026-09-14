@@ -368,8 +368,18 @@ export const TodayTreatments: React.FC = () => {
     fetchTasks();
     fetchTeamMembers();
 
-    const timer = setInterval(() => fetchTasks(true), 15000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      fetchTasks(true);
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchTasks(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchTasks, fetchTeamMembers]);
 
   // Format jam:menit dan rentang jam mulai - jam selesai

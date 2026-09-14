@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
+import { CustomerLabels } from './CustomerLabels';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -79,6 +81,8 @@ interface ChatMessage {
 
 export const CustomerDatabase: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeMainTab = (searchParams.get('tab') === 'labels' ? 'LABELS' : 'CUSTOMERS') as 'CUSTOMERS' | 'LABELS';
   const cachedCustRes = getCachedApiResponse<any>('/api/admin/customers?page=1&pageSize=15&sortBy=created_at&sortOrder=desc');
   const initialCustomers = Array.isArray(cachedCustRes) ? cachedCustRes : (cachedCustRes?.data || []);
   const [loading, setLoading] = useState(initialCustomers.length === 0);
@@ -430,6 +434,26 @@ export const CustomerDatabase: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Top-level Tabs: Customers vs Labels */}
+      <div className="flex items-center gap-2 border-b border-[#e9edef] pb-0">
+        <button
+          onClick={() => setSearchParams({}, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CUSTOMERS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Daftar Pelanggan
+        </button>
+        <button
+          onClick={() => setSearchParams({ tab: 'labels' }, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'LABELS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Kelola Label
+        </button>
+      </div>
+
+      {activeMainTab === 'LABELS' ? (
+        <CustomerLabels />
+      ) : (
+      <>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -1523,6 +1547,8 @@ export const CustomerDatabase: React.FC = () => {
           onHousePhotoView={(url) => window.open(url, '_blank')}
           onOpenChatHistory={(id, name, phone) => handleOpenHistory({ id, name: name || null, phone: phone || '' } as CustomerItem, 10000)}
         />
+      )}
+      </>
       )}
   </div>
 );
