@@ -176,10 +176,23 @@ export class ConversationService {
       }
       if (search && search.trim()) {
         const query = search.trim();
-        const cleanDigits = query.replace(/\D/g, '');
+        const digitsOnly = query.replace(/\D/g, '');
+        let normalizedPhone = digitsOnly;
+        if (normalizedPhone.startsWith('0')) normalizedPhone = '62' + normalizedPhone.slice(1);
+        else if (normalizedPhone.startsWith('8')) normalizedPhone = '62' + normalizedPhone;
+
+        const phoneConditions: any[] = [{ phone: { contains: query } }];
+        if (digitsOnly && digitsOnly.length >= 3) {
+          phoneConditions.push({ phone: { contains: digitsOnly } });
+        }
+        if (normalizedPhone && normalizedPhone.length >= 4 && normalizedPhone !== digitsOnly) {
+          phoneConditions.push({ phone: { contains: normalizedPhone } });
+        }
+
         where.OR = [
           { customer: { name: { contains: query, mode: 'insensitive' } } },
-          { customer: { phone: { contains: cleanDigits.length > 2 ? cleanDigits : query } } },
+          ...phoneConditions.map((p) => ({ customer: p })),
+          { customer: { children: { some: { name: { contains: query, mode: 'insensitive' } } } } },
           { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
         ];
       }
@@ -223,6 +236,34 @@ export class ConversationService {
         if (label === 'medical_concern') working = working.filter((c: any) => c.escalation_reason === 'medical_concern');
         else if (label === 'unresolved_faq') working = working.filter((c: any) => c.escalation_reason === 'unresolved_faq');
         else if (label === 'human_request') working = working.filter((c: any) => !!c.is_human_handling);
+      }
+      if (search && search.trim()) {
+        const q = search.trim().toLowerCase();
+        const digitsOnly = q.replace(/\D/g, '');
+        let normalized = digitsOnly;
+        if (normalized.startsWith('0')) normalized = '62' + normalized.slice(1);
+        else if (normalized.startsWith('8')) normalized = '62' + normalized;
+        const next: any[] = [];
+        for (const c of working) {
+          try {
+            const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
+            const nameMatch = (cust?.name || '').toLowerCase().includes(q);
+            const phoneRaw = (cust?.phone || '').toLowerCase();
+            const phoneDigits = (cust?.phone || '').replace(/\D/g, '');
+            const phoneMatch = digitsOnly.length >= 3
+              ? (phoneDigits.includes(digitsOnly) || (normalized.length >= 4 && phoneDigits.includes(normalized)) || phoneRaw.includes(q))
+              : phoneRaw.includes(q);
+            const childMatch = Array.isArray(cust?.children) && cust.children.some((ch: any) => (ch.name || '').toLowerCase().includes(q));
+            if (nameMatch || phoneMatch || childMatch) next.push(c);
+          } catch {
+            // fallback: cek phone/name di conversation snapshot jika ada
+            const phoneMatch = digitsOnly.length >= 3
+              ? ((c.customerPhone || '') && (c.customerPhone || '').replace(/\D/g, '').includes(digitsOnly))
+              : false;
+            if (phoneMatch) next.push(c);
+          }
+        }
+        working = next;
       }
       return working.slice(offset, offset + take);
     }
