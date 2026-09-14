@@ -1408,7 +1408,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const activeTodayTasks = tasks.filter((t) => !isTrulyCompleted(t));
   const pastOrCompletedTodayTasks = tasks.filter((t) => isTrulyCompleted(t));
   const combinedCompletedTasks = [
-    ...completedTasks,
+    ...completedTasks.map((c) => {
+      const fromToday = pastOrCompletedTodayTasks.find((t) => t.reservationId === c.reservationId);
+      return fromToday?.conversationId ? { ...c, conversationId: fromToday.conversationId } : c;
+    }),
     ...pastOrCompletedTodayTasks.filter((t) => !completedTasks.some((c) => c.reservationId === t.reservationId)),
   ];
 
@@ -1973,8 +1976,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
                         </div>
 
-                        {/* Quick Action Buttons: Navigasi, Infokan OTW */}
-                        <div className="grid grid-cols-2 gap-1.5 pt-2 mt-1">
+                        {/* Quick Action Buttons: Chat, Navigasi, Infokan OTW */}
+                        <div className="grid grid-cols-3 gap-1.5 pt-2 mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenChat(task);
+                            }}
+                            className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                            title="Buka Ruang Percakapan WhatsApp Pasien"
+                          >
+                            <MessageSquare size={12} className="text-[#008069]" />
+                            <span>Chat</span>
+                          </button>
+
                           {task.navigationUrl || task.mapsUrl ? (
                             <a
                               href={task.navigationUrl || task.mapsUrl || '#'}
@@ -2634,20 +2650,25 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <strong className="text-[#111b21] ml-0.5">{formatRupiah(item.pricing.totalFee)}</strong>
                             </div>
 
-                            {item.navigationUrl || item.mapsUrl ? (
-                              <a
-                                href={item.navigationUrl || item.mapsUrl || '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg transition-all active:scale-95 shadow-xs"
-                                title="Buka Peta Google Maps"
-                              >
-                                <Navigation size={12} />
-                                <span>Peta Rute</span>
-                              </a>
-                            ) : (
-                              <span className="text-[11px] text-[#667781]">Tanpa Peta</span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-[#667781] bg-[#f0f2f5] px-2 py-0.5 rounded-md border border-[#e9edef] hidden sm:inline">
+                                Chat aktif di hari-H
+                              </span>
+                              {item.navigationUrl || item.mapsUrl ? (
+                                <a
+                                  href={item.navigationUrl || item.mapsUrl || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg transition-all active:scale-95 shadow-xs"
+                                  title="Buka Peta Google Maps"
+                                >
+                                  <Navigation size={12} />
+                                  <span>Peta Rute</span>
+                                </a>
+                              ) : (
+                                <span className="text-[11px] text-[#667781]">Tanpa Peta</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -3433,6 +3454,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Modal Actions */}
             <div className="pt-1 flex space-x-2">
+              {detailModalTask.conversationId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = detailModalTask;
+                    setDetailModalTask(null);
+                    handleOpenChat(t);
+                  }}
+                  className="flex-1 py-3 px-4 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
+                  title="Buka Chat WhatsApp Pasien"
+                >
+                  <MessageSquare size={14} className="text-[#008069]" />
+                  <span>Chat Pasien</span>
+                </button>
+              )}
               {(detailModalTask.navigationUrl || detailModalTask.mapsUrl) && (
                 <a
                   href={detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#'}
