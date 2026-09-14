@@ -212,6 +212,65 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/admin/live-chat/sync-health
+   * Observabilitas ringan integritas urutan chat (Fase C v3, read-only):
+   * drift `conversations.last_message_at` vs MAX(messages.created_at) +
+   * pesan tanpa `wa_message_id`, digabung status background sync.
+   */
+  fastify.get('/api/admin/live-chat/sync-health', async (request, reply) => {
+    const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
+    const activeSync = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+    const checkedAt = new Date().toISOString();
+    try {
+      const driftRows = (await prisma.$queryRaw`
+        SELECT COUNT(*) AS count
+        FROM conversations c
+        JOIN (
+          SELECT conversation_id, MAX(created_at) AS latest
+          FROM messages
+          GROUP BY conversation_id
+        ) sub ON sub.conversation_id = c.id
+        WHERE c.tenant_id = ${DEFAULT_TENANT_ID}
+          AND (c.last_message_at IS NULL OR c.last_message_at != sub.latest)
+      `) as Array<{ count: bigint }>;
+      const missingRows = (await prisma.$queryRaw`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE m.direction = 'INBOUND') AS inbound,
+          COUNT(*) FILTER (WHERE m.direction = 'OUTBOUND') AS outbound
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE c.tenant_id = ${DEFAULT_TENANT_ID}
+          AND m.wa_message_id IS NULL
+      `) as Array<{ total: bigint; inbound: bigint; outbound: bigint }>;
+      const driftsFound = Number(driftRows?.[0]?.count ?? 0);
+      const missing = missingRows?.[0] ?? { total: 0n, inbound: 0n, outbound: 0n };
+      return reply.status(200).send({
+        success: true,
+        healthy: driftsFound === 0,
+        driftsFound,
+        missingWaId: {
+          total: Number(missing.total ?? 0),
+          inbound: Number(missing.inbound ?? 0),
+          outbound: Number(missing.outbound ?? 0),
+        },
+        activeSync,
+        checkedAt,
+      });
+    } catch (err: any) {
+      return reply.status(200).send({
+        success: true,
+        healthy: false,
+        driftsFound: 0,
+        missingWaId: { total: 0, inbound: 0, outbound: 0 },
+        activeSync,
+        checkedAt,
+        note: `Database offline — kesehatan drift tidak dapat diverifikasi: ${err?.message || err}`,
+      });
+    }
+  });
+
+  /**
    * GET /api/admin/live-chat/conversations/:id
    * Detail satu percakapan untuk live chat monitor.
    */

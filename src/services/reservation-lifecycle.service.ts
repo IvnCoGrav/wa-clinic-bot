@@ -1,7 +1,18 @@
 import { prisma } from '../db/client';
-import { wahaClient } from '../integrations/waha/client';
 import { BabyDetail } from '../utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
+
+/**
+ * Kanonis nama label lifecycle di DB internal (tabel `Label`, tenant-scoped).
+ * Dipetakan dari nama label WAHA historis: 'new customer' → 'New Customer',
+ * 'pending payment' → 'Pending Payment', 'repeat' → 'Repeat Order'.
+ * Sesuai DEFAULT_SYSTEM_LABELS di labels.subroute (seed-defaults); upsert di
+ * bawah memakai update:{} agar kustomisasi warna/deskripsi oleh admin (via
+ * /api/admin/labels) TIDAK pernah tertimpa.
+ */
+const LIFECYCLE_LABEL_NEW_CUSTOMER = 'New Customer';
+const LIFECYCLE_LABEL_PENDING_PAYMENT = 'Pending Payment';
+const LIFECYCLE_LABEL_REPEAT_ORDER = 'Repeat Order';
 
 /**
  * ReservationLifecycleService — fungsi sentral untuk side-effect pasca-create reservasi.
@@ -155,18 +166,21 @@ export class ReservationLifecycleService {
   }
 
   /**
-   * Terapkan label lifecycle pada chat:
-   * - priorConfirmedCount > 0  → 'repeat'          (bukan 'pending payment')
-   * - priorConfirmedCount === 0 → 'pending payment'
-   * - selalu hapus 'new customer'
-   * - TIDAK pernah melepas label 'legacy'
-   * Semua best-effort (opsi label WA tidak pernah menggagalkan operasi inti).
+   * Terapkan label lifecycle pada customer — DB-ONLY (Mandat Mutlak Anti-Label WAHA).
+   * - priorConfirmedCount > 0  → tambah 'Repeat Order', hapus 'New Customer' + 'Pending Payment'
+   * - priorConfirmedCount === 0 → tambah 'Pending Payment', hapus 'New Customer'
+   * - TIDAK pernah menyentuh label lain (mis. 'legacy') — hanya 3 nama kanonis di atas
+   *   yang di-upsert/di-delete via tabel `Label` + `CustomerLabel` (tenant-scoped).
+   * - Zero pemanggilan WAHA (dulu: wahaClient.batchUpdateLabels). Best-effort:
+   *   DB offline → warn & lanjut, operasi inti reservasi tidak pernah gagal.
    *
    * Riwayat = `confirmed` ATAU `completed` (kanonis patient-lifecycle):
-   * pasien yang reservasi sebelumnya sudah `completed` tetap 'repeat'.
+   * pasien yang reservasi sebelumnya sudah `completed` tetap 'Repeat Order'.
    */
   private async applyLifecycleLabels(params: { customerId: string; tenantId: string; chatId: string }): Promise<void> {
-    const { customerId, tenantId, chatId } = params;
+    const { customerId, tenantId } = params;
+    // chatId dipertahankan di signature untuk kompatibilitas pemanggil
+    // (reservation-core, webhook, script) — tidak dipakai: zero WAHA.
 
     // Hitung reservasi confirmed/completed-sebelumnya milik customer (di luar reservasi barusan).
     let priorConfirmedCount = 0;
@@ -183,19 +197,47 @@ export class ReservationLifecycleService {
       console.warn('[LIFECYCLE LABEL] Could not count prior confirmed reservations:', err.message);
     }
 
-    // Best-effort: satu operasi atomik (1x GET + 1x PUT) untuk semua perubahan label
-    const remove: string[] = ['new customer'];
-    const add: string[] = [];
-    if (priorConfirmedCount > 0) {
-      add.push('repeat');
-      remove.push('pending payment');
-    } else {
-      add.push('pending payment');
+    const add: string[] =
+      priorConfirmedCount > 0 ? [LIFECYCLE_LABEL_REPEAT_ORDER] : [LIFECYCLE_LABEL_PENDING_PAYMENT];
+    const remove: string[] =
+      priorConfirmedCount > 0
+        ? [LIFECYCLE_LABEL_NEW_CUSTOMER, LIFECYCLE_LABEL_PENDING_PAYMENT]
+        : [LIFECYCLE_LABEL_NEW_CUSTOMER];
+
+    try {
+      const labelIds = new Map<string, string>();
+      for (const name of [...add, ...remove]) {
+        const label = await prisma.label.upsert({
+          where: { tenant_id_name: { tenant_id: tenantId, name } },
+          update: {},
+          create: { tenant_id: tenantId, name },
+        });
+        labelIds.set(name, label.id);
+      }
+      for (const name of add) {
+        const labelId = labelIds.get(name);
+        if (!labelId) continue;
+        await prisma.customerLabel.upsert({
+          where: { customer_id_label_id: { customer_id: customerId, label_id: labelId } },
+          update: {},
+          create: { customer_id: customerId, label_id: labelId },
+        });
+      }
+      const removeIds = remove
+        .map((name) => labelIds.get(name))
+        .filter((id): id is string => !!id);
+      if (removeIds.length > 0) {
+        await prisma.customerLabel.deleteMany({
+          where: { customer_id: customerId, label_id: { in: removeIds } },
+        });
+      }
+      console.log(
+        `[LIFECYCLE LABEL] DB-only lifecycle applied for customer ${customerId}: +[${add.join(', ')}] -[${remove.join(', ')}]`
+      );
+    } catch (err: any) {
+      console.warn('[LIFECYCLE LABEL] DB-only lifecycle tagging failed:', err?.message || err);
     }
-    wahaClient.batchUpdateLabels(chatId, { add, remove }).catch((err: any) =>
-      console.warn('[LIFECYCLE LABEL] batchUpdateLabels failed:', err.message)
-    );
-    // Catatan: label 'legacy' dibiarkan tak tersentuh.
+    // Catatan: label lain (mis. 'legacy') dibiarkan tak tersentuh.
   }
 }
 

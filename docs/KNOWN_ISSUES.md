@@ -1181,4 +1181,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Deviasi dari plan yang WAJIB dicatat (Confirmation Gate, disetujui eksplisit via prompt):** opsi "full plan apa adanya" dipilih user atas temuan audit (overclaim latensi, matinya V3 DOMAIN GATE untuk OOD, konflik mandat non-hardcode pada keyword darurat, target <250 baris). Pengecualian hardcode sementara: TIDAK ada daftar keyword baru yang ditambahkan — darurat medis tetap mengandalkan `preExtractDeterministic` existing + router `escalate_to_human`.
 - **Risiko sisa:** OOD yang hanya terdeteksi semantik LLM kini dijawab V3 dulu (bukan silent-gate pre-V3) kecuali Call 1 memilih `escalate_to_human` — monitor via reason `unresolved_faq`/HUMAN_HANDLING; `EntityExtractor.extract` (LLM) masih dipakai jalur lain bila ada — grep berkala bila ingin dipensiunkan total.
 
+---
+
+## 60. [LiveChat v3] Sisa terbuka pasca implementasi Fase A–D (2026-09-14)
+
+- **Status:** Fase A–D implemented (full suite 275 files, 2001 passed + 19 skipped, 0 failures; `npm run build` + dashboard `tsc && vite build` exit 0; `dist/` ter-regenerasi).
+- **Sisa yang diketahui & disengaja:**
+  1. Rencana verifikasi v3 merujuk `tests/unit/live-chat.test.ts` dan `tests/unit/date-wib.test.ts` — kedua file TIDAK ADA di repo. Cakupan pengganti yang benar-benar ada & hijau: `tests/unit/live-chat-paged-messages.test.ts`, `tests/unit/live-chat-sync-health.test.ts` (baru, 2 tests), `tests/unit/label-lifecycle.test.ts` (8), `tests/unit/waha-label-cache.test.ts`. Jangan klaim file yang tidak ada sebagai gate.
+  2. Method `wahaClient.addLabel/removeLabel/batchUpdateLabels` tetap ada di `src/integrations/waha/client.ts` (ditandai `@deprecated` + runtime warning) karena test client-level (`waha-label-cache`, `waha-label-resilience`, `waha-retry`) mengunci perilaku cache/invalidate-nya. Larangan berlaku untuk kode BISNIS (dikunci invariant guard 3 tests, termasuk pola chain multiline).
+  3. Verifikasi manual mobile (scythe viewport iPhone, emoji picker, draf antar-chat, kirim) belum dieksekusi di sesi ini — wajib sebelum klaim "100% lancar" ke user.
+  4. Skrip `check-livechat-sync.ts` / `repair-last-message-at.ts` dan endpoint `sync-health` belum dijalankan terhadap DB produksi (lingkungan sesi ini offline).
+
 

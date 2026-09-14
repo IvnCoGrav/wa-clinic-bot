@@ -369,8 +369,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   /**
    * PATCH /api/admin/customers/:id/label
    * Set/toggle label 'admin' atau 'hold' untuk customer.
-   * Sumber kebenaran = kolom DB (is_admin_labeled / is_hold_labeled); mirror ke
-   * WAHA (addLabel/removeLabel) bersifat best-effort agar label tampil di aplikasi WA.
+   * Sumber kebenaran = kolom DB (is_admin_labeled / is_hold_labeled) + tabel
+   * CustomerLabel internal. Mandat Mutlak Anti-Label WAHA: zero mutasi label
+   * WAHA (tanpa addLabel/removeLabel/batching ke WA) — DB adalah single source of truth.
    */
   fastify.patch(
     '/api/admin/customers/:id/label',

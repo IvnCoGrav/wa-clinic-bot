@@ -32,8 +32,29 @@ describe('WAHA Label Ban Invariant (Mandat Mutlak)', () => {
     ).toHaveLength(0);
   });
 
-  it('DILARANG memanggil wahaClient.getChatLabels di luar webhook (read-only exception di webhook)', () => {
+  it('DILARANG memanggil .addLabel/.removeLabel/.batchUpdateLabels dalam bentuk apapun di src/ (termasuk chain multiline wahaClient\\n.method)', () => {
+    // Latar: pola lama `wahaClient?.(addLabel|removeLabel)\(` lolos saat call dipecah
+    // multiline (`wahaClient\\n.removeLabel(...)`) dan tidak mencakup batchUpdateLabels.
+    // Pola dot-call ini menutup kedua celah (definisi `async addLabel(` tidak ber-dot → aman).
     const srcDir = path.resolve(__dirname, '../../../src');
+    let result: string;
+    try {
+      result = execSync(
+        `rg -n "\\.(addLabel|removeLabel|batchUpdateLabels)\\(" --glob "!src/integrations/waha/client.ts" --glob "!src/cli/mock-waha-client.ts" --glob "!*.test.ts" --glob "!*.d.ts" src/`,
+        { cwd: path.resolve(srcDir, '..'), encoding: 'utf8', timeout: 15000 }
+      );
+    } catch (err: any) {
+      if (err.status === 1) { result = ''; } else { throw err; }
+    }
+
+    const violations = result.trim().split('\n').filter((line) => line.length > 0);
+    expect(
+      violations,
+      `[WAHA LABEL BAN VIOLATION] Ditemukan ${violations.length} pemanggilan mutasi label (bentuk apapun):\n${violations.join('\n')}`
+    ).toHaveLength(0);
+  });
+
+  it('DILARANG memanggil wahaClient.getChatLabels di luar webhook (read-only exception di webhook)', () => {    const srcDir = path.resolve(__dirname, '../../../src');
     let result: string;
     try {
       result = execSync(
