@@ -231,11 +231,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         const conversationIds = conversations.map((c) => c.id);
-        const messages = await prisma.message.findMany({
+        // Ambil N pesan TERBARU (desc) lalu kembalikan kronologis (asc) agar
+        // customer berriwayat panjang tidak kehilangan pesan terbarunya di modal.
+        const rawMessages = await prisma.message.findMany({
           where: { conversation_id: { in: conversationIds }, tenant_id: DEFAULT_TENANT_ID },
-          orderBy: { created_at: 'asc' },
+          orderBy: { created_at: 'desc' },
           take: limit,
         });
+        const messages = rawMessages.reverse();
 
         return reply.status(200).send({ success: true, count: messages.length, data: messages });
       } catch (err: any) {

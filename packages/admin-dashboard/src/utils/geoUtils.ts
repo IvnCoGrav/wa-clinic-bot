@@ -69,6 +69,24 @@ function isValidLatLng(lat: number, lng: number): boolean {
 }
 
 /**
+ * Jarak Haversine dalam kilometer (1 desimal) — single source untuk dashboard.
+ * Konsolidasi dari duplikat lokal di CreateReservationModal (Anti-Spaghetti).
+ */
+export function calculateHaversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+/**
  * Menghasilkan URL navigasi Google Maps yang selalu valid dengan fallback berjenjang.
  */
 export function getGoogleMapsDirectionUrl(
