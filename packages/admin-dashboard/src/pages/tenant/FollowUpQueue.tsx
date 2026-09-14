@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { Pagination } from '../../components/common/Pagination';
+import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import {
   Clock,
   Send,
@@ -98,48 +99,15 @@ export const FollowUpQueue: React.FC = () => {
     id?: string;
   } | null>(null);
 
-  // Chat History Modal
+  // Chat History Modal — render, fetch & quick-reply dimiliki ChatHistoryModal
+  // terpusat (mode reply via endpoint live-chat valid; tanpa fallback 404).
   const [chatModal, setChatModal] = useState<{
     open: boolean;
     customer: Customer | null;
-    messages: any[];
-    loading: boolean;
-    replyText: string;
-    sending: boolean;
   }>({
     open: false,
     customer: null,
-    messages: [],
-    loading: false,
-    replyText: '',
-    sending: false,
   });
-
-  const chatContainerRef = React.useRef<HTMLDivElement>(null);
-  const chatMessagesEndRef = React.useRef<HTMLDivElement>(null);
-
-  // Auto-scroll chat modal to bottom
-  const scrollChatToBottom = useCallback((smooth = false) => {
-    const doScroll = () => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
-      }
-      if (chatMessagesEndRef.current) {
-        chatMessagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
-      }
-    };
-    doScroll();
-    requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 30);
-    setTimeout(doScroll, 100);
-    setTimeout(doScroll, 250);
-  }, []);
-
-  useEffect(() => {
-    if (chatModal.open && chatModal.messages.length > 0 && !chatModal.loading) {
-      scrollChatToBottom(false);
-    }
-  }, [chatModal.open, chatModal.messages, chatModal.loading, scrollChatToBottom]);
 
   // Edit Modal (Date, Stage, Variant, and Custom Text)
   const [editModal, setEditModal] = useState<{
@@ -159,18 +127,18 @@ export const FollowUpQueue: React.FC = () => {
 
   const PAGE_SIZE = 20;
 
-  // Global ESC key listener to close modals
+  // Global ESC key listener to close modals (chat modal menutup diri sendiri
+  // via capture-phase listener di ChatHistoryModal).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (chatModal.open) setChatModal((prev) => ({ ...prev, open: false }));
         if (editModal.open) setEditModal({ open: false, newDate: '', stage: 1, variant: 1, customText: '' });
         if (confirmAction) setConfirmAction(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chatModal.open, editModal.open, confirmAction]);
+  }, [editModal.open, confirmAction]);
 
   // Pre-load templates
   useEffect(() => {
@@ -404,59 +372,9 @@ export const FollowUpQueue: React.FC = () => {
     }
   };
 
-  // Open Chat History Modal
-  const handleOpenChatHistory = async (customer: Customer) => {
-    setChatModal({
-      open: true,
-      customer,
-      messages: [],
-      loading: true,
-      replyText: '',
-      sending: false,
-    });
-    try {
-      const res = await apiRequest(`/api/admin/customers/${customer.id}/messages`);
-      if (res && res.success) {
-        setChatModal((prev) => ({ ...prev, messages: res.data || [], loading: false }));
-      } else {
-        setChatModal((prev) => ({ ...prev, loading: false }));
-      }
-    } catch (err: any) {
-      setToastMsg({ type: 'error', text: `Gagal memuat chat: ${err.message}` });
-      setChatModal((prev) => ({ ...prev, loading: false }));
-    }
-  };
-
-  // Send Reply from Chat Modal
-  const handleSendChatReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatModal.customer || !chatModal.replyText.trim() || chatModal.sending) return;
-    const convId = chatModal.customer.conversations?.[0]?.id;
-    setChatModal((prev) => ({ ...prev, sending: true }));
-    try {
-      if (convId) {
-        await apiRequest(`/api/admin/live-chat/conversations/${convId}/reply`, {
-          method: 'POST',
-          body: JSON.stringify({ text: chatModal.replyText.trim() }),
-        });
-      } else {
-        await apiRequest(`/api/admin/customers/${chatModal.customer.id}/reply`, {
-          method: 'POST',
-          body: JSON.stringify({ message: chatModal.replyText.trim() }),
-        });
-      }
-      setToastMsg({ type: 'success', text: 'Pesan WhatsApp berhasil terkirim!' });
-      setChatModal((prev) => ({ ...prev, replyText: '', sending: false }));
-
-      // Refresh message list
-      const res = await apiRequest(`/api/admin/customers/${chatModal.customer.id}/messages`);
-      if (res && res.success) {
-        setChatModal((prev) => ({ ...prev, messages: res.data || [] }));
-      }
-    } catch (err: any) {
-      setToastMsg({ type: 'error', text: `Gagal mengirim balasan: ${err.message}` });
-      setChatModal((prev) => ({ ...prev, sending: false }));
-    }
+  // Open Chat History Modal — fetch & render dimiliki ChatHistoryModal terpusat.
+  const handleOpenChatHistory = (customer: Customer) => {
+    setChatModal({ open: true, customer });
   };
 
   const formatDateTime = (isoStr: string) => {
@@ -1197,156 +1115,15 @@ export const FollowUpQueue: React.FC = () => {
         )}
 
       {/* ========================================================================= */}
-      {/* PORTAL MODAL 2: Chat History Modal (In-Page Viewport Centered)            */}
+      {/* PORTAL MODAL 2: Chat History Modal (terpusat — Anti-Bloat) */}
       {/* ========================================================================= */}
-      {chatModal.open &&
-        chatModal.customer &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
-            onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
-          >
-            <div
-              className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[85vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] shrink-0">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                    {chatModal.customer.name ? chatModal.customer.name.slice(0, 2).toUpperCase() : 'CU'}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-1.5">
-                      <span>{chatModal.customer.name || 'Customer'}</span>
-                      {chatModal.customer.conversations?.[0]?.is_human_handling && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                          Human Handling
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-[11px] text-[#667781] flex items-center space-x-2 mt-0.5">
-                      <span className="font-mono">{chatModal.customer.phone}</span>
-                      <span>•</span>
-                      <span className="flex items-center space-x-0.5">
-                        <MapPin size={10} className="text-[#8696a0]" />
-                        <span>
-                          {chatModal.customer.kelurahan ||
-                            chatModal.customer.kecamatan ||
-                            chatModal.customer.kota ||
-                            'Surabaya/Sidoarjo'}
-                        </span>
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <a
-                    href="/admin/live-chat"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition flex items-center space-x-1"
-                    title="Buka Halaman Live Chat di Tab Baru"
-                  >
-                    <ExternalLink size={12} />
-                    <span className="hidden sm:inline">Live Chat Tab</span>
-                  </a>
-                  <button
-                    onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
-                    className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
-                    title="Tutup (Esc)"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Modal Body: Message Stream with WhatsApp Pattern Background */}
-              <div
-                ref={chatContainerRef}
-                className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
-                style={{
-                  backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
-                  backgroundSize: '16px 16px',
-                }}
-              >
-                {chatModal.loading ? (
-                  <div className="flex justify-center items-center py-20">
-                    <Loader2 className="animate-spin text-[#008069]" size={32} />
-                  </div>
-                ) : chatModal.messages.length === 0 ? (
-                  <div className="text-center py-20 text-[#667781] text-xs">
-                    <MessageSquare size={32} className="mx-auto text-[#8696a0] mb-2 opacity-40" />
-                    <p className="font-semibold text-[#111b21]">Belum ada riwayat pesan tercatat.</p>
-                    <p className="text-[#8696a0] mt-0.5">Ketik pesan di bawah untuk memulai percakapan.</p>
-                  </div>
-                ) : (
-                  <>
-                    {chatModal.messages.map((msg) => {
-                      const isInbound = msg.direction === 'INBOUND';
-                      const typeUpper = (msg.sender_type || '').toUpperCase();
-                      const sender = isInbound
-                        ? 'Customer'
-                        : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
-                        ? msg.sender_name || 'Admin'
-                        : 'Bot';
-
-                      return (
-                        <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                          <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5 px-1">
-                            <span className="font-bold text-[#111b21]">{sender}</span>
-                            <span>•</span>
-                            <Clock size={9} />
-                            <span>
-                              {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                          <div
-                            className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
-                              isInbound
-                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                                : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                            }`}
-                          >
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div ref={chatMessagesEndRef} className="h-0 w-0 pointer-events-none" />
-                  </>
-                )}
-              </div>
-
-              {/* Modal Footer: Quick Reply Bar */}
-              <form
-                onSubmit={handleSendChatReply}
-                className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-center space-x-2 shrink-0"
-              >
-                <input
-                  type="text"
-                  value={chatModal.replyText}
-                  onChange={(e) => setChatModal({ ...chatModal, replyText: e.target.value })}
-                  placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
-                  className="flex-1 px-3.5 py-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none shadow-xs transition"
-                />
-                <button
-                  type="submit"
-                  disabled={chatModal.sending || !chatModal.replyText.trim()}
-                  className="px-4 py-2.5 bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 shrink-0"
-                >
-                  {chatModal.sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                  <span>Kirim</span>
-                </button>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+      <ChatHistoryModal
+        isOpen={chatModal.open}
+        customer={chatModal.customer}
+        conversationId={chatModal.customer?.conversations?.[0]?.id ?? null}
+        mode="reply"
+        onClose={() => setChatModal((prev) => ({ ...prev, open: false }))}
+      />
 
       {/* ========================================================================= */}
       {/* PORTAL MODAL 3: Confirm Action Modal                                     */}

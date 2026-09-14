@@ -64,6 +64,7 @@ import {
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { extractMedia } from '../../utils/mediaExtractor';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
@@ -157,44 +158,7 @@ function isDifferentDay(d1Str: string, d2Str?: string | null): boolean {
   return isDifferentDayWib(d1Str, d2Str);
 }
 
-function extractMedia(msg: any): ChatMediaData | undefined {
-  const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
-  if (m && (m.url || m.hdUrl)) {
-    const hdUrlStr = m.hdUrl || m.url;
-    const standardUrlStr = (m.url && !m.url.includes('_thumb.')) ? m.url : (m.hdUrl || m.url);
-    const thumbStr = m.thumbUrl || (m.url && m.url.includes('_thumb.') ? m.url : undefined);
-    const cleanUrl = standardUrlStr.replace(/^https?:\/\/[^/]+/, '');
-    const cleanHdUrl = hdUrlStr.replace(/^https?:\/\/[^/]+/, '');
-    const cleanThumb = thumbStr ? thumbStr.replace(/^https?:\/\/[^/]+/, '') : undefined;
-    return {
-      ...m,
-      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
-      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
-      thumbUrl: cleanThumb ? (cleanThumb.startsWith('/') ? cleanThumb : `/${cleanThumb}`) : undefined,
-    };
-  }
-  const directMediaUrl = msg?.media_url ?? msg?.mediaUrl ?? msg?.media_hd_url ?? msg?.mediaHdUrl;
-  if (directMediaUrl && typeof directMediaUrl === 'string') {
-    const rawHdUrl = msg?.media_hd_url ?? msg?.mediaHdUrl ?? directMediaUrl;
-    const rawUrl = (!directMediaUrl.includes('_thumb.')) ? directMediaUrl : rawHdUrl;
-    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
-    return {
-      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
-      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
-      thumbUrl: (msg?.media_thumb_url ?? msg?.mediaThumbUrl)?.replace(/^https?:\/\/[^/]+/, ''),
-      mimeType: msg?.media_mime_type ?? msg?.mediaMimeType ?? 'image/jpeg',
-      caption: msg?.media_caption ?? msg?.mediaCaption ?? undefined,
-    };
-  }
-  if (msg?.payload_raw?.imageUrl) return { url: msg.payload_raw.imageUrl, hdUrl: msg.payload_raw.imageUrl };
-  if (typeof msg?.content === 'string' && (msg.content.startsWith('/media/') || msg.content.startsWith('/api/files/') || msg.content.startsWith('http://') || msg.content.startsWith('https://')) && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.content)) {
-    const clean = msg.content.replace(/^https?:\/\/[^/]+/, '');
-    return { url: clean.startsWith('/') ? clean : `/${clean}`, hdUrl: clean.startsWith('/') ? clean : `/${clean}` };
-  }
-  return undefined;
-}
-
+// extractMedia terpusat di utils/mediaExtractor.ts (single source of truth).
 interface CustomerLabelData {
   id: string;
   name: string;
@@ -5123,6 +5087,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           onOpenEditLocation={() => toast('Edit lokasi via menu Reservations untuk akses penuh.', 'info')}
           onProofView={(r) => window.open(r.proof_url!, '_blank')}
           onHousePhotoView={(url) => window.open(url, '_blank')}
+          // Monitor SUDAH menampilkan thread percakapan: tombol Riwayat Chat
+          // menutup detail agar admin langsung kembali ke thread customer tsb.
+          onOpenChatHistory={() => setSelectedReservation(null)}
         />
       )}
 
