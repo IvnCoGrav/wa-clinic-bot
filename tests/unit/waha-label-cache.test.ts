@@ -3,6 +3,7 @@ import axios from 'axios';
 import { WahaClient } from '../../src/integrations/waha/client';
 import { reservationLifecycleService } from '../../src/services/reservation-lifecycle.service';
 import { clearLabelCache } from '../../src/integrations/waha/label-cache';
+import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 vi.mock('axios');
@@ -200,45 +201,49 @@ describe('WahaClient — batchUpdateLabels atomik & race (Task 2)', () => {
     expect(finalIds).toEqual(['l2', 'l3', 'l5']); // legacy + repeat + hold (union kedua perubahan)
   });
 
-  it('5x onReservationCreated paralel untuk 5 customer BERBEDA → label tidak salah tertukar antar customer', async () => {
-    forceRealHttp();
+  it('5x onReservationCreated paralel untuk 5 customer BERBEDA → tagging DB per-customer benar, zero WA PUT', async () => {
+    // Mandat Mutlak Anti-Label WAHA: lifecycle tagging WAJIB DB-only.
+    // Test ini menggantikan asersi PUT WAHA lama dengan asersi CustomerLabel DB.
     process.env.ENABLE_LIFECYCLE_LABELS = 'true';
+    mockedAxios.put.mockClear();
+    mockedAxios.get.mockClear();
 
-    const chats: Record<string, any[]> = {};
-    const phones: string[] = [];
-    for (let i = 1; i <= 5; i++) {
-      const phone = `62811100000${i}`;
-      chats[`${phone}@c.us`] = [{ id: 'l1', name: 'new customer' }];
-      phones.push(phone);
-    }
-    installLabelApi(chats);
+    // Store Label/CustomerLabel tiruan (tanpa mengubah tests/setup.ts).
+    const joins = new Set<string>();
+    (prisma as any).label = {
+      upsert: vi.fn().mockImplementation(async ({ where, create }: any) => {
+        const name = where?.tenant_id_name?.name ?? create?.name;
+        return { id: `lbl_${name}`, tenant_id: DEFAULT_TENANT_ID, name };
+      }),
+    };
+    (prisma as any).customerLabel = {
+      upsert: vi.fn().mockImplementation(async ({ create }: any) => {
+        joins.add(`${create.customer_id}:${create.label_id}`);
+        return create;
+      }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    };
 
     await Promise.all(
-      phones.map((phone, i) =>
+      [1, 2, 3, 4, 5].map((i) =>
         reservationLifecycleService.onReservationCreated({
           customerId: `cust-label-${i}`,
           reservationId: `res-label-${i}`,
           tenantId: DEFAULT_TENANT_ID,
-          chatId: `${phone}@c.us`,
+          chatId: `62811100000${i}@c.us`,
         })
       )
     );
 
-    // batchUpdateLabels dijalankan fire-and-forget dari lifecycle service —
-    // tunggu sampai semua PUT selesai sebelum memeriksa payload-nya.
-    await vi.waitFor(() => {
-      expect(chatLabelsPutCalls()).toHaveLength(5);
-    }, { timeout: 5000, interval: 10 });
+    // Zero WAHA label PUT dari jalur lifecycle (mandat mutlak).
+    expect(chatLabelsPutCalls()).toHaveLength(0);
 
-    const puts = chatLabelsPutCalls();
-    expect(puts).toHaveLength(5);
-
-    // DB offline → priorConfirmedCount = 0 → tiap chat hanya dapat 'pending payment'
-    for (const phone of phones) {
-      const putForChat = puts.find(([u]) => String(u).includes(`chats/${phone}@c.us`));
-      expect(putForChat, `PUT untuk ${phone} harus ada`).toBeTruthy();
-      const ids = putForChat![1].labels.map((x: any) => x.id);
-      expect(ids).toEqual(['l4']); // pending payment saja — new customer hilang, tidak ada label milik chat lain
+    // DB offline → priorConfirmedCount = 0 → tiap customer tepat dapat join
+    // 'Pending Payment' miliknya sendiri (tidak tertukar antar customer).
+    const upserts = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
+    expect(upserts).toHaveLength(5);
+    for (let i = 1; i <= 5; i++) {
+      expect(joins.has(`cust-label-${i}:lbl_Pending Payment`)).toBe(true);
     }
   });
 });

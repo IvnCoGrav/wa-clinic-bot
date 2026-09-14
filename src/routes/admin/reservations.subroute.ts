@@ -1156,13 +1156,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         // CAPI Purchase decoupled: event Purchase HANYA via Meta Purchase Queue (POST /api/admin/reservation/:id/approve-purchase)
         // — Tandai Lunas / Confirm tidak lagi auto-trigger CAPI & tidak set purchase_event_sent_at.
 
-        if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && existing.customer?.phone) {
-          const { wahaClient } = await import('../../integrations/waha/client');
-          wahaClient
-            .removeLabel(`${existing.customer.phone}@c.us`, 'pending payment')
-            .catch((err: any) =>
-              console.warn('[LIFECYCLE LABEL] removeLabel "pending payment" on confirm failed:', err.message)
-            );
+        // Mandat Mutlak Anti-Label WAHA: pelunasan melepas label lifecycle via DB
+        // internal (tabel CustomerLabel) — zero mutasi label WAHA.
+        if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
+          try {
+            const pendingLabel = await prisma.label.findFirst({
+              where: { tenant_id: DEFAULT_TENANT_ID, name: 'Pending Payment' },
+            });
+            if (pendingLabel && existing.customer_id) {
+              await prisma.customerLabel.deleteMany({
+                where: { customer_id: existing.customer_id, label_id: pendingLabel.id },
+              });
+            }
+          } catch (err: any) {
+            console.warn('[LIFECYCLE LABEL] DB-only remove "Pending Payment" on confirm failed:', err.message);
+          }
         }
 
         return reply.status(200).send({ success: true, data: reservation });
@@ -1176,16 +1184,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
           // CAPI decoupled — mock juga tidak kirim Purchase & tidak set purchase_event_sent_at.
 
-          if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && mock.customer?.phone) {
-            const { wahaClient } = await import('../../integrations/waha/client');
-            wahaClient
-              .removeLabel(`${mock.customer.phone}@c.us`, 'pending payment')
-              .catch((err: any) =>
-                console.warn(
-                  '[LIFECYCLE LABEL] removeLabel "pending payment" on confirm (memory) failed:',
-                  err.message
-                )
+          // Mandat Mutlak Anti-Label WAHA: memory-fallback juga DB-only (zero WAHA label).
+          if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
+            try {
+              const pendingLabel = await prisma.label.findFirst({
+                where: { tenant_id: DEFAULT_TENANT_ID, name: 'Pending Payment' },
+              });
+              const mockCustomerId = (mock as any).customer_id;
+              if (pendingLabel && mockCustomerId) {
+                await prisma.customerLabel.deleteMany({
+                  where: { customer_id: mockCustomerId, label_id: pendingLabel.id },
+                });
+              }
+            } catch (err: any) {
+              console.warn(
+                '[LIFECYCLE LABEL] DB-only remove "Pending Payment" on confirm (memory) failed:',
+                err.message
               );
+            }
           }
 
           return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });

@@ -62,6 +62,7 @@ import {
   Download,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
+import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -266,71 +267,7 @@ interface LiveChatItem {
   } | null;
 }
 
-const DEFAULT_FAVORITE_EMOJIS = [
-  '😊', '🙏', '👶', '❤️', '👍', '✅', '✨', '🌸',
-  '🥰', '🙌', '🩺', '🗓️', '🍼', '💐', '💬', '🎉',
-  '😄', '👌', '💆‍♀️', '💵', '⭐', '☀️', '📞', '💡',
-];
-
-const EMOJI_CATEGORIES = [
-  {
-    id: 'favorites',
-    label: 'Favorit & Sering Digunakan',
-    icon: '⭐',
-    emojis: [] as string[],
-  },
-  {
-    id: 'smileys',
-    label: 'Wajah & Ekspresi',
-    icon: '😊',
-    emojis: [
-      '😊', '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥹',
-      '🥰', '😍', '🤩', '😘', '😗', '😚', '😋', '😛', '😜', '🤪',
-      '🤗', '🤭', '🫢', '🤫', '🤔', '🫡', '🤐', '🤨', '😐', '😑',
-      '😶', '😏', '😒', '🙄', '😬', '😮‍💨', '🤥', '😌', '😔', '😪',
-      '😴', '😷', '🤒', '🤕', '🤢', '🤧', '🥵', '🥶', '🥴', '😵',
-      '🤯', '🥳', '🥸', '😎', '🤓', '🧐', '😇', '🤠', '🥺', '😭'
-    ],
-  },
-  {
-    id: 'gestures',
-    label: 'Tangan & Hati',
-    icon: '👍',
-    emojis: [
-      '👍', '👍🏻', '👍🏼', '👍🏽', '👎', '👌', '👌🏻', '👌🏼', '✌️', '🤞',
-      '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋',
-      '🤚', '🖐️', '👋', '🤝', '🙏', '🤲', '💪', '👏', '🙌', '🫶',
-      '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💔',
-      '❤️‍🔥', '❤️‍🩹', '💖', '💗', '💓', '💞', '💕', '💌', '✨', '⭐',
-      '🌟', '💫', '💥', '🔥', '💯', '🎉', '🎊', '💐', '🌸', '🌹'
-    ],
-  },
-  {
-    id: 'clinic',
-    label: 'Klinik & Bayi',
-    icon: '👶',
-    emojis: [
-      '👶', '👶🏻', '👶🏼', '🧒', '👧', '👦', '👩‍🍼', '👨‍🍼', '🍼', '🤱',
-      '🤰', '💆‍♀️', '💆‍♂️', '🧖‍♀️', '🧖‍♂️', '🛁', '🫧', '🧴', '🩺', '🩹',
-      '💊', '💉', '🏥', '🗓️', '📅', '⏰', '⏱️', '📍', '🗺️', '🏡',
-      '🏠', '🚗', '🛵', '💳', '💵', '🧾', '💰', '🎁', '🎈', '🌿',
-      '🌱', '☀️', '🌤️', '🌙', '⭐', '🌈', '☂️', '☕', '🍵', '🍎'
-    ],
-  },
-  {
-    id: 'symbols',
-    label: 'Simbol',
-    icon: '✅',
-    emojis: [
-      '✅', '✔️', '☑️', '❌', '❎', '❓', '❔', '❗', '❕', '⚠️',
-      '⛔', '🚫', '💡', '🔔', '🔕', '📌', '📍', '📞', '📱', '💬',
-      '💭', '📝', '📋', '📎', '➡️', '⬅️', '⬆️', '⬇️', '▶️', '⏸️',
-      '🔁', '🔂', '🔄', '📢', '📣', '🔍', '🔎', '🔒', '🔓', '🔑',
-      '🏷️', '🏧', '🟢', '🟡', '🔴', '⚪', '⚫', '🟦', '🟧', '🟨',
-      '🟩', '🟣', '🟤', '🔘', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'
-    ],
-  },
-] as const;
+// Katalog emoji & favorit dimiliki LiveChatComposer (Fase A v3) — single source of truth.
 
 // 3.3: Voice Note audio player (WhatsApp PTT) — jangan lempar ke <MediaImage>
 const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
@@ -420,11 +357,7 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelectReply = (msg: ChatMessage) => {
     if (msg.is_revoked || (msg as any).isRevoked) return;
     setReplyingTo(msg);
-    setTimeout(() => {
-      if (chatInputRef.current) {
-        chatInputRef.current.focus();
-      }
-    }, 50);
+    composerRef.current?.focus();
   };
 
   const [sending, setSending] = useState(false);
@@ -466,7 +399,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [clinicServices, setClinicServices] = useState<any[]>([]);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const chatInputRef = useRef<HTMLDivElement | null>(null);
+  // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
+  const composerRef = useRef<LiveChatComposerHandle | null>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -581,9 +515,7 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
-  // ✍️ WhatsApp Typing Presence & Seen Notification — debounce untuk hindari spam saat ketik
-  const typingTimerRef = useRef<any>(null);
-  const typingStartTimerRef = useRef<any>(null);
+  // ✍️ WhatsApp Typing Presence — dipicu LiveChatComposer via onTyping (debounce 500ms di composer).
   const isTypingActiveRef = useRef(false);
 
   const notifyTyping = (isTyping: boolean) => {
@@ -668,44 +600,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   } catch (_) {}
 }
 
-  const handleInputChange = (text: string) => {
+  // Fase A v3: dipanggil LiveChatComposer per perubahan teks. Composer bersifat
+  // uncontrolled — monitor hanya mirror transisi kosong<->terisi agar thread/sidebar
+  // tidak re-render per keystroke. Draft & typing-debounce dimiliki composer.
+  const handleComposerTextChange = (text: string) => {
     replyTextRef.current = text;
     const isNotEmpty = text.trim().length > 0;
     if (hasReplyText !== isNotEmpty) {
       setHasReplyText(isNotEmpty);
     }
-    // Slash command detection for Quick Reply
-    const slash = detectSlashToken(text);
-    if (slash !== null) {
-      setQuickReplyFilter(slash);
-      setQuickReplyActiveIdx(0);
-    } else {
-      if (quickReplyFilter !== null) setQuickReplyFilter(null);
-    }
-    if (!selectedIdRef.current) return;
-    saveConversationDraft(selectedIdRef.current, text);
     // Segarkan preview draf di daftar chat (debounce agar tidak render tiap keystroke)
     if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
     draftListTimerRef.current = setTimeout(() => {
       setDraftTick((t) => t + 1);
     }, 700);
-
-    if (isNotEmpty) {
-      // Debounce 500ms sebelum kirim startTyping — hindari goyang akibat SSE balik tiap karakter
-      if (typingStartTimerRef.current) clearTimeout(typingStartTimerRef.current);
-      typingStartTimerRef.current = setTimeout(() => {
-        notifyTyping(true);
-      }, 500);
-
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
-        notifyTyping(false);
-      }, 3000);
-    } else {
-      if (typingStartTimerRef.current) clearTimeout(typingStartTimerRef.current);
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      notifyTyping(false);
-    }
   };
 
   const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -713,11 +621,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   const handleBackToList = () => {
     // 1.1: hentikan typing, bersihkan state & URL agar reload tidak jebak di chat
+    // (timer debounce typing dimiliki LiveChatComposer; unmount menghentikannya).
     if (isTypingActiveRef.current) {
       try { notifyTyping(false); } catch {}
     }
-    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
-    if (typingStartTimerRef.current) { clearTimeout(typingStartTimerRef.current); typingStartTimerRef.current = null; }
     isTypingActiveRef.current = false;
     setSelectedId(null);
     selectedIdRef.current = null;
@@ -833,37 +740,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
   const labelPopoverRef = useRef<HTMLDivElement>(null);
 
-  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
-  const toolsMenuRef = useRef<HTMLDivElement>(null);
-
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const [favoriteEmojis, setFavoriteEmojis] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('liveChat:favoriteEmojis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (_) {}
-    return DEFAULT_FAVORITE_EMOJIS;
-  });
-  const [emojiCategory, setEmojiCategory] = useState<'favorites' | 'smileys' | 'gestures' | 'clinic' | 'symbols'>('favorites');
-
-  // ⚡ Quick Chat / Balasan Cepat (/shortcut) state
+  // ⚡ Quick Chat / Balasan Cepat (/shortcut) — daftar template milik monitor
+  // (butuh data customer untuk interpolasi); UI popover & filter dimiliki composer.
   const [quickReplies, setQuickReplies] = useState<Array<{ id: string; shortcut: string; title: string; content: string; category: string | null }>>([]);
-  const [quickReplyFilter, setQuickReplyFilter] = useState<string | null>(null);
-  const [quickReplyActiveIdx, setQuickReplyActiveIdx] = useState(0);
-  const composerWrapperRef = useRef<HTMLDivElement | null>(null);
-
-  const filteredQuickReplies = useMemo(() => {
-    if (quickReplyFilter === null) return [];
-    const q = quickReplyFilter.toLowerCase();
-    if (!q) return quickReplies.slice(0, 8);
-    return quickReplies.filter((qr) => qr.shortcut.toLowerCase().includes(q) || qr.title.toLowerCase().includes(q)).slice(0, 8);
-  }, [quickReplies, quickReplyFilter]);
-
-  const showQuickReplyPopover = quickReplyFilter !== null && filteredQuickReplies.length > 0;
 
   useEffect(() => {
     apiRequest('/api/admin/quick-replies')
@@ -910,37 +789,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     user,
   ]);
 
+  // Fase A v3: interpolasi milik monitor (butuh data customer); penyisipan DOM milik composer.
   const applyQuickReply = useCallback((qr: { content: string }) => {
     const interpolated = interpolateQuickReplyContent(qr.content);
-    if (chatInputRef.current) {
-      chatInputRef.current.innerText = interpolated;
-    }
     replyTextRef.current = interpolated;
     setHasReplyText(true);
     if (selectedIdRef.current) {
-      try {
-        const key = `liveChat:draft:${selectedIdRef.current}`;
-        localStorage.setItem(key, JSON.stringify({ text: interpolated, timestamp: Date.now() }));
-      } catch {}
+      saveConversationDraft(selectedIdRef.current, interpolated);
     }
-    setQuickReplyFilter(null);
-    setQuickReplyActiveIdx(0);
-    setTimeout(() => chatInputRef.current?.focus(), 50);
+    return interpolated;
   }, [interpolateQuickReplyContent]);
-
-  const detectSlashToken = useCallback((text: string): string | null => {
-    if (!text) return null;
-    // Detect last token that starts with /
-    const tokens = text.split(/\s+/);
-    const lastToken = tokens[tokens.length - 1] || '';
-    // Also detect slash at start or after newline
-    const match = text.match(/(?:^|\s)\/([a-z0-9_-]*)$/i);
-    if (match) return match[1].toLowerCase();
-    if (lastToken.startsWith('/') && /^\/[a-z0-9_-]*$/i.test(lastToken)) {
-      return lastToken.slice(1).toLowerCase();
-    }
-    return null;
-  }, []);
 
   // Periksa status background sync saat pertama kali buka halaman
   const checkBackgroundSyncStatus = async () => {
@@ -1007,99 +865,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   };
 
-  // Close label popover, tools menu, emoji picker, and quick-reply popover on outside click
+  // Close label popover on outside click (tools/emoji/quick-reply dimiliki composer).
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
       if (labelPopoverRef.current && !labelPopoverRef.current.contains(e.target as Node)) {
         setLabelPopoverOpen(false);
-      }
-      if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target as Node)) {
-        setToolsMenuOpen(false);
-      }
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
-        setEmojiPickerOpen(false);
-      }
-      if (composerWrapperRef.current && !composerWrapperRef.current.contains(e.target as Node)) {
-        if (quickReplyFilter !== null) setQuickReplyFilter(null);
       }
     };
     document.addEventListener('mousedown', handleDocumentClick);
     return () => {
       document.removeEventListener('mousedown', handleDocumentClick);
     };
-  }, [quickReplyFilter]);
+  }, []);
 
-  const insertEmoji = (emoji: string) => {
-    if (!chatInputRef.current) return;
-    chatInputRef.current.focus();
-
-    // Auto-update list emoji favorit / sering digunakan
-    setFavoriteEmojis((prev) => {
-      const next = [emoji, ...prev.filter((e) => e !== emoji)].slice(0, 32);
-      try {
-        localStorage.setItem('liveChat:favoriteEmojis', JSON.stringify(next));
-      } catch (_) {}
-      return next;
-    });
-
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      if (chatInputRef.current.contains(range.commonAncestorContainer)) {
-        range.deleteContents();
-        const textNode = document.createTextNode(emoji);
-        range.insertNode(textNode);
-        range.setStartAfter(textNode);
-        range.setEndAfter(textNode);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      } else {
-        chatInputRef.current.innerText += emoji;
-        const newRange = document.createRange();
-        newRange.selectNodeContents(chatInputRef.current);
-        newRange.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
-      }
-    } else {
-      chatInputRef.current.innerText += emoji;
-      if (sel) {
-        const newRange = document.createRange();
-        newRange.selectNodeContents(chatInputRef.current);
-        newRange.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
-      }
-    }
-
-    const updatedText = chatInputRef.current.innerText || '';
-    handleInputChange(updatedText);
-  };
-
-  const resetChatInput = (clearStorage = true) => {
-    if (clearStorage && selectedIdRef.current) {
-      clearConversationDraft(selectedIdRef.current);
-    }
-    replyTextRef.current = '';
-    setHasReplyText(false);
-    setReplyingTo(null);
-    setEmojiPickerOpen(false);
-    if (chatInputRef.current) {
-      chatInputRef.current.innerText = '';
-    }
-  };
-
-  const setChatInputRef = (node: HTMLDivElement | null) => {
-    chatInputRef.current = node;
-    if (node && selectedIdRef.current) {
-      const draft = loadConversationDraft(selectedIdRef.current);
-      if (draft && node.innerText !== draft) {
-        node.innerText = draft;
-        replyTextRef.current = draft;
-        setHasReplyText(true);
-      }
-    }
-  };
+  // Fase A v3: DOM composer & draf per-chat dimiliki LiveChatComposer (prop conversationId).
+  // Monitor hanya mirror teks untuk preview daftar chat.
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -1121,16 +901,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
 
     setReplyingTo(null);
-    setEmojiPickerOpen(false);
 
-    // Muat draft tersimpan 24 jam untuk percakapan ini jika ada
+    // Mirror draf tersimpan 24 jam untuk preview daftar chat (DOM milik composer).
     if (selectedId) {
       const draft = loadConversationDraft(selectedId);
       replyTextRef.current = draft;
       setHasReplyText(draft.trim().length > 0);
-      if (chatInputRef.current && chatInputRef.current.innerText !== draft) {
-        chatInputRef.current.innerText = draft;
-      }
     } else {
       replyTextRef.current = '';
       setHasReplyText(false);
@@ -1164,11 +940,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   }, [selectedId]);
 
-  // Auto-save draft saat berpindah menu (unmount) atau meninggalkan halaman
+  // Auto-save draft saat berpindah menu (unmount) atau meninggalkan halaman.
+  // Sumber teks: mirror replyTextRef (composer menyimpan drafnya sendiri per keystroke).
   useEffect(() => {
     const saveCurrentDraft = () => {
-      if (selectedIdRef.current && chatInputRef.current) {
-        const currentText = chatInputRef.current.innerText || replyTextRef.current || '';
+      if (selectedIdRef.current) {
+        const currentText = replyTextRef.current || '';
         if (currentText.trim()) {
           saveConversationDraft(selectedIdRef.current, currentText);
         }
@@ -1673,8 +1450,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       // Prioritas 1: Tutup modal/popup/menu jika sedang terbuka di mobile
       if (contextMenu) { setContextMenu(null); e.preventDefault(); return; }
       if (labelPopoverOpen) { setLabelPopoverOpen(false); e.preventDefault(); return; }
-      if (toolsMenuOpen) { setToolsMenuOpen(false); e.preventDefault(); return; }
-      if (emojiPickerOpen) { setEmojiPickerOpen(false); e.preventDefault(); return; }
+      // Popover composer (tools/emoji/quick-reply) dimiliki LiveChatComposer.
+      if (composerRef.current) {
+        composerRef.current.closePopovers();
+      }
       if (customerDetailModalOpen) { setCustomerDetailModalOpen(false); e.preventDefault(); return; }
       if (customerDetailEditMode) { setCustomerDetailEditMode(false); e.preventDefault(); return; }
       if (showQuickBookingModal) { setShowQuickBookingModal(false); e.preventDefault(); return; }
@@ -1694,8 +1473,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     mobileView,
     contextMenu,
     labelPopoverOpen,
-    toolsMenuOpen,
-    emojiPickerOpen,
     customerDetailModalOpen,
     customerDetailEditMode,
     showQuickBookingModal,
@@ -1716,13 +1493,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         setLabelPopoverOpen(false);
         return;
       }
-      if (toolsMenuOpen) {
-        setToolsMenuOpen(false);
-        return;
-      }
-      if (emojiPickerOpen) {
-        setEmojiPickerOpen(false);
-        return;
+      // Popover composer (tools/emoji/quick-reply) dimiliki LiveChatComposer.
+      if (composerRef.current) {
+        composerRef.current.closePopovers();
       }
       if (customerDetailModalOpen) {
         setCustomerDetailModalOpen(false);
@@ -1772,8 +1545,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     mobileView,
     contextMenu,
     labelPopoverOpen,
-    toolsMenuOpen,
-    emojiPickerOpen,
     customerDetailModalOpen,
     customerDetailEditMode,
     showQuickBookingModal,
@@ -1966,11 +1737,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   const handleSelect = (conversationId: string) => {
     // 2.4/1.2: batalkan typing di percakapan lama sebelum pindah
+    // (timer debounce dimiliki composer; ganti conversationId menghentikannya).
     if (selectedIdRef.current && selectedIdRef.current !== conversationId && isTypingActiveRef.current) {
       try { notifyTyping(false); } catch {}
     }
-    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
-    if (typingStartTimerRef.current) { clearTimeout(typingStartTimerRef.current); typingStartTimerRef.current = null; }
     isTypingActiveRef.current = false;
 
     // Simpan posisi scroll percakapan lama sebelum berpindah ke percakapan baru
@@ -2575,9 +2345,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       if (res?.data?.draftText) {
         replyTextRef.current = res.data.draftText;
         setHasReplyText(true);
-        if (chatInputRef.current) {
-          chatInputRef.current.innerText = res.data.draftText;
-        }
+        composerRef.current?.setText(res.data.draftText);
         if (selectedId) {
           saveConversationDraft(selectedId, res.data.draftText);
         }
@@ -2921,14 +2689,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   };
 
   const handleInsertInvoiceToChat = (text: string) => {
-    if (chatInputRef.current) {
-      chatInputRef.current.innerText = text;
-      replyTextRef.current = text;
-      setHasReplyText(true);
-      if (selectedIdRef.current) {
-        saveConversationDraft(selectedIdRef.current, text);
-      }
-      chatInputRef.current.focus();
+    composerRef.current?.setText(text);
+    replyTextRef.current = text;
+    setHasReplyText(true);
+    if (selectedIdRef.current) {
+      saveConversationDraft(selectedIdRef.current, text);
     }
   };
 
@@ -3074,12 +2839,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     pushModalHistory('invoice');
   };
 
-  const handleSendReply = async () => {
+  // Fase A v3: teks balasan dipasok LiveChatComposer (sudah clear DOM-nya sendiri).
+  const handleSendReply = async (composerText?: string) => {
     const image = selectedImage;
-    const text = (chatInputRef.current?.innerText || replyTextRef.current || '').trim();
+    const text = (typeof composerText === 'string' ? composerText : replyTextRef.current || '').trim();
     if (!selectedId || (!text && !image)) return;
 
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     notifyTyping(false);
 
     const currentReplyingTo = replyingTo;
@@ -3124,8 +2889,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       return sorted;
     });
 
-    // 3. Instan kosongkan form input, pratinjau gambar, dan reply state
-    resetChatInput();
+    // 3. Instan kosongkan mirror input, pratinjau gambar, dan reply state
+    // (DOM & draf composer sudah dibersihkan composer sebelum onSend).
+    replyTextRef.current = '';
+    setHasReplyText(false);
+    if (selectedId) clearConversationDraft(selectedId);
     if (image?.preview) {
       try { URL.revokeObjectURL(image.preview); } catch {}
     }
@@ -4971,78 +4739,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     </div>
                   ) : (
                   <>
-                  {/* Active Quoted Message Banner (WhatsApp-Style Replying Bar) */}
-                  {replyingTo && (
-                    <div className="flex items-center justify-between bg-white px-3 py-2 border-l-4 border-[#008069] rounded-t-xl mb-0 shadow-xs border border-b-0 border-[#e9edef] animate-fadeIn">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex items-center space-x-1.5">
-                          <Reply size={12} className="text-[#008069] shrink-0" />
-                          <span className="text-[11px] font-bold text-[#008069] truncate">
-                            Membalas {replyingTo.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#54656f] truncate mt-0.5 pl-4">
-                          {replyingTo.media ? '📷 Foto' : (replyingTo.content || 'Pesan')}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setReplyingTo(null)}
-                        className="p-1 text-[#8696a0] hover:text-rose-500 hover:bg-rose-50 rounded-full transition active:scale-90"
-                        title="Batal membalas"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  {selectedImage && (
-                    <div className="relative inline-block mb-2">
-                      <img
-                        src={selectedImage.preview}
-                        alt="Preview"
-                        className="w-20 h-20 object-cover rounded-lg border border-[#e9edef]"
-                      />
-                      <button
-                        onClick={handleRemoveSelectedImage}
-                        className="absolute -top-1.5 -right-1.5 p-0.5 bg-rose-500 text-white rounded-full hover:bg-rose-600 transition"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* ⚡ Quick Reply Floating Autocomplete Popover */}
-                  {showQuickReplyPopover && (
-                    <div className="mb-1.5 bg-white border border-[#e9edef] rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
-                      <div className="px-3 py-1.5 bg-[#f8fafc] border-b border-[#e9edef] flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-[#008069] flex items-center gap-1"><Zap size={12} /> Balasan Cepat</span>
-                        <span className="text-[10px] text-[#8696a0]">{filteredQuickReplies.length} template</span>
-                      </div>
-                      <div className="overflow-y-auto flex-1 divide-y divide-[#f0f2f5]">
-                        {filteredQuickReplies.map((qr, idx) => (
-                          <button
-                            key={qr.id}
-                            type="button"
-                            onClick={() => applyQuickReply(qr)}
-                            onMouseEnter={() => setQuickReplyActiveIdx(idx)}
-                            className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition ${idx === quickReplyActiveIdx ? 'bg-[#e8f5f2] border-l-4 border-[#008069]' : 'hover:bg-[#f8fafc] border-l-4 border-transparent'}`}
-                          >
-                            <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-[#008069] text-white border-[#008069]' : 'bg-[#f0f2f5] text-[#008069] border-[#c2e7e0]'}`}>/{qr.shortcut}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">{qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] font-semibold">{qr.category}</span>}</p>
-                              <p className="text-[11px] text-[#667781] line-clamp-1 truncate">{qr.content.slice(0, 80).replace(/\n/g, ' ')}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="px-2.5 py-1 bg-[#fffbeb] border-t border-amber-100 text-[10px] text-amber-700 flex items-center gap-1.5">
-                        <span>↑↓ navigasi</span><span className="opacity-40">•</span><span>Enter/Tab pilih</span><span className="opacity-40">•</span><span>Esc tutup</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-[#e9edef] w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -5052,286 +4748,36 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       onChange={handlePickImage}
                       className="hidden"
                     />
-
-                    {/* Tools Button */}
-                    <div className="relative shrink-0" ref={toolsMenuRef}>
-                      <button
-                        type="button"
-                        onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
-                        disabled={sending || generatingDraft}
-                        className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
-                          toolsMenuOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
-                        }`}
-                        title="Fitur & Lampiran (AI Copilot / Gambar)"
-                        aria-label="Menu Tools & Lampiran"
-                      >
-                        {generatingDraft ? (
-                          <Loader size={17} className="animate-spin text-amber-500" />
-                        ) : (
-                          <Plus size={17} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-[#008069]' : ''}`} />
-                        )}
-                      </button>
-
-                      {/* Tools Popover Menu */}
-                      {toolsMenuOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 animate-fadeIn space-y-1">
-                          {/* Option 1: AI Copilot Draft */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              handleGenerateAiDraft();
-                            }}
-                            disabled={generatingDraft || sending}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Sparkles size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate flex items-center gap-1">
-                                <span>AI Copilot Draft</span>
-                                <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">AI</span>
-                              </p>
-                              <p className="text-[10px] text-[#667781] truncate">Saran balasan otomatis bidan</p>
-                            </div>
-                          </button>
-
-                          {/* Option 0: Cek Jadwal Harian */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              setShowDailyScheduleModal(true);
-                            }}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Calendar size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Cek Jadwal Harian</p>
-                              <p className="text-[10px] text-[#667781] truncate">Lihat kalender & slot kosong</p>
-                            </div>
-                          </button>
-
-                          {/* Option 2: Quick Hold / Tahan Slot Ditawarkan */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              handleOpenQuickHold();
-                            }}
-                            disabled={!selectedChat || sending}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Zap size={15} className="fill-current" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Tahan Slot (Hold)</p>
-                              <p className="text-[10px] text-[#667781] truncate">Kunci tgl & jam negosiasi</p>
-                            </div>
-                          </button>
-
-                          {/* Option 3: Quick Create Reservation */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              handleOpenQuickReservation();
-                            }}
-                            disabled={!selectedChat || sending}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-emerald-50/80 hover:text-[#008069] transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-emerald-100/80 text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <CalendarPlus size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Buat Reservasi Baru</p>
-                              <p className="text-[10px] text-[#667781] truncate">Auto-fill data pasien & anak</p>
-                            </div>
-                          </button>
-
-                          {/* Option 3: Generate Invoice / Payment */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              handleGenerateActiveReservationInvoice();
-                            }}
-                            disabled={!selectedChat || sending}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-sky-50/80 hover:text-sky-700 transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-sky-100/80 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Receipt size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Generate Invoice / Payment</p>
-                              <p className="text-[10px] text-[#667781] truncate">Isi format rincian ke chat</p>
-                            </div>
-                          </button>
-
-                          {/* Option 4: Image Attachment */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              fileInputRef.current?.click();
-                            }}
-                            disabled={sending}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <ImagePlus size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Lampirkan Gambar</p>
-                              <p className="text-[10px] text-[#667781] truncate">Kirim foto/pricelist (maks 8MB)</p>
-                            </div>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Emoji Picker Button (Khusus Tampilan Web/Desktop) */}
-                    <div className="relative shrink-0 hidden md:block" ref={emojiPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
-                        disabled={sending}
-                        className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
-                          emojiPickerOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
-                        }`}
-                        title="Pilih Emoticon (Khusus Web)"
-                        aria-label="Pilih Emoticon"
-                      >
-                        <Smile size={18} className={emojiPickerOpen ? 'text-[#008069]' : 'text-[#54656f]'} />
-                      </button>
-
-                      {/* Emoji Popover */}
-                      {emojiPickerOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-[#e9edef] rounded-2xl shadow-2xl p-2.5 z-40 animate-fadeIn flex flex-col gap-2 select-none">
-                          {/* Header / Category Tabs - Icon Only */}
-                          <div className="flex items-center justify-between border-b border-[#e9edef] pb-1.5 px-0.5">
-                            <div className="flex items-center space-x-1">
-                              {EMOJI_CATEGORIES.map((cat) => (
-                                <button
-                                  key={cat.id}
-                                  type="button"
-                                  onClick={() => setEmojiCategory(cat.id as any)}
-                                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-base transition active:scale-95 cursor-pointer ${
-                                    emojiCategory === cat.id
-                                      ? 'bg-[#e8f5f2] text-[#008069] font-bold shadow-xs scale-105'
-                                      : 'text-[#54656f] hover:bg-[#f0f2f5]'
-                                  }`}
-                                  title={cat.label}
-                                  aria-label={cat.label}
-                                >
-                                  <span>{cat.icon}</span>
-                                </button>
-                              ))}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setEmojiPickerOpen(false)}
-                              className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
-                              title="Tutup"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-
-                          {/* Emoji Grid */}
-                          <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto p-1 custom-scrollbar">
-                            {(emojiCategory === 'favorites'
-                              ? favoriteEmojis
-                              : (EMOJI_CATEGORIES.find((cat) => cat.id === emojiCategory)?.emojis || [])
-                            ).map((emoji, idx) => (
-                              <button
-                                key={`${emoji}-${idx}`}
-                                type="button"
-                                onClick={() => insertEmoji(emoji)}
-                                className="w-8 h-8 flex items-center justify-center text-lg rounded-lg hover:bg-[#f0f2f5] hover:scale-125 transition-transform active:scale-95 cursor-pointer"
-                                title={emoji}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      ref={setChatInputRef}
-                      contentEditable="plaintext-only"
-                      role="textbox"
-                      aria-multiline="true"
-                      tabIndex={0}
-                      inputMode="text"
-                      enterKeyHint="send"
-                      autoCapitalize="sentences"
-                      autoCorrect="on"
-                      spellCheck={true}
-                      data-placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
-                      onFocus={() => {
-                        if (typeof window !== 'undefined') {
-                          window.scrollTo(0, 0);
-                          setTimeout(() => {
-                            window.scrollTo(0, 0);
-                            scrollToBottom(true, false);
-                          }, 100);
-                        }
-                      }}
-                      onInput={(e) => {
-                        handleInputChange(e.currentTarget.innerText || '');
-                      }}
-                      onKeyDown={(e) => {
-                        if (showQuickReplyPopover) {
-                          if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            setQuickReplyActiveIdx((prev) => (prev + 1) % filteredQuickReplies.length);
-                            return;
-                          }
-                          if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            setQuickReplyActiveIdx((prev) => (prev - 1 + filteredQuickReplies.length) % filteredQuickReplies.length);
-                            return;
-                          }
-                          if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault();
-                            const target = filteredQuickReplies[quickReplyActiveIdx];
-                            if (target) applyQuickReply(target);
-                            return;
-                          }
-                          if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setQuickReplyFilter(null);
-                            return;
-                          }
-                        }
-                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                          e.preventDefault();
-                          handleSendReply();
-                        }
-                      }}
-                      className="chat-contenteditable flex-1 w-full min-w-0 rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none"
-                      style={{ fontSize: '16px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
-                    />
-                    <button
-                      onClick={handleSendReply}
-                      disabled={sending || (!hasReplyText && !selectedImage)}
-                      className="w-9 h-9 sm:w-auto sm:px-4 min-h-[36px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95"
-                      title="Kirim Balasan"
-                    >
-                      <Send size={15} />
-                      <span className="hidden sm:inline">{sending ? 'Mengirim...' : 'Kirim'}</span>
-                    </button>
+                    {selectedId && (
+                      <LiveChatComposer
+                        ref={composerRef}
+                        conversationId={selectedId}
+                        sending={sending}
+                        generatingDraft={generatingDraft}
+                        replyingTo={replyingTo ? {
+                          senderLabel: replyingTo.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS',
+                          preview: replyingTo.media ? '📷 Foto' : (replyingTo.content || 'Pesan'),
+                        } : null}
+                        selectedImage={selectedImage ? { preview: selectedImage.preview } : null}
+                        quickReplies={quickReplies}
+                        onTextChange={handleComposerTextChange}
+                        onTyping={notifyTyping}
+                        onSend={handleSendReply}
+                        onApplyQuickReply={applyQuickReply}
+                        onPickImage={() => fileInputRef.current?.click()}
+                        onRemoveImage={handleRemoveSelectedImage}
+                        onCancelReply={() => setReplyingTo(null)}
+                        onGenerateAiDraft={handleGenerateAiDraft}
+                        onOpenSchedule={() => setShowDailyScheduleModal(true)}
+                        onOpenQuickHold={handleOpenQuickHold}
+                        onOpenQuickReservation={handleOpenQuickReservation}
+                        onGenerateInvoice={handleGenerateActiveReservationInvoice}
+                        onRequestScrollToBottom={() => scrollToBottom(true, false)}
+                      />
+                    )}
+                  </>
+                    )}
                   </div>
-                </>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="bg-white border border-[#e9edef] rounded-2xl p-8 h-full flex flex-col justify-center items-center text-center text-[#667781] text-xs shadow-xs">
