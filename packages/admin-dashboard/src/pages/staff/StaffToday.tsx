@@ -225,6 +225,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -399,22 +400,25 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     };
   }, [fetchTasks]);
 
-  // Auto-scroll chat viewport to latest message with multi-tick dual execution
-  const scrollToBottom = useCallback((forceMulti = true) => {
+  // Track user scroll position in chat viewport (anti-jerking when reading earlier messages)
+  const handleChatScroll = useCallback(() => {
+    if (!chatContainerRef.current) return;
+    const el = chatContainerRef.current;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 120;
+  }, []);
+
+  // Auto-scroll chat viewport to latest message (respects manual scroll if user scrolled up)
+  const scrollToBottom = useCallback((force = false) => {
+    if (!force && !isNearBottomRef.current) return;
     const doScroll = () => {
       if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
-      }
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
       }
     };
     requestAnimationFrame(doScroll);
-    if (forceMulti) {
-      setTimeout(doScroll, 30);
-      setTimeout(doScroll, 100);
-      setTimeout(doScroll, 250);
-      setTimeout(doScroll, 500);
+    if (force) {
+      setTimeout(doScroll, 50);
     }
   }, []);
 
@@ -426,12 +430,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
       if (res.success && Array.isArray(res.data)) {
         setMessages(res.data.slice(-30));
+        isNearBottomRef.current = true;
         scrollToBottom(true);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memuat riwayat pesan.');
     } finally {
       setLoadingMessages(false);
+      isNearBottomRef.current = true;
       scrollToBottom(true);
     }
   }, [scrollToBottom]);
@@ -448,12 +454,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   }, [selectedTask?.conversationId, fetchMessages]);
 
-  // Auto scroll chat when messages update or loading completes or view switches to chat
+  // Auto scroll chat when messages update or loading completes
   useEffect(() => {
-    if (!loadingMessages && (mobileView === 'chat' || selectedTask)) {
-      scrollToBottom(true);
+    if (!loadingMessages && messages.length > 0) {
+      scrollToBottom(false);
     }
-  }, [mobileView, selectedTask, messages, loadingMessages, scrollToBottom]);
+  }, [messages, loadingMessages, scrollToBottom]);
 
   // Open Chat with history push for Android/iOS Hardware Back Button
   const handleOpenChat = (task: StaffTask) => {
@@ -461,6 +467,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     setSelectedTask(task);
     setMobileView('chat');
     window.history.pushState({ view: 'chat', taskId: task.reservationId }, '');
+    isNearBottomRef.current = true;
     scrollToBottom(true);
   };
 
@@ -803,6 +810,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     if (replyTextareaRef.current) {
       replyTextareaRef.current.style.height = 'auto';
     }
+    isNearBottomRef.current = true;
     scrollToBottom(true);
 
     try {
@@ -1451,7 +1459,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const totalRevenueCompleted = completedTasks.reduce((sum, t) => sum + (t.pricing?.totalFee || 0), 0);
 
   return (
-    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
+    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar */}
       <header className="bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
@@ -1594,7 +1602,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
       {/* Mobile Navigation Segment Tab Bar (Always visible on mobile when not inside full-screen chat) */}
       {!(mobileView === 'chat' && activeTab === 'today') && (
-        <nav aria-label="Mobile Navigation" className="sm:hidden px-3 py-2 bg-white border-b border-[#e9edef] flex items-center justify-between gap-1.5 shadow-xs z-20">
+        <nav aria-label="Mobile Navigation" className="sm:hidden px-3 py-2 bg-white border-b border-[#e9edef] flex items-center justify-between gap-1.5 shadow-xs z-20 shrink-0">
           <button
             type="button"
             onClick={() => handleTabChange('today')}
@@ -1672,7 +1680,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
       {/* Main Split-View Workspace with Mobile Touch Swipe Navigation */}
       <div
-        className="flex-1 flex overflow-hidden touch-pan-y"
+        className="flex-1 min-h-0 flex overflow-hidden touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -2072,7 +2080,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               {selectedTask ? (
                 <>
                   {/* WhatsApp Web Chat Header */}
-                  <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 py-2.5 flex items-center justify-between gap-3 shadow-xs z-10">
+                  <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 py-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       {/* Mobile Back to List Button */}
                       <button
@@ -2169,10 +2177,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   {/* WhatsApp Chat Bubbles Viewport (Warm Beige Wallpaper Canvas) */}
                   <div
                     ref={chatContainerRef}
-                    className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#efeae2] relative min-h-0"
+                    onScroll={handleChatScroll}
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3 bg-[#efeae2] relative"
                     style={{
                       backgroundImage: `radial-gradient(#d1c7b8 1px, transparent 1px)`,
                       backgroundSize: '24px 24px',
+                      WebkitOverflowScrolling: 'touch',
                     }}
                   >
                     {/* Date separator badge */}
@@ -2270,7 +2280,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               )}
 
                               {/* Message Text Content */}
-                              <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                              <div className="whitespace-pre-wrap break-words select-text">{msg.content}</div>
 
                               {/* Meta Info & Double Blue Ticks / Delete Button */}
                               <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-[#667781]">
@@ -2323,7 +2333,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 z-10 space-y-2"
+                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 z-10 space-y-2 shrink-0"
                   >
                     {/* Quick Reply Template Chips for Fast Field Messaging */}
                     <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
