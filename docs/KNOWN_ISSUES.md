@@ -1203,4 +1203,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. **LocationPickerModal & CustomerProfilePanel** baru (file siap, build lolos) belum menggantikan 800–1100 LOC duplikat lokasi/foto di `TodayTreatments`, `StaffToday`, `CustomerEditForm` secara penuh — integrasi penuh butuh refactoring lanjutan per-konsumen (risiko regresi tinggi bila sekaligus). 
   4. Old page files (`DeliveryTiers.tsx`, `FollowUpTemplates.tsx`, dll.) tetap ada di repo sebagai source untuk tab — tidak dihapus agar import tab tetap berfungsi; hanya rute `App.tsx` yang di-redirect.
 
+---
+
+## 62. [Sanitizer V3] Mutilasi katalog sesi 381894 — plafon 500 hardcoded, tenant-aware di-bypass (2026-09-14)
+
+- **Status:** diperbaiki parsial sesi ini (Fase 1–3); sisa tech debt di bawah.
+- **Insiden:** LLM utuh 1006/837 chars (4 paket + penutup); `OutputSanitizer.truncateToMaxChars` (hardcode 500 di `src/v3/guardrails/sanitizer.ts`) memenggal di index 212/390 sehingga tersisa header menggantung "untuk si kecil:". Pemicu: blank-line ber-spasi tidak dinormalisasi sebelum hitung batas paragraf. Sekunder: Router Call 1 me-re-query `calculate_delivery("Surabaya")` tanpa lokasi baru di Turn 3.
+- **Perbaikan masuk:** plafon konteks-sadar tenant-aware (1200 umum / 1500 katalog; kolom `TenantPersona.max_chars_per_reply` menang bila di-set admin — sesuai keputusan user), normalisasi blank-line ber-spasi, Hanging-Header Ban + potong di akhir item bernomor lengkap, pengetatan direktif `calculate_delivery` (`persona.ts`, `context-grounder.ts` guard GENERAL), suite adversarial `tests/unit/v3/sanitizer-catalog-truncation.test.ts`.
+- **Sisa tech debt (disengaja):** (1) duplikasi `truncateToMaxChars` legacy di `src/config/persona.ts` belum dikonsolidasi ke sanitizer V3 (jalur lama masih dipakai kode non-V3); (2) `getMaxCharsPerReply` dibaca sinkron dari cache in-memory — bila `loadPersonaFromDb` belum dipanggil, fallback ke default 1200/1500 (override DB aktif setelah persona termuat); (3) Aturan Emas #1 (maks 2–3 kalimat) vs katalog 4 paket (700–1100 chars) hanya didamaikan via pengecualian "rincian diminta" — belum ada batas formal kalimat-vs-katalog di prompt DB.
+
 
