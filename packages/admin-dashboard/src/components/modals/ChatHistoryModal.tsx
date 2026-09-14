@@ -236,10 +236,11 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
         {/* Body */}
         <div
           ref={containerRef}
-          className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
+          className="p-4 overflow-y-auto overscroll-contain flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
           style={{
             backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
             backgroundSize: '16px 16px',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           {loading ? (
