@@ -1,8 +1,22 @@
+import { getMaxCharsPerReply } from '../../config/persona';
+
 export class OutputSanitizer {
+  /** Plafon default tenant-aware (sesi 381894): umum 1200, konteks katalog/keranjang 1500. */
+  public static readonly DEFAULT_MAX_CHARS = 1200;
+  public static readonly CATALOG_MAX_CHARS = 1500;
+
   /**
    * Membersihkan tag thinking, monolog internal, dan artefak AI dari balasan sebelum dikirim ke WhatsApp.
+   * Plafon karakter tenant-aware: opts.maxChars eksplisit > TenantPersona.max_chars_per_reply (DB)
+   * > default konteks-sadar (1500 katalog / 1200 umum). Param ke-4 number tetap didukung
+   * demi kompatibilitas pemanggil lama.
    */
-  public static cleanOutboundReply(rawText: string, customerInput?: string, isFollowUp: boolean = false): string {
+  public static cleanOutboundReply(
+    rawText: string,
+    customerInput?: string,
+    isFollowUp: boolean = false,
+    maxCharsOrOpts?: number | { tenantId?: string; maxChars?: number; isCatalogContext?: boolean }
+  ): string {
     if (!rawText || typeof rawText !== 'string') return '';
 
     let text = rawText;
@@ -32,8 +46,9 @@ export class OutputSanitizer {
     // 5. Pastikan semua format nominal harga dibungkus bintang tunggal (*Rp 10.000*)
     text = text.replace(/(?<!\*)\b(Rp\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?)\b(?!\*)/g, '*$1*');
 
-    // 6. Normalisasi spasi dan baris baru berlebih
-    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    // 6. Normalisasi spasi dan baris baru berlebih (sesi 381894: blank-line
+    // ber-spasi "\n   \n" diserap menjadi "\n\n" agar hitung batas paragraf benar)
+    text = text.replace(/\n[ \t]+\n/g, '\n\n').replace(/\n{3,}/g, '\n\n').trim();
 
     // 7. Guardrail minimal (Mandat Minimal-Regex Phase 4):
     // - stripEnglishLeakage & sanitizeFirstPersonPronoun DIHAPUS — sudah ditangani
@@ -41,7 +56,7 @@ export class OutputSanitizer {
     // - Hanya pertahankan sanitizer non-mutilasi: STR mention & followUp greeting minimal
     text = OutputSanitizer.sanitizeUnpromptedStrMention(text, customerInput);
     text = OutputSanitizer.sanitizeFollowUpGreetingRepetition(text, isFollowUp);
-    text = OutputSanitizer.truncateToMaxChars(text, 500);
+    text = OutputSanitizer.truncateToMaxChars(text, OutputSanitizer.resolveMaxChars(maxCharsOrOpts));
     text = text.replace(/[^\S\r\n]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
     return text;
@@ -61,16 +76,117 @@ export class OutputSanitizer {
   }
 
   /**
-   * Memotong teks secara elegan di batas kalimat terakhir sebelum maxChars (default 500).
-   * Prioritas: 1) batas paragraf \n\n, 2) akhir kalimat (./!? atau emoji penutup), 3) spasi.
+   * Resolusi plafon karakter tenant-aware (sesi 381894, keputusan user 1200/1500):
+   * maxChars eksplisit > TenantPersona.max_chars_per_reply (DB, via getMaxCharsPerReply)
+   * > default konteks-sadar (1500 katalog / 1200 umum). DB null/tak terbaca → default.
    */
-  public static truncateToMaxChars(text: string, maxChars: number = 500): string {
+  public static resolveMaxChars(
+    maxCharsOrOpts?: number | { tenantId?: string; maxChars?: number; isCatalogContext?: boolean }
+  ): number {
+    if (typeof maxCharsOrOpts === 'number' && maxCharsOrOpts > 0) return maxCharsOrOpts;
+    const opts = (typeof maxCharsOrOpts === 'object' && maxCharsOrOpts) ? maxCharsOrOpts : {};
+    if (opts.maxChars && opts.maxChars > 0) return opts.maxChars;
+    if (opts.tenantId) {
+      try {
+        const dbVal = getMaxCharsPerReply(opts.tenantId);
+        if (typeof dbVal === 'number' && dbVal > 0) return dbVal;
+      } catch (_) {
+        // DB/cache belum termuat → jatuh ke default konteks-sadar di bawah.
+      }
+    }
+    return opts.isCatalogContext ? OutputSanitizer.CATALOG_MAX_CHARS : OutputSanitizer.DEFAULT_MAX_CHARS;
+  }
+
+  /**
+   * Hanging-header detector (sesi 381894): kandidat potongan yang berakhiran titik
+   * dua, tanda hubung, kata sambung, atau frasa pengantar daftar DILARANG dipakai
+   * sebagai titik potong (meninggalkan kalimat menggantung seperti
+   * "Untuk treatment, ada beberapa pilihan menarik untuk si kecil:").
+   */
+  private static isHangingEnding(candidate: string): boolean {
+    const t = (candidate || '').trimEnd();
+    if (!t) return true;
+    if (/[:\-–—]$/.test(t)) return true;
+    if (/\b(dan|atau|yang|untuk|dengan|adalah|yaitu|yakni|seperti|antara)$/i.test(t)) return true;
+    if (/(untuk si kecil|berikut rincian|pilihan treatment|pilihan menarik|pilihan (lainnya|paket)|daftar (harga|paket)|pricelist|rinciannya|pilihannya apa)\s*:?\s*$/i.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Akhir item daftar bernomor terakhir yang lengkap sebelum batas: cari start item
+   * bernomor terakhir ("\n1. ", "\n2. ", ...) lalu kembalikan indeks akhir kalimat
+   * (./!? atau emoji penutup) pertama setelahnya. Null bila tak ada.
+   */
+  private static findLastCompleteListItemEnd(rawSlice: string): number {
+    const startRe = /\n\s*\d+\.\s/g;
+    let m: RegExpExecArray | null;
+    let lastStart = -1;
+    while ((m = startRe.exec(rawSlice)) !== null) {
+      lastStart = m.index;
+    }
+    if (lastStart < 0) return -1;
+    const tail = rawSlice.slice(lastStart);
+    const punctRe = /[.!?]/g;
+    let pm: RegExpExecArray | null;
+    let endRel = -1;
+    while ((pm = punctRe.exec(tail)) !== null) {
+      const idx = pm.index;
+      const ch = pm[0];
+      if (ch === '.') {
+        const prev = idx > 0 ? tail[idx - 1] : '';
+        const next = idx + 1 < tail.length ? tail[idx + 1] : '';
+        const prevIsLetter = /[a-zA-Z\u00C0-\u024F]/.test(prev);
+        const nextIsBoundary = next === '' || next === ' ' || next === '\n' || next === '\r' || next === '\t';
+        if (!prevIsLetter || !nextIsBoundary) continue;
+      }
+      endRel = idx;
+    }
+    if (endRel > 0) return lastStart + endRel;
+    const emojiRe = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+(?=\s|\n|$)/gu;
+    let em: RegExpExecArray | null;
+    let emojiEnd = -1;
+    while ((em = emojiRe.exec(tail)) !== null) {
+      emojiEnd = lastStart + em.index + em[0].length - 1;
+    }
+    return emojiEnd;
+  }
+
+  /**
+   * Memotong teks secara elegan di batas kalimat terakhir sebelum maxChars
+   * (default 1200; konteks katalog 1500 — Tie-break tenant-aware via resolveMaxChars).
+   * Prioritas: 1) batas paragraf (toleran blank-line ber-spasi, anti hanging-header),
+   * 2) akhir item daftar bernomor lengkap, 3) akhir kalimat (./!? atau emoji), 4) spasi.
+   */
+  public static truncateToMaxChars(text: string, maxChars: number = 1200): string {
     if (!text || text.length <= maxChars) return text;
     const rawSlice = text.slice(0, maxChars);
-    // 1. Prioritas Utama: potong di pemisah paragraf ganda terdekat sebelum batas
-    const lastParagraphEnd = rawSlice.lastIndexOf('\n\n');
-    if (lastParagraphEnd > 100) {
-      return rawSlice.slice(0, lastParagraphEnd).trimEnd();
+    // 1. Prioritas Utama: pemisah paragraf ganda terdekat (toleran "\n   \n").
+    // Kumpulkan semua break, iterasi dari terakhir; tolak yang hanging.
+    const breakRe = /\n\s*\n/g;
+    const breaks: number[] = [];
+    let bm: RegExpExecArray | null;
+    while ((bm = breakRe.exec(rawSlice)) !== null) {
+      breaks.push(bm.index);
+    }
+    let hangingSeen = false;
+    for (let i = breaks.length - 1; i >= 0; i--) {
+      const idx = breaks[i];
+      if (idx <= 100) continue;
+      const candidate = rawSlice.slice(0, idx).trimEnd();
+      if (OutputSanitizer.isHangingEnding(candidate)) {
+        hangingSeen = true;
+        continue;
+      }
+      return candidate;
+    }
+    // 1b. Bila break terakhir menggantung di kepala daftar bernomor (sesi 381894),
+    // jangan mundur ke pra-header (membuang seluruh katalog) — potong di akhir
+    // item bernomor lengkap terakhir sebagai gantinya.
+    if (hangingSeen && /\n\s*\d+\.\s/.test(rawSlice)) {
+      const itemEnd = OutputSanitizer.findLastCompleteListItemEnd(rawSlice);
+      if (itemEnd > 100) {
+        return rawSlice.slice(0, itemEnd + 1).trimEnd();
+      }
     }
     // 2. Prioritas Kedua: cari akhir kalimat valid (./!? ATAU emoji penutup diikuti spasi/newline)
     let lastSentenceEnd = -1;

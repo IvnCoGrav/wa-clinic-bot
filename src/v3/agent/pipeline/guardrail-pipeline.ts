@@ -173,7 +173,13 @@ export class GuardrailPipeline {
       tenantId, phone, conversationId, selectedModel, baseUrl, apiKey,
     } = input;
     let { shouldSendReply, isEscalated, emptyKnowledgeResult } = input;
-    let finalReply = OutputSanitizer.cleanOutboundReply(input.draftReply, incomingText, isFollowUp);
+    // Sesi 381894: plafon konteks-sadar tenant-aware (katalog/keranjang 1500, umum 1200;
+    // kolom TenantPersona.max_chars_per_reply menang bila di-set admin).
+    const isCatalogContext =
+      executedTools.some((t) => t?.name === 'get_catalog_and_price') ||
+      (session?.cartItems || []).length > 0;
+    const sanitizeOpts = { tenantId, isCatalogContext };
+    let finalReply = OutputSanitizer.cleanOutboundReply(input.draftReply, incomingText, isFollowUp, sanitizeOpts);
     let repromptCount = 0;
     const violationsDetected: string[] = [];
 
@@ -210,7 +216,7 @@ export class GuardrailPipeline {
         repromptCount++;
         const trimmedRetry = (retryReply || '').trim();
         if (trimmedRetry) {
-          const cleanedRetry = OutputSanitizer.cleanOutboundReply(trimmedRetry, incomingText, isFollowUp);
+          const cleanedRetry = OutputSanitizer.cleanOutboundReply(trimmedRetry, incomingText, isFollowUp, sanitizeOpts);
           const recheck = validateNumericFacts(cleanedRetry, executedTools, { tenantId, session });
           if (recheck.isValid) {
             finalReply = cleanedRetry;
@@ -290,7 +296,7 @@ export class GuardrailPipeline {
         input.addUsage((factRetryData as any)?.usage);
         const factRetryText = (factRetryData?.choices?.[0]?.message?.content || '').trim();
         if (factRetryText) {
-          const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp);
+          const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp, sanitizeOpts);
           const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown });
           if (factRecheck.isValid) {
             finalReply = factCleaned;
@@ -357,7 +363,7 @@ export class GuardrailPipeline {
         input.addUsage((pronounRetryData as any)?.usage);
         const pronounRetryText = (pronounRetryData?.choices?.[0]?.message?.content || '').trim();
         if (pronounRetryText) {
-          const pronounCleaned = OutputSanitizer.cleanOutboundReply(pronounRetryText, incomingText, isFollowUp);
+          const pronounCleaned = OutputSanitizer.cleanOutboundReply(pronounRetryText, incomingText, isFollowUp, sanitizeOpts);
           const pronounRecheck = detectFirstPersonSlip(pronounCleaned, { isFollowUp });
           if (pronounRecheck.isValid) {
             finalReply = pronounCleaned;

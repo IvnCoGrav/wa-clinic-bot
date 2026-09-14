@@ -252,6 +252,7 @@ const LiveChatComposerInner = (
   const toolsMenuRef = useRef<HTMLDivElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const composerWrapperRef = useRef<HTMLDivElement | null>(null);
+  const quickReplyRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
   const typingStartTimerRef = useRef<any>(null);
   const isTypingActiveRef = useRef(false);
@@ -342,13 +343,18 @@ const LiveChatComposerInner = (
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
         setEmojiPickerOpen(false);
       }
-      if (composerWrapperRef.current && !composerWrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideComposer = composerWrapperRef.current?.contains(target);
+      const insideQuickReply = quickReplyRef.current?.contains(target);
+      if (!insideComposer && !insideQuickReply) {
         setQuickReplyFilter((prev) => (prev === null ? prev : null));
       }
     };
     document.addEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('touchstart', handleDocumentClick as any, { passive: true } as any);
     return () => {
       document.removeEventListener('mousedown', handleDocumentClick);
+      document.removeEventListener('touchstart', handleDocumentClick as any);
     };
   }, []);
 
@@ -543,7 +549,7 @@ const LiveChatComposerInner = (
       )}
 
       {showQuickReplyPopover && (
-        <div className="mb-1.5 bg-white border border-[#e9edef] rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
+        <div ref={quickReplyRef} className="mb-1.5 bg-white border border-[#e9edef] rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
           <div className="px-3 py-1.5 bg-[#f8fafc] border-b border-[#e9edef] flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#008069] flex items-center gap-1"><Zap size={12} /> Balasan Cepat</span>
             <span className="text-[10px] text-[#8696a0]">{filteredQuickReplies.length} template</span>
@@ -554,8 +560,9 @@ const LiveChatComposerInner = (
                 key={qr.id}
                 type="button"
                 onClick={() => applyQuickReply(qr)}
+                onTouchEnd={(e) => { e.preventDefault(); applyQuickReply(qr); }}
                 onMouseEnter={() => setQuickReplyActiveIdx(idx)}
-                className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition ${idx === quickReplyActiveIdx ? 'bg-[#e8f5f2] border-l-4 border-[#008069]' : 'hover:bg-[#f8fafc] border-l-4 border-transparent'}`}
+                className={`w-full text-left px-3 py-3 sm:py-2 flex items-start gap-2.5 transition cursor-pointer active:scale-[0.99] min-h-[48px] sm:min-h-0 ${idx === quickReplyActiveIdx ? 'bg-[#e8f5f2] border-l-4 border-[#008069]' : 'hover:bg-[#f0f2f5] border-l-4 border-transparent active:bg-[#e8f5f2]'}`}
               >
                 <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-[#008069] text-white border-[#008069]' : 'bg-[#f0f2f5] text-[#008069] border-[#c2e7e0]'}`}>/{qr.shortcut}</span>
                 <div className="flex-1 min-w-0">
@@ -565,8 +572,9 @@ const LiveChatComposerInner = (
               </button>
             ))}
           </div>
-          <div className="px-2.5 py-1 bg-[#fffbeb] border-t border-amber-100 text-[10px] text-amber-700 flex items-center gap-1.5">
-            <span>↑↓ navigasi</span><span className="opacity-40">•</span><span>Enter/Tab pilih</span><span className="opacity-40">•</span><span>Esc tutup</span>
+          <div className="px-2.5 py-1.5 bg-[#fffbeb] border-t border-amber-100 text-[10px] text-amber-700 flex items-center gap-1.5">
+            <span className="hidden sm:inline">↑↓ navigasi • Enter/Tab pilih • Esc tutup</span>
+            <span className="sm:hidden">Tap untuk pilih • Geser untuk lihat lainnya</span>
           </div>
         </div>
       )}
