@@ -178,12 +178,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           slots,
         });
       } catch (err: any) {
-        return reply.status(200).send({
-          success: true,
-          date: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-          totalTherapists: 2,
-          slots: SLOTS.map((t) => ({ time: t, status: 'available' as const, availableCount: 2, availableStaff: [], bookings: [] })),
-          note: 'Fallback',
+        console.error(JSON.stringify({
+          event: 'AVAILABILITY_QUERY_FAILED',
+          tenantId: DEFAULT_TENANT_ID,
+          error: err?.message, timestamp: new Date().toISOString(),
+        }));
+        return reply.status(503).send({
+          success: false,
+          error: 'AVAILABILITY_UNAVAILABLE',
+          message: 'Ketersediaan slot tidak dapat diverifikasi saat ini. Coba lagi.',
         });
       }
     }

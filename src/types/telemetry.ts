@@ -29,7 +29,7 @@ export interface AiHealthSummary {
   p50LatencyMs: number;
   p90LatencyMs: number;
   p95LatencyMs: number;
-  status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL';
+  status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL' | 'NO_DATA';
   perModelLatency?: Record<string, { p50: number; p90: number; p95: number; count: number }>;
   generatedAt: string;
 }

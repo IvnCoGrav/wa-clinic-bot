@@ -160,7 +160,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       const allMessages = await liveChatService.getConversationMessages(id, tenantId);
-      const messages = Array.isArray(allMessages) ? allMessages.slice(-10) : [];
+      const messages = Array.isArray(allMessages) ? allMessages.slice(-30) : [];
       return reply.status(200).send({ success: true, data: messages });
     }
   );

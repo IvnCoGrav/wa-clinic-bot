@@ -313,9 +313,9 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(body.data[0].conversationId).toBeNull();
     });
 
-    it('GET /api/staff/conversations/:id/messages caps returned messages to maximum 10 bubbles', async () => {
+    it('GET /api/staff/conversations/:id/messages caps returned messages to maximum 30 bubbles', async () => {
       vi.spyOn(StaffReservationService, 'assertConversationOwnedByStaffToday').mockResolvedValue(true);
-      const fakeMessages = Array.from({ length: 25 }, (_, i) => ({
+      const fakeMessages = Array.from({ length: 40 }, (_, i) => ({
         id: `msg-${i + 1}`,
         content: `Pesan ${i + 1}`,
       }));
@@ -330,9 +330,9 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.success).toBe(true);
-      expect(body.data).toHaveLength(10);
-      expect(body.data[0].content).toBe('Pesan 16');
-      expect(body.data[9].content).toBe('Pesan 25');
+      expect(body.data).toHaveLength(30);
+      expect(body.data[0].content).toBe('Pesan 11');
+      expect(body.data[29].content).toBe('Pesan 40');
     });
 
     it('POST /api/staff/conversations/:id/reply blocks unowned conversation with 403', async () => {

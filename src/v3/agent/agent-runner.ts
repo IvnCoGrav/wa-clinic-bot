@@ -9,6 +9,7 @@ import { ContextGrounder, FastResponseGate } from './pipeline/context-grounder';
 import { ToolExecutionPipeline } from './pipeline/tool-pipeline';
 import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
+import { telemetryService } from '../../services/telemetry.service';
 
 export interface AgentRunnerInput {
   tenantId?: string;
@@ -227,6 +228,31 @@ export class V3AgentRunner {
         originalText: input.originalText, incomingText,
         finalReply, isEscalated: guard.isEscalated,
       });
+
+      // F0 T0.1 — Telemetri per-turn (fail-closed observability): catat metrik kualitas
+      // raw vs sanitized untuk SMR, silent-drop, dan latensi. Overhead <2ms (hanya hitung string).
+      try {
+        const rawForTelemetry = draftReply || '';
+        const sanitizedForTelemetry = finalReply || '';
+        const latencyMs = Date.now() - turn.turnStartedAt;
+        const isSilentDrop = !guard.shouldSendReply && !guard.isEscalated;
+        const isUnjustifiedRsqr = (guard.violationsDetected || []).some((v: string) => v.includes('RSQR') || v.includes('Unjustified'));
+        telemetryService.recordTurn({
+          conversationId,
+          customerPhone: phone,
+          tenantId,
+          timestamp: Date.now(),
+          rawLlmReply: rawForTelemetry || null,
+          sanitizedReply: sanitizedForTelemetry || null,
+          mutilationRatio: telemetryService.calculateMutilationRatio(rawForTelemetry, sanitizedForTelemetry),
+          isSilentDrop,
+          isUnjustifiedRsqr,
+          nluErrorCode: null,
+          isJsonTruncated: false,
+          latencyMs,
+          modelName: selectedModel,
+        });
+      } catch {}
 
       // Monolitik V3_AGENT sudah dipecah menjadi ROUTING/GENERATION/REPROMPT per-call;
       // hanya catat legacy bila belum ada per-call (mis. jalur deterministik tanpa LLM).
