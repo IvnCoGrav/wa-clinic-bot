@@ -314,6 +314,10 @@ export class ContextGrounder {
       default:
         lines.push('• Jawab pertanyaan customer saat ini berdasar konteks yang sudah diketahui.');
         lines.push('• Bila pertanyaan soal jadwal dan lokasi customer belum diketahui: dahulukan tanya domisili netral (aturan persona 5a) di atas pola "cekkan/infokan".');
+        // Sesi 381894 (anti-requery wilayah luas): kota luas yang sudah ditagih
+        // kelurahannya DILARANG dihitung ulang — JANGAN panggil calculate_delivery
+        // kecuali customer menyebut kelurahan/perumahan/jalan baru.
+        lines.push('• Wilayah luas yang sudah ditanyakan kelurahannya DILARANG dihitung ulang: JANGAN panggil calculate_delivery kecuali customer menyebutkan kelurahan/perumahan/jalan/patokan baru. Pertanyaan harga/paket ("berapa", "biaya", "treatment apa saja") dijawab dari katalog/konteks, bukan dari hitungan ulang kota luas.');
         break;
     }
 
