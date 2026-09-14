@@ -13,7 +13,19 @@ import {
   mergeNotesIntoRawText,
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
+import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { memoryReservations } from './stores';
+
+function getCatalogFallbackPrice(): number {
+  try {
+    const all = treatmentCatalogService.getAllServices();
+    const baby = all.find((s: any) => s.category === 'BABY' && s.isActive !== false);
+    if (baby) return Number((baby as any).promoPrice ?? (baby as any).originalPrice ?? 60000);
+    const any = all.find((s: any) => s.isActive !== false);
+    if (any) return Number((any as any).promoPrice ?? (any as any).originalPrice ?? 60000);
+  } catch {}
+  return 60000;
+}
 import { responseCacheService } from '../../services/response-cache.service';
 
 /**
@@ -2124,7 +2136,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         const resolvedVal = (customPayload && typeof customPayload.custom_data?.value === 'number')
           ? customPayload.custom_data.value
-          : (autoResolvedVal ?? 60000);
+          : (autoResolvedVal ?? getCatalogFallbackPrice());
 
         const eventName = (customPayload && typeof customPayload.event_name === 'string')
           ? customPayload.event_name
@@ -2406,7 +2418,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             }
           }
 
-          const value = calculatedValue ?? 60000;
+          const value = calculatedValue ?? getCatalogFallbackPrice();
 
           let distanceKm = r.customer?.distance_km ? `${r.customer.distance_km} km` : null;
           if (!distanceKm && r.raw_text) {

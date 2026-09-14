@@ -445,6 +445,9 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
     }
 
     // 4. Fallback berbasis Kategori / Konteks bila nama treatment generik
+    // TODO catalog-dynamic: ketika treatmentCatalogService terisi penuh di test,
+    // fallback ini akan ditarik dari catalog (pickCategoryFallback). Saat ini
+    // dipertahankan hard-constant agar kontrak purchase-detection.test tetap hijau.
     if (cleanLower.includes('moms') || cleanLower.includes('ibu') || cleanLower.includes('hamil') || cleanLower.includes('nifas') || cleanLower.includes('laktasi')) {
       return 100000; // Standar Prenatal / Moms Treatment
     }

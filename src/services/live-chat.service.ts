@@ -40,6 +40,13 @@ export interface LiveChatConversationItem {
   isPinned: boolean;
   pinnedAt: Date | null;
   isAwaitingReply: boolean;
+  matchedMessage?: {
+    id: string;
+    content: string;
+    createdAt: Date;
+    direction?: string;
+    senderName?: string | null;
+  } | null;
   hasActiveHold?: boolean;
   hasUpcomingBooking?: boolean;
   hasPendingBooking?: boolean;
@@ -190,6 +197,33 @@ export class LiveChatService {
       }
     }
 
+    // Batch fetch matchedMessage saat search aktif (snippet pencarian)
+    let matchedMessageByConv = new Map<string, any>();
+    if (search && search.trim()) {
+      try {
+        const q = search.trim();
+        const matchedRows = await prisma.message.findMany({
+          where: {
+            conversation_id: { in: conversationIds },
+            tenant_id: tenantId,
+            content: { contains: q, mode: 'insensitive' },
+          },
+          orderBy: { created_at: 'desc' },
+        });
+        for (const m of matchedRows) {
+          if (!matchedMessageByConv.has(m.conversation_id)) {
+            matchedMessageByConv.set(m.conversation_id, {
+              id: m.id,
+              content: m.content,
+              createdAt: m.created_at,
+              direction: m.direction,
+              senderName: m.sender_name,
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
     // Batch fetch unread counts
     const unreadMap = await messageService.getUnreadCountsBatch(conversationIds, tenantId);
 
@@ -216,6 +250,7 @@ export class LiveChatService {
           ...c,
           customer: customers.get(c.customer_id),
           messages: lastMessagesByConv.get(c.id) || [],
+          matchedMessage: matchedMessageByConv.get(c.id) || null,
         },
         customerStats.get(c.customer_id),
         unreadMap.get(c.id) || 0
@@ -1008,6 +1043,7 @@ export class LiveChatService {
       activeHoldReservation,
       activeConfirmedReservation,
       activePendingReservation,
+      matchedMessage: (c as any).matchedMessage || null,
     };
   }
 

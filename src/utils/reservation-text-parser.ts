@@ -1,5 +1,6 @@
 import { TreatmentCategory } from '@prisma/client';
 import { parsePaymentSection } from './conversation-transaction-extractor';
+import { treatmentCatalogService } from '../services/treatment-catalog.service';
 
 export interface BabyDetail {
   name: string;
@@ -772,11 +773,33 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     dateStr = dateMatch[1].trim() + (timeMatch ? ` ${timeMatch[0]}` : '');
   }
 
-  // 5. Ekstrak Treatment
+  // 5. Ekstrak Treatment — data-driven: cocokkan katalog dinamis dulu, fallback generik
   let treatmentDetail = 'Pijat / Treatment Homecare';
-  const treatmentMatch = rawText.match(/(pijat\s+bayi|pijat\s+anak|baby\s+spa|newborn|pulih\s+ceria|mom\s+spa|pijat\s+hamil|pijat\s+laktasi|nebulizer|terapi\s+moksa|cukur\s+bayi|tindik\s+bayi)/i);
-  if (treatmentMatch) {
-    treatmentDetail = treatmentMatch[1].trim();
+  let catalogHit: string | null = null;
+  try {
+    const catalog = treatmentCatalogService.getAllServices();
+    const lowerRaw = rawText.toLowerCase();
+    const sorted = [...catalog].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+    for (const svc of sorted) {
+      const nameLower = (svc.name || '').toLowerCase();
+      if (nameLower && nameLower.length >= 4 && lowerRaw.includes(nameLower)) {
+        catalogHit = svc.name;
+        break;
+      }
+      const tokens = nameLower.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+      if (tokens.length >= 2 && tokens.every(t => lowerRaw.includes(t))) {
+        catalogHit = svc.name;
+        break;
+      }
+    }
+  } catch {}
+  if (catalogHit) {
+    treatmentDetail = catalogHit;
+  } else {
+    const treatmentMatch = rawText.match(/(pijat\s+bayi|pijat\s+anak|baby\s+spa|newborn|pulih\s+ceria|mom\s+spa|pijat\s+hamil|pijat\s+laktasi|nebulizer|terapi\s+moksa|cukur\s+bayi|tindik\s+bayi)/i);
+    if (treatmentMatch) {
+      treatmentDetail = treatmentMatch[1].trim();
+    }
   }
 
   // Validasi: harus ada Nama DAN Alamat

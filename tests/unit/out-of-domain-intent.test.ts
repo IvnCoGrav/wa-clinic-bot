@@ -33,6 +33,14 @@ describe('Out-of-Domain Intent (batas domain NLU)', () => {
       expect(r.intents || []).not.toContain('ask_unlisted_service');
       expect(r.intents || []).not.toContain('provide_location');
     });
+
+    it('layanan resmi klinik (tindik telinga & paket newborn) TIDAK dibajak ke ask_unlisted_service', () => {
+      const r1 = EntityExtractor.preExtractDeterministic('Bisa minta info untuk tindik telinga bayi?');
+      expect(r1.intents || []).not.toContain('ask_unlisted_service');
+
+      const r2 = EntityExtractor.preExtractDeterministic('Mau tanya paket newborn treatment');
+      expect(r2.intents || []).not.toContain('ask_unlisted_service');
+    });
   });
 
   describe('extract (LLM) — out_of_domain lolos pipeline taksonomi', () => {

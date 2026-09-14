@@ -86,9 +86,10 @@ function renderHighlightedText(text: string, query: string) {
     const regex = new RegExp(`(${escaped})`, 'gi');
     const parts = text.split(regex);
     if (parts.length <= 1) return text;
+    const testRegex = new RegExp(`^${escaped}$`, 'i');
     return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} className="bg-amber-300 text-amber-950 font-bold px-0.5 rounded shadow-2xs">
+      testRegex.test(part) ? (
+        <mark key={i} className="bg-amber-200 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200 font-bold px-0.5 rounded">
           {part}
         </mark>
       ) : (
@@ -98,6 +99,19 @@ function renderHighlightedText(text: string, query: string) {
   } catch {
     return text;
   }
+}
+
+function extractImageCaption(content?: string | null): string | null {
+  if (!content || typeof content !== 'string') return null;
+  const m = content.trim().match(/^\[IMAGE:\s*([\s\S]*?)\]$/i);
+  if (m && m[1] && m[1].trim()) return m[1].trim();
+  if (content.startsWith('[IMAGE:')) return content.replace(/^\[IMAGE:\s*/i, '').replace(/\]$/, '').trim() || null;
+  return null;
+}
+
+function cleanSnippetText(s: string): string {
+  const c = extractImageCaption(s);
+  return (c || s || '').trim();
 }
 
 interface QuotedMessageData {
@@ -393,6 +407,7 @@ export const LiveChatMonitor: React.FC = () => {
     if (!selectedId || !q || q.length < 2) return '';
     return q;
   }, [inChatSearchQuery, selectedId]);
+  const lastScrolledInChatQueryRef = useRef<string>('');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
@@ -1065,9 +1080,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
-        // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama (misal chat lama ke-51+),
-        // pertahankan objek percakapan aktif agar selectedChat tidak hilang/undefined
-        const currentActive = chatsRef.current.find((c) => c.conversationId === selectedIdRef.current);
+        // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama, pertahankan agar tidak hilang —
+        // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
+        const isSearchActive = !!(search && search.trim());
+        const currentActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
         const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
           ? [currentActive, ...data]
           : data;
@@ -1571,19 +1587,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   };
 
   useEffect(() => {
-    // Smart auto-scroll: jika ada keyword pencarian dalam-bubble dan pesan cocok, scroll langsung ke target
     if (messages.length > 0) {
       const q = effectiveInChatQuery;
       if (q) {
-        const matches = messages
-          .filter((m) => m.content && m.content.toLowerCase().includes(q))
-          .map((m) => m.id);
-
-        if (matches.length > 0) {
-          const targetId = matches[matches.length - 1];
-          scrollToMessage(targetId, false);
-          return;
+        if (lastScrolledInChatQueryRef.current !== q) {
+          const matches = messages
+            .filter((m) => m.content && m.content.toLowerCase().includes(q))
+            .map((m) => m.id);
+          if (matches.length > 0) {
+            const targetId = matches[matches.length - 1];
+            lastScrolledInChatQueryRef.current = q;
+            scrollToMessage(targetId, false);
+            return;
+          }
+          // Belum ada match di batch saat ini (mungkin di riwayat lama) — jangan tandai scrolled agar retry saat history termuat
         }
+        // In-chat search aktif: jangan paksa scroll ke bawah saat SSE/pagination menambah pesan
+        return;
+      } else {
+        lastScrolledInChatQueryRef.current = '';
       }
       if (isInitialMessagesLoadRef.current) {
         if (!wasNearBottomRef.current && savedScrollTopRef.current !== null) {
@@ -3003,25 +3025,36 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       return false;
     }
 
-    // 3. Filter search query (Nama, Nomor HP, atau Keyword Pesan)
+    // 3. Filter search query — anti-mutilasi: jika search aktif, `chats` sudah hasil filter server (RN<=3).
+    // Jangan buang chat yang valid di server hanya karena tidak ada di 3 pesan terakhir lokal.
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      const cleanDigits = q.replace(/\D/g, '');
+      const digitsOnly = q.replace(/\D/g, '');
+      let normalized = digitsOnly;
+      if (normalized.startsWith('0')) normalized = '62' + normalized.slice(1);
+      else if (normalized.startsWith('8')) normalized = '62' + normalized;
+
+      const phone = (chat.customerPhone || '').replace(/\D/g, '');
       const nameMatch = (chat.customerName || '').toLowerCase().includes(q);
-      const phoneMatch = cleanDigits.length >= 2
-        ? (chat.customerPhone || '').includes(cleanDigits)
-        : (chat.customerPhone || '').toLowerCase().includes(q);
+      const phoneMatch = digitsOnly.length >= 3 && (
+        phone.includes(digitsOnly) ||
+        (normalized.length >= 4 && phone.includes(normalized)) ||
+        (chat.customerPhone || '').toLowerCase().includes(q)
+      );
       const messageMatch = (chat.lastMessages || []).some((m) =>
         (m.content || '').toLowerCase().includes(q)
       );
 
       if (!nameMatch && !phoneMatch && !messageMatch) {
-        return false;
+        const isFromServerSearch = isSearching || (chatsRef.current.length > 0 && searchQuery.trim().length >= 2);
+        if (!isFromServerSearch) {
+          return false;
+        }
       }
     }
 
     return true;
-  }), [chats, labelFilter, searchQuery, sourceFilter]);
+  }), [chats, labelFilter, searchQuery, sourceFilter, isSearching]);
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -3333,6 +3366,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => {
+                          if (searchDebounceTimerRef.current) {
+                            clearTimeout(searchDebounceTimerRef.current);
+                            searchDebounceTimerRef.current = null;
+                          }
                           setSearchQuery('');
                           loadChats(true, '', true);
                         }}
@@ -3359,8 +3396,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => {
+                          if (searchDebounceTimerRef.current) {
+                            clearTimeout(searchDebounceTimerRef.current);
+                            searchDebounceTimerRef.current = null;
+                          }
                           setSearchQuery('');
-                          loadChats(true, '');
+                          loadChats(true, '', true);
                         }}
                         className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
                       >
@@ -3415,7 +3456,24 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           longPressTriggeredRef.current = false;
                           return;
                         }
+                        const matchedId = (chat as any).matchedMessage?.id || null;
+                        if (searchQuery.trim() && matchedId) {
+                          setInChatSearchQuery(searchQuery);
+                          setInChatSearchOpen(true);
+                        } else if (searchQuery.trim()) {
+                          // Fallback: cari di lastMessages untuk highlight lokal
+                          const q = searchQuery.trim().toLowerCase();
+                          const localMatch = (chat.lastMessages || []).find((m: any) => (m.content || '').toLowerCase().includes(q));
+                          if (localMatch) {
+                            setInChatSearchQuery(searchQuery);
+                            setInChatSearchOpen(true);
+                          }
+                        }
                         handleSelect(chat.conversationId);
+                        if (matchedId) {
+                          setTimeout(() => scrollToMessage(matchedId, true), 600);
+                          setTimeout(() => scrollToMessage(matchedId, true), 1200);
+                        }
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -3604,20 +3662,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         </div>
                       </div>
 
-                      {/* Chat Preview — draf typing didahulukan bila ada */}
-                      {draftText ? (
-                        <p
-                          className="text-xs text-[#008069] dark:text-[#00a884] line-clamp-1 leading-snug font-medium flex items-center gap-1"
-                          title={`Draf belum terkirim: ${draftText}`}
-                        >
-                          <PenLine size={11} className="shrink-0" />
-                          <span className="truncate">Draft: {draftText}</span>
-                        </p>
-                      ) : (
-                        <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 italic leading-snug">
-                          "{preview || 'Tidak ada pesan'}"
-                        </p>
-                      )}
+                      {/* Chat Preview — snippet pencarian didahulukan saat search aktif */}
+                      {(() => {
+                        const matchedSnippet = searchQuery.trim()
+                          ? ((chat as any).matchedMessage?.content || (chat.lastMessages || []).find((m: any) => (m.content || '').toLowerCase().includes(searchQuery.trim().toLowerCase()))?.content || null)
+                          : null;
+                        if (searchQuery.trim() && matchedSnippet) {
+                          return (
+                            <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-[#111b21] dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
+                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-500/60" />
+                              <span className="flex-1 min-w-0">&quot;{renderHighlightedText(cleanSnippetText(matchedSnippet), searchQuery)}&quot;</span>
+                            </div>
+                          );
+                        }
+                        if (draftText) {
+                          return (
+                            <p className="text-xs text-[#008069] dark:text-[#00a884] line-clamp-1 leading-snug font-medium flex items-center gap-1" title={`Draf belum terkirim: ${draftText}`}>
+                              <PenLine size={11} className="shrink-0" />
+                              <span className="truncate">Draft: {draftText}</span>
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 italic leading-snug">
+                            &quot;{preview || 'Tidak ada pesan'}&quot;
+                          </p>
+                        );
+                      })()}
 
                       {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) — background ikut status */}
                       <div className={`flex justify-between items-center text-[10px] border-t -mx-2 px-2.5 py-1.5 rounded-b-[11px] mt-1.5 ${
@@ -4535,7 +4606,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                         </span>
                                         <Download size={14} className="text-[#8696a0] shrink-0" />
                                       </a>
-                                      {msg.media.caption && <span className="block mt-1 text-[11px] text-slate-700 break-words">{msg.media.caption}</span>}
+                                      {msg.media.caption && (
+                                        <span className="block mt-1 text-[11px] text-slate-700 break-words">
+                                          {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(msg.media.caption, effectiveInChatQuery || searchQuery) : msg.media.caption}
+                                        </span>
+                                      )}
                                     </div>
                                   );
                                 }
@@ -4545,8 +4620,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
                                       downloadSrc={msg.media.hdUrl || msg.media.url}
                                       thumbUrl={msg.media.thumbUrl}
-                                      caption={msg.media.caption || undefined}
+                                      caption={msg.media.caption || extractImageCaption(msg.content) || undefined}
                                     />
+                                    {(() => {
+                                      const cap = msg.media.caption || extractImageCaption(msg.content);
+                                      const q = effectiveInChatQuery || searchQuery;
+                                      if (!cap || !q || !q.trim()) return null;
+                                      // Render highlighted caption below image (when image fails, MediaImage also shows plain caption — this adds highlight)
+                                      return (
+                                        <div className="mt-1 text-[11px] leading-snug break-words">
+                                          {renderHighlightedText(cap, q)}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 );
                               })()}
@@ -4584,7 +4670,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   )}
                                   {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
                                     <p className="font-sans whitespace-pre-wrap select-text cursor-text">
-                                      {renderHighlightedText(msg.content, searchQuery)}
+                                      {renderHighlightedText(msg.content, effectiveInChatQuery || searchQuery)}
                                     </p>
                                   )}
                                 </>

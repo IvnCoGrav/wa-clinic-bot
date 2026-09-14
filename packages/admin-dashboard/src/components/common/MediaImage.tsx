@@ -175,11 +175,18 @@ export const MediaImage: React.FC<{
 
   if (!standardSrc || error) {
     return (
-      <div className="w-48 sm:w-56 h-32 sm:h-36 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
-        <ImageOff size={18} className="text-slate-400" />
-        <span className="font-medium text-slate-500 leading-tight">
-          Gambar tidak tersedia
-        </span>
+      <div className="inline-block max-w-full">
+        <div className="w-48 sm:w-56 h-32 sm:h-36 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
+          <ImageOff size={18} className="text-slate-400" />
+          <span className="font-medium text-slate-500 dark:text-slate-400 leading-tight">
+            Gambar tidak tersedia
+          </span>
+        </div>
+        {caption && (
+          <span className="block mt-1 text-[11px] text-slate-700 dark:text-slate-300 font-normal break-words">
+            {caption}
+          </span>
+        )}
       </div>
     );
   }

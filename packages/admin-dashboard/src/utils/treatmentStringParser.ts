@@ -50,17 +50,14 @@ export function cleanTreatmentName(itemStr: string): string {
 export function isAddonServiceName(name: string): boolean {
   const lower = (name || '').toLowerCase();
   return (
+    lower.includes('(add-on)') ||
+    lower.includes('(addon)') ||
+    lower.includes('[addon]') ||
+    lower.startsWith('add-on') ||
+    lower.startsWith('addon') ||
     lower.includes('moksa') ||
     lower.includes('moxa') ||
-    lower.includes('addon') ||
-    lower.includes('add-on') ||
-    lower.includes('tambahan') ||
-    lower.includes('taping') ||
-    lower.includes('kinesio') ||
-    lower.includes('ear candle') ||
-    lower.includes('nebulizer') ||
-    lower.includes('potong kuku') ||
-    lower.includes('tindik')
+    lower.includes('nebulizer')
   );
 }
 
@@ -217,7 +214,9 @@ export function parseTreatmentItemsFromRaw(
     const matched = catalogMap.get(pureName.toLowerCase()) ||
       matchCatalogService(pureName, catalog);
 
-    const isAddon = isAddonServiceName(pureName);
+    const isAddon = matched
+      ? (matched.isAddon === true || matched.category === 'ADD_ON' || (matched as any).serviceType === 'ADD_ON')
+      : isAddonServiceName(pureName);
     let category: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | 'ADD_ON' = isAddon ? 'ADD_ON' : 'BABY';
 
     if (matched?.category) {
