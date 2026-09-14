@@ -1401,8 +1401,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   const isTrulyCompleted = (t: StaffTask) => {
     const isStatusDone = (t.status || '').toLowerCase() === 'completed';
-    const isPaid = t.pricing?.paymentStatus === 'LUNAS';
-    return isStatusDone || isPaid;
+    const isPaidAndPast = t.pricing?.paymentStatus === 'LUNAS' && isOverdueSchedule(t);
+    return isStatusDone || isPaidAndPast;
   };
 
   const activeTodayTasks = tasks.filter((t) => !isTrulyCompleted(t));
