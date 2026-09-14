@@ -27,6 +27,20 @@ describe('treatmentStringParser & deliveryTierCalculator Unit Tests', () => {
       expect(isAddonServiceName('Sinar Moksa (Add-on)')).toBe(true);
       expect(isAddonServiceName('Moxa Perut')).toBe(true);
       expect(isAddonServiceName('Pijat Bayi Ceria')).toBe(false);
+      expect(isAddonServiceName('Tindik Telinga Bayi')).toBe(false);
+      expect(isAddonServiceName('Cukur Rambut Bayi')).toBe(false);
+    });
+
+    it('should not treat Tindik Telinga Bayi as add-on in parsed items', () => {
+      const raw = 'Tindik Telinga Bayi [15m]';
+      const catalog = [
+        { id: 'baby-tindik', name: 'Tindik Telinga Bayi', promoPrice: 50000, durationMinutes: 15, category: 'BABY', isAddon: false },
+      ];
+      const items = parseTreatmentItemsFromRaw(raw, catalog);
+      expect(items.length).toBe(1);
+      expect(items[0].isAddon).toBe(false);
+      expect(items[0].category).toBe('BABY');
+      expect(items[0].price).toBe(50000);
     });
 
     it('should parse multi-treatment into clean items without creating dummy buffer items', () => {

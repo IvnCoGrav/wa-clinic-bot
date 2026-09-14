@@ -48,19 +48,19 @@ export function isAddonService(t: { name: string; category?: string; serviceType
   if (t.isAddon === true || t.category === 'ADD_ON' || t.serviceType === 'ADD_ON') {
     return true;
   }
+  if (t.isAddon === false || (t.category && t.category !== 'ADD_ON')) {
+    return false;
+  }
   const name = (t.name || '').toLowerCase();
   return (
+    name.includes('(add-on)') ||
+    name.includes('(addon)') ||
+    name.includes('[addon]') ||
+    name.startsWith('add-on') ||
+    name.startsWith('addon') ||
     name.includes('moksa') ||
     name.includes('moxa') ||
-    name.includes('addon') ||
-    name.includes('add-on') ||
-    name.includes('tambahan') ||
-    name.includes('taping') ||
-    name.includes('kinesio') ||
-    name.includes('ear candle') ||
-    name.includes('nebulizer') ||
-    name.includes('potong kuku') ||
-    name.includes('tindik')
+    name.includes('nebulizer')
   );
 }
 
