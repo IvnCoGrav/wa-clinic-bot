@@ -11,10 +11,15 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 
 /**
- * WhatsApp Label Lifecycle (Task 3/4/5) — test unit.
- * Cover: 'new customer', 'pending payment', 'repeat', 'legacy' tidak pernah dihapus,
- * failure-toleran label, & flag off.
+ * Label Lifecycle (Task 3/4/5) — test unit DB-ONLY.
+ * Mandat Mutlak Anti-Label WAHA: seluruh penandaan lifecycle ('New Customer',
+ * 'Pending Payment', 'Repeat Order') WAJIB via tabel internal `Label` +
+ * `CustomerLabel` (tenant-scoped). Zero pemanggilan WAHA (addLabel/removeLabel/
+ * batchUpdateLabels) dari kode bisnis — lihat invariant guard
+ * tests/unit/v3/waha-label-ban-invariant.test.ts.
  */
+
+const LIFECYCLE_NAMES = ['New Customer', 'Pending Payment', 'Repeat Order'];
 
 const RESERVATION_FORM = `Berikut list untuk reservasi :
 Hari dan tanggal : Sabtu/1-8-2026
@@ -55,7 +60,15 @@ async function setupInterestConversation(phone: string, name: string) {
   return { customer, conversation };
 }
 
-describe('WhatsApp Label Lifecycle', () => {
+describe('Label Lifecycle (DB-only)', () => {
+  // Store label DB tiruan per-test (tanpa mengubah tests/setup.ts).
+  let labelStore: Map<string, { id: string; tenant_id: string; name: string }>;
+  let customerLabels: Set<string>; // "customerId:labelId"
+  const labelNameById = (id: string) => {
+    for (const v of labelStore.values()) if (v.id === id) return v.name;
+    return undefined;
+  };
+
   beforeEach(async () => {
     process.env.ENABLE_LIFECYCLE_LABELS = 'true';
     process.env.HUMANIZER_ENABLED = 'false';
@@ -63,6 +76,39 @@ describe('WhatsApp Label Lifecycle', () => {
     vi.mocked(prisma.reservation.create).mockResolvedValue(buildReservationObject() as any);
     // prisma.reservation.count tidak ada di mock setup — tambahkan default 0 (tanpa mengubah setup.ts).
     (prisma.reservation as any).count = vi.fn().mockResolvedValue(0);
+    // Delegate Label/CustomerLabel tidak ada di mock setup — pasang store tiruan per-test.
+    labelStore = new Map();
+    customerLabels = new Set();
+    (prisma as any).label = {
+      upsert: vi.fn().mockImplementation(async ({ where, create }: any) => {
+        const name = where?.tenant_id_name?.name ?? create?.name;
+        const key = `${DEFAULT_TENANT_ID}:${name}`;
+        if (!labelStore.has(key)) {
+          labelStore.set(key, { id: `lbl_${labelStore.size + 1}`, tenant_id: DEFAULT_TENANT_ID, name });
+        }
+        return labelStore.get(key);
+      }),
+      findFirst: vi.fn().mockImplementation(async ({ where }: any) => {
+        return labelStore.get(`${DEFAULT_TENANT_ID}:${where?.name}`) ?? null;
+      }),
+    };
+    (prisma as any).customerLabel = {
+      upsert: vi.fn().mockImplementation(async ({ create }: any) => {
+        customerLabels.add(`${create.customer_id}:${create.label_id}`);
+        return create;
+      }),
+      deleteMany: vi.fn().mockImplementation(async ({ where }: any) => {
+        const raw = where?.label_id;
+        const ids: string[] = Array.isArray(raw)
+          ? raw
+          : (raw?.in ?? (typeof raw === 'string' ? [raw] : []));
+        let count = 0;
+        for (const lid of ids) {
+          if (customerLabels.delete(`${where.customer_id}:${lid}`)) count++;
+        }
+        return { count };
+      }),
+    };
     await seedAiScopeAll();
   });
 
@@ -94,7 +140,7 @@ describe('WhatsApp Label Lifecycle', () => {
     expect(customer).toBeDefined();
   });
 
-  it('2. Form reservasi pertama masuk → batchUpdateLabels(add: pending payment, remove: new customer)', async () => {
+  it('2. Form reservasi pertama masuk → DB: tambah Pending Payment, hapus New Customer (zero WAHA)', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
     const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
@@ -113,14 +159,22 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
-      add: ['pending payment'],
-      remove: ['new customer'],
-    });
-    expect(batchSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, expect.objectContaining({ add: ['repeat'] }));
+    // Zero WAHA label mutation (mandat mutlak).
+    expect(batchSpy).not.toHaveBeenCalled();
+    // DB: Pending Payment terpasang untuk customer ini.
+    const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
+    const upsertedNames = upsertCalls.map((c: any) => labelNameById(c[0].create.label_id));
+    expect(upsertedNames).toEqual(['Pending Payment']);
+    expect(upsertCalls[0][0].create.customer_id).toBe(customer.id);
+    // DB: New Customer terlepas untuk customer ini.
+    const delCalls = vi.mocked((prisma as any).customerLabel.deleteMany).mock.calls;
+    expect(delCalls).toHaveLength(1);
+    expect(delCalls[0][0].where.customer_id).toBe(customer.id);
+    const removedNames = delCalls[0][0].where.label_id.in.map((id: string) => labelNameById(id));
+    expect(removedNames).toEqual(['New Customer']);
   });
 
-  it('3. Customer riwayat confirmed ≥1 kirim form baru → batchUpdateLabels(add: repeat, remove: new customer + pending payment)', async () => {
+  it('3. Customer riwayat confirmed ≥1 kirim form baru → DB: tambah Repeat Order, hapus New Customer + Pending Payment', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(1);
     const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
@@ -139,14 +193,17 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
-      add: ['repeat'],
-      remove: ['new customer', 'pending payment'],
-    });
-    expect(batchSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, expect.objectContaining({ add: ['pending payment'] }));
+    expect(batchSpy).not.toHaveBeenCalled();
+    const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
+    const upsertedNames = upsertCalls.map((c: any) => labelNameById(c[0].create.label_id));
+    expect(upsertedNames).toEqual(['Repeat Order']);
+    const delCalls = vi.mocked((prisma as any).customerLabel.deleteMany).mock.calls;
+    expect(delCalls).toHaveLength(1);
+    const removedNames = delCalls[0][0].where.label_id.in.map((id: string) => labelNameById(id)).sort();
+    expect(removedNames).toEqual(['New Customer', 'Pending Payment']);
   });
 
-  it('4. Admin klik "Tandai Lunas" (PATCH confirm) → removeLabel("pending payment") + status confirmed', async () => {
+  it('4. Admin klik "Tandai Lunas" (PATCH confirm) → DB: lepas Pending Payment + status confirmed (zero WAHA)', async () => {
     process.env.ADMIN_API_KEY = 'test_admin_key_123';
     process.env.ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER = 'false';
     const phone = `628994${Date.now()}`;
@@ -159,6 +216,13 @@ describe('WhatsApp Label Lifecycle', () => {
       customer: { phone, name: 'Bunda Confirm' },
     };
     memoryReservations.set(mockRes.id, mockRes);
+    // Seed label Pending Payment agar findFirst menemukannya (jalur DB confirm).
+    labelStore.set(`${DEFAULT_TENANT_ID}:Pending Payment`, {
+      id: 'lbl_pending',
+      tenant_id: DEFAULT_TENANT_ID,
+      name: 'Pending Payment',
+    });
+    customerLabels.add('cust-confirm:lbl_pending');
     const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
 
     const app = buildApp();
@@ -170,17 +234,28 @@ describe('WhatsApp Label Lifecycle', () => {
 
     expect(res.statusCode).toBe(200);
     expect(mockRes.status).toBe('confirmed');
-    // Memory fallback mengeksekusi removeLabel 'pending payment'
-    expect(removeLabelSpy).toHaveBeenCalledWith(`${phone}@c.us`, 'pending payment');
+    // Zero WAHA label mutation (mandat mutlak) — pelunasan via CustomerLabel DB.
+    expect(removeLabelSpy).not.toHaveBeenCalled();
+    const delCalls = vi.mocked((prisma as any).customerLabel.deleteMany).mock.calls;
+    expect(delCalls).toHaveLength(1);
+    expect(delCalls[0][0]).toEqual({
+      where: { customer_id: 'cust-confirm', label_id: 'lbl_pending' },
+    });
+    expect(customerLabels.has('cust-confirm:lbl_pending')).toBe(false);
   });
 
-  it('5. Customer berlabel "legacy" mengisi form → label lifecycle jalan, "legacy" TIDAK pernah di-remove', async () => {
+  it('5. Customer berlabel "Legacy" mengisi form → lifecycle DB jalan, "Legacy" TIDAK pernah dilepas', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
     const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289951${Date.now()}`, 'Bunda Legacy');
-    // Tandai sebagai legacy source + beri label 'legacy' di WA
-    wahaClient.mockLabels.set(`${customer.phone}@c.us`, ['legacy']);
+    // Tandai legacy di DB internal (bukan WAHA): label + join row milik customer.
+    labelStore.set(`${DEFAULT_TENANT_ID}:Legacy`, {
+      id: 'lbl_legacy',
+      tenant_id: DEFAULT_TENANT_ID,
+      name: 'Legacy',
+    });
+    customerLabels.add(`${customer.id}:lbl_legacy`);
 
     const res = await stateMachine.processMessage({
       tenantId: DEFAULT_TENANT_ID,
@@ -196,20 +271,25 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    // new customer tetap dihapus, pending payment ditambahkan sesuai riwayat
-    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
-      add: ['pending payment'],
-      remove: ['new customer'],
-    });
-    // legacy tidak boleh muncul di daftar remove manapun
-    for (const call of batchSpy.mock.calls) {
-      expect(call[1].remove).not.toContain('legacy');
+    expect(batchSpy).not.toHaveBeenCalled();
+    // Hanya 3 nama kanonis lifecycle yang boleh di-upsert/di-delete.
+    const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
+    for (const c of upsertCalls) {
+      expect(LIFECYCLE_NAMES).toContain(labelNameById(c[0].create.label_id));
     }
+    const delCalls = vi.mocked((prisma as any).customerLabel.deleteMany).mock.calls;
+    for (const c of delCalls) {
+      for (const lid of c[0].where.label_id.in) {
+        expect(LIFECYCLE_NAMES).toContain(labelNameById(lid));
+      }
+    }
+    // Join row Legacy milik customer tetap utuh.
+    expect(customerLabels.has(`${customer.id}:lbl_legacy`)).toBe(true);
   });
 
-  it('6. batchUpdateLabels gagal (mock error) → operasi inti reservasi tetap sukses', async () => {
+  it('6. Penulisan label DB gagal → operasi inti reservasi tetap sukses (best-effort)', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    vi.spyOn(wahaClient, 'batchUpdateLabels').mockRejectedValue(new Error('WAHA timeout'));
+    vi.mocked((prisma as any).label.upsert).mockRejectedValueOnce(new Error('DB down'));
 
     const { customer } = await setupInterestConversation(`6289961${Date.now()}`, 'Bunda Resilient');
     const res = await stateMachine.processMessage({
@@ -230,7 +310,7 @@ describe('WhatsApp Label Lifecycle', () => {
     expect(res.isHumanHandling).toBe(true);
   });
 
-  it('7. Flag ENABLE_LIFECYCLE_LABELS=false → tidak ada batchUpdateLabels lifecycle', async () => {
+  it('7. Flag ENABLE_LIFECYCLE_LABELS=false → tidak ada penulisan label lifecycle DB maupun WAHA', async () => {
     process.env.ENABLE_LIFECYCLE_LABELS = 'false';
     const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
@@ -250,6 +330,9 @@ describe('WhatsApp Label Lifecycle', () => {
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(batchSpy).not.toHaveBeenCalled();
+    expect(vi.mocked((prisma as any).label.upsert)).not.toHaveBeenCalled();
+    expect(vi.mocked((prisma as any).customerLabel.upsert)).not.toHaveBeenCalled();
+    expect(vi.mocked((prisma as any).customerLabel.deleteMany)).not.toHaveBeenCalled();
   });
 
   it('8. resolvePrimaryJid menormalisasi JID @lid dan nomor polos ke format @c.us untuk API label', async () => {

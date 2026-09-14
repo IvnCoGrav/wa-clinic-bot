@@ -1,162 +1,133 @@
-# Implementation Plan — LiveChat Comprehensive Fix (Goyang Typing + Search + Tanggal + WA Sync)
+# Implementation Plan — LiveChat Comprehensive Optimization & WA Sync (Revisi v3 — September 2026)
 
-**Tanggal:** 2026-09-01  
-**Branch rencana:** `plan/livechat-wa-sync` (update v2)  
-**Status:** Plan → Build (disetujui user 2026-09-01)  
-**Penulis:** Muse Spark — audit impeccable LiveChatMonitor 4237 baris + live-chat.service + conversation/message  
-**Prasyarat:** `AGENTS.md` SaaS-readiness, `docs/KNOWN_ISSUES.md#9 #10 #11 #18`, `docs/PERF_AUDIT_2026-08-08.md` P1+P7
+**Tanggal:** 2026-09-01 (Direvisi komprehensif: 2026-09-14)  
+**Status:** In Progress (Fase Historis Selesai, Sisa Fase Siap Eksekusi)  
+**Prasyarat:** Mandat `AGENTS.md` (SaaS-readiness, Zero New Dependencies, **Mandat Mutlak Larangan Menyentuh Label WAHA**)
 
 ---
 
-## 1. Ringkasan Masalah (Faktual)
+## 1. Status Audit Penyelesaian Historis (Fase yang Sudah Berjalan)
 
-### 1a. Goyang saat Typing (laporan 2026-08-31)
-- **Gejala:** Input LiveChat goyang saat ketik, terutama iOS Safari/PWA. Keyboard `∧∨✓` + bubble lompat.
-- **Akar (7 faktor konkuren, verified read-only):**
-  1. `LiveChatMonitor.tsx:1105` `visualViewport resize/scroll → scrollToBottom(true)` fire 5-10×/detik saat ketik (prediksi bar, tinggi `contentEditable` berubah) × `scrollToBottom:1065` paksa 5× (`scrollTop=scrollHeight+99999` + `scrollIntoView` + rAF + 4× setTimeout) → jitter vertikal.
-  2. `LiveChatMonitor.tsx:338,483` `hasReplyText` di root → full re-render 4237 baris tiap karakter (list 50 + 30 bubble).
-  3. `3788` `contentEditable="plaintext-only"` → iOS `UITextInputAssistantItem` debt (`KNOWN_ISSUES#9`), `innerText` + selection reset tiap input → tinggi `min-h-[38px] max-h-[220px]` tumbuh/ciut.
-  4. `3122:3129` `chatContainer overscroll-contain` + `Layout.tsx:493` `h-screen overflow-hidden` vs `index.css:60` `dvh` dobel.
-  5. SSE `message.created:1497` + `visualViewport` bersamaan → double-jump.
-  6. Sticky `2601` + `3132` collision.
-  7. Typing presence `472:502` spam `POST /typing` tiap 3s → SSE balik.
+Berdasarkan audit langsung kode sumber aktif per 14 September 2026, sebagian besar keluhan kritis (P0/P1) pada draf awal rencana ini **telah berhasil diselesaikan**:
 
-### 1b. Search salah (laporan 2026-09-01)
-- **Gejala:** Cari `628113141111` (nomor) → banner “Tidak ada bubble pesan berisi "628113141111" di percakapan ini” + tidak ter-close saat pindah chat.
-- **Akar:**
-  1. Kopling salah `LiveChatMonitor.tsx:1207:1212` `useEffect([searchQuery,selectedId]) → setInChatSearchQuery(searchQuery)` → global search (nama/nomor via `filteredChats:2297` & `conversation.service:174` `customer.name/phone`) ikut trigger in-chat search (`1214` filter `messages[].content`). Nomor tidak ada di bubble → banner `3167` muncul.
-  2. `handleClearInChatSearch:1250` hanya reset `inChatSearchQuery`, tidak reset pindah chat → effect isi ulang lagi.
-  3. Banner guard `3167` `inChatSearchQuery && matching===0` terlalu agresif (walau `messages.length===0` atau q=numerik).
-
-- **Ekspektasi benar:** Search nomor/nama = filter list kiri (`filteredChats`), bukan bubble. Search bubble = hanya jika admin memang cari isi pesan.
-
-### 1c. Bug Tanggal
-- **Gejala:** Separator “Hari ini/Kemarin/Senin” kadang off-by-one, `formatLastChat:2328` tanpa tahun.
-- **Akar:**
-  1. `formatChatDateSeparator:144` pakai `Math.round` + `getFullYear` lokal vs UTC → 23:30 WIB bisa jadi “Kemarin”.
-  2. `isDifferentDay:167` sama → midnight lokal.
-  3. `formatLastChat` tanpa `timeZone:'Asia/Jakarta'`, threshold `Math.floor` tapi tanpa tahun.
-  4. `live-chat.service:843` `effectiveLastMsgAt = lastMsg.created_at || last_message_at` bisa desync 197 rows (drift terbesar 48 hari, `docs/IMPLEMENTATION_PLAN_LIVECHAT_WA_SYNC.md#1`).
-
-### 1d. WA Sync (plan lama, tetap valid)
-- 64 phantom conv, 197 drift, 173 `wa_message_id NULL`, history media drop – detail §1 Fase 0-5 lama (dipertahankan).
+| Komponen / Masalah Asal | Status | Solusi yang Sudah Aktif di Produksi | Lokasi Kode Sumber |
+|---|:---:|---|---|
+| **Search Decoupling (Fase 5 lama)** | **RESOLVED** | Search nomor HP global via API backend (`searchQuery`) telah dipisahkan total dari pencarian pesan internal thread (`inChatSearchQuery`). Mencari nomor tidak lagi memunculkan banner *"tidak ada bubble pesan"*. | `LiveChatMonitor.tsx:480-496` & `conversation.service.ts:177-185` |
+| **Tanggal WIB (Fase 6 lama)** | **RESOLVED** | Seluruh pemformatan tanggal chat dan separator "Hari ini/Kemarin" konsisten menggunakan zona waktu `Asia/Jakarta`, mencegah bug pergantian hari dini pada pukul 23:30 WIB. | `packages/admin-dashboard/src/utils/dateWib.ts` |
+| **Jump & Highlight (Fase 8 lama)** | **RESOLVED** | Pencarian pesan dalam thread otomatis menyorot teks `<mark>`, menampilkan floating bar navigasi *“Hasil X dari Y”*, tombol Chevron 🔼/🔽, dan animasi kilat highlight 3.5 detik. | `LiveChatMonitor.tsx:1620-1642` |
+| **Filter Phantom Chat (Fase 2 lama)** | **RESOLVED** | Percakapan tanpa pesan riil otomatis difilter di level query database Prisma (`messages: { some: {} }`), mencegah percakapan kosong naik ke atas list. | `conversation.service.ts:170` |
+| **Peredam Goyang Viewport (Fase 4 lama)** | **RESOLVED** | Event `visualViewport` di-throttle 200ms dan diberi threshold >80px (hanya bereaksi saat keyboard virtual iOS buka/tutup, bukan per karakter ketikan). | `LiveChatMonitor.tsx:1644-1668` |
+| **Debounce Typing & Draft (Fase 4 lama)** | **RESOLVED** | Pengetikan menggunakan `replyTextRef.current` (uncontrolled) dan boolean state `hasReplyText` hanya trigger render saat transisi kosong <-> terisi. Typing presence ke server di-debounce 500ms. | `LiveChatMonitor.tsx:671-705` |
 
 ---
 
-## 2. Tujuan
+## 2. Sisa Pekerjaan Riil (The Remaining Actionable Scope)
 
-- **Goyang hilang:** Ketik 30 detik di iOS tanpa jitter, FPS 60, `visualViewport` throttle.
-- **Search benar:** Cari nomor/nama → list terfilter, **tanpa** banner bubble. Cari isi bubble → highlight + navigasi ↑↓ + auto-close saat pindah chat.
-- **Tanggal benar:** Separator WIB akurat, no off-by-one, `lastMessageAt` single source.
-- **WA Sync:** `last_message_at` ≡ `max(messages.created_at)`, phantom tidak naik ke atas.
-- Non-tujuan: Ubah SOP greeting/ongkir, ganti WAHA `noweb-2026.7.2`.
+Sisa pekerjaan yang benar-benar relevan dan selaras dengan arsitektur terkini difokuskan pada **3 Fase Terarah**:
 
----
+```mermaid
+flowchart TD
+    subgraph FaseA [Fase A: UI Performance & Modularitas]
+        A1[Ekstraksi LiveChatComposer.tsx] --> A2[Bungkus React.memo & Isolasi Event Input]
+        A2 --> A3[Integrasikan ke LiveChatMonitor.tsx]
+    end
 
-## 3. Prinsip
+    subgraph FaseB [Fase B: Anti-Label WAHA Enforcement]
+        B1[Audit Seluruh Alur LiveChat Tagging] --> B2[Kunci Mutasi Label ke Internal PostgreSQL DB]
+        B2 --> B3[Verifikasi Invariant Guard Zero WAHA Label]
+    end
 
-- Tenant-aware (`tenant_id` filter, tidak hardcode).
-- Idempotent & re-runnable.
-- Offline test green (`tests/setup.ts` mock).
-- **Rekomendasi disetujui:** (1) Pisah dua kotak search (global atas list + in-chat dalam thread), (2) WIB hardcode `Asia/Jakarta`, (3) Global search tetap saat pindah chat, in-chat reset.
+    subgraph FaseC [Fase C: WA History Drift Audit & Observability]
+        C1[Skrip Diagnostik check-livechat-sync.ts] --> C2[Skrip Perbaikan repair-last-message-at.ts]
+        C2 --> C3[Endpoint GET /api/admin/live-chat/sync-health]
+    end
 
----
-
-## 4. Fase Implementasi (Update v2)
-
-### Fase 0 — Diagnostic & Guard (0.5 hari, read-only) — TETAP
-*Skrip `check-livechat-sync.ts` + `npm run check:livechat-sync` seperti plan lama (phantom/drift/nullWa).*  
-*Tambah:* `check-livechat-search-date.ts` → cek `isDifferentDay` batas 23:55 WIB, cek `searchQuery → inChatSearchQuery` kopling.
-
-### Fase 1 — Fix `last_message_at` Single Source (1 hari) — TETAP
-*`message.service:324` effectiveMsgDate, `conversation.service:328` touch flag, `live-chat.service:764` serialize, `repair-last-message-at.ts` seperti plan lama.*
-
-### Fase 2 — Phantom & History Media (0.5+0.5 hari) — TETAP
-*Seperti plan lama.*
-
-### Fase 3 — `wa_message_id` NULL & Ack (0.5 hari) — TETAP
-
-### Fase 4 — Goyang Typing P0 (1 hari, high impact) — BARU, PRIORITAS 1
-**Ubah `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`:**
-1. **Isolasi Composer:** Ekstrak `components/livechat/Composer.tsx` (`React.memo`), state `hasReplyText/typingTimer` lokal, root hanya `onSend`. Hapus `setHasReplyText` di root `483`.
-2. **Throttled viewport:** Ganti `1105:1119` → `throttle 200ms + isNearBottom (>80%) + !isComposing`. Hanya `scrollTop`, hapus `scrollIntoView` duplikat & `onFocus 200ms` `3792`. Kurangi `forceMulti` dari 4 timeout jadi 1 rAF.
-3. **Debounce typing:** `handleInputChange` debounce 500ms → `notifyTyping(true)`, `stop 1500ms`, `AbortController`. Server `livechat.subroute.ts:320` tambah `per-phone 1 req/2s` rate-limit.
-4. **Verifikasi:** Profiler renders -90%, `visualViewport` count, `npm run build`, 3 test baru `typing-throttle.test.ts`.
-
-### Fase 5 — Search Decoupling P0 (0.5 hari, high impact) — BARU, PRIORITAS 1
-**Ubah `LiveChatMonitor.tsx`:**
-1. **Hapus kopling** `1207:1212` → `searchQuery` tidak pernah set `inChatSearchQuery`. Dua state independen.
-2. **Banner guard** `3167` → `inChatSearchActive && messages.length>0 && q.length>=2 && !isGlobalSearch`. Tambah `isInChatSearchActive` boolean.
-3. **Auto-clear saat pindah chat:** `useEffect([selectedId]) => handleClearInChatSearch()` (reset `inChatSearchQuery/matching/highlighted`), **tanpa** sentuh `searchQuery`. `handleClearInChatSearch` juga dipanggil di `loadThread` selesai.
-4. **Global search tetap:** `filteredChats:2297` sudah benar (name/phone/message), tambah highlight phone/name di list.
-5. **In-chat search visible:** Tambah input kecil dalam thread (icon Search → expand) yang set `inChatSearchQuery`. Global input tetap di `2600:2635`.
-
-### Fase 6 — Tanggal WIB P1 (1 hari) — BARU, PRIORITAS 1
-**Ubah `LiveChatMonitor.tsx:144:176,2328` + `live-chat.service.ts:843`:**
-1. Buat `src/utils/dateWib.ts` → `toWibMidnight`, `formatWib(date, opts:{timeZone:'Asia/Jakarta'})`, `diffCalendarDaysWib`.
-2. `formatChatDateSeparator` → pakai `differenceInCalendarDays` floor + WIB, bukan `Math.round`.
-3. `isDifferentDay` → bandingkan `YYYY-MM-DD` WIB string.
-4. `formatLastChat` → branch `>1 tahun` tampil tahun, `>7 hari` `dd MMM yyyy` WIB, semua `toLocale*` dengan `timeZone:'Asia/Jakarta'`.
-5. `serialize:876` → `lastMessageAt` konsisten, `listConversations` order `COALESCE(last_message_at,updated_at)`.
-6. Test `tests/unit/date-wib.test.ts` (23:55 vs 00:05, round vs floor, tahun).
-
-### Fase 7 — Observabilitas (0.5 hari) — TETAP
-*`GET /api/admin/live-chat/sync-health` + banner drift.*
-
-### Fase 8 — Search-to-Jump & Highlight Polish P2 (0.5 hari) — TETAP (Fase 6 lama)
-*Seperti plan lama Fase 6: scroll ke target, `<mark>`, pill `🔍 "5km" (X dari Y)` ↑↓✖ — sudah ada `3131:3182` tapi sekarang decoupled, tinggal polish.*
+    FaseA --> Verifikasi[Fase D: Build & Verification Gate]
+    FaseB --> Verifikasi
+    FaseC --> Verifikasi
+```
 
 ---
 
-## 5. Urutan Eksekusi & Estimasi (Update)
+## 3. Rincian Staged Tasks Sisa
 
-| Fase | Estimasi | Ketergantungan | Risiko | Status |
-|------|----------|----------------|--------|--------|
-| 0 diagnostic | 0.5d | none | read-only | pending |
-| 1 last_message_at | 1d | 0 | medium (write DB idempotent) | pending |
-| 2 phantom+media | 1d | 1 | low | pending |
-| 3 null wa_id | 0.5d | 1 | low | pending |
-| **4 goyang P0** | **1d** | **0** | **low (UI only)** | **next** |
-| **5 search P0** | **0.5d** | **0** | **low** | **next** |
-| **6 tanggal P1** | **1d** | **0** | **low** | **next** |
-| 7 observabilitas | 0.5d | 1-6 | low | pending |
-| 8 jump & highlight | 0.5d | 5 | low | pending |
-| **Total v2** | **~6.5 hari** | | | |
+### Fase A: Ekstraksi & Isolasi `LiveChatComposer.tsx` (Performa Mobile)
+**Tujuan**: Memangkas ukuran `LiveChatMonitor.tsx` (yang saat ini 6.238 baris) dan mengisolasi siklus render form input sehingga pengetikan di perangkat seluler (terutama Safari iOS) menjadi 100% lancar tanpa re-render thread/sidebar.
 
-Rekomendasi eksekusi: **Fase 4+5+6 dulu** (2.5 hari, impact langsung ke laporan user), lalu Fase 1-3.
-
----
-
-## 6. Verifikasi & Deploy
-
-- **Lokal:** `WAHA_MOCK=true npm test` (Vitest), `npm run build` (`tsc` + `vite build`), `npx prisma migrate diff --from-url` empty.
-- **Staging:** `docker compose up -d` pinned `noweb-2026.7.2`, `waha` healthy, test iOS ketik 30s, test search `628113141111` (list filter tanpa banner), test tanggal 23:55 WIB.
-- **Prod (2-step gate, `.agents/rules/server-update-gate.md`):** Backup `pg_dump`, repair `--dry-run` dulu, `docker compose up -d --no-deps app` (jangan `latest` WAHA), `docker logs -f app` 2 menit, bandingkan 2 nomor sample WA Web vs LiveChat.
-
----
-
-## 7. Risiko & Mitigasi
-
-- **WAHA down saat repair** → tunda Fase 1-3, Fase 4-6 tetap jalan (UI only).
-- **Migrasi drift** → `--from-url` bukan `--from-migrations` (`KNOWN_ISSUES#1`).
-- **Goyang regresi** → feature flag `LIVECHAT_VIEWPORT_FIX=false`, revert 1 commit.
-- **Search regresi** → jika global search butuh `messages.content` like, index sudah ada (`knowledge_chunks_tenant_id_idx`).
+1. **[NEW] `packages/admin-dashboard/src/components/livechat/LiveChatComposer.tsx`**:
+   - Komponen input balasan mandiri terbungkus `React.memo`.
+   - Mengelola state lokal:
+     - Textarea / ContentEditable auto-resize (`min-h-[38px] max-h-[125px]`).
+     - Popover Emoji Picker & Favorite Emojis.
+     - Popover Quick Reply dengan pemicu slash token (`/`).
+     - Penyimpanan draf per-chat lokal (`draft_${selectedId}`).
+     - Debounced typing presence (500ms).
+   - Props Contract:
+     ```typescript
+     export interface LiveChatComposerProps {
+       conversationId: string | null;
+       disabled?: boolean;
+       sending?: boolean;
+       onSendMessage: (text: string) => Promise<void>;
+       onAttachMedia?: (file: File) => void;
+       onVoiceRecordComplete?: (blob: Blob) => void;
+       onInsertInvoiceClick?: () => void;
+       scrollToBottom: (force?: boolean, onlyNearBottom?: boolean) => void;
+     }
+     ```
+2. **[MODIFY] `LiveChatMonitor.tsx`**:
+   - Ganti blok JSX input manual baris ~5240–5332 dengan `<LiveChatComposer ... />`.
+   - Hapus state lokal input yang tidak lagi diperlukan di root monitor.
 
 ---
 
-## 8. Notes Eksekutor
+### Fase B: Penegakan Mandat Mutlak Anti-Label WAHA pada Alur Live Chat
+**Tujuan**: Menjamin tidak ada residu atau rencana baru yang mencoba memanggil API label WAHA, sesuai aturan mutlak di `AGENTS.md`.
 
-- **File diubah Fase 4-6:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `src/utils/dateWib.ts` (baru), `components/livechat/Composer.tsx` (baru), `src/routes/admin/livechat.subroute.ts:320` (rate-limit typing).
-- **Cara lanjut:**
-  ```bash
-  git checkout plan/livechat-wa-sync
-  # Fase 4+5+6 dulu
-  # edit LiveChatMonitor.tsx:483,1065,1105,1207,3167 + buat Composer.tsx + dateWib.ts
-  npm run build && npm test
-  npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
-  git commit -m "fix(livechat): goyang typing + search decoupling + tanggal WIB"
-  git push origin plan/livechat-wa-sync
-  ```
-- **Jangan deploy Jumat malam / jam iklan.**
-- **Catat ke `docs/KNOWN_ISSUES.md` setelah selesai:** tambah `#19 Goyang Typing` + `#20 Search Banner` + `#21 Tanggal WIB` dengan `Status: fixed (2026-09-01)`.
+1. **[VERIFY] `src/routes/admin/livechat.subroute.ts`**:
+   - Seluruh mutasi label (Hold, Unassign, Tagging) murni menulis ke kolom `Customer.labels` dan kolom flag `Customer.is_hold_labeled` di basis data PostgreSQL.
+   - Dilarang keras memanggil `wahaClient.addLabel` atau `wahaClient.removeLabel`.
 
+---
+
+### Fase C: Skrip Diagnostik Drift Riwayat Pesan & Observabilitas
+**Tujuan**: Menyediakan alat ukur dan perbaikan idempoten untuk integritas urutan chat tanpa spekulasi.
+
+1. **[NEW] `scripts/check-livechat-sync.ts` (Read-Only Diagnostic)**:
+   - Memeriksa desinkronisasi `conversations.last_message_at` terhadap timestamp riil pesan terakhir `max(messages.created_at)`.
+   - Menghitung pesan masuk/keluar yang tidak memiliki `wa_message_id`.
+   - Output: Laporan metrik statistik kesehatan data riwayat di terminal.
+2. **[NEW] `scripts/repair-last-message-at.ts` (Idempotent Fix)**:
+   - Menjalankan koreksi idempoten melalui SQL transaksional:
+     ```sql
+     UPDATE conversations c
+     SET last_message_at = sub.latest_created
+     FROM (
+       SELECT conversation_id, MAX(created_at) AS latest_created
+       FROM messages
+       GROUP BY conversation_id
+     ) sub
+     WHERE c.id = sub.conversation_id
+       AND (c.last_message_at IS NULL OR c.last_message_at != sub.latest_created);
+     ```
+3. **[MODIFY] `src/routes/admin/livechat.subroute.ts`**:
+   - Tambahkan endpoint ringan `GET /api/admin/live-chat/sync-health`:
+     - Mengembalikan status: `{ success: true, driftsFound: number, activeSync: BackgroundSyncProgress, healthy: boolean }`.
+
+---
+
+## 4. Verification Plan & Regression Gate (Fase D)
+
+### Automated Tests
+1. **Typecheck & Frontend Build**:
+   - `npm --prefix packages/admin-dashboard run build` (memastikan bundle Vite dan komponen baru terkompilasi sempurna ke `dist/`).
+   - `npm run build` (`tsc` root exit code 0).
+2. **Invariant Guard Test**:
+   - `npx vitest run tests/unit/v3/waha-label-ban-invariant.test.ts` (memastikan 0 pelanggaran label WAHA).
+3. **Offline Regression Test**:
+   - `npx vitest run tests/unit/live-chat.test.ts`
+
+### Manual Verification
+1. Buka halaman `/admin/live-chat` di browser desktop & mobile viewport (iPhone emulation).
+2. Uji alur pengetikan: verifikasi tidak ada jitter/lompat layar, emoji picker berfungsi, draf tersimpan saat berganti chat, dan tombol Kirim berfungsi mulus.
+3. Jalankan `npx tsx scripts/check-livechat-sync.ts` di terminal untuk memverifikasi kesehatan urutan chat.
