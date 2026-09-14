@@ -387,6 +387,48 @@ export class GuardrailPipeline {
       }
     }
 
+    // 7d. Validator usia (T0.2 — anti-mutilasi, sesi 552209): deteksi
+    // pertanyaan usia di balasan. Bila terdeteksi, re-prompt 1x untuk
+    // menghapus pertanyaan usia tanpa memotong kalimat. Gagal → kirim
+    // balasan asli + catat pelanggaran (bukan sunyi total).
+    const hasAgeQuestion = (text: string): boolean =>
+      /usia\s+(si\s+kecil|anak|baby|balita|bunda)|berapa\s+(bulan|tahun|usia)/i.test(text);
+    if (hasAgeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
+      violationsDetected.push('age_solicitation_detected');
+      const ageRepromptStartedAt = Date.now();
+      let ageRepromptOk = false;
+      try {
+        const ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. Jika informasi usia diperlukan untuk rekomendasi, sampaikan bahwa tim kami akan menanyakan saat koordinasi jadwal. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        const ageRetryData = await input.executeChat({
+          payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, ageCorrectionNote), temperature: 0.3 },
+          tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
+        });
+        repromptCount++;
+        const ageRetryText = (ageRetryData?.choices?.[0]?.message?.content || '').trim();
+        if (ageRetryText) {
+          const ageCleaned = OutputSanitizer.cleanOutboundReply(ageRetryText, incomingText, isFollowUp, sanitizeOpts);
+          if (!hasAgeQuestion(ageCleaned)) {
+            finalReply = ageCleaned;
+            ageRepromptOk = true;
+            console.log(JSON.stringify({ event: 'AGE_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+            await input.recordCall({
+              reply: finalReply, status: 'SUCCESS', durationMs: Date.now() - ageRepromptStartedAt,
+              promptPayload: { model: selectedModel, correction: 'age_solicitation' },
+              callReasoning: 'Hapus pertanyaan usia dari balasan', callSequence: 3,
+            });
+          }
+        }
+      } catch (repromptErr: any) {
+        console.warn(JSON.stringify({ event: 'AGE_SOLICITATION_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message, timestamp: new Date().toISOString() }));
+      }
+      if (!ageRepromptOk) {
+        // Anti-mutilasi: kirim balasan asli (pelanggaran gaya, bukan halusinasi),
+        // catat untuk kurasi prompt. DILARANG memotong kalimat.
+        violationsDetected.push('age_solicitation_unresolved');
+        console.warn(JSON.stringify({ event: 'AGE_SOLICITATION_UNRESOLVED_KEEP_ORIGINAL', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      }
+    }
+
     // Safety-net deterministik same-day (sesi 462651): bila turn ini
     // mencatat reservasi HARI INI tetapi balasan tidak menurunkan
     // ekspektasi (tanpa indikasi penuh), sisipkan disclaimer resmi.

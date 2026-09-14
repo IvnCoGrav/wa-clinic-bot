@@ -279,7 +279,7 @@ function normalizeWilayahText(text: string): string {
 
 /**
  * Cari nama kecamatan/kota dari teks alamat berdasarkan daftar referensi.
- * Pencocokan substring whole-word longest-first, tanpa regex hafalan dan tanpa daftar statis.
+ * Mendukung pencocokan awalan eksplisit (Kec./Kab./Kota) dan penyelesaian konflik nama (Sidoarjo kab vs kec).
  */
 export function extractWilayahFromAddress(
   address: string,
@@ -289,15 +289,11 @@ export function extractWilayahFromAddress(
   if (!address || !ref) return found;
   const norm = normalizeWilayahText(address);
   if (norm.trim().length < 3) return found;
+
   const byLengthDesc = (a: string, b: string): number => b.length - a.length;
-  for (const name of [...(ref.kecamatan || [])].sort(byLengthDesc)) {
-    const key = name.trim().toLowerCase();
-    if (key.length < 3 || GENERIC_WILAYAH_TOKENS.has(key)) continue;
-    if (norm.includes(` ${key} `)) {
-      found.kecamatan = name.trim();
-      break;
-    }
-  }
+
+  // 1. Ekstraksi Kota terlebih dahulu untuk mengetahui token wilayah kota/kabupaten
+  const matchedKotaTokens = new Set<string>();
   for (const name of [...(ref.kota || [])].sort(byLengthDesc)) {
     const key = name.trim().toLowerCase();
     // Kota berupa frasa ("Kabupaten Sidoarjo"): cocok bila token signifikan muncul utuh
@@ -305,9 +301,50 @@ export function extractWilayahFromAddress(
     if (tokens.length === 0) continue;
     if (tokens.every((t) => norm.includes(` ${t} `))) {
       found.kota = name.trim();
+      tokens.forEach((t) => matchedKotaTokens.add(t));
       break;
     }
   }
+
+  // 2. Ekstraksi Kecamatan:
+  // Prioritas tertinggi: cek apakah ada awalan eksplisit "kec" / "kecamatan"
+  let prefixKecMatch: string | null = null;
+  const kecPrefixRegex = /(?:\bkec\b|\bkecamatan\b)\s+([a-z0-9\s]+)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = kecPrefixRegex.exec(norm)) !== null) {
+    const remainder = ` ${match[1].trim()} `;
+    for (const name of [...(ref.kecamatan || [])].sort(byLengthDesc)) {
+      const key = name.trim().toLowerCase();
+      if (key.length < 3 || GENERIC_WILAYAH_TOKENS.has(key)) continue;
+      if (remainder.startsWith(` ${key} `)) {
+        prefixKecMatch = name.trim();
+        break;
+      }
+    }
+    if (prefixKecMatch) break;
+  }
+
+  if (prefixKecMatch) {
+    found.kecamatan = prefixKecMatch;
+  } else {
+    // Kumpulkan semua kandidat kecamatan yang muncul utuh sebagai whole-word
+    const candidates: Array<{ name: string; key: string }> = [];
+    for (const name of [...(ref.kecamatan || [])].sort(byLengthDesc)) {
+      const key = name.trim().toLowerCase();
+      if (key.length < 3 || GENERIC_WILAYAH_TOKENS.has(key)) continue;
+      if (norm.includes(` ${key} `)) {
+        candidates.push({ name: name.trim(), key });
+      }
+    }
+
+    if (candidates.length > 0) {
+      // Jika ada lebih dari 1 kandidat dan salah satunya bentrok dengan nama kota (misal 'Sidoarjo'),
+      // utamakan kandidat yang murni kecamatan (misal 'Sedati' atau 'Waru')
+      const nonKotaCandidate = candidates.find((c) => !matchedKotaTokens.has(c.key));
+      found.kecamatan = nonKotaCandidate ? nonKotaCandidate.name : candidates[0].name;
+    }
+  }
+
   return found;
 }
 

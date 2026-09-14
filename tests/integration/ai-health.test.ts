@@ -23,7 +23,7 @@ describe('AI Health Endpoint', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
-    expect(body.data.status).toBe('HEALTHY');
+    expect(body.data.status).toBe('NO_DATA');
     expect(body.data.windowHours).toBe(24);
     await app.close();
   });

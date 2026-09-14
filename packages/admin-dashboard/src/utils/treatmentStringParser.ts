@@ -76,6 +76,8 @@ const SERVICE_TOKEN_ALIASES: Record<string, string[]> = {
   oksitoksin: ['oksitosin'],
   oksi: ['oksitosin'],
   moksa: ['moksa'],
+  rileksasi: ['relaksasi', 'ceria'],
+  relaksasi: ['relaksasi', 'ceria'],
 };
 
 function significantTokens(s: string): string[] {
@@ -148,11 +150,22 @@ export function matchCatalogService(
   let bestSpecificity = -1;
   let fallbackBundle: any = null;
 
+  const GENERIC_SERVICE_TOKENS = new Set(['pijat', 'massage', 'spa', 'treatment', 'layanan']);
+
   for (const c of catalog) {
     const cToks = significantTokens(c.name || '');
     if (cToks.length === 0) continue;
-    const shared = qToks.filter((qt) => cToks.some((ct) => tokenHits(qt, ct))).length;
+    const matchingTokens = qToks.filter((qt) => cToks.some((ct) => tokenHits(qt, ct)));
+    const shared = matchingTokens.length;
     if (shared === 0) continue;
+
+    // Guard ketat: bila token yang cocok HANYA kata generik ("pijat", "massage", "spa", "treatment"),
+    // DILARANG mengunci katalog jika query memuat kata-kata asing/spesifik yang tidak cocok sama sekali.
+    const hasDifferentiatorMatch = matchingTokens.some((t) => !GENERIC_SERVICE_TOKENS.has(t));
+    if (!hasDifferentiatorMatch && qToks.length > 1) {
+      continue;
+    }
+
     const isBundleish = BUNDLE_MARKERS.some((m) => (c.name || '').toLowerCase().includes(m));
     if (isBundleish && !qExplicitBundle) {
       if (!fallbackBundle) fallbackBundle = c;
