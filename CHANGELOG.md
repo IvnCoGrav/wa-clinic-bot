@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Resolusi Fondasional Bug Chat Freeze / Tidak Bisa Scroll Portal Terapis (2026-09-14)
+
+- **Fase 1 — Kunci Ketinggian Viewport Rigid & Perbaikan Rantai Flexbox (`StaffToday.tsx`)**:
+  - *Viewport Locking Kaku*: Mengubah kontainer terluar `StaffToday.tsx` dari `min-h-[100dvh]` menjadi `h-[100dvh] max-h-[100dvh] overflow-hidden`, memastikan dokumen tidak pernah memuai melampaui layar.
+  - *Perbaikan Rantai Flexbox*: Menambahkan `min-h-0` pada split-view workspace (`line 1682`) dan `shrink-0` pada Header, Segmented Mobile Nav, Chat Header, serta Quick Reply Input Bar. Mencegah kontainer gelembung chat membesar setinggi seluruh pesan (`scrollHeight === clientHeight`), sehingga native scrollbar aktif sempurna di desktop maupun mobile.
+  - *Overscroll Containment & Touch Momentum*: Menambahkan `overscroll-contain` dan momentum scrolling `-webkit-overflow-scrolling: touch` pada kontainer chat (`chatContainerRef`), mencegah gestur usap/swipe tersangkut atau menggerakkan halaman induk.
+- **Fase 2 — Eliminasi Auto-Scroll Loop & Deteksi Scroll Pengguna**:
+  - *Deteksi `isNearBottom` Terpadu*: Menambahkan ref `isNearBottomRef` dan handler `onScroll={handleChatScroll}` pada kontainer chat. Sistem kini mengetahui apakah terapis sedang membaca pesan di atas atau berada di dasar percakapan.
+  - *Penghapusan Polling Scroll Loop*: Menghapus `selectedTask` dari dependency array `useEffect` auto-scroll dan membatasi `scrollToBottom` hanya berjalan jika `isNearBottomRef.current === true` (kecuali dibuka pertama kali atau saat mengirim pesan baru). Terapis tidak lagi tersentak ke bawah setiap interval polling 20 detik saat sedang membaca riwayat pesan.
+- **Fase 3 — Seleksi Teks Pesan Chat**:
+  - Menambahkan class `select-text` pada gelembung teks percakapan (`msg.content`) agar nomor telepon, patokan alamat, dan keluhan pasien dapat disalin (*copy*) secara mudah tanpa terhalang `select-none` dari layout portal.
+- **Regression**: `npm run build` (tsc) exit 0, dashboard `npm run build` (tsc & vite) exit 0, test unit `tests/unit/staff-auth-and-reservation.test.ts` (21/21 passed), test integrasi `tests/integration/staff-routes.test.ts` (21/21 passed).
+
 #### Restorasi Akses Chat & Hardening Relasi Percakapan Portal Terapis (2026-09-14)
 
 - **Fase 1 — Restorasi Tombol Chat Kartu Aktif & Modal Detail (`StaffToday.tsx`)**:
