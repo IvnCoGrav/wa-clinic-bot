@@ -32,6 +32,51 @@ export interface ClinicServiceCatalogItem {
   promoPrice?: number;
   originalPrice?: number;
   category?: string;
+  min_age_months?: number;
+  max_age_months?: number | null;
+  minAgeMonths?: number;
+  maxAgeMonths?: number | null;
+}
+
+/** Parse usia teks ke bulan (tanpa dependensi backend) — dipakai untuk filter katalog usia-aware. */
+function parseChildAgeToMonthsLocal(ageText: string | null | undefined): number | null {
+  if (!ageText || typeof ageText !== 'string') return null;
+  const lower = ageText.toLowerCase();
+  if (/\b(hamil|kehamilan|kandungan|trimester|bumil|janin)\b/.test(lower)) return null;
+  if (/\b(newborn|baru\s+lahir|nb)\b/.test(lower)) return 0;
+  let years = 0; let months = 0;
+  const y = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:tahun|thn|th\b|taon)\b/);
+  if (y) years = parseFloat(y[1].replace(',', '.')) || 0;
+  const mo = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:bulan|bln|bl\b)\b/);
+  if (mo) months = parseFloat(mo[1].replace(',', '.')) || 0;
+  if (years !== 0 || months !== 0) return Math.round(years * 12 + months);
+  const d = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:hari|hr)\b/);
+  if (d) return Math.round((parseFloat(d[1].replace(',', '.')) || 0) / 30.44 * 10) / 10;
+  const w = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:minggu|mgg|mg)\b/);
+  if (w) return Math.round(((parseFloat(w[1].replace(',', '.')) || 0) * 7) / 30.44 * 10) / 10;
+  return null;
+}
+
+function filterCatalogByChildAge(catalog: ClinicServiceCatalogItem[], ageMonths: number | null): ClinicServiceCatalogItem[] {
+  if (ageMonths == null || !Number.isFinite(ageMonths) || catalog.length === 0) return catalog;
+  const hasAgeTier = catalog.some((s) => s.min_age_months != null || s.minAgeMonths != null || s.max_age_months != null || s.maxAgeMonths != null);
+  if (!hasAgeTier) return catalog;
+  const filtered = catalog.filter((s) => {
+    const minRaw = (s as any).min_age_months ?? (s as any).minAgeMonths ?? 0;
+    const maxRaw = (s as any).max_age_months ?? (s as any).maxAgeMonths ?? null;
+    const min = Number(minRaw ?? 0); const max = maxRaw == null ? Infinity : Number(maxRaw);
+    if (!Number.isFinite(min) || (!Number.isFinite(max) && max !== Infinity)) return true;
+    return ageMonths >= min && ageMonths <= max;
+  });
+  return filtered.length > 0 ? filtered : catalog;
+}
+
+function catalogPriceOf(s: ClinicServiceCatalogItem | null | undefined): number | null {
+  if (!s) return null;
+  const raw = (s as any).promoPrice ?? (s as any).price ?? (s as any).originalPrice;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 const MONTH_NAMES = [
@@ -217,12 +262,63 @@ function pickFilledFormBlock(
 }
 
 /**
+ * Referensi wilayah dari backend (`GET /api/admin/geo/areas`, sumber: gazetteer).
+ * Disuntik sebagai parameter agar tidak ada daftar hafalan di frontend.
+ */
+export interface WilayahReference {
+  kecamatan: string[];
+  kota: string[];
+}
+
+const GENERIC_WILAYAH_TOKENS = new Set(['kota', 'kab', 'kabupaten', 'kec', 'kecamatan', 'desa', 'kelurahan']);
+
+/** Normalisasi teknis (huruf kecil + pemisah non-alfanumerik) untuk pencocokan string. */
+function normalizeWilayahText(text: string): string {
+  return ` ${(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()} `;
+}
+
+/**
+ * Cari nama kecamatan/kota dari teks alamat berdasarkan daftar referensi.
+ * Pencocokan substring whole-word longest-first, tanpa regex hafalan dan tanpa daftar statis.
+ */
+export function extractWilayahFromAddress(
+  address: string,
+  ref?: WilayahReference | null
+): { kecamatan: string; kota: string } {
+  const found = { kecamatan: '', kota: '' };
+  if (!address || !ref) return found;
+  const norm = normalizeWilayahText(address);
+  if (norm.trim().length < 3) return found;
+  const byLengthDesc = (a: string, b: string): number => b.length - a.length;
+  for (const name of [...(ref.kecamatan || [])].sort(byLengthDesc)) {
+    const key = name.trim().toLowerCase();
+    if (key.length < 3 || GENERIC_WILAYAH_TOKENS.has(key)) continue;
+    if (norm.includes(` ${key} `)) {
+      found.kecamatan = name.trim();
+      break;
+    }
+  }
+  for (const name of [...(ref.kota || [])].sort(byLengthDesc)) {
+    const key = name.trim().toLowerCase();
+    // Kota berupa frasa ("Kabupaten Sidoarjo"): cocok bila token signifikan muncul utuh
+    const tokens = key.split(/\s+/).filter((t) => t.length >= 4 && !GENERIC_WILAYAH_TOKENS.has(t));
+    if (tokens.length === 0) continue;
+    if (tokens.every((t) => norm.includes(` ${t} `))) {
+      found.kota = name.trim();
+      break;
+    }
+  }
+  return found;
+}
+
+/**
  * Ekstraksi entitas jadwal dari deretan pesan obrolan terakhir dan database customer.
  */
 export function extractScheduleFromMessages(
   messages: Array<{ content?: string; direction?: string; created_at?: string }>,
   customer?: any,
-  clinicServices: ClinicServiceCatalogItem[] = []
+  clinicServices: ClinicServiceCatalogItem[] = [],
+  wilayahRef?: WilayahReference | null
 ): ExtractedScheduleData {
   const baseDate = new Date();
   let extractedDate: Date | null = null;
@@ -658,6 +754,21 @@ export function extractScheduleFromMessages(
     extractedAddress = customer?.address || customer?.preferences?.address || customer?.kelurahan || '';
   }
 
+  // 3b. Alamat teks lebih jujur daripada profil yang mungkin terpolusi:
+  // bila baris Kec/Kota form kosong, intip nama wilayah di dalam teks alamat
+  // (referensi dari backend) sebelum jatuh ke profil customer.
+  if ((!extractedKecamatan || !extractedKota) && extractedAddress && wilayahRef) {
+    const fromAddr = extractWilayahFromAddress(extractedAddress, wilayahRef);
+    if (!extractedKecamatan && fromAddr.kecamatan) {
+      extractedKecamatan = fromAddr.kecamatan;
+      isExtracted = true;
+    }
+    if (!extractedKota && fromAddr.kota) {
+      extractedKota = fromAddr.kota;
+      isExtracted = true;
+    }
+  }
+
   if (!extractedKecamatan) {
     extractedKecamatan = customer?.kecamatan || '';
   }
@@ -694,39 +805,43 @@ export function extractScheduleFromMessages(
   }
 
   // 5. Pencocokan Treatment dengan Katalog Layanan — support akumulasi 2+ treatment
+  // Data-driven: harga HANYA dari DB/katalog; tanpa katalog → harga 0 (jujur belum terpetakan, bukan 60000 karangan)
   if (!extractedTreatment) {
     if (clinicServices.length > 0) {
       const s0 = clinicServices[0];
       extractedTreatment = s0.name;
-      extractedPrice = Number(s0.promoPrice ?? s0.price ?? s0.originalPrice ?? 60000);
+      const p = catalogPriceOf(s0);
+      extractedPrice = p ?? 0;
     } else {
-      extractedTreatment = 'Pijat Ceria';
-      extractedPrice = 60000;
+      extractedTreatment = '';
+      extractedPrice = 0;
     }
   } else if (extractedPrice === null) {
     // Intelligent catalog matching (token overlap + anti-bundle) — "pijat ceria"
     // → "Pijat Bayi Ceria (Rileksasi)", bukan "Paket Selapan (Cukur + Pijat Ceria)".
+    // Usia-aware: bila ada usia anak, filter katalog ke tier yang cocok dulu.
+    const ageMonths = parseChildAgeToMonthsLocal(extractedChildAge || (customer?.children?.[0]?.raw_age_text as string) || (customer?.children?.[0]?.current_age as string) || '');
+    const catalogByAge = filterCatalogByChildAge(clinicServices as ClinicServiceCatalogItem[], ageMonths);
     const names = extractedTreatment.split(/\s*\+\s*/).map(s=>s.trim()).filter(Boolean);
     if (names.length > 1 && clinicServices.length > 0) {
       let sum = 0; let found = 0;
       for (const n of names) {
-        const m = matchCatalogService(n, clinicServices as any);
-        if (m) { sum += Number(m.promoPrice ?? m.price ?? m.originalPrice ?? 0); found++; }
+        const m = (matchCatalogService(n, catalogByAge as any) || matchCatalogService(n, clinicServices as any)) as ClinicServiceCatalogItem | null;
+        const p = catalogPriceOf(m);
+        if (m && p != null) { sum += p; found++; }
       }
-      if (found > 0) extractedPrice = sum || 60000;
+      if (found > 0) extractedPrice = sum;
       else {
-        const matchedService = matchCatalogService(extractedTreatment, clinicServices as any);
-        extractedPrice = matchedService ? Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000) : 60000;
+        const matchedService = (matchCatalogService(extractedTreatment, catalogByAge as any) || matchCatalogService(extractedTreatment, clinicServices as any)) as ClinicServiceCatalogItem | null;
+        const p = catalogPriceOf(matchedService);
+        extractedPrice = p ?? 0;
       }
     } else {
-      const matchedService = clinicServices.length > 0
-        ? matchCatalogService(extractedTreatment, clinicServices as any)
-        : null;
-      if (matchedService) {
-        extractedPrice = Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000);
-      } else {
-        extractedPrice = 60000;
-      }
+      const matchedService = (clinicServices.length > 0
+        ? (matchCatalogService(extractedTreatment, catalogByAge as any) || matchCatalogService(extractedTreatment, clinicServices as any))
+        : null) as ClinicServiceCatalogItem | null;
+      const p = catalogPriceOf(matchedService);
+      extractedPrice = p ?? 0;
     }
   }
 
@@ -754,7 +869,7 @@ export function extractScheduleFromMessages(
     dateDisplay: rawDateText,
     timeDisplay: extractedTime,
     treatmentName: extractedTreatment,
-    treatmentPrice: extractedPrice || 60000,
+    treatmentPrice: extractedPrice ?? 0,
     treatmentCategory: extractedCategory,
     childName: extractedChildName,
     childAge: extractedChildAge,

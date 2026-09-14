@@ -1212,4 +1212,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Perbaikan masuk:** plafon konteks-sadar tenant-aware (1200 umum / 1500 katalog; kolom `TenantPersona.max_chars_per_reply` menang bila di-set admin — sesuai keputusan user), normalisasi blank-line ber-spasi, Hanging-Header Ban + potong di akhir item bernomor lengkap, pengetatan direktif `calculate_delivery` (`persona.ts`, `context-grounder.ts` guard GENERAL), suite adversarial `tests/unit/v3/sanitizer-catalog-truncation.test.ts`.
 - **Sisa tech debt (disengaja):** (1) duplikasi `truncateToMaxChars` legacy di `src/config/persona.ts` belum dikonsolidasi ke sanitizer V3 (jalur lama masih dipakai kode non-V3); (2) `getMaxCharsPerReply` dibaca sinkron dari cache in-memory — bila `loadPersonaFromDb` belum dipanggil, fallback ke default 1200/1500 (override DB aktif setelah persona termuat); (3) Aturan Emas #1 (maks 2–3 kalimat) vs katalog 4 paket (700–1100 chars) hanya didamaikan via pengecualian "rincian diminta" — belum ada batas formal kalimat-vs-katalog di prompt DB.
 
+---
+
+## 63. [Resolusi Reservasi & Invoice] Kasus 6282229353440 Bunda Lutfia — 4 lapisan akar (2026-09-15)
+
+- **Status:** Fase 1–4 selesai terverifikasi (nearest-neighbor 5, wilayah 5, catalog-age 5, safe-address 4, chat-extractor 8+13; `npm run build` + dashboard tsc exit 0). 31 failures full suite adalah pre-existing stubs di luar cakupan fase (queue-durability, telemetry, typing-transport, v3-governance, pediatric-taxonomy, recruitment, schedule-handoff, guardrail-no-mutilation, migration) — bukan regresi fase ini.
+- **Sisa & Tech Debt yang disengaja:**
+  1. **`DEFAULT_CLINIC_SERVICES_FALLBACK` hardcode** di `CreateReservationModal.tsx:73` tetap sebagai jaring pengaman offline bila `GET /api/admin/services` gagal/offline. Harga & tier usia di fallback sinkron manual dengan DB — perlu sync berkala; migrasi tenant-aware penuh butuh endpoint settings baru (Confirmation Gate bila LOC besar).
+  2. **Tanpa katalog (DB kosong/offline) fallback `0`** di extractor — jujur bukan karangan, tapi UI invoice menampilkan `0`; user wajib pilih layanan manual. Belum ada banner "katalog belum termuat".
+  3. **Matcher `matchCatalogService` token-substring** masih memetakan kata `pijat` saja ke kandidat terdekat; turunan `xyz` tidak cocok → 0 benar, tapi validasi "minimal 1 token signifikan" tetap sederhana — belum ada threshold coverage formal.
+  4. **Verifikasi manual belum:** shareloc Sedati → profil Sedati/Sidoarjo, invoice Kec/Kota dari alamat teks, edit reservasi ganti staff/alamat tanpa 500.
+
 

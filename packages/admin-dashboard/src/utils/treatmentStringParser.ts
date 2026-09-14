@@ -225,7 +225,8 @@ export function parseTreatmentItemsFromRaw(
       category = 'MOMS';
     }
 
-    const price = matched ? Number(matched.promoPrice ?? matched.price ?? matched.originalPrice ?? 60000) : 60000;
+    const rawPrice = matched ? (matched.promoPrice ?? matched.price ?? matched.originalPrice) : null;
+    const price = rawPrice != null && rawPrice !== '' ? Number(rawPrice) : 0;
     const duration = matched ? Number(matched.durationMinutes || 40) : (part.match(/\[(\d+)m/)?.[1] ? parseInt(part.match(/\[(\d+)m/)![1], 10) : 40);
 
     return {

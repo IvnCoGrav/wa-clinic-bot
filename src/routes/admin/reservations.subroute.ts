@@ -1506,18 +1506,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
 
         // Sync customer details if provided
+        // Fondasional: Customer TIDAK punya kolom `address`; alamat lengkap disimpan di preferences.address (+ kelurahan bila kosong)
         if (existing.customer_id && (customerName || customerPhone || address || kecamatan || kota || kelurahan || landmark)) {
           const custUpdate: any = {};
           if (customerName) custUpdate.name = customerName;
           if (customerPhone) custUpdate.phone = customerPhone.replace(/\D/g, '');
-          if (address) custUpdate.address = address;
           if (kecamatan) custUpdate.kecamatan = kecamatan;
           if (kota) custUpdate.kota = kota;
           if (kelurahan) custUpdate.kelurahan = kelurahan;
-          if (landmark) {
+          if (address || landmark) {
             const currentPrefs = (existing.customer?.preferences as any) || {};
-            custUpdate.preferences = { ...currentPrefs, landmark };
+            const nextPrefs: any = { ...currentPrefs };
+            if (address) nextPrefs.address = address;
+            if (landmark) nextPrefs.landmark = landmark;
+            custUpdate.preferences = nextPrefs;
+            if (address && !custUpdate.kelurahan && !(existing.customer as any)?.kelurahan) {
+              custUpdate.kelurahan = String(address).substring(0, 100);
+            }
           }
+          // assigned_staff_id: string kosong → null agar tidak menabrak FK
+          // (ditangani di updateData.assigned_staff_id di atas; blok ini hanya customer)
           await prisma.customer.update({
             where: { id: existing.customer_id },
             data: custUpdate,

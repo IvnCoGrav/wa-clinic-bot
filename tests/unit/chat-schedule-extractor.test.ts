@@ -21,12 +21,14 @@ describe('Chat Schedule & Context Extractor Unit Tests', () => {
       ongkir: 0,
     };
 
-    const extracted = extractScheduleFromMessages(messages, customer);
+    // Data-driven: tanpa katalog harga jujur 0; dengan katalog harga dari DB
+    const catalog = [{ name: 'Pijat Bayi Ceria (Rileksasi)', promoPrice: 70000, category: 'BABY' } as any];
+    const extracted = extractScheduleFromMessages(messages, customer, catalog);
 
     expect(extracted.isExtractedFromChat).toBe(true);
     expect(extracted.timeDisplay).toBe('12.00-12.30');
-    expect(extracted.treatmentName.toLowerCase()).toContain('pijat ceria');
-    expect(extracted.treatmentPrice).toBe(60000);
+    expect(extracted.treatmentName.toLowerCase()).toContain('pijat');
+    expect(extracted.treatmentPrice).toBe(70000);
     expect(extracted.bundaName).toBe('Karmila');
     expect(extracted.childName.toLowerCase()).toContain('leo');
     expect(extracted.childAge).toContain('3tahun 7 bulan');

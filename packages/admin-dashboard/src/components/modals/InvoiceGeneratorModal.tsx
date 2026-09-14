@@ -104,7 +104,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const [childAge, setChildAge] = useState('');
   const [babies, setBabies] = useState<BabyRow[]>([]);
   const [treatmentName, setTreatmentName] = useState('Pijat Ceria');
-  const [treatmentPrice, setTreatmentPrice] = useState<number | ''>(60000);
+  const [treatmentPrice, setTreatmentPrice] = useState<number | ''>(0);
   const [selectedTreatments, setSelectedTreatments] = useState<SelectedTreatmentItem[]>([]);
   const [serviceSearch, setServiceSearch] = useState('');
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
@@ -163,18 +163,20 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         setTreatmentPrice(subtotal);
       } else {
         const fallbackName = stripBufferMetadata(initialData.treatmentName) || 'Pijat Bayi Ceria (Rileksasi)';
+        const rawFallback = (initialData as any).treatmentPrice;
+        const fallbackPrice = rawFallback != null && String(rawFallback) !== '' ? Number(rawFallback) : 0;
         setSelectedTreatments([{
           instanceId: `init-0-${Date.now()}`,
           serviceId: `init-${fallbackName}`,
           name: fallbackName,
           category: /mom|hamil|laktasi|nifas|breast/i.test(fallbackName) ? 'MOMS' : 'BABY',
           durationMinutes: 40,
-          price: Number(initialData.treatmentPrice) || 60000,
+          price: Number.isFinite(fallbackPrice) ? fallbackPrice : 0,
           isAddon: isAddonServiceName(fallbackName),
           assignedChildIndex: 0,
         }]);
         setTreatmentName(fallbackName);
-        setTreatmentPrice(Number(initialData.treatmentPrice) || 60000);
+        setTreatmentPrice(Number.isFinite(fallbackPrice) ? fallbackPrice : 0);
       }
 
       setDistanceKmInput(String(Number(initialData.distanceKm) || 3.0));
@@ -431,7 +433,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     setChildAge('');
     setBabies([]);
     setTreatmentName('Pijat Ceria');
-    setTreatmentPrice(60000);
+    setTreatmentPrice(0);
     setSelectedTreatments([]);
     setServiceSearch('');
     setIsServiceDropdownOpen(false);

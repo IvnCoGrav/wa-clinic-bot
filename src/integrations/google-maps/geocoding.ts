@@ -5,7 +5,7 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
-import { escapeRegex, getGazetteerData, resolvePrefixMatches } from '../../utils/gazetteer';
+import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict } from '../../utils/gazetteer';
 dotenv.config();
 
 interface AddressComponent {
@@ -981,15 +981,28 @@ export class GeocodingService {
   }
 
   private mockReverseGeocode(lat: number, lng: number): ResolvedLocation {
+    // Local-first: cocokkan ke kelurahan/desa terdekat dari dataset gazetteer.
+    // Tanpa API key tidak ada alasan mengarang "Gubeng, Surabaya" untuk semua koordinat.
+    try {
+      const match = findNearestSubdistrict(lat, lng);
+      if (match) {
+        return {
+          isPrecise: true,
+          kelurahan: match.kelurahan,
+          kecamatan: match.kecamatan,
+          kota: match.kota,
+          lat,
+          lng,
+          formattedAddress: `${match.kelurahan}, ${match.kecamatan}, ${match.kota}`,
+          zipcode: match.zipcode,
+        };
+      }
+    } catch {}
+    // Di luar coverage: teruskan koordinat murni tanpa nama wilayah fiktif.
     return {
       isPrecise: true,
-      kelurahan: 'Gubeng',
-      kecamatan: 'Gubeng',
-      kota: 'Surabaya',
       lat,
       lng,
-      formattedAddress: `Lat: ${lat}, Lng: ${lng}, Gubeng, Surabaya`,
-      zipcode: '60281',
     };
   }
 
