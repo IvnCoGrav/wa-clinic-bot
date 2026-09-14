@@ -114,7 +114,11 @@ function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
 }
 
-export const StaffToday: React.FC = () => {
+interface StaffTodayProps {
+  defaultTab?: 'today' | 'upcoming' | 'completed';
+}
+
+export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const { staff, logout: staffLogout } = useStaffAuth();
   const { user, logout: adminLogout } = useAuth();
   const { toast, confirm } = useUiFeedback();
@@ -123,7 +127,19 @@ export const StaffToday: React.FC = () => {
   const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
   
   // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang) vs 'completed' (Treatment Selesai)
-  const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>(() => {
+    if (defaultTab) return defaultTab;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'upcoming' || tabParam === 'completed' || tabParam === 'today') {
+        return tabParam;
+      }
+    } catch {
+      // Fallback safe
+    }
+    return 'today';
+  });
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | 'none'>('none');
 
   const handleTabChange = (nextTab: 'today' | 'upcoming' | 'completed') => {
@@ -441,6 +457,7 @@ export const StaffToday: React.FC = () => {
 
   // Open Chat with history push for Android/iOS Hardware Back Button
   const handleOpenChat = (task: StaffTask) => {
+    setActiveTab('today');
     setSelectedTask(task);
     setMobileView('chat');
     window.history.pushState({ view: 'chat', taskId: task.reservationId }, '');
@@ -1235,26 +1252,23 @@ export const StaffToday: React.FC = () => {
   const handleSaveLocation = async () => {
     if (!updateLocationModalTask) return;
 
-    // Konfirmasi sebelum menimpa data lokasi/foto yang sudah ada sebelumnya
+    // Konsolidasi konfirmasi: Timpa data & akurasi GPS dalam satu dialog terpadu
+    const confirmWarnings: string[] = [];
     if (hasSavedLocData) {
-      const ok = await confirm({
-        title: 'Konfirmasi Timpa Data Lokasi',
-        message: `Data panduan rumah dan titik GPS untuk ${updateLocationModalTask.customerName || 'Bunda'} sudah tersimpan sebelumnya.\n\nApakah Anda yakin ingin menimpa dengan data foto & koordinat yang baru?`,
-        confirmText: 'Ya, Timpa Data',
-        cancelText: 'Batal',
-        danger: false,
-      });
-      if (!ok) return;
+      confirmWarnings.push('• Data foto & titik panduan GPS pasien ini sudah pernah disimpan sebelumnya.');
+    }
+    const isLowAccuracy = !!(locCoords && locCoords.accuracy && locCoords.accuracy > 15);
+    if (isLowAccuracy) {
+      confirmWarnings.push(`• Akurasi sinyal GPS saat ini ±${locCoords.accuracy}m (akurasi rendah/di atas batas ideal 15m).`);
     }
 
-    // Konfirmasi titik lokasi GPS jika akurasi rendah (> 15m)
-    if (locCoords && locCoords.accuracy && locCoords.accuracy > 15) {
+    if (confirmWarnings.length > 0) {
       const ok = await confirm({
-        title: 'Konfirmasi Akurasi GPS',
-        message: `⚠️ Akurasi GPS saat ini ±${locCoords.accuracy}m.\n\nApakah Anda ingin tetap menyimpan koordinat ini?`,
+        title: 'Konfirmasi Simpan Data Lokasi',
+        message: `Perhatian sebelum menyimpan data lokasi untuk ${updateLocationModalTask.customerName || 'Bunda'}:\n\n${confirmWarnings.join('\n')}\n\nApakah Anda yakin ingin tetap menyimpan pembaruan ini?`,
         confirmText: 'Ya, Tetap Simpan',
-        cancelText: 'Kunci GPS Ulang',
-        danger: true,
+        cancelText: 'Periksa Kembali',
+        danger: isLowAccuracy,
       });
       if (!ok) return;
     }
@@ -1376,7 +1390,7 @@ export const StaffToday: React.FC = () => {
     return totalMins > 0 ? totalMins : 60;
   };
 
-  const isPastStaffTask = (t: StaffTask) => {
+  const isOverdueSchedule = (t: StaffTask) => {
     if (!t.bookingDate) return false;
     const startTime = new Date(t.bookingDate).getTime();
     if (isNaN(startTime)) return false;
@@ -1385,8 +1399,14 @@ export const StaffToday: React.FC = () => {
     return Date.now() >= endTime;
   };
 
-  const activeTodayTasks = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isPastStaffTask(t));
-  const pastOrCompletedTodayTasks = tasks.filter((t) => t.status.toLowerCase() === 'completed' || isPastStaffTask(t));
+  const isTrulyCompleted = (t: StaffTask) => {
+    const isStatusDone = (t.status || '').toLowerCase() === 'completed';
+    const isPaid = t.pricing?.paymentStatus === 'LUNAS';
+    return isStatusDone || isPaid;
+  };
+
+  const activeTodayTasks = tasks.filter((t) => !isTrulyCompleted(t));
+  const pastOrCompletedTodayTasks = tasks.filter((t) => isTrulyCompleted(t));
   const combinedCompletedTasks = [
     ...completedTasks,
     ...pastOrCompletedTodayTasks.filter((t) => !completedTasks.some((c) => c.reservationId === t.reservationId)),
@@ -1800,9 +1820,16 @@ export const StaffToday: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-1 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-md whitespace-nowrap border border-[#00a884]/30 flex-shrink-0">
-                            <Clock size={11} />
-                            <span>{formatTime(task.bookingDate).split(' ')[0]}</span>
+                          <div className="flex items-center space-x-1.5 flex-shrink-0">
+                            {isOverdueSchedule(task) && (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-300">
+                                Berlangsung
+                              </span>
+                            )}
+                            <div className="flex items-center space-x-1 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-md whitespace-nowrap border border-[#00a884]/30">
+                              <Clock size={11} />
+                              <span>{formatTime(task.bookingDate).split(' ')[0]}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -1936,10 +1963,12 @@ export const StaffToday: React.FC = () => {
                                 e.stopPropagation();
                                 setPaymentModalTask(task);
                               }}
-                              className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full border border-amber-300 transition-all active:scale-95 flex items-center gap-1"
+                              className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-0.5 rounded-full border border-amber-300 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                              title="Klik untuk mencatat pembayaran transaksi ini"
                             >
-                              <CreditCard size={11} />
-                              <span>Catat Bayar</span>
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              <CreditCard size={11} className="text-amber-700" />
+                              <span>Tagih di Tempat</span>
                             </button>
                           )}
                         </div>
@@ -2832,15 +2861,31 @@ export const StaffToday: React.FC = () => {
                               </span>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => setDetailModalTask(item)}
-                              className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
-                              title="Lihat Detail Lengkap Pasien"
-                            >
-                              <Info size={12} />
-                              <span>Detail</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {item.conversationId && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenChat(item);
+                                  }}
+                                  className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef]"
+                                  title="Buka Riwayat Chat WhatsApp"
+                                >
+                                  <MessageSquare size={12} className="text-[#008069]" />
+                                  <span>Chat</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setDetailModalTask(item)}
+                                className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
+                                title="Lihat Detail Lengkap Pasien"
+                              >
+                                <Info size={12} />
+                                <span>Detail</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

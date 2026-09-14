@@ -62,7 +62,7 @@ class TelemetryService {
         windowHours, totalTurns: 0, silentDropRate: 0, unjustifiedRsqrRate: 0,
         sanitizerMutilationRate: 0, nluErrorRate: 0,
         p50LatencyMs: 0, p90LatencyMs: 0, p95LatencyMs: 0,
-        status: 'HEALTHY', generatedAt: new Date().toISOString(),
+        status: 'NO_DATA', generatedAt: new Date().toISOString(),
       };
     }
 

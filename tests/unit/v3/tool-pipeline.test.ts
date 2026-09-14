@@ -85,4 +85,20 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     expect(out.executedTools[0].result.error).toBeDefined();
     expect(out.isEscalated).toBe(false);
   });
+
+  it('T0.4: setelah save_reservation gagal (DB offline), tool berikutnya tetap dieksekusi', async () => {
+    const input = baseInput({
+      toolCalls: [
+        { id: 'call-4a', function: { name: 'save_reservation', arguments: JSON.stringify({ treatmentName: 'Pijat Bayi Ceria', bookingDate: '2026-09-15T10:00:00' }) } },
+        { id: 'call-4b', function: { name: 'get_catalog_and_price', arguments: JSON.stringify({ specificTreatmentName: 'Pijat Bayi Ceria' }) } },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    // save_reservation gagal (DB offline) → reservationCommitted tetap false → tool kedua jalan
+    expect(out.executedTools.length).toBe(2);
+    expect(out.executedTools[0].name).toBe('save_reservation');
+    expect(out.executedTools[0].result.success).toBeFalsy();
+    expect(out.executedTools[1].name).toBe('get_catalog_and_price');
+    expect(out.executedTools[1].result.success).toBe(true);
+  });
 });

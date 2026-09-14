@@ -87,7 +87,13 @@ export class ToolExecutionPipeline {
 
     input.messages.push(assistantMessage);
 
+    let reservationCommitted = false;
     for (const tc of toolCalls) {
+      const tcName = tc.function?.name;
+      if (reservationCommitted) {
+        console.warn(JSON.stringify({ event: 'V3_TOOL_POST_COMMIT_IGNORED', tool: tcName, tenantId, conversationId, timestamp: new Date().toISOString() }));
+        continue;
+      }
       const fnName = tc.function?.name;
       let fnArgs: any = {};
       try {
@@ -212,6 +218,10 @@ export class ToolExecutionPipeline {
         name: fnName,
         content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
       });
+
+      if (fnName === 'save_reservation' && toolResult?.success === true) {
+        reservationCommitted = true;
+      }
     }
 
     return {
