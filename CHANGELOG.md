@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Restorasi Akses Chat & Hardening Relasi Percakapan Portal Terapis (2026-09-14)
+
+- **Fase 1 — Restorasi Tombol Chat Kartu Aktif & Modal Detail (`StaffToday.tsx`)**:
+  - *Tombol Chat Terlihat Jelas*: Tombol aksi kartu tugas aktif (`StaffToday.tsx`) diubah dari `grid-cols-2` menjadi `grid-cols-3` dengan menghadirkan tombol `Chat` (`MessageSquare`) eksplisit berdampingan dengan `Navigasi` dan `Infokan OTW`. Terapis tidak lagi perlu menebak bahwa teks alamat dapat diklik untuk membuka chat.
+  - *Tombol Chat Pasien di Modal Detail*: Pada `detailModalTask`, ditambahkan tombol aksi utama `Chat Pasien` di footer modal untuk membuka split-view percakapan secara langsung tanpa harus menutup modal dan mencari kartu kembali.
+  - *Fallback ID Percakapan & Badge Edukatif*: Data `combinedCompletedTasks` diproteksi dengan fallback mapping agar `conversationId` yang ada di riwayat selesai tidak tereset. Pada kartu jadwal mendatang (upcoming), ditambahkan badge halus `Chat aktif di hari-H` agar terapis memahami kapan akses komunikasi aktif.
+- **Fase 2 — Hardening Backend Relasi Percakapan (`staff-reservation.service.ts`)**:
+  - *Dynamic Conversation Resolution di `getCompletedTasks`*: Mengganti hardcoded `conversationId: null` dengan relasi query dinamis Prisma (`customer.conversations` take 1 order desc `updated_at`), sehingga kunjungan yang telah selesai tetap dapat dibuka riwayat percakapannya oleh terapis.
+  - *Sinkronisasi Timezone WIB pada Kepemilikan Percakapan*: Menyelaraskan metode `assertConversationOwnedByStaffToday` dengan `this.getWibDateRange()` alih-alih `new Date().setHours(0,0,0,0)` (UTC container), mencegah penolakan akses (403/Forbidden) bagi staf pada window pergantian hari antara UTC dan WIB (00:00-07:00 WIB).
+- **Regression**: `tests/unit/staff-auth-and-reservation.test.ts` (21/21 passed, termasuk verifikasi `conversationId` selesai dinamis), `tests/integration/staff-routes.test.ts` (21/21 passed), `npm run build` (tsc) exit 0, dashboard `npm run build` (tsc & vite) exit 0.
+
 #### Audit & Perbaikan Fondasional Portal Terapis (Staff Portal) (2026-09-14)
 
 - **Fase 1 — Perbaikan Bug Kritis & Visual (Functional & Visual Blockers)**:

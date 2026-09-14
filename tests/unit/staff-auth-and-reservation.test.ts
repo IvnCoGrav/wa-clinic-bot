@@ -390,6 +390,7 @@ describe('Staff Auth & Reservation Services', () => {
             distance_km: 3.2,
             ongkir: 15000,
             children: [{ name: 'Baby Kenzo', raw_age_text: '5 bulan', birth_date: null }],
+            conversations: [{ id: 'conv-done-1' }],
           },
           children: [],
         },
@@ -402,7 +403,7 @@ describe('Staff Auth & Reservation Services', () => {
       expect(completed[0].pricing.paymentStatus).toBe('LUNAS');
       expect(completed[0].pricing.paymentStatusLabel).toContain('Lunas');
       expect(completed[0].pricing.totalFee).toBe(155000);
-      expect(completed[0].conversationId).toBeNull();
+      expect(completed[0].conversationId).toBe('conv-done-1');
     });
 
     it('should assert conversation ownership based on active task today', async () => {

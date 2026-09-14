@@ -630,6 +630,11 @@ export class StaffReservationService {
                   birth_date: true,
                 },
               },
+              conversations: {
+                select: { id: true },
+                orderBy: { updated_at: 'desc' },
+                take: 1,
+              },
             },
           },
           children: {
@@ -697,7 +702,7 @@ export class StaffReservationService {
           treatmentCategory: r.treatment_category || null,
           bookingDate: r.booking_date,
           status: r.status,
-          conversationId: null,
+          conversationId: cust?.conversations?.[0]?.id || null,
           mapsUrl,
           navigationUrl,
           address: {
@@ -960,10 +965,7 @@ export class StaffReservationService {
   ): Promise<boolean> {
     if (!conversationId || !staffId) return false;
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const { startOfDay, endOfDay } = this.getWibDateRange();
 
     try {
       const conv = await prisma.conversation.findUnique({
@@ -973,25 +975,18 @@ export class StaffReservationService {
 
       if (!conv || conv.tenant_id !== tenantId) return false;
 
-      if (isSupervisor) {
-        const anyToday = await prisma.reservation.findFirst({
-          where: {
-            tenant_id: tenantId,
-            customer_id: conv.customer_id,
-            booking_date: { gte: startOfDay, lte: endOfDay },
-          },
-          select: { id: true },
-        });
-        if (anyToday) return true;
+      const whereCondition: any = {
+        tenant_id: tenantId,
+        customer_id: conv.customer_id,
+        booking_date: { gte: startOfDay, lte: endOfDay },
+      };
+
+      if (!isSupervisor) {
+        whereCondition.assigned_staff_id = staffId;
       }
 
       const owns = await prisma.reservation.findFirst({
-        where: {
-          tenant_id: tenantId,
-          customer_id: conv.customer_id,
-          assigned_staff_id: staffId,
-          booking_date: { gte: startOfDay, lte: endOfDay },
-        },
+        where: whereCondition,
         select: { id: true },
       });
 
