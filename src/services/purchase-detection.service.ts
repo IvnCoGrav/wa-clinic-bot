@@ -1,4 +1,5 @@
 import { prisma } from '../db/client';
+import { hasBypassLabel } from '../utils/customer-bypass';
 import {
   resolveTreatmentValue,
   fireCapiEvent,
@@ -68,6 +69,10 @@ export async function maybeFirePurchaseEvent(params: {
   tenantId: string;
 }): Promise<boolean> {
   const { customer, conversation, text, tenantId } = params;
+
+  if (customer && (customer.is_admin_labeled || hasBypassLabel(customer))) {
+    return false;
+  }
 
   const formats = await getTenantCapiFormats(tenantId);
   const purchaseKeyword = formats.formatPurchase.toLowerCase().trim();

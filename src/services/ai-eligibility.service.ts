@@ -1,4 +1,5 @@
 import type { Customer, Tenant, AiCustomerScope } from '@prisma/client';
+import { hasBypassLabel } from '../utils/customer-bypass';
 
 /**
  * Precedence (urut, berhenti di match pertama):
@@ -79,6 +80,11 @@ export function resolveAiEligibilityWithReason(
 ): AiEligibilityResolution {
   if (customer.ai_override === 'FORCE_ON') return { eligible: true };
   if (customer.ai_override === 'FORCE_OFF') return { eligible: false, reason: 'FORCE_OFF' };
+
+  // Guard bypass kontak non-customer (Skip atau Admin CS)
+  if ((customer as any).is_admin_labeled === true || hasBypassLabel(customer)) {
+    return { eligible: false, reason: 'FORCE_OFF' };
+  }
 
   // Guard operasional wajib: jadwal aktif H-0/H+1 → CS manusia, tanpa toggle.
   if (customer.has_active_appointment === true) {

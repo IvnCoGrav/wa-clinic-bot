@@ -5,6 +5,7 @@ import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 import { decryptSecret } from '../utils/encryption';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import { prisma } from '../db/client';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
@@ -740,10 +741,16 @@ export class CapiService {
   }> {
     const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId } = params;
 
-    // 1. Meta CAPI Sandbox / Dummy Test Guard (Pencegahan pencemaran data conversion pixel)
-    if (customer?.is_sandbox_test || isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test)) {
-      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy contact: ${customer?.phone}`);
-      return { success: false, message: 'Skipped: Sandbox or dummy test contact' };
+    // 1. Meta CAPI Sandbox / Dummy Test Guard & Non-Customer Bypass Guard (Skip / Admin CS)
+    if (
+      customer?.is_sandbox_test ||
+      isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test) ||
+      customer?.is_admin_labeled === true ||
+      hasBypassLabel(customer) ||
+      (await checkCustomerBypass({ customerId: customer?.id, phone: customer?.phone, tenantId }))
+    ) {
+      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass contact (skip/admin cs): ${customer?.phone}`);
+      return { success: false, message: 'Skipped: Sandbox, dummy test, or non-customer bypass contact (skip/admin cs)' };
     }
 
     // 1b. Centralized Event Cooldown Guard (Anti-Burst & Idempotency)

@@ -15,15 +15,17 @@ export interface MemoryLabel {
   _count?: { customers: number };
 }
 
+import { isSystemLabelName, isBypassLabelName } from '../../utils/customer-bypass';
+
 export const DEFAULT_SYSTEM_LABELS = [
   { name: 'Hold', color: '#dc2626', description: 'Penanganan khusus / tahan balasan bot otomatis' },
   { name: 'Admin (CS)', color: '#7c3aed', description: 'Percakapan ditangani manual oleh Admin CS' },
+  { name: 'Skip', color: '#64748b', description: 'Bypass semua mekanisme sistem (bukan customer)' },
   { name: 'Pending Payment', color: '#d97706', description: 'Pasien dalam tahap menunggu pembayaran / transfer' },
   { name: 'Repeat Order', color: '#059669', description: 'Pelanggan setia yang pernah melakukan reservasi' },
   { name: 'New Customer', color: '#0284c7', description: 'Pasien baru yang baru pertama kali kontak' },
   { name: 'Medical Emergency', color: '#e11d48', description: 'Kebutuhan darurat medis atau konsultasi bidan khusus' },
   { name: 'Unresolved FAQ', color: '#ea580c', description: 'Pertanyaan kompleks yang belum terjawab otomatis' },
-  { name: 'MQL (Hot Lead)', color: '#10b981', description: 'Prospek hangat berpotensi tinggi untuk closing' },
 ];
 
 export const memoryLabels = new Map<string, MemoryLabel>();
@@ -89,7 +91,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return reply.status(200).send({ success: true, data: labels });
+      const enriched = labels.map((l) => ({
+        ...l,
+        is_system: isSystemLabelName(l.name),
+      }));
+
+      return reply.status(200).send({ success: true, data: enriched });
     } catch (err: any) {
       // In-memory fallback
       initMemoryLabels();
@@ -100,7 +107,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           for (const key of memoryCustomerLabels) {
             if (key.endsWith(`:${l.id}`)) count++;
           }
-          return { ...l, _count: { customers: count } };
+          return { ...l, _count: { customers: count }, is_system: isSystemLabelName(l.name) };
         });
       return reply.status(200).send({ success: true, data: list, note: 'Fallback in-memory mode' });
     }
@@ -108,14 +115,14 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/admin/labels/seed-defaults
-   * Menambahkan/merestorasi seluruh label default sistem.
+   * Memastikan seluruh default system label ter-seed ke DB jika belum ada.
    */
   fastify.post('/api/admin/labels/seed-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       for (const item of DEFAULT_SYSTEM_LABELS) {
         await prisma.label.upsert({
           where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
-          update: { color: item.color, description: item.description },
+          update: { description: item.description },
           create: {
             tenant_id: DEFAULT_TENANT_ID,
             name: item.name,
@@ -131,22 +138,24 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         orderBy: { name: 'asc' },
       });
 
-      return reply.status(200).send({ success: true, data: labels });
+      const enriched = labels.map((l) => ({ ...l, is_system: isSystemLabelName(l.name) }));
+      return reply.status(200).send({ success: true, data: enriched });
     } catch (err: any) {
       initMemoryLabels();
-      return reply.status(200).send({ success: true, data: Array.from(memoryLabels.values()) });
+      const enriched = Array.from(memoryLabels.values()).map((l) => ({ ...l, is_system: isSystemLabelName(l.name) }));
+      return reply.status(200).send({ success: true, data: enriched });
     }
   });
 
   /**
    * POST /api/admin/labels
-   * Membuat label baru.
+   * Membuat label kustom baru.
    */
   fastify.post(
     '/api/admin/labels',
     async (
       request: FastifyRequest<{
-        Body: { name?: string; color?: string; description?: string | null };
+        Body: { name: string; color?: string; description?: string };
       }>,
       reply: FastifyReply
     ) => {
@@ -156,25 +165,26 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'Nama label wajib diisi.' });
       }
 
-      const cleanName = name.trim();
-      const cleanColor = color.trim() || '#008069';
-      const cleanDescription = description !== undefined ? (description ? description.trim() : null) : null;
+      const trimmedName = name.trim();
 
       try {
         const existing = await prisma.label.findFirst({
-          where: { tenant_id: DEFAULT_TENANT_ID, name: { equals: cleanName, mode: 'insensitive' } },
+          where: {
+            tenant_id: DEFAULT_TENANT_ID,
+            name: { equals: trimmedName, mode: 'insensitive' },
+          },
         });
 
         if (existing) {
-          return reply.status(409).send({ success: false, error: `Label "${cleanName}" sudah ada.` });
+          return reply.status(409).send({ success: false, error: `Label "${trimmedName}" sudah ada.` });
         }
 
-        const label = await prisma.label.create({
+        const newLabel = await prisma.label.create({
           data: {
             tenant_id: DEFAULT_TENANT_ID,
-            name: cleanName,
-            color: cleanColor,
-            description: cleanDescription,
+            name: trimmedName,
+            color: color.trim(),
+            description: description?.trim() || null,
           },
         });
 
@@ -182,41 +192,41 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_LABEL',
-          targetId: label.id,
-          payload: { name: label.name, color: label.color, description: label.description },
+          targetId: newLabel.id,
+          payload: { name: trimmedName, color },
           ipAddress: request.ip,
           tenantId: DEFAULT_TENANT_ID,
         });
 
-        return reply.status(201).send({ success: true, data: label });
+        return reply.status(201).send({ success: true, data: { ...newLabel, is_system: isSystemLabelName(newLabel.name) } });
       } catch (err: any) {
         // In-memory fallback
         const id = `mem_label_${Date.now()}`;
         const newLabel: MemoryLabel = {
           id,
           tenant_id: DEFAULT_TENANT_ID,
-          name: cleanName,
-          color: cleanColor,
-          description: cleanDescription,
+          name: trimmedName,
+          color: color.trim(),
+          description: description?.trim() || null,
           created_at: new Date(),
           updated_at: new Date(),
         };
         memoryLabels.set(id, newLabel);
-        return reply.status(201).send({ success: true, data: newLabel, note: 'Fallback in-memory mode' });
+        return reply.status(201).send({ success: true, data: { ...newLabel, is_system: isSystemLabelName(newLabel.name) }, note: 'Fallback in-memory mode' });
       }
     }
   );
 
   /**
    * PATCH /api/admin/labels/:id
-   * Mengedit nama, warna, atau deskripsi label.
+   * Memperbarui label kustom (nama, warna, deskripsi).
    */
   fastify.patch(
     '/api/admin/labels/:id',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body: { name?: string; color?: string; description?: string | null };
+        Body: { name?: string; color?: string; description?: string };
       }>,
       reply: FastifyReply
     ) => {
@@ -232,14 +242,14 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Label tidak ditemukan.' });
         }
 
-        const updateData: any = {};
-        if (name !== undefined && name.trim()) updateData.name = name.trim();
-        if (color !== undefined && color.trim()) updateData.color = color.trim();
-        if (description !== undefined) updateData.description = description ? description.trim() : null;
+        const data: any = {};
+        if (name && name.trim()) data.name = name.trim();
+        if (color && color.trim()) data.color = color.trim();
+        if (description !== undefined) data.description = description ? description.trim() : null;
 
         const updated = await prisma.label.update({
           where: { id },
-          data: updateData,
+          data,
         });
 
         await auditService.logAdminAction({
@@ -247,20 +257,20 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_LABEL',
           targetId: id,
-          payload: updateData,
+          payload: data,
           ipAddress: request.ip,
           tenantId: DEFAULT_TENANT_ID,
         });
 
-        return reply.status(200).send({ success: true, data: updated });
+        return reply.status(200).send({ success: true, data: { ...updated, is_system: isSystemLabelName(updated.name) } });
       } catch (err: any) {
         const mem = memoryLabels.get(id);
         if (mem) {
-          if (name) mem.name = name.trim();
-          if (color) mem.color = color.trim();
+          if (name && name.trim()) mem.name = name.trim();
+          if (color && color.trim()) mem.color = color.trim();
           if (description !== undefined) mem.description = description ? description.trim() : null;
           mem.updated_at = new Date();
-          return reply.status(200).send({ success: true, data: mem, note: 'Fallback in-memory mode' });
+          return reply.status(200).send({ success: true, data: { ...mem, is_system: isSystemLabelName(mem.name) }, note: 'Fallback in-memory mode' });
         }
         return reply.status(500).send({ success: false, error: 'Gagal memperbarui label.' });
       }
@@ -269,7 +279,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * DELETE /api/admin/labels/:id
-   * Menghapus label.
+   * Menghapus label (dilindungi: label bawaan sistem TIDAK boleh dihapus).
    */
   fastify.delete(
     '/api/admin/labels/:id',
@@ -290,6 +300,14 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Label tidak ditemukan.' });
         }
 
+        // GUARD: Label bawaan sistem dilindungi dari penghapusan
+        if (isSystemLabelName(existing.name)) {
+          return reply.status(400).send({
+            success: false,
+            error: `Label "${existing.name}" merupakan label bawaan sistem dan tidak dapat dihapus demi stabilitas fitur bot.`,
+          });
+        }
+
         await prisma.label.delete({ where: { id } });
 
         await auditService.logAdminAction({
@@ -305,6 +323,13 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, message: `Label "${existing.name}" berhasil dihapus.` });
       } catch (err: any) {
         if (memoryLabels.has(id)) {
+          const mem = memoryLabels.get(id);
+          if (mem && isSystemLabelName(mem.name)) {
+            return reply.status(400).send({
+              success: false,
+              error: `Label "${mem.name}" merupakan label bawaan sistem dan tidak dapat dihapus demi stabilitas fitur bot.`,
+            });
+          }
           memoryLabels.delete(id);
           for (const key of memoryCustomerLabels) {
             if (key.endsWith(`:${id}`)) memoryCustomerLabels.delete(key);
@@ -360,6 +385,33 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
               skipDuplicates: true,
             }),
           ]);
+
+          // Sinkronisasi flags boolean
+          const hasHold = validLabels.some((l) => l.name.toLowerCase() === 'hold');
+          const hasAdmin = validLabels.some((l) => l.name.toLowerCase().includes('admin'));
+          const hasBypass = validLabels.some((l) => isBypassLabelName(l.name));
+
+          await prisma.customer.update({
+            where: { id: resolvedCustomerId },
+            data: {
+              is_hold_labeled: hasHold,
+              is_admin_labeled: hasAdmin || hasBypass,
+              labels_synced_at: new Date(),
+            },
+          }).catch(() => {});
+
+          // Jika terdapat label bypass (Skip atau Admin CS), batalkan seluruh follow-up aktif
+          if (hasBypass) {
+            await prisma.followUp.updateMany({
+              where: {
+                customer_id: resolvedCustomerId,
+                status: { in: ['PENDING', 'QUEUED'] },
+              },
+              data: {
+                status: 'SKIPPED',
+              },
+            }).catch(() => {});
+          }
 
           const updatedCustomer = await prisma.customer.findUnique({
             where: { id: resolvedCustomerId },
@@ -435,17 +487,36 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         try {
           const normName = targetLabel.name.toLowerCase();
           const isAssigned = !isRemove;
+          const isBypass = isBypassLabelName(targetLabel.name);
           const flagUpdates: Record<string, boolean> = {};
+
           if (normName === 'hold') {
             flagUpdates.is_hold_labeled = isAssigned;
-          } else if (normName.includes('admin')) {
+          } else if (normName.includes('admin') || isBypass) {
             flagUpdates.is_admin_labeled = isAssigned;
           }
+
           if (Object.keys(flagUpdates).length > 0) {
             await prisma.customer.updateMany({
               where: { id: resolvedCustomerId },
-              data: flagUpdates,
+              data: {
+                ...flagUpdates,
+                labels_synced_at: new Date(),
+              },
             });
+          }
+
+          // Jika label bypass di-assign, batalkan follow-up aktif seketika
+          if (isAssigned && isBypass) {
+            await prisma.followUp.updateMany({
+              where: {
+                customer_id: resolvedCustomerId,
+                status: { in: ['PENDING', 'QUEUED'] },
+              },
+              data: {
+                status: 'SKIPPED',
+              },
+            }).catch(() => {});
           }
         } catch {
           // Best-effort flag sync

@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { Customer } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 
 // In-Memory store fallback jika DB offline
@@ -114,7 +115,7 @@ export class CustomerService {
           customer = newCustomer;
           // skipFollowUpScheduling: true saat dipanggil dari migration service
           // agar legacy customer tidak mendapat follow-up NO_PURCHASE yang tidak relevan.
-          if (!options?.skipFollowUpScheduling && !isSandbox) {
+          if (!options?.skipFollowUpScheduling && !isSandbox && !customer.is_admin_labeled && !hasBypassLabel(customer)) {
             try {
               const { followUpService } = await import('./follow-up.service');
               await followUpService.createNoPurchaseFollowUps(customer.id, tenantId);
@@ -932,9 +933,12 @@ export class CustomerService {
       const mqlAutoLead = settings.mqlAutoLeadEnabled;
 
       // 2. Fetch customer saat ini
-      const current = await prisma.customer.findUnique({ where: { id: customerId } });
-      if (!current) {
-        return { customer: null, newlyTriggeredMql: false };
+      const current = await prisma.customer.findUnique({
+        where: { id: customerId },
+        include: { labels: { include: { label: true } } },
+      });
+      if (!current || current.is_admin_labeled || hasBypassLabel(current)) {
+        return { customer: current, newlyTriggeredMql: false };
       }
 
       const newCount = (current.mql_bubble_count || 0) + 1;

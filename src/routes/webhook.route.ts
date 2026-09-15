@@ -22,6 +22,7 @@ import { normalizeWahaJid, extractRealPhoneFromWahaPayload, parseJidType } from 
 import { extractWahaLocation } from '../utils/waha-location-parser';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
+import { hasBypassLabel, isBypassLabelName, checkCustomerBypass } from '../utils/customer-bypass';
 dotenv.config();
 
 /** Cari penawaran jam eksplisit (pola "jam 11.00-11.30", "pukul 10.00", dst)
@@ -820,20 +821,32 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
       let labels: string[] | null = null;
-      let isAdminChat = false;
+      let isBypassChat = false;
 
-      if (existingCustomer && existingCustomer.labels_synced_at !== null && existingCustomer.is_admin_labeled === true) {
-        isAdminChat = true;
-      } else if (!existingCustomer || existingCustomer.labels_synced_at === null) {
+      // 1. Cek dari flag customer atau relasi label di database
+      if (existingCustomer) {
+        if (existingCustomer.is_admin_labeled === true || hasBypassLabel(existingCustomer)) {
+          isBypassChat = true;
+        } else {
+          const dbBypass = await checkCustomerBypass({ customerId: existingCustomer.id, phone, tenantId: DEFAULT_TENANT_ID });
+          if (dbBypass) {
+            isBypassChat = true;
+          }
+        }
+      }
+
+      // 2. Fallback jika customer baru atau belum tersinkronisasi labels_synced_at
+      if (!isBypassChat && (!existingCustomer || existingCustomer.labels_synced_at === null)) {
         labels = await wahaClient.getChatLabelsOrNull(chatId);
         if (labels !== null) {
-          const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
-          const isHold = labels.some(l => l.toLowerCase() === 'hold');
+          const hasBypass = labels.some((l) => isBypassLabelName(l));
+          const isAdmin = labels.some((l) => l.toLowerCase() === 'admin');
+          const isHold = labels.some((l) => l.toLowerCase() === 'hold');
           if (existingCustomer) {
-            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: isHold }).catch(() => {});
+            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin || hasBypass, isHoldLabeled: isHold }).catch(() => {});
           }
-          if (isAdmin) {
-            isAdminChat = true;
+          if (isAdmin || hasBypass) {
+            isBypassChat = true;
           }
         }
       }
@@ -872,9 +885,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         })();
       }
 
-      if (isAdminChat) {
-        console.log(`[ADMIN CHAT] Chat ${chatId} is labeled as "Admin". Logging to Live Chat and bypassing bot auto-reply.`);
-        const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+      if (isBypassChat) {
+        console.log(`[BYPASS CHAT] Chat ${chatId} has bypass/admin label (Skip / Admin CS). Logging to Live Chat and bypassing bot auto-reply.`);
+        const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID, { skipFollowUpScheduling: true });
         const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, DEFAULT_TENANT_ID);
 
         await messageService.logMessage({
@@ -891,7 +904,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           await conversationService.escalateToHumanHandling(
             adminConversation,
             phone,
-            'Nomor berlabel Admin / Karyawan (Manual Handling)',
+            'Nomor berlabel Skip / Admin CS (Manual Handling)',
             DEFAULT_TENANT_ID,
             'admin_labeled'
           ).catch(() => {});

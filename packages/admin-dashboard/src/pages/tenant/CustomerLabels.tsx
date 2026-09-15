@@ -11,6 +11,7 @@ interface LabelItem {
   created_at: string;
   updated_at: string;
   _count?: { customers: number };
+  is_system?: boolean;
 }
 
 const PRESET_COLORS = [
@@ -125,6 +126,11 @@ export const CustomerLabels: React.FC = () => {
   };
 
   const handleDelete = async (label: LabelItem) => {
+    if (label.is_system) {
+      toast(`Label "${label.name}" merupakan bawaan sistem dan tidak dapat dihapus.`, 'error');
+      return;
+    }
+
     const isConfirmed = await confirm({
       title: 'Hapus Label Customer',
       message: `Apakah Anda yakin ingin menghapus label "${label.name}"?\nLabel ini akan dilepas dari ${label._count?.customers || 0} customer.`,
@@ -155,7 +161,7 @@ export const CustomerLabels: React.FC = () => {
       const res = await apiRequest('/api/admin/labels/seed-defaults', { method: 'POST' });
       if (res?.success && Array.isArray(res.data)) {
         setLabels(res.data);
-        toast('Label bawaan sistem (Hold, Admin, Pending Payment, Repeat Order, dll) berhasil ditambahkan.', 'success');
+        toast('Label bawaan sistem (Hold, Admin CS, Skip, Pending Payment, dll) berhasil dimuat.', 'success');
       }
     } catch (err: any) {
       toast(err.message || 'Gagal memuat label bawaan.', 'error');
@@ -190,7 +196,7 @@ export const CustomerLabels: React.FC = () => {
             onClick={handleSeedDefaults}
             disabled={loading}
             className="px-3 py-2 bg-white border border-[#d1d7db] hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-            title="Muat label bawaan sistem (Hold, Admin CS, Pending Payment, dll)"
+            title="Muat label bawaan sistem (Hold, Admin CS, Skip, Pending Payment, dll)"
           >
             <Tag size={13} className="text-[#008069]" />
             <span>Muat Label Bawaan</span>
@@ -215,7 +221,7 @@ export const CustomerLabels: React.FC = () => {
           <Tag className="mx-auto text-[#8696a0] mb-3" size={40} />
           <p className="font-bold text-[#111b21] text-sm">Belum Ada Label</p>
           <p className="text-[#667781] max-w-sm mx-auto mt-1">
-            Klik tombol di bawah untuk memuat label bawaan (Hold, Admin CS, Pending Payment, Repeat Order, Medis, dll) atau buat label kustom baru.
+            Klik tombol di bawah untuk memuat label bawaan (Hold, Admin CS, Skip, Pending Payment, Repeat Order, Medis, dll) atau buat label kustom baru.
           </p>
           <div className="flex items-center justify-center space-x-3 mt-4">
             <button
@@ -248,7 +254,14 @@ export const CustomerLabels: React.FC = () => {
                     style={{ backgroundColor: label.color }}
                   />
                   <div className="min-w-0">
-                    <h3 className="text-sm font-bold text-[#111b21] truncate">{label.name}</h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-sm font-bold text-[#111b21] truncate">{label.name}</h3>
+                      {label.is_system && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#f0f2f5] text-[#54656f] border border-[#d1d7db]" title="Label bawaan sistem yang dilindungi">
+                          Bawaan Sistem
+                        </span>
+                      )}
+                    </div>
                     <span
                       className="inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-2xs"
                       style={{ backgroundColor: label.color }}
@@ -270,13 +283,22 @@ export const CustomerLabels: React.FC = () => {
                   >
                     <Edit2 size={14} />
                   </button>
-                  <button
-                    onClick={() => handleDelete(label)}
-                    className="p-1.5 rounded-lg text-[#667781] hover:text-rose-600 hover:bg-rose-50 transition"
-                    title="Hapus Label"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {label.is_system ? (
+                    <span
+                      className="p-1.5 text-[#cbd5e1] cursor-not-allowed"
+                      title="Label bawaan sistem tidak dapat dihapus demi keamanan fitur"
+                    >
+                      <Trash2 size={14} className="opacity-40" />
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleDelete(label)}
+                      className="p-1.5 rounded-lg text-[#667781] hover:text-rose-600 hover:bg-rose-50 transition"
+                      title="Hapus Label"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 

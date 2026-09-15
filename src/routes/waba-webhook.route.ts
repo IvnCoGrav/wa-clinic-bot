@@ -10,6 +10,7 @@ import { wabaTenantService } from '../services/waba-tenant.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -220,6 +221,41 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
       const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
       const isNewCustomerRecord = !existingCustomer;
+
+      const isBypass =
+        existingCustomer?.is_admin_labeled === true ||
+        hasBypassLabel(existingCustomer) ||
+        (await checkCustomerBypass({ customerId: existingCustomer?.id, phone: msg.fromNumber, tenantId }));
+
+      if (isBypass) {
+        console.log(`[WABA BYPASS] Contact ${msg.fromNumber} has bypass/admin label (Skip / Admin CS). Dropping bot auto-reply.`);
+        const bypassCustomer = await customerService.getOrCreateCustomer(
+          msg.fromNumber,
+          msg.contactName,
+          tenantId,
+          { skipFollowUpScheduling: true }
+        );
+        const bypassConversation = await conversationService.getOrCreateConversation(bypassCustomer.id, tenantId);
+        await messageService.logMessage({
+          tenantId,
+          conversationId: bypassConversation.id,
+          direction: 'INBOUND',
+          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          waMessageId: msg.messageId,
+          payloadRaw: mergeWabaMedia(msg.rawPayload),
+          skipMqlEvaluation: true,
+        });
+        if (!bypassConversation.is_human_handling) {
+          await conversationService.escalateToHumanHandling(
+            bypassConversation,
+            msg.fromNumber,
+            'Nomor berlabel Skip / Admin CS (Manual Handling)',
+            tenantId,
+            'admin_labeled'
+          ).catch(() => {});
+        }
+        continue;
+      }
 
       const customer = await customerService.getOrCreateCustomer(
         msg.fromNumber,
