@@ -61,6 +61,11 @@ export interface BookingState {
    * yang sudah dikonfirmasi alur reservasi). Dipakai context-aware CTA.
    */
   requestedTimeHint?: string;
+  /**
+   * Plan 7 (Audit 216683): true bila customer meminta pengecekan ketersediaan
+   * hari/slot jadwal dan sistem menunggu konfirmasi admin/staf (anti holding stall loop).
+   */
+  pendingScheduleCheck?: boolean;
 }
 
 /** Satu item layanan di keranjang (multi-item cart, deterministik). */
@@ -580,6 +585,12 @@ export class GoalTracker {
 
     if (session.booking?.preferredDate) {
       lines.push(`• Jadwal Booking: ${session.booking.preferredDate} ${session.booking.preferredTime || ''}`);
+    } else if (session.booking?.requestedTimeHint) {
+      lines.push(`• Preferensi Waktu Diminta: ${session.booking.requestedTimeHint}`);
+    }
+
+    if (session.booking?.pendingScheduleCheck) {
+      lines.push(`• Status Verifikasi Jadwal: Menunggu konfirmasi ketersediaan slot dari tim Bidan/Admin [JANGAN berjanji cek ulang bila customer hanya mengonfirmasi menunggu].`);
     }
 
     return lines.join('\n');

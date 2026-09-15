@@ -489,6 +489,21 @@ export class GenerationStage {
     if (!turn.reasoning && typeof (secondData?.choices?.[0]?.message as any)?.reasoning_content === 'string') {
       turn.reasoning = (secondData.choices[0].message as any).reasoning_content;
     }
+
+    // Plan 7 (Audit 216683 - Garansi Sapaan Resmi Turn-0):
+    // Jika turn ini adalah chat pembuka (!isFollowUp), pastikan sapaan resmi Bidan Yusi
+    // tidak terlewat akibat penjiplakan template tool (mis. calculate_delivery suggestedTemplateReply).
+    if (!isFollowUp && finalReply) {
+      const lower = finalReply.toLowerCase();
+      const hasGreeting = lower.includes('bidan yusi') || lower.includes('perkenalkan, saya bidan') || lower.includes('perkenalkan saya bidan');
+      if (!hasGreeting) {
+        const { getBrandIdentity } = await import('../../../config/brand');
+        const brand = getBrandIdentity();
+        const greeting = session.genderGreeting || 'Bunda';
+        const greetingPrefix = `Halo ${greeting}! ✨ Perkenalkan, saya Bidan Yusi dari ${brand.businessName}.\n\n`;
+        finalReply = greetingPrefix + finalReply.trimStart();
+      }
+    }
     // Tracing Call 2 (Response Generation): latensi bersih + grounding yang dipakai
     {
       const secondDurationMs = Date.now() - secondStartedAt;

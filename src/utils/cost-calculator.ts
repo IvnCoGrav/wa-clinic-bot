@@ -188,6 +188,45 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     promptCacheHitCostPer1kIdr: (0.01875 / 1000) * USD_TO_IDR,
     completionCostPer1kIdr: (0.30 / 1000) * USD_TO_IDR,
   },
+
+  // Kenari Models (https://kenari.id/v1) — harga dalam micro-IDR/1M token, dikonversi ke IDR/1k token.
+  // Kenari adalah OpenAI-compatible proxy; model-model di bawah adalah yang unik/berbeda dari yang sudah ada di atas.
+  // Harga lengkap via GET /v1/models (publik, tanpa key).
+  'deepseek-v4-1-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0.15,  // 150,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.004,  // 4,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 0.30,  // 300,000,000 micro-IDR / 1M
+  },
+  'deepseek-v4-pro': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,  // 10,000,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.10,  // 100,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 20.0,  // 20,000,000,000 micro-IDR / 1M
+  },
+  'qwen3-8-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 3.0,  // 3,000,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.30,  // 300,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 7.5,  // 7,500,000,000 micro-IDR / 1M
+  },
+  'qwen3-7-plus': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.7,  // 6,700,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 1.3,  // 1,300,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 26.0,  // 26,000,000,000 micro-IDR / 1M
+  },
+  'minimax-m2-7': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.3,  // 6,300,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 1.2,  // 1,200,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 25.0,  // 25,000,000,000 micro-IDR / 1M
+  },
+  'step-3-7-flash:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,  // Gratis (RPM limit)
+    completionCostPer1kIdr: 0,
+  },
 };
 
 const DEFAULT_PRICING: ModelPricing = {
@@ -245,6 +284,7 @@ export function deriveProvider(baseUrl?: string | null): string {
   if (raw.includes('sumopod')) return 'SumoPod';
   if (raw.includes('api.deepseek.com') || raw.includes('deepseek.com')) return 'DeepSeek Direct';
   if (raw.includes('api.openai.com') || raw.includes('openai.azure') || raw.includes('ai.azure.com')) return 'OpenAI';
+  if (raw.includes('kenari.id')) return 'Kenari';
   try {
     return new URL(raw).host;
   } catch {

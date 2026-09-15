@@ -65,9 +65,14 @@ Seluruh rencana prosedural mikro telah tersimpan di direktori `docs/plans/`:
    - **Fix Issue #21**: Kamus koridor jalan arteri Surabaya & Sidoarjo di gazetteer (tanpa kata penanda "Jl.").
    - **Fix Issue #30**: Hardening mitigasi Prisma P2022 pada `tenants.settings`.
 
-5. **PLAN 7 (`docs/plans/PLAN_7_SCHEDULE_VERIFICATION_HOLDING_STALL_FIX.md` & `implementation_plan.md`) [PRIORITAS TINGGI - HASIL AUDIT SESI 216683]**:
-   - **Tujuan**: Memperbaiki secara fondasional masalah kebuntuan percakapan (*infinite holding stall loop*), mengaktifkan handoff eskalasi otomatis ke live-chat staf manusia (`is_human_handling = true`, `current_state = HUMAN_HANDLING`) saat customer menunggu konfirmasi jadwal, menegakkan isolasi konsultasi usia sehat dari pencemaran paket terapi sakit di Call 2 generator (`persona.ts`), memperbaiki pembaruan latch preferensi hari pada session, serta edukasi batas jam operasional klinik (08.00–17.00 WIB).
-   - **Hasil Audit Sesi 216683**: 8 rules ditabrak (kaset rusak 5x, promosi *Pulih Ceria* tanpa keluhan, deadlock state machine di mana bot berjanji cek slot tanpa ada entitas manusia/sistem yang memeriksa kalender).
+- **Plan 7 (Schedule Verification Holding Stall Fix, Time Hint Latch, & Clinical Age Isolation)**: **SELESAI & HIJAU (2026-09-15)**.
+  - Selesai 4 fase:
+    - Fase 1: `pendingScheduleCheck` flag di `BookingState`, latching atomik `applySessionLatches`, ekspansi token hari kerja (`'hari biasa'`, `'weekday'`).
+    - Fase 2: FastResponseGate handoff saat pengakuan tunggu: kirim closing resmi 1x + eskalasi `pending_schedule_check` (`is_human_handling = true`), dilanjutkan *silent skip* (0 token) pada pengakuan berikutnya.
+    - Fase 3: Tool `get_catalog_and_price` menenggelamkan paket sakit (`healthyPriorityOf`) saat customer konsultasi usia tanpa keluhan, dan persona prompt melarang penawaran terapi sakit tanpa keluhan.
+    - Fase 4: Turn-0 deterministic official greeting prefix Bidan Yusi & edukasi operasional 08.00–17.00 WIB.
+  - Unit tests baru (`tests/unit/v3/fast-response-gate-schedule.test.ts`, `tests/unit/v3/time-hint-latch.test.ts`, `tests/unit/v3/age-consultation-isolation.test.ts`): 8/8 passed.
+  - Typecheck `npm run build`: exit 0 tanpa error.
 
 ---
 

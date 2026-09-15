@@ -333,9 +333,24 @@ export async function executeGetCatalog(
       const d = typeof s?.durationMinutes === 'number' ? s.durationMinutes : 0;
       return d > 0 && d < QUICK_SUPPORT_MAX_MINUTES;
     };
+    // Plan 7 (Audit 216683 - Isolasi Usia Sehat vs Terapi Sakit):
+    // Jika customer TIDAK menyebutkan keluhan (symptoms kosong), layanan yang difokuskan
+    // khusus untuk terapi sakit (batuk, pilek, flu, kembung, kolik) diturunkan prioritasnya
+    // di bawah layanan relaksasi/nutrisi/tumbuh kembang sehat (Ceria, Lahap Juara).
+    const isSickTherapyService = (id: string): boolean => {
+      const s = serviceById.get(id);
+      if (!s) return false;
+      const text = `${s.name} ${s.description || ''}`.toLowerCase();
+      return /batuk|pilek|flu|kembung|kolik|bapil/i.test(text) && !/relaksasi|tumbuh kembang/i.test(s.name.toLowerCase());
+    };
+    const healthyPriorityOf = (id: string): number => {
+      if ((symptoms || []).length > 0) return 0;
+      return isSickTherapyService(id) ? 1 : 0;
+    };
     formattedTreatments.sort((a, b) =>
       ((b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0))
       || (therapyScoreOf(b.id) - therapyScoreOf(a.id))
+      || (healthyPriorityOf(a.id) - healthyPriorityOf(b.id))
       || ((isBridgeMassage(b.id) ? 1 : 0) - (isBridgeMassage(a.id) ? 1 : 0))
       || (babyFirstOf(b.id) - babyFirstOf(a.id))
       || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
