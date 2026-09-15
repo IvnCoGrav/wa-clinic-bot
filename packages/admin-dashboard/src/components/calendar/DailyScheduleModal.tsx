@@ -108,19 +108,27 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
         </div>
 
         <div className="px-4 py-2 border-b border-[#e9edef] bg-[#f8fafc] shrink-0 space-y-2">
-          <div className="flex items-center justify-between">
-            <button onClick={() => shiftDate(-1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
-              <ChevronLeft size={16} />
-            </button>
-            <button onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()} className="font-bold text-sm text-[#111b21] hover:text-[#008069] flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white border border-transparent hover:border-[#c2e7e0] transition">
-              <Calendar size={14} className="text-[#008069]" />
-              {formatDateLabel(selectedDateStr)}
-            </button>
-            <button onClick={() => shiftDate(1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-          <input ref={dateInputRef} type="date" value={selectedDateStr} onChange={(e) => setSelectedDateStr(e.target.value)} className="hidden" />
+           <div className="flex items-center justify-between">
+             <button onClick={() => shiftDate(-1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
+               <ChevronLeft size={16} />
+             </button>
+             <label className="relative font-bold text-sm text-[#111b21] hover:text-[#008069] flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white border border-transparent hover:border-[#c2e7e0] transition cursor-pointer">
+               <Calendar size={14} className="text-[#008069] shrink-0" />
+               <span className="truncate">{formatDateLabel(selectedDateStr)}</span>
+               <input
+                 type="date"
+                 value={selectedDateStr}
+                 onChange={(e) => {
+                   if (e.target.value) setSelectedDateStr(e.target.value);
+                 }}
+                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer pointer-events-auto"
+                 aria-label="Pilih Tanggal Jadwal"
+               />
+             </label>
+             <button onClick={() => shiftDate(1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
+               <ChevronRight size={16} />
+             </button>
+           </div>
           {staffList.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setSelectedStaffId('all')} className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === 'all' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}>

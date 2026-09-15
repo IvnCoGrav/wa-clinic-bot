@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
-import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
 
 interface QuickHoldModalProps {
   isOpen: boolean;
@@ -45,6 +45,8 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
   const [holdDuration, setHoldDuration] = useState<number>(60);
   const [notes, setNotes] = useState('');
   const [slotStatusMap, setSlotStatusMap] = useState<Record<string, 'full' | 'available' | 'hold'>>({});
+  const [dailySlotsData, setDailySlotsData] = useState<Array<{ time: string; status: string; bookings?: any[] }>>([]);
+  const [pendingOverlapSubmit, setPendingOverlapSubmit] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -91,16 +93,34 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
 
   useEffect(() => {
     if (!isOpen || !bookingDate) return;
-    apiRequest<{ success: boolean; slots: Array<{ time: string; status: 'full' | 'available' | 'hold' }> }>(`/api/admin/reservations/daily-slots?date=${bookingDate}`)
+    apiRequest<{ success: boolean; slots: Array<{ time: string; status: 'full' | 'available' | 'hold'; bookings?: any[] }> }>(`/api/admin/reservations/daily-slots?date=${bookingDate}`)
       .then((res: any) => {
         if (res?.slots) {
           const map: Record<string, string> = {};
           res.slots.forEach((s: any) => (map[s.time] = s.status));
           setSlotStatusMap(map as any);
+          setDailySlotsData(res.slots);
         }
       })
       .catch(() => {});
   }, [isOpen, bookingDate]);
+
+  const overlappingBookings = useMemo(() => {
+    if (!bookingTime || !bookingDate) return [];
+    const [h, m] = bookingTime.split(':').map(Number);
+    const startMin = h * 60 + m;
+    const endMin = startMin + holdDuration;
+    return (dailySlotsData || [])
+      .filter((s) => {
+        if (!s || !s.time || s.time === bookingTime) return false;
+        const [sh, sm] = s.time.split(':').map(Number);
+        const slotStartMin = sh * 60 + sm;
+        const slotEndMin = slotStartMin + 60;
+        return slotStartMin < endMin && startMin < slotEndMin;
+      })
+      .flatMap((s) => s.bookings || [])
+      .filter(Boolean);
+  }, [bookingTime, bookingDate, holdDuration, dailySlotsData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +132,15 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
       toast('Harap masukkan Nama atau Nomor WhatsApp customer.', 'error');
       return;
     }
+    if (overlappingBookings.length > 0) {
+      setPendingOverlapSubmit(() => () => doSubmit(true));
+      return;
+    }
+    await doSubmit(false);
+  };
+
+  const doSubmit = async (force: boolean) => {
+    setPendingOverlapSubmit(null);
     setSubmitting(true);
     try {
       const combinedDateTime = new Date(`${bookingDate}T${bookingTime}:00`);
@@ -133,6 +162,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
             treatmentCategory: 'BABY',
             treatmentDetail: `[HOLD] Slot Ditawarkan (BABY) [${holdDuration}m]`,
             notes: notes || undefined,
+            force: force || undefined,
           }),
         }
       );
@@ -247,23 +277,42 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <p className="text-[10.5px] text-[#667781] dark:text-[#8696a0] mb-1.5 font-medium flex items-center gap-1"><Clock size={11} /> Slot Jam Populer:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {COMMON_SLOTS.map((slot) => {
-                  const isSelected = bookingTime === slot;
-                  const s = (slotStatusMap as any)[slot] as string | undefined;
-                  const dot = s === 'full' ? 'bg-rose-500' : s === 'hold' ? 'bg-amber-500' : s === 'available' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600';
-                  return (
-                    <button key={slot} type="button" onClick={() => setBookingTime(slot)} className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition flex items-center gap-1 ${isSelected ? 'bg-[#008069] dark:bg-[#00a884] text-white shadow-xs' : 'bg-white dark:bg-[#111b21] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/20'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-                      {slot}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+             <div>
+               <p className="text-[10.5px] text-[#667781] dark:text-[#8696a0] mb-1.5 font-medium flex items-center gap-1"><Clock size={11} /> Slot Jam Populer:</p>
+               <div className="flex flex-wrap gap-1.5">
+                 {COMMON_SLOTS.map((slot) => {
+                   const isSelected = bookingTime === slot;
+                   const s = (slotStatusMap as any)[slot] as string | undefined;
+                   const dot = s === 'full' ? 'bg-rose-500' : s === 'hold' ? 'bg-amber-500' : s === 'available' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600';
+                   return (
+                     <button key={slot} type="button" onClick={() => setBookingTime(slot)} className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition flex items-center gap-1 ${isSelected ? 'bg-[#008069] dark:bg-[#00a884] text-white shadow-xs' : 'bg-white dark:bg-[#111b21] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/20'}`}>
+                       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                       {slot}
+                     </button>
+                   );
+                 })}
+               </div>
+             </div>
+           </div>
+
+           {/* Overlap Warning Banner */}
+           {overlappingBookings.length > 0 && (
+             <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs">
+               <div className="flex items-center gap-2 font-bold mb-1.5">
+                 <AlertTriangle size={14} className="shrink-0" />
+                 <span>⚠️ Peringatan Jadwal Tumpang Tindih</span>
+               </div>
+               <p className="text-[11px] mb-1.5">Jam ini beririsan dengan jadwal pasien lain:</p>
+               <ul className="space-y-1">
+                 {overlappingBookings.map((b: any, i: number) => (
+                   <li key={i} className="text-[11px] flex items-center gap-1.5">
+                     <span className="font-semibold">{b.customerName || b.customer?.name || 'Pasien'}</span>
+                     <span className="text-[10px] opacity-75">({b.status} • {b.treatmentDetail || b.treatment_detail || '-'} • {b.assignedStaffName || b.assigned_staff?.name || '-'})</span>
+                   </li>
+                 ))}
+               </ul>
+             </div>
+           )}
 
           {/* Durasi Hold — dukung treatment >1 jam, slot berikutnya ikut tertutup */}
           <div>
@@ -320,13 +369,33 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
         </form>
 
         <div className="p-4 border-t border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#202c33] flex items-center justify-between">
-          <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 bg-white dark:bg-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#222e35] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold rounded-xl transition">Batal</button>
-          <button type="button" onClick={handleSubmit} disabled={submitting} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-amber-500/25 flex items-center space-x-2 active:scale-95 disabled:opacity-50">
-            {submitting ? (<><Loader2 size={14} className="animate-spin" /><span>Menyimpan...</span></>) : (<><Zap size={14} className="fill-current" /><span>⚡ Simpan & Tahan Slot</span></>)}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
+           <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 bg-white dark:bg-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#222e35] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold rounded-xl transition">Batal</button>
+           <button type="button" onClick={handleSubmit} disabled={submitting} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-amber-500/25 flex items-center space-x-2 active:scale-95 disabled:opacity-50">
+             {submitting ? (<><Loader2 size={14} className="animate-spin" /><span>Menyimpan...</span></>) : (<><Zap size={14} className="fill-current" /><span>⚡ Simpan & Tahan Slot</span></>)}
+           </button>
+         </div>
+       </div>
+       {pendingOverlapSubmit && (
+         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+           <div className="bg-white dark:bg-[#111b21] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#2a3942] p-6 max-w-sm mx-4 space-y-4">
+             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-sm">
+               <AlertTriangle size={20} />
+               <span>Jadwal Tumpang Tindih</span>
+             </div>
+             <p className="text-xs text-[#54656f] dark:text-[#aebac1]">
+               Terdapat jadwal lain yang tumpang tindih di jam ini. Apakah Anda yakin ingin tetap menahan (HOLD) slot ini?
+             </p>
+             <div className="flex items-center justify-end gap-2">
+               <button type="button" onClick={() => setPendingOverlapSubmit(null)} className="px-4 py-2 bg-white dark:bg-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#222e35] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold rounded-xl transition">Batal</button>
+               <button type="button" onClick={() => pendingOverlapSubmit()} className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-amber-500/25 flex items-center space-x-2">
+                 <Zap size={14} className="fill-current" />
+                 <span>Yakin & Tahan</span>
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+     </div>,
+     document.body
+   );
 };
