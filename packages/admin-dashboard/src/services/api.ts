@@ -201,12 +201,21 @@ export async function apiRequest<T = any>(
 
     if (!response.ok) {
       let errorMsg = 'API request failed';
+      let errorCode: string | undefined = undefined;
+      let existingReservation: any = undefined;
+      let rawErrorData: any = undefined;
       try {
         const errorData = await response.json();
+        rawErrorData = errorData;
         errorMsg = errorData.message || errorData.error || errorMsg;
+        errorCode = errorData.error || errorData.code;
+        existingReservation = errorData.existingReservation;
       } catch (_) {}
-      const error = new Error(errorMsg) as Error & { status?: number };
+      const error = new Error(errorMsg) as Error & { status?: number; code?: string; existingReservation?: any; data?: any };
       error.status = response.status;
+      error.code = errorCode;
+      error.existingReservation = existingReservation;
+      error.data = rawErrorData;
       throw error;
     }
 
