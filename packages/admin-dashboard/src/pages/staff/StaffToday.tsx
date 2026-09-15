@@ -22,6 +22,7 @@ import {
   Baby,
   Search,
   CheckCheck,
+  Check,
   Compass,
   Smile,
   Navigation2,
@@ -41,6 +42,10 @@ import {
   ExternalLink,
   Pencil,
   ArrowLeft,
+  Ban,
+  AlertCircle,
+  Play,
+  Volume2,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { extractMedia } from '../../utils/mediaExtractor';
@@ -49,6 +54,7 @@ import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
+import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime } from '../../utils/dateWib';
 
 interface StaffTaskChild {
   name: string;
@@ -105,6 +111,21 @@ interface ChatMessage {
   sender_name?: string | null;
   created_at: string;
   media?: ChatMediaData;
+  delivery_status?: 'sent' | 'delivered' | 'read' | 'failed' | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  is_revoked?: boolean;
+  is_edited?: boolean;
+  quoted_message?: {
+    id?: string;
+    wa_message_id?: string;
+    sender_name?: string | null;
+    sender_type?: string | null;
+    direction?: string;
+    content?: string;
+    media?: ChatMediaData;
+  } | null;
+  payload_raw?: any;
 }
 
 // extractMedia terpusat di utils/mediaExtractor.ts (single source of truth).
@@ -113,6 +134,137 @@ import { playIncomingMessageSound } from '../../services/notificationSound';
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
 }
+
+// Helper: ekstraksi quoted_message dari berbagai bentuk payload_raw
+function extractQuotedMessage(msg: ChatMessage): NonNullable<ChatMessage['quoted_message']> | null {
+  const direct = (msg as any).quoted_message;
+  if (direct && (direct.content || direct.media)) return direct;
+  const pr = (msg as any).payload_raw;
+  if (!pr) return null;
+  const q = pr.quoted_message || pr.quotedMessage || pr.quoted || pr.reply_to_message || pr.quotedMsg;
+  if (q && (q.content || q.media || q.text)) {
+    return {
+      id: q.id || q.wa_message_id || q.waMessageId,
+      wa_message_id: q.wa_message_id || q.waMessageId || q.id,
+      sender_name: q.sender_name || q.senderName || q.sender || null,
+      sender_type: q.sender_type || q.senderType || null,
+      direction: q.direction || q.dir || undefined,
+      content: q.content || q.text || q.caption || '',
+      media: q.media || undefined,
+    };
+  }
+  return null;
+}
+
+// Helper: ekstraksi koordinat lokasi WA (validasi 0,0 sebagai invalid)
+function extractLocation(msg: ChatMessage): { lat: number; lng: number } | null {
+  const pr = (msg as any).payload_raw;
+  if (pr?.location) {
+    const loc = pr.location;
+    const lat = typeof loc.latitude === 'number' ? loc.latitude : typeof loc.lat === 'number' ? loc.lat : null;
+    const lng = typeof loc.longitude === 'number' ? loc.longitude : typeof loc.lng === 'number' ? loc.lng : null;
+    if (lat !== null && lng !== null && !(lat === 0 && lng === 0)) return { lat, lng };
+  }
+  if (pr && typeof pr.latitude === 'number' && typeof pr.longitude === 'number' && !(pr.latitude === 0 && pr.longitude === 0)) {
+    return { lat: pr.latitude, lng: pr.longitude };
+  }
+  if (pr && typeof pr.lat === 'number' && typeof pr.lng === 'number' && !(pr.lat === 0 && pr.lng === 0)) {
+    return { lat: pr.lat, lng: pr.lng };
+  }
+  const c = (msg.content || '').trim();
+  // Pola "[LOCATION: Lat -7.xxx, Lng 112.xxx]" & varian
+  const m = c.match(/Lat\s*[:\-]?\s*(-?\d+\.\d+)\s*[,\s]+\s*Lng\s*[:\-]?\s*(-?\d+\.\d+)/i);
+  if (m) {
+    const lat = parseFloat(m[1]); const lng = parseFloat(m[2]);
+    if (!isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0)) return { lat, lng };
+  }
+  // Fallback: coba parsing URL Google Maps di konten via URL API (mandat non-hardcode)
+  const urlMatch = c.match(/https?:\/\/[^\s]+/g);
+  if (urlMatch) {
+    for (const u of urlMatch) {
+      try {
+        const urlObj = new URL(u);
+        const q = urlObj.searchParams.get('q') || urlObj.searchParams.get('query') || urlObj.searchParams.get('destination');
+        if (q) {
+          const parts = q.split(',');
+          if (parts.length >= 2) {
+            const lat = parseFloat(parts[0]); const lng = parseFloat(parts[1]);
+            if (!isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0)) return { lat, lng };
+          }
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function extractAudioUrl(msg: ChatMessage, media?: ChatMediaData | null): string | null {
+  const pr = (msg as any).payload_raw;
+  const mt = ((media as any)?.mimeType || pr?.media?.mimeType || (msg as any).media_mime_type || '') as string;
+  const url = (media?.url || media?.hdUrl || pr?.media?.url || pr?.media?.hdUrl || (msg as any).media_url || pr?.audio?.url || pr?.ptt?.url || pr?.voice?.url || '') as string;
+  const isAudioMime = mt.startsWith('audio/');
+  const isAudioExt = /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test(url) || /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test((msg.content || '').trim());
+  const isAudioPlaceholder = /^\[(AUDIO|VOICE|PTT)/i.test((msg.content || '').trim());
+  if (url && (isAudioMime || isAudioExt || isAudioPlaceholder)) return url;
+  if (pr?.audio?.url) return pr.audio.url;
+  if (pr?.ptt?.url) return pr.ptt.url;
+  if (pr?.voice?.url) return pr.voice.url;
+  return null;
+}
+
+// VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
+const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const fmt = (s: number) => {
+    if (!isFinite(s) || isNaN(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  };
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => setCurrent(a.currentTime);
+    const onMeta = () => setDuration(a.duration);
+    const onEnd = () => setPlaying(false);
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('loadedmetadata', onMeta);
+    a.addEventListener('ended', onEnd);
+    return () => {
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('loadedmetadata', onMeta);
+      a.removeEventListener('ended', onEnd);
+    };
+  }, [src]);
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+  };
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    if (audioRef.current) audioRef.current.currentTime = v;
+    setCurrent(v);
+  };
+  return (
+    <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
+      <button type="button" onClick={toggle} className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition">
+        {playing ? <span className="w-2.5 h-2.5 bg-white rounded-sm" /> : <Play size={14} className="ml-0.5 fill-white" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
+        <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
+          <span>{fmt(current)}</span><span>{fmt(duration)}</span>
+        </div>
+      </div>
+      <Volume2 size={14} className="text-[#008069] shrink-0" />
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+    </div>
+  );
+};
 
 interface StaffTodayProps {
   defaultTab?: 'today' | 'upcoming' | 'completed';
@@ -633,6 +785,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             sender_name: payload.senderName || payload.sender_name || null,
             created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
             media: extractMedia(payload),
+            delivery_status: payload.delivery_status || payload.deliveryStatus || null,
+            delivered_at: payload.deliveredAt || payload.delivered_at || null,
+            read_at: payload.readAt || payload.read_at || null,
+            is_revoked: payload.isRevoked ?? payload.is_revoked ?? false,
+            quoted_message: payload.quoted_message || payload.quotedMessage || payload.payloadRaw?.quoted_message || payload.payload_raw?.quoted_message || null,
+            payload_raw: payload.payloadRaw || payload.payload_raw || payload.payload_raw || undefined,
           };
 
           const isSandbox = Boolean(payload.isSandboxTest || payload.is_sandbox_test || payload.isSandbox);
@@ -699,14 +857,33 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       es.addEventListener('message.updated', (event) => {
         try {
           const payload = JSON.parse((event as MessageEvent).data);
-          const { messageId, content, isRevoked, conversationId } = payload;
+          const { messageId, content, isRevoked, isEdited, conversationId } = payload;
           if (selectedTaskRef.current?.conversationId === conversationId) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
+                m.id === messageId || (m as any).wa_message_id === messageId
+                  ? { ...m, content: content ?? m.content, is_revoked: isRevoked ?? m.is_revoked, is_edited: isEdited ?? m.is_edited, payload_raw: { ...(m.payload_raw || {}), is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked, is_edited: isEdited ?? (m.payload_raw as any)?.is_edited } }
+                  : m
               )
             );
           }
+        } catch {}
+      });
+
+      es.addEventListener('message.status_updated', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const { messageId, waMessageId, conversationId, status, deliveredAt, readAt } = payload;
+          const targetId = messageId || waMessageId;
+          if (!targetId) return;
+          if (conversationId && selectedTaskRef.current?.conversationId !== conversationId) return;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === targetId || (m as any).wa_message_id === targetId || (payload.waMessageId && (m as any).wa_message_id === payload.waMessageId)
+                ? { ...m, delivery_status: status, delivered_at: deliveredAt || m.delivered_at, read_at: readAt || m.read_at }
+                : m
+            )
+          );
         } catch {}
       });
 
@@ -802,6 +979,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       sender_type: 'STAFF',
       sender_name: staff?.name || 'Staff',
       created_at: new Date().toISOString(),
+      delivery_status: 'sent',
     };
 
     setMessages((prev) => [...prev, optimisticMsg].slice(-30));
@@ -2185,13 +2363,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       WebkitOverflowScrolling: 'touch',
                     }}
                   >
-                    {/* Date separator badge */}
-                    <div className="flex justify-center my-1.5">
-                      <div className="bg-white text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef]">
-                        Percakapan WhatsApp Pasien
-                      </div>
-                    </div>
-
                     {loadingMessages ? (
                       <div className="flex justify-center items-center h-48 space-x-2 text-[#667781] text-xs">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
@@ -2204,125 +2375,219 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         <p className="text-[#667781]">Ketik balasan di bawah untuk mengirim pesan langsung ke WhatsApp pasien.</p>
                       </div>
                     ) : (
-                      messages.map((msg) => {
+                      messages.map((msg, idx) => {
                         const isInbound = msg.direction === 'INBOUND';
                         const isBot = !isInbound && msg.sender_type === 'BOT';
                         const isStaff = !isInbound && msg.sender_type === 'STAFF';
                         const media = extractMedia(msg);
-
+                        const quotedMsg = extractQuotedMessage(msg);
+                        const locData = extractLocation(msg);
+                        const audioUrl = extractAudioUrl(msg, media);
+                        const isRevoked = !!(msg.is_revoked || (msg as any).payload_raw?.is_revoked || (msg as any).isRevoked);
+                        const isLocationMsg = !!locData;
+                        const isAudioMsg = !!audioUrl && !isRevoked;
                         const isValidDate = msg.created_at && !isNaN(new Date(msg.created_at).getTime());
-                        const timeStr = isValidDate
-                          ? new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            }).replace(':', '.')
-                          : new Date().toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            }).replace(':', '.');
+                        const timeStr = isValidDate ? formatWibTime(msg.created_at) : formatWibTime(new Date().toISOString());
+                        const fullDateTitle = (() => {
+                          try {
+                            return new Date(msg.created_at).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) + ' WIB';
+                          } catch { return msg.created_at; }
+                        })();
+                        const isDifferentDay = isDifferentDayWib(msg.created_at, idx > 0 ? messages[idx - 1]?.created_at : null);
+                        const separatorLabel = formatChatDateSeparatorWib(msg.created_at);
 
                         return (
-                          <div
-                            key={msg.id}
-                            className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'} animate-popIn`}
-                          >
-                            {/* Sender Label Tag */}
-                            <div className="text-[10px] text-[#667781] mb-0.5 px-1.5 flex items-center space-x-1">
-                              {isInbound ? (
-                                <>
-                                  <User size={10} className="text-[#54656f]" />
-                                  <span className="font-medium text-[#111b21]">
-                                    {selectedTask.customerName || 'Customer'}
-                                  </span>
-                                </>
-                              ) : isBot ? (
-                                <>
-                                  <Bot size={10} className="text-[#008069]" />
-                                  <span className="font-medium text-[#008069]">Bot Asisten Klinik</span>
-                                </>
-                              ) : isStaff ? (
-                                <>
-                                  <UserCheck size={10} className="text-sky-600" />
-                                  <span className="font-medium text-sky-700">
-                                    {msg.sender_name || staff?.name || 'Terapis'}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="font-medium text-[#54656f]">Admin</span>
-                              )}
-                              <span>•</span>
-                              <span>{timeStr}</span>
-                            </div>
-
-                            {/* WhatsApp Speech Bubble */}
-                            <div
-                              className={`relative group max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs transition-all ${
-                                isInbound
-                                  ? 'bg-white text-[#111b21] rounded-tl-xs border border-[#e9edef]'
-                                  : isBot
-                                  ? 'bg-[#e8f5f2] text-[#111b21] rounded-tr-xs border border-[#c2e7e0]'
-                                  : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs border border-[#00a884]/20'
-                              }`}
-                            >
-                              {/* Media Attachment Preview */}
-                              {media && (
-                                <div
-                                  onLoad={() => scrollToBottom(false)}
-                                  className="mb-2 rounded-xl overflow-hidden"
-                                >
-                                  <MediaImage
-                                    src={media.url || media.hdUrl || media.thumbUrl}
-                                    downloadSrc={media.hdUrl || media.url}
-                                    thumbUrl={media.thumbUrl}
-                                    caption={media.caption}
-                                  />
+                          <React.Fragment key={msg.id}>
+                            {isDifferentDay && (
+                              <div className="flex justify-center my-1.5">
+                                <div className="bg-white text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef]">
+                                  {separatorLabel}
                                 </div>
-                              )}
-
-                              {/* Message Text Content */}
-                              <div className="whitespace-pre-wrap break-words select-text">{msg.content}</div>
-
-                              {/* Meta Info & Double Blue Ticks / Delete Button */}
-                              <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-[#667781]">
-                                {((msg as any).is_edited || (msg as any).payload_raw?.is_edited) && (
-                                  <span className="text-[9px] text-[#667781] italic">diedit</span>
+                              </div>
+                            )}
+                            <div
+                              className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'} animate-popIn`}
+                            >
+                              {/* Sender Label Tag */}
+                              <div className="text-[10px] text-[#667781] mb-0.5 px-1.5 flex items-center space-x-1" title={fullDateTitle}>
+                                {isInbound ? (
+                                  <>
+                                    <User size={10} className="text-[#54656f]" />
+                                    <span className="font-medium text-[#111b21]">
+                                      {selectedTask.customerName || 'Customer'}
+                                    </span>
+                                  </>
+                                ) : isBot ? (
+                                  <>
+                                    <Bot size={10} className="text-[#008069]" />
+                                    <span className="font-medium text-[#008069]">Bot Asisten Klinik</span>
+                                  </>
+                                ) : isStaff ? (
+                                  <>
+                                    <UserCheck size={10} className="text-sky-600" />
+                                    <span className="font-medium text-sky-700">
+                                      {msg.sender_name || staff?.name || 'Terapis'}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="font-medium text-[#54656f]">Admin</span>
                                 )}
-                                <span>{timeStr}</span>
-                                {!isInbound && (
-                                  <span title="Terkirim ke WhatsApp">
-                                    <CheckCheck size={13} className="text-[#53bdeb]" />
-                                  </span>
-                                )}
+                                <span>•</span>
+                                <span title={fullDateTitle}>{timeStr} WIB</span>
+                              </div>
 
-                                {/* Edit message button (for Staff Outbound Messages within 15 mins) */}
-                                {isStaff && !media && (msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false) && (gatewayCapability?.supportsEdit ?? true) && (
-                                  <button
-                                    onClick={() => handleStartEdit(msg)}
-                                    className="opacity-0 group-hover:opacity-100 hover:text-[#008069] transition-opacity p-0.5 ml-1"
-                                    title="Edit pesan ini (maksimal 15 menit)"
-                                  >
-                                    <PenLine size={11} />
-                                  </button>
-                                )}
-
-                                {/* Revoke message button (for Staff Outbound Messages) */}
-                                {isStaff && gatewayCapability?.supportsRevoke && (
-                                  <button
-                                    onClick={() => handleRevokeMessage(msg)}
-                                    disabled={revokingId === msg.id}
-                                    className="opacity-0 group-hover:opacity-100 hover:text-rose-600 transition-opacity p-0.5 ml-1"
-                                    title="Tarik pesan ini dari WhatsApp"
-                                  >
-                                    {revokingId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent"></div>
-                                    ) : (
-                                      <Trash2 size={11} />
+                              {/* WhatsApp Speech Bubble */}
+                              <div
+                                className={`relative group max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs transition-all ${
+                                  isRevoked
+                                    ? 'bg-[#f0f2f5] text-[#667781] border border-[#e9edef] italic'
+                                    : isInbound
+                                    ? 'bg-white text-[#111b21] rounded-tl-xs border border-[#e9edef]'
+                                    : isBot
+                                    ? 'bg-[#e8f5f2] text-[#111b21] rounded-tr-xs border border-[#c2e7e0]'
+                                    : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs border border-[#00a884]/20'
+                                }`}
+                              >
+                                {isRevoked ? (
+                                  <div className="flex items-center gap-1.5 py-0.5 text-[#667781]">
+                                    <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                    <span className="italic">🚫 Pesan ini telah ditarik</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {/* Quoted Message Preview */}
+                                    {quotedMsg && (
+                                      <div className="mb-2 p-2 rounded-lg border-l-[3px] border-[#00a884] bg-black/[0.04] text-[11px] leading-snug">
+                                        <p className="font-bold text-[10px] text-[#008069] truncate mb-0.5">
+                                          {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedTask.customerName || 'Customer') : 'Bidan / CS')}
+                                        </p>
+                                        <p className="text-[11px] text-[#54656f] truncate">
+                                          {quotedMsg.media ? (
+                                            <span className="flex items-center gap-1">📷 Foto {quotedMsg.content && !/^\[(IMAGE|MEDIA)/.test(quotedMsg.content) ? `• ${quotedMsg.content.slice(0, 60)}` : ''}</span>
+                                          ) : (
+                                            quotedMsg.content || 'Pesan'
+                                          )}
+                                        </p>
+                                      </div>
                                     )}
-                                  </button>
+
+                                    {/* Share Location Card */}
+                                    {isLocationMsg && locData && (
+                                      <div className="mb-2 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] flex items-center gap-2.5">
+                                        <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                          <MapPin size={16} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-bold text-[12px] text-[#111b21] leading-tight">📍 Share Location Pasien</p>
+                                          <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                            {locData.lat.toFixed(6)}, {locData.lng.toFixed(6)}
+                                          </p>
+                                        </div>
+                                        <a
+                                          href={`https://www.google.com/maps/search/?api=1&query=${locData.lat},${locData.lng}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
+                                          title="Buka lokasi di Google Maps"
+                                        >
+                                          <span>Buka Google Maps</span>
+                                          <ExternalLink size={12} />
+                                        </a>
+                                      </div>
+                                    )}
+
+                                    {/* Voice Note / Audio Player */}
+                                    {isAudioMsg && audioUrl ? (
+                                      <div className="mb-2">
+                                        <VoiceNotePlayer src={audioUrl} />
+                                      </div>
+                                    ) : media && !isLocationMsg ? (
+                                      <div
+                                        onLoad={() => scrollToBottom(false)}
+                                        className="mb-2 rounded-xl overflow-hidden"
+                                      >
+                                        <MediaImage
+                                          src={media.url || media.hdUrl || media.thumbUrl}
+                                          downloadSrc={media.hdUrl || media.url}
+                                          thumbUrl={media.thumbUrl}
+                                          caption={media.caption}
+                                        />
+                                      </div>
+                                    ) : null}
+
+                                    {/* Message Text Content (hidden for pure location placeholder) */}
+                                    {(() => {
+                                      const isPureLocationPlaceholder = isLocationMsg && /^\[LOCATION/i.test((msg.content || '').trim());
+                                      if (isPureLocationPlaceholder) return null;
+                                      if (!msg.content || /^\[(AUDIO|VOICE|PTT)/i.test(msg.content.trim())) return null;
+                                      return <div className="whitespace-pre-wrap break-words select-text">{msg.content}</div>;
+                                    })()}
+                                  </>
                                 )}
+
+                                {/* Meta Info & Delivery Ticks */}
+                                <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-[#667781]">
+                                  {((msg as any).is_edited || msg.is_edited || (msg as any).payload_raw?.is_edited) && !isRevoked && (
+                                    <span className="text-[9px] text-[#667781] italic">diedit</span>
+                                  )}
+                                  <span title={fullDateTitle}>{timeStr}</span>
+                                  {!isInbound && !isRevoked && (
+                                    <span
+                                      className="inline-flex items-center"
+                                      title={
+                                        msg.delivery_status === 'read'
+                                          ? `Dibaca ${msg.read_at ? formatWibTime(msg.read_at) : ''} WIB`
+                                          : msg.delivery_status === 'delivered'
+                                          ? `Diterima ${msg.delivered_at ? formatWibTime(msg.delivered_at) : ''} WIB`
+                                          : msg.delivery_status === 'failed'
+                                          ? 'Gagal terkirim'
+                                          : msg.delivery_status === 'sent'
+                                          ? 'Terkirim'
+                                          : 'Terkirim'
+                                      }
+                                    >
+                                      {msg.delivery_status === 'read' ? (
+                                        <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
+                                      ) : msg.delivery_status === 'delivered' ? (
+                                        <CheckCheck size={13} className="text-[#8696a0]" />
+                                      ) : msg.delivery_status === 'failed' ? (
+                                        <AlertCircle size={12} className="text-rose-500" />
+                                      ) : (
+                                        <Check size={12} className="text-[#8696a0]" />
+                                      )}
+                                    </span>
+                                  )}
+
+                                  {/* Edit message button */}
+                                  {isStaff && !isRevoked && !media && !isAudioMsg && (msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false) && (gatewayCapability?.supportsEdit ?? true) && (
+                                    <button
+                                      onClick={() => handleStartEdit(msg)}
+                                      className="opacity-0 group-hover:opacity-100 hover:text-[#008069] transition-opacity p-0.5 ml-1"
+                                      title="Edit pesan ini (maksimal 15 menit)"
+                                    >
+                                      <PenLine size={11} />
+                                    </button>
+                                  )}
+
+                                  {/* Revoke message button */}
+                                  {isStaff && !isRevoked && gatewayCapability?.supportsRevoke && (
+                                    <button
+                                      onClick={() => handleRevokeMessage(msg)}
+                                      disabled={revokingId === msg.id}
+                                      className="opacity-0 group-hover:opacity-100 hover:text-rose-600 transition-opacity p-0.5 ml-1"
+                                      title="Tarik pesan ini dari WhatsApp"
+                                    >
+                                      {revokingId === msg.id ? (
+                                        <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent"></div>
+                                      ) : (
+                                        <Trash2 size={11} />
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         );
                       })
                     )}
