@@ -1,8 +1,10 @@
-# Implementation Plan: Foundational Fix for Schedule Verification Flow, FastResponseGate Deadlock & Clinical Age Consultation
+# PLAN 7 — FOUNDATIONAL FIX FOR SCHEDULE VERIFICATION FLOW, FASTRESPONSEGATE DEADLOCK & CLINICAL AGE CONSULTATION
 
 Memperbaiki secara sistemik dan fondasional masalah kebuntuan percakapan (*infinite holding stall loop*), kegagalan eskalasi pengecekan jadwal ke live-chat staf manusia, pelanggaran batas rekomendasi terapi sakit pada konsultasi usia sehat, kegagalan pembaruan *latch* preferensi jadwal di sesi, dan terlewatnya perkenalan resmi Turn-0 Bidan Yusi.
 
-## User Review Required
+---
+
+## 📌 User Review Required
 
 > [!IMPORTANT]
 > **Transisi Handoff Cek Jadwal ke Live-Chat Manusia**:
@@ -13,7 +15,7 @@ Memperbaiki secara sistemik dan fondasional masalah kebuntuan percakapan (*infin
 
 ---
 
-## Multi-Layer Root Cause Analysis
+## 🧩 Multi-Layer Root Cause Analysis
 
 1. **Lapisan 1 (FastResponseGate Blind Spot & Deadlock)**:
    `resolvePostReservationAck` di `src/v3/agent/pipeline/context-grounder.ts` dirancang hanya untuk customer yang sudah memiliki `reservationId`. Pada kasus pengecekan jadwal awal di mana `save_reservation` belum dipanggil, gerbang ini mengabaikan pesan pendek (*"oke"*, *"baik"*, *"tunggu ya"*). Akibatnya, pesan diteruskan ke LLM Call 1 Router.
@@ -30,7 +32,7 @@ Memperbaiki secara sistemik dan fondasional masalah kebuntuan percakapan (*infin
 
 ---
 
-## Proposed Changes
+## 🏗️ Proposed Changes
 
 ### Staged Phase Execution Architecture
 
@@ -101,7 +103,7 @@ graph TD
 
 ---
 
-## Verification Plan
+## 🧪 Verification Plan
 
 ### Automated Tests
 1. **Unit Test FastResponseGate Schedule Check**:
