@@ -1301,7 +1301,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
          } catch (createErr: any) {
            const code = createErr?.code || createErr?.error;
            const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
-           const is409 = createErr?.status === 409 || /409/.test(String(createErr?.message || '')) || /duplicate|bentrok|conflict/i.test(String(createErr?.message || ''));
+           const is409 = createErr?.status === 409 || /409/.test(String(createErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(createErr?.message || ''));
            if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
             setConflictInfo({
               code: code || 'DUPLICATE_BOOKING',
