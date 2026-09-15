@@ -19,16 +19,6 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
   - `npm run build` (tsc) exit 0; `npm run build` di `packages/admin-dashboard` (vite) exit 0.
 - **Known Issues**: Mencatat dua temuan terbuka di `docs/KNOWN_ISSUES.md` butir 67 - tumpang-tindih dua definisi "chat terakhir" (sliding window inbound vs Smart Context Guard `last_message_at`), dan jalur `DELETE /api/admin/reservation/:id` yang tidak memanggil `onReservationCancelled`.
 
-#### Dukungan Provider Model Kenari (OpenAI-Compatible Proxy) (2026-09-15)
-
-- **Registrasi Provider (`src/config/ai-models.config.ts`)**: Menambahkan `'Kenari'` ke `SUPPORTED_PROVIDERS`, sehingga seluruh task (CHAT_REPLY, SUMMARIZATION, PII, dsb.) dapat dialihkan ke model Kenari via Admin Dashboard tanpa perubahan kode.
-- **Tabel Tarif Kenari (`src/utils/cost-calculator.ts`)**: Menambahkan entri `MODEL_PRICING_MAP` untuk model Kenari (harga diambil dari `GET https://kenari.id/v1/models`, format micro-IDR/1M token → IDR/1k token):
-  - `deepseek-v4-1-flash` (Rp 0.15 in / Rp 0.004 cache / Rp 0.30 out per 1k token).
-  - `deepseek-v4-pro`, `qwen3-8-flash`, `qwen3-7-plus`, `minimax-m2-7`, dan model gratisan `step-3-7-flash:free` (tarif Rp 0).
-- **Deteksi Provider (`src/utils/cost-calculator.ts`)**: `deriveProvider()` kini mengenali domain `kenari.id` → `'Kenari'` untuk akurasi tracking biaya di `llm_audit_logs`.
-- **Dokumentasi Env (`.env.example`)**: Menambahkan blok komentar konfigurasi Kenari (`OPENAI_BASE_URL="https://kenari.id/v1"`, `LLM_API_KEY="kn-..."`, daftar model yang tersedia).
-- **Unit Tests (`tests/unit/cost-calculator.test.ts`)**: Menambahkan test derivasi provider Kenari, akurasi biaya `deepseek-v4-1-flash`, dan tarif nol model `:free`. 12/12 passed; `npm run build` exit 0.
-
 #### Resolusi Infinite Holding Stall Pengecekan Jadwal, Latch Time Hint, & Isolasi Konsultasi Usia (Plan 7) (2026-09-15)
 
 - **Fase 1 — Goal Tracker & Session Latch Resilience (`src/v3/state/goal-tracker.ts`, `src/v3/agent/pipeline/context-grounder.ts`)**:

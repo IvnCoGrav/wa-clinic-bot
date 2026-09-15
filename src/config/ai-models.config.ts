@@ -123,7 +123,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   ],
 ]);
 
-export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen', 'Kenari'];
+export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen'];
 
 // Registry per-tenant: Map<tenantId, Map<AiTaskType, AiTaskModelConfig>>.
 // Default tenant di-seed dari env pada saat modul dimuat.
