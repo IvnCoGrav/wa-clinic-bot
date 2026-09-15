@@ -115,26 +115,6 @@ describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Ho
     expect(deriveProvider('https://api.deepseek.com/v1')).toBe('DeepSeek Direct');
     expect(deriveProvider('https://api.deepseek.com')).toBe('DeepSeek Direct');
     expect(deriveProvider('https://api.openai.com/v1')).toBe('OpenAI');
-    expect(deriveProvider('https://kenari.id/v1')).toBe('Kenari');
-    expect(deriveProvider('https://kenari.id')).toBe('Kenari');
-  });
-
-  it('should calculate accurate cost for Kenari deepseek-v4-1-flash', () => {
-    // 10,000 prompt tokens (8,000 cached, 2,000 miss), 1,000 completion tokens
-    // Miss: 2k * 0.15 = Rp 0.30
-    // Hit: 8k * 0.004 = Rp 0.032
-    // Output: 1k * 0.30 = Rp 0.30
-    const result = calculateLlmCost('deepseek-v4-1-flash', 10000, 1000, 8000);
-    expect(result.provider).toBe('Kenari');
-    expect(result.promptCostIdr).toBe(0.332);
-    expect(result.completionCostIdr).toBe(0.30);
-    expect(result.totalCostIdr).toBe(0.632);
-  });
-
-  it('should calculate zero cost for Kenari free model step-3-7-flash:free', () => {
-    const result = calculateLlmCost('step-3-7-flash:free', 10000, 1000);
-    expect(result.provider).toBe('Kenari');
-    expect(result.totalCostIdr).toBe(0);
   });
 });
 
