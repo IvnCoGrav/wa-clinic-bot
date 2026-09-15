@@ -18,15 +18,9 @@ export interface ParsedReservation {
   bookingDate: Date | null;
   rawText: string;
   babies: BabyDetail[];
-  /**
-   * Profil ibu multi-audience (first-class, terpisah dari babies):
-   * usia kehamilan tidak boleh dibuang maupun bocor ke usia anak.
-   */
-  momProfile?: {
-    gestationalWeeks?: string;
-    stage?: string;
-    notes?: string;
-  };
+  momProfile?: { gestationalWeeks?: string; stage?: string; notes?: string } | null;
+  /** Jam tanggal ditulis eksplisit oleh customer di form (bukan fallback 09:00 WIB). */
+  hasExplicitTime: boolean;
   payment?: {
     treatmentPrice: number;
     ongkir: number;
@@ -439,14 +433,15 @@ export function parseReservationText(rawText: string): ParseResult {
       kota,
       treatmentCategory,
       treatmentDetail,
-      bookingDate,
-      rawText,
-      babies,
-      momProfile,
-      payment,
-    },
-  };
-}
+       bookingDate,
+       rawText,
+       babies,
+       momProfile,
+       payment,
+       hasExplicitTime: !!timeStr,
+     },
+   };
+ }
 
 /**
  * Ekstrak daftar bayi/anak (nama + usia) dari teks list reservasi mentah.
@@ -851,6 +846,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     rawText,
     babies,
     momProfile,
+    hasExplicitTime: false,
   };
 }
 
