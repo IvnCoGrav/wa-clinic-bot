@@ -60,6 +60,18 @@ export class ReservationConflictError extends Error {
 
 const ACTIVE_STATUSES = ['confirmed', 'hold'];
 const STAFF_BUFFER_MINUTES = 20;
+const WIB_OFFSET_MS = 7 * 3600000;
+
+function getWibCalendarDayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
+  const utcTime = date.getTime();
+  const wibTime = new Date(utcTime + WIB_OFFSET_MS);
+  const year = wibTime.getUTCFullYear();
+  const month = wibTime.getUTCMonth();
+  const day = wibTime.getUTCDate();
+  const dayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - WIB_OFFSET_MS);
+  const dayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) - WIB_OFFSET_MS);
+  return { dayStart, dayEnd };
+}
 
 function effectiveDuration(v: unknown, fallback = 60): number {
   const n = Number(v);
@@ -79,8 +91,9 @@ async function findOverlappingCustomerReservations(params: {
   bookingDate: Date;
   durationMinutes: number;
   excludeId?: string;
-}): Promise<any[]> {
+}): Promise<{ exactConflicts: any[]; sameDayReservations: any[] }> {
   const { tenantId, customerId, bookingDate, durationMinutes } = params;
+  const { dayStart, dayEnd } = getWibCalendarDayBounds(bookingDate);
   const windowStart = new Date(bookingDate.getTime() - durationMinutes * 60000);
   const windowEnd = new Date(bookingDate.getTime() + durationMinutes * 60000);
   let candidates: any[] = [];
@@ -90,22 +103,24 @@ async function findOverlappingCustomerReservations(params: {
         tenant_id: tenantId,
         customer_id: customerId,
         status: { in: ACTIVE_STATUSES },
-        booking_date: { gte: windowStart, lte: windowEnd },
+        booking_date: { gte: dayStart, lte: dayEnd },
       },
       orderBy: { booking_date: 'asc' },
     });
   } catch {
-    // DB offline / lookup gagal → anggap tidak ada konflik di sini; kegagalan
-    // tulis (create/update) di bawah akan diputuskan oleh pemanggil (fallback memory).
-    return [];
+    return { exactConflicts: [], sameDayReservations: [] };
   }
-  return (candidates || []).filter((r: any) => {
+  const activeCandidates = (candidates || []).filter((r: any) => {
     if (!r.booking_date) return false;
     if (params.excludeId && r.id === params.excludeId) return false;
+    return true;
+  });
+  const exactConflicts = activeCandidates.filter((r: any) => {
     const existingStart = new Date(r.booking_date);
     const existingDur = effectiveDuration((r as any).duration_minutes, 60);
     return intervalsOverlap(bookingDate, durationMinutes, existingStart, existingDur);
   });
+  return { exactConflicts, sameDayReservations: activeCandidates };
 }
 
 async function findOverlappingStaffReservations(params: {
@@ -175,56 +190,56 @@ export class ReservationCoreService {
     if (bookingDate && !isNaN(bookingDate.getTime())) {
       const durForCheck = duration ?? 60;
 
-      const customerConflicts = await findOverlappingCustomerReservations({
-        tenantId,
-        customerId,
-        bookingDate,
-        durationMinutes: durForCheck,
-      });
+       const { exactConflicts, sameDayReservations } = await findOverlappingCustomerReservations({
+         tenantId,
+         customerId,
+         bookingDate,
+         durationMinutes: durForCheck,
+       });
+       const customerSameDayActive = sameDayReservations.length > 0;
 
-      if (customerConflicts.length > 0) {
-        if (source === 'ADMIN_PANEL' && !force) {
-          throw new ReservationConflictError('DUPLICATE_BOOKING', customerConflicts[0]);
-        }
-        if (source === 'ADMIN_PANEL' && force) {
-          // Override disengaja: lewati merge, lanjut ke pembuatan record baru
-          // di bawah (sudah dicatat khusus di audit log oleh pemanggil).
-          console.log(`[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${customerConflicts.length} konflik customer.`);
-        } else {
-        // BOT / WEBHOOK / AGENT → idempotent merge ke reservasi pertama,
-        // auto-consolidate sisanya (cancel) agar tak ada kartu hantu.
-        const primary = customerConflicts[0];
-        const duplicates = customerConflicts.slice(1);
-        const updated = await prisma.reservation.update({
-          where: { id: primary.id },
-          data: {
-            treatment_category: (treatmentCategory as TreatmentCategory) || primary.treatment_category,
-            treatment_detail: treatmentDetail !== undefined ? treatmentDetail : primary.treatment_detail,
-            booking_date: bookingDate,
-            duration_minutes: duration ?? (primary as any).duration_minutes ?? null,
-            assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
-            raw_text: effectiveRawText,
-            purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
-          },
-        });
-        let consolidatedCount = 0;
-        for (const dup of duplicates) {
-          try {
-            await prisma.reservation.update({ where: { id: dup.id }, data: { status: 'cancelled' } });
-            consolidatedCount++;
-          } catch {}
-        }
-        if (consolidatedCount > 0) {
-          console.log(`[RESERVATION CORE] Auto-consolidated ${consolidatedCount} duplicate(s) for customer ${customerId} (kept ${primary.id}).`);
-        }
-        const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
-        await reservationLifecycleService.onReservationCreated({
-          customerId, reservationId: updated.id, tenantId, chatId, babies,
-          customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
-        });
-        return { reservation: updated, isNew: false, isUpdate: true, consolidatedCount };
-        } // akhir cabang idempotent merge BOT/WEBHOOK/AGENT
-      }
+       if (exactConflicts.length > 0 || customerSameDayActive) {
+         if (source === 'ADMIN_PANEL' && !force) {
+           throw new ReservationConflictError('DUPLICATE_BOOKING', exactConflicts[0] || sameDayReservations[0]);
+         }
+          if (source === 'ADMIN_PANEL' && force) {
+            console.log(`[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,
+              `customer=${customerId} date=${bookingDate.toISOString()}`);
+          } else {
+         // BOT / WEBHOOK / AGENT → idempotent merge ke reservasi pertama hari ini,
+         // auto-consolidate sisanya (cancel) agar tak ada kartu hantu.
+         const primary = sameDayReservations[0];
+         const duplicates = sameDayReservations.slice(1);
+         const updated = await prisma.reservation.update({
+           where: { id: primary.id },
+           data: {
+             treatment_category: (treatmentCategory as TreatmentCategory) || primary.treatment_category,
+             treatment_detail: treatmentDetail !== undefined ? treatmentDetail : primary.treatment_detail,
+             booking_date: bookingDate,
+             duration_minutes: duration ?? (primary as any).duration_minutes ?? null,
+             assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
+             raw_text: effectiveRawText,
+             purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
+           },
+         });
+         let consolidatedCount = 0;
+         for (const dup of duplicates) {
+           try {
+             await prisma.reservation.update({ where: { id: dup.id }, data: { status: 'cancelled' } });
+             consolidatedCount++;
+           } catch {}
+         }
+         if (consolidatedCount > 0) {
+           console.log(`[RESERVATION CORE] Auto-consolidated ${consolidatedCount} duplicate(s) for customer ${customerId} (kept ${primary.id}).`);
+         }
+         const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
+         await reservationLifecycleService.onReservationCreated({
+           customerId, reservationId: updated.id, tenantId, chatId, babies,
+           customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
+         });
+         return { reservation: updated, isNew: false, isUpdate: true, consolidatedCount };
+         } // akhir cabang idempotent merge BOT/WEBHOOK/AGENT
+       }
 
       if (assignedStaffId) {
         const staffConflicts = await findOverlappingStaffReservations({

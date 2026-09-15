@@ -24,6 +24,21 @@ import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
 dotenv.config();
 
+/** Cari penawaran jam eksplisit (pola "jam 11.00-11.30", "pukul 10.00", dst)
+ *  dari N pesan terakhir riwayat percakapan. Mengembalikan jam dalam format
+ *  ISO string bagian waktu ("HH:mm:ss") atau null bila tidak ditemukan. */
+function findExplicitTimeFromHistory(
+  history: Array<{ role: string; content: string }>,
+  lookback = 3
+): string | null {
+  const timeRe = /(?:jam|pukul|waktu)\s*(\d{1,2})[.:](\d{2})/g;
+  for (let i = history.length - 1; i >= Math.max(0, history.length - lookback); i--) {
+    const m = timeRe.exec(history[i]?.content || '');
+    if (m) return `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}:00`;
+  }
+  return null;
+}
+
 /**
  * Handler event label.chat.added / label.chat.deleted dari WAHA.
  * Meng-update kolom Customer.is_admin_labeled / is_hold_labeled (best-effort)
@@ -1050,23 +1065,28 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const { resolveTreatmentValue: _rtvG } = await import('../services/capi.service');
                   const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvG(p.treatmentDetail)) || undefined;
-                  const { upsertReservationForm: _upsertG } = await import('../services/reservation-lifecycle.service');
-                  const { reservation: r, isNew, isUpdate } = await _upsertG({
-                    tenantId: DEFAULT_TENANT_ID,
-                    customerId: customer.id,
-                    chatId,
-                    treatmentCategory: p.treatmentCategory,
-                    treatmentDetail: p.treatmentDetail,
-                    bookingDate: p.bookingDate,
-                    rawText: raw,
-                    purchaseValue: initialVal,
-                    babies: p.babies || [],
-                    customerName: p.name,
-                    kecamatan: p.kec,
-                    kota: p.kota,
-                    kelurahan: p.address,
-                    source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
-                  });
+                   const { upsertReservationForm: _upsertG } = await import('../services/reservation-lifecycle.service');
+                   const history = conversation?.history || [];
+                   const explicitTimeG = findExplicitTimeFromHistory(history);
+                   const bookingDateG = (explicitTimeG && p.bookingDate)
+                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeG + '+07:00')
+                     : p.bookingDate;
+                   const { reservation: r, isNew, isUpdate } = await _upsertG({
+                     tenantId: DEFAULT_TENANT_ID,
+                     customerId: customer.id,
+                     chatId,
+                     treatmentCategory: p.treatmentCategory,
+                     treatmentDetail: p.treatmentDetail,
+                     bookingDate: bookingDateG,
+                     rawText: raw,
+                     purchaseValue: initialVal,
+                     babies: p.babies || [],
+                     customerName: p.name,
+                     kecamatan: p.kec,
+                     kota: p.kota,
+                     kelurahan: p.address,
+                     source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
+                   });
                   if (isNew || isUpdate) {
                     try { const { fireCapiEvent: _fcG } = await import('../services/capi.service'); _fcG({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_GRACE_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
@@ -1116,23 +1136,28 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const { resolveTreatmentValue: _rtvL } = await import('../services/capi.service');
                   const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvL(p.treatmentDetail)) || undefined;
-                  const { upsertReservationForm: _upsertL } = await import('../services/reservation-lifecycle.service');
-                  const { reservation: r, isNew, isUpdate } = await _upsertL({
-                    tenantId: DEFAULT_TENANT_ID,
-                    customerId: customer.id,
-                    chatId,
-                    treatmentCategory: p.treatmentCategory,
-                    treatmentDetail: p.treatmentDetail,
-                    bookingDate: p.bookingDate,
-                    rawText: raw,
-                    purchaseValue: initialVal,
-                    babies: p.babies || [],
-                    customerName: p.name,
-                    kecamatan: p.kec,
-                    kota: p.kota,
-                    kelurahan: p.address,
-                    source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
-                  });
+                   const { upsertReservationForm: _upsertL } = await import('../services/reservation-lifecycle.service');
+                   const historyL = conversation?.history || [];
+                   const explicitTimeL = findExplicitTimeFromHistory(historyL);
+                   const bookingDateL = (explicitTimeL && p.bookingDate)
+                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeL + '+07:00')
+                     : p.bookingDate;
+                   const { reservation: r, isNew, isUpdate } = await _upsertL({
+                     tenantId: DEFAULT_TENANT_ID,
+                     customerId: customer.id,
+                     chatId,
+                     treatmentCategory: p.treatmentCategory,
+                     treatmentDetail: p.treatmentDetail,
+                     bookingDate: bookingDateL,
+                     rawText: raw,
+                     purchaseValue: initialVal,
+                     babies: p.babies || [],
+                     customerName: p.name,
+                     kecamatan: p.kec,
+                     kota: p.kota,
+                     kelurahan: p.address,
+                     source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
+                   });
                   if (isNew || isUpdate) {
                     try { const { fireCapiEvent: _fcL } = await import('../services/capi.service'); _fcL({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HOLD_DISABLED_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
@@ -1219,23 +1244,28 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const { resolveTreatmentValue: _rtvE } = await import('../services/capi.service');
                   const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvE(p.treatmentDetail)) || undefined;
-                  const { upsertReservationForm: _upsertE } = await import('../services/reservation-lifecycle.service');
-                  const { reservation: r, isNew, isUpdate } = await _upsertE({
-                    tenantId: DEFAULT_TENANT_ID,
-                    customerId: customer.id,
-                    chatId,
-                    treatmentCategory: p.treatmentCategory,
-                    treatmentDetail: p.treatmentDetail,
-                    bookingDate: p.bookingDate,
-                    rawText: raw,
-                    purchaseValue: initialVal,
-                    babies: p.babies || [],
-                    customerName: p.name,
-                    kecamatan: p.kec,
-                    kota: p.kota,
-                    kelurahan: p.address,
-                    source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
-                  });
+                   const { upsertReservationForm: _upsertE } = await import('../services/reservation-lifecycle.service');
+                   const historyE = conversation?.history || [];
+                   const explicitTimeE = findExplicitTimeFromHistory(historyE);
+                   const bookingDateE = (explicitTimeE && p.bookingDate)
+                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeE + '+07:00')
+                     : p.bookingDate;
+                   const { reservation: r, isNew, isUpdate } = await _upsertE({
+                     tenantId: DEFAULT_TENANT_ID,
+                     customerId: customer.id,
+                     chatId,
+                     treatmentCategory: p.treatmentCategory,
+                     treatmentDetail: p.treatmentDetail,
+                     bookingDate: bookingDateE,
+                     rawText: raw,
+                     purchaseValue: initialVal,
+                     babies: p.babies || [],
+                     customerName: p.name,
+                     kecamatan: p.kec,
+                     kota: p.kota,
+                     kelurahan: p.address,
+                     source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
+                   });
                   if (isNew || isUpdate) {
                     try { const { fireCapiEvent: _fcE } = await import('../services/capi.service'); _fcE({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
