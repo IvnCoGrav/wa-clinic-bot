@@ -4,6 +4,43 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Dukungan Provider Model Kenari (OpenAI-Compatible Proxy) (2026-09-15)
+
+- **Registrasi Provider (`src/config/ai-models.config.ts`)**: Menambahkan `'Kenari'` ke `SUPPORTED_PROVIDERS`, sehingga seluruh task (CHAT_REPLY, SUMMARIZATION, PII, dsb.) dapat dialihkan ke model Kenari via Admin Dashboard tanpa perubahan kode.
+- **Tabel Tarif Kenari (`src/utils/cost-calculator.ts`)**: Menambahkan entri `MODEL_PRICING_MAP` untuk model Kenari (harga diambil dari `GET https://kenari.id/v1/models`, format micro-IDR/1M token → IDR/1k token):
+  - `deepseek-v4-1-flash` (Rp 0.15 in / Rp 0.004 cache / Rp 0.30 out per 1k token).
+  - `deepseek-v4-pro`, `qwen3-8-flash`, `qwen3-7-plus`, `minimax-m2-7`, dan model gratisan `step-3-7-flash:free` (tarif Rp 0).
+- **Deteksi Provider (`src/utils/cost-calculator.ts`)**: `deriveProvider()` kini mengenali domain `kenari.id` → `'Kenari'` untuk akurasi tracking biaya di `llm_audit_logs`.
+- **Dokumentasi Env (`.env.example`)**: Menambahkan blok komentar konfigurasi Kenari (`OPENAI_BASE_URL="https://kenari.id/v1"`, `LLM_API_KEY="kn-..."`, daftar model yang tersedia).
+- **Unit Tests (`tests/unit/cost-calculator.test.ts`)**: Menambahkan test derivasi provider Kenari, akurasi biaya `deepseek-v4-1-flash`, dan tarif nol model `:free`. 12/12 passed; `npm run build` exit 0.
+
+#### Resolusi Infinite Holding Stall Pengecekan Jadwal, Latch Time Hint, & Isolasi Konsultasi Usia (Plan 7) (2026-09-15)
+
+- **Fase 1 — Goal Tracker & Session Latch Resilience (`src/v3/state/goal-tracker.ts`, `src/v3/agent/pipeline/context-grounder.ts`)**:
+  - Menambahkan field `pendingScheduleCheck?: boolean` pada `BookingState`.
+  - Format status sesi di prompt (`formatGoalSessionForPrompt`) kini menampilkan `requestedTimeHint` dan status `pendingScheduleCheck` secara eksplisit sehingga LLM sadar permintaan hari/waktu customer sudah terekam.
+  - Memperluas deteksi `extractTimeHint` dan `hasScheduleSignal` untuk menangkap token hari kerja (`'hari biasa'`, `'weekday'`, `'weekdays'`).
+  - Memperbaiki persistensi latching atomik pada `applySessionLatches` (`session.booking` diupdate in-place dan disimpan bersama payload sesi utuh ke `GoalTracker.updateGoalSession`), mencegah amnesia lokasi saat terjadi fallback store memori offline.
+- **Fase 2 — FastResponseGate Schedule Verification Handoff & Anti-Looping (`src/v3/agent/pipeline/context-grounder.ts`)**:
+  - Menambahkan template respon deterministik `POST_SCHEDULE_CHECK_CLOSING`: penegasan pengecekan rute/jadwal tanpa tanya balik berulang.
+  - Memperluas token pengakuan tunggu `POST_RESERVATION_ACK_TOKENS` (`tunggu`, `kabari`, `nanti`, `ditunggu`) dan ignorables (`min`, `admin`, `aku`, `saya`).
+  - Menghubungkan FastResponseGate: pada putaran pertama pengakuan tunggu saat `pendingScheduleCheck === true`, bot mengirimkan `POST_SCHEDULE_CHECK_CLOSING` dan langsung mengeksekusi handoff/eskalasi live chat (`isEscalated: true`, `escalationReason: 'pending_schedule_check'`).
+  - Pada putaran ke-2 dan seterusnya, FastResponseGate melakukan *silent skip* (`shouldSendReply: false`, 0 token), mencegah bot kaset rusak mengulang janji cek jadwal yang sama.
+- **Fase 3 — Isolasi Konsultasi Usia Sehat vs Terapi Sakit (`src/v3/tools/get-catalog.tool.ts`, `src/v3/agent/persona.ts`)**:
+  - Menyematkan pembobotan `healthyPriorityOf` pada pengurutan layanan (`formattedTreatments.sort`): ketika customer berkonsultasi usia anak tanpa menyebutkan keluhan sakit (`symptoms.length === 0`), paket terapi batuk/pilek/kembung (`isSickTherapyService` seperti *Pulih Ceria*) ditenggelamkan ke prioritas bawah. Paket relaksasi & nutrisi sehat (*Pijat Bayi Ceria*, *Pijat Bayi Lahap Juara*) diprioritaskan di posisi teratas.
+  - Memperbarui instruksi KONDISI A.1 di persona prompt: dilarang keras merekomendasikan terapi bapil atau menyinggung batuk/pilek/kembung bila customer tidak menyampaikan keluhan medis.
+  - Menambahkan instruksi anti-looping pada router prompt ketika customer sekadar mengonfirmasi atau menunggu pengecekan jadwal.
+- **Fase 4 — Turn-0 Greeting & Operational Hours Clarity (`src/v3/agent/persona.ts`, `src/v3/agent/pipeline/generation-stage.ts`)**:
+  - Menambahkan panduan jam operasional (08.00–17.00 WIB) dan koordinasi rute bidan pada instruksi persona ketika customer menanyakan jadwal di luar jam operasional atau hari biasa.
+  - Menambahkan mekanisme penjaminan sapaan resmi pembuka (*deterministic Turn-0 greeting prefix*): jika bot berada di awal percakapan (Turn-0) dan respons model belum memuat sapaan/perkenalan, prefix resmi Bidan Yusi disematkan secara mulus.
+- **Regression & Unit Tests**:
+  - `tests/unit/v3/fast-response-gate-schedule.test.ts`: 4/4 passed.
+  - `tests/unit/v3/time-hint-latch.test.ts`: 2/2 passed.
+  - `tests/unit/v3/age-consultation-isolation.test.ts`: 2/2 passed.
+  - `tests/unit/v3-*.test.ts`: 86/86 passed.
+  - `tests/v3/agent-runner.test.ts` & `agent-tools.test.ts`: 19/19 passed.
+  - `npm run build`: kompilasi TypeScript exit 0 tanpa error.
+
 #### Resolusi Fondasional Bug Chat Freeze / Tidak Bisa Scroll Portal Terapis (2026-09-14)
 
 - **Fase 1 — Kunci Ketinggian Viewport Rigid & Perbaikan Rantai Flexbox (`StaffToday.tsx`)**:
