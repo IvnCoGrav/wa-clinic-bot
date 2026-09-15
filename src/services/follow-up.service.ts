@@ -7,6 +7,7 @@ import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
 import { parsePositiveInt } from '../utils/env-numeric';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import {
   sanitizeCustomerNameForGreeting,
   formatGreetingBunda,
@@ -290,10 +291,22 @@ export class FollowUpService {
    */
   public async createNoPurchaseFollowUps(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
       try {
-        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
-        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+        const customer = await prisma.customer?.findUnique?.({
+          where: { id: customerId },
+          include: { labels: { include: { label: true } } },
+        });
+        if (
+          customer &&
+          (customer.is_sandbox_test ||
+            customer.is_admin_labeled ||
+            hasBypassLabel(customer) ||
+            isDummyOrTestContact(customer.phone, customer.name))
+        ) {
+          return;
+        }
+        if (await checkCustomerBypass({ customerId, tenantId })) {
           return;
         }
       } catch (_) {}
@@ -421,10 +434,22 @@ export class FollowUpService {
     } = params;
 
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
       try {
-        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
-        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+        const customer = await prisma.customer?.findUnique?.({
+          where: { id: customerId },
+          include: { labels: { include: { label: true } } },
+        });
+        if (
+          customer &&
+          (customer.is_sandbox_test ||
+            customer.is_admin_labeled ||
+            hasBypassLabel(customer) ||
+            isDummyOrTestContact(customer.phone, customer.name))
+        ) {
+          return;
+        }
+        if (await checkCustomerBypass({ customerId, tenantId })) {
           return;
         }
       } catch (_) {}
@@ -606,10 +631,22 @@ export class FollowUpService {
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
       try {
-        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
-        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+        const customer = await prisma.customer?.findUnique?.({
+          where: { id: customerId },
+          include: { labels: { include: { label: true } } },
+        });
+        if (
+          customer &&
+          (customer.is_sandbox_test ||
+            customer.is_admin_labeled ||
+            hasBypassLabel(customer) ||
+            isDummyOrTestContact(customer.phone, customer.name))
+        ) {
+          return;
+        }
+        if (await checkCustomerBypass({ customerId, tenantId })) {
           return;
         }
       } catch (_) {}
@@ -919,6 +956,14 @@ export class FollowUpService {
           customer: {
             status: { not: 'blocked' },
             is_sandbox_test: false,
+            is_admin_labeled: false,
+            labels: {
+              none: {
+                label: {
+                  name: { in: ['Skip', 'skip', 'SKIP', 'Admin (CS)', 'admin (cs)', 'Admin CS', 'admin cs', 'Admin', 'admin'] },
+                },
+              },
+            },
           },
         },
         include: {
@@ -933,6 +978,9 @@ export class FollowUpService {
           customer: {
             include: {
               children: true,
+              labels: {
+                include: { label: true },
+              },
               conversations: {
                 select: {
                   last_message_at: true,
@@ -966,6 +1014,16 @@ export class FollowUpService {
       const cooldownMs = cooldownHours * 60 * 60 * 1000;
 
       for (const fu of dueFollowUps) {
+        // Bypass Guard: Jangan kirim follow-up untuk customer berlabel Skip atau Admin CS
+        if (fu.customer && (fu.customer.is_admin_labeled || hasBypassLabel(fu.customer))) {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} for ${fu.customer?.phone} is SKIPPED (Bypass contact label).`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED' },
+          });
+          continue;
+        }
+
         // Kebijakan Klinik: Follow-up Reminder H-1 dan Review H+1 di-postpone (ditunda pengirimannya sementara)
         if (fu.type === 'REMINDER_H1' || fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.type}) for ${fu.customer?.phone} is POSTPONED by clinic policy. Skipping automatic send.`);
