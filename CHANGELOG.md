@@ -7,12 +7,10 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 #### Dukungan Provider Model Kenari (OpenAI-Compatible Proxy) (2026-09-15)
 
 - **Registrasi Provider (`src/config/ai-models.config.ts`)**: Menambahkan `'Kenari'` ke `SUPPORTED_PROVIDERS`, sehingga seluruh task (CHAT_REPLY, SUMMARIZATION, PII, dsb.) dapat dialihkan ke model Kenari via Admin Dashboard tanpa perubahan kode.
-- **Tabel Tarif Kenari (`src/utils/cost-calculator.ts`)**: Menambahkan entri `MODEL_PRICING_MAP` untuk model Kenari (harga diambil dari `GET https://kenari.id/v1/models`, format micro-IDR/1M token → IDR/1k token):
-  - `deepseek-v4-1-flash` (Rp 0.15 in / Rp 0.004 cache / Rp 0.30 out per 1k token).
-  - `deepseek-v4-pro`, `qwen3-8-flash`, `qwen3-7-plus`, `minimax-m2-7`, dan model gratisan `step-3-7-flash:free` (tarif Rp 0).
+- **Tabel Tarif Kenari (`src/utils/cost-calculator.ts`)**: Menambahkan entri `MODEL_PRICING_MAP` untuk seluruh model chat Kenari (harga dari `GET https://kenari.id/v1/models`, format micro-IDR/1M token → IDR/1k token). Termasuk 68+ model: Anthropic (Claude Opus/Sonnet/Fable), OpenAI (GPT-5-4/5-5/5-6/GPT-6/OSS), Google Gemini (2.5/3.1/3.6/3.7/3.8), xAI (Grok), Meta (Muse Spark), Moonshot (Kimi), NVIDIA (Nemotron), MiniMax, DeepSeek, Qwen, StepFun, Z-AI/GLM, Xiaomi/Mimo, Tencent (Hy), dan 12+ model gratisan (`:free`).
 - **Deteksi Provider (`src/utils/cost-calculator.ts`)**: `deriveProvider()` kini mengenali domain `kenari.id` → `'Kenari'` untuk akurasi tracking biaya di `llm_audit_logs`.
 - **Dokumentasi Env (`.env.example`)**: Menambahkan blok komentar konfigurasi Kenari (`OPENAI_BASE_URL="https://kenari.id/v1"`, `LLM_API_KEY="kn-..."`, daftar model yang tersedia).
-- **Unit Tests (`tests/unit/cost-calculator.test.ts`)**: Menambahkan test derivasi provider Kenari, akurasi biaya `deepseek-v4-1-flash`, dan tarif nol model `:free`. 12/12 passed; `npm run build` exit 0.
+- **Unit Tests (`tests/unit/cost-calculator.test.ts`)**: Menambahkan test derivasi provider Kenari, akurasi biaya `deepseek-v4-1-flash`, dan tarif nol model `:free`. 12/12 passed; `npm run build` exit 0. Semua 68+ model Kenari sekarang punya pricing entry yang akurat.
 
 #### Resolusi Infinite Holding Stall Pengecekan Jadwal, Latch Time Hint, & Isolasi Konsultasi Usia (Plan 7) (2026-09-15)
 
