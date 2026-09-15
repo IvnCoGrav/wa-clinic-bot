@@ -196,67 +196,98 @@ export class ReservationCoreService {
          bookingDate,
          durationMinutes: durForCheck,
        });
+
+       const confirmedSameDay = sameDayReservations.filter((r: any) => r.status !== 'hold');
+       const holdSameDay = sameDayReservations.filter((r: any) => r.status === 'hold');
        const customerSameDayActive = sameDayReservations.length > 0;
 
-       if (exactConflicts.length > 0 || customerSameDayActive) {
-         if (source === 'ADMIN_PANEL' && !force) {
-           throw new ReservationConflictError('DUPLICATE_BOOKING', exactConflicts[0] || sameDayReservations[0]);
-         }
-          if (source === 'ADMIN_PANEL' && force) {
-            console.log(`[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,
-              `customer=${customerId} date=${bookingDate.toISOString()}`);
-          } else {
-         // BOT / WEBHOOK / AGENT → idempotent merge ke reservasi pertama hari ini,
-         // auto-consolidate sisanya (cancel) agar tak ada kartu hantu.
-         const primary = sameDayReservations[0];
-         const duplicates = sameDayReservations.slice(1);
-         const updated = await prisma.reservation.update({
-           where: { id: primary.id },
-           data: {
-             treatment_category: (treatmentCategory as TreatmentCategory) || primary.treatment_category,
-             treatment_detail: treatmentDetail !== undefined ? treatmentDetail : primary.treatment_detail,
-             booking_date: bookingDate,
-             duration_minutes: duration ?? (primary as any).duration_minutes ?? null,
-             assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
-             raw_text: effectiveRawText,
-             purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
-           },
-         });
-         let consolidatedCount = 0;
-         for (const dup of duplicates) {
-           try {
-             await prisma.reservation.update({ where: { id: dup.id }, data: { status: 'cancelled' } });
-             consolidatedCount++;
-           } catch {}
-         }
-         if (consolidatedCount > 0) {
-           console.log(`[RESERVATION CORE] Auto-consolidated ${consolidatedCount} duplicate(s) for customer ${customerId} (kept ${primary.id}).`);
-         }
-         const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
-         await reservationLifecycleService.onReservationCreated({
-           customerId, reservationId: updated.id, tenantId, chatId, babies,
-           customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
-         });
-         return { reservation: updated, isNew: false, isUpdate: true, consolidatedCount };
-         } // akhir cabang idempotent merge BOT/WEBHOOK/AGENT
+       // Kasus 1: Konflik Nyata ADMIN_PANEL — customer SUDAH memiliki reservasi 'confirmed' hari ini
+       if (source === 'ADMIN_PANEL' && !force && confirmedSameDay.length > 0) {
+         throw new ReservationConflictError('DUPLICATE_BOOKING', exactConflicts.find((r: any) => r.status === 'confirmed') || confirmedSameDay[0]);
        }
 
-      if (assignedStaffId) {
-        const staffConflicts = await findOverlappingStaffReservations({
-          tenantId,
-          staffId: assignedStaffId,
-          bookingDate,
-          durationMinutes: durForCheck,
-        });
-        if (staffConflicts.length > 0 && source === 'ADMIN_PANEL' && !force) {
-          throw new ReservationConflictError('STAFF_COLLISION', staffConflicts[0]);
-        }
-        // Jalur BOT/WEBHOOK/AGENT: staff collision tidak digagalkan (best-effort),
-        // hanya dicatat agar admin bisa re-assign manual.
-        if (staffConflicts.length > 0 && source !== 'ADMIN_PANEL') {
-          console.warn(`[RESERVATION CORE] Staff collision tolerated on ${source} path (staff=${assignedStaffId}, kept new/merged record).`);
-        }
-      }
+       // Validasi bentrok terapis (jika ada assignedStaffId)
+       if (assignedStaffId) {
+         const staffConflicts = await findOverlappingStaffReservations({
+           tenantId,
+           staffId: assignedStaffId,
+           bookingDate,
+           durationMinutes: durForCheck,
+           excludeId: sameDayReservations[0]?.id,
+         });
+         if (staffConflicts.length > 0 && source === 'ADMIN_PANEL' && !force) {
+           throw new ReservationConflictError('STAFF_COLLISION', staffConflicts[0]);
+         }
+         if (staffConflicts.length > 0 && source !== 'ADMIN_PANEL') {
+           console.warn(`[RESERVATION CORE] Staff collision tolerated on ${source} path (staff=${assignedStaffId}, kept new/merged record).`);
+         }
+       }
+
+       if (exactConflicts.length > 0 || customerSameDayActive) {
+         if (source === 'ADMIN_PANEL' && force) {
+           console.log(
+             `[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,
+             `customer=${customerId} date=${bookingDate.toISOString()}`
+           );
+         } else {
+           // Berlaku untuk:
+           // a) ADMIN_PANEL saat customer HANYA punya hold (confirmedSameDay.length === 0 & holdSameDay.length > 0)
+           //    -> Auto-upgrade slot hold milik customer tersebut menjadi confirmed!
+           // b) BOT / WEBHOOK / AGENT -> Idempotent merge ke reservasi pertama hari ini
+           const primary = sameDayReservations[0];
+           const duplicates = sameDayReservations.slice(1);
+           const targetStatus = status || 'confirmed';
+
+           const updated = await prisma.reservation.update({
+             where: { id: primary.id },
+             data: {
+               status: targetStatus,
+               treatment_category: (treatmentCategory as TreatmentCategory) || primary.treatment_category,
+               treatment_detail: treatmentDetail !== undefined ? treatmentDetail : primary.treatment_detail,
+               booking_date: bookingDate,
+               duration_minutes: duration ?? (primary as any).duration_minutes ?? null,
+               assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
+               raw_text: effectiveRawText,
+               purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
+             },
+           });
+
+           let consolidatedCount = 0;
+           for (const dup of duplicates) {
+             try {
+               await prisma.reservation.update({ where: { id: dup.id }, data: { status: 'cancelled' } });
+               consolidatedCount++;
+             } catch {}
+           }
+           if (consolidatedCount > 0) {
+             console.log(`[RESERVATION CORE] Auto-consolidated ${consolidatedCount} duplicate(s) for customer ${customerId} (kept ${primary.id}).`);
+           }
+
+           const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
+           await reservationLifecycleService.onReservationCreated({
+             customerId, reservationId: updated.id, tenantId, chatId, babies,
+             customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
+           });
+
+           // Follow-up otomatis untuk reservasi yang dikonfirmasi
+           if (targetStatus === 'confirmed' && bookingDate) {
+             try {
+               const { followUpService } = await import('./follow-up.service');
+               await followUpService.createReservationFollowUps({
+                 reservationId: updated.id,
+                 customerId,
+                 bookingDate,
+                 treatmentCategory: validCategory,
+                 tenantId,
+               });
+             } catch (fuErr: any) {
+               console.warn('[RESERVATION CORE] Failed to create follow-ups for upgraded reservation:', fuErr.message);
+             }
+           }
+
+           return { reservation: updated, isNew: false, isUpdate: true, consolidatedCount };
+         }
+       }
     }
 
     // --- Tidak ada konflik: buat baru (atau fallback upsert 24 jam bila tanpa tanggal) ---

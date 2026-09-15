@@ -2556,6 +2556,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       toast('Pilih percakapan customer terlebih dahulu.', 'info');
       return;
     }
+    // Jika chat ini sedang memiliki slot hold aktif, langsung arahkan untuk melengkapi hold tersebut
+    if (activeHoldReservation) {
+      handleConvertHoldToBooking(activeHoldReservation);
+      return;
+    }
     if (reservationStaffList.length === 0) {
       try {
         const staffRes = await apiRequest('/api/admin/staff');
