@@ -90,4 +90,93 @@ describe('Same-Day Reservation Collision Guard (sesi Bunda Lutfia #6282229353440
       expect(res.consolidatedCount).toBe(1);
     }
   });
+
+  // --- Adversarial Test 6 (Bunda 0185 #628551000185): Slot Hold milik customer sendiri auto-upgrade ke Confirmed
+  it('ADMIN_PANEL: customer punya slot HOLD di hari sama → auto-upgrade ke CONFIRMED, TIDAK melempar DUPLICATE_BOOKING', async () => {
+    const holdSlot = new Date('2026-09-16T09:00:00.000Z');
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
+      {
+        id: 'hold-res-9b463d6f',
+        booking_date: holdSlot,
+        duration_minutes: 60,
+        treatment_category: 'BABY',
+        treatment_detail: '[HOLD] Slot Ditawarkan (BABY) [60m]',
+        purchase_value: 0,
+        assigned_staff_id: null,
+        status: 'hold',
+      } as any,
+    ]);
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({
+      id: 'hold-res-9b463d6f',
+      status: 'confirmed',
+      treatment_detail: 'Pijat Bayi Pulih Ceria [Total 75m]',
+      purchase_value: 85000,
+      assigned_staff_id: 'staff-bidan-1',
+    } as any);
+
+    const res = await reservationCoreService.saveReservation({
+      ...base,
+      source: 'ADMIN_PANEL',
+      status: 'confirmed',
+      force: false,
+      bookingDate: holdSlot,
+      treatmentDetail: 'Pijat Bayi Pulih Ceria [Total 75m]',
+      purchaseValue: 85000,
+      assignedStaffId: 'staff-bidan-1',
+    });
+
+    expect(res.isNew).toBe(false);
+    expect(res.isUpdate).toBe(true);
+    expect(res.reservation.id).toBe('hold-res-9b463d6f');
+    expect(res.reservation.status).toBe('confirmed');
+    expect(prisma.reservation.create).not.toHaveBeenCalled();
+    expect(prisma.reservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'hold-res-9b463d6f' },
+        data: expect.objectContaining({
+          status: 'confirmed',
+          treatment_detail: 'Pijat Bayi Pulih Ceria [Total 75m]',
+          purchase_value: 85000,
+        }),
+      })
+    );
+  });
+
+  // --- Adversarial Test 7: Hold upgrade tetap menjaga bentrok staf lain jika staf tidak tersedia
+  it('ADMIN_PANEL hold upgrade: staf yang dipilih bentrok di jadwal lain → lempar STAFF_COLLISION', async () => {
+    const holdSlot = new Date('2026-09-16T09:00:00.000Z');
+    // findOverlappingCustomerReservations: customer punya hold
+    vi.mocked(prisma.reservation.findMany)
+      .mockResolvedValueOnce([
+        {
+          id: 'hold-res-9b463d6f',
+          booking_date: holdSlot,
+          duration_minutes: 60,
+          treatment_category: 'BABY',
+          treatment_detail: '[HOLD] Slot Ditawarkan',
+          status: 'hold',
+        } as any,
+      ])
+      // findOverlappingStaffReservations: staff punya jadwal lain (bukan hold-res-9b463d6f)
+      .mockResolvedValueOnce([
+        {
+          id: 'other-patient-booking',
+          booking_date: holdSlot,
+          duration_minutes: 60,
+          assigned_staff_id: 'busy-staff',
+          status: 'confirmed',
+        } as any,
+      ]);
+
+    await expect(
+      reservationCoreService.saveReservation({
+        ...base,
+        source: 'ADMIN_PANEL',
+        status: 'confirmed',
+        force: false,
+        bookingDate: holdSlot,
+        assignedStaffId: 'busy-staff',
+      })
+    ).rejects.toMatchObject({ code: 'STAFF_COLLISION', statusCode: 409 });
+  });
 });
