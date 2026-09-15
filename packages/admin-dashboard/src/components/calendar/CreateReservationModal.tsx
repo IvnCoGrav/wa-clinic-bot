@@ -637,9 +637,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
       setAssignedStaffId(res.assigned_staff_id || (res as any).assigned_staff?.id || '');
 
-      const validStatus = ['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status)
-        ? res.status
-        : 'confirmed';
+       // Jika membuka hold untuk diedit/dilengkapi, default 'confirmed'
+       const validStatus = res.status === 'hold'
+         ? 'confirmed'
+         : (['pending', 'confirmed', 'completed', 'cancelled'].includes(res.status) ? res.status : 'confirmed');
       setStatus(validStatus as any);
       const extractedNotes = res.notes || (() => {
         if (!res.raw_text) return '';
@@ -1297,10 +1298,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           discardDraft(true);
           onSuccess(res?.reservation || res?.data || res);
           onClose();
-        } catch (createErr: any) {
-          const code = createErr?.code || createErr?.error;
-          const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
-          if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || /409/.test(String(createErr?.message || ''))) {
+         } catch (createErr: any) {
+           const code = createErr?.code || createErr?.error;
+           const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
+           const is409 = createErr?.status === 409 || /409/.test(String(createErr?.message || '')) || /duplicate|bentrok|conflict/i.test(String(createErr?.message || ''));
+           if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
             setConflictInfo({
               code: code || 'DUPLICATE_BOOKING',
               message: createErr?.message || 'Jadwal bentrok dengan reservasi aktif.',

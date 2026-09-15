@@ -386,7 +386,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
   const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
-  const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
+   const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
+   const [activeEditingHoldReservation, setActiveEditingHoldReservation] = useState<any | null>(null);
   // Smart Micro-Pill auto-collapse (mobile <768px): banner penuh 3 detik lalu menciut
   const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
   const [userManuallyExpanded, setUserManuallyExpanded] = useState(false);
@@ -2603,22 +2604,23 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     await handleOpenQuickHold();
   };
 
-  const handleConvertHoldToBooking = (holdRes: any) => {
-    const d = new Date(holdRes.booking_date);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    setConvertingHoldId(holdRes.id);
-    setQuickBookingTargetSlot({
-      date: `${yyyy}-${mm}-${dd}`,
-      hour: d.getHours(),
-      timeStr: `${hh}:${min}`,
-      staffId: holdRes.assigned_staff_id,
-    });
-    setShowQuickBookingModal(true);
-  };
+   const handleConvertHoldToBooking = (holdRes: any) => {
+     const d = new Date(holdRes.booking_date);
+     const yyyy = d.getFullYear();
+     const mm = String(d.getMonth() + 1).padStart(2, '0');
+     const dd = String(d.getDate()).padStart(2, '0');
+     const hh = String(d.getHours()).padStart(2, '0');
+     const min = String(d.getMinutes()).padStart(2, '0');
+     setConvertingHoldId(holdRes.id);
+     setActiveEditingHoldReservation(holdRes);
+     setQuickBookingTargetSlot({
+       date: `${yyyy}-${mm}-${dd}`,
+       hour: d.getHours(),
+       timeStr: `${hh}:${min}`,
+       staffId: holdRes.assigned_staff_id,
+     });
+     setShowQuickBookingModal(true);
+   };
 
   const handleConfirmPendingBooking = async (pendingRes: any) => {
     const dateStr = pendingRes.booking_date
@@ -5215,11 +5217,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         />
       )}
 
-      {/* Quick Create Reservation Modal dari Live Chat */}
-      {showQuickBookingModal && (
-        <CreateReservationModal
-          isOpen={showQuickBookingModal}
-          onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setQuickBookingTargetSlot(null); }}
+       {/* Quick Create Reservation Modal dari Live Chat */}
+       {showQuickBookingModal && (
+         <CreateReservationModal
+           isOpen={showQuickBookingModal}
+           mode={activeEditingHoldReservation ? 'edit' : 'create'}
+           initialReservation={activeEditingHoldReservation || undefined}
+           onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setActiveEditingHoldReservation(null); setQuickBookingTargetSlot(null); }}
           staffList={reservationStaffList}
           initialSlotTarget={quickBookingTargetSlot}
           initialCustomer={
@@ -5238,20 +5242,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 } : null)
           }
           initialCustomerId={selectedChat?.customerId}
-          onSuccess={async (newRes) => {
-            setShowQuickBookingModal(false);
-            if (convertingHoldId) {
-              try {
-                await apiRequest(`/api/admin/reservation/${convertingHoldId}/release-hold`, { method: 'PATCH' });
-              } catch {}
-              setConvertingHoldId(null);
-              setQuickBookingTargetSlot(null);
-            }
-            await handleReservationUpdate();
-            if (newRes) {
-              handleGenerateAndInsertInvoice(newRes);
-            }
-          }}
+           onSuccess={async (newRes) => {
+             setShowQuickBookingModal(false);
+             setConvertingHoldId(null);
+             setActiveEditingHoldReservation(null);
+             setQuickBookingTargetSlot(null);
+             await handleReservationUpdate();
+             if (newRes) {
+               handleGenerateAndInsertInvoice(newRes);
+             }
+           }}
         />
       )}
 
