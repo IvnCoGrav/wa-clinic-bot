@@ -189,43 +189,345 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     completionCostPer1kIdr: (0.30 / 1000) * USD_TO_IDR,
   },
 
-  // Kenari Models (https://kenari.id/v1) — harga dalam micro-IDR/1M token, dikonversi ke IDR/1k token.
-  // Kenari adalah OpenAI-compatible proxy; model-model di bawah adalah yang unik/berbeda dari yang sudah ada di atas.
-  // Harga lengkap via GET /v1/models (publik, tanpa key).
+  // DeepSeek :free variants (Kenari mendukung :free suffix untuk semua model)
+  'deepseek-v4-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'deepseek-v4-1-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'deepseek-v4-pro:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // Claude :free variants
+  // Format asli: micro-IDR per 1M token → dikonversi ke IDR per 1k token (÷ 1_000_000).
+  // Model dengan nama yang SUDAH ada di atas (mis. deepseek-v4-flash, minimax-m2.7-highspeed)
+  // tidak diduplikasi — entry yang ada sudah dipakai saat OPENAI_BASE_URL=kenari.id/v1.
+  // Model :free ditandai promptCostPer1kIdr=0 & completionCostPer1kIdr=0.
+
+  // Agnes (gratis)
+  'agnes-2-0-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'agnes-2-5-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'agnes-3-0-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // Anthropic
+  'claude-fable-5': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 210.0,
+    promptCacheHitCostPer1kIdr: 21.0,
+    completionCostPer1kIdr: 1000.0,
+  },
+  'claude-opus-4-7': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 100.0,
+    promptCacheHitCostPer1kIdr: 10.0,
+    completionCostPer1kIdr: 520.0,
+  },
+  'claude-opus-4-8': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 100.0,
+    promptCacheHitCostPer1kIdr: 10.0,
+    completionCostPer1kIdr: 520.0,
+  },
+  'claude-opus-5': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 100.0,
+    promptCacheHitCostPer1kIdr: 40.0,
+    completionCostPer1kIdr: 500.0,
+  },
+  'claude-sonnet-4-6': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 63.0,
+    promptCacheHitCostPer1kIdr: 6.3,
+    completionCostPer1kIdr: 310.0,
+  },
+  'claude-sonnet-5': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 20.0,
+    promptCacheHitCostPer1kIdr: 2.0,
+    completionCostPer1kIdr: 100.0,
+  },
+
+  // Cohere (gratis)
+  'north-mini-code:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // DeepSeek (baru)
   'deepseek-v4-1-flash': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 0.15,  // 150,000,000 micro-IDR / 1M
-    promptCacheHitCostPer1kIdr: 0.004,  // 4,000,000 micro-IDR / 1M
-    completionCostPer1kIdr: 0.30,  // 300,000,000 micro-IDR / 1M
+    promptCostPer1kIdr: 0.15,
+    promptCacheHitCostPer1kIdr: 0.004,
+    completionCostPer1kIdr: 0.30,
   },
   'deepseek-v4-pro': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 10.0,  // 10,000,000,000 micro-IDR / 1M
-    promptCacheHitCostPer1kIdr: 0.10,  // 100,000,000 micro-IDR / 1M
-    completionCostPer1kIdr: 20.0,  // 20,000,000,000 micro-IDR / 1M
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 0.10,
+    completionCostPer1kIdr: 20.0,
   },
-  'qwen3-8-flash': {
+
+  // Google Gemini (baru)
+  'gemini-2-5-flash': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 3.0,  // 3,000,000,000 micro-IDR / 1M
-    promptCacheHitCostPer1kIdr: 0.30,  // 300,000,000 micro-IDR / 1M
-    completionCostPer1kIdr: 7.5,  // 7,500,000,000 micro-IDR / 1M
+    promptCostPer1kIdr: 2.0,
+    promptCacheHitCostPer1kIdr: 0.20,
+    completionCostPer1kIdr: 15.0,
   },
-  'qwen3-7-plus': {
+  'gemini-2-5-flash-lite': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 6.7,  // 6,700,000,000 micro-IDR / 1M
-    promptCacheHitCostPer1kIdr: 1.3,  // 1,300,000,000 micro-IDR / 1M
-    completionCostPer1kIdr: 26.0,  // 26,000,000,000 micro-IDR / 1M
+    promptCostPer1kIdr: 0.40,
+    promptCacheHitCostPer1kIdr: 0.04,
+    completionCostPer1kIdr: 1.7,
   },
+  'gemini-3-1-pro': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 21.0,
+    promptCacheHitCostPer1kIdr: 2.1,
+    completionCostPer1kIdr: 125.0,
+  },
+  'gemini-3-6-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.0,
+    promptCacheHitCostPer1kIdr: 0.60,
+    completionCostPer1kIdr: 30.0,
+  },
+  'gemini-3-7-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.0,
+    promptCacheHitCostPer1kIdr: 0.60,
+    completionCostPer1kIdr: 30.0,
+  },
+  'gemini-3-8-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.0,
+    promptCacheHitCostPer1kIdr: 0.60,
+    completionCostPer1kIdr: 30.0,
+  },
+  'gemma-4-31b-it': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 1.8,
+    promptCacheHitCostPer1kIdr: 0.72,
+    completionCostPer1kIdr: 7.1,
+  },
+
+  // Meta
+  'muse-spark-1-2': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 20.0,
+    promptCacheHitCostPer1kIdr: 2.0,
+    completionCostPer1kIdr: 80.0,
+  },
+  'muse-spark-1-2-contributor': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 2.0,
+    promptCacheHitCostPer1kIdr: 0.04,
+    completionCostPer1kIdr: 4.0,
+  },
+  'muse-spark-1-2-contributor:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
+  'muse-spark-1-3': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 20.0,
+    promptCacheHitCostPer1kIdr: 2.0,
+    completionCostPer1kIdr: 80.0,
+  },
+  'muse-spark-1-3-contributor': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 2.0,
+    promptCacheHitCostPer1kIdr: 0.04,
+    completionCostPer1kIdr: 4.0,
+  },
+  'muse-spark-1-3-contributor:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
+
+  // MiniMax (baru — model existing seperti minimax-m2.7-highspeed sudah ada di atas)
   'minimax-m2-7': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 6.3,  // 6,300,000,000 micro-IDR / 1M
-    promptCacheHitCostPer1kIdr: 1.2,  // 1,200,000,000 micro-IDR / 1M
-    completionCostPer1kIdr: 25.0,  // 25,000,000,000 micro-IDR / 1M
+    promptCostPer1kIdr: 6.3,
+    promptCacheHitCostPer1kIdr: 1.2,
+    completionCostPer1kIdr: 25.0,
+  },
+
+  // Mistral (gratis)
+  'mistral-medium-3-5:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // Moonshot
+  'kimi-k2-6': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 5.0,
+    completionCostPer1kIdr: 50.0,
+  },
+  'kimi-k2-7-code': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 2.0,
+    completionCostPer1kIdr: 50.0,
+  },
+  'kimi-k3': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 30.0,
+    promptCacheHitCostPer1kIdr: 3.0,
+    completionCostPer1kIdr: 150.0,
+  },
+
+  // Nex AGI (gratis)
+  'nex-n2-5-pro:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // NVIDIA
+  'nemotron-3-super-120b-a12b': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 1.7,
+    promptCacheHitCostPer1kIdr: 0.17,
+    completionCostPer1kIdr: 8.4,
+  },
+  'nemotron-3-super-120b-a12b:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
+  'nemotron-3-ultra-550b-a55b': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 12.0,
+    promptCacheHitCostPer1kIdr: 1.2,
+    completionCostPer1kIdr: 75.0,
+  },
+  'nemotron-3-ultra-550b-a55b:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
+
+  // OpenAI GPT (baru)
+  'gpt-5-4': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 52.0,
+    promptCacheHitCostPer1kIdr: 5.2,
+    completionCostPer1kIdr: 310.0,
+  },
+  'gpt-5-4-mini': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 15.0,
+    promptCacheHitCostPer1kIdr: 1.5,
+    completionCostPer1kIdr: 94.0,
+  },
+  'gpt-5-5': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 100.0,
+    promptCacheHitCostPer1kIdr: 10.0,
+    completionCostPer1kIdr: 630.0,
+  },
+  'gpt-5-6-sol': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 52.0,
+    promptCacheHitCostPer1kIdr: 20.8,
+    completionCostPer1kIdr: 310.0,
+  },
+  'gpt-5-6-terra': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 42.0,
+    promptCacheHitCostPer1kIdr: 16.8,
+    completionCostPer1kIdr: 250.0,
+  },
+  'gpt-6-astra': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 200.0,
+    promptCacheHitCostPer1kIdr: 20.0,
+    completionCostPer1kIdr: 1000.0,
+  },
+  'gpt-oss-120b': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0.63,
+    promptCacheHitCostPer1kIdr: 0.063,
+    completionCostPer1kIdr: 3.5,
+  },
+  'gpt-oss-20b': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0.63,
+    promptCacheHitCostPer1kIdr: 0.065,
+    completionCostPer1kIdr: 2.7,
+  },
+
+  // Poolside (gratis)
+  'laguna-s-2-1:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    promptCacheHitCostPer1kIdr: 0.19,
+    completionCostPer1kIdr: 0,
+  },
+  'laguna-xs-2-1:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    promptCacheHitCostPer1kIdr: 1.2,
+    completionCostPer1kIdr: 0,
+  },
+
+  // Qwen (baru)
+  'qwen3-8-max': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 42.0,
+    promptCacheHitCostPer1kIdr: 5.2,
+    completionCostPer1kIdr: 120.0,
+  },
+
+  // StepFun
+  'step-3-7-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 4.2,
+    promptCacheHitCostPer1kIdr: 0.84,
+    completionCostPer1kIdr: 24.0,
   },
   'step-3-7-flash:free': {
     provider: 'Kenari',
-    promptCostPer1kIdr: 0,  // Gratis (RPM limit)
+    promptCostPer1kIdr: 0,
     completionCostPer1kIdr: 0,
+  },
+
+  // Tencent (baru)
+  'hy3:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'hy4-preview': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 12.0,
+    promptCacheHitCostPer1kIdr: 1.2,
+    completionCostPer1kIdr: 42.0,
+  },
+
+  // xAI
+  'grok-4-5': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 21.0,
+    promptCacheHitCostPer1kIdr: 3.25,
+    completionCostPer1kIdr: 60.0,
+  },
+  'grok-4-6': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 21.0,
+    promptCacheHitCostPer1kIdr: 3.25,
+    completionCostPer1kIdr: 60.0,
+  },
+
+  // Xiaomi / Mimo (baru — model existing mimo-v2.5 sudah ada di atas)
+  'mimo-v2-5:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+
+  // Z-AI / GLM
+  'glm-4-7-flash:free': { provider: 'Kenari', promptCostPer1kIdr: 0, completionCostPer1kIdr: 0 },
+  'glm-5-2': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 4.0,
+    completionCostPer1kIdr: 66.0,
+  },
+  'glm-5-3': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 4.0,
+    completionCostPer1kIdr: 66.0,
+  },
+  'glm-5-3-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 1.5,
+    promptCacheHitCostPer1kIdr: 0.25,
+    completionCostPer1kIdr: 5.0,
   },
 };
 
