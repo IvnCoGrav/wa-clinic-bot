@@ -240,7 +240,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   initialReservation,
 }) => {
   const { user } = useAuth();
-  const { toast } = useUiFeedback();
+  const { toast, confirm } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
 
   // Form State
@@ -962,6 +962,66 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     });
   }, [bookedReservationsForDate, customerId, mode, (initialReservation as any)?.id]);
 
+  // Real-Time Collision Guardrail: mendeteksi bentrok jadwal terapis & customer di jam yang dipilih
+  const realtimeCollisions = useMemo(() => {
+    if (!bookingDate || !bookingTime || bookedReservationsForDate.length === 0) {
+      return { staffCollisions: [], customerCollisions: [] };
+    }
+
+    const [slotH, slotM] = bookingTime.split(':').map(Number);
+    if (isNaN(slotH) || isNaN(slotM)) return { staffCollisions: [], customerCollisions: [] };
+
+    const selectedStartMin = slotH * 60 + slotM;
+    const dur = totalScheduledDurationMinutes || 60;
+    const bufferMinutes = 20;
+    const selectedEndMin = selectedStartMin + dur + bufferMinutes;
+
+    const staffCollisions: Array<{ id: string; customerName: string; time: string; duration: number; treatment: string; staffName: string }> = [];
+    const customerCollisions: Array<{ id: string; time: string; treatment: string }> = [];
+
+    for (const r of bookedReservationsForDate) {
+      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) {
+        continue;
+      }
+      if (r.status === 'cancelled') continue;
+
+      const rDate = new Date(r.booking_date!);
+      if (isNaN(rDate.getTime())) continue;
+
+      const rStartMin = rDate.getHours() * 60 + rDate.getMinutes();
+      const rDur = (r as any).duration_minutes || 60;
+      const rEndMin = rStartMin + rDur + bufferMinutes;
+
+      const isOverlap = selectedStartMin < rEndMin && selectedEndMin > rStartMin;
+
+      const rStaffId = r.assigned_staff_id || r.assigned_staff?.id;
+      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && isOverlap) {
+        const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+        const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+        staffCollisions.push({
+          id: r.id,
+          customerName: (r.customer as any)?.name || 'Pasien Lain',
+          time: timeStr,
+          duration: rDur,
+          treatment: r.treatment_detail || 'Treatment',
+          staffName: staffObj?.name || 'Bidan Terpilih',
+        });
+      }
+
+      const rCustId = r.customer_id || (r.customer as any)?.id;
+      if (customerId && rCustId === customerId && isOverlap) {
+        const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+        customerCollisions.push({
+          id: r.id,
+          time: timeStr,
+          treatment: r.treatment_detail || r.status,
+        });
+      }
+    }
+
+    return { staffCollisions, customerCollisions };
+  }, [bookingDate, bookingTime, totalScheduledDurationMinutes, assignedStaffId, bookedReservationsForDate, mode, (initialReservation as any)?.id, customerId, effectiveStaffList]);
+
   // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
   const handleGenerateRecommendations = () => {
     if (!bookingDate) {
@@ -1243,30 +1303,66 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       rawCategory === 'KIDS' ? 'BABY' :
       (rawCategory as any) || 'BABY';
 
+    let forceSubmit = false;
+    if (realtimeCollisions.staffCollisions.length > 0) {
+      const staffName = realtimeCollisions.staffCollisions[0].staffName;
+      const details = realtimeCollisions.staffCollisions
+        .map((c) => `• Pasien Ny. ${c.customerName} (Pukul ${c.time} WIB - ${c.treatment})`)
+        .join('\n');
+      const isConfirmed = await confirm({
+        title: '⚠️ Konfirmasi Jadwal Bentrok',
+        message: `Bidan ${staffName} sudah memiliki jadwal lain di jam ini:\n${details}\n\nApakah Anda yakin ingin tetap menjadwalkan (Force Override)?`,
+        confirmText: 'Ya, Simpan Paksa (Force)',
+        cancelText: 'Batal & Ubah Jam',
+        danger: true,
+      });
+      if (!isConfirmed) {
+        return;
+      }
+      forceSubmit = true;
+    }
+
     setSubmitting(true);
     try {
       if (mode === 'edit' && initialReservation?.id) {
-        const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            customerId,
-            treatmentCategory: computedCategory,
-            treatmentDetail: finalTreatmentDetail,
-            bookingDate: fullBookingIso || null,
-            durationMinutes: totalScheduledDurationMinutes,
-            assignedStaffId: assignedStaffId ? assignedStaffId : null,
-            status,
-            notes: notes.trim() ? notes.trim() : null,
-            babies: babies.filter((b) => b.name.trim().length > 0),
-            purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-            ongkir: Number(ongkir) || 0,
-          }),
-        });
+        try {
+          const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              customerId,
+              treatmentCategory: computedCategory,
+              treatmentDetail: finalTreatmentDetail,
+              bookingDate: fullBookingIso || null,
+              durationMinutes: totalScheduledDurationMinutes,
+              assignedStaffId: assignedStaffId ? assignedStaffId : null,
+              status,
+              notes: notes.trim() ? notes.trim() : null,
+              babies: babies.filter((b) => b.name.trim().length > 0),
+              purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+              ongkir: Number(ongkir) || 0,
+              force: forceSubmit,
+            }),
+          });
 
-        toast('Perubahan reservasi berhasil disimpan!', 'success');
-        discardDraft(true);
-        onSuccess(res?.reservation || res?.data || res || initialReservation);
-        onClose();
+          toast('Perubahan reservasi berhasil disimpan!', 'success');
+          discardDraft(true);
+          onSuccess(res?.reservation || res?.data || res || initialReservation);
+          onClose();
+        } catch (editErr: any) {
+          const code = editErr?.code || editErr?.error;
+          const existing = editErr?.existingReservation || editErr?.data?.existingReservation;
+          const is409 = editErr?.status === 409 || /409/.test(String(editErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(editErr?.message || ''));
+          if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
+            setConflictInfo({
+              code: code || 'STAFF_COLLISION',
+              message: editErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
+              existingReservation: existing || null,
+            });
+            setShowConflictModal(true);
+            return;
+          }
+          throw editErr;
+        }
       } else if (isMultiSession && multiSessionSchedule.length > 0) {
         // Multi-Session Series Creation
         const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
@@ -1293,7 +1389,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         onSuccess(res?.data || res);
         onClose();
       } else {
-        const { payload } = buildCreatePayload(false);
+        const { payload } = buildCreatePayload(forceSubmit);
         try {
           const res = await apiRequest('/api/admin/reservation', {
             method: 'POST',
@@ -1951,6 +2047,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 />
               </div>
             </div>
+
+            {/* Real-time Overlap Warning Banner */}
+            {realtimeCollisions.staffCollisions.length > 0 && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
+                <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                  <span>⚠️ Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
+                </p>
+                <ul className="space-y-1 text-[11px]">
+                  {realtimeCollisions.staffCollisions.map((b) => (
+                    <li key={b.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">• Pasien <strong>Ny. {b.customerName}</strong> ({b.treatment})</span>
+                      <span className="font-mono font-bold shrink-0">{b.time} WIB ({b.duration}m)</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                  Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m). Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
+                </p>
+              </div>
+            )}
 
             {/* Recommendations Chips Area with Arrival Timeline */}
             {recommendations.length > 0 && (
