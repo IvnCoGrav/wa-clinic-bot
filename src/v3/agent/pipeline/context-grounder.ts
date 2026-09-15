@@ -47,18 +47,25 @@ export interface GroundingOutput {
 export const POST_RESERVATION_CLOSING =
   'Sama-sama Bunda 🌸 Mohon ditunggu ya, tim Bidan kami sedang mengecek jadwal dan akan segera mengabari Bunda 🤗';
 
+/** Balasan closing deterministik saat pengecekan ketersediaan jadwal slot (Plan 7). */
+export const POST_SCHEDULE_CHECK_CLOSING =
+  'Baik Bunda, ketersediaan jadwalnya akan segera kami konfirmasikan yaa. Mohon ditunggu sebentar ya Bunda 🤗';
+
 /**
- * Penanda acknowledgement pendek pasca-reservasi (sesi 462651, pure):
- * "oke kak", "siap", "baik", "makasih", "👍" — BUKAN pertanyaan baru.
+ * Penanda acknowledgement pendek pasca-reservasi / cek jadwal (sesi 462651 & Plan 7, pure):
+ * "oke kak", "siap", "baik", "makasih", "saya tunggu", "kabari ya", "👍" — BUKAN pertanyaan baru.
  * Daftar kata setingkat bahasa sapaan (seperti DAY_EVIDENCE_WORDS), HANYA
- * bermakna di dalam state gated (reservasi menunggu verifikasi staf) —
+ * bermakna di dalam state gated (reservasi/jadwal menunggu verifikasi staf) —
  * bukan gatekeeper intent umum.
  */
 const POST_RESERVATION_ACK_TOKENS = new Set([
-  'oke', 'ok', 'okay', 'siap', 'baik', 'makasih', 'terimakasih',
-  'terima', 'kasih', 'sip', 'ya',
+  'oke', 'ok', 'okay', 'okey', 'siap', 'baik', 'makasih', 'terimakasih',
+  'terima', 'kasih', 'sip', 'ya', 'tunggu', 'kabari', 'nanti', 'ditunggu',
 ]);
-const POST_RESERVATION_ACK_IGNORABLES = new Set(['kak', 'bun', 'bunda', 'bund']);
+const POST_RESERVATION_ACK_IGNORABLES = new Set([
+  'kak', 'kakak', 'bun', 'bunda', 'bund', 'min', 'admin', 'mba', 'mbak',
+  'saya', 'aku',
+]);
 
 export function isShortAcknowledgement(text: string): boolean {
   const lower = (text || '').toLowerCase();
@@ -76,7 +83,7 @@ export function isShortAcknowledgement(text: string): boolean {
 }
 
 /**
- * Resolusi acknowledgement pasca-reservasi (pure, sesi 462651):
+ * Resolusi acknowledgement pasca-reservasi atau pengecekan ketersediaan jadwal (pure, sesi 462651 & Plan 7):
  * - null → bukan kondisi handoff (lanjut alur normal),
  * - 'closing' → ack pertama: kirim 1x closing lalu handoff,
  * - 'silent' → closing sudah dikirim: senyap total.
@@ -85,7 +92,10 @@ export function resolvePostReservationAck(
   session: CustomerGoalSession,
   incomingText: string
 ): 'closing' | 'silent' | null {
-  if (!session?.booking?.reservationId || !session?.booking?.needsStaffVerification) return null;
+  const isPostReservation = Boolean(session?.booking?.reservationId && session?.booking?.needsStaffVerification);
+  const isScheduleCheckWait = Boolean(session?.booking?.pendingScheduleCheck);
+
+  if (!isPostReservation && !isScheduleCheckWait) return null;
   if (!isShortAcknowledgement(incomingText)) return null;
   return session.booking?.handoffClosingSent ? 'silent' : 'closing';
 }
@@ -167,15 +177,22 @@ export class FastResponseGate {
       }
     }
 
-    // GATE DETERMINISTIK: acknowledgement pasca-reservasi (sesi 462651) —
+    // GATE DETERMINISTIK: acknowledgement pasca-reservasi atau cek jadwal (sesi 462651 & Plan 7) —
     // 1x graceful closing + handoff ke staf, TANPA LLM. Machine meneruskan
     // isEscalated ke escalateToHumanHandling (notifikasi staf + antrean live-chat).
     const postReservationAck = resolvePostReservationAck(session, cleanIncomingText);
     if (conversationId && postReservationAck) {
+      const isScheduleCheck = Boolean(!session.booking?.reservationId && session.booking?.pendingScheduleCheck);
+      const replyMessage = isScheduleCheck ? POST_SCHEDULE_CHECK_CLOSING : POST_RESERVATION_CLOSING;
+      const escalationReason = isScheduleCheck ? 'pending_schedule_check' : 'pending_reservation_check';
+      const escalationNote = isScheduleCheck
+        ? 'Menunggu konfirmasi ketersediaan jadwal slot Bidan'
+        : 'Menunggu konfirmasi jadwal reservasi oleh tim Bidan';
+
       if (postReservationAck === 'closing') {
         try {
           session = await GoalTracker.updateGoalSession(conversationId, {
-            booking: { isConfirmed: session.booking?.isConfirmed ?? false, handoffClosingSent: true },
+            booking: { ...(session.booking || {}), isConfirmed: session.booking?.isConfirmed ?? false, handoffClosingSent: true },
           }, tenantId);
         } catch (e) {}
         if (!skipDbLogging) {
@@ -186,22 +203,22 @@ export class FastResponseGate {
               tenantId,
               conversationId,
               direction: Direction.OUTBOUND,
-              content: POST_RESERVATION_CLOSING,
+              content: replyMessage,
             });
           } catch (e) {}
         }
-        console.log(JSON.stringify({ event: 'POST_RESERVATION_HANDOFF_CLOSING', tenantId, conversationId, timestamp: new Date().toISOString() }));
+        console.log(JSON.stringify({ event: isScheduleCheck ? 'SCHEDULE_CHECK_HANDOFF_CLOSING' : 'POST_RESERVATION_HANDOFF_CLOSING', tenantId, conversationId, timestamp: new Date().toISOString() }));
         return {
           handled: true,
           session,
           output: {
-            replyText: POST_RESERVATION_CLOSING,
+            replyText: replyMessage,
             executedTools: [],
             updatedSession: session,
             shouldSendReply: true,
             isEscalated: true,
-            escalationReason: 'pending_reservation_check',
-            escalationNote: 'Menunggu konfirmasi jadwal reservasi oleh tim Bidan',
+            escalationReason,
+            escalationNote,
             retrievedChunks: [],
             fewShotExemplars: args.fewShotExemplars,
             systemPrompt: args.currentSystemPrompt,
@@ -212,7 +229,7 @@ export class FastResponseGate {
           },
         };
       }
-      console.log(JSON.stringify({ event: 'POST_RESERVATION_SILENT_SKIP', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      console.log(JSON.stringify({ event: isScheduleCheck ? 'SCHEDULE_CHECK_SILENT_SKIP' : 'POST_RESERVATION_SILENT_SKIP', tenantId, conversationId, timestamp: new Date().toISOString() }));
       return {
         handled: true,
         session,
@@ -222,7 +239,8 @@ export class FastResponseGate {
           updatedSession: session,
           shouldSendReply: false,
           isEscalated: true,
-          escalationReason: 'pending_reservation_check',
+          escalationReason,
+          escalationNote,
           retrievedChunks: [],
           fewShotExemplars: args.fewShotExemplars,
           systemPrompt: args.currentSystemPrompt,
@@ -403,6 +421,7 @@ export class ContextGrounder {
     const hasAny = (words: string[]): boolean => words.some((w) => lower.includes(w));
     // Sinyal jadwal kuat (mandiri, tanpa verifikasi tambahan).
     if (hasAny(['jadwal', 'kapan', 'tanggal', 'slot', 'besok', 'lusa', 'minggu depan',
+      'hari biasa', 'weekday', 'weekdays',
       'bisa hari apa', 'hari apa', 'masih kosong', 'bisa sekarang',
       'jam berapa', 'ready jam', 'bisa jam'])) {
       return true;
@@ -492,6 +511,9 @@ export class ContextGrounder {
     const lower = (text || '').toLowerCase();
     if (!lower) return null;
     if (lower.includes('minggu depan')) return 'minggu depan';
+    if (lower.includes('hari biasa')) return 'hari biasa';
+    if (lower.includes('weekdays')) return 'weekday';
+    if (lower.includes('weekday')) return 'weekday';
     if (lower.includes('hari ini')) return 'hari ini';
     let norm = '';
     for (let i = 0; i < lower.length; i++) {
@@ -499,7 +521,7 @@ export class ContextGrounder {
       norm += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
     }
     const tokens = norm.split(' ').filter((t) => t.length > 0);
-    const HINTS = ['sekarang', 'besok', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'weekend'];
+    const HINTS = ['sekarang', 'besok', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'weekend', 'weekday'];
     for (const t of tokens) {
       if (HINTS.includes(t)) {
         if (t === 'minggu') {
@@ -611,17 +633,41 @@ export class ContextGrounder {
       } catch (e) {}
     }
 
-    // Audit 337101 (anti CTA-looping): petunjuk waktu yang diminta ("sekarang",
-    // nama hari) dicatat ke booking.requestedTimeHint walau reservasi BELUM
-    // dibuat — agar turn ongkir berikutnya tidak menodong hari lagi.
+    // Audit 337101 & Plan 7 (anti CTA-looping, latch resilience & pendingScheduleCheck):
+    // petunjuk waktu yang diminta ("sekarang", nama hari, "hari biasa") dicatat ke
+    // booking.requestedTimeHint walau reservasi BELUM dibuat — agar turn ongkir
+    // berikutnya tidak menodong hari lagi, dan diperbarui bila customer mengganti hari.
+    // Jika lokasi atau treatment sudah diketahui, tandai pendingScheduleCheck agar ack
+    // penegasan ("oke/baik/tunggu") dapat dieskalasi ke antrean staf tanpa loop.
     if (conversationId && ContextGrounder.hasScheduleSignal(cleanIncomingText)
-      && !session.booking?.preferredDate && !session.booking?.requestedTimeHint
+      && !session.booking?.preferredDate
       && !session.booking?.reservationId) {
       const hint = ContextGrounder.extractTimeHint(cleanIncomingText);
-      if (hint) {
+      const hasLocationOrTreatment = Boolean(
+        session.location?.kelurahan ||
+        session.location?.distanceKm != null ||
+        session.selectedTreatment ||
+        (session.cartItems && session.cartItems.length > 0)
+      );
+
+      let bookingChanged = false;
+      const nextBooking = { ...(session.booking || {}), isConfirmed: false };
+
+      if (hint && hint !== session.booking?.requestedTimeHint) {
+        nextBooking.requestedTimeHint = hint;
+        bookingChanged = true;
+      }
+      if (hasLocationOrTreatment && !session.booking?.pendingScheduleCheck) {
+        nextBooking.pendingScheduleCheck = true;
+        bookingChanged = true;
+      }
+
+      if (bookingChanged) {
+        session.booking = nextBooking;
         try {
           session = await GoalTracker.updateGoalSession(conversationId, {
-            booking: { ...(session.booking || {}), requestedTimeHint: hint, isConfirmed: false },
+            ...session,
+            booking: nextBooking,
           }, tenantId);
         } catch (e) {}
       }
