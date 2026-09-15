@@ -120,11 +120,16 @@ export function parseTreatmentsFromDetail(
     const childNameInParenMatch = p.match(/\(\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)\s*$/);
     const childNameInParen = childNameInParenMatch ? childNameInParenMatch[1].trim() : null;
 
-    // Bersihkan tag durasi kurung siku [..] dan nama anak opsional (Anak #1 / Nama), tapi pertahankan nama medis (Rileksasi/Terapi)
-    let cleanName = p.replace(/\[.*?\]/g, '').trim();
-    cleanName = cleanName.replace(/\(\s*(?:Anak\s*#?\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)$/i, '').trim();
+     // Bersihkan tag durasi kurung siku [..] dan nama anak opsional (Anak #1 / Nama), tapi pertahankan nama medis (Rileksasi/Terapi)
+     let cleanName = p.replace(/\[.*?\]/g, '').trim();
+     cleanName = cleanName.replace(/\(\s*(?:Anak\s*#?\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)$/i, '').trim();
 
-    if (!cleanName) continue;
+     if (!cleanName) continue;
+
+      // Auto-Clean Dummy Hold Card: skip [HOLD] Slot Ditawarkan placeholder
+      if (/^\[?hold\]?\s*slot\s*ditawarkan|slot\s*ditawarkan/i.test(cleanName)) {
+        continue;
+      }
 
     const normTarget = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
 

@@ -386,8 +386,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
   const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
-   const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
-   const [activeEditingHoldReservation, setActiveEditingHoldReservation] = useState<any | null>(null);
+    const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
+    const [activeEditingHoldReservation, setActiveEditingHoldReservation] = useState<any | null>(null);
+    const [activeEditingConfirmedReservation, setActiveEditingConfirmedReservation] = useState<any | null>(null);
   // Smart Micro-Pill auto-collapse (mobile <768px): banner penuh 3 detik lalu menciut
   const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
   const [userManuallyExpanded, setUserManuallyExpanded] = useState(false);
@@ -4137,53 +4138,49 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 )}
 
                 {/* Active Confirmed / Terjadwal Alert Banner */}
-                {!activeHoldReservation && activeConfirmedReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
-                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">JADWAL</span>
-                        <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
-                          <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
-                          <span className="font-semibold truncate text-[11px]">
-                            {activeConfirmedReservation.booking_date
-                              ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
-                                  weekday: 'short',
-                                  day: 'numeric',
-                                  month: 'short',
-                                }) +
-                                ' ' +
-                                new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : 'Jadwal terkonfirmasi'}
-                            {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className={`flex items-center shrink-0 ${chatBotActive ? 'gap-2' : 'gap-1.5'}`}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedReservation(activeConfirmedReservation);
-                        }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
-                        title="Lihat detail reservasi"
-                      >
-                        <Eye size={chatBotActive ? 12 : 14} className="shrink-0" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedReservation(activeConfirmedReservation);
-                        }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
-                        title="Kelola / Edit detail reservasi"
-                      >
-                        <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
-                      </button>
+                 {!activeHoldReservation && activeConfirmedReservation && (
+                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
+                     <button
+                       type="button"
+                       onClick={() => setSelectedReservation(activeConfirmedReservation)}
+                       className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden text-left cursor-pointer hover:opacity-90 transition-opacity"
+                       title="Klik untuk lihat detail jadwal"
+                     >
+                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                       <div className="flex flex-col justify-center leading-tight min-w-0">
+                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">JADWAL</span>
+                         <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
+                           <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
+                           <span className="font-semibold truncate text-[11px]">
+                             {activeConfirmedReservation.booking_date
+                               ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
+                                   weekday: 'short',
+                                   day: 'numeric',
+                                   month: 'short',
+                                 }) +
+                                 ' ' +
+                                 new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
+                                   hour: '2-digit',
+                                   minute: '2-digit',
+                                 })
+                               : 'Jadwal terkonfirmasi'}
+                             {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
+                           </span>
+                         </span>
+                       </div>
+                     </button>
+                     <div className={`flex items-center shrink-0 ${chatBotActive ? 'gap-2' : 'gap-1.5'}`}>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setActiveEditingConfirmedReservation(activeConfirmedReservation);
+                           setShowQuickBookingModal(true);
+                         }}
+                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                         title="Edit reservasi ini"
+                       >
+                         <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
+                       </button>
                       <button
                         type="button"
                         onClick={async () => {
@@ -5223,12 +5220,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       )}
 
        {/* Quick Create Reservation Modal dari Live Chat */}
-       {showQuickBookingModal && (
-         <CreateReservationModal
-           isOpen={showQuickBookingModal}
-           mode={activeEditingHoldReservation ? 'edit' : 'create'}
-           initialReservation={activeEditingHoldReservation || undefined}
-           onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setActiveEditingHoldReservation(null); setQuickBookingTargetSlot(null); }}
+      {showQuickBookingModal && (
+        <CreateReservationModal
+          isOpen={showQuickBookingModal}
+          mode={activeEditingHoldReservation || activeEditingConfirmedReservation ? 'edit' : 'create'}
+          initialReservation={activeEditingHoldReservation || activeEditingConfirmedReservation || undefined}
+          onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setActiveEditingHoldReservation(null); setActiveEditingConfirmedReservation(null); setQuickBookingTargetSlot(null); }}
           staffList={reservationStaffList}
           initialSlotTarget={quickBookingTargetSlot}
           initialCustomer={
@@ -5251,6 +5248,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
              setShowQuickBookingModal(false);
              setConvertingHoldId(null);
              setActiveEditingHoldReservation(null);
+             setActiveEditingConfirmedReservation(null);
              setQuickBookingTargetSlot(null);
              await handleReservationUpdate();
              if (newRes) {
