@@ -65,6 +65,10 @@ Seluruh rencana prosedural mikro telah tersimpan di direktori `docs/plans/`:
    - **Fix Issue #21**: Kamus koridor jalan arteri Surabaya & Sidoarjo di gazetteer (tanpa kata penanda "Jl.").
    - **Fix Issue #30**: Hardening mitigasi Prisma P2022 pada `tenants.settings`.
 
+5. **PLAN 7 (`docs/plans/PLAN_7_SCHEDULE_VERIFICATION_HOLDING_STALL_FIX.md` & `implementation_plan.md`) [PRIORITAS TINGGI - HASIL AUDIT SESI 216683]**:
+   - **Tujuan**: Memperbaiki secara fondasional masalah kebuntuan percakapan (*infinite holding stall loop*), mengaktifkan handoff eskalasi otomatis ke live-chat staf manusia (`is_human_handling = true`, `current_state = HUMAN_HANDLING`) saat customer menunggu konfirmasi jadwal, menegakkan isolasi konsultasi usia sehat dari pencemaran paket terapi sakit di Call 2 generator (`persona.ts`), memperbaiki pembaruan latch preferensi hari pada session, serta edukasi batas jam operasional klinik (08.00–17.00 WIB).
+   - **Hasil Audit Sesi 216683**: 8 rules ditabrak (kaset rusak 5x, promosi *Pulih Ceria* tanpa keluhan, deadlock state machine di mana bot berjanji cek slot tanpa ada entitas manusia/sistem yang memeriksa kalender).
+
 ---
 
 ## 🛠️ 4. Quick Runbook untuk PC Baru
@@ -73,19 +77,18 @@ Seluruh rencana prosedural mikro telah tersimpan di direktori `docs/plans/`:
    ```bash
    git checkout -- services_custom.json
    git status
-   # Commit perubahan yang ingin dibawa
-   git add src/v3/agent/pipeline/ src/v3/agent/agent-runner.ts src/v3/tools/ docs/plans/
-   git commit -m "feat(v3): complete plan 1 and plan 2 runner decomposition"
-   git push origin <nama-branch>
+   git add implementation_plan.md docs/plans/PLAN_7_SCHEDULE_VERIFICATION_HOLDING_STALL_FIX.md docs/HANDOVER_SESSION_STATUS.md
+   git commit -m "docs: add foundational implementation plan 7 for schedule verification holding stall fix"
+   git push origin master
    ```
 
 2. **Di PC Baru**:
    ```bash
-   git pull origin <nama-branch>
+   git pull origin master
    npm install
    npm run build     # Pastikan tsc 0 error
    npm test          # Pastikan 266 test files passed
    ```
 
 3. **Mulai Eksekusi Plan Berikutnya**:
-   Buka `docs/plans/PLAN_3_GOAL_TRACKER_DECOMPOSITION_AND_SYMPTOM_SCORER.md` dan mulai eksekusi Fase 1.
+   Buka `docs/plans/PLAN_7_SCHEDULE_VERIFICATION_HOLDING_STALL_FIX.md` (atau `implementation_plan.md`) dan mulai eksekusi Phase 1.
