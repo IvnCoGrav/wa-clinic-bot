@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { apiRequest } from '../../services/api';
@@ -11,6 +11,7 @@ function toISODate(d: Date): string {
   const dd = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${dd}`;
 }
+
 function formatDateLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -25,12 +26,20 @@ interface Props {
   onInsertToChat?: (text: string) => void;
 }
 
-export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDate, onSelectSlot, onSelectReservation, onInsertToChat }) => {
+export const DailyScheduleModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  initialDate,
+  onSelectSlot,
+  onSelectReservation,
+  onInsertToChat: _onInsertToChat,
+}) => {
   const getTomorrowISO = () => {
     const t = new Date();
     t.setDate(t.getDate() + 1);
     return toISODate(t);
   };
+
   const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
     if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) return initialDate;
     return getTomorrowISO();
@@ -39,7 +48,6 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
   const [loading, setLoading] = useState(false);
   const [staffList, setStaffList] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
-  const dateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +76,6 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
       .then((res: any) => {
         if (cancelled) return;
         const list: Reservation[] = res?.data || res?.reservations || res?.rows || res?.data?.data || [];
-        // Fallback: if paginated response, extract data
         const actual = Array.isArray(list) ? list : Array.isArray(res?.data) ? res.data : [];
         setReservations(actual as Reservation[]);
       })
@@ -93,49 +100,74 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
     setSelectedDateStr(toISODate(d));
   };
 
-  const filteredReservations = selectedStaffId === 'all' ? reservations : reservations.filter((r: any) => (r.assigned_staff?.id || (r as any).assigned_staff_id) === selectedStaffId);
+  const filteredReservations =
+    selectedStaffId === 'all'
+      ? reservations
+      : reservations.filter((r: any) => (r.assigned_staff?.id || (r as any).assigned_staff_id) === selectedStaffId);
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn" onClick={onClose}>
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-[#e9edef] w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-[#e9edef] w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-[#c2e7e0] bg-gradient-to-r from-[#e8f5f2] to-white flex items-center justify-between shrink-0">
           <h3 className="font-extrabold text-[#005c4b] text-sm flex items-center gap-2">
             <Calendar size={16} className="text-[#008069]" /> JADWAL KALENDER HARIAN
           </h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white border border-[#c2e7e0] flex items-center justify-center text-[#005c4b]">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full hover:bg-white border border-[#c2e7e0] flex items-center justify-center text-[#005c4b]"
+          >
             <X size={18} />
           </button>
         </div>
 
         <div className="px-4 py-2 border-b border-[#e9edef] bg-[#f8fafc] shrink-0 space-y-2">
-           <div className="flex items-center justify-between">
-             <button onClick={() => shiftDate(-1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
-               <ChevronLeft size={16} />
-             </button>
-             <label className="relative font-bold text-sm text-[#111b21] hover:text-[#008069] flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white border border-transparent hover:border-[#c2e7e0] transition cursor-pointer">
-               <Calendar size={14} className="text-[#008069] shrink-0" />
-               <span className="truncate">{formatDateLabel(selectedDateStr)}</span>
-               <input
-                 type="date"
-                 value={selectedDateStr}
-                 onChange={(e) => {
-                   if (e.target.value) setSelectedDateStr(e.target.value);
-                 }}
-                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer pointer-events-auto"
-                 aria-label="Pilih Tanggal Jadwal"
-               />
-             </label>
-             <button onClick={() => shiftDate(1)} className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]">
-               <ChevronRight size={16} />
-             </button>
-           </div>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => shiftDate(-1)}
+              className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="relative font-bold text-sm text-[#111b21] hover:text-[#008069] flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#c2e7e0] transition shadow-2xs cursor-pointer">
+              <Calendar size={14} className="text-[#008069] shrink-0 pointer-events-none" />
+              <span className="truncate pointer-events-none">{formatDateLabel(selectedDateStr)}</span>
+              <input
+                type="date"
+                value={selectedDateStr}
+                onChange={(e) => {
+                  if (e.target.value) setSelectedDateStr(e.target.value);
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer pointer-events-auto appearance-none"
+                aria-label="Pilih Tanggal Jadwal"
+              />
+            </div>
+            <button
+              onClick={() => shiftDate(1)}
+              className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
           {staffList.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setSelectedStaffId('all')} className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === 'all' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}>
+              <button
+                onClick={() => setSelectedStaffId('all')}
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === 'all' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}
+              >
                 Semua Bidan
               </button>
               {staffList.map((s) => (
-                <button key={s.id} onClick={() => setSelectedStaffId(s.id)} className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === s.id ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}>
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedStaffId(s.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === s.id ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}
+                >
                   {s.name}
                 </button>
               ))}
@@ -169,7 +201,10 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
         </div>
 
         <div className="p-3 border-t border-[#e9edef] bg-white shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] text-xs font-bold">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] text-xs font-bold cursor-pointer"
+          >
             Tutup
           </button>
         </div>
