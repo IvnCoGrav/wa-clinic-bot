@@ -1,140 +1,36 @@
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
-import { CartManager, CartItem as CartItemType, RecipientScope as RecipientScopeType, GENERIC_CLINIC_TOKENS as GENERIC_CLINIC_TOKENS_CONST } from './cart-manager';
+import { CartManager } from './cart-manager';
 import { PatientProfileExtractor } from './patient-extractor';
+import type {
+  LocationState,
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  BookingState,
+  CartItem,
+  OngkirStatus,
+  CustomerGoalSession,
+  RecipientScope,
+} from '../domain/types';
 
-export interface LocationState {
-  rawText: string;
-  kelurahan?: string;
-  kecamatan?: string;
-  kota?: string;
-  distanceKm?: number;
-  ongkirNormal?: number;
-  ongkirPromo?: number;
-  isOutOfCoverage?: boolean;
-}
-
-export interface ChildState {
-  id?: string;
-  name?: string;
-  /** Label penerima: 'Adik' | 'Kakak' | 'Si Kecil'. */
-  roleLabel?: string;
-  ageMonths?: number;
-  symptoms: string[];
-}
-
-/** Subjek layanan multi-audience (Moms & Baby Spa): ibu, bayi, anak, atau keduanya. */
-export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
-
-/** Kondisi klinis ibu: hamil, paska salin/nifas, atau relaksasi umum. */
-export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
-
-/** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
-export interface MomProfileState {
-  stage?: MomStage;
-  /** Usia kehamilan dalam minggu (misal: 38 untuk "uk 38 weeks"). */
-  gestationalWeeks?: number;
-  /** Durasi paska salin (misal: "2 minggu") — teks bebas dari customer. */
-  postpartumPeriod?: string;
-  /** Keluhan ibu (misal: pegal, kaki bengkak, capek, asi). */
-  complaints: string[];
-}
-
-export interface BookingState {
-  preferredDate?: string;
-  preferredTime?: string;
-  reservationId?: string;
-  isConfirmed: boolean;
-  /**
-   * Skema human handling pasca-reservasi (sesi 462651): true bila reservasi
-   * tercatat dan ketersediaan masih menunggu verifikasi staf. Mengaktifkan
-   * acknowledgement gate di agent-runner (1x closing + handoff, anti loop).
-   */
-  needsStaffVerification?: boolean;
-  /** True bila closing pasca-reservasi sudah dikirim (ack berikutnya senyap). */
-  handoffClosingSent?: boolean;
-  /**
-   * Audit 337101 (anti CTA-looping): waktu yang DIMINTA customer
-   * ("sekarang"/"hari ini"/nama hari) — dicatat saat sinyal jadwal terdeteksi
-   * walau reservasi BELUM dibuat. Berbeda dari preferredDate (kesepakatan
-   * yang sudah dikonfirmasi alur reservasi). Dipakai context-aware CTA.
-   */
-  requestedTimeHint?: string;
-  /**
-   * Plan 7 (Audit 216683): true bila customer meminta pengecekan ketersediaan
-   * hari/slot jadwal dan sistem menunggu konfirmasi admin/staf (anti holding stall loop).
-   */
-  pendingScheduleCheck?: boolean;
-}
-
-/** Satu item layanan di keranjang (multi-item cart, deterministik). */
-export interface CartItem {
-  name: string;
-  price: number;
-  promoPrice?: number;
-  type: 'PRIMARY' | 'ADDON' | 'SERVICE';
-  category?: 'BABY' | 'KIDS' | 'MOMS' | 'BUNDLE' | 'ADDON';
-  /** Label penerima tampil: 'Si Kecil', 'Adik (2 bln)', 'Kakak (3 th)', 'Bunda'. */
-  recipientLabel?: string;
-  recipientScope?: RecipientScope;
-}
-
-/** Lifecycle fakta ongkir: UNQUOTED → QUOTED (disampaikan) → CONFIRMED (lanjut booking). */
-export type OngkirStatus = 'UNQUOTED' | 'QUOTED' | 'CONFIRMED';
-
-export interface CustomerGoalSession {
-  customerName?: string;
-  genderGreeting: 'Bunda' | 'Bapak';
-  location?: LocationState;
-  /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
-  targetAudience?: TargetAudienceType;
-  /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */
-  momProfile?: MomProfileState;
-  /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
-  childProfile?: ChildState;
-  /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
-  children?: ChildState[];
-  /**
-   * Gerbang disambiguasi multi-anak (sesi 214956): true bila 2 usia anak
-   * berbeda terdeteksi TANPA konfirmasi eksplisit ("anak saya 2" / label
-   * peran Adik-Kakak). Selama true, LLM WAJIB bertanya konfirmasi lembut
-   * sebelum mengunci total biaya (lihat mandat grounding). Dibersihkan saat
-   * customer memberi sinyal jumlah eksplisit.
-   */
-  isMultiChildUnconfirmed?: boolean;
-  selectedTreatment?: string;
-  booking?: BookingState;
-  cartItems?: CartItem[];
-  ongkirStatus?: OngkirStatus;
-  totalPrice?: number;
-  /**
-   * Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): true bila customer sudah
-   * pernah bertanya harga/total di sesi ini. Mengontrol eksposur angka total
-   * resmi di grounding prompt (disembunyikan selama konsultasi murni).
-   */
-  priceDiscussed?: boolean;
-  /**
-   * Fase E: penghitung form reservasi tak lengkap berurutan. Direset ke 0
-   * saat form valid masuk; mencapai 2 → form tak lengkap berikutnya
-   * dieskalasi sunyi (anti loop minta-lengkapi selamanya).
-   */
-  formRetryCount?: number;
-}
-
-/** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
-export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
-
-/**
- * Kata generik domain klinik — DILARANG menjadi token tunggal unik penentu
- * fuzzy matching. Mencegah sapaan bot ("Treatment moms & Baby...") memicu
- * phantom cart item via satu kata umum yang kebetulan unik di katalog.
- */
-export const GENERIC_CLINIC_TOKENS = new Set([
-  'treatment', 'treatments', 'layanan', 'service', 'services', 'homecare',
-  'perawatan', 'terapi', 'therapy', 'pijat', 'massage', 'paket',
-  'bunda', 'bayi', 'baby', 'anak', 'moms', 'klinik',
-]);
+// PLAN 8 FASE 6: definisi tipe kanonis di src/v3/domain/types.ts.
+// Re-export menjaga seluruh import path lama tetap berfungsi.
+export type {
+  LocationState,
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  BookingState,
+  CartItem,
+  OngkirStatus,
+  CustomerGoalSession,
+  RecipientScope,
+} from '../domain/types';
+export { GENERIC_CLINIC_TOKENS } from '../domain/types';
 
 const DEFAULT_SESSION: CustomerGoalSession = {
   genderGreeting: 'Bunda',
@@ -436,6 +332,11 @@ export class GoalTracker {
 
     if (session.cartItems && session.cartItems.length > 0) {
       const fmtRp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+      let catalogServices: any[] = [];
+      try {
+        catalogServices = treatmentCatalogService.getAllServices(true);
+      } catch (_) {}
+
       const ageSuffixFor = (scope?: string, label?: string): string => {
         if (label && /\(\d+\s*(bln|th)\)/.test(label)) return '';
         const kids = session.children || [];
@@ -455,7 +356,19 @@ export class GoalTracker {
           : it.type === 'SERVICE'
             ? `Layanan: ${fmtRp(it.promoPrice ?? it.price)}`
             : `Promo: ${fmtRp(it.promoPrice ?? it.price)}`;
-        return `  - [Untuk ${who}${ageSuffixFor(scope, it.recipientLabel)}] ${it.name} (${priceLabel})`;
+
+        // Sesi 887216: inject durasi resmi & batasan usia dari katalog DB secara data-driven
+        const svc = catalogServices.find((s) => s.name.toLowerCase() === (it.name || '').toLowerCase());
+        const metaParts: string[] = [];
+        if (svc && typeof svc.durationMinutes === 'number' && svc.durationMinutes > 0) {
+          metaParts.push(`Durasi Resmi: ${svc.durationMinutes} menit`);
+        }
+        if (svc?.ageTier?.label) {
+          metaParts.push(`Batasan Usia: ${svc.ageTier.label}`);
+        }
+        const metaStr = metaParts.length > 0 ? ` [${metaParts.join(' | ')}]` : '';
+
+        return `  - [Untuk ${who}${ageSuffixFor(scope, it.recipientLabel)}] ${it.name} (${priceLabel})${metaStr}`;
       });
       lines.push(`• Keranjang Layanan Terpilih:\n${rows.join('\n')}`);
       const subtotal = session.cartItems.reduce((s, it) => s + (it.promoPrice ?? it.price), 0);

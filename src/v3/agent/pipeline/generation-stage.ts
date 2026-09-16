@@ -2,7 +2,8 @@ import axios from 'axios';
 import { ConversationState } from '@prisma/client';
 import { CircuitBreaker } from '../../../utils/circuit-breaker';
 import { ALL_V3_TOOLS } from '../../tools/tool-registry';
-import { PersonaPromptBuilder, extractFastIntents } from '../persona';
+import { PersonaPromptBuilder, extractFastIntents, PERSONA_STABLE_PREFIX_MARKER } from '../persona';
+import { buildCacheableSystemPrompt, buildCachedMessages } from '../../../integrations/llm/prompt-cache';
 import { CustomerGoalSession } from '../../state/goal-tracker';
 import { ContextGrounder, GroundingOutput } from './context-grounder';
 import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
@@ -305,9 +306,10 @@ export class GenerationStage {
       session: CustomerGoalSession;
       messages: any[];
       grounding: GroundingOutput;
+      conversationHistory?: Array<{ role: string; content: string }>;
     }
   ): Promise<RoutingOutput> {
-    const { cleanIncomingText, messages, grounding } = opts;
+    const { cleanIncomingText, messages, grounding, session, conversationHistory = [] } = opts;
     // 4. Panggilan Pertama: Model mengevaluasi apakah perlu memanggil Tools
     const detectedIntents = extractFastIntents(cleanIncomingText);
 
@@ -333,6 +335,12 @@ export class GenerationStage {
       // setara prioritasnya dengan forcing lokasi). Mencegah LLM mencatut
       // artikel mandi untuk menjawab soal vaksin.
       dynamicToolChoice = { type: 'function', function: { name: 'get_clinic_policy_faq' } };
+    } else if (ContextGrounder.isBookingCommitReady(session, cleanIncomingText, conversationHistory)) {
+      // Audit sesi 614425 (booking buntu): treatment sudah disepakati DAN customer
+      // sudah menyebut hari/tanggal → Paksa save_reservation, jangan serahkan
+      // keputusan commit ke judgment LLM (akar masalah: model buntu lalu
+      // menanyakan jam spesifik yang justru dilarang).
+      dynamicToolChoice = { type: 'function', function: { name: 'save_reservation' } };
     }
 
     // Tool Schema Filtering untuk Call 1:
@@ -461,12 +469,22 @@ export class GenerationStage {
     }
     const fullSystemPrompt = fullSystemPromptParts.join('\n\n');
 
+    // PLAN 9 FASE 9.1 — Prompt caching: pisahkan prefix statis (byte-stabil) dari
+    // tail dinamis, lalu susun messages dengan anotasi cache bila provider mendukung.
+    // Provider non-pendukung → digabung kembali, byte-identik dengan perilaku lama.
+    // PENTING: objek riwayat (termasuk pesan tool/assistant dengan tool_calls dan
+    // tool_call_id) diteruskan utuh tanpa pemangkasan field agar kontinuitas tool tetap valid.
+    const cacheParts = buildCacheableSystemPrompt(fullSystemPrompt, PERSONA_STABLE_PREFIX_MARKER);
+    const cachedMessages = buildCachedMessages(cacheParts, turn.baseUrl, messages.slice(1));
+
+    // Pertahankan mutasi messages[0] untuk kompatibilitas observability downstream
+    // (telemetry mencatat messages.slice(1); turn.currentSystemPrompt dipakai guardrail).
     messages[0].content = fullSystemPrompt;
     turn.currentSystemPrompt = fullSystemPrompt;
 
     const secondPayload: any = {
       model: turn.selectedModel,
-      messages,
+      messages: cachedMessages,
       temperature: 0.65,
     };
 

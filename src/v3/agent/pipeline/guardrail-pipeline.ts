@@ -163,6 +163,30 @@ export function ensureSameDayDisclaimer(replyText: string): string {
 }
 
 /**
+ * Detektor pertanyaan JAM kunjungan spesifik (pure, sesi 614425 — Aturan Emas):
+ * pertanyaan "jam berapa", "mau jam berapa", "pukul berapa", "jam kunjungan
+ * yang diinginkan". Jam kunjungan diatur tim Bidan sesuai rute harian, jadi
+ * pertanyaan ini DILARANG. Token-match terarah (bukan regex semantik).
+ */
+export function detectVisitTimeQuestion(replyText: string): boolean {
+  if (!replyText || !replyText.trim()) return false;
+  const lower = replyText.toLowerCase();
+  const phrases = [
+    'jam berapa',
+    'mau jam',
+    'pukul berapa',
+    'jam kunjungan yang',
+    'jam kunjungan yang diinginkan',
+    'konfirmasi jam',
+    'pilih jam',
+    'jam kedatangan',
+    'jam berapa ya',
+  ];
+  return phrases.some((p) => lower.includes(p));
+}
+
+
+/**
  * Stage 5 — GuardrailPipeline: sanitasi, 3 loop reprompt terisolasi
  * (numerik, faktual, pronoun), safety-net same-day, dan fallback sanitizer.
  */
@@ -426,6 +450,44 @@ export class GuardrailPipeline {
         // catat untuk kurasi prompt. DILARANG memotong kalimat.
         violationsDetected.push('age_solicitation_unresolved');
         console.warn(JSON.stringify({ event: 'AGE_SOLICITATION_UNRESOLVED_KEEP_ORIGINAL', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      }
+    }
+
+    // 7e. Validator jam kunjungan (sesi 614425 — Aturan Emas): balasan
+    // DILARANG menanyakan JAM spesifik. Deteksi → re-prompt bersih 1x untuk
+    // ganti menjadi pertanyaan hari / pernyataan jam diatur tim Bidan. Gagal →
+    // kirim balasan asli + catat (pelanggaran gaya, bukan halusinasi).
+    if (detectVisitTimeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
+      violationsDetected.push('visit_time_solicitation_detected');
+      const timeRepromptStartedAt = Date.now();
+      let timeRepromptOk = false;
+      try {
+        const timeCorrectionNote = `KOREKSI JADWAL — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang JAM kunjungan spesifik ("jam berapa", "mau jam berapa", "pukul berapa"). Aturan klinik: jam kunjungan diatur tim Bidan sesuai rute operasional harian (jam operasional 08.00-17.00 WIB). Jika perlu memajukan jadwal, tanyakan HANYA preferensi HARI, atau sampaikan bahwa jam akan dikonfirmasi tim Bidan. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        const timeRetryData = await input.executeChat({
+          payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, timeCorrectionNote), temperature: 0.3 },
+          tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
+        });
+        repromptCount++;
+        const timeRetryText = (timeRetryData?.choices?.[0]?.message?.content || '').trim();
+        if (timeRetryText) {
+          const timeCleaned = OutputSanitizer.cleanOutboundReply(timeRetryText, incomingText, isFollowUp, sanitizeOpts);
+          if (!detectVisitTimeQuestion(timeCleaned)) {
+            finalReply = timeCleaned;
+            timeRepromptOk = true;
+            console.log(JSON.stringify({ event: 'VISIT_TIME_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+            await input.recordCall({
+              reply: finalReply, status: 'SUCCESS', durationMs: Date.now() - timeRepromptStartedAt,
+              promptPayload: { model: selectedModel, correction: 'visit_time_solicitation' },
+              callReasoning: 'Hapus pertanyaan jam kunjungan dari balasan', callSequence: 3,
+            });
+          }
+        }
+      } catch (repromptErr: any) {
+        console.warn(JSON.stringify({ event: 'VISIT_TIME_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message, timestamp: new Date().toISOString() }));
+      }
+      if (!timeRepromptOk) {
+        violationsDetected.push('visit_time_solicitation_unresolved');
+        console.warn(JSON.stringify({ event: 'VISIT_TIME_UNRESOLVED_KEEP_ORIGINAL', tenantId, conversationId, timestamp: new Date().toISOString() }));
       }
     }
 
