@@ -26,7 +26,7 @@ async function testMimo() {
       temperature: 0.5
     }, {
       headers: {
-        'Authorization': 'Bearer sk-xPRgkZmQakNaOq44qqzPLw',
+        'Authorization': 'Bearer ' + (process.env.LLM_API_KEY || ''),
         'Content-Type': 'application/json'
       },
       timeout: 25000
@@ -58,7 +58,10 @@ testMimo();
 
 const b64 = Buffer.from(testCode).toString('base64');
 const remoteCmd = `echo ${b64} | base64 -d | docker compose -f /opt/wa-clinic-bot/docker-compose.yml exec -T app node`;
-const sshCmd = `ssh -i C:/Users/Ivan/.ssh/id_ed25519_klinik -p 1403 -o StrictHostKeyChecking=no ubuntu@43.157.197.148 "${remoteCmd}"`;
+const sshKey = process.env.SSH_KEY_PATH || 'C:/Users/Ivan/.ssh/id_ed25519_klinik';
+const deployHost = process.env.DEPLOY_HOST || '43.157.197.148';
+const deployPort = process.env.DEPLOY_PORT || '1403';
+const sshCmd = `ssh -i "${sshKey}" -p ${deployPort} -o StrictHostKeyChecking=no ubuntu@${deployHost} "${remoteCmd}"`;
 
 try {
   console.log(execSync(sshCmd, { encoding: 'utf8' }));

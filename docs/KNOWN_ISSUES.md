@@ -231,7 +231,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 13. [Attribution] AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView asli (Aisyah 929) — FIXED 2026-08-22
 
 - **Status:** fixed (2026-08-22), recovery mass 30 reservasi 14 hari terakhir.
-- **Gejala:** Reservasi #777 (Siska, 6285106962777) form lengkap `Berikut list untuk reservasi...` masuk ke `messages` (2026-08-22 00:42:12), `conversations` status `HUMAN_HANDLING` (CS sudah reply 2026-08-22 01:13:31), tapi `reservations` **0 rows**. Customer cuma dapat balasan manual CS, tidak ada record otomatis.
+- **Gejala:** Reservasi #777 (Siska, 628510696xxxx) form lengkap `Berikut list untuk reservasi...` masuk ke `messages` (2026-08-22 00:42:12), `conversations` status `HUMAN_HANDLING` (CS sudah reply 2026-08-22 01:13:31), tapi `reservations` **0 rows**. Customer cuma dapat balasan manual CS, tidak ada record otomatis.
 - **Akar masalah (3 silent-drop berlapis):**
   1. **Human Handling short-circuit** `webhook.route.ts:732-823`: 3 jalur early-return `HUMAN_HANDLING_ACTIVE_SILENT` (grace 30s / `ENABLE_WAHA_HOLD_LABEL=false` default / explicit guard) langsung `logMessage` + `return` tanpa `enqueue` → watcher `human.ts:41` (`isReservationFormMessage` → `parseReservationText` → `prisma.reservation.create`) tidak pernah reachable.
   2. **Stale guard 180s** `webhook.route.ts:407`: WAHA reconnect/QR burst bikin `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` (log saja, skip state machine) — form ikut ter-drop.
@@ -242,13 +242,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `human.ts:73`: Background watcher juga fire `InitiateCheckout` CAPI.
   - `interest.ts:93-112`: Catch DB tidak lagi swallow; `console.error`, update nama `Bunda {nama} {kecamatan}` tetap jalan, eskalasi dengan reply jujur `gangguan penyimpanan — tim cek manual` (bukan sukses palsu).
 - **Recovery mass (script `recover_all.js` via `dist/utils/reservation-text-parser.js` + `dist/db/client.js`):**
-  - Scan `messages INBOUND` 14 hari (1358 messages) → 38 kandidat form → **30 reservasi baru** dibuat idempoten 24h `treatment_detail` + `reservationLifecycle` + `InitiateCheckout` CAPI (`CAPI SUCCESS` di log). Contoh: `6289667285350 Hansen 1th`, `6281224301155 Althaf`, `6287855873973 zayyan 1.5bln`. Total `reservations` DB: 122 (sebelum 92). Siska #777 manual recover via `POST /api/admin/reservation/parse` → `bfc3020b` + `children.gifton 13bln→12mo` + `CAPI SUCCESS` (organic).
+  - Scan `messages INBOUND` 14 hari (1358 messages) → 38 kandidat form → **30 reservasi baru** dibuat idempoten 24h `treatment_detail` + `reservationLifecycle` + `InitiateCheckout` CAPI (`CAPI SUCCESS` di log). Contoh: `628966728xxxx Hansen 1th`, `628122430xxxx Althaf`, `628785587xxxx zayyan 1.5bln`. Total `reservations` DB: 122 (sebelum 92). Siska #777 manual recover via `POST /api/admin/reservation/parse` → `bfc3020b` + `children.gifton 13bln→12mo` + `CAPI SUCCESS` (organic).
 - **Kenapa cara ini:** Seluruh pipeline capture (webhook → human.ts → interest.ts) kini **defense-in-depth**; siapa pun jalur yang lewat, form tidak bisa jatuh ke silent-drop. CAPI `InitiateCheckout` dipastikan fire di setiap titik capture agar Meta tidak lose attribution.
 
 ### 15.2 Aisyah 929 (AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView)
 
 - **Status:** fixed (storage + self-heal), data lama di-heal.
-- **Gejala:** `ad_clicks` id `cmt3l5r1s00026xfn0kpkt928` (Aisyah 6285812506929, created 2026-08-21 23:33:56) `landingUrl=https://app.kalababyspa.online/cta?divisi=iklan-utama` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` CAPI jadi `app.*` → atribusi Meta tidak presisi.
+- **Gejala:** `ad_clicks` id `cmt3l5r1s00026xfn0kpkt928` (Aisyah 628581250xxxx, created 2026-08-21 23:33:56) `landingUrl=https://app.kalababyspa.online/cta?divisi=iklan-utama` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` CAPI jadi `app.*` → atribusi Meta tidak presisi.
 - **Akar masalah:** `external-tracker.js:121-146` wajib bridge `window.location.href → /cta?landing_url=...` — jika LP eksternal tidak pasang script / CTA `href` bukan `/cta` / race 250ms klik sebelum `MutationObserver` scan, `GET /cta` tiba **tanpa `landing_url`** → `landing.route.ts:164` fallback ke `x-forwarded-host` (`app.*`). `resolveCanonicalLandingUrl` (`capi.service.ts:103`) sudah self-heal di `GET /capi-queue` + CAPI send, tapi raw DB tetap `app.*` sebelum queue dibuka.
 - **Fix (commit `4ec5a6e`, live):**
   - `landing.route.ts:185-198`: Kanonikalisasi **sebelum simpan** `AdClick` via `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` + warn `CTA LANDING_URL MISSING`. Data baru langsung `kalababyspa.online/reservasionline?fbclid...` (strip `app.`, map `/cta → /reservasionline`, preserve `fbclid/utm_*`, delete `landing_url/slug/p/msg/divisi`). Tenant-aware `Tenant.landing_domain` (`schema.prisma:539`), fallback `kalababyspa.online/reservasionline` bila `landing_domain=""`.
@@ -425,7 +425,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 13. [Attribution] AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView asli (Aisyah 929) — FIXED 2026-08-22
 
 - **Status:** fixed (2026-08-22), recovery mass 30 reservasi 14 hari terakhir.
-- **Gejala:** Reservasi #777 (Siska, 6285106962777) form lengkap `Berikut list untuk reservasi...` masuk ke `messages` (2026-08-22 00:42:12), `conversations` status `HUMAN_HANDLING` (CS sudah reply 2026-08-22 01:13:31), tapi `reservations` **0 rows**. Customer cuma dapat balasan manual CS, tidak ada record otomatis.
+- **Gejala:** Reservasi #777 (Siska, 628510696xxxx) form lengkap `Berikut list untuk reservasi...` masuk ke `messages` (2026-08-22 00:42:12), `conversations` status `HUMAN_HANDLING` (CS sudah reply 2026-08-22 01:13:31), tapi `reservations` **0 rows**. Customer cuma dapat balasan manual CS, tidak ada record otomatis.
 - **Akar masalah (3 silent-drop berlapis):**
   1. **Human Handling short-circuit** `webhook.route.ts:732-823`: 3 jalur early-return `HUMAN_HANDLING_ACTIVE_SILENT` (grace 30s / `ENABLE_WAHA_HOLD_LABEL=false` default / explicit guard) langsung `logMessage` + `return` tanpa `enqueue` → watcher `human.ts:41` (`isReservationFormMessage` → `parseReservationText` → `prisma.reservation.create`) tidak pernah reachable.
   2. **Stale guard 180s** `webhook.route.ts:407`: WAHA reconnect/QR burst bikin `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` (log saja, skip state machine) — form ikut ter-drop.
@@ -436,13 +436,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `human.ts:73`: Background watcher juga fire `InitiateCheckout` CAPI.
   - `interest.ts:93-112`: Catch DB tidak lagi swallow; `console.error`, update nama `Bunda {nama} {kecamatan}` tetap jalan, eskalasi dengan reply jujur `gangguan penyimpanan — tim cek manual` (bukan sukses palsu).
 - **Recovery mass (script `recover_all.js` via `dist/utils/reservation-text-parser.js` + `dist/db/client.js`):**
-  - Scan `messages INBOUND` 14 hari (1358 messages) → 38 kandidat form → **30 reservasi baru** dibuat idempoten 24h `treatment_detail` + `reservationLifecycle` + `InitiateCheckout` CAPI (`CAPI SUCCESS` di log). Contoh: `6289667285350 Hansen 1th`, `6281224301155 Althaf`, `6287855873973 zayyan 1.5bln`. Total `reservations` DB: 122 (sebelum 92). Siska #777 manual recover via `POST /api/admin/reservation/parse` → `bfc3020b` + `children.gifton 13bln→12mo` + `CAPI SUCCESS` (organic).
+  - Scan `messages INBOUND` 14 hari (1358 messages) → 38 kandidat form → **30 reservasi baru** dibuat idempoten 24h `treatment_detail` + `reservationLifecycle` + `InitiateCheckout` CAPI (`CAPI SUCCESS` di log). Contoh: `628966728xxxx Hansen 1th`, `628122430xxxx Althaf`, `628785587xxxx zayyan 1.5bln`. Total `reservations` DB: 122 (sebelum 92). Siska #777 manual recover via `POST /api/admin/reservation/parse` → `bfc3020b` + `children.gifton 13bln→12mo` + `CAPI SUCCESS` (organic).
 - **Kenapa cara ini:** Seluruh pipeline capture (webhook → human.ts → interest.ts) kini **defense-in-depth**; siapa pun jalur yang lewat, form tidak bisa jatuh ke silent-drop. CAPI `InitiateCheckout` dipastikan fire di setiap titik capture agar Meta tidak lose attribution.
 
 ### 15.2 Aisyah 929 (AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView)
 
 - **Status:** fixed (storage + self-heal), data lama di-heal.
-- **Gejala:** `ad_clicks` id `cmt3l5r1s00026xfn0kpkt928` (Aisyah 6285812506929, created 2026-08-21 23:33:56) `landingUrl=https://app.kalababyspa.online/cta?divisi=iklan-utama` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` CAPI jadi `app.*` → atribusi Meta tidak presisi.
+- **Gejala:** `ad_clicks` id `cmt3l5r1s00026xfn0kpkt928` (Aisyah 628581250xxxx, created 2026-08-21 23:33:56) `landingUrl=https://app.kalababyspa.online/cta?divisi=iklan-utama` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` CAPI jadi `app.*` → atribusi Meta tidak presisi.
 - **Akar masalah:** `external-tracker.js:121-146` wajib bridge `window.location.href → /cta?landing_url=...` — jika LP eksternal tidak pasang script / CTA `href` bukan `/cta` / race 250ms klik sebelum `MutationObserver` scan, `GET /cta` tiba **tanpa `landing_url`** → `landing.route.ts:164` fallback ke `x-forwarded-host` (`app.*`). `resolveCanonicalLandingUrl` (`capi.service.ts:103`) sudah self-heal di `GET /capi-queue` + CAPI send, tapi raw DB tetap `app.*` sebelum queue dibuka.
 - **Fix (commit `4ec5a6e`, live):**
   - `landing.route.ts:185-198`: Kanonikalisasi **sebelum simpan** `AdClick` via `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` + warn `CTA LANDING_URL MISSING`. Data baru langsung `kalababyspa.online/reservasionline?fbclid...` (strip `app.`, map `/cta → /reservasionline`, preserve `fbclid/utm_*`, delete `landing_url/slug/p/msg/divisi`). Tenant-aware `Tenant.landing_domain` (`schema.prisma:539`), fallback `kalababyspa.online/reservasionline` bila `landing_domain=""`.
@@ -472,7 +472,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 14b. [Customer] Jarak tidak terekam saat human handling (Sawotratap 6283831256927) — FIXED 2026-08-27
+## 14b. [Customer] Jarak tidak terekam saat human handling (Sawotratap 628383125xxxx) — FIXED 2026-08-27
 
 - **Status:** fixed (2026-08-27).
 - **Gejala:** Customer Sawotratap kirim `Jl anusanata No.19 Sawotratap Gedangan Sidoarjo` + form reservasi `Kec Sawotratap Kota Sidoarjo` saat `is_human_handling=true` → `customers.lat/lng/distance_km/ongkir` tetap NULL. Balasan admin `jaraknya 4km` hanya teks manual.
@@ -485,7 +485,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 14. [Follow-Up / Live Chat] Pesan Multi-Bubble Follow-Up & Reminder Hanya Mencatat Bubble Terakhir di Live Chat — FIXED 2026-08-26
 
 - **Status:** fixed (2026-08-26).
-- **Ditemukan:** 2026-08-26, saat investigasi customer Bunda Mika Tegalsari (`+62 812-1733-2334`), Sita wonokromo (`6285755140841`), dan Novi Candi (`6282311154677`).
+- **Ditemukan:** 2026-08-26, saat investigasi customer Bunda Mika Tegalsari (`+62 812-1733-xxxx`), Sita wonokromo (`628575514xxxx`), dan Novi Candi (`628231115xxxx`).
 - **Gejala:** Pesan follow-up otomatis (`NEXT_TREATMENT`, `NO_PURCHASE`, `Review H+1`, `Morning Reminder`) yang dipecah oleh engine Humanizer menjadi 2 bubble terkirim utuh ke WhatsApp customer, namun di database `messages` dan tampilan Live Chat Admin Dashboard HANYA bubble terakhir yang tersimpan. Bubble 1 (sapaan awal) hilang dari riwayat Live Chat.
 - **Akar Masalah (3 faktor):**
   1. **Ketiadaan Pre-Logging di Modul Background**: `FollowUpService.executeFollowUp`, `CronService`, dan `BroadcastQueueService` langsung memanggil `typingService.simulateHumanReply()` tanpa mencatat pesan ke tabel `messages` sebelum/sesudah kirim.
@@ -510,7 +510,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 17. [Slot Engine] Hardcoded Treatment Keyword Harvester di `slate-store.ts` (SaaS Multi-Tenant Tech Debt)
 
 - **Status:** open (tech debt, deferred).
-- **Ditemukan:** 2026-08-31, saat audit mendalam perbaikan kasus `6281237904919`.
+- **Ditemukan:** 2026-08-31, saat audit mendalam perbaikan kasus `628123790xxxx`.
 - **Gejala / Deskripsi:** `SlateStore.harvestGroundTruthFromHistorySync` memiliki daftar array statis `treatmentKeywords` (seperti *oksitosin*, *laktasi*, *pulih ceria*, *batuk*, dll.) untuk mendeteksi treatment yang pernah dibahas di riwayat pesan.
 - **Dampak:** Sesuai konvensi SaaS-readiness di `AGENTS.md`, seluruh nama layanan dan kata kunci seharusnya dimuat secara dinamis per-tenant dari tabel database `clinic_services`. Untuk tenant default klinik Mom & Baby saat ini bekerja dengan baik, namun untuk tenant multi-klinik baru di masa depan perlu dihubungkan ke `TreatmentCatalogService`.
 - **Rencana Mitigasi:** Pindahkan daftar keyword ke query dinamis `clinicService.getServices(tenantId)` saat inisialisasi / caching per-tenant.
@@ -898,9 +898,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Status:** audit read-only selesai; tindakan data menunggu keputusan operasional.
 - **Cakupan:** 638 customer; 310 `completed`, 13 `pending`, 1 `cancelled` (Retno, dieksekusi sesi ini).
 - **Temuan (existing-patient + pending, pola Retno):**
-  1. **Bunda Bella (6289670370062)** — KOMBO duplikat + nilai korup, slot 09:30 WIB hari ini (sudah lewat, keduanya masih `pending`): `bbbde4bd` = 46000 (tertulis dari teks bot "Selamat Malam bunda Bella!..." → signature overwrite buta `maybeFirePurchaseEvent` pra-fix, relasi 2 anak) vs `7a6e494a` = 160000 (`[Admin Manual]`, tanpa anak). Rencana approved sebelumnya (cancel `7a6e49…`, restore `bbbd…`→160000) BELUM pernah dieksekusi. Perlu keputusan: batalkan salah satu + status baris kept (completed bila treatment tadi pagi terjadi / tetap pending / cancel).
-  2. **Bunda Devia (6285850166929, histori 12)** — 2 pending Newborn (`[Admin Manual]`, dibuat selisih 2 menit): booking kemarin 08:00 WIB (overdue) + hari ini 08:00 WIB (overdue). Dugaan double-entry admin. Rekomendasi: cancel baris kemarin, konfirmasi status baris hari ini ke CS.
-  3. **Bunda Fitria Wonokromo (628563567095, histori 2)** — 2 pending 13 Sept: 09:00 WIB form customer (165k) + 13:00 WIB admin (180k), detail berbeda. Belum jelas duplikat vs 2 sesi sah. Rekomendasi: klarifikasi CS dulu, JANGAN eksekusi buta.
+  1. **Bunda Bella (628967037xxxx)** — KOMBO duplikat + nilai korup, slot 09:30 WIB hari ini (sudah lewat, keduanya masih `pending`): `bbbde4bd` = 46000 (tertulis dari teks bot "Selamat Malam bunda Bella!..." → signature overwrite buta `maybeFirePurchaseEvent` pra-fix, relasi 2 anak) vs `7a6e494a` = 160000 (`[Admin Manual]`, tanpa anak). Rencana approved sebelumnya (cancel `7a6e49…`, restore `bbbd…`→160000) BELUM pernah dieksekusi. Perlu keputusan: batalkan salah satu + status baris kept (completed bila treatment tadi pagi terjadi / tetap pending / cancel).
+  2. **Bunda Devia (628585016xxxx, histori 12)** — 2 pending Newborn (`[Admin Manual]`, dibuat selisih 2 menit): booking kemarin 08:00 WIB (overdue) + hari ini 08:00 WIB (overdue). Dugaan double-entry admin. Rekomendasi: cancel baris kemarin, konfirmasi status baris hari ini ke CS.
+  3. **Bunda Fitria Wonokromo (62856356xxxx, histori 2)** — 2 pending 13 Sept: 09:00 WIB form customer (165k) + 13:00 WIB admin (180k), detail berbeda. Belum jelas duplikat vs 2 sesi sah. Rekomendasi: klarifikasi CS dulu, JANGAN eksekusi buta.
 - **Normal (tanpa tindakan):** 7 pending milik new-lead (tanpa riwayat) — booking sah; 1 upcoming aktif hari ini (Agnes 13:30 WIB, guard kini melindungi); Retno bersih (1 completed + 1 cancelled).
 - **Kronologi eksekusi Bella + admin konkuren (UTC, 2026-09-09, dari `audit_logs`):**
   - 04:12 admin `REJECT_PURCHASE_OUTLIER` pada `7a6e49…` (duplikat yatim Bella).
@@ -951,7 +951,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 40. [V3] Bot menjawab pertanyaan lowongan kerja dengan jawaban jadwal bidan + buta isi gambar (kasus 6289681655911, 2026-09-11)
+## 40. [V3] Bot menjawab pertanyaan lowongan kerja dengan jawaban jadwal bidan + buta isi gambar (kasus 628968165xxxx, 2026-09-11)
 
 - **Status:** implemented (2026-09-11, plan v2 — mekanisme fondasional; BUKAN tambal per-kasus).
 - **Kronologi live (fakta DB + log + WAHA store, read-only via SSH):** customer Rizki Dwi S kirim 3x foto flyer loker + caption ("Pagi kak mau tanya lokernya masih tersedia ?", 00:19/00:22/00:24 UTC). Bot menjawab di luar domain — preview log: "Halo Bapak! ✨ Terima kasih sudah menghubungi..." lalu 2x "Bapak, mohon maaf untuk hari ini jadwal Bidan..." (completion 97/40/41 token, `retrievedChunks` 2-3, `toolCount` 0). `admin@kalamomsspa.com` menarik ketiga balasan via Live Chat (`REVOKE_MESSAGE` 00:28:33–39 UTC), `manual_takeover` 00:29:43 + balasan manual berisi link Google Form rekrutmen; customer mengisi form 00:36. Teks lengkap balasan bot tak terpulihkan (DB ditimpa placeholder oleh `markMessageDeleted`, WAHA store terprune).
@@ -1214,7 +1214,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 63. [Resolusi Reservasi & Invoice] Kasus 6282229353440 Bunda Lutfia — 4 lapisan akar (2026-09-15)
+## 63. [Resolusi Reservasi & Invoice] Kasus 628222935xxxx Bunda Lutfia — 4 lapisan akar (2026-09-15)
 
 - **Status:** Fase 1–4 selesai terverifikasi (nearest-neighbor 5, wilayah 5, catalog-age 5, safe-address 4, chat-extractor 8+13; `npm run build` + dashboard tsc exit 0). 31 failures full suite adalah pre-existing stubs di luar cakupan fase (queue-durability, telemetry, typing-transport, v3-governance, pediatric-taxonomy, recruitment, schedule-handoff, guardrail-no-mutilation, migration) — bukan regresi fase ini.
 - **Sisa & Tech Debt yang disengaja:**
