@@ -469,6 +469,24 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       } catch (_) {}
     }
 
+    // Fail-closed Prasyarat Lokasi (Homecare Clinic Safety):
+    // Jika conversationId ada dan effectiveAddress kosong (tidak ada alamat fisik
+    // maupun wilayah/kelurahan dari sesi), TOLAK reservasi dan arahkan asisten
+    // untuk menanyakan lokasi/daerah terlebih dahulu (Aturan Emas 5a).
+    if (conversationId && !effectiveAddress) {
+      console.warn(JSON.stringify({
+        event: 'V3_TOOL_RESERVATION_LOCATION_MISSING',
+        tenantId,
+        conversationId,
+        timestamp: new Date().toISOString(),
+      }));
+      return {
+        success: false,
+        summary: 'Lokasi customer belum diketahui',
+        message: 'Lokasi/wilayah Bunda belum diketahui. Untuk layanan homecare, tanyakan terlebih dahulu daerah/kelurahan/kecamatan rumah Bunda dengan ramah agar tim Bidan dapat memastikan jangkauan dan ketersediaan rute.',
+      };
+    }
+
     // Validasi medis momStage (fail-closed): POSTPARTUM DILARANG ditulis ke
     // rekam reservasi bila anak tertua sudah lewat masa nifas (mis. balita
     // 2 tahun) — turunkan ke GENERAL agar label "Paska Salin/Nifas" tak

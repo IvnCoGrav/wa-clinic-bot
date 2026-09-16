@@ -3,6 +3,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { CartManager } from './cart-manager';
 import { PatientProfileExtractor } from './patient-extractor';
+import { isAskedLocationRecently } from './conversation-summarizer';
 import type {
   LocationState,
   ChildState,
@@ -284,7 +285,10 @@ export class GoalTracker {
    * dan belum ada treatment terpilih, layanan teratas dari katalog didorong ke
    * status agar LLM terpandu — bahkan bila tool_choice dilewati model.
    */
-  public static formatGoalSessionForPrompt(session: CustomerGoalSession): string {
+  public static formatGoalSessionForPrompt(
+    session: CustomerGoalSession,
+    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean }
+  ): string {
     // Pre-grounding deterministik (Zero-Code) — audience-aware:
     // keluhan ibu (momProfile.complaints) dan keluhan anak digabung sesuai subjek.
     const childSymptoms: string[] = [
@@ -336,7 +340,12 @@ export class GoalTracker {
         lines.push(`• Ongkir: Rp ${session.location.ongkirPromo.toLocaleString('id-ID')} (Promo dari normal Rp ${session.location.ongkirNormal?.toLocaleString('id-ID') || '-'})` + (ongkirState ? ` [STATUS: ${ongkirState}]` : ''));
       }
     } else {
-      lines.push(`• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)`);
+      const recentlyAsked = opts?.askedLocationRecently ?? (opts?.history ? isAskedLocationRecently(opts.history) : false);
+      if (recentlyAsked) {
+        lines.push(`• Lokasi: Belum diketahui (Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi pada turn ini, fokus jawab keluhan/pertanyaan Bunda)`);
+      } else {
+        lines.push(`• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)`);
+      }
     }
 
     if (session.cartItems && session.cartItems.length > 0) {
