@@ -685,7 +685,9 @@ export const MetaCapiQueue: React.FC = () => {
             </span>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[#e9edef] dark:border-[#2a3942] text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#1c272e]">
@@ -798,7 +800,7 @@ export const MetaCapiQueue: React.FC = () => {
                       <td className="py-3.5 px-4 text-center align-top">
                         <button
                           onClick={() => openJsonModal(item)}
-                          className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs ${
+                          className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
                             customPayloads[item.id]
                               ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
                               : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
@@ -816,7 +818,7 @@ export const MetaCapiQueue: React.FC = () => {
                           <div className="flex flex-col gap-1.5 items-end">
                             <button
                               onClick={() => handleApprove(item)}
-                              className="flex items-center justify-center space-x-1 px-3 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs whitespace-nowrap"
+                              className="flex items-center justify-center space-x-1 px-3 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Kirim event ke Meta CAPI dengan event_time saat transaksi/interaksi"
                             >
                               <Check size={13} />
@@ -824,7 +826,7 @@ export const MetaCapiQueue: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleReject(item)}
-                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-rose-200 dark:hover:border-rose-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap"
+                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-rose-200 dark:hover:border-rose-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Tandai sebagai outlier — event TIDAK dikirim ke Meta"
                             >
                               <X size={12} />
@@ -839,7 +841,7 @@ export const MetaCapiQueue: React.FC = () => {
                             </span>
                             <button
                               onClick={() => handleApprove(item, undefined)}
-                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-blue-200 dark:hover:border-blue-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-[10px] font-medium transition shadow-xs whitespace-nowrap"
+                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-blue-200 dark:hover:border-blue-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Kirim ulang event ke Meta CAPI (berguna jika event sebelumnya sempat gagal)"
                             >
                               <RefreshCw size={10} />
@@ -859,6 +861,142 @@ export const MetaCapiQueue: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile Card Stack View */}
+          <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+            {filtered.map((item) => {
+              const cleanTreatments = cleanTreatmentList(item.treatment_detail);
+              const isPurchase = (item.eventType || 'Purchase') === 'Purchase';
+
+              return (
+                <div key={item.id} className="p-4 space-y-3 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#182229] transition-colors">
+                  {/* Header: Customer Name, Phone & Status Badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm truncate">
+                        {item.customer.name}
+                      </div>
+                      <a
+                        href={`https://wa.me/${item.customer.phone?.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-[#008069] dark:text-[#00a884] font-mono hover:underline block"
+                      >
+                        {item.customer.phone}
+                      </a>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      {statusBadge(item.purchase_review_status)}
+                      {item.metaDropRisk && item.purchase_review_status === 'pending' && (
+                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 text-[10px] font-bold">
+                          <AlertTriangle size={10} />
+                          <span>Drop Risk (&gt;7d)</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Attribution & Distance Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {attributionBadge(item.attribution.isPaid)}
+                    {item.attribution.trackingCode && (
+                      <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">
+                        {item.attribution.trackingCode}
+                      </span>
+                    )}
+                    {item.distanceKm && (
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 font-semibold flex items-center gap-0.5">
+                        <MapPin size={10} className="text-blue-500" />
+                        <span>{item.distanceKm}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Treatments List */}
+                  <div className="bg-[#f8fafc] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#667781] dark:text-[#8696a0]">
+                      Layanan / Treatment
+                    </div>
+                    {cleanTreatments.map((t, idx) => (
+                      <div key={idx} className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-start space-x-1.5">
+                        <span className="text-[#008069] font-bold shrink-0">{idx + 1}.</span>
+                        <span className="leading-snug">{t}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Event Type, Value, & Time */}
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <div className="flex items-center space-x-2">
+                      <span
+                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg text-xs font-bold border ${
+                          isPurchase
+                            ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
+                        }`}
+                      >
+                        <Sparkles size={11} />
+                        <span>{item.eventType || 'Purchase'}</span>
+                      </span>
+                      {item.value && item.value > 0 ? (
+                        <span className="font-extrabold text-[#008069] dark:text-[#00a884] font-mono">
+                          {formatRupiah(item.value)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="text-right text-[11px] text-[#667781] dark:text-[#8696a0]">
+                      {formatDateTime(item.purchase_occurred_at)}
+                    </div>
+                  </div>
+
+                  {/* Actions & JSON Button */}
+                  <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5] dark:border-[#202c33]">
+                    <button
+                      onClick={() => openJsonModal(item)}
+                      className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
+                        customPayloads[item.id]
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40'
+                          : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
+                      }`}
+                    >
+                      <Code2 size={13} className={customPayloads[item.id] ? 'text-amber-600' : 'text-[#008069]'} />
+                      <span>JSON{customPayloads[item.id] ? ' *' : ''}</span>
+                    </button>
+
+                    <div className="flex items-center space-x-2">
+                      {item.purchase_review_status === 'pending' ? (
+                        <>
+                          <button
+                            onClick={() => handleReject(item)}
+                            className="px-3 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
+                          >
+                            Abaikan
+                          </button>
+                          <button
+                            onClick={() => handleApprove(item)}
+                            className="px-3.5 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                          >
+                            <Check size={13} />
+                            <span>Approve</span>
+                          </button>
+                        </>
+                      ) : item.purchase_review_status === 'approved' ? (
+                        <button
+                          onClick={() => handleApprove(item, undefined)}
+                          className="px-2.5 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+                        >
+                          <RefreshCw size={11} />
+                          <span>Kirim Ulang</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 
@@ -869,8 +1007,13 @@ export const MetaCapiQueue: React.FC = () => {
         const isPending = selectedJsonItem.purchase_review_status === 'pending';
 
         return (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#111b21] w-full max-w-3xl rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white dark:bg-[#111b21] w-full max-w-3xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[90vh] animate-slideUp sm:animate-modalScaleUp">
+              {/* Mobile Drag Handle */}
+              <div className="pt-2 pb-1 bg-[#f8fafc] dark:bg-[#1c272e] sm:hidden flex justify-center shrink-0">
+                <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full" />
+              </div>
+
               {/* Modal Header */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e]">
                 <div className="flex items-center space-x-2.5">

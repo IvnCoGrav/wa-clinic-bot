@@ -600,7 +600,8 @@ export const StaffManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-[#111b21]">
                 <thead className="bg-[#f8fafc] text-xs font-bold uppercase text-[#667781] border-b border-[#e9edef]">
                   <tr>
@@ -673,7 +674,7 @@ export const StaffManagement: React.FC = () => {
                             {/* Edit Button */}
                             <button
                               onClick={() => handleOpenEdit(staff)}
-                              className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs"
+                              className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs cursor-pointer"
                               title="Edit Data Staff"
                             >
                               <Pencil size={13} />
@@ -682,7 +683,7 @@ export const StaffManagement: React.FC = () => {
                             {/* Delete button */}
                             <button
                               onClick={() => handleDeleteStaff(staff)}
-                              className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition-colors border border-[#d1d7db] shadow-xs"
+                              className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition-colors border border-[#d1d7db] shadow-xs cursor-pointer"
                               title="Hapus Akun Staff"
                             >
                               <Trash2 size={13} />
@@ -694,6 +695,83 @@ export const StaffManagement: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Stack View */}
+            <div className="md:hidden">
+              {loading ? (
+                <div className="py-12 text-center text-[#667781]">
+                  <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
+                  <p className="text-xs">Memuat data staff...</p>
+                </div>
+              ) : filteredStaffList.length === 0 ? (
+                <div className="py-12 text-center text-[#667781] px-4">
+                  <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
+                  <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
+                  <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#e9edef]">
+                  {filteredStaffList.map((staff) => (
+                    <div key={staff.id} className="p-4 space-y-3 bg-white hover:bg-[#f8fafc] transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                              staff.active ? 'bg-emerald-500' : 'bg-[#d1d7db]'
+                            }`}
+                            title={staff.active ? 'Akun aktif' : 'Akun nonaktif'}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#111b21] text-sm truncate">{staff.name}</p>
+                            <a
+                              href={`https://wa.me/${staff.phone?.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono text-xs text-[#008069] hover:underline"
+                            >
+                              {staff.phone}
+                            </a>
+                          </div>
+                        </div>
+                        <div className="shrink-0">{getRoleBadge(staff.role)}</div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5] text-xs">
+                        <div>
+                          {staff.telegram_chat_id ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>Telegram</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] text-[#8696a0] border border-[#e9edef]">
+                              <span>No Telegram</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(staff)}
+                            className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs text-xs font-semibold flex items-center space-x-1 cursor-pointer"
+                            title="Edit Data Staff"
+                          >
+                            <Pencil size={12} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStaff(staff)}
+                            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition-colors border border-[#d1d7db] shadow-xs cursor-pointer"
+                            title="Hapus Akun Staff"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

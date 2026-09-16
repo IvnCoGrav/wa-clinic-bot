@@ -4554,7 +4554,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             )}
 
                             <div
-                              className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all select-text cursor-text ${
+                              className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
                                 isRevoked
                                   ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
                                   : isCustomer

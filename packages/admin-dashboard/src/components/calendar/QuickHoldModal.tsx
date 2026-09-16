@@ -189,12 +189,21 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
   const initials = (customerName || 'B').trim().charAt(0).toUpperCase() || 'B';
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-fadeIn"
+      onClick={onClose}
+    >
       <div
-        className="bg-white dark:bg-[#111b21] rounded-3xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh] transition-all transform scale-100"
+        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] w-full max-w-lg overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[92vh] animate-slideUp sm:animate-modalScaleUp"
         role="dialog"
         aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Drag Handle */}
+        <div className="pt-2 pb-1 bg-amber-500/10 dark:bg-[#182229] sm:hidden flex justify-center shrink-0">
+          <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full" />
+        </div>
+
         <div className="px-5 py-4 border-b border-[#e9edef] dark:border-[#222e35] bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
             <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
@@ -368,7 +377,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
           </div>
         </form>
 
-        <div className="p-4 border-t border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#202c33] flex items-center justify-between">
+        <div className="p-4 border-t border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#202c33] flex items-center justify-between safe-bottom-padding shrink-0">
            <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 bg-white dark:bg-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#222e35] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold rounded-xl transition">Batal</button>
            <button type="button" onClick={handleSubmit} disabled={submitting} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-amber-500/25 flex items-center space-x-2 active:scale-95 disabled:opacity-50">
              {submitting ? (<><Loader2 size={14} className="animate-spin" /><span>Menyimpan...</span></>) : (<><Zap size={14} className="fill-current" /><span>⚡ Simpan & Tahan Slot</span></>)}
