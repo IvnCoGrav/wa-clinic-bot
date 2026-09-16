@@ -48,7 +48,13 @@ import {
   Volume2,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
-import { extractMedia } from '../../utils/mediaExtractor';
+import {
+  extractMedia,
+  extractLocation,
+  extractAudio,
+  ChatLocationData,
+  ChatAudioData,
+} from '../../utils/mediaExtractor';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
@@ -156,61 +162,7 @@ function extractQuotedMessage(msg: ChatMessage): NonNullable<ChatMessage['quoted
   return null;
 }
 
-// Helper: ekstraksi koordinat lokasi WA (validasi 0,0 sebagai invalid)
-function extractLocation(msg: ChatMessage): { lat: number; lng: number } | null {
-  const pr = (msg as any).payload_raw;
-  if (pr?.location) {
-    const loc = pr.location;
-    const lat = typeof loc.latitude === 'number' ? loc.latitude : typeof loc.lat === 'number' ? loc.lat : null;
-    const lng = typeof loc.longitude === 'number' ? loc.longitude : typeof loc.lng === 'number' ? loc.lng : null;
-    if (lat !== null && lng !== null && !(lat === 0 && lng === 0)) return { lat, lng };
-  }
-  if (pr && typeof pr.latitude === 'number' && typeof pr.longitude === 'number' && !(pr.latitude === 0 && pr.longitude === 0)) {
-    return { lat: pr.latitude, lng: pr.longitude };
-  }
-  if (pr && typeof pr.lat === 'number' && typeof pr.lng === 'number' && !(pr.lat === 0 && pr.lng === 0)) {
-    return { lat: pr.lat, lng: pr.lng };
-  }
-  const c = (msg.content || '').trim();
-  // Pola "[LOCATION: Lat -7.xxx, Lng 112.xxx]" & varian
-  const m = c.match(/Lat\s*[:\-]?\s*(-?\d+\.\d+)\s*[,\s]+\s*Lng\s*[:\-]?\s*(-?\d+\.\d+)/i);
-  if (m) {
-    const lat = parseFloat(m[1]); const lng = parseFloat(m[2]);
-    if (!isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0)) return { lat, lng };
-  }
-  // Fallback: coba parsing URL Google Maps di konten via URL API (mandat non-hardcode)
-  const urlMatch = c.match(/https?:\/\/[^\s]+/g);
-  if (urlMatch) {
-    for (const u of urlMatch) {
-      try {
-        const urlObj = new URL(u);
-        const q = urlObj.searchParams.get('q') || urlObj.searchParams.get('query') || urlObj.searchParams.get('destination');
-        if (q) {
-          const parts = q.split(',');
-          if (parts.length >= 2) {
-            const lat = parseFloat(parts[0]); const lng = parseFloat(parts[1]);
-            if (!isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0)) return { lat, lng };
-          }
-        }
-      } catch {}
-    }
-  }
-  return null;
-}
-
-function extractAudioUrl(msg: ChatMessage, media?: ChatMediaData | null): string | null {
-  const pr = (msg as any).payload_raw;
-  const mt = ((media as any)?.mimeType || pr?.media?.mimeType || (msg as any).media_mime_type || '') as string;
-  const url = (media?.url || media?.hdUrl || pr?.media?.url || pr?.media?.hdUrl || (msg as any).media_url || pr?.audio?.url || pr?.ptt?.url || pr?.voice?.url || '') as string;
-  const isAudioMime = mt.startsWith('audio/');
-  const isAudioExt = /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test(url) || /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test((msg.content || '').trim());
-  const isAudioPlaceholder = /^\[(AUDIO|VOICE|PTT)/i.test((msg.content || '').trim());
-  if (url && (isAudioMime || isAudioExt || isAudioPlaceholder)) return url;
-  if (pr?.audio?.url) return pr.audio.url;
-  if (pr?.ptt?.url) return pr.ptt.url;
-  if (pr?.voice?.url) return pr.voice.url;
-  return null;
-}
+// VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
 
 // VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
 const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
@@ -2382,7 +2334,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         const media = extractMedia(msg);
                         const quotedMsg = extractQuotedMessage(msg);
                         const locData = extractLocation(msg);
-                        const audioUrl = extractAudioUrl(msg, media);
+                        const audioData = extractAudio(msg);
+                        const audioUrl = audioData?.url || null;
                         const isRevoked = !!(msg.is_revoked || (msg as any).payload_raw?.is_revoked || (msg as any).isRevoked);
                         const isLocationMsg = !!locData;
                         const isAudioMsg = !!audioUrl && !isRevoked;
@@ -2478,13 +2431,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                           <MapPin size={16} />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                          <p className="font-bold text-[12px] text-[#111b21] leading-tight">📍 Share Location Pasien</p>
-                                          <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
-                                            {locData.lat.toFixed(6)}, {locData.lng.toFixed(6)}
+                                          <p className="font-bold text-[12px] text-[#111b21] leading-tight flex items-center gap-1">
+                                            <span>📍 {locData.isLive ? 'Live Location Pasien' : 'Share Location Pasien'}</span>
+                                            {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
                                           </p>
+                                          <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                            {locData.latitude.toFixed(6)}, {locData.longitude.toFixed(6)}
+                                          </p>
+                                          {(locData.name || locData.address) && (
+                                            <p className="text-[11px] text-[#111b21] truncate mt-0.5 font-medium">
+                                              {locData.name || locData.address}
+                                            </p>
+                                          )}
                                         </div>
                                         <a
-                                          href={`https://www.google.com/maps/search/?api=1&query=${locData.lat},${locData.lng}`}
+                                          href={locData.url || `https://www.google.com/maps/search/?api=1&query=${locData.latitude},${locData.longitude}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
@@ -2515,11 +2476,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       </div>
                                     ) : null}
 
-                                    {/* Message Text Content (hidden for pure location placeholder) */}
+                                    {/* Message Text Content (Anti-Hollow Bubble) */}
                                     {(() => {
-                                      const isPureLocationPlaceholder = isLocationMsg && /^\[LOCATION/i.test((msg.content || '').trim());
-                                      if (isPureLocationPlaceholder) return null;
-                                      if (!msg.content || /^\[(AUDIO|VOICE|PTT)/i.test(msg.content.trim())) return null;
+                                      const hasVisual = isLocationMsg || isAudioMsg || !!media;
+                                      const isPurePlaceholder = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i.test((msg.content || '').trim());
+                                      if (hasVisual && isPurePlaceholder) return null;
+                                      if (!msg.content || !msg.content.trim()) {
+                                        if (!hasVisual) return <div className="text-[11px] italic text-[#667781]">[Pesan tanpa teks]</div>;
+                                        return null;
+                                      }
                                       return <div className="whitespace-pre-wrap break-words select-text">{msg.content}</div>;
                                     })()}
                                   </>

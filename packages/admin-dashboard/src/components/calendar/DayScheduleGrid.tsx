@@ -269,8 +269,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className={`${hideHeader ? 'flex-1 min-h-0' : 'max-h-[720px]'} overflow-y-auto select-none cursor-grab active:cursor-grabbing`}
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+        className={`${hideHeader ? 'flex-1 min-h-0' : 'max-h-[720px]'} overflow-y-auto select-none cursor-grab active:cursor-grabbing overscroll-contain`}
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
       >
         <div
           className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
