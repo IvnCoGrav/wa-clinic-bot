@@ -20,6 +20,8 @@ beforeEach(() => {
 /**
  * Audit 694493 — Copy reservasi anti-dissonance: tampung + cekkan,
  * tanpa klaim "berhasil dicatat" yang kontradiktif.
+ * Fase 2': bukti berupa pernyataan tegas (kontrak fail-closed menolak
+ * pertanyaan slot — lihat day-evidence-question-gate).
  */
 describe('save_reservation response copy (audit 694493)', () => {
   const base = {
@@ -27,7 +29,7 @@ describe('save_reservation response copy (audit 694493)', () => {
     chatId: '628123@c.us',
     treatmentName: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
     bookingDate: 'Jumat',
-    dayMentionEvidence: ['untuk jumat besok apakah bisa?'],
+    dayMentionEvidence: ['untuk jumat besok ya'],
     tenantId: 'default-tenant',
   } as any;
 

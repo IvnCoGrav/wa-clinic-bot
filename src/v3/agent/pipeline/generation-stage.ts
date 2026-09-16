@@ -341,6 +341,12 @@ export class GenerationStage {
       // keputusan commit ke judgment LLM (akar masalah: model buntu lalu
       // menanyakan jam spesifik yang justru dilarang).
       dynamicToolChoice = { type: 'function', function: { name: 'save_reservation' } };
+    } else if (detectedIntents.includes('ask_duration')) {
+      // Fase 4' (Turn 4: "durasi pijatnya berapa lama?"): paksa
+      // get_catalog_and_price agar durasi datang dari katalog DB per-tenant
+      // (bukan karangan "40 menit") — memakai sinyal intent eksisting,
+      // tanpa deteksi keyword baru.
+      dynamicToolChoice = { type: 'function', function: { name: 'get_catalog_and_price' } };
     }
 
     // Tool Schema Filtering untuk Call 1:

@@ -117,6 +117,18 @@ export class ToolExecutionPipeline {
         }
       }
 
+      // Fase 4' (Turn 4: presisi usia & durasi): bila LLM memanggil
+      // get_catalog_and_price tanpa usia anak padahal profil sesi sudah tahu
+      // (mis. balita 2 tahun), suntikkan agar filter tier usia + peringkat
+      // katalog tepat — cermin pola pengayaan momProfile di atas.
+      if (fnName === 'get_catalog_and_price') {
+        if (fnArgs.childAgeMonths == null) {
+          const sessionChildAge = (session as any).childProfile?.ageMonths
+            ?? (session as any).children?.[0]?.ageMonths ?? null;
+          if (typeof sessionChildAge === 'number') fnArgs.childAgeMonths = sessionChildAge;
+        }
+      }
+
       console.log(`[V3 AGENT TOOL EXECUTE] Tool: "${fnName}", Args:`, JSON.stringify(maskToolArgsForLogging(fnName, fnArgs)));
 
       const validation = validateToolArgs(fnName, fnArgs);
@@ -151,14 +163,30 @@ export class ToolExecutionPipeline {
           ];
           // Phase 4 (audit 222655): snapshot ongkir sesi agar
           // get_catalog_and_price menyusun template total otomatis.
+          // Fase 4' (anti-kaset rusak): sertakan keluhan yang SUDAH diketahui
+          // sesi (agregat deterministik cermin formatGoalSessionForPrompt) agar
+          // tool tak menanyakan ulang keluhan yang sudah disampaikan customer.
+          const pipeChildSymptoms: string[] = [
+            ...((session as any).childProfile?.symptoms || []),
+            ...(((session as any).children || []).flatMap((c: any) => c?.symptoms || [])),
+          ];
+          const pipeMomComplaints: string[] = [...(((session as any).momProfile?.complaints || []) as string[])];
+          const pipeIsMomSubject = (session as any).targetAudience === 'MOMS'
+            || (session as any).targetAudience === 'BOTH'
+            || Boolean((session as any).momProfile?.gestationalWeeks != null || (session as any).momProfile?.stage);
+          const pipeKnownSymptoms: string[] = (pipeIsMomSubject && pipeMomComplaints.length > 0 && pipeChildSymptoms.length === 0
+            ? pipeMomComplaints
+            : [...pipeChildSymptoms, ...((session as any).targetAudience === 'BOTH' ? pipeMomComplaints : [])]
+          ).filter((s, i, arr) => arr.indexOf(s) === i);
           toolContext.locationSnapshot = session.location
             ? {
                 kelurahan: session.location.kelurahan,
                 ongkirPromo: session.location.ongkirPromo,
                 ongkirNormal: session.location.ongkirNormal,
                 ongkirStatus: session.ongkirStatus,
+                knownSymptoms: pipeKnownSymptoms,
               }
-            : undefined;
+            : (pipeKnownSymptoms.length > 0 ? { knownSymptoms: pipeKnownSymptoms } : undefined);
           toolResult = await withTimeout(
             executeToolByName(fnName, validation.data, toolContext),
             TOOL_TIMEOUT_MS,

@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Resolusi Fondasional Siklus Regresi Chatbot & Isolasi Total Sandbox CAPI Queue (2026-09-16)
+
+- **Fase 1' — Isolasi sandbox antrean Meta CAPI (`src/routes/admin/reservations.subroute.ts`, `src/utils/dummy-filter.ts`)**:
+  - Query `prisma.reservation.findMany` + `unsentMqlCustomers` kini filter `customer.is_sandbox_test: false` (MQL + `phone not startsWith 6289999`); `processedCustomers` dan fallback in-memory disaring via helper baru `shouldExcludeFromCapiQueue()` (reuses `isDummyOrTestContact` terpusat — tanpa duplikasi prefix). Pengiriman aktual tetap dijaga CAPI GUARD (`capi.service.ts`).
+  - Test `tests/unit/capi-queue-sandbox-isolation.test.ts` (5/5 passed).
+- **Fase 2' — Fail-closed kontrak `save_reservation` + tahun dinamis + guard momStage (`src/v3/tools/save-reservation.tool.ts`, `src/utils/indonesian-date-parser.ts`, `src/utils/conversation-transaction-extractor.ts`)**:
+  - `verifyDayMentioned`: bukti hari yang seluruhnya dari kalimat tanya (`?`) = pertanyaan ketersediaan, BUKAN kesepakatan → tolak tanpa tulis DB (tanpa daftar frasa tanya baru; pengecualian same-day sesi 138207 yang catatannya pending ekspektasi-aman). Helper baru `isSameDayRequestText()` (reuse `SAME_DAY_EVIDENCE_ALIASES`, kini exported).
+  - `parseIndonesianDate`: tanggal lampau (mis. "2023" karangan LLM) digulir ke kemunculan berikutnya (`rollPastToFuture`); default tahun di `conversation-transaction-extractor` dijadikan dinamis (`getFullYear()`).
+  - `momStage POSTPARTUM` diturunkan bila anak tertua > 2 bln (`isPostpartumStageValid` + `POSTPARTUM_MAX_CHILD_AGE_MONTHS`, TODO tenant-aware — lihat KNOWN_ISSUES 69.1).
+  - Test baru: `day-evidence-question-gate` (8/8), `indonesian-date-year-clamp` (5/5).
+  - Kontrak test lama yang mengkodifikasi bug diperbarui (`premature-reservation-guard`, `reservation-response-copy`: jalur lolos kini pernyataan tegas; +1 kasus tanya-menolak). Same-day alias tetap hijau.
+- **Fase 3' — Grounding sesi & anti-kunci sepihak (`context-grounder.ts`, `persona.ts`, `goal-tracker.ts`, `cart-manager.ts`, `domain/types.ts`)**:
+  - `isBookingCommitReady`: giliran `?` bukan komitmen (kecuali same-day) → hentikan forcing prematur `save_reservation`.
+  - Direktif `SCHEDULING`: bila `pendingScheduleCheck` tanpa `reservationId`, sinyalkan `save_reservation DILARANG` (ganti "tersedia bila data lengkap"); persona router sinkron untuk pertanyaan slot.
+  - `formatGoalSessionForPrompt`: tier NIFAS (≤2 bln) / MENYUSUI-IBU BALITA (3–24 bln) / IBU ANAK (>24 bln) — POSTPARTUM hanya untuk bayi baru lahir.
+  - Cart: fuzzy match wajib memuat ≥1 token non-generik + `GENERIC_CLINIC_TOKENS` diperluas (balita/usia/umur/tahun/bulan/toddler) — kalimat generik "pijat balita usia 2 tahun" tidak lagi mengunci paket sepihak (test-first, bug ter-reproduksi sebelum fix).
+  - Test baru: `booking-commit-ready-gate` (5/5), `cart-generic-no-unilateral-lock` (2/2).
+- **Fase 4' — Anti-kaset rusak skrining + forcing durasi presisi (`get-catalog.tool.ts`, `tool-pipeline.ts`, `tool-registry.ts`, `generation-stage.ts`)**:
+  - `CatalogSessionContext.knownSymptoms` diisi deterministik dari sesi (tool-pipeline, cermin agregat `formatGoalSessionForPrompt`) → `effectiveSymptoms` menutup keluhan yang LLM lupa oper ("Biasa kembung"); `closingGuide` + `suggestedConsultationReply` tidak lagi menanyakan ulang skrining (wording panduan tidak mengutip frasa pemantik agar tak menyuntik pola ke LLM).
+  - `routeTools`: `ask_duration` (sinyal intent eksisting) memaksa `get_catalog_and_price` agar durasi dari katalog DB; `childAgeMonths` disuntik dari profil sesi bila LLM mengosongkan (cermin pola momProfile).
+  - Test baru: `catalog-known-symptoms-no-reask` (3/3).
+- **Regression**: `npm run build` exit 0 (termasuk `prisma generate` sinkronisasi client `cancel_reason` pasca-rebase); 27/27 test baru hijau; full suite 2340 passed / 30 failed — seluruhnya pre-existing terdokumentasi (fitur belum terimplementasi plan 8/9 + governance summary, lih. FASE 0) dan file terkait area sentuhan (`premature-guard`, `response-copy`, `sameday`, `multi-recipient-cart`, `age-consultation`, katalog) 100% hijau.
+- **Known Issues**: butir 69 (ambang klinis TODO tenant-aware + opsi keputusan; cleanup sandbox live menunggu 2-step verification; replay simulator Turn 1–8 manual).
+
 #### Follow-Up Berbasis Chat Terakhir & Informasi Alasan Pembatalan (2026-09-16)
 
 - **Skema & Migrasi (`prisma/schema.prisma`, `prisma/migrations/20260916000000_add_followup_cancel_reason/migration.sql`)**: Menambahkan kolom `cancel_reason String?` pada model `FollowUp` plus indeks komposit `@@index([tenant_id, customer_id, type, status])` untuk mempercepat lookup antrian NO_PURCHASE aktif saat chat masuk. Migrasi idempotent (`DO $$ ... information_schema.columns`) + `CREATE INDEX IF NOT EXISTS`, aman di DB live maupun fresh env.

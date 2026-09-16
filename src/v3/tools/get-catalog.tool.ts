@@ -85,6 +85,13 @@ export interface CatalogSessionContext {
    * template total resmi multi-item (dihitung mesin, bukan LLM).
    */
   cartItems?: Array<{ name: string; promoPrice?: number | null; price?: number | null }>;
+  /**
+   * Keluhan yang SUDAH diketahui sesi (Fase 4' anti-kaset rusak): agregat
+   * deterministik childProfile/children/momProfile dari tool-pipeline —
+   * BUKAN karangan LLM. Menutup kasus LLM lupa mengisi args.symptoms
+   * padahal customer sudah menulis keluhan ("Biasa kembung").
+   */
+  knownSymptoms?: string[];
 }
 
 export const GET_CATALOG_TOOL_SCHEMA = {
@@ -146,6 +153,12 @@ export async function executeGetCatalog(
 ): Promise<GetCatalogOutput> {
   const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
   void gestationalWeeks;
+  // Fase 4' (anti-kaset rusak): gabung keluhan argumen LLM dengan keluhan
+  // yang SUDAH diketahui sesi (dedupe). Menutup kasus LLM lupa mengisi
+  // symptoms padahal customer sudah menulis keluhan ("Biasa kembung").
+  const effectiveSymptoms: string[] = [...(symptoms || []), ...((sessionCtx?.knownSymptoms || []) as string[])]
+    .filter((s, i, arr) => arr.indexOf(s) === i);
+  const hasKnownSymptoms = effectiveSymptoms.length > 0;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
   // Menyebut nominal ("100rb") = bertanya harga → paksa showPrices true.
@@ -261,9 +274,9 @@ export async function executeGetCatalog(
       };
     });
 
-    if ((symptoms || []).length > 0) {
+    if (effectiveSymptoms.length > 0) {
       const recommended = treatmentCatalogService.recommendServiceBySymptoms(
-        symptoms, childAgeMonths ?? null, category as any
+        effectiveSymptoms, childAgeMonths ?? null, category as any
       );
       if (recommended) {
         const hit = formattedTreatments.find((t) => t.id === recommended.id);
@@ -293,8 +306,8 @@ export async function executeGetCatalog(
     // relaksasi murni (skor 0) tenggelam secara alami TANPA daftar nama
     // hafalan. Cermin logika recommendServiceBySymptoms, tapi di atas pool
     // tenant yang sudah terfilter (tenant-correct).
-    const symptomToks = symptoms.length > 0
-      ? symptoms.flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length > 3)
+    const symptomToks = effectiveSymptoms.length > 0
+      ? effectiveSymptoms.flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length > 3)
       : [];
     const therapyScoreOf = (id: string): number => {
       if (symptomToks.length === 0) return 0;
@@ -344,7 +357,7 @@ export async function executeGetCatalog(
       return /batuk|pilek|flu|kembung|kolik|bapil/i.test(text) && !/relaksasi|tumbuh kembang/i.test(s.name.toLowerCase());
     };
     const healthyPriorityOf = (id: string): number => {
-      if ((symptoms || []).length > 0) return 0;
+      if (effectiveSymptoms.length > 0) return 0;
       return isSickTherapyService(id) ? 1 : 0;
     };
     formattedTreatments.sort((a, b) =>
@@ -424,7 +437,7 @@ export async function executeGetCatalog(
       const comboLine = (showPrices && moksa && topService.id !== moksa.id && isRespiratory)
         ? ` Paket Combo ${topService.name} + Sinar Moksa total Promo ${formatRp(Number(topService.promoPrice ?? 0) + moksa.promoPrice)} (normal ${formatRp(Number(topService.originalPrice ?? 0) + moksa.originalPrice)}).`
         : '';
-      recommendationReason = `Berdasarkan keluhan yang disampaikan (${symptoms.join(', ')}), layanan yang paling sesuai adalah ${topService.name}${priceLine} ${topService.description}${comboLine}`;
+      recommendationReason = `Berdasarkan keluhan yang disampaikan (${effectiveSymptoms.join(', ')}), layanan yang paling sesuai adalah ${topService.name}${priceLine} ${topService.description}${comboLine}`;
     }
 
     // Phase 1 — Anti-brochure: format deskripsi percakapan mengalir (satu baris
@@ -487,7 +500,9 @@ export async function executeGetCatalog(
     // klinis, TANPA penjumlahan nominal, TANPA todongan jadwal. Komplemen
     // dari suggestedPriceReply/cartTotalReply yang khusus mode transaksional.
     let suggestedConsultationReply: string | undefined = undefined;
-    if (!showPrices && formattedTreatments.length > 0) {
+    // Fase 4': bila keluhan SUDAH diketahui (argumen/sesi), DILARANG
+    // menanyakan ulang "apakah ada keluhan" (anti-kaset rusak).
+    if (!showPrices && !hasKnownSymptoms && formattedTreatments.length > 0) {
       const focus = formattedTreatments.find((t) => t.isRecommendedForSymptoms) || formattedTreatments[0];
       if (focus) {
         suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description} Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗\n\n(Panduan sistem: JANGAN sebut nominal rupiah/lama waktu, JANGAN todong jadwal hari — customer belum bertanya harga, masih tahap konsultasi.)`;
@@ -496,9 +511,13 @@ export async function executeGetCatalog(
 
     // Sesi 973126: bila nominal dicocokkan, tutup pemantik klinis generik diganti
     // klarifikasi subjek pasien (Bunda vs si kecil) — paket belum dipilih.
-    const closingGuide = priceClarification
-      ? `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`
-      : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.';
+    // Fase 4' (anti-kaset rusak): keluhan yang SUDAH diketahui sesi/argumen
+    // DILARANG ditanyakan ulang — jelaskan manfaat untuk keluhan tersebut.
+    const closingGuide = hasKnownSymptoms
+      ? `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi jadwal kunjungan.`
+      : priceClarification
+        ? `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`
+        : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.';
     return {
       success: true,
       treatments: formattedTreatments.slice(0, 5),

@@ -29,3 +29,17 @@ export function isDummyOrTestContact(
 
   return false;
 }
+
+/**
+ * Kebijakan isolasi antrean Meta CAPI (defense-in-depth lapis presentasi):
+ * baris milik customer sandbox/QA test ATAU kontak dummy TIDAK BOLEH tampil
+ * di GET /api/admin/capi-queue. Pengiriman aktual ke Meta tetap dijaga
+ * capi.service.ts (CAPI GUARD) — helper ini menutup kebocoran di lapis daftar.
+ */
+export function shouldExcludeFromCapiQueue(
+  phone?: string | null,
+  name?: string | null,
+  isSandbox?: boolean | null
+): boolean {
+  return isDummyOrTestContact(phone, name, isSandbox ?? undefined);
+}

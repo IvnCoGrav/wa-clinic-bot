@@ -15,6 +15,7 @@ import {
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { memoryReservations } from './stores';
+import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 
 function getCatalogFallbackPrice(): number {
   try {
@@ -2125,7 +2126,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const body = (request.body || {}) as { customPayload?: any };
         const customPayload = body.customPayload;
 
-        const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+      const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
         
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
         if (!autoResolvedVal) {
@@ -2343,6 +2344,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         where: {
           tenant_id: DEFAULT_TENANT_ID,
           status: { not: 'cancelled' },
+          // Isolasi sandbox (lapis query): customer QA test tidak masuk antrean CAPI.
+          customer: { is_sandbox_test: false },
           OR: [
             { purchase_occurred_at: { not: null } },
             { status: 'completed' },
@@ -2357,6 +2360,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           },
         },
       });
+
+      // Isolasi sandbox lapis presentasi (defense-in-depth): saring baris
+      // sandbox/dummy yang lolos filter query (flag belum ter-set tapi nomor dummy).
+      const visibleRows = rows.filter(
+        (r: (typeof rows)[number]) => !shouldExcludeFromCapiQueue(r.customer?.phone, r.customer?.name, (r.customer as any)?.is_sandbox_test)
+      );
 
       const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
       const now = Date.now();
@@ -2383,7 +2392,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       };
 
       const reservationData = await Promise.all(
-        rows.map(async (r) => {
+        visibleRows.map(async (r) => {
           const occurredDate = r.purchase_occurred_at || r.created_at || new Date();
           const occurredAt = new Date(occurredDate).getTime();
           const ageMs = Math.max(0, now - occurredAt);
@@ -2504,6 +2513,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const unsentMqlCustomers = await prisma.customer.findMany({
           where: {
             tenant_id: DEFAULT_TENANT_ID,
+            is_sandbox_test: false,
+            phone: { not: { startsWith: '6289999' } },
             OR: [
               { is_mql: true },
               { mql_bubble_count: { gte: 5 } },
@@ -2566,6 +2577,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               include: { adClick: true },
             });
             for (const c of processedCustomers as any[]) {
+              if (shouldExcludeFromCapiQueue((c as any).phone, (c as any).name, (c as any).is_sandbox_test)) continue;
               const action = sentMap.get(c.id);
               const isSent = action === 'MQL_LEAD_EVENT_SENT';
               const occurredDate = c.mql_triggered_at || c.created_at || new Date();
@@ -2612,7 +2624,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({ success: true, data, total: data.length, pending });
     } catch (err: any) {
-      const rows = Array.from(memoryReservations.values()).filter((r) => r.status !== 'cancelled');
+      const rows = Array.from(memoryReservations.values()).filter(
+        (r) => r.status !== 'cancelled'
+          && !shouldExcludeFromCapiQueue((r as any).customer?.phone ?? (r as any).phone, (r as any).customer?.name ?? (r as any).name, (r as any).customer?.is_sandbox_test ?? (r as any).is_sandbox_test)
+      );
       return reply.status(200).send({
         success: true,
         data: rows,
