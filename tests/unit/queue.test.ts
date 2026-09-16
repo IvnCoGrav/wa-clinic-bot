@@ -103,12 +103,12 @@ describe('Message Queue Service Unit Tests', () => {
     const promises = payloads.map(p => queueService.enqueueMessage(p));
     await Promise.all(promises);
 
-    // Wait for in-memory queues to settle
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Wait for in-memory queues to settle with resilient polling
+    await vi.waitFor(() => {
+      expect(processSpy).toHaveBeenCalledTimes(3);
+      expect(processedIds).toEqual(['offline_msg_1', 'offline_msg_2', 'offline_msg_3']);
+    }, { timeout: 3000, interval: 20 });
 
-    expect(processSpy).toHaveBeenCalledTimes(3);
-    // Check that the in-memory queue fallback is strictly sequential and FIFO
-    expect(processedIds).toEqual(['offline_msg_1', 'offline_msg_2', 'offline_msg_3']);
     // Verify worker re-fetch customer fresh via getCustomerById pada jalur in-memory fallback.
     expect(processedCustomerIds).toEqual([customer.id, customer.id, customer.id]);
   });

@@ -467,6 +467,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const deltaX = touch.clientX - swipeBackStartRef.current.x;
       const deltaY = touch.clientY - swipeBackStartRef.current.y;
 
+      // Jika pergerakan dominan vertikal, segera batalkan pelacakan gestur swipe tepi
+      if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > deltaX) {
+        swipeBackStartRef.current = null;
+        setSwipeBackDistance(0);
+        return;
+      }
+
       if (deltaX > 8 && deltaX > Math.abs(deltaY) * 1.2) {
         if (e.cancelable) {
           e.preventDefault();
@@ -801,34 +808,34 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {wahaStatus === 'WORKING' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="no-touch-min rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
+                className="rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
-                <CheckCircle size={13} />
+                <CheckCircle size={14} />
                 <span className="text-[11px] font-bold">Online</span>
               </button>
             ) : wahaStatus === 'SCAN_QR_CODE' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="no-touch-min rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
+                className="rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
-                <QrCode size={13} />
+                <QrCode size={14} />
                 <span className="text-[11px] font-bold">Scan QR</span>
               </button>
             ) : wahaStatus === 'FAILED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="no-touch-min rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
+                className="rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
-                <AlertCircle size={13} />
+                <AlertCircle size={14} />
                 <span className="text-[11px] font-bold">Offline</span>
               </button>
             ) : wahaStatus === 'DISCONNECTED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Terputus. Klik untuk membuka panel status"
-                className="no-touch-min rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7 cursor-pointer"
+                className="rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
-                <WifiOff size={13} />
+                <WifiOff size={14} />
                 <span className="text-[11px] font-bold">Terputus</span>
                 <ChevronDown size={11} className="opacity-50" />
               </button>
@@ -836,9 +843,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Sedang memeriksa koneksi server... Klik untuk membuka panel status"
-                className="no-touch-min rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7 cursor-pointer"
+                className="rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
-                <Loader size={13} className="animate-spin" />
+                <Loader size={14} className="animate-spin" />
                 <span className="text-[11px] font-bold">WA: Memeriksa...</span>
                 <ChevronDown size={11} className="opacity-50" />
               </button>
@@ -866,13 +873,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   }
                 }}
                 title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
-                className={`no-touch-min w-7 h-7 sm:w-8 sm:h-8 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square ${
+                className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
                   soundActive
                     ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
                     : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'
                 }`}
               >
-                {soundActive ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                {soundActive ? <Volume2 size={15} /> : <VolumeX size={15} />}
               </button>
             )}
 
@@ -884,9 +891,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               onClick={openMobileMenu} 
               aria-label="Buka Menu"
               title="Buka Menu Navigasi"
-              className="no-touch-min md:hidden w-8 h-8 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#374248] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
+              className="md:hidden w-10 h-10 min-w-[40px] min-h-[40px] sm:w-9 sm:h-9 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#374248] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
 
             {/* Interactive Status Popover for Mobile & Desktop Touch */}
@@ -896,7 +903,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   className="fixed inset-0 z-40"
                   onClick={() => setShowStatusPopover(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-[#202c33] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-50 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-[#202c33] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-50 space-y-3 animate-in fade-in zoom-in-95 origin-top-right duration-150">
                   <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-2">
                     <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center gap-1.5">
                       <Activity size={15} className="text-[#008069] dark:text-[#00a884]" />

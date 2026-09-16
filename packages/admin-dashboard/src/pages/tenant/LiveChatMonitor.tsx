@@ -3869,11 +3869,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={handleBackToList}
-                        className="lg:hidden flex items-center justify-center w-8 h-8 -ml-1 mr-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-90 touch-manipulation z-20 cursor-pointer shadow-2xs"
+                        className="lg:hidden flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] -ml-1 mr-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-95 touch-manipulation z-20 cursor-pointer shadow-2xs"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={20} className="stroke-[2.5]" />
+                        <ChevronLeft size={22} className="stroke-[2.5]" />
                       </button>
 
                       {/* Clickable Customer Header Box */}
@@ -4485,11 +4485,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           )}
                           <div
                             id={`msg-${msg.id}`}
-                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative ${
+                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group relative ${
                               isCurrentActiveMatch
-                                ? 'ring-3 ring-amber-400/90 bg-amber-200/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
+                                ? 'transition-transform duration-150 ring-3 ring-amber-400/90 bg-amber-200/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
                                 : isMatchBubble
-                                ? 'ring-1 ring-amber-300/60 bg-amber-100/20 rounded-2xl p-0.5 -m-0.5'
+                                ? 'transition-colors duration-150 ring-1 ring-amber-300/60 bg-amber-100/20 rounded-2xl p-0.5 -m-0.5'
                                 : ''
                             }`}
                           >
@@ -5485,7 +5485,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
           {/* Desktop Floating Popover (hidden sm:block) */}
           <div
-            className="hidden sm:block bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-64 text-xs text-[#111b21] animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#f0f2f5]"
+            className="hidden sm:block bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-64 text-xs text-[#111b21] animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-[#f0f2f5]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3.5 py-2 text-[11px] font-bold text-[#667781] truncate">

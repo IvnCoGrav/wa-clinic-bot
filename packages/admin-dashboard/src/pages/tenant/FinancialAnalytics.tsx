@@ -748,8 +748,85 @@ export const FinancialAnalytics: React.FC = () => {
           </div>
         </div>
 
-        {/* Table Body */}
-        <div className="overflow-x-auto">
+        {/* Mobile Card Stack (< md) */}
+        <div className="md:hidden divide-y divide-[#f0f2f5] dark:divide-[#2a3942]">
+          {loading ? (
+            <div className="py-8 text-center text-[#8696a0] text-xs">
+              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
+              <p>Memuat buku besar transaksi...</p>
+            </div>
+          ) : filteredTransactions.length === 0 ? (
+            <div className="py-8 text-center text-[#8696a0] text-xs px-4">
+              Tidak ada catatan transaksi yang sesuai dengan filter.
+            </div>
+          ) : (
+            filteredTransactions.map((tx) => (
+              <div
+                key={`mobile-tx-${tx.id}`}
+                onClick={() => setSelectedTx(tx)}
+                className="p-4 space-y-2.5 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition-colors cursor-pointer active:scale-[0.99] touch-manipulation"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-mono text-[11px] text-[#667781] dark:text-[#8696a0] flex items-center gap-1">
+                      <Clock size={11} className="text-[#008069] dark:text-[#00a884]" />
+                      <span>
+                        {tx.bookingDate
+                          ? new Date(tx.bookingDate).toLocaleString('id-ID', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : '-'}
+                      </span>
+                    </span>
+                    <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] mt-0.5 flex items-center gap-1.5">
+                      <span>{tx.customerName}</span>
+                      {tx.isRepeatOrder && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30">
+                          Repeat
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="font-extrabold text-sm text-[#008069] dark:text-[#00a884] block font-mono">
+                      {formatRupiah(tx.totalFee)}
+                    </span>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 ${
+                        tx.paymentStatus === 'LUNAS'
+                          ? 'bg-[#d9fdd3] dark:bg-[#005c4b]/50 text-[#008069] dark:text-[#4ae3b5] border border-[#00a884]/30'
+                          : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300'
+                      }`}
+                    >
+                      {tx.paymentStatus === 'LUNAS' ? 'Lunas' : 'Tagih di Tempat'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 font-medium">
+                  {(() => {
+                    const clean = stripBufferMetadata(tx.treatmentDetail);
+                    return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
+                  })()}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1 border-t border-[#f0f2f5] dark:border-[#2a3942]">
+                  <span className="truncate">
+                    Terapis: <strong className="text-[#111b21] dark:text-[#e9edef]">{tx.assignedStaffName || 'Belum ditugaskan'}</strong>
+                  </span>
+                  <span className="truncate">{tx.location || '-'}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-[#111b21]">
             <thead className="bg-[#f8fafc] text-[#54656f] uppercase text-[10px] font-bold border-b border-[#e9edef]">
               <tr>

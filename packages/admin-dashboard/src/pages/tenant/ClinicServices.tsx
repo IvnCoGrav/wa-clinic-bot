@@ -549,7 +549,137 @@ export const ClinicServices: React.FC = () => {
         </div>
       ) : (
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
+          {/* Mobile Card Stack (< md) */}
+          <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+            {filteredServices.map(srv => {
+              const isBundle = srv.category === 'BUNDLE' || srv.serviceType === 'BUNDLE' || (Array.isArray(srv.bundleItemIds) && srv.bundleItemIds.length >= 2);
+              const isAddon = srv.category === 'ADD_ON' || srv.serviceType === 'ADD_ON' || srv.isAddon === true;
+              const bundleComponents = isBundle && srv.bundleItemIds ? srv.bundleItemIds.map(id => serviceMap.get(id)).filter(Boolean) as ClinicServiceItem[] : [];
+              const origPrice = Number(srv.originalPrice) || 0;
+              const promPrice = Number(srv.promoPrice) || 0;
+              const savings = origPrice - promPrice;
+              const savingsPercent = origPrice > 0 ? Math.round((savings / origPrice) * 100) : 0;
+
+              return (
+                <div key={srv.id} className={`p-4 space-y-3 ${!srv.isActive ? 'opacity-60 bg-gray-50/50 dark:bg-gray-900/20' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">{srv.name}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          isBundle
+                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                            : isAddon
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : srv.category === 'BABY' 
+                                ? 'bg-sky-100 text-sky-800 border border-sky-200' 
+                                : srv.category === 'KIDS'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : srv.category === 'MOMS'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {isBundle ? 'BUNDLE' : isAddon ? 'ADD-ON' : srv.category}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-[#8696a0] font-mono">ID: {srv.id}</div>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0 text-xs text-[#54656f] dark:text-[#aebac1]">
+                      <Clock size={12} className="text-[#8696a0]" />
+                      <span>{srv.durationMinutes || 0} mnt</span>
+                    </div>
+                  </div>
+
+                  {srv.description && (
+                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-2">{srv.description}</p>
+                  )}
+
+                  {srv.ageTier?.label && (
+                    <div className="text-[11px] text-[#667781] dark:text-[#8696a0]">
+                      Target: <span className="font-medium text-[#111b21] dark:text-[#e9edef]">{srv.ageTier.label}</span>
+                    </div>
+                  )}
+
+                  {/* Bundle Components */}
+                  {isBundle && bundleComponents.length > 0 && (
+                    <div className="p-2.5 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/30 rounded-xl space-y-1.5">
+                      <div className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center space-x-1">
+                        <Package size={11} className="text-indigo-600" />
+                        <span>Termasuk {bundleComponents.length} Layanan:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {bundleComponents.map((c) => (
+                          <span
+                            key={c.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
+                          >
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pricing row */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="space-y-0.5">
+                      {origPrice > 0 && origPrice !== promPrice && (
+                        <div className="text-xs text-[#8696a0] line-through">
+                          Rp {origPrice.toLocaleString('id-ID')}
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-1 text-sm font-bold text-[#008069]">
+                        <Sparkles size={13} />
+                        <span>Rp {promPrice.toLocaleString('id-ID')}</span>
+                      </div>
+                      {savings > 0 && (
+                        <span className="text-[10px] text-emerald-600 font-semibold">
+                          Hemat Rp {savings.toLocaleString('id-ID')} ({savingsPercent}%)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <ToggleSwitch
+                        checked={srv.isActive}
+                        onChange={() => handleToggleActive(srv)}
+                        size="sm"
+                        onLabel="Aktif"
+                        offLabel="Nonaktif"
+                      />
+                      <div className="flex items-center space-x-1 pl-1 border-l border-[#e9edef] dark:border-[#2a3942]">
+                        <button
+                          onClick={() => openEditModal(srv)}
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] active:scale-95 transition"
+                          title="Edit Layanan"
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(srv.id)}
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 active:scale-95 transition"
+                          title="Hapus Layanan"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredServices.length === 0 && (
+              <div className="p-8 text-center text-xs text-[#667781] dark:text-[#8696a0]">
+                {searchQuery
+                  ? 'Tidak ada layanan yang cocok dengan pencarian Anda.'
+                  : 'Belum ada layanan pada kategori ini. Klik "Tambah Layanan" untuk mulai.'}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table (>= md) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-[#111b21] dark:text-[#e9edef]">
               <thead>
                 <tr className="border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px]">
@@ -717,13 +847,14 @@ export const ClinicServices: React.FC = () => {
       {/* Modal Form */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-t-3xl sm:rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] sm:max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
             
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c272e]">
@@ -738,9 +869,9 @@ export const ClinicServices: React.FC = () => {
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
+                className="p-2 rounded-xl text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] active:scale-95 transition"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
