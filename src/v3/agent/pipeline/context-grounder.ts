@@ -304,10 +304,22 @@ export class ContextGrounder {
     if (!hasTreatment) return false;
     if (session.booking?.reservationId != null) return false;
     if (session.booking?.preferredDate != null) return false;
+
+    // Prasyarat mutlak: Lokasi harus sudah diketahui (homecare klinik butuh rute terapis).
+    // DILARANG memaksa save_reservation bila domisili/kelurahan/kecamatan belum ada!
+    const hasLocation = Boolean(
+      session.location?.kelurahan ||
+      session.location?.kecamatan ||
+      session.location?.kota ||
+      session.location?.rawText
+    );
+    if (!hasLocation) return false;
+
     // Fail-closed pertanyaan slot (cermin Day Evidence Gate di kontrak tool):
     // giliran bertanda tanya BUKAN komitmen booking — DILARANG memaksa
     // save_reservation. Level tanda baca, bukan daftar hafalan baru.
-    // Pengecualian same-day (sesi 138207): catatannya pending ekspektasi-aman.
+    // Pengecualian same-day (sesi 138207): catatannya pending ekspektasi-aman
+    // HANYA bila lokasi customer sudah diketahui.
     if ((incomingText || '').includes('?') && !isSameDayRequestText(incomingText)) return false;
     const haystack = [incomingText, ...history.filter((h) => h.role === 'user').map((h) => h.content)]
       .join(' ')
