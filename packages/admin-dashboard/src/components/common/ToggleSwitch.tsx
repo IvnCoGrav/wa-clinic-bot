@@ -155,14 +155,14 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         aria-checked={checked}
         disabled={disabled || loading}
         onKeyDown={handleKeyDown}
-        className={`relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#008069]/30 focus:ring-offset-1 ${trackSizes} ${
+        className={`relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-[#008069]/30 focus:ring-offset-1 ${trackSizes} ${
           checked ? activeBg : 'bg-[#cbd5e1] dark:bg-[#374248]'
         } ${disabled || loading ? 'cursor-not-allowed opacity-70' : ''}`}
       >
         <span className="sr-only">{checked ? onLabel : offLabel}</span>
         <span
           aria-hidden="true"
-          className={`pointer-events-none inline-flex items-center justify-center rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${thumbSizes} ${
+          className={`pointer-events-none inline-flex items-center justify-center rounded-full bg-white shadow-sm ring-0 transition-transform duration-150 ease-out ${thumbSizes} ${
             checked ? thumbTranslates : 'translate-x-0.5'
           }`}
         >

@@ -376,17 +376,20 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   return createPortal(
     <div
       data-modal-active="true"
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+        className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile drag handle */}
+        <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+
         <button
           data-modal-close="true"
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+          className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] p-2 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] active:scale-95 transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>

@@ -3534,13 +3534,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {detailModalTask && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
           onClick={() => setDetailModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+            className="bg-white rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Mobile drag handle */}
+            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
+
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
               <div className="flex items-center space-x-3">
@@ -3771,13 +3774,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {paymentModalTask && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
           onClick={() => setPaymentModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp"
+            className="bg-white rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Mobile drag handle */}
+            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
+
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">

@@ -52,6 +52,16 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
      - **Kontrak Tool & Alur Pemesanan**: keabsahan pemanggilan `calculate_delivery`, `get_catalog_and_price`, dan larangan keras pemanggilan `save_reservation` sebelum kesepakatan final; pencegahan penguncian layanan secara sepihak atas jawaban ambigu customer (*"boleh deh yang itu"*).
      - **SOP Medis & Katalog Klinis**: validitas rekomendasi terapi sesuai keluhan (misal GTM wajib ke penambah nafsu makan, bukan bapil), aturan pasca-vaksinasi, dsb.
   3. Laporkan audit secara tegas, jujur, dan berani: pisahkan antara aspek yang sudah patuh vs seluruh pelanggaran rules (kritis, sedang, minor), sertakan bukti teknis log pemanggilan tool/state machine, dan ajukan solusi perbaikan fondasional.
+- **Mandat Konsultasi & Pemanggilan Skill Otomatis (MANDATORY)**: AI Agent WAJIB selalu secara proaktif mengidentifikasi dan mengkonsultasikan *skill* yang tersedia di `.agents/skills/` sebelum dan saat melakukan tugas:
+  - **Investigasi & Debugging Bug**: WAJIB memuat alur `diagnosing-bugs`.
+  - **Pengerjaan Fitur / Perbaikan Kode**: WAJIB menerapkan prinsip `tdd` (test-first / red-green-refactor) dan `implement-spec`.
+  - **Arsitektur & Refaktor Backend**: WAJIB mengacu pada `codebase-design` (deep modules, seams, information hiding, locality) dan `improve-codebase-architecture`.
+  - **Pemodelan Domain & ADR**: WAJIB merujuk pada `domain-modeling`.
+  - **Audit, Desain UI/UX & Motion**: WAJIB menerapkan `emil-design-eng`, `review-animations`, dan `improve-animations`.
+  - **Mobile Web & Touch Responsiveness**: WAJIB menerapkan checklist `mobile-native`.
+  - **Review Perubahan / Diff**: WAJIB memuat panduan `code-review`.
+  - **Validasi Rencana & Keputusan**: WAJIB melakukan uji kritis (*stress-test*) dengan `grilling` / `grill-me`.
+  - **Manajemen Tiket & Spesifikasi**: WAJIB menggunakan `to-tickets`, `to-spec`, dan `triage`.
 
 
 ## Monorepo (no npm workspaces)

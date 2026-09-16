@@ -585,7 +585,7 @@ const LiveChatComposerInner = (
             type="button"
             onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
             disabled={sending || generatingDraft}
-            className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
+            className={`w-10 h-10 min-w-[40px] min-h-[40px] sm:w-10 sm:h-10 p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 touch-manipulation ${
               toolsMenuOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
             }`}
             title="Fitur & Lampiran (AI Copilot / Gambar)"
@@ -807,7 +807,7 @@ const LiveChatComposerInner = (
         <button
           onClick={handleSend}
           disabled={sendDisabled}
-          className="w-9 h-9 sm:w-auto sm:px-4 min-h-[36px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95"
+          className="w-10 h-10 sm:w-auto sm:px-4 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
           title="Kirim Balasan"
         >
           <Send size={15} />

@@ -224,6 +224,11 @@ textarea,
   input[type="search"],
   input[type="email"],
   input[type="password"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
   textarea,
   select {
     font-size: 16px !important;
@@ -231,7 +236,7 @@ textarea,
 
   /* Standard touch target baseline for action buttons & interactive icons (exempting micro buttons & badges) */
   button:not(.no-touch-min):not(table button):not(.inline-chip):not(.aspect-square):not([class*="w-3"]):not([class*="w-4"]):not([class*="w-5"]):not([class*="w-6"]):not([class*="h-3"]):not([class*="h-4"]):not([class*="h-5"]):not([class*="h-6"]) {
-    min-height: 36px;
+    min-height: 38px;
   }
 }
 
@@ -246,7 +251,7 @@ textarea,
   background: #ffffff;
   border: 1px solid #e9edef;
   box-shadow: 0 1px 3px 0 rgba(11, 20, 26, 0.05);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .glass-card:hover {
@@ -380,6 +385,52 @@ textarea,
 
 .animate-slideInFromLeft {
   animation: slideInFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ========================================================================= */
+/* Native Modal & Popover Animations (Zero External Dependency)              */
+/* Kompatibel dengan kelas-kelas utilitas modal/dialog: animate-in, etc.     */
+/* ========================================================================= */
+@keyframes nativeFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes nativeZoomIn95 {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes nativeSlideInBottom {
+  from { transform: translateY(16px); opacity: 0.5; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes nativeSlideInTop4 {
+  from { transform: translateY(-16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: nativeFadeIn;
+}
+
+.zoom-in-95 {
+  animation-name: nativeZoomIn95;
+}
+
+.slide-in-from-bottom {
+  animation-name: nativeSlideInBottom;
+}
+
+.slide-in-from-top-4 {
+  animation-name: nativeSlideInTop4;
 }
 
 /* Mobile Smooth Fluid Navigation & View Transitions */
@@ -723,4 +774,27 @@ html.dark {
   to { opacity: 1; transform: rotate(0deg) scale(1); }
 }
 .animate-theme-icon { animation: themeIconRotate 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ========================================================================= */
+/* ♿ Aksesibilitas & Proteksi Touch Ergonomis                               */
+/* ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Hindari sticky hover flash pada perangkat layar sentuh mobile */
+@media (hover: none) and (pointer: coarse) {
+  .hover\:scale-105:hover,
+  .group-hover\:scale-105:hover,
+  .hover\:scale-\[1\.01\]:hover {
+    transform: none !important;
+  }
+}
 

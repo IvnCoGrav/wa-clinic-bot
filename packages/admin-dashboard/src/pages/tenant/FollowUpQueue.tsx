@@ -674,9 +674,145 @@ export const FollowUpQueue: React.FC = () => {
         </form>
       </div>
 
-      {/* Main Table */}
+      {/* Main Content: Mobile Card Stack (< md) + Desktop Table (>= md) */}
       <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        {/* Mobile Card Stack (< md) */}
+        <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+          {loading ? (
+            <div className="py-16 text-center text-[#667781] text-xs">
+              <div className="flex justify-center items-center space-x-2">
+                <RefreshCw size={16} className="animate-spin text-[#008069]" />
+                <span>Memuat data antrian follow-up...</span>
+              </div>
+            </div>
+          ) : followUps.length === 0 ? (
+            <div className="py-16 text-center text-[#667781] text-xs px-4">
+              <CalendarCheck size={36} className="mx-auto text-[#8696a0] mb-2.5 opacity-40" />
+              <p className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">Tidak ada antrian follow-up yang sesuai filter.</p>
+              <p className="text-[#8696a0] mt-1 max-w-sm mx-auto">
+                Saat ini tidak ada jadwal follow-up aktif. Coba ubah pilihan tanggal atau status di atas.
+              </p>
+            </div>
+          ) : (
+            followUps.map((fu) => {
+              const dt = formatDateTime(fu.scheduled_at);
+              const typeMeta = getTypeLabel(fu.type, fu.stage);
+              const c = fu.customer;
+              const isOverdue =
+                new Date(fu.scheduled_at).getTime() < Date.now() &&
+                (fu.status === 'PENDING' || fu.status === 'QUEUED');
+
+              return (
+                <div key={`mobile-fu-${fu.id}`} className="p-4 space-y-3 bg-white dark:bg-[#111b21]">
+                  {/* Header row: Type badge & Status badge */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${typeMeta.color}`}>
+                      {typeMeta.label}
+                    </span>
+                    {getStatusBadge(fu.status)}
+                  </div>
+
+                  {/* Customer & Phone info */}
+                  <div>
+                    <div className="flex items-center space-x-1.5 font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
+                      <User size={14} className="text-[#008069] shrink-0" />
+                      <span className="truncate">{c?.name || 'Tanpa Nama'}</span>
+                      {c?.conversations?.[0]?.is_human_handling && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          Human Handling
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-[#667781] dark:text-[#8696a0] font-mono mt-0.5 pl-5">
+                      <span>{c?.phone}</span>
+                      {c?.conversations?.[0]?.last_message_at && (
+                        <span className="text-[10px] text-[#008069] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-1.5 py-0.2 rounded font-sans">
+                          Chat {formatLastChat(c.conversations[0].last_message_at)}
+                        </span>
+                      )}
+                    </div>
+                    {fu.reservation?.treatment_detail && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-1 pl-5">
+                        📋 {fu.reservation.treatment_detail}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Schedule & Message Preview */}
+                  <div className="p-2.5 rounded-xl bg-[#f8fafc] dark:bg-[#1c272e] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1">
+                        <Calendar size={12} className="text-[#008069]" />
+                        <span>{dt.date}</span>
+                        <span className="text-[#667781] font-normal">({dt.time})</span>
+                      </span>
+                      {isOverdue && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          Overdue
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-2 leading-relaxed">
+                      {fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, ((fu.stage-1)%3)+1)}
+                    </p>
+                  </div>
+
+                  {/* Action buttons with touch-friendly dimensions */}
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-[#f0f2f5] dark:border-[#2a3942]">
+                    {fu.status === 'PENDING' && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({ type: 'queue', id: fu.id })}
+                        disabled={actionLoading === fu.id}
+                        className="px-3 py-2 min-h-[38px] rounded-xl bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 text-blue-700 text-xs font-bold flex items-center space-x-1 shadow-xs cursor-pointer touch-manipulation"
+                        title="Jadwalkan / Masukkan ke Antrian"
+                      >
+                        <CalendarCheck size={14} />
+                        <span>Jadwalkan</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => fu.customer && handleOpenChatHistory(fu.customer)}
+                      className="p-2 min-w-[38px] min-h-[38px] rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] active:scale-95 border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] transition shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
+                      title="Buka Riwayat Chat"
+                    >
+                      <MessageSquare size={15} />
+                    </button>
+
+                    {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(fu)}
+                        disabled={actionLoading === fu.id}
+                        className="p-2 min-w-[38px] min-h-[38px] rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] transition shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
+                        title="Edit Jadwal & Teks Pesan"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                    )}
+
+                    {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
+                        disabled={actionLoading === fu.id}
+                        className="p-2 min-w-[38px] min-h-[38px] rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 border border-rose-200 text-rose-600 transition shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
+                        title="Batalkan Follow-Up"
+                      >
+                        <XCircle size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f8fafc] border-b border-[#e9edef] text-[#54656f] text-xs font-bold uppercase tracking-wider">
