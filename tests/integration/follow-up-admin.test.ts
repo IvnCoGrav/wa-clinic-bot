@@ -105,6 +105,31 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
     expect(cancelSpy).toHaveBeenCalledWith('fu-1', expect.any(String));
   });
 
+  it('3b. PATCH /api/admin/follow-ups/:id/cancel meneruskan reason ke service', async () => {
+    const cancelSpy = vi.spyOn(followUpService, 'cancelFollowUp').mockResolvedValueOnce(true);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/follow-ups/fu-1/cancel',
+      payload: { reason: 'Customer minta ditunda' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(cancelSpy).toHaveBeenCalledWith('fu-1', expect.any(String), { reason: 'Customer minta ditunda' });
+  });
+
+  it('3c. PATCH cancel tanpa reason tetap memanggil service tanpa opsi reason', async () => {
+    const cancelSpy = vi.spyOn(followUpService, 'cancelFollowUp').mockResolvedValueOnce(true);
+
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/follow-ups/fu-1/cancel',
+      payload: { reason: '   ' },
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith('fu-1', expect.any(String));
+  });
+
   it('4. POST /api/admin/follow-ups/bulk-cancel cancels all pending follow-ups', async () => {
     const bulkSpy = vi.spyOn(followUpService, 'bulkCancelFollowUps').mockResolvedValueOnce(5);
 
@@ -119,6 +144,18 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
     expect(body.success).toBe(true);
     expect(body.count).toBe(5);
     expect(bulkSpy).toHaveBeenCalledWith(expect.any(String), 'PENDING');
+  });
+
+  it('4b. POST bulk-cancel meneruskan reason ke service', async () => {
+    const bulkSpy = vi.spyOn(followUpService, 'bulkCancelFollowUps').mockResolvedValueOnce(2);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/bulk-cancel',
+      payload: { status: 'QUEUED', reason: 'Bersih-bersih antrian' },
+    });
+
+    expect(bulkSpy).toHaveBeenCalledWith(expect.any(String), 'QUEUED', { reason: 'Bersih-bersih antrian' });
   });
 
   it('5. PATCH /api/admin/follow-ups/:id/reschedule updates scheduled date', async () => {

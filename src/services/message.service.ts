@@ -26,11 +26,51 @@ function resolveSenderType(data: { direction: Direction; senderType?: string }):
   return data.direction === Direction.OUTBOUND ? 'BOT' : 'CUSTOMER';
 }
 
-// Ambil metadata media (gambar Live Chat) dari payload_raw untuk di-render dashboard.
+// Ambil metadata media (gambar, audio, dokumen, video) dari payload_raw untuk di-render dashboard.
 function extractMediaFromPayload(payloadRaw: any): any {
   const media = payloadRaw?.media;
-  if (media && (media.url || media.hdUrl)) return media;
+  if (media && (media.url || media.hdUrl || media.mimeType || media.fileName || media.caption)) return media;
   return undefined;
+}
+
+// Ambil koordinat lokasi dari payload_raw untuk disiarkan ke Live Chat real-time.
+export function extractLocationFromPayload(payloadRaw: any): any {
+  if (!payloadRaw) return null;
+  if (payloadRaw.location && typeof payloadRaw.location.latitude === 'number' && payloadRaw.location.latitude !== 0) {
+    return payloadRaw.location;
+  }
+  if (typeof payloadRaw.latitude === 'number' && payloadRaw.latitude !== 0) {
+    return { latitude: payloadRaw.latitude, longitude: payloadRaw.longitude };
+  }
+  const locMsg =
+    payloadRaw._data?.message?.locationMessage ||
+    payloadRaw.message?.locationMessage ||
+    payloadRaw._data?.message?.liveLocationMessage ||
+    payloadRaw.message?.liveLocationMessage;
+  if (locMsg) {
+    const lat = locMsg.degreesLatitude ?? locMsg.latitude;
+    const lng = locMsg.degreesLongitude ?? locMsg.longitude;
+    if (typeof lat === 'number' && lat !== 0) {
+      return {
+        latitude: lat,
+        longitude: lng,
+        address: locMsg.address,
+        name: locMsg.name,
+      };
+    }
+  }
+  return null;
+}
+
+// Sanitasi payloadRaw untuk SSE agar tidak membawa data biner/base64 raksasa
+export function sanitizePayloadForSse(payloadRaw: any): any {
+  if (!payloadRaw || typeof payloadRaw !== 'object') return payloadRaw;
+  const clone = { ...payloadRaw };
+  if (clone._data?.jpegThumbnail) delete clone._data.jpegThumbnail;
+  if (clone._data?.mediaData) delete clone._data.mediaData;
+  if (clone.message?.imageMessage?.jpegThumbnail) delete clone.message.imageMessage.jpegThumbnail;
+  if (clone.buffer) delete clone.buffer;
+  return clone;
 }
 
 export function extractShortMessageId(waMessageId: string): string {
@@ -154,21 +194,10 @@ export class MessageService {
     }
 
     try {
-      // 2. Query ke Prisma DB
-      const orConditions: any[] = [{ wa_message_id: waMessageId }];
-      if (shortId && shortId !== waMessageId) {
-        orConditions.push({ wa_message_id: shortId });
-        orConditions.push({ wa_message_id: { endsWith: `_${shortId}` } });
-      }
-
-      const existing = await prisma.message.findFirst({
-        where: {
-          tenant_id: tenantId,
-          OR: orConditions,
-        },
-      });
-
-      if (existing) {
+      // 2. Query ke DB via Repository (PLAN 8 FASE 5c).
+      const { getMessageRepository } = await import('../repositories/message.repository');
+      const exists = await getMessageRepository().existsByWaId(waMessageId, shortId, tenantId);
+      if (exists) {
         return true;
       }
     } catch (error) {
@@ -326,74 +355,49 @@ export class MessageService {
         : undefined;
 
     let saved: any = null;
-    try {
-      const [savedMsg] = await Promise.all([
-        prisma.message.create({
-          data: {
-            tenant_id: data.tenantId,
-            conversation_id: data.conversationId,
-            direction: data.direction,
-            content: data.content,
-            wa_message_id: data.waMessageId || null,
-            payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
-            sender_type: data.senderType ?? (data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
-            sender_name: data.senderName ?? undefined,
-            delivery_status: data.deliveryStatus ?? undefined,
-            meta_error_code: data.metaErrorCode ?? undefined,
-            meta_error_desc: data.metaErrorDesc ?? undefined,
-            created_at: data.createdAt || undefined,
-            read_at: effectiveReadAt ?? undefined,
-          },
-        }),
-        prisma.conversation?.update
-          ? prisma.conversation
-              .update({
-                where: { id: data.conversationId },
-                data: {
-                  last_message_at: effectiveMsgDate,
-                  updated_at: new Date(),
-                },
-              })
-              ?.catch?.((convErr: any) => {
-                console.warn('[MESSAGE LOG CONV UPDATE WARN]', convErr.message);
-              })
-          : Promise.resolve(),
-      ]);
-      saved = savedMsg;
-      if (saved) return saved;
-      throw new Error('Prisma create returned null/undefined (DB offline)');
-    } catch (error) {
-      console.warn('DB logMessage error (using fallback):', (error as Error).message);
-      const fallbackMessage: any = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+    // PLAN 8 FASE 5c: tulis via Repository seam (fail-closed di produksi).
+    // DB error → THROW (pemanggil/queue menangani via retry), BUKAN objek fiktif.
+    const repo = (await import('../repositories/message.repository')).getMessageRepository();
+    const [savedMsg] = await Promise.all([
+      repo.create({
         tenant_id: data.tenantId,
         conversation_id: data.conversationId,
         direction: data.direction,
         content: data.content,
         wa_message_id: data.waMessageId || null,
         payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
-        sender_type: data.senderType || resolveSenderType(data),
-        sender_name: data.senderName || null,
-        delivery_status: data.deliveryStatus ?? null,
-        meta_error_code: data.metaErrorCode ?? null,
-        meta_error_desc: data.metaErrorDesc ?? null,
-        created_at: effectiveMsgDate,
-        read_at: effectiveReadAt ?? null,
-      };
-      memoryMessages.push(fallbackMessage);
+        sender_type: data.senderType ?? (data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
+        sender_name: data.senderName ?? undefined,
+        delivery_status: data.deliveryStatus ?? undefined,
+        meta_error_code: data.metaErrorCode ?? undefined,
+        meta_error_desc: data.metaErrorDesc ?? undefined,
+        created_at: data.createdAt || undefined,
+        read_at: effectiveReadAt ?? undefined,
+      }),
+      prisma.conversation?.update
+        ? prisma.conversation
+            .update({
+              where: { id: data.conversationId },
+              data: {
+                last_message_at: effectiveMsgDate,
+                updated_at: new Date(),
+              },
+            })
+            ?.catch?.((convErr: any) => {
+              console.warn('[MESSAGE LOG CONV UPDATE WARN]', convErr.message);
+            })
+        : Promise.resolve(),
+    ]);
+    saved = savedMsg;
+    if (!saved) {
+      throw new Error('Prisma create returned null/undefined (DB offline)');
+    }
+    memoryMessages.push(saved);
 
-      // In-memory fallback: sinkronkan last_message_at di memoryConversations
-      try {
-        const { conversationService } = await import('./conversation.service');
-        const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
-        if (conv) {
-          conv.last_message_at = effectiveMsgDate;
-          conv.updated_at = new Date();
-        }
-      } catch {}
-
-      return fallbackMessage;
-    } finally {
+    // Efek samping pasca-simpan (dulu blok finally): resolusi sandbox, MQL,
+    // reschedule follow-up, publish livechat, web push. Semua best-effort dengan
+    // try/catch sendiri — kegagalannya tidak membatalkan penyimpanan yang sukses.
+    {
       // Resolusi info customer & deteksi apakah berasal dari percakapan Sandbox/QA Test
       let isSandboxCustomer = false;
       let resolvedCustomer: any = null;
@@ -424,6 +428,28 @@ export class MessageService {
         }
       }
 
+      // Event-Driven Last-Chat Sliding Window: pesan masuk riil customer menggeser
+      // jadwal NO_PURCHASE aktif agar selalu relatif ke chat terakhir (bukan chat pertama).
+      // Fire-and-forget: tidak memblokir alur webhook/state-machine; riwayat/sandbox dikecualikan.
+      if (
+        !data.skipMqlEvaluation &&
+        !data.isHistorical &&
+        (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND') &&
+        resolvedCustomer?.id &&
+        !isSandboxCustomer
+      ) {
+        void (async () => {
+          try {
+            const { followUpService } = await import('./follow-up.service');
+            await followUpService.rescheduleNoPurchaseOnInboundChat(
+              resolvedCustomer.id,
+              data.tenantId,
+              effectiveMsgDate
+            );
+          } catch (_) {}
+        })();
+      }
+
       // Live Chat publish: fire-and-forget, tidak memblokir alur webhook/state-machine.
       getLiveChatHub()
         .publish({
@@ -436,8 +462,12 @@ export class MessageService {
             senderType: resolveSenderType(data),
             senderName: data.senderName || resolvedCustomer?.name || null,
             messageId: saved?.id || null,
+            waMessageId: data.waMessageId || null,
             createdAt: saved?.created_at || new Date(),
             media: extractMediaFromPayload(data.payloadRaw),
+            location: extractLocationFromPayload(data.payloadRaw),
+            contact: data.payloadRaw?.contact || undefined,
+            payloadRaw: sanitizePayloadForSse(data.payloadRaw),
             isHistorical: !!data.isHistorical,
             isSandboxTest: isSandboxCustomer,
           },
@@ -480,6 +510,8 @@ export class MessageService {
         })();
       }
     }
+
+    return saved;
   }
 
   /**

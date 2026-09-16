@@ -479,12 +479,14 @@ model FollowUp {
   scheduled_at   DateTime
   sent_at        DateTime?
   status         FollowUpStatus @default(QUEUED)
+  cancel_reason  String?
   created_at     DateTime       @default(now())
   updated_at     DateTime       @updatedAt
 
   @@index([tenant_id])
   @@index([reservation_id])
   @@index([status, scheduled_at])
+  @@index([tenant_id, customer_id, type, status])
   @@map("follow_ups")
 }
 
