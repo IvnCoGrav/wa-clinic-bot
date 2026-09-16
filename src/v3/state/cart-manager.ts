@@ -1,128 +1,33 @@
 import { PatientProfileExtractor } from './patient-extractor';
+import type {
+  CartItem,
+  RecipientScope,
+  LocationState,
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  BookingState,
+  CustomerGoalSession,
+  OngkirStatus,
+} from '../domain/types';
+import { GENERIC_CLINIC_TOKENS } from '../domain/types';
 
-/** Satu item layanan di keranjang (multi-item cart, deterministik). */
-export interface CartItem {
-  name: string;
-  price: number;
-  promoPrice?: number;
-  type: 'PRIMARY' | 'ADDON' | 'SERVICE';
-  category?: 'BABY' | 'KIDS' | 'MOMS' | 'BUNDLE' | 'ADDON';
-  /** Label penerima tampil: 'Si Kecil', 'Adik (2 bln)', 'Kakak (3 th)', 'Bunda'. */
-  recipientLabel?: string;
-  recipientScope?: RecipientScope;
-}
-
-/** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
-export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
-
-export interface LocationState {
-  rawText: string;
-  kelurahan?: string;
-  kecamatan?: string;
-  kota?: string;
-  distanceKm?: number;
-  ongkirNormal?: number;
-  ongkirPromo?: number;
-  isOutOfCoverage?: boolean;
-}
-
-export interface ChildState {
-  id?: string;
-  name?: string;
-  /** Label penerima: 'Adik' | 'Kakak' | 'Si Kecil'. */
-  roleLabel?: string;
-  ageMonths?: number;
-  symptoms: string[];
-}
-
-/** Subjek layanan multi-audience (Moms & Baby Spa): ibu, bayi, anak, atau keduanya. */
-export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
-
-/** Kondisi klinis ibu: hamil, paska salin/nifas, atau relaksasi umum. */
-export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
-
-/** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
-export interface MomProfileState {
-  stage?: MomStage;
-  /** Usia kehamilan dalam minggu (misal: 38 untuk "uk 38 weeks"). */
-  gestationalWeeks?: number;
-  /** Durasi paska salin (misal: "2 minggu") — teks bebas dari customer. */
-  postpartumPeriod?: string;
-  /** Keluhan ibu (misal: pegal, kaki bengkak, capek, asi). */
-  complaints: string[];
-}
-
-export interface BookingState {
-  preferredDate?: string;
-  preferredTime?: string;
-  reservationId?: string;
-  isConfirmed: boolean;
-  /**
-   * Skema human handling pasca-reservasi (sesi 462651): true bila reservasi
-   * tercatat dan ketersediaan masih menunggu verifikasi staf. Mengaktifkan
-   * acknowledgement gate di agent-runner (1x closing + handoff, anti loop).
-   */
-  needsStaffVerification?: boolean;
-  /** True bila closing pasca-reservasi sudah dikirim (ack berikutnya senyap). */
-  handoffClosingSent?: boolean;
-  /**
-   * Audit 337101 (anti CTA-looping): waktu yang DIMINTA customer
-   * ("sekarang"/"hari ini"/nama hari) — dicatat saat sinyal jadwal terdeteksi
-   * walau reservasi BELUM dibuat. Berbeda dari preferredDate (kesepakatan
-   * yang sudah dikonfirmasi alur reservasi). Dipakai context-aware CTA.
-   */
-  requestedTimeHint?: string;
-}
-
-export interface CustomerGoalSession {
-  customerName?: string;
-  genderGreeting: 'Bunda' | 'Bapak';
-  location?: LocationState;
-  /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
-  targetAudience?: TargetAudienceType;
-  /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */
-  momProfile?: MomProfileState;
-  /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
-  childProfile?: ChildState;
-  /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
-  children?: ChildState[];
-  /**
-   * Gerbang disambiguasi multi-anak (sesi 214956): true bila 2 usia anak
-   * berbeda terdeteksi TANPA konfirmasi eksplisit ("anak saya 2" / label
-   * peran Adik-Kakak). Selama true, LLM WAJIB bertanya konfirmasi lembut
-   * sebelum mengunci total biaya (lihat mandat grounding). Dibersihkan saat
-   * customer memberi sinyal jumlah eksplisit.
-   */
-  isMultiChildUnconfirmed?: boolean;
-  selectedTreatment?: string;
-  booking?: BookingState;
-  cartItems?: CartItem[];
-  ongkirStatus?: 'UNQUOTED' | 'QUOTED' | 'CONFIRMED';
-  totalPrice?: number;
-  /**
-   * Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): true bila customer sudah
-   * pernah bertanya harga/total di sesi ini. Mengontrol eksposur angka total
-   * resmi di grounding prompt (disembunyikan selama konsultasi murni).
-   */
-  priceDiscussed?: boolean;
-  /**
-   * Fase E: penghitung form reservasi tak lengkap berurutan. Direset ke 0
-   * saat form valid masuk; mencapai 2 → form tak lengkap berikutnya
-   * dieskalasi sunyi (anti loop minta-lengkapi selamanya).
-   */
-  formRetryCount?: number;
-}
-
-/**
- * Kata generik domain klinik — DILARANG menjadi token tunggal unik penentu
- * fuzzy matching. Mencegah sapaan bot ("Treatment moms & Baby...") memicu
- * phantom cart item via satu kata umum yang kebetulan unik di katalog.
- */
-export const GENERIC_CLINIC_TOKENS = new Set([
-  'treatment', 'treatments', 'layanan', 'service', 'services', 'homecare',
-  'perawatan', 'terapi', 'therapy', 'pijat', 'massage', 'paket',
-  'bunda', 'bayi', 'baby', 'anak', 'moms', 'klinik',
-]);
+// PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
+// Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
+export type {
+  CartItem,
+  RecipientScope,
+  LocationState,
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  BookingState,
+  CustomerGoalSession,
+  OngkirStatus,
+} from '../domain/types';
+export { GENERIC_CLINIC_TOKENS } from '../domain/types';
 
 export class CartManager {
   /**
@@ -198,7 +103,7 @@ export class CartManager {
   public static syncCartItems(
     session: CustomerGoalSession,
     history: Array<{ role: string; content: string }>,
-    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[] }>
+    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[]; ageTier?: { minAgeMonths: number; maxAgeMonths: number | null; label: string } }>
   ): CartItem[] {
     // Phase 2 (audit 315036) — rekonsiliasi hierarki bundle vs parsial via
     // metadata katalog (bundleItemIds), BUKAN daftar nama hardcode:
@@ -425,7 +330,7 @@ export class CartManager {
       const rawCleanHits = services.filter((s) => !fullHitSet.has(s) && cleanFormOf(text, s) !== null);
       const acceptedForms = new Map<string, (typeof services)[number]>();
       for (const s of fullHits) acceptedForms.set(s.name.toLowerCase(), s);
-      const cleanHits = rawCleanHits.filter((s) => {
+      const cleanHitsRaw = rawCleanHits.filter((s) => {
         const mine = cleanFormOf(text, s) as string;
         for (const [, other] of acceptedForms) {
           const theirs = matchedFormOf(text, other) as string;
@@ -439,6 +344,31 @@ export class CartManager {
         acceptedForms.set(mine, s);
         return true;
       });
+      // Audit 887216 (resolusi collision multi-tier usia): nama bersih kembar
+      // (mis. "pijat kids pulih ceria" dari tier 2-4th / 4-6th / 6-8th)
+      // DILARANG menimpa liar ke tier tertinggi. Pilih varian yang rentang
+      // usianya (ageTier dari DB) mencakup usia anak; default tier TERENDAH
+      // (label ageTier.minAgeMonths terkecil) bila usia tak diketahui.
+      const cleanHitsByName = new Map<string, Array<(typeof services)[number]>>();
+      for (const s of cleanHitsRaw) {
+        const cn = cleanNameOf(s.name);
+        const list = cleanHitsByName.get(cn) || [];
+        list.push(s);
+        cleanHitsByName.set(cn, list);
+      }
+      const patientAge = session.children?.[0]?.ageMonths ?? session.childProfile?.ageMonths ?? null;
+      const cleanHits: typeof cleanHitsRaw = [];
+      for (const [, list] of cleanHitsByName.entries()) {
+        if (list.length === 1) { cleanHits.push(list[0]); continue; }
+        const matched = patientAge != null
+          ? list.find((s) => patientAge >= (s.ageTier?.minAgeMonths ?? 0)
+            && patientAge <= (s.ageTier?.maxAgeMonths ?? Number.MAX_SAFE_INTEGER))
+          : null;
+        const fallback = [...list].sort(
+          (a, b) => (a.ageTier?.minAgeMonths ?? 0) - (b.ageTier?.minAgeMonths ?? 0)
+        )[0];
+        cleanHits.push(matched || fallback);
+      }
       // 2. Tanpa nama resmi UTUH, parafrasa hanya mengambil SATU yang terpanjang
       //    (paling spesifik) agar tidak mengotori keranjang dengan kandidat umum.
       //    Pesan asisten (role === 'assistant') DILARANG memicu fuzzyHits — sapaan
@@ -582,7 +512,7 @@ export class CartManager {
   public static resolveAffirmativeSwap(
     session: CustomerGoalSession,
     history: Array<{ role: string; content: string }>,
-    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[] }>
+    catalog: Array<{ name: string; promoPrice?: number | null; originalPrice?: number | null; category?: string; isAddon?: boolean; id?: string; bundleItemIds?: string[]; ageTier?: { minAgeMonths: number; maxAgeMonths: number | null; label: string } }>
   ): { oldName: string; newName: string; scope: RecipientScope } | null {
     if (!history || history.length < 2) return null;
     const lastUser = history[history.length - 1];

@@ -6,7 +6,6 @@ import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
 import { sanitizeGreetingRepetitionForFollowUp } from '../../src/utils/language-sanitizer';
 import { PersonaPromptBuilder } from '../../src/v3/agent/persona';
 import { TEMPLATES } from '../../src/config/persona';
-import { prisma } from '../../src/db/client';
 
 vi.mock('axios');
 
@@ -78,11 +77,22 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
       incomingText: raw,
       originalText: raw,
     });
-    const calls = (prisma.message.create as any).mock.calls;
-    const inbound = calls.find((c: any) => c?.[0]?.data?.direction === 'INBOUND');
+    // PLAN 8 FASE 5c: persistensi lewat Repository seam — verifikasi via InMemory
+    // repo (bukan spy prisma.message.create yang kini dilewati adapter).
+    const { getMessageRepository, InMemoryMessageRepository } = await import(
+      '../../src/repositories/message.repository'
+    );
+    const repo = getMessageRepository();
+    expect(repo).toBeInstanceOf(InMemoryMessageRepository);
+    const exists = await (repo as InMemoryMessageRepository).existsByWaId('__none__', null, 'default-tenant');
+    expect(exists).toBe(false);
+    // Audit INBOUND tercatat: cari via store internal (akses uji).
+    const store = (repo as any).messages as any[];
+    const inbound = store.find(
+      (m: any) => m.conversation_id === 'mock-lead-conv-2' && m.content?.includes('Promo[b8]')
+    );
     expect(inbound).toBeDefined();
-    expect(inbound[0].data.content).toContain('Promo[b8]');
-    expect(inbound[0].data.content).toContain('saya tertarik dengan layanan home-treatment');
+    expect(inbound.content).toContain('saya tertarik dengan layanan home-treatment');
   });
 
   it('V3 gate: salam Islami dibalas sapaan Waalaikumsalam', async () => {

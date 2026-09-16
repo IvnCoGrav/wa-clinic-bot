@@ -1,8 +1,23 @@
 import { vi, beforeEach } from 'vitest';
 import { faqCacheService } from '../src/services/faq-cache.service';
+import { setCustomerRepository, InMemoryCustomerRepository } from '../src/repositories/customer.repository';
+import { setConversationRepository, InMemoryConversationRepository } from '../src/repositories/conversation.repository';
+import { setMessageRepository, InMemoryMessageRepository } from '../src/repositories/message.repository';
+
+// PLAN 8 FASE 5a/5b/5c: inject test double persistensi secara EKSPLISIT.
+// - Level modul (di bawah): aktif sebelum beforeAll mana pun — karena beforeAll
+//   berjalan SEBELUM beforeEach pertama, tanpa ini service fail-closed akan
+//   melempar saat setup test (bukan bug, tapi konsekuensi fail-closed yang benar).
+// - beforeEach: instance BARU per test agar store tidak bocor antar-test.
+setCustomerRepository(new InMemoryCustomerRepository());
+setConversationRepository(new InMemoryConversationRepository());
+setMessageRepository(new InMemoryMessageRepository());
 
 beforeEach(() => {
   faqCacheService.clearMemoryCache();
+  setCustomerRepository(new InMemoryCustomerRepository());
+  setConversationRepository(new InMemoryConversationRepository());
+  setMessageRepository(new InMemoryMessageRepository());
 });
 
 // Matikan burst coalescing secara global supaya semua test deterministik:

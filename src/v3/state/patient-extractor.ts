@@ -1,80 +1,25 @@
 // ── PatientProfileExtractor — Pure demographic/profile extraction (zero side-effects) ──
 // Extracted from goal-tracker.ts to isolate patient-profiling logic from DB/persistence.
+import type {
+  LocationState,
+  BookingState,
+  RecipientScope,
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  CustomerGoalSession,
+} from '../domain/types';
 
-import type { LocationState, BookingState, RecipientScope } from './goal-tracker';
-
-export interface ChildState {
-  id?: string;
-  name?: string;
-  /** Label penerima: 'Adik' | 'Kakak' | 'Si Kecil'. */
-  roleLabel?: string;
-  ageMonths?: number;
-  symptoms: string[];
-}
-
-/** Subjek layanan multi-audience (Moms & Baby Spa): ibu, bayi, anak, atau keduanya. */
-export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
-
-/** Kondisi klinis ibu: hamil, paska salin/nifas, atau relaksasi umum. */
-export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
-
-/** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
-export interface MomProfileState {
-  stage?: MomStage;
-  /** Usia kehamilan dalam minggu (misal: 38 untuk "uk 38 weeks"). */
-  gestationalWeeks?: number;
-  /** Durasi paska salin (misal: "2 minggu") — teks bebas dari customer. */
-  postpartumPeriod?: string;
-  /** Keluhan ibu (misal: pegal, kaki bengkak, capek, asi). */
-  complaints: string[];
-}
-
-export interface CustomerGoalSession {
-  customerName?: string;
-  genderGreeting: 'Bunda' | 'Bapak';
-  location?: LocationState;
-  /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
-  targetAudience?: TargetAudienceType;
-  /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */
-  momProfile?: MomProfileState;
-  /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
-  childProfile?: ChildState;
-  /** Daftar anak (Adik/Kakak). childProfile selalu mirror children[0]. */
-  children?: ChildState[];
-  /**
-   * Gerbang disambiguasi multi-anak (sesi 214956): true bila 2 usia anak
-   * berbeda terdeteksi TANPA konfirmasi eksplisit ("anak saya 2" / label
-   * peran Adik-Kakak). Selama true, LLM WAJIB bertanya konfirmasi lembut
-   * sebelum mengunci total biaya (lihat mandat grounding). Dibersihkan saat
-   * customer memberi sinyal jumlah eksplisit.
-   */
-  isMultiChildUnconfirmed?: boolean;
-  selectedTreatment?: string;
-  booking?: BookingState;
-  cartItems?: Array<{
-    name: string;
-    price: number;
-    promoPrice?: number;
-    type: 'PRIMARY' | 'ADDON' | 'SERVICE';
-    category?: 'BABY' | 'KIDS' | 'MOMS' | 'BUNDLE' | 'ADDON';
-    recipientLabel?: string;
-    recipientScope?: RecipientScope;
-  }>;
-  ongkirStatus?: 'UNQUOTED' | 'QUOTED' | 'CONFIRMED';
-  totalPrice?: number;
-  /**
-   * Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): true bila customer sudah
-   * pernah bertanya harga/total di sesi ini. Mengontrol eksposur angka total
-   * resmi di grounding prompt (disembunyikan selama konsultasi murni).
-   */
-  priceDiscussed?: boolean;
-  /**
-   * Fase E: penghitung form reservasi tak lengkap berurutan. Direset ke 0
-   * saat form valid masuk; mencapai 2 → form tak lengkap berikutnya
-   * dieskalasi sunyi (anti loop minta-lengkapi selamanya).
-   */
-  formRetryCount?: number;
-}
+// PLAN 8 FASE 6: definisi tipe kanonis di src/v3/domain/types.ts.
+// Re-export menjaga seluruh import path lama tetap berfungsi.
+export type {
+  ChildState,
+  TargetAudienceType,
+  MomStage,
+  MomProfileState,
+  CustomerGoalSession,
+} from '../domain/types';
 
 export class PatientProfileExtractor {
   /**
@@ -471,17 +416,22 @@ export class PatientProfileExtractor {
       if (foundSymptoms.length > 0) addSymptoms(ensureChild(0, 'Adik'));
     } else if (ages.length === 1 || foundSymptoms.length > 0) {
       const newAge = ages.length === 1 ? ages[0] : null;
-      // Tokenisasi untuk penanda referensial anak-lain (audit 854065).
+      // Penanda anak-LAIN level FRASA (audit 854065 vs 887216): yang membedakan
+      // anak kedua adalah frasa rujukan eksplisit ("anak saya yang", "anaknya
+      // yang") atau kata ordinal ('satunya', 'kedua', 'berikutnya', 'lainnya') —
+      // BUKAN kata sambung umum ('kalau', 'yang' telanjang). "kalau anak saya
+      // yang umur 2 tahun" → anak lain; "Kalau umur 16 bulan" → usia susulan
+      // anak yang SAMA (anti-halusinasi anak kedua, sesi 887216).
       let normRef = '';
       for (let i = 0; i < lower.length; i++) {
         const ch = lower[i];
         normRef += (ch >= 'a' && ch <= 'z') ? ch : ' ';
       }
+      normRef = normRef.split(' ').filter((t) => t.length > 0).join(' ');
       const refTokens = new Set(normRef.split(' ').filter((t) => t.length > 0));
-      // Penanda kuat anak-LAIN (audit 854065: "kalau anak saya yang umur
-      // 2 tahun"). Bare "yang" SENGAJA dikecualikan — "yang 2 bulan" telanjang
-      // lebih mungkin usia susulan anak yang sama → isi idx0 (cabang e).
-      const hasReferentialMarker = ['kalau', 'satunya', 'kedua'].some((t) => refTokens.has(t));
+      const hasReferentialMarker =
+        ['satunya', 'kedua', 'berikutnya', 'lainnya'].some((t) => refTokens.has(t))
+        || normRef.includes('anak saya yang') || normRef.includes('anaknya yang');
       const firstHasCare = (children[0]?.symptoms || []).length > 0
         || (session.cartItems || []).some((c) => (c.recipientScope || 'GENERAL') === 'CHILD_1');
       const ageMatchIdx = newAge != null
@@ -501,11 +451,11 @@ export class PatientProfileExtractor {
         && ((children[0].ageMonths != null && children[0].ageMonths !== newAge)
           || (children[0].ageMonths == null && firstHasCare && hasReferentialMarker))) {
         // (c) Audit 222655: anak pertama ber-usia beda → slot kedua by usia.
-        // (d) Audit 854065: anak pertama TANPA usia tapi punya keluhan/cart
-        //     + usia baru berpenanda referensial ("kalau anak saya yang...")
-        //     → slot kedua Kakak (DILARANG menimpa konteks pilek adik).
-        //     Tanpa penanda referensial ("umur 2 bulan" telanjang) → isi idx0
-        //     (asumsi usia susulan anak yang sama).
+        // (d) Audit 854065: anak pertama TANPA usia tapi punya keluhan/cart +
+        //     frasa rujukan anak-lain eksplisit ("anak saya yang...") → slot
+        //     kedua Kakak. Audit 887216: frasa itu BUKAN kata sambung umum
+        //     'kalau'/'yang' telanjang — "Kalau umur 16 bulan" mengisi anak
+        //     pertama (cabang e), mencegah halusinasi anak kedua.
         const firstAge = children[0].ageMonths as number | undefined;
         if (children[1]?.ageMonths != null) {
           // Slot penuh (2 anak): update anak dengan usia terdekat (cap model Adik/Kakak).

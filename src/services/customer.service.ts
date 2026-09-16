@@ -68,19 +68,16 @@ export class CustomerService {
     if (flags.isAdminLabeled !== undefined) data.is_admin_labeled = flags.isAdminLabeled;
     if (flags.isHoldLabeled !== undefined) data.is_hold_labeled = flags.isHoldLabeled;
 
-    try {
-      await prisma.customer.updateMany({
-        where: { phone },
-        data,
-      });
-    } catch (error) {
-      // Memory fallback (DB offline / test)
-      const cust = memoryCustomers.get(phone);
-      if (cust) {
-        if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
-        if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
-        cust.labels_synced_at = new Date();
-      }
+    // PLAN 8 FASE 5a: update phone-global via Repository (fail-closed di produksi).
+    // Sinkronkan juga cache baca memoryCustomers karena kode yang belum termigrasi
+    // masih membacanya langsung (akan hilang seluruhnya setelah Fase 5c).
+    const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+    await repo.updateManyByPhone(phone, data);
+    const cust = memoryCustomers.get(phone);
+    if (cust) {
+      if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
+      if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
+      cust.labels_synced_at = new Date();
     }
   }
 
@@ -93,89 +90,57 @@ export class CustomerService {
     tenantId: string,
     options?: { skipFollowUpScheduling?: boolean }
   ): Promise<any> {
-    try {
-      const isSandbox = isDummyOrTestContact(phone, name);
+    // PLAN 8 FASE 5a: persistensi via Repository seam. Adapter Postgres melempar
+    // error DB (fail-closed); adapter InMemory (test) tidak pernah melempar.
+    // TIDAK ADA lagi pembuatan objek mock diam-diam saat DB mati di produksi.
+    const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+    const isSandbox = isDummyOrTestContact(phone, name);
 
-      let customer = await prisma.customer.findFirst({
-        where: { phone, tenant_id: tenantId },
-      });
+    let customer = await repo.findByPhone(phone, tenantId);
+    let isNewlyCreated = false;
 
-      if (!customer) {
-        const newCustomer = await prisma.customer.create({
-          data: {
-            tenant_id: tenantId,
-            phone,
-            name: name || null,
-            labels_synced_at: new Date(),
-            is_sandbox_test: isSandbox,
-          },
-        });
-
-        if (newCustomer) {
-          customer = newCustomer;
-          // skipFollowUpScheduling: true saat dipanggil dari migration service
-          // agar legacy customer tidak mendapat follow-up NO_PURCHASE yang tidak relevan.
-          if (!options?.skipFollowUpScheduling && !isSandbox && !customer.is_admin_labeled && !hasBypassLabel(customer)) {
-            try {
-              const { followUpService } = await import('./follow-up.service');
-              await followUpService.createNoPurchaseFollowUps(customer.id, tenantId);
-            } catch (err) {
-              console.error('[Customer Service] Failed to trigger follow-up creation:', err);
-            }
-          }
-        } else {
-          throw new Error('Database create returned null/undefined');
-        }
-      } else if (!customer.is_sandbox_test && isSandbox) {
-        // Otomatis sinkronkan flag jika nomor/nama terdeteksi dummy
-        try {
-          await prisma.customer.update({
-            where: { id: customer.id },
-            data: { is_sandbox_test: true },
-          });
-          customer.is_sandbox_test = true;
-        } catch (_) {}
-      }
-
-
-      memoryCustomers.set(phone, customer);
-      if (customer?.id) memoryCustomers.set(customer.id, customer);
-      return customer;
-    } catch (error) {
-      // Memory fallback for offline mode
-      if (!memoryCustomers.has(phone)) {
-        const mockCustomer = {
-          id: `cust_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+    if (!customer) {
+      // Skema saat ini: phone @unique GLOBAL. Bila nomor sudah ada di tenant lain,
+      // JANGAN create (pasti gagal unique-violation di produksi) — kembalikan record
+      // yang ada dengan peringatan. Dihapus setelah migrasi @@unique([tenant_id, phone]).
+      const globalExisting = await repo.findByPhoneGlobal(phone);
+      if (globalExisting) {
+        console.warn(
+          `[Customer Service] Nomor ${phone} sudah ada di tenant ${(globalExisting as any).tenant_id} ` +
+          `(diminta ${tenantId}) — memakai record existing (skema global-unique).`
+        );
+        customer = globalExisting;
+      } else {
+        customer = await repo.create({
           tenant_id: tenantId,
           phone,
           name: name || null,
-          kelurahan: null,
-          kecamatan: null,
-          kota: null,
-          lat: null,
-          lng: null,
-          distance_km: null,
-          ongkir: null,
-          is_out_of_coverage: false,
-          zipcode: null,
-          pending_zipcode: null,
-          status: 'active',
-          block_reason: null,
-          blocked_at: null,
-          is_legacy_source: false,
-          legacy_scraped_at: null,
-          is_admin_labeled: false,
-          is_hold_labeled: false,
-          labels_synced_at: new Date(),
-          created_at: new Date(),
-          updated_at: new Date(),
-        };
-        memoryCustomers.set(phone, mockCustomer);
-        memoryCustomers.set(mockCustomer.id, mockCustomer);
-        return mockCustomer;
+          is_sandbox_test: isSandbox,
+        });
+        isNewlyCreated = true;
       }
-      return memoryCustomers.get(phone);
+
+      // skipFollowUpScheduling: true saat dipanggil dari migration service
+      // agar legacy customer tidak mendapat follow-up NO_PURCHASE yang tidak relevan.
+      // HANYA untuk record yang benar-benar baru dibuat (bukan hasil fallback global).
+      if (isNewlyCreated && !options?.skipFollowUpScheduling && !isSandbox && !customer.is_admin_labeled && !hasBypassLabel(customer)) {
+        try {
+          const { followUpService } = await import('./follow-up.service');
+          await followUpService.createNoPurchaseFollowUps(customer.id, tenantId);
+        } catch (err) {
+          console.error('[Customer Service] Failed to trigger follow-up creation:', err);
+        }
+      }
+    } else if (!customer.is_sandbox_test && isSandbox) {
+      // Otomatis sinkronkan flag jika nomor/nama terdeteksi dummy
+      try {
+        customer = await repo.update(customer.id, { is_sandbox_test: true });
+      } catch (_) {}
     }
+
+    memoryCustomers.set(phone, customer);
+    if (customer?.id) memoryCustomers.set(customer.id, customer);
+    return customer;
   }
 
   /**
@@ -822,44 +787,40 @@ export class CustomerService {
    * Cari customer berdasarkan id (dengan memory store fallback saat DB offline).
    */
   public async getCustomerById(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
+    // PLAN 8 FASE 5a: baca via Repository (fail-closed di produksi).
+    // Cache memori hanya dibaca bila repo mengembalikan null (bukan sebagai
+    // pengganti kegagalan tulis) — mempertahankan perilaku baca-tahan.
+    const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
     try {
-      const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-      if (customer) {
-        if (tenantId && customer.tenant_id && customer.tenant_id !== tenantId) return null;
-        return customer;
-      }
-      const memCust = memoryCustomers.get(customerId);
-      if (memCust) {
-        if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
-        return memCust;
-      }
-      for (const [, cust] of memoryCustomers.entries()) {
-        if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
-      }
-      return null;
+      const customer = await repo.findById(customerId, tenantId);
+      if (customer) return customer;
     } catch (error) {
-      const memCust = memoryCustomers.get(customerId);
-      if (memCust) {
-        if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
-        return memCust;
-      }
-      for (const [, cust] of memoryCustomers.entries()) {
-        if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
-      }
-      return null;
+      // DB error → JANGAN buat objek fiktif; lanjut ke cache baca di bawah,
+      // dan kembalikan null bila tidak ada (pemanggil menangani null).
+      console.warn('[Customer Service] getCustomerById DB error (fail-closed, cek cache baca):', (error as Error)?.message);
     }
+    const memCust = memoryCustomers.get(customerId);
+    if (memCust) {
+      if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
+      return memCust;
+    }
+    for (const [, cust] of memoryCustomers.entries()) {
+      if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
+    }
+    return null;
   }
 
   /**
    * Cari customer berdasarkan nomor telepon
    */
   public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {
+    // PLAN 8 FASE 5a: baca via Repository (fail-closed di produksi).
+    const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
     try {
-      const customer = await prisma.customer.findFirst({
-        where: { phone, tenant_id: tenantId },
-      });
+      const customer = await repo.findByPhone(phone, tenantId);
       return customer || memoryCustomers.get(phone) || null;
     } catch (error) {
+      console.warn('[Customer Service] getCustomerByPhone DB error (fail-closed, cek cache baca):', (error as Error)?.message);
       return memoryCustomers.get(phone) || null;
     }
   }
