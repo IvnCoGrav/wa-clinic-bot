@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Resolusi Fondasional Siklus Regresi Chatbot Sesi 173235: Anti-Phantom Basket Add-On, Grounding Lokasi Cool-Off, & Fail-Closed Booking Gate (2026-09-16)
+
+- **Fase 1 — Isolasi Keranjang Add-on Anti-Phantom Basket (`src/v3/state/cart-manager.ts`)**:
+  - Menambahkan guard isolasi pada `CartManager.syncCartItems`: Pesan asisten (`isAssistant === true`) dilarang memasukkan layanan berjenis `ADDON` (seperti *Sinar Moksa* / *Cukur Rambut*) ke keranjang belanja customer (`session.cartItems`) KECUALI bila nama add-on sudah pernah disebut atau dikonfirmasi oleh customer (`userConfirmedNames.has(s.name.toLowerCase())`).
+  - Mencegah asisten yang hanya mengedukasi perlengkapan treatment membengkakkan isi keranjang dan durasi/harga treatment secara sepihak.
+  - Test baru: `tests/unit/v3/cart-addon-assistant-isolation.test.ts` (3/3 passed).
+- **Fase 2 — Grounding Lokasi Cool-Off & Anti-Kaset Rusak (`src/v3/state/conversation-summarizer.ts`, `src/v3/state/goal-tracker.ts`, `src/v3/agent/persona.ts`)**:
+  - Memperluas deteksi `isAskedLocationRecently(history)` di `conversation-summarizer.ts` agar mengenali sapaan pembuka Turn-0 yang menanyakan lokasi (`rumahnya dimana`, `rumah bunda dimana`, `daerah mana`, `tinggal dimana`, dsb.).
+  - Mengeliminasi kontradiksi internal grounding prompt: `GoalTracker.formatGoalSessionForPrompt` kini menerima `isAskedLocationRecently`. Bila lokasi belum diketahui namun bot baru saja menanyakan lokasi pada 1-2 turn terakhir, status instruksi tidak lagi menodong `(Perlu ditanyakan kelurahan/kecamatannya)`, melainkan beralih ke instruksi cool-off: `• Lokasi: Belum diketahui (Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi pada turn ini, fokus jawab keluhan/pertanyaan Bunda)`.
+  - Meneruskan riwayat percakapan (`opts.history`) dari `persona.ts` (`buildRouterPrompt`, `buildRouterPromptAsync`, `buildSystemPrompt`, `buildSystemPromptAsync`) ke `GoalTracker.formatGoalSessionForPrompt`.
+  - Test baru: `tests/unit/v3/location-prompt-grounding-sync.test.ts` (4/4 passed).
+- **Fase 3 — Fail-Closed Booking Readiness & Prasyarat Mutlak Lokasi (`src/v3/agent/pipeline/context-grounder.ts`, `src/v3/tools/save-reservation.tool.ts`)**:
+  - `ContextGrounder.isBookingCommitReady`: Wajib memverifikasi keberadaan data lokasi (`session.location.kelurahan / kecamatan / kota / rawText`). Bila lokasi belum diketahui, reservasi homecare DILARANG dianggap siap dikomit (`false`), menghentikan forcing pemanggilan `save_reservation` (`dynamicToolChoice`) di Turn 4 saat customer hanya bertanya ketersediaan slot.
+  - `executeSaveReservation`: Menambahkan guard fail-closed prasyarat lokasi. Jika `conversationId` ada dan `effectiveAddress` kosong (tidak ada alamat fisik dari argumen tool maupun wilayah/kelurahan dari sesi), tool menolak mencatat ke database (`success: false`) dan membimbing bot untuk menanyakan daerah rumah terlebih dahulu sesuai Aturan Emas 5a. Mencegah terciptanya reservasi fiktif tanpa alamat/wilayah dan data anak dummy.
+  - Test baru: `tests/unit/v3/booking-commit-location-gate.test.ts` (6/6 passed); test gate diperbarui `tests/unit/v3/booking-commit-ready-gate.test.ts` (6/6 passed).
+- **Fase 4 — Pengetatan Persona & SOP Menjawab Persiapan (`src/v3/agent/persona.ts`, `src/services/tenant-prompt-config.service.ts`)**:
+  - Mempertegas Aturan Emas 5a: Bila customer bertanya jadwal/slot padahal lokasi belum diketahui, WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi. DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil `save_reservation`.
+  - Mempertegas Aturan Emas 14: Pertanyaan persiapan treatment dijawab padat maksimal 2-3 kalimat (perlengkapan dibawa Bidan, cukup siapkan alas tidur). DILARANG proaktif mempromosikan alat add-on (Sinar Moksa) jika customer hanya menanyakan persiapan umum.
+  - Mempertegas syarat mutlak lokasi pada panduan tool `save_reservation`.
+- **Verifikasi & Regresi**:
+  - `npm run build` (`tsc`) exit 0.
+  - 14 test suite terkait booking, cart, location, summarizer, dan persona (100+ tes) 100% passed.
+  - Knowledge graph disinkronkan via `graphify update .`.
+
 #### Resolusi Fondasional Siklus Regresi Chatbot & Isolasi Total Sandbox CAPI Queue (2026-09-16)
 
 - **Fase 1' — Isolasi sandbox antrean Meta CAPI (`src/routes/admin/reservations.subroute.ts`, `src/utils/dummy-filter.ts`)**:

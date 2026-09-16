@@ -9,17 +9,25 @@ import { ContextGrounder } from '../../../src/v3/agent/pipeline/context-grounder
 const sessionWithTreatment: any = {
   genderGreeting: 'Bunda',
   selectedTreatment: 'Pijat Kids Ceria (Usia 2-4 th)',
+  location: { kelurahan: 'Tambakwedi', kecamatan: 'Kenjeran', distanceKm: 5 },
   booking: {},
 };
 
 describe('isBookingCommitReady fail-closed (Fase 3)', () => {
+  it('false bila lokasi customer belum diketahui', () => {
+    const noLocation = { ...sessionWithTreatment, location: undefined };
+    expect(ContextGrounder.isBookingCommitReady(
+      noLocation, 'Baik saya ambil hari selasa', []
+    )).toBe(false);
+  });
+
   it('false untuk pertanyaan ketersediaan slot (Turn 7)', () => {
     expect(ContextGrounder.isBookingCommitReady(
       sessionWithTreatment, 'Bisa hari selasa depan? Tgl 18 agustus?', []
     )).toBe(false);
   });
 
-  it('true untuk pernyataan tegas + treatment disepakati', () => {
+  it('true untuk pernyataan tegas + treatment disepakati + lokasi diketahui', () => {
     expect(ContextGrounder.isBookingCommitReady(
       sessionWithTreatment, 'Baik saya ambil hari selasa', []
     )).toBe(true);

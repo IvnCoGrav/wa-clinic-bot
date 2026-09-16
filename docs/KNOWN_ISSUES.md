@@ -1381,10 +1381,25 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 68. [V3 Grounding] Emitter Metadata Durasi & Batasan Usia Katalog pada Keranjang (Sesi 887216) — FIXED 2026-09-16
+## 70. [Arsitektur V3] Mandat Penghentian Permanen Solusi Tambal-Sulam & Resolusi Sistemik Bot Diam (Sesi 477412) — OPEN / REFACTOR PLANNED
 
-- **Status:** fixed (2026-09-16).
-- **Akar masalah:** `GoalTracker.formatGoalSessionForPrompt` sebelumnya hanya merender nama paket, nominal harga, dan recipient scope tanpa durasi resmi dan batasan usia per-item dari database katalog. Akibatnya, LLM berisiko halusinasi durasi untuk item tunggal.
-- **Fix (fondasional, data-driven):** Di `src/v3/state/goal-tracker.ts`, baris item keranjang kini menyuntikkan `[Durasi Resmi: ${svc.durationMinutes} menit | Batasan Usia: ${svc.ageTier.label}]` secara data-driven dari `treatmentCatalogService.getAllServices(true)`.
-- **Verifikasi:** `tests/unit/v3/grounding-catalog-metadata.test.ts` (2/2 passed), `tests/unit/v3/multi-item-duration-grounding.test.ts` (3/3 passed), golden corpus 51/51 passed. Full vitest suite 310 files passed 100%.
+- **Status:** open (rencana refaktor fondasional telah disusun di `docs/plans/CHATBOT_FOUNDATIONAL_ARCHITECTURE_TRANSFORMATION_PLAN.md`).
+- **Ditemukan:** 2026-09-16 pada simulasi sesi 477412 (Turn 5 bot diam saat ditanya persiapan & minyak pijat).
+- **Gejala:** 
+  1. Turn 5: Bot diam membisu (`🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]`) atas pertanyaan *"Ni kudu nyiapin apa? Pakai baby oil atau minyak telon?"*.
+  2. Turn 2 & Turn 4: Asisten memuntahkan 6–9 kalimat brosur menu bernomor dan mengulang pertanyaan penutup persis kaset rusak.
+  3. Turn 3: Geocoder salah mengeja "Kutisari" menjadi "Kutusari" (Kec. Sukomanunggal) dan meminta shareloc (melanggar Aturan 21).
+- **Akar Masalah Sistemik (5 Pola Kegagalan Berulang):**
+  1. *The Death Penalty Guardrail*: Di `GuardrailPipeline.verifyAndReprompt`, mismatch nama layanan sekunder pada pertanyaan FAQ langsung mengeksekusi `isEscalated = true; shouldSendReply = false; finalReply = ''`. Bot dibunuh padahal jawaban inti FAQ sudah benar.
+  2. *Negative Engineering Overload*: Penumpukan 21 Aturan Emas dengan puluhan larangan "DILARANG" membuat `gpt-4o-mini` mengalami *attention dilution* dan gagal mematuhi batasan 2–3 kalimat.
+  3. *Tool Over-Triggering*: Router memanggil `get_catalog_and_price` pada pertanyaan FAQ persiapan karena membawa state usia 24 bulan, memicu rantai halusinasi silang.
+  4. *Ambiguitas Taksonomi Usia 24 Bulan*: Usia 24 bulan berada di batas skema `BABY (0–24 bln)` vs `KIDS (2–4 thn)`, menyebabkan pergantian kategori antar-turn yang memicu alarm validator faktual.
+  5. *Debugging Berbasis Anekdot*: Pola fixing kalimat per kalimat melahirkan lubang baru di tempat lain.
+- **Rencana Tindak Lanjut (Mandat Fondasional):**
+  1. Hapus silent drop di `GuardrailPipeline`: terapkan *graceful degradation* (buang paragraf ekstra bermasalah, balasan FAQ tetap dikirim). Bot DILARANG MATI MEMBISU.
+  2. Gating tool di Router: pertanyaan FAQ/persiapan DILARANG memicu `get_catalog_and_price`.
+  3. Kunci taksonomi usia: deterministik `< 24 bln` = BABY, `>= 24 bln` = KIDS. Pangkas output katalog ke 1 rekomendasi utama + 1 alternatif (anti-brosur).
+  4. Perluas gazetteer lokal Surabaya untuk Kutisari & perumahan utama.
+  5. Bangun Automated Conversation Matrix Test Suite (20 skenario end-to-end terotomatisasi).
+
 

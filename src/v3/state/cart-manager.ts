@@ -457,6 +457,12 @@ export class CartManager {
         // (b) pesan turn ini juga memuat layanan utama. Tanya konsultasi
         // add-on tanpa paket utama → lewati (SOP: wajib digabung pijat).
         if (primaryTypeOf(s) === 'ADDON') {
+          // Audit Sesi 173235 (anti-phantom basket): pesan asisten (role === 'assistant')
+          // yang menyebut nama add-on (mis. penjelasan persiapan "seperti Sinar Moksa kami bawa",
+          // atau tawaran terapi tambahan) DILARANG memasukkan add-on ke keranjang
+          // kecuali user pernah eksplisit meminta / mengonfirmasi add-on tersebut.
+          if (isAssistant && !userConfirmedNames.has(s.name.toLowerCase())) continue;
+
           const msgHasNonAddon = [...fullHits, ...cleanHits, ...fuzzyHits]
             .some((x) => primaryTypeOf(x) !== 'ADDON');
           const cartHasNonAddon = cart.some((c) => c.type !== 'ADDON');

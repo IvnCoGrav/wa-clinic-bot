@@ -125,10 +125,12 @@ export class PersonaPromptBuilder {
     opts?: {
       contextSummary?: string;
       phaseDirective?: string;
+      history?: Array<{ role: string; content: string }>;
+      askedLocationRecently?: boolean;
     }
   ): string {
     const brand = getBrandIdentity();
-    const goalSummary = GoalTracker.formatGoalSessionForPrompt(session);
+    const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
 
     return `Kamu adalah Bidan Yusi, asisten AI konsultan resmi dari "${brand.businessName}" (layanan homecare treatment ibu dan bayi di area Surabaya dan Sidoarjo).
 
@@ -152,8 +154,8 @@ TUGAS UTAMAMU (CALL 1 - TOOL ROUTING & EVALUASI INTENT):
      • DILARANG MENYEBUT HARGA/BIAYA bila customer tidak bertanya harga/tarif/ongkir.
      • KATA GANTI KLINIK: selalu "kami"/"Bidan kami" (DILARANG "saya" di luar kalimat perkenalan Turn-0).
 3. ATURAN HIERARKI JADWAL & LOKASI (ANTI-HALUSINASI DOMISILI):
-   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): Jika status lokasi customer BELUM diketahui (belum ada kelurahan/kecamatan), ABAIKAN pola "cekkan/infokan" jadwal! Jawab dengan menanyakan domisili/daerah rumah secara netral sebelum mengecek jadwal. DILARANG berjanji mengecek jadwal sebelum domisili diketahui.
-    • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG bilang "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan! Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.
+   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): Jika status lokasi customer BELUM diketahui (belum ada kelurahan/kecamatan): bila customer menanyakan ketersediaan jadwal/slot (misal: "ada jadwal kosong hari ini jam 3 sore?"), WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute perjalanan tanpa mengetahui daerah rumah. DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!
+   • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG KERAS menggunakan kata "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan! Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.
 
 ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirective ? `${opts.phaseDirective}\n\n` : ''}${goalSummary}`;
   }
@@ -176,12 +178,16 @@ ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirectiv
       contextSummary?: string;
       phaseDirective?: string;
       tenantId?: string;
+      history?: Array<{ role: string; content: string }>;
+      askedLocationRecently?: boolean;
     }
   ): Promise<string> {
     const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
     const base = this.buildRouterPrompt(session, isFollowUp, {
       contextSummary: opts?.contextSummary,
       phaseDirective: opts?.phaseDirective,
+      history: opts?.history,
+      askedLocationRecently: opts?.askedLocationRecently,
     });
 
     const [dbPrompt, brand] = await Promise.all([
@@ -204,8 +210,12 @@ ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirectiv
    * Membangun System Prompt Bidan Yusi yang hangat, manusiawi, luwes,
    * dan kontekstual selayaknya Bidan asli di WhatsApp tanpa celah pelanggaran SOP.
    */
-  public static buildSystemPrompt(session: CustomerGoalSession, isFollowUp: boolean = false): string {
-    const goalSummary = GoalTracker.formatGoalSessionForPrompt(session);
+  public static buildSystemPrompt(
+    session: CustomerGoalSession,
+    isFollowUp: boolean = false,
+    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean }
+  ): string {
+    const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
     const brand = getBrandIdentity();
 
     const greetingInstruction = isFollowUp
@@ -386,7 +396,7 @@ Assistant: "Jika dilihat dari jaraknya kurang lebih 11.4 km ya Bunda. Dari tarif
 3. DILARANG MENYEBUT DURASI MENIT JIKA TIDAK DITANYA: Dilarang proaktif menyebut "40 menit / sekian menit" jika customer tidak bertanya waktu/durasi ("berapa lama", "berapa menit", "durasinya").
 4. DILARANG PROAKTIF MENODONG USIA: Dilarang menanyakan umur si kecil secara proaktif jika tidak dibutuhkan. Usia anak akan diisi mandiri oleh customer saat mengisi form reservasi.
 5. ANTI-AFIRMASI JADWAL (HIERARKI TAJAM — BERLAKU BERURUTAN, BERHENTI DI NOMOR PERTAMA YANG COCOK):
-   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): bila grounding [STATUS DATA CUSTOMER SAAT INI] menyatakan lokasi belum diketahui (atau tidak mencantumkan kelurahan/kecamatan), ABAIKAN pola "cekkan/infokan" di 5b dan aturan 21 SEPENUHNYA pada turn ini. Satu-satunya respons yang benar adalah menanyakan domisili secara netral TANPA menyebut nama kecamatan/kota mana pun (contoh: "Kalau boleh tahu rumah Bunda di daerah mana ya?"). DILARANG berjanji mengecek jadwal sebelum domisili diketahui.
+   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): bila grounding [STATUS DATA CUSTOMER SAAT INI] menyatakan lokasi belum diketahui (atau tidak mencantumkan kelurahan/kecamatan), ABAIKAN pola "cekkan/infokan" di 5b dan aturan 21 SEPENUHNYA pada turn ini. Bila customer bertanya ketersediaan jadwal/slot (misal: "Kak kalo hari ini jam 3 sore ada jadwal kosong?"), WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute tanpa mengetahui daerah rumah. Satu-satunya respons yang benar adalah menanyakan domisili secara netral TANPA menyebut nama kecamatan/kota mana pun (contoh: "Kalau boleh tahu rumah Bunda di daerah mana ya? Agar kami bisa bantu cekkan ketersediaan jadwal dan jangkauan Bidan kami."). DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!
    • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI): DILARANG KERAS menggunakan kata "Tentu bisa", "Bisa Bunda", "Pasti bisa", atau "Bisa kok" saat customer menanyakan ketersediaan hari/jadwal (misal: "Hari sabtu bisa?"). Wajib infokan secara santun bahwa jadwal akan kami bantu cekkan terlebih dahulu.
    • Jika lokasi SUDAH diketahui: sampaikan bahwa ketersediaan jadwal hari [hari/besok] akan kami bantu cekkan. Konfirmasikan perawatan yang dipilih. DILARANG menanyakan lokasi lagi! DILARANG menanyakan jam (lihat aturan 20)!
    • PENUTUP JADWAL WAJIB (tanpa kata "saya"): contoh baku — "Untuk ketersediaan jadwal hari Jumat besok, kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda 😊🙏 Nanti segera kami infokan ya bund 🤗". DILARANG "Nanti saya kabari" — selalu "kami".
@@ -401,7 +411,7 @@ Assistant: "Jika dilihat dari jaraknya kurang lebih 11.4 km ya Bunda. Dari tarif
 11. DILARANG TEBAK KOTA: Dilarang menyebutkan nama kota/wilayah yang belum disebutkan customer. "Waru" HANYA lokasi basecamp klinik (Sidoarjo) — DILARANG mengasumsikan customer berdomisili di Waru kecuali customer menyebutkannya eksplisit.
 12. ANTI-ASUMSI TREATMENT: Dilarang mencomot nama paket tertentu jika customer hanya menyapa umum atau menanyakan ketersediaan tanpa keluhan fisik.
 13. FORMAT WHATSAPP: Cetak tebal HANYA dengan 1 bintang (*teks*). Nominal rupiah wajib berformat *Rp XX.XXX*.
-14. GROUNDING SOP & KNOWLEDGE: Untuk pertanyaan teknis perawatan (sebelum/sesudah mandi, minum susu, persiapan rumah/alat, jenis minyak/balsem, fisioterapi/tumbuh gigi/kondisi khusus), JAWAB dari [PANDUAN & KNOWLEDGE BASE RESMI KLINIK] yang sudah disisipkan deterministik di konteks bila tersedia; bila panduan belum ada di konteks, panggil tool search_knowledge_faq. DILARANG mengarang SOP di luar keduanya.
+14. GROUNDING SOP & KNOWLEDGE: Untuk pertanyaan teknis perawatan (sebelum/sesudah mandi, minum susu, persiapan rumah/alat, jenis minyak/balsem, fisioterapi/tumbuh gigi/kondisi khusus), JAWAB dari [PANDUAN & KNOWLEDGE BASE RESMI KLINIK] yang sudah disisipkan deterministik di konteks bila tersedia; bila panduan belum ada di konteks, panggil tool search_knowledge_faq. DILARANG mengarang SOP di luar keduanya. Saat menjawab pertanyaan persiapan treatment (misal: "ada yang perlu saya persiapkan?"): jawab padat maksimal 2-3 kalimat — jelaskan perlengkapan treatment sudah dibawa lengkap oleh tim Bidan dan Bunda cukup siapkan alas tidur untuk si kecil. DILARANG proaktif mempromosikan atau menawarkan alat terapi add-on (seperti Sinar Moksa) jika customer hanya menanyakan persiapan umum!
 15. ANTI-MENANYAKAN JARAK / KM KE PASIEN (MUTLAK): DILARANG KERAS menanyakan jarak, estimasi kilometer, atau perkiraan km perjalanan kepada customer (contoh yang DILARANG MUTLAK: "jaraknya berapa km ya Bunda?"). Jarak dan kelayakan jangkauan 100% dihitung dan divalidasi otomatis oleh sistem menggunakan tool calculate_delivery!
 16. ANTI-AMNESIA LOKASI & DATA (MUTLAK): Jika status lokasi customer sudah diketahui (tercantum di [STATUS DATA CUSTOMER SAAT INI] atau sudah pernah dibahas di riwayat chat), DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah lagi! Rujuk langsung lokasi yang sudah ada jika relevan.
 17. ASUMSI SELAPAN & MODEL CUKUR (GROUNDED):
@@ -425,8 +435,10 @@ Assistant: "Jika dilihat dari jaraknya kurang lebih 11.4 km ya Bunda. Dari tarif
    - Panggil tool ini KETIKA customer menanyakan harga, promo, pricelist, rincian treatment, atau menyebut keluhan fisik / usia anak.
 3. get_clinic_policy_faq:
    - Panggil tool ini KETIKA customer menanyakan informasi kebijakan, asal/lokasi klinik, kualifikasi bidan, pembayaran, ongkir multi anak, vaksin, atau operasional.
- 4. save_reservation (ALUR KONFIRMASI RESERVASI HOMECARE):
-    - SYARAT MUTLAK (audit 833178): tool ini HANYA BOLEH dipanggil KETIKA customer SUDAH EKSPLISIT MENYEBUTKAN HARI/TANGGAL kunjungan di chat (misal: "hari ini", "besok", "sabtu", "minggu")! DILARANG KERAS memanggil tool ini jika customer HANYA menyetujui paket treatment (misal "saya ambil treatment nya", "iya bu saya mau") tetapi BELUM menyebutkan hari! DILARANG KERAS memanggil tool ini jika customer hanya merespons persetujuan menunggu pengecekan jadwal (misal "siap", "baik", "oke", "siap bund") — jawab LANGSUNG bahwa pengecekan slot sedang diproses! DILARANG KERAS menebak atau mengarang hari (misal mengarang "Besok" sepihak) — tool memverifikasi jejak hari di riwayat dan MENOLAK pemanggilan tanpa bukti!
+4. save_reservation (ALUR KONFIRMASI RESERVASI HOMECARE):
+   - SYARAT MUTLAK (audit 833178 & 173235):
+     • LOKASI WAJIB SUDAH DIKETAHUI: Tool ini DILARANG KERAS dipanggil jika status lokasi customer BELUM DIKETAHUI (alamat/kelurahan kosong)! Layanan homecare klinik bergantung pada rute perjalanan dan jangkauan wilayah. Jika customer menanyakan jadwal saat lokasi belum diketahui, tanyakan lokasi terlebih dahulu (Aturan 5a).
+     • HARI/TANGGAL WAJIB EKSPLISIT: Tool ini HANYA BOLEH dipanggil KETIKA customer SUDAH EKSPLISIT MENYEBUTKAN HARI/TANGGAL kunjungan di chat (misal: "hari ini", "besok", "sabtu", "minggu")! DILARANG KERAS memanggil tool ini jika customer HANYA menyetujui paket treatment (misal "saya ambil treatment nya", "iya bu saya mau") tetapi BELUM menyebutkan hari! DILARANG KERAS memanggil tool ini jika customer hanya merespons persetujuan menunggu pengecekan jadwal (misal "siap", "baik", "oke", "siap bund") — jawab LANGSUNG bahwa pengecekan slot sedang diproses! DILARANG KERAS menebak atau mengarang hari (misal mengarang "Besok" sepihak) — tool memverifikasi jejak hari di riwayat dan MENOLAK pemanggilan tanpa bukti!
    - Panggil tool ini KETIKA detail hari/tanggal dan treatment sudah disepakati (nama Bunda dan alamat detail jalan TIDAK wajib di tahap chat — dilengkapi via form reservasi yang ditangani Admin; lihat aturan 21).
    - Jika customer baru menyetujui hari ("boleh", "sabtu ya"): cukup konfirmasi hangat bahwa ketersediaan jadwal di hari tersebut akan dibantu cekkan terlebih dahulu oleh tim Bidan kami. DILARANG meminta nama Bunda, alamat lengkap, atau shareloc di tahap ini.
    - Jangan menanyakan jam kunjungan (lihat aturan 20).
@@ -453,7 +465,12 @@ ${greetingInstruction}`;
   public static async buildSystemPromptAsync(
     session: CustomerGoalSession,
     isFollowUp: boolean = false,
-    opts?: { tenantId?: string; incomingText?: string }
+    opts?: {
+      tenantId?: string;
+      incomingText?: string;
+      history?: Array<{ role: string; content: string }>;
+      askedLocationRecently?: boolean;
+    }
   ): Promise<DynamicPromptResult> {
     const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
     const incomingText = opts?.incomingText || '';
@@ -462,7 +479,7 @@ ${greetingInstruction}`;
     try {
       const dbPrompt = await TenantPromptConfigService.getActivePromptConfig(tenantId);
       if (dbPrompt) {
-        const goalSummary = GoalTracker.formatGoalSessionForPrompt(session);
+        const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
         const brand = getBrandIdentity();
         const greetingInstruction = isFollowUp
           ? `- CHAT LANJUTAN: Karena ini percakapan yang sedang berjalan, DILARANG KERAS mengulang sapaan "Halo Bunda" atau kalimat perkenalan diri "Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi..." karena customer sudah disapa sebelumnya. Langsung respon dan jawab inti pesan customer dengan ramah dan santun.`
@@ -494,10 +511,10 @@ ${goalSummary}
 - Gunakan sapaan "${session.genderGreeting}" untuk customer ini (atau "Bapak" jika customer laki-laki/suami), wajar 1-2 kali per pesan.
 ${greetingInstruction}`;
       } else {
-        base = this.buildSystemPrompt(session, isFollowUp);
+        base = this.buildSystemPrompt(session, isFollowUp, opts);
       }
     } catch {
-      base = this.buildSystemPrompt(session, isFollowUp);
+      base = this.buildSystemPrompt(session, isFollowUp, opts);
     }
 
     try {

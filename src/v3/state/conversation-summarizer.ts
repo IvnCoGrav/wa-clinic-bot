@@ -152,14 +152,11 @@ export class V3ConversationSummarizer {
     }
 
     // 7. Cool-off
-    const recentAssistantMsgs = history.filter((h) => h.role === 'assistant').slice(-2);
-    const askedLocationRecently = recentAssistantMsgs.some((m) => {
-      const c = (m.content || '').toLowerCase();
-      return c.includes('daerah atau kelurahan') || c.includes('kelurahan mana') || c.includes('rumahnya dimana') || c.includes('lokasi rumah') || c.includes('alamat rumah');
-    });
+    const askedLocationRecently = isAskedLocationRecently(history);
     if (askedLocationRecently) {
       janganDiulang.push('Menanyakan alamat/kelurahan rumah Bunda lagi (karena baru saja ditanyakan dan Bunda sedang fokus berkonsultasi). Berikan jawaban empatik tanpa menodong alamat!');
     }
+    const recentAssistantMsgs = history.filter((h) => h.role === 'assistant').slice(-2);
     const askedScheduleRecently = recentAssistantMsgs.some((m) => {
       const c = (m.content || '').toLowerCase();
       return c.includes('di hari apa') || c.includes('hari atau tanggal') || c.includes('tanggal yang diinginkan')
@@ -235,3 +232,25 @@ PANDUAN ANTI-PENGULANGAN (WAJIB DIPATUHI):
 ${janganDiulangStr}`;
   }
 }
+
+/**
+ * Mendeteksi apakah bot/asisten baru saja menanyakan domisili / alamat pada 1-2 turn terakhir.
+ * Digunakan untuk cool-off penodongan lokasi (anti-kaset rusak).
+ */
+export function isAskedLocationRecently(history: Array<{ role: string; content: string }>): boolean {
+  const recentAssistantMsgs = (history || []).filter((h) => h.role === 'assistant').slice(-2);
+  return recentAssistantMsgs.some((m) => {
+    const c = (m.content || '').toLowerCase();
+    return c.includes('daerah atau kelurahan')
+      || c.includes('kelurahan mana')
+      || c.includes('rumahnya dimana')
+      || c.includes('rumah bunda dimana')
+      || c.includes('daerah mana')
+      || c.includes('lokasi rumah')
+      || c.includes('alamat rumah')
+      || c.includes('tinggal dimana')
+      || c.includes('posisi rumah')
+      || c.includes('alamat lengkap');
+  });
+}
+
