@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isBypassLabelName, isSystemLabelName, hasBypassLabel, checkCustomerBypass } from '../../src/utils/customer-bypass';
 import { capiService } from '../../src/services/capi.service';
-import { followUpService } from '../../src/services/follow-up.service';
+import { followUpService, CANCEL_REASON } from '../../src/services/follow-up.service';
 import { prisma } from '../../src/db/client';
 
 describe('Customer Bypass Label Engine (Skip & Admin CS)', () => {
@@ -197,7 +197,7 @@ describe('Customer Bypass Label Engine (Skip & Admin CS)', () => {
       expect(updateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'fu_due_bypass_1' },
-          data: { status: 'SKIPPED' },
+          data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL },
         })
       );
     });

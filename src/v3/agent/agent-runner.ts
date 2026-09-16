@@ -74,9 +74,12 @@ export class V3AgentRunner {
     // 1. Session saat ini.
     let session = await GoalTracker.getGoalSession(conversationId, tenantId);
 
-    // Kontrak domain: out_of_domain pra-ekstraksi dihentikan sebelum LLM — eskalasi sunyi.
-    if (input.preExtractedIntents?.includes('out_of_domain')) {
-      console.log(`[V3 DOMAIN GATE] out_of_domain pra-ekstraksi untuk ${phone} — eskalasi sunyi tanpa LLM.`);
+    // Kontrak domain: keputusan gerbang via modul tunggal conversation-gates
+    // (PLAN 8 FASE 3) — otoritas yang sama dengan machine.ts. Dihentikan sebelum LLM.
+    const { evaluateDomainGate } = await import('../../state-machine/conversation-gates');
+    const domainVerdict = evaluateDomainGate(input.preExtractedIntents);
+    if (domainVerdict.action === 'silent_escalate') {
+      console.log(`[V3 DOMAIN GATE] ${domainVerdict.reason} pra-ekstraksi untuk ${phone} — eskalasi sunyi tanpa LLM.`);
       return {
         replyText: '',
         executedTools: [],
@@ -167,7 +170,7 @@ export class V3AgentRunner {
       session = await ContextGrounder.applySessionLatches(session, cleanIncomingText, conversationId, tenantId);
 
       // Stage 2: Call 1 Tool Routing.
-      const routing = await GenerationStage.routeTools(turn, tel, { cleanIncomingText, session, messages, grounding });
+      const routing = await GenerationStage.routeTools(turn, tel, { cleanIncomingText, session, messages, grounding, conversationHistory });
       let draftReply: string;
       let toolEmptyKnowledge = false;
       if (routing.toolCalls && (routing.toolCalls as any[]).length > 0) {

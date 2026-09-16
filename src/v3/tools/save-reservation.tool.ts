@@ -51,7 +51,7 @@ export interface SaveReservationInput {
 }
 
 /** Kata waktu yang mengikat hari/tanggal (data-driven includes, tanpa regex). */
-const DAY_EVIDENCE_WORDS = [
+export const DAY_EVIDENCE_WORDS = [
   'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu',
   'besok', 'lusa', 'sekarang', 'hari ini', 'minggu depan', 'weekend', 'akhir pekan',
   'januari', 'februari', 'maret', 'april', 'mei', 'juni',

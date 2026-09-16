@@ -8,6 +8,7 @@ import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wahaClient } from '../integrations/waha/client';
 import { googleContactsService } from '../services/google-contacts.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { wahaTenantService } from '../services/waha-tenant.service';
 import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
@@ -20,6 +21,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { normalizeWahaJid, extractRealPhoneFromWahaPayload, parseJidType } from '../utils/jid';
 import { extractWahaLocation } from '../utils/waha-location-parser';
+import { parseCanonicalInboundMessage } from '../utils/canonical-message-normalizer';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
 import { hasBypassLabel, isBypassLabelName, checkCustomerBypass } from '../utils/customer-bypass';
@@ -107,6 +109,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       if (!event) {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
       }
+
+      // --- PLAN 8 FASE 4: Tenant enforcement (was FASE 2a log-only) ---
+      // Resolve tenant dari WAHA session id; hasilnya dipakai di SELURUH jalur
+      // downstream menggantikan DEFAULT_TENANT_ID. Bila session tidak dikenal /
+      // DB offline → fallback DEFAULT_TENANT_ID (perilaku single-tenant tidak berubah).
+      let resolvedTenantId = DEFAULT_TENANT_ID;
+      try {
+        const eventSession = (event as any)?.session as string | undefined;
+        resolvedTenantId = await wahaTenantService.resolveTenantBySession(eventSession);
+        if (eventSession && resolvedTenantId !== DEFAULT_TENANT_ID) {
+          console.log(`[WAHA TENANT] session=${eventSession} → tenant=${resolvedTenantId}`);
+        }
+      } catch (tenantErr: any) {
+        console.warn('[WAHA TENANT] resolusi tenant gagal (non-fatal, fallback default):', tenantErr?.message);
+        resolvedTenantId = DEFAULT_TENANT_ID;
+      }
+
       if (event.event === 'label.chat.added' || event.event === 'label.chat.deleted') {
         await handleLabelChatEvent(event);
         return reply.status(200).send({ status: 'LABEL_EVENT_PROCESSED' });
@@ -133,7 +152,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             console.log(`[MESSAGE ACK WEBHOOK] msgId=${rawId}, ack=${ackNum} (${deliveryStatus}), ts=${ackPayload.timestamp}`);
             await messageService.updateDeliveryStatus(
               String(rawId),
-              DEFAULT_TENANT_ID,
+              resolvedTenantId,
               deliveryStatus,
               ackPayload.timestamp ? Number(ackPayload.timestamp) : undefined
             );
@@ -227,7 +246,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
         if (targetMsgId) {
           console.log(`[MESSAGE REACTION WEBHOOK] targetMsgId=${targetMsgId}, emoji="${emoji}", fromMe=${fromMe}`);
-          await messageService.addOrUpdateReaction(String(targetMsgId), DEFAULT_TENANT_ID, {
+          await messageService.addOrUpdateReaction(String(targetMsgId), resolvedTenantId, {
             emoji: emoji || '',
             fromMe,
             senderName,
@@ -235,6 +254,45 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           });
         }
         return reply.status(200).send({ status: 'REACTION_PROCESSED' });
+      }
+
+      // --- EVENT MESSAGE EDITED (WAHA Message Edited) ---
+      const isEditedEvent =
+        event.event === 'message.edited' ||
+        (event.event === 'message' && (
+          (event.payload as any)?.type === 'edited' ||
+          (event.payload as any)?.subType === 'edited' ||
+          (event.payload as any)?.message?.protocolMessage?.type === 14 ||
+          (event.payload as any)?.protocolMessage?.type === 14
+        ));
+
+      if (isEditedEvent) {
+        const editPayload: any = event.payload || {};
+        const targetMsgId =
+          editPayload.messageId ||
+          editPayload.id?._serialized ||
+          editPayload.id ||
+          editPayload.key?.id ||
+          editPayload.protocolMessage?.key?.id ||
+          editPayload.message?.protocolMessage?.key?.id;
+        const newBody =
+          editPayload.body ||
+          editPayload.text?.body ||
+          editPayload.text ||
+          editPayload.message?.editedMessage?.conversation ||
+          editPayload.message?.protocolMessage?.editedMessage?.conversation ||
+          editPayload.message?.extendedTextMessage?.text ||
+          '';
+
+        if (targetMsgId && newBody) {
+          console.log(`[MESSAGE EDITED WEBHOOK] Updating message ${targetMsgId} with new content: "${newBody.slice(0, 30)}..."`);
+          try {
+            await messageService.updateMessageContent(String(targetMsgId), newBody, resolvedTenantId);
+          } catch (editErr: any) {
+            console.error('[MESSAGE EDITED ERROR]', editErr.message);
+          }
+        }
+        return reply.status(200).send({ status: 'EDIT_PROCESSED' });
       }
 
       // Filter hanya event "message" atau "message.any"
@@ -280,15 +338,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
           if (phone && /^\d+$/.test(phone) && !phone.startsWith('6289999')) {
             const pAny = payload as any;
-            const isOutboundImage =
-              pAny.type === 'image' ||
-              pAny._data?.type === 'image' ||
-              !!(pAny.message && pAny.message.imageMessage) ||
-              !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
-              !!(pAny._data?.mimetype?.startsWith('image/')) ||
-              !!(pAny.mimetype?.startsWith('image/')) ||
-              !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
-              !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
+            const outCanonical = parseCanonicalInboundMessage(payload);
+            const isOutboundNonText = outCanonical.type !== 'text';
+            const isOutboundImage = outCanonical.type === 'image';
+            const isOutboundAudio = outCanonical.type === 'audio' || outCanonical.type === 'voice_note';
+            const isOutboundDocument = outCanonical.type === 'document';
+            const isOutboundVideo = outCanonical.type === 'video';
+            const isOutboundLocation = outCanonical.type === 'location' || outCanonical.type === 'live_location';
 
             const imageCaption =
               pAny.message?.imageMessage?.caption ||
@@ -312,9 +368,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               adminReplyText.startsWith('[AUTOMATED]') ||
               isDeviceAutoGreeting;
 
-            if (adminReplyText.trim() || isOutboundImage) {
-              const customer = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
-              const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+            if (adminReplyText.trim() || isOutboundNonText) {
+              const customer = await customerService.getOrCreateCustomer(phone, undefined, resolvedTenantId);
+              const conversation = await conversationService.getOrCreateConversation(customer.id, resolvedTenantId);
 
               let outboundMedia: any = null;
               if (isOutboundImage) {
@@ -334,7 +390,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   }
                   // Catatan: JANGAN fallback ke jpegThumbnail untuk outbound WhatsApp Web karena rawan cache collision di level socket Baileys.
                   if (buffer && buffer.length > 0) {
-                    const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
+                    const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType });
                     outboundMedia = {
                       url: saved.hdUrl || saved.thumbUrl,
                       hdUrl: saved.hdUrl,
@@ -358,40 +414,40 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
 
               // 1. Cek duplikasi pesan outbound (apakah ini pesan yang baru saja dikirim oleh bot/sistem)
-              const outboundContent = isOutboundImage
-                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[IMAGE]')
+              const outboundContent = isOutboundNonText
+                ? outCanonical.content
                 : adminReplyText;
 
-              const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
+              const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, resolvedTenantId);
               const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
                 conversation.id,
                 outboundContent,
                 payload.id,
-                DEFAULT_TENANT_ID,
+                resolvedTenantId,
                 60,
                 isOutboundImage
               );
               const isInFlightBot = messageService.isInFlightBotOutbound(
                 customerJid || `${phone}@c.us`,
                 outboundContent,
-                DEFAULT_TENANT_ID
+                resolvedTenantId
               ) || messageService.isInFlightBotOutbound(
                 `${phone}@c.us`,
                 outboundContent,
-                DEFAULT_TENANT_ID
+                resolvedTenantId
               ) || messageService.isInFlightBotOutbound(
                 `${phone}@c.us`,
                 adminReplyText,
-                DEFAULT_TENANT_ID
+                resolvedTenantId
               ) || messageService.isInFlightBotOutbound(
                 `${phone}@c.us`,
                 imageCaption,
-                DEFAULT_TENANT_ID
+                resolvedTenantId
               );
 
               if (isDuplicateOutbound || isRecentDuplicate || isInFlightBot) {
                 if (isInFlightBot && payload.id) {
-                  messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID).catch(() => {});
+                  messageService.isDuplicateMessage(payload.id, resolvedTenantId).catch(() => {});
                 }
                 console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / in-flight / duplicate). Skipping manual reply escalation.`);
                 return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
@@ -403,7 +459,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const recentBotMsg = await prisma.message.findFirst({
                     where: {
                       conversation_id: conversation.id,
-                      tenant_id: DEFAULT_TENANT_ID,
+                      tenant_id: resolvedTenantId,
                       direction: 'OUTBOUND',
                       sender_type: 'BOT',
                       created_at: { gte: new Date(Date.now() - 30000) },
@@ -427,18 +483,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               // 2. Jika bukan auto-reply bot, proses human handling takeover / timer + auto mark-as-read
               if (!isBotAutoReply) {
                 if (conversation.is_human_handling) {
-                  conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
+                  conversationService.resetHumanHandlingTimer(conversation.id, resolvedTenantId)
                     .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
                 } else {
                   // Jika admin membalas langsung dari HP saat bot aktif, eskalasi ke human handling (takeover)
                   try {
-                    const tenantConfig = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+                    const tenantConfig = await prisma.tenant.findUnique({ where: { id: resolvedTenantId } });
                     if (tenantConfig?.manual_reply_escalates !== false) {
                       await conversationService.escalateToHumanHandling(
                         conversation,
                         phone,
                         'Admin membalas manual via aplikasi WhatsApp HP',
-                        DEFAULT_TENANT_ID,
+                        resolvedTenantId,
                         'manual_reply'
                       );
                     }
@@ -446,13 +502,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
                 // Stage 1: auto mark-as-read & broadcast — balasan admin WA HP menandakan sudah dibaca
                 try {
-                  await messageService.markConversationMessagesAsRead(conversation.id, DEFAULT_TENANT_ID);
-                  await conversationService.setManualUnread(conversation.id, DEFAULT_TENANT_ID, false);
+                  await messageService.markConversationMessagesAsRead(conversation.id, resolvedTenantId);
+                  await conversationService.setManualUnread(conversation.id, resolvedTenantId, false);
                   const { getLiveChatHub } = await import('../services/live-chat-hub.service');
                   const hub = getLiveChatHub();
                   await hub.publish({
                     type: 'conversation.updated',
-                    tenantId: DEFAULT_TENANT_ID,
+                    tenantId: resolvedTenantId,
                     payload: {
                       conversationId: conversation.id,
                       unreadCount: 0,
@@ -467,18 +523,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               // 3. Self Learning Capture (hanya jika diaktifkan, ada teks, & bukan auto-reply)
               if (process.env.ENABLE_SELF_LEARNING === 'true' && adminReplyText.trim() && !isBotAutoReply) {
                 const { selfLearningService } = await import('../services/self-learning.service');
-                selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
+                selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, resolvedTenantId)
                   .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
               }
 
               // 4. MedicalFaqStaging Capture Hook
               if (conversation.escalation_reason === 'medical_concern' && adminReplyText.trim() && !isBotAutoReply) {
                 try {
-                  const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
+                  const lastInbound = await messageService.getLastInboundMessage(conversation.id, resolvedTenantId);
                   const rawQuestion = lastInbound?.content || 'Pertanyaan medis customer';
                   await prisma.medicalFaqStaging.create({
                     data: {
-                      tenant_id: DEFAULT_TENANT_ID,
+                      tenant_id: resolvedTenantId,
                       conversation_id: conversation.id,
                       customer_phone: phone,
                       raw_question: rawQuestion,
@@ -495,7 +551,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               if (adminReplyText.trim() && !isBotAutoReply) {
                 try {
                   const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-                  humanBackgroundEnrichmentService.enrichFromAdminOutboundAsync(adminReplyText, customer.id, DEFAULT_TENANT_ID);
+                  humanBackgroundEnrichmentService.enrichFromAdminOutboundAsync(adminReplyText, customer.id, resolvedTenantId);
                 } catch (err: any) {
                   console.warn('[ADMIN OUTBOUND ENRICH ERROR]', err?.message || err);
                 }
@@ -512,7 +568,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
 
               await messageService.logMessage({
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId: resolvedTenantId,
                 conversationId: conversation.id,
                 direction: 'OUTBOUND',
                 content: outboundContent,
@@ -534,7 +590,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     const parsed = parseResult.reservation;
                     const { upsertReservationForm } = await import('../services/reservation-lifecycle.service');
                     await upsertReservationForm({
-                      tenantId: DEFAULT_TENANT_ID,
+                      tenantId: resolvedTenantId,
                       customerId: customer.id,
                       chatId: customerJid,
                       treatmentCategory: parsed.treatmentCategory,
@@ -558,7 +614,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               // 6. CAPI Event Trigger dari Pesan Outbound WhatsApp HP (InitiateCheckout & Purchase)
               try {
                 const { getTenantCapiFormats, fireCapiEvent } = await import('../services/capi.service');
-                const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+                const formats = await getTenantCapiFormats(resolvedTenantId);
                 const replyLower = adminReplyText.toLowerCase();
 
                 // A. InitiateCheckout jika pesan memuat format_checkout
@@ -574,7 +630,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     eventName: 'InitiateCheckout',
                     customer,
                     adClick: adClick || undefined,
-                    tenantId: DEFAULT_TENANT_ID,
+                    tenantId: resolvedTenantId,
                     customData: { source: 'ADMIN_HP_FORM_SENT' },
                   });
                   console.log(`[CAPI] InitiateCheckout triggered from WhatsApp HP outbound message (${customer.phone}).`);
@@ -588,7 +644,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     customer,
                     conversation,
                     text: adminReplyText,
-                    tenantId: DEFAULT_TENANT_ID,
+                    tenantId: resolvedTenantId,
                   });
                 }
               } catch (capiErr: any) {
@@ -636,7 +692,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       // --- IDEMPOTENCY CHECK ---
-      const isDuplicate = await messageService.isDuplicateMessage(waMessageId, DEFAULT_TENANT_ID);
+      const isDuplicate = await messageService.isDuplicateMessage(waMessageId, resolvedTenantId);
       if (isDuplicate) {
         console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
         return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
@@ -665,10 +721,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // meski timestamp telat (reconnect/QR burst) dan tetap muncul di LiveChat.
       const pAny = payload as any;
 
+      // Normalisasi kanonis pesan (Tipe, Content, Lokasi, Media, Kontak)
+      const canonical = parseCanonicalInboundMessage(payload);
+
       // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG).
-      // Normalisasi via util kanonis: mendukung payload WAHA NOWEB/Baileys
-      // (`_data.message.locationMessage.degreesLatitude/degreesLongitude` dan
-      // `liveLocationMessage`) selain `payload.location` lawas.
       const {
         rawLat,
         rawLng,
@@ -676,20 +732,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         isLocationMsgType,
       } = extractWahaLocation(payload);
 
-      const isInboundImage = !hasRealLocation && (
-        payload.hasMedia ||
-        pAny.hasMedia ||
-        pAny.media ||
-        pAny._data?.hasMedia ||
-        pAny.type === 'image' ||
-        pAny._data?.type === 'image' ||
-        !!(pAny.message && pAny.message.imageMessage) ||
-        !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
-        !!(pAny._data?.mimetype?.startsWith('image/')) ||
-        !!(pAny.mimetype?.startsWith('image/')) ||
-        !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
-        !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url)
-      );
+      const isInboundImage = canonical.type === 'image';
 
       // Caption WAHA NOWEB sering ada di body, bukan caption — fallback ke body
       const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isInboundImage ? pAny.body : '') || pAny._data?.caption || pAny._data?.body || '';
@@ -716,7 +759,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             buffer = Buffer.from(thumbB64, 'base64');
           }
           if (buffer && buffer.length > 0) {
-            const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
+            const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType });
             inboundMedia = {
               url: saved.hdUrl || saved.thumbUrl,
               hdUrl: saved.hdUrl,
@@ -749,18 +792,28 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
         }
       }
-      const inboundContent = isInboundImage
-        ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
-        : hasRealLocation
-          ? `[LOCATION: Lat ${rawLat}, Lng ${rawLng}]`
-          : (payload.body || '');
+
+      // Canonical Inbound Content — Single Source of Truth
+      const inboundContent = canonical.content;
+
       const mergeMediaIntoPayload = (p: any) => {
         const cleanedPayload = { ...p };
-        if (!hasRealLocation) {
+        if (canonical.location) {
+          cleanedPayload.location = canonical.location;
+        } else if (!hasRealLocation) {
           delete cleanedPayload.location;
           if (cleanedPayload._data) delete cleanedPayload._data.location;
         }
-        return inboundMedia ? { ...cleanedPayload, media: inboundMedia } : cleanedPayload;
+        if (inboundMedia) {
+          cleanedPayload.media = inboundMedia;
+        } else if (canonical.media) {
+          cleanedPayload.media = canonical.media;
+        }
+        if (canonical.contact) {
+          cleanedPayload.contact = canonical.contact;
+        }
+        cleanedPayload.canonicalType = canonical.type;
+        return cleanedPayload;
       };
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
@@ -786,10 +839,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             } else if (isInboundImage) {
               // Image stale tetap simpan dengan media, jangan hilangkan gambar
               console.log(`[STALE IMAGE] Message ${waMessageId} from ${phone} is ${ageSeconds}s old — tetap simpan image ke LiveChat.`);
-              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
-              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
+              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
+              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, resolvedTenantId);
               await messageService.logMessage({
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId: resolvedTenantId,
                 conversationId: staleConversation.id,
                 direction: 'INBOUND',
                 content: inboundContent,
@@ -801,10 +854,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
             } else {
               console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
-              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
-              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
+              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
+              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, resolvedTenantId);
               await messageService.logMessage({
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId: resolvedTenantId,
                 conversationId: staleConversation.id,
                 direction: 'INBOUND',
                 content: inboundContent,
@@ -819,7 +872,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+      const existingCustomer = await customerService.getCustomerByPhone(phone, resolvedTenantId);
       let labels: string[] | null = null;
       let isBypassChat = false;
 
@@ -828,7 +881,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         if (existingCustomer.is_admin_labeled === true || hasBypassLabel(existingCustomer)) {
           isBypassChat = true;
         } else {
-          const dbBypass = await checkCustomerBypass({ customerId: existingCustomer.id, phone, tenantId: DEFAULT_TENANT_ID });
+          const dbBypass = await checkCustomerBypass({ customerId: existingCustomer.id, phone, tenantId: resolvedTenantId });
           if (dbBypass) {
             isBypassChat = true;
           }
@@ -874,7 +927,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const { mediaService } = await import('../services/media.service');
             const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
             if (buffer && buffer.length > 0) {
-              await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType: heavyMime });
+              await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType: heavyMime });
               console.log(`[WAHA MEDIA] ${heavyMediaType} inbound ${waMessageId} arsip tersimpan (background).`);
             } else {
               console.warn(`[WAHA MEDIA WARNING] Buffer kosong untuk ${heavyMediaType} ${waMessageId}.`);
@@ -887,11 +940,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       if (isBypassChat) {
         console.log(`[BYPASS CHAT] Chat ${chatId} has bypass/admin label (Skip / Admin CS). Logging to Live Chat and bypassing bot auto-reply.`);
-        const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID, { skipFollowUpScheduling: true });
-        const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, DEFAULT_TENANT_ID);
+        const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, { skipFollowUpScheduling: true });
+        const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, resolvedTenantId);
 
         await messageService.logMessage({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: resolvedTenantId,
           conversationId: adminConversation.id,
           direction: 'INBOUND',
           content: inboundContent,
@@ -905,7 +958,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             adminConversation,
             phone,
             'Nomor berlabel Skip / Admin CS (Manual Handling)',
-            DEFAULT_TENANT_ID,
+            resolvedTenantId,
             'admin_labeled'
           ).catch(() => {});
         }
@@ -926,10 +979,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (existingCustomer && !existingCustomer.legacy_scraped_at) {
             console.log(`[LEGACY SCRAPE TRIGGER] Chat ${chatId} labeled 'legacy', customer not yet scraped. Triggering.`);
             // Log inbound message ke audit trail
-            const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
-            const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+            const customer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
+            const conversation = await conversationService.getOrCreateConversation(customer.id, resolvedTenantId);
             await messageService.logMessage({
-              tenantId: DEFAULT_TENANT_ID,
+              tenantId: resolvedTenantId,
               conversationId: conversation.id,
               direction: 'INBOUND',
               content: inboundContent,
@@ -939,7 +992,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             // Mandat Anti-Label WAHA: penandaan hold via DB internal (is_human_handling), zero WAHA label
             // Fire-and-forget scrape
             import('../services/per-contact-legacy-scrape.service').then(({ perContactLegacyScrapeService }) => {
-              perContactLegacyScrapeService.scrapeContactUntilFirstLead(chatId, DEFAULT_TENANT_ID)
+              perContactLegacyScrapeService.scrapeContactUntilFirstLead(chatId, resolvedTenantId)
                 .catch((err: any) => console.error('[LEGACY SCRAPE ERROR]', err));
             });
             return reply.status(200).send({ status: 'LEGACY_SCRAPE_TRIGGERED' });
@@ -952,7 +1005,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const isNewCustomerRecord = !existingCustomer;
 
       // Ambil/Buat record Customer & Conversation
-      const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+      const customer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
 
       // Periksa apakah customer baru (belum ada record di database)
       const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
@@ -960,14 +1013,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // --- Mandat Anti-Label WAHA: 'new customer' ditandai via DB internal (customer.labels), zero WAHA label ---
       // Flag is_new_customer sudah tercatat di kolom created_at (record baru < 5 detik)
 
-      let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-      conversationService.updateLastCustomerMessageAt(conversation.id, DEFAULT_TENANT_ID).catch(() => {});
+      let conversation = await conversationService.getOrCreateConversation(customer.id, resolvedTenantId);
+      conversationService.updateLastCustomerMessageAt(conversation.id, resolvedTenantId).catch(() => {});
 
       // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
       if (customer.status === 'blocked') {
         console.warn(`[BLOCKED ACCESS] Blocked customer ${phone} attempted to send a message. Logging to audit and dropping response.`);
         await messageService.logMessage({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: resolvedTenantId,
           conversationId: conversation.id,
           direction: 'INBOUND',
           content: inboundContent,
@@ -986,7 +1039,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const scopeGate = await enforceAiScopeGate({
         customer,
         conversation,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: resolvedTenantId,
         content: inboundContent,
         waMessageId,
         payloadRaw: mergeMediaIntoPayload(payload),
@@ -1001,15 +1054,31 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         from: phone,
         chatId,
         timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
-        type: isInboundImage ? 'image' : hasRealLocation ? 'location' : 'text',
-        text: payload.body ? { body: payload.body } : undefined,
-        location: hasRealLocation
+        type: canonical.type === 'location' || canonical.type === 'live_location'
+          ? 'location'
+          : canonical.type === 'image'
+            ? 'image'
+            : canonical.type === 'voice_note' || canonical.type === 'audio'
+              ? 'audio'
+              : canonical.type === 'document'
+                ? 'document'
+                : canonical.type === 'video'
+                  ? 'video'
+                  : canonical.type === 'sticker'
+                    ? 'sticker'
+                    : canonical.type === 'contact'
+                      ? 'contact'
+                      : 'text',
+        text: canonical.type === 'text' && payload.body ? { body: payload.body } : undefined,
+        location: canonical.location
           ? {
-              latitude: rawLat,
-              longitude: rawLng,
+              latitude: canonical.location.latitude,
+              longitude: canonical.location.longitude,
             }
           : undefined,
-        media: inboundMedia,
+        media: inboundMedia || canonical.media,
+        contact: canonical.contact,
+        canonicalType: canonical.type,
       };
 
       // --- PURCHASE EVENT DETECTION (sebelum state machine / HUMAN HANDLING guard,
@@ -1022,7 +1091,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             customer,
             conversation,
             text: incomingMessage.text.body,
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolvedTenantId,
           });
         } catch (purchaseErr) {
           console.warn('[CAPI] Purchase detection error:', (purchaseErr as Error).message);
@@ -1035,7 +1104,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         bodyText,
         isNewCustomerRecord,
         customer,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: resolvedTenantId,
       });
 
       // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail.
@@ -1052,7 +1121,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       // --- REVISI USER #4: EXPLICIT GUARD CLAUSE UNTUK HUMAN HANDLING ---
       // Memeriksa apakah timeout auto-release 6 jam sudah terlampaui terlebih dahulu
-      const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, DEFAULT_TENANT_ID);
+      const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, resolvedTenantId);
       conversation = autoRelease.updatedConversation;
 
       // JIKA is_human_handling === true (dan belum timed out):
@@ -1085,7 +1154,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeG + '+07:00')
                      : p.bookingDate;
                    const { reservation: r, isNew, isUpdate } = await _upsertG({
-                     tenantId: DEFAULT_TENANT_ID,
+                     tenantId: resolvedTenantId,
                      customerId: customer.id,
                      chatId,
                      treatmentCategory: p.treatmentCategory,
@@ -1101,7 +1170,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
                    });
                   if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcG } = await import('../services/capi.service'); _fcG({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_GRACE_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
+                    try { const { fireCapiEvent: _fcG } = await import('../services/capi.service'); _fcG({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HUMAN_GRACE_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
                 }
               }
@@ -1111,22 +1180,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           try {
             if (incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null)) {
               const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
             } else {
               const rawLocText = incomingMessage.text?.body || '';
               const hasMapsLink = rawLocText && /maps\.app\.goo\.gl|goo\.gl\/maps|google\.com\/maps/i.test(rawLocText);
               if (hasMapsLink) {
                 const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
               }
             }
           } catch (e: any) { console.warn('[HUMAN GRACE GPS SYNC ERROR]', e.message); }
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolvedTenantId,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
@@ -1156,7 +1225,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeL + '+07:00')
                      : p.bookingDate;
                    const { reservation: r, isNew, isUpdate } = await _upsertL({
-                     tenantId: DEFAULT_TENANT_ID,
+                     tenantId: resolvedTenantId,
                      customerId: customer.id,
                      chatId,
                      treatmentCategory: p.treatmentCategory,
@@ -1172,7 +1241,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
                    });
                   if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcL } = await import('../services/capi.service'); _fcL({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HOLD_DISABLED_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
+                    try { const { fireCapiEvent: _fcL } = await import('../services/capi.service'); _fcL({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HOLD_DISABLED_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
                 } else {
                   console.warn(`[HUMAN HOLD-DISABLED PARSE FAIL] ${pr.error} missing=${pr.missingFields?.join(',')}`);
@@ -1184,21 +1253,21 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           try {
             if (incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null)) {
               const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
             } else {
               const rawLocText2 = incomingMessage.text?.body || '';
               const hasMapsLink2 = rawLocText2 && /maps\.app\.goo\.gl|goo\.gl\/maps|google\.com\/maps/i.test(rawLocText2);
               if (hasMapsLink2) {
                 const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
               }
             }
           } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED GPS SYNC ERROR]', e.message); }
           await messageService.logMessage({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolvedTenantId,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
@@ -1235,7 +1304,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               isHumanHandling: false,
               humanHandlingSince: null,
             },
-            DEFAULT_TENANT_ID
+            resolvedTenantId
           );
           if (updatedConv) {
             conversation = updatedConv;
@@ -1264,7 +1333,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeE + '+07:00')
                      : p.bookingDate;
                    const { reservation: r, isNew, isUpdate } = await _upsertE({
-                     tenantId: DEFAULT_TENANT_ID,
+                     tenantId: resolvedTenantId,
                      customerId: customer.id,
                      chatId,
                      treatmentCategory: p.treatmentCategory,
@@ -1280,7 +1349,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
                    });
                   if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcE } = await import('../services/capi.service'); _fcE({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
+                    try { const { fireCapiEvent: _fcE } = await import('../services/capi.service'); _fcE({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
                 }
               }
@@ -1292,9 +1361,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
             const isGpsPin = incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null);
             if (isGpsPin) {
-              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
             } else {
-              humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, resolvedTenantId);
             }
           } catch (enrichErr: any) {
             console.warn('[HUMAN ENRICH HOOK ERROR]', enrichErr?.message || enrichErr);
@@ -1302,10 +1371,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolvedTenantId,
             conversationId: conversation.id,
             direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
@@ -1321,16 +1390,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         customer,
         conversation,
         incomingMessage.text?.body || '',
-        DEFAULT_TENANT_ID
+        resolvedTenantId
       );
 
       if (abuseResult.blocked) {
         // Log pesan pemicu blokir ke audit trail
         await messageService.logMessage({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: resolvedTenantId,
           conversationId: conversation.id,
           direction: 'INBOUND',
-          content: (incomingMessage as any).originalText || incomingMessage.text?.body || '[LOCATION/MEDIA]',
+          content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
           waMessageId,
           payloadRaw: mergeMediaIntoPayload(payload),
         });
@@ -1343,7 +1412,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // BURST COALESCING: jika aktif (BURST_COALESCE_MS>0) dan pesan text di state
       // open-ended, pesan di-buffer lalu di-merge jadi 1 balasan (handled=true).
       const coalesceResult = await burstCoalesceService.maybeCoalesce({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: resolvedTenantId,
         customerId: customer.id,
         phone: customer.phone,
         conversation,
@@ -1352,7 +1421,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       if (!coalesceResult.handled) {
         await queueService.enqueueMessage({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: resolvedTenantId,
           customerId: customer.id,
           phone: customer.phone,
           incomingMessage,

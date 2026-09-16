@@ -56,6 +56,28 @@ export function normalizeWabaPayload(
         } else if (msg.type === 'reaction' && msg.reaction) {
           type = 'reaction';
           text = msg.reaction.emoji;
+        } else if (msg.type === 'audio' && msg.audio) {
+          type = msg.audio.voice ? 'voice_note' : 'audio';
+          mediaId = msg.audio.id;
+          mimeType = msg.audio.mime_type || (msg.audio.voice ? 'audio/ogg; codecs=opus' : 'audio/mp3');
+        } else if (msg.type === 'document' && msg.document) {
+          type = 'document';
+          mediaId = msg.document.id;
+          caption = msg.document.filename || msg.document.caption || 'Dokumen';
+          mimeType = msg.document.mime_type || 'application/pdf';
+        } else if (msg.type === 'video' && msg.video) {
+          type = 'video';
+          mediaId = msg.video.id;
+          caption = msg.video.caption;
+          mimeType = msg.video.mime_type || 'video/mp4';
+        } else if (msg.type === 'sticker' && msg.sticker) {
+          type = 'sticker';
+          mediaId = msg.sticker.id;
+          mimeType = msg.sticker.mime_type || 'image/webp';
+        } else if (msg.type === 'contacts' && (msg as any).contacts) {
+          type = 'contact';
+          const c = (msg as any).contacts?.[0];
+          text = c?.name?.formatted_name || c?.name?.first_name || 'Kontak';
         } else if (msg.type === 'interactive' && (msg as any).interactive) {
           const inter = (msg as any).interactive;
           type = 'interactive_button';

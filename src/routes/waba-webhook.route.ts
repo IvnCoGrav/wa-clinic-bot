@@ -187,7 +187,28 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           }
         }
       }
-      const mergeWabaMedia = (raw: any) => (msgMedia ? { ...raw, media: msgMedia } : raw);
+      const mergeWabaMedia = (raw: any) => {
+        const res = { ...raw };
+        if (msg.location) {
+          res.location = msg.location;
+        }
+        if (msgMedia) {
+          res.media = msgMedia;
+        }
+        return res;
+      };
+
+      const wabaCanonicalContent =
+        (msg as any).originalText ||
+        msg.text ||
+        (msg.location ? `[LOCATION: Lat ${msg.location.latitude}, Lng ${msg.location.longitude}${msg.location.address ? ` | ${msg.location.address}` : ''}]` : undefined) ||
+        (msg.type === 'voice_note' ? '[VOICE_NOTE]' : undefined) ||
+        (msg.type === 'audio' ? '[AUDIO]' : undefined) ||
+        (msg.type === 'document' ? `[DOCUMENT: ${msg.caption || 'Dokumen'}]` : undefined) ||
+        (msg.type === 'video' ? (msg.caption ? `[VIDEO: ${msg.caption}]` : '[VIDEO]') : undefined) ||
+        (msg.type === 'sticker' ? '[STICKER]' : undefined) ||
+        (msg.type === 'contact' ? `[CONTACT: ${msg.text || 'Kontak'}]` : undefined) ||
+        (msg.caption ? `[IMAGE: ${msg.caption}]` : '[IMAGE]');
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
       const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '300', 10);
@@ -208,7 +229,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
               tenantId,
               conversationId: staleConversation.id,
               direction: 'INBOUND',
-              content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+              content: wabaCanonicalContent,
               waMessageId: msg.messageId,
               payloadRaw: mergeWabaMedia(msg.rawPayload),
               isHistorical: true,
@@ -240,7 +261,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           tenantId,
           conversationId: bypassConversation.id,
           direction: 'INBOUND',
-          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          content: wabaCanonicalContent,
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),
           skipMqlEvaluation: true,
@@ -283,7 +304,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           tenantId,
           conversationId: blockedConversation.id,
           direction: 'INBOUND',
-          content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          content: wabaCanonicalContent,
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),
         });
@@ -297,7 +318,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         customer,
         conversation,
         tenantId,
-        content: (msg as any).originalText || msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+        content: wabaCanonicalContent,
         waMessageId: msg.messageId,
         payloadRaw: mergeWabaMedia(msg.rawPayload),
       });

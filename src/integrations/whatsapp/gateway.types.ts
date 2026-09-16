@@ -70,7 +70,7 @@ export interface NormalizedInboundMessage {
   messageId: string;
   fromNumber: string;
   timestamp: number;
-  type: 'text' | 'location' | 'image' | 'reaction' | 'interactive_button' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'reaction' | 'interactive_button' | 'audio' | 'voice_note' | 'document' | 'video' | 'sticker' | 'contact' | 'unknown';
   text?: string;
   buttonPayload?: { id: string; title: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };

@@ -149,7 +149,19 @@ export class ConversationStateMachine {
 
       const allowFaqExemption = !isLegacy && !hasPriorConfirmed;
 
-      if (allowFaqExemption && approvedFaqMatch && (approvedFaqMatch as any).category === 'medical' && (approvedFaqMatch as any).status === 'APPROVED') {
+      // Keputusan eskalasi vs lanjut di modul tunggal conversation-gates
+      // (PLAN 8 FASE 3) — pengumpulan input tetap di sini, side-effect di bawah.
+      const { evaluateMedicalGate } = await import('./conversation-gates');
+      const medicalVerdict = evaluateMedicalGate({
+        isMedical: true,
+        severity: medicalResult.severity,
+        detectedSymptoms: medicalResult.detectedSymptoms,
+        allowFaqExemption,
+        faqCategory: (approvedFaqMatch as any)?.category,
+        faqStatus: (approvedFaqMatch as any)?.status,
+      });
+
+      if (medicalVerdict.action === 'continue') {
         console.log(`[MEDICAL FAQ EXEMPTION] Approved medical FAQ found for new customer "${incomingText}". Proceeding with official FAQ response.`);
       } else {
         const isHigh = medicalResult.severity === 'HIGH';
@@ -444,33 +456,20 @@ export class ConversationStateMachine {
         preExtractedIntents = detIntents.length > 0 ? detIntents : ['chitchat'];
       }
     } catch {}
-    // Intent yang memaksa eskalasi sunyi + reason tercatat untuk CS/admin.
-    const SILENT_ESCALATE_REASONS: Record<string, { reason: string; note: string }> = {
-      out_of_domain: {
-        reason: 'out_of_domain',
-        note: 'Topik di luar layanan klinik (out_of_domain) — diteruskan ke tim manusia',
-      },
-      complaint: {
-        reason: 'complaint',
-        note: 'Keluhan eksplisit terhadap layanan — diteruskan ke tim manusia',
-      },
-      human_agent: {
-        reason: 'manual_request',
-        note: 'Permintaan bicara dengan manusia — diteruskan ke tim manusia',
-      },
-    };
-    const silentMatched = preExtractedIntents.find((i) => SILENT_ESCALATE_REASONS[i]);
-    if (silentMatched) {
-      const { reason: silentReason, note: silentNote } = SILENT_ESCALATE_REASONS[silentMatched];
-      console.log(`[SILENT GATE] ${silentMatched} untuk ${customer.phone} — eskalasi sunyi tanpa V3.`);
+    // Intent yang memaksa eskalasi sunyi — keputusan di modul tunggal
+    // conversation-gates (PLAN 8 FASE 3; dipakai bersama agent-runner).
+    const { evaluateDomainGate } = await import('./conversation-gates');
+    const domainVerdict = evaluateDomainGate(preExtractedIntents);
+    if (domainVerdict.action === 'silent_escalate') {
+      console.log(`[SILENT GATE] ${domainVerdict.reason} untuk ${customer.phone} — eskalasi sunyi tanpa V3.`);
       activeConversation.is_human_handling = true;
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
       await conversationService.escalateToHumanHandling(
         activeConversation,
         customer.phone,
-        silentNote,
+        domainVerdict.note || 'Eskalasi domain',
         tenantId,
-        silentReason
+        domainVerdict.reason || 'domain'
       );
       return {
         nextState: ConversationState.HUMAN_HANDLING,

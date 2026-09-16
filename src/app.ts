@@ -13,6 +13,7 @@ import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
+import { trackInterval } from './lifecycle/interval-registry';
 
 dotenv.config();
 // URUTAN PENTING: installLogBuffer HARUS sebelum initializeConsoleWrapper.
@@ -148,6 +149,14 @@ if (require.main === module) {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const HOST = process.env.HOST || '0.0.0.0';
 
+  // PLAN 8 FASE 1: graceful shutdown (SIGTERM/SIGINT) — hentikan cron lebih dulu,
+  // lalu drain queue/burst, lalu putuskan koneksi. Lihat src/lifecycle/shutdown.ts.
+  import('./lifecycle/shutdown').then(({ registerShutdownHooks }) => {
+    registerShutdownHooks(server);
+  }).catch((e: any) => {
+    console.warn('[SHUTDOWN INIT] Gagal mendaftarkan shutdown hooks:', e?.message);
+  });
+
   server.listen({ port: PORT, host: HOST }, async (err, address) => {
     if (err) {
       server.log.error(err);
@@ -158,6 +167,8 @@ if (require.main === module) {
     console.log(`📌 Admin Endpoint: ${address}/api/admin/human-handling-conversations\n`);
 
     // Init data tenant (SaaS-ready): seed catalog & delivery tiers dari DB
+    // PLAN 8 FASE 4: iterasi SELURUH tenant aktif (bukan hanya default).
+    // DB offline → fallback [DEFAULT_TENANT_ID] (perilaku single-tenant tidak berubah).
     try {
       const { DEFAULT_TENANT_ID } = await import('./config/tenant');
       const { loadServicesFromDb } = await import('./services/treatment-catalog.service');
@@ -165,27 +176,53 @@ if (require.main === module) {
       const { loadPersonaFromDb } = await import('./config/persona');
       const { AiModelConfigService } = await import('./config/ai-models.config');
       const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
-      await loadServicesFromDb(DEFAULT_TENANT_ID);
-      await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
-      await loadPersonaFromDb(DEFAULT_TENANT_ID);
-      await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      const aiScopeLoaded = await AiEligibilityConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      if (!aiScopeLoaded) {
-        console.warn(
-          '[AI_ROLLOUT_SCOPE] DB unreachable at boot, defaulting to fail-closed (NEW_ONLY, cutoff=now). ' +
-          'AI akan silence untuk customer yang belum eligible sampai config berhasil di-load ulang.'
-        );
+      let tenantIds: string[] = [DEFAULT_TENANT_ID];
+      try {
+        const { prisma } = await import('./db/client');
+        const tenants = await prisma.tenant.findMany({ select: { id: true } });
+        if (tenants.length > 0) tenantIds = tenants.map((t: any) => t.id);
+      } catch {
+        console.warn('[INIT TENANT DATA] DB offline — fallback ke DEFAULT_TENANT_ID.');
       }
-      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router + idle greeting + AI scope)');
+      for (const tid of tenantIds) {
+        await loadServicesFromDb(tid);
+        await getDeliveryTiersFromDb(tid);
+        await loadPersonaFromDb(tid);
+        await AiModelConfigService.loadConfigsFromDb(tid);
+        const aiScopeLoaded = await AiEligibilityConfigService.loadConfigsFromDb(tid);
+        if (!aiScopeLoaded) {
+          console.warn(
+            `[AI_ROLLOUT_SCOPE] DB unreachable at boot for tenant ${tid}, defaulting to fail-closed (NEW_ONLY, cutoff=now).`
+          );
+        }
+      }
+      console.log(`📦 Tenant data initialized for ${tenantIds.length} tenant(s) (catalog + delivery tiers + persona + AI config + AI router + idle greeting + AI scope)`);
     } catch (initErr) {
       console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
     }
 
-    // Auto-sync WAHA webhook events (pastikan message.reaction terdaftar tanpa scan QR ulang)
+    // Auto-sync WAHA webhook events per tenant (PLAN 8 FASE 4).
     import('./config/tenant').then(({ DEFAULT_TENANT_ID }) => {
       import('./services/whatsapp-provider.service').then(({ whatsappProviderService }) => {
-        whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch((err: any) => {
-          console.warn('[WAHA SYNC] Gagal sinkronisasi webhook events:', err?.message || err);
+        import('./db/client').then(({ prisma }) => {
+          prisma.tenant.findMany({ select: { id: true } })
+            .then((tenants: any[]) => {
+              const ids = tenants.length > 0 ? tenants.map((t) => t.id) : [DEFAULT_TENANT_ID];
+              return Promise.all(ids.map((tid) =>
+                whatsappProviderService.syncSessionWebhooks(tid).catch((err: any) => {
+                  console.warn(`[WAHA SYNC] Gagal sinkronisasi webhook events tenant ${tid}:`, err?.message || err);
+                })
+              ));
+            })
+            .catch(() => {
+              whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch((err: any) => {
+                console.warn('[WAHA SYNC] Gagal sinkronisasi webhook events:', err?.message || err);
+              });
+            });
+        }).catch(() => {
+          whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch((err: any) => {
+            console.warn('[WAHA SYNC] Gagal sinkronisasi webhook events:', err?.message || err);
+          });
         });
       });
     });
@@ -200,7 +237,7 @@ if (require.main === module) {
       const intervalHours = parseInt(process.env.LABEL_RECONCILIATION_INTERVAL_HOURS || '4', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
-        setInterval(() => cron.runLabelReconciliation(), intervalHours * 60 * 60 * 1000);
+        trackInterval(() => cron.runLabelReconciliation(), intervalHours * 60 * 60 * 1000);
         console.log(`🏷️ Label reconciliation cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[LABEL RECONCILIATION START ERROR]', e));
     }
@@ -212,7 +249,7 @@ if (require.main === module) {
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
         cron.runMediaCleanup().catch(e => console.warn('[MEDIA CLEANUP BOOT WARNING]', (e as Error).message));
-        setInterval(() => cron.runMediaCleanup(), intervalHours * 60 * 60 * 1000);
+        trackInterval(() => cron.runMediaCleanup(), intervalHours * 60 * 60 * 1000);
         console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
     }
@@ -222,7 +259,7 @@ if (require.main === module) {
       const intervalHours = parseInt(process.env.MESSAGE_RETENTION_INTERVAL_HOURS || '24', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
-        setInterval(() => cron.runMessageRetentionCleanup(), intervalHours * 60 * 60 * 1000);
+        trackInterval(() => cron.runMessageRetentionCleanup(), intervalHours * 60 * 60 * 1000);
         console.log(`🧾 Message retention cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[MESSAGE RETENTION START ERROR]', e));
     }
@@ -232,7 +269,7 @@ if (require.main === module) {
       const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
-        setInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);
+        trackInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);
         console.log(`🧪 AI quality evaluation cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[AI EVAL START ERROR]', e));
     }
@@ -242,7 +279,7 @@ if (require.main === module) {
       const intervalHours = parseInt(process.env.CHAT_EXPORT_INTERVAL_HOURS || '6', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
-        setInterval(() => cron.runDailyChatExport(), intervalHours * 60 * 60 * 1000);
+        trackInterval(() => cron.runDailyChatExport(), intervalHours * 60 * 60 * 1000);
         console.log(`📤 Daily chat export cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[CHAT EXPORT START ERROR]', e));
     }
@@ -252,7 +289,7 @@ if (require.main === module) {
       const { prisma } = require('./db/client');
       const { getAllTenantIds } = require('./services/media.service');
       
-      setInterval(async () => {
+      trackInterval(async () => {
         try {
           const nowUtc = new Date();
           const wibTime = new Date(nowUtc.getTime() + (7 * 60 * 60 * 1000));
@@ -285,7 +322,7 @@ if (require.main === module) {
       // 1. Follow-Up worker: jalankan setiap 15 menit HANYA jika ENABLE_FOLLOWUP_WORKER === 'true'
       if (process.env.ENABLE_FOLLOWUP_WORKER === 'true') {
         const followUpIntervalMinutes = parseInt(process.env.FOLLOWUP_WORKER_INTERVAL_MINUTES || '15', 10);
-        setInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
+        trackInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
         console.log(`⏱️ Follow-Up Queue worker started (every ${followUpIntervalMinutes}m)`);
       } else {
         console.log(`🛑 Follow-Up Worker is DISABLED (ENABLE_FOLLOWUP_WORKER is not 'true')`);
@@ -294,7 +331,7 @@ if (require.main === module) {
       // 2. Morning Jobs (Pengingat H-0 & Review H+1 pada 06:00 WIB) & Weekly Auto-Backup (Senin 02:00 WIB)
       let lastMorningRunDate = '';
       let lastWeeklyBackupRunDate = '';
-      setInterval(async () => {
+      trackInterval(async () => {
         try {
           const nowUtc = new Date();
           const wibTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);

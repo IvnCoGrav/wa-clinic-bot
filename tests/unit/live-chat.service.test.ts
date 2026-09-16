@@ -25,8 +25,8 @@ describe('LiveChatService — monitor & balas admin', () => {
   });
 
   it('getConversationList offline: menampilkan percakapan + preview pesan dengan sender_type', async () => {
-    const phone = `628100${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Test', DEFAULT_TENANT_ID);
+    const phone = `628100${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Sari', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     await messageService.logMessage({
@@ -55,8 +55,8 @@ describe('LiveChatService — monitor & balas admin', () => {
 
   it('getConversationList: paging offset tidak mengembalikan item halaman sebelumnya', async () => {
     // Buat 2 percakapan dengan timestamp berbeda untuk memastikan urutan stable
-    const phoneA = `628700${Date.now()}`;
-    const phoneB = `628710${Date.now()}`;
+    const phoneA = `628700${Date.now().toString().slice(-7)}`;
+    const phoneB = `628710${Date.now().toString().slice(-7)}`;
     const customerA = await customerService.getOrCreateCustomer(phoneA, 'Bunda A', DEFAULT_TENANT_ID);
     const convA = await conversationService.getOrCreateConversation(customerA.id, DEFAULT_TENANT_ID);
     const customerB = await customerService.getOrCreateCustomer(phoneB, 'Bunda B', DEFAULT_TENANT_ID);
@@ -87,7 +87,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const phone = `628200${Date.now()}`;
+    const phone = `628200${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Auto', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -114,7 +114,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const phone = `628201${Date.now()}`;
+    const phone = `628201${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Reply', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -149,8 +149,8 @@ describe('LiveChatService — monitor & balas admin', () => {
   });
 
   it('getConversationList: mode memisahkan sandbox/test vs WhatsApp asli', async () => {
-    const phoneReal = `628800${Date.now()}`;
-    const phoneSand = `628900${Date.now()}`;
+    const phoneReal = `628800${Date.now().toString().slice(-7)}`;
+    const phoneSand = `628900${Date.now().toString().slice(-7)}`;
     const customerReal = await customerService.getOrCreateCustomer(phoneReal, 'Bunda Real', DEFAULT_TENANT_ID);
     const convReal = await conversationService.getOrCreateConversation(customerReal.id, DEFAULT_TENANT_ID);
     const customerSand = await customerService.getOrCreateCustomer(phoneSand, 'Bunda Sandbox', DEFAULT_TENANT_ID);
@@ -188,7 +188,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628910${Date.now()}`, 'Bunda Sandbox Reply', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628910${Date.now().toString().slice(-7)}`, 'Bunda Sandbox Reply', DEFAULT_TENANT_ID);
     customer.is_sandbox_test = true;
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -208,7 +208,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628300${Date.now()}`, 'Bunda Empty', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628300${Date.now().toString().slice(-7)}`, 'Bunda Empty', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await liveChatService.sendAdminReply({
@@ -225,7 +225,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WABA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628400${Date.now()}`, 'Bunda Waba', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628400${Date.now().toString().slice(-7)}`, 'Bunda Waba', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const spied = vi
@@ -267,7 +267,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628500${Date.now()}`, 'Bunda Image', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628500${Date.now().toString().slice(-7)}`, 'Bunda Image', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     // PNG 1x1 transparan base64 valid
@@ -303,7 +303,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WABA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628510${Date.now()}`, 'Bunda WabaImg', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628510${Date.now().toString().slice(-7)}`, 'Bunda WabaImg', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await liveChatService.sendAdminReply({
@@ -322,7 +322,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const fake = makeFakeGateway('WABA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628520${Date.now()}`, 'Bunda WabaImg2', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628520${Date.now().toString().slice(-7)}`, 'Bunda WabaImg2', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await liveChatService.sendAdminReply({
@@ -352,7 +352,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     };
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628600${Date.now()}`, 'Bunda Edit', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628600${Date.now().toString().slice(-7)}`, 'Bunda Edit', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const loggedMsg = await messageService.logMessage({
@@ -391,7 +391,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     };
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628610${Date.now()}`, 'Bunda ExpiredEdit', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628610${Date.now().toString().slice(-7)}`, 'Bunda ExpiredEdit', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const loggedMsg = await messageService.logMessage({
@@ -425,7 +425,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     };
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628620${Date.now()}`, 'Bunda CustomerMsg', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628620${Date.now().toString().slice(-7)}`, 'Bunda CustomerMsg', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const loggedMsg = await messageService.logMessage({
@@ -454,7 +454,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     };
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628630${Date.now()}`, 'Bunda WabaEdit', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628630${Date.now().toString().slice(-7)}`, 'Bunda WabaEdit', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const loggedMsg = await messageService.logMessage({
@@ -476,7 +476,7 @@ describe('LiveChatService — monitor & balas admin', () => {
   });
 
   it('getTotalUnreadCount: mengembalikan jumlah unread inbound message secara cepat', async () => {
-    const phone = `628990${Date.now()}`;
+    const phone = `628990${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Unread', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 

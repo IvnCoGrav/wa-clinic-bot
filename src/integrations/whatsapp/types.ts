@@ -20,7 +20,7 @@ export interface WhatsAppIncomingMessage {
   from: string; // Nomor HP pengirim (format internasional tanpa +, misal: 628123456789)
   chatId?: string; // JID chat WAHA asli (misal phone@c.us / phone@lid) — dipakai utk label lifecycle
   timestamp: string;
-  type: 'text' | 'location' | 'image' | 'interactive' | 'reaction' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'interactive' | 'reaction' | 'audio' | 'document' | 'video' | 'sticker' | 'contacts' | 'unknown';
   text?: WhatsAppTextPayload;
   location?: WhatsAppLocationPayload;
   image?: {
@@ -29,6 +29,37 @@ export interface WhatsAppIncomingMessage {
     sha256?: string;
     caption?: string;
   };
+  audio?: {
+    id: string;
+    mime_type?: string;
+    voice?: boolean;
+  };
+  document?: {
+    id: string;
+    mime_type?: string;
+    filename?: string;
+    caption?: string;
+  };
+  video?: {
+    id: string;
+    mime_type?: string;
+    caption?: string;
+  };
+  sticker?: {
+    id: string;
+    mime_type?: string;
+  };
+  contacts?: Array<{
+    name: {
+      formatted_name: string;
+      first_name?: string;
+    };
+    phones?: Array<{
+      phone: string;
+      wa_id?: string;
+      type?: string;
+    }>;
+  }>;
   /** Payload reaksi emoji (Meta Cloud / WABA) */
   reaction?: {
     message_id: string;
