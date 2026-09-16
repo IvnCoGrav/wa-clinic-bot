@@ -15,7 +15,9 @@
  */
 import { prisma } from '../src/db/client';
 import { DEFAULT_TENANT_ID } from '../src/config/tenant';
-import { GOLD_FEW_SHOT_EXEMPLARS } from '../src/slot-engine/gold-few-shot-exemplars';
+// PLAN 9 FASE 9.4: src/slot-engine/ sudah didekomisioning — sumber koleksi emas
+// yang benar adalah src/v3/agent/gold-few-shot-exemplars.ts.
+import { GOLD_FEW_SHOT_EXEMPLARS } from '../src/v3/agent/gold-few-shot-exemplars';
 
 async function main() {
   const tenantId = process.env.FEW_SHOT_TENANT_ID || DEFAULT_TENANT_ID;

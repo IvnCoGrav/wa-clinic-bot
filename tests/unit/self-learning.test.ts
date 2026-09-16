@@ -111,8 +111,7 @@ describe('Self-Learning Service Unit Tests', () => {
     });
   });
 
-  it('should ignore learning if the admin reply contains transactional or greeting noise', async () => {
-    const customerId = 'cust_123';
+  it('should ignore learning if the admin reply contains transactional or greeting noise', async () => {    const customerId = 'cust_123';
     const conversationId = 'conv_123';
     const tenantId = 'default-tenant';
 
@@ -139,5 +138,76 @@ describe('Self-Learning Service Unit Tests', () => {
     // Should NOT stage anything because the offline noise filter rejects "halo"/"otw"
     expect(stagingCreateSpy).not.toHaveBeenCalled();
     expect(medicalStagingSpy).not.toHaveBeenCalled();
+  });
+
+  it('PLAN 9 FASE 9.3: jawaban admin berkualitas → usulan exemplar gaya NON-AKTIF', async () => {
+    const { FewShotExemplarBank } = await import('../../src/v3/agent/few-shot-exemplars');
+    const createSpy = vi.spyOn(FewShotExemplarBank, 'createExemplar').mockResolvedValue({} as any);
+
+    vi.spyOn(prisma.message, 'findFirst').mockResolvedValue({
+      id: 'msg_1', tenant_id: 'default-tenant', conversation_id: 'conv_style',
+      direction: 'INBOUND', content: 'Apakah pijat bayi aman untuk newborn?',
+      wa_message_id: 'wa_1', payload_raw: null, created_at: new Date(),
+    } as any);
+    vi.spyOn(prisma.generalFaqStaging, 'create').mockResolvedValue({} as any);
+
+    await selfLearningService.processAdminReply(
+      'cust_style', 'conv_style',
+      'Aman untuk newborn, teknik pijat kami lembut khusus bayi baru lahir dengan minyak telon hangat.',
+      'default-tenant'
+    );
+    await vi.advanceTimersByTimeAsync(11000);
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ isActive: false, tags: expect.arrayContaining(['style-harvest', 'needs-review']) }),
+      'default-tenant'
+    );
+    createSpy.mockRestore();
+  });
+
+  it('PLAN 9 FASE 9.3 adversarial: jawaban ber-nominal → TIDAK jadi exemplar gaya (tapi FAQ tetap)', async () => {
+    const { FewShotExemplarBank } = await import('../../src/v3/agent/few-shot-exemplars');
+    const createSpy = vi.spyOn(FewShotExemplarBank, 'createExemplar').mockResolvedValue({} as any);
+
+    vi.spyOn(prisma.message, 'findFirst').mockResolvedValue({
+      id: 'msg_2', tenant_id: 'default-tenant', conversation_id: 'conv_price',
+      direction: 'INBOUND', content: 'Berapa harga pijat bayi?',
+      wa_message_id: 'wa_2', payload_raw: null, created_at: new Date(),
+    } as any);
+    const stagingCreateSpy = vi.spyOn(prisma.generalFaqStaging, 'create').mockResolvedValue({} as any);
+
+    await selfLearningService.processAdminReply(
+      'cust_price', 'conv_price',
+      'Pijat bayi harganya 60rb bund, sudah termasuk aromaterapi ya dan free konsultasi lanjutan.',
+      'default-tenant'
+    );
+    await vi.advanceTimersByTimeAsync(11000);
+
+    // FAQ staging tetap jalan (offline fallback tidak menolak teks ini), tapi exemplar gaya tidak dibuat
+    // karena jawaban mengandung nominal — harga WAJIB dari tool, bukan contoh.
+    expect(createSpy).not.toHaveBeenCalled();
+    createSpy.mockRestore();
+  });
+
+  it('PLAN 9 FASE 9.3 adversarial: jawaban ber-digit panjang (PII) → TIDAK jadi exemplar gaya', async () => {
+    const { FewShotExemplarBank } = await import('../../src/v3/agent/few-shot-exemplars');
+    const createSpy = vi.spyOn(FewShotExemplarBank, 'createExemplar').mockResolvedValue({} as any);
+
+    vi.spyOn(prisma.message, 'findFirst').mockResolvedValue({
+      id: 'msg_3', tenant_id: 'default-tenant', conversation_id: 'conv_pii',
+      direction: 'INBOUND', content: 'Bagaimana cara reservasi?',
+      wa_message_id: 'wa_3', payload_raw: null, created_at: new Date(),
+    } as any);
+    vi.spyOn(prisma.generalFaqStaging, 'create').mockResolvedValue({} as any);
+
+    await selfLearningService.processAdminReply(
+      'cust_pii', 'conv_pii',
+      'Bisa banget Bunda, silakan hubungi admin di nomor 0812 3456 7890 ya untuk konfirmasi jadwal kunjungan kami.',
+      'default-tenant'
+    );
+    await vi.advanceTimersByTimeAsync(11000);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    createSpy.mockRestore();
   });
 });
