@@ -60,12 +60,26 @@ import {
   ShieldAlert,
   ShieldCheck,
   Download,
+  Volume2,
+  Video,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { ChatExport } from './ChatExport';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
-import { extractMedia } from '../../utils/mediaExtractor';
+import {
+  extractMedia,
+  extractLocation,
+  extractAudio,
+  extractDocument,
+  extractContact,
+  extractVideo,
+  ChatLocationData,
+  ChatAudioData,
+  ChatDocumentData,
+  ChatContactData,
+  ChatVideoData,
+} from '../../utils/mediaExtractor';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
@@ -157,6 +171,7 @@ interface ChatMessage {
   read_at?: string | null;
   created_at: string;
   media?: ChatMediaData;
+  location?: ChatLocationData | null;
   quoted_message?: QuotedMessageData;
   is_revoked?: boolean;
   is_edited?: boolean;
@@ -1214,7 +1229,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
 
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
-        setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
+        setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) })));
       }
     } catch (err: any) {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
@@ -1248,7 +1263,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const cursor = (res as any)?.oldestCursor as string | undefined;
       if (older.length > 0) {
         oldestMessageCursorRef.current = cursor || String((older[0] as any)?.created_at || '') || oldestMessageCursorRef.current;
-        const mapped = older.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
+        const mapped = older.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) }));
         setMessages((prev) => {
           const seen = new Set(prev.map((m) => String(m.id)));
           const fresh = mapped.filter((m) => {
@@ -1828,8 +1843,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
     const unsubscribe = connectLiveChatSse({
       onStatusChange: (connected) => {
+        const wasDisconnected = !sseConnectedRef.current && connected;
         setSseConnected(connected);
         sseConnectedRef.current = connected;
+        if (wasDisconnected) {
+          loadChats(true);
+          if (selectedIdRef.current) {
+            loadThread(selectedIdRef.current);
+          }
+        }
       },
       onEvent: (type, payload) => {
         if (type === 'bot.cutoff_changed' || type === 'BOT_CUTOFF_CHANGED') {
@@ -1859,8 +1881,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         if (type === 'message.created') {
           const conversationId = payload.conversationId;
           const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
+          const rawPayload = payload.payloadRaw || payload.payload_raw || payload.payload;
           const msg: ChatMessage = {
             id: payload.messageId || `sse_${Date.now()}`,
+            wa_message_id: payload.waMessageId || payload.wa_message_id || null,
             direction: payload.direction,
             content: payload.content || '',
             sender_type: payload.senderType || payload.sender_type || null,
@@ -1868,7 +1892,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             created_at: msgTime,
             delivery_status: payload.deliveryStatus || 'sent',
             media: extractMedia(payload),
+            location: payload.location || extractLocation(payload),
             quoted_message: extractQuotedMessage(payload),
+            payload_raw: rawPayload,
           };
 
           // Append ke thread yang sedang dibuka / replace optimistic message
@@ -4431,33 +4457,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const isMatchBubble = effectiveInChatQuery ? matchingMessageIds.includes(msg.id) : false;
                       const isCurrentActiveMatch = effectiveInChatQuery ? (matchingMessageIds[currentMatchIndex] === msg.id || highlightedMsgId === msg.id) : false;
 
-                      // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
-                      const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
-                      const hasValidLocation = !!(
-                        rawLoc &&
-                        Number(rawLoc.latitude) !== 0 &&
-                        Number(rawLoc.longitude) !== 0 &&
-                        !isNaN(Number(rawLoc.latitude)) &&
-                        !isNaN(Number(rawLoc.longitude))
-                      );
-                      const isLocationMsg = hasValidLocation && ((msg.content && /^\[LOCATION/i.test(msg.content)) || !!rawLoc);
-                      // Jika ada media valid, jangan anggap sebagai location walau payload_raw.location ada (0,0)
-                      const effectiveIsLocationMsg = isLocationMsg && !hasMedia;
-                      const hasMediaOnly = hasMedia && (!msg.content || /^\[(IMAGE|MEDIA)/.test(msg.content));
-
-                      // Extract Location Coordinates if present (hanya jika lokasi valid & bukan image)
-                      let locLat: string | null = null;
-                      let locLng: string | null = null;
-                      if (effectiveIsLocationMsg) {
-                        const locMatch = msg.content?.match(/Lat\s*([-\d.]+),\s*Lng\s*([-\d.]+)/i);
-                        if (locMatch && Number(locMatch[1]) !== 0 && Number(locMatch[2]) !== 0) {
-                          locLat = locMatch[1];
-                          locLng = locMatch[2];
-                        } else if (hasValidLocation) {
-                          locLat = rawLoc.latitude != null ? String(rawLoc.latitude) : null;
-                          locLng = rawLoc.longitude != null ? String(rawLoc.longitude) : null;
-                        }
-                      }
+                      // Ekstraksi data kaya: lokasi, audio/PTT, dokumen, kontak, video via helper terpusat
+                      const locData: ChatLocationData | null = (msg as any).location || extractLocation(msg);
+                      const audioData: ChatAudioData | null = extractAudio(msg);
+                      const docData: ChatDocumentData | null = extractDocument(msg);
+                      const contactData: ChatContactData | null = extractContact(msg);
+                      const videoData: ChatVideoData | null = extractVideo(msg);
+                      const hasMediaOnly = hasMedia && !audioData && !docData && !videoData && (!msg.content || /^\[(IMAGE|MEDIA)/.test(msg.content));
 
                       // Reaksi Pesan (WhatsApp Message Reactions)
                       const reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
@@ -4610,98 +4616,170 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 </div>
                               )}
 
-                              {!isRevoked && msg.media && (() => {
-                                const mt = ((msg.media as any)?.mimeType || '') as string;
-                                const url = (msg.media.url || msg.media.hdUrl || msg.media.thumbUrl || '') as string;
-                                const isAudio = mt.startsWith('audio/') || /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test(url) || /^\[(AUDIO|VOICE|PTT)/i.test((msg.content || '').trim());
-                                const isDoc = mt.startsWith('application/') || mt.startsWith('text/') || /\.(pdf|docx?|xlsx?|pptx?|zip|rar)$/i.test(url);
-                                if (isAudio && url) {
-                                  return (
-                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                      <VoiceNotePlayer src={url} />
+                              {!isRevoked && (
+                                <>
+                                  {/* 1. Audio / PTT Voice Note */}
+                                  {audioData && audioData.url && (
+                                    <div className="mb-1.5">
+                                      <VoiceNotePlayer src={audioData.url} />
                                     </div>
-                                  );
-                                }
-                                if (isDoc && url) {
-                                  const fileName = (msg.media as any)?.fileName || (msg.media as any)?.caption || url.split('/').pop() || 'Dokumen';
-                                  return (
-                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                      <a href={url} target="_blank" rel="noopener noreferrer" download className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] hover:bg-[#e8f5f2] transition text-left max-w-[260px]">
-                                        <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0"><FileText size={16} /></span>
+                                  )}
+
+                                  {/* 2. Document / PDF */}
+                                  {docData && docData.url && (
+                                    <div className="mb-1.5">
+                                      <a
+                                        href={docData.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download
+                                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] hover:bg-[#e8f5f2] transition text-left max-w-[260px]"
+                                      >
+                                        <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                                          <FileText size={16} />
+                                        </span>
                                         <span className="flex-1 min-w-0">
-                                          <span className="block text-xs font-bold text-[#111b21] truncate">{String(fileName).slice(0, 48)}</span>
-                                          <span className="block text-[10px] text-[#667781]">Ketuk untuk unduh</span>
+                                          <span className="block text-xs font-bold text-[#111b21] truncate">
+                                            {String(docData.fileName || 'Dokumen').slice(0, 48)}
+                                          </span>
+                                          <span className="block text-[10px] text-[#667781]">
+                                            {docData.fileSize ? `${Math.round(Number(docData.fileSize) / 1024)} KB • Ketuk untuk unduh` : 'Ketuk untuk unduh'}
+                                          </span>
                                         </span>
                                         <Download size={14} className="text-[#8696a0] shrink-0" />
                                       </a>
-                                      {msg.media.caption && (
+                                    </div>
+                                  )}
+
+                                  {/* 3. Video */}
+                                  {videoData && videoData.url && (
+                                    <div className="mb-1.5 max-w-[280px]">
+                                      <video
+                                        src={videoData.url}
+                                        controls
+                                        className="rounded-lg max-h-[240px] w-full bg-black"
+                                      />
+                                      {videoData.caption && (
                                         <span className="block mt-1 text-[11px] text-slate-700 break-words">
-                                          {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(msg.media.caption, effectiveInChatQuery || searchQuery) : msg.media.caption}
+                                          {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(videoData.caption, effectiveInChatQuery || searchQuery) : videoData.caption}
                                         </span>
                                       )}
                                     </div>
-                                  );
-                                }
-                                return (
-                                  <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                    <MediaImage
-                                      src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
-                                      downloadSrc={msg.media.hdUrl || msg.media.url}
-                                      thumbUrl={msg.media.thumbUrl}
-                                      caption={msg.media.caption || extractImageCaption(msg.content) || undefined}
-                                    />
-                                    {(() => {
-                                      const cap = msg.media.caption || extractImageCaption(msg.content);
-                                      const q = effectiveInChatQuery || searchQuery;
-                                      if (!cap || !q || !q.trim()) return null;
-                                      // Render highlighted caption below image (when image fails, MediaImage also shows plain caption — this adds highlight)
-                                      return (
-                                        <div className="mt-1 text-[11px] leading-snug break-words">
-                                          {renderHighlightedText(cap, q)}
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-                                );
-                              })()}
-                              {isRevoked ? (
-                                <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
-                                  <Ban size={12} className="text-[#8696a0] shrink-0" />
-                                  <span>Pesan ini telah ditarik</span>
-                                </p>
-                              ) : (
-                                <>
-                                  {effectiveIsLocationMsg && (
+                                  )}
+
+                                  {/* 4. Contact vCard */}
+                                  {contactData && (
+                                    <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left max-w-[260px]">
+                                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                        <User size={16} />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight truncate">
+                                          {contactData.displayName || 'Kontak WhatsApp'}
+                                        </p>
+                                        {contactData.phoneNumber && (
+                                          <p className="text-[11px] text-[#667781] font-mono truncate mt-0.5">
+                                            {contactData.phoneNumber}
+                                          </p>
+                                        )}
+                                      </div>
+                                      {contactData.phoneNumber && (
+                                        <a
+                                          href={`tel:${contactData.phoneNumber}`}
+                                          className="px-2 py-1 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[10px] font-bold transition shrink-0"
+                                          title="Hubungi kontak"
+                                        >
+                                          Telepon
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* 5. Image / Photo */}
+                                  {hasMedia && !audioData && !docData && !videoData && (
+                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                      <MediaImage
+                                        src={msg.media!.url || msg.media!.hdUrl || msg.media!.thumbUrl}
+                                        downloadSrc={msg.media!.hdUrl || msg.media!.url}
+                                        thumbUrl={msg.media!.thumbUrl}
+                                        caption={msg.media!.caption || extractImageCaption(msg.content) || undefined}
+                                      />
+                                      {(() => {
+                                        const cap = msg.media!.caption || extractImageCaption(msg.content);
+                                        const q = effectiveInChatQuery || searchQuery;
+                                        if (!cap || !q || !q.trim()) return null;
+                                        return (
+                                          <div className="mt-1 text-[11px] leading-snug break-words">
+                                            {renderHighlightedText(cap, q)}
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+
+                                  {/* 6. Location (Pin GPS & Live Location) */}
+                                  {locData && (
                                     <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
                                       <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
                                         <MapPin size={17} />
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
-                                        <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
-                                          {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
+                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight flex items-center gap-1">
+                                          <span>{locData.isLive ? 'Live Location WhatsApp' : 'Lokasi Pin WhatsApp'}</span>
+                                          {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
                                         </p>
+                                        <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                          {locData.latitude}, {locData.longitude}
+                                        </p>
+                                        {(locData.name || locData.address) && (
+                                          <p className="text-[11px] text-[#111b21] truncate mt-0.5 font-medium">
+                                            {locData.name || locData.address}
+                                          </p>
+                                        )}
                                       </div>
-                                      {locLat && locLng && (
-                                        <a
-                                          href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
-                                          title="Buka lokasi di Google Maps"
-                                        >
-                                          <span>Peta</span>
-                                          <ExternalLink size={12} />
-                                        </a>
-                                      )}
+                                      <a
+                                        href={locData.url || `https://www.google.com/maps/search/?api=1&query=${locData.latitude},${locData.longitude}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
+                                        title="Buka lokasi di Google Maps"
+                                      >
+                                        <span>Peta</span>
+                                        <ExternalLink size={12} />
+                                      </a>
                                     </div>
                                   )}
-                                  {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">
-                                      {renderHighlightedText(msg.content, effectiveInChatQuery || searchQuery)}
-                                    </p>
-                                  )}
+
+                                  {/* 7. Text Content (Anti-Hollow Bubble: selalu tampilkan teks jika tidak ada visual, atau jika teks bukan sekadar placeholder teknis) */}
+                                  {(() => {
+                                    const hasVisual = (hasMedia && !audioData && !docData && !videoData) || !!locData || !!audioData || !!docData || !!videoData || !!contactData;
+                                    const isPurePlaceholder = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i.test((msg.content || '').trim());
+                                    if (hasVisual && isPurePlaceholder) {
+                                      return null;
+                                    }
+                                    if (!msg.content || !msg.content.trim()) {
+                                      if (!hasVisual) {
+                                        return (
+                                          <p className="font-sans italic text-[#667781] py-0.5 text-[11px]">
+                                            [Pesan tanpa teks]
+                                          </p>
+                                        );
+                                      }
+                                      return null;
+                                    }
+                                    return (
+                                      <p className="font-sans whitespace-pre-wrap select-text cursor-text">
+                                        {renderHighlightedText(msg.content, effectiveInChatQuery || searchQuery)}
+                                      </p>
+                                    );
+                                  })()}
                                 </>
+                              )}
+                              {isRevoked && (
+                                <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
+                                  <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                  <span>Pesan ini telah ditarik</span>
+                                </p>
                               )}
                               <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
                                 {isEdited && !isRevoked && (

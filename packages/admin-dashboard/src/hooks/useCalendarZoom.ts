@@ -109,12 +109,16 @@ export function useCalendarZoom(initialHeight?: number): CalendarZoomState {
         if (el.scrollHeight > 0) {
           anchorScrollRatio = (el.scrollTop + el.clientHeight / 2) / el.scrollHeight;
         }
+
+        // Pasang touchmove non-passive HANYA saat 2 jari aktif untuk pinch-to-zoom
+        // Menjaga scrolling 1 jari tetap 100% native compositor speed tanpa jeda JS
+        el.addEventListener('touchmove', handleTouchMove, { passive: false });
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       if (!isPinching || e.touches.length !== 2) return;
-      // Cegah default browser zoom
+      // Cegah default browser zoom saat pinch kalender
       e.preventDefault();
 
       const currentDistance = getDistance(e.touches[0], e.touches[1]);
@@ -141,7 +145,10 @@ export function useCalendarZoom(initialHeight?: number): CalendarZoomState {
 
     const handleTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) {
-        isPinching = false;
+        if (isPinching) {
+          isPinching = false;
+          el.removeEventListener('touchmove', handleTouchMove);
+        }
       }
     };
 
@@ -155,14 +162,15 @@ export function useCalendarZoom(initialHeight?: number): CalendarZoomState {
     };
 
     el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: false });
     el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
     el.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       el.removeEventListener('touchstart', handleTouchStart);
       el.removeEventListener('touchmove', handleTouchMove);
       el.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('touchcancel', handleTouchEnd);
       el.removeEventListener('wheel', handleWheel);
     };
   }, [setHourHeight]);
