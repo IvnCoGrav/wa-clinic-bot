@@ -1,9 +1,14 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { AiModelConfigService } from '../config/ai-models.config';
-import { BOT_PERSONA_PROMPT } from '../config/persona';
 import { getLlmEndpointConfig, callChatWithRetry } from '../integrations/llm/llm-gateway';
 import { parsePositiveInt } from '../utils/env-numeric';
+import {
+  buildPersonaJudgeSystemPrompt,
+  averagePersonaScore,
+  failingPersonaDimensions,
+  type PersonaScores,
+} from '../evals/persona-rubric';
 
 /**
  * LLM-as-Judge — Evaluasi kualitas balasan bot secara otomatis.
@@ -33,6 +38,18 @@ export interface EvalResult {
   dispatchMessageId: string;
   score?: number;
   feedback?: string;
+}
+
+/**
+ * Verdict per dimensi persona (PLAN 9 FASE 9.2). `score` = rata-rata dibulatkan
+ * agar kolom `ai_evaluations.score` lama tetap bermakna; rincian dimensi disimpan
+ * sebagai JSON di awal `feedback` (tanpa migrasi skema).
+ */
+export interface PersonaVerdict {
+  score: number;
+  feedback: string;
+  dimensions: PersonaScores;
+  failingDimensions: string[];
 }
 
 export class LlmEvaluatorService {
@@ -93,23 +110,14 @@ export class LlmEvaluatorService {
    * Menilai kualitas satu pesan via LLM-as-Judge.
    * Return { score, feedback } atau null bila LLM gagal/tidak tersedia.
    */
-  private async evaluateOne(sample: EvaluatedSample): Promise<{ score: number; feedback: string } | null> {
+  private async evaluateOne(sample: EvaluatedSample): Promise<PersonaVerdict | null> {
     const endpoint = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', timeoutMs: parsePositiveInt(process.env.AI_EVAL_TIMEOUT_MS, 30000) });
     if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) return null;
 
     const config = AiModelConfigService.getModelConfig('CHAT_REPLY');
 
-    const systemPrompt = `Kamu adalah evaluator kualitas balasan asisten (LLM-as-a-Judge) untuk chatbot klinik.
-${BOT_PERSONA_PROMPT}
-
-Nilailah kualitas JAWABAN bot berikut berdasarkan REASONING yang menyertai & jawabannya.
-Skor 1-5: 1=sangat buruk/menyesatkan, 3=cukup, 5=sangat baik. Beri feedback singkat 1-2 kalimat (Indonesia).
-
-FORMAT WAJIB JSON:
-{
-  "score": 1-5,
-  "feedback": "ringkas"
-}`;
+    // PLAN 9 FASE 9.2: rubrik persona 5 dimensi (single source di evals/persona-rubric).
+    const systemPrompt = buildPersonaJudgeSystemPrompt();
 
     const userContent = `REASONING AI: ${sample.aiReasoning || '(tidak ada)'}\nJAWABAN BOT: ${sample.messageText}`;
 
@@ -176,10 +184,25 @@ FORMAT WAJIB JSON:
       if (!raw) return null;
 
       const parsed = JSON.parse(raw.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim());
-      const score = Number(parsed.score);
-      if (!Number.isFinite(score) || score < 1 || score > 5) return null;
+      const dimensions: PersonaScores = {
+        warmth: Number(parsed.warmth),
+        golden_rules: Number(parsed.golden_rules),
+        grounding: Number(parsed.grounding),
+        format: Number(parsed.format),
+        pronoun: Number(parsed.pronoun),
+        feedback: String(parsed.feedback || '').slice(0, 2000),
+      };
+      const avg = averagePersonaScore(dimensions);
+      if (avg === null) return null;
 
-      return { score, feedback: String(parsed.feedback || '').slice(0, 2000) };
+      const failing = failingPersonaDimensions(dimensions);
+      const score = Math.round(avg);
+      const feedback =
+        `[dimensi ${JSON.stringify({ warmth: dimensions.warmth, golden_rules: dimensions.golden_rules, grounding: dimensions.grounding, format: dimensions.format, pronoun: dimensions.pronoun })}` +
+        (failing.length > 0 ? ` gagal: ${failing.join(',')}` : ' semua dimensi lulus') +
+        `] ${dimensions.feedback || ''}`.slice(0, 2000);
+
+      return { score, feedback, dimensions, failingDimensions: failing };
     } catch (err) {
       console.warn('[AI EVALUATOR] evaluasi LLM gagal (silent):', (err as Error).message);
       return null;

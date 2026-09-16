@@ -92,7 +92,6 @@ export class SelfLearningService {
         // Anti-duplication check
         const dupCheck = await knowledgeBaseService.checkDuplicateFaq(refinedFaq.question, tenantId, 0.70);
         const stagingStatus: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
-
         if (medicalCheck.isMedical) {
           await prisma.medicalFaqStaging.create({
             data: {
@@ -126,12 +125,69 @@ export class SelfLearningService {
           });
         }
         console.log(`[SELF-LEARNING STAGED] Q&A pair routed to ${medicalCheck.isMedical ? 'MedicalFaqStaging' : 'GeneralFaqStaging'} for review.`);
+
+        // PLAN 9 FASE 9.3 — Usulan exemplar GAYA (default NON-AKTIF, menunggu review admin).
+        // Syarat ketat agar antrean review tidak dipenuhi sampah:
+        //  - jawaban admin 20–800 char, tanpa nominal rupiah (harga WAJIB dari tool, bukan contoh),
+        //  - tanpa nomor telepon / rekening (anti PII bocor ke prompt),
+        //  - tanpa markdown double-star (format gate).
+        // TIDAK PERNAH auto-aktif: isActive=false selalu.
+        try {
+          await this.proposeStyleExemplar(customerQuestion, adminAnswer, refinedFaq, tenantId);
+        } catch (exErr: any) {
+          console.warn('[SELF-LEARNING] proposeStyleExemplar gagal (non-fatal):', exErr?.message || exErr);
+        }
       } else {
         console.log('[SELF-LEARNING IGNORED] Message exchange is transactional or personal. Skipping database ingestion.');
       }
     } catch (err: any) {
       console.error('[SELF-LEARNING ERROR] Error in finalizeLearning:', err.message || err);
     }
+  }
+
+  private async proposeStyleExemplar(
+    customerQuestion: string,
+    adminAnswer: string,
+    refinedFaq: { question: string; answer: string },
+    tenantId: string
+  ): Promise<void> {
+    const answer = (adminAnswer || '').trim();
+    const question = (customerQuestion || '').trim();
+
+    // Filter kualitas: panjang wajar.
+    if (answer.length < 20 || answer.length > 800 || question.length < 3) {
+      console.log('[SELF-LEARNING STYLE] Dilewati: panjang di luar 20–800 char.');
+      return;
+    }
+    // Filter anti-kontaminasi harga: exemplar gaya DILARANG memuat nominal rupiah.
+    if (/(rp\s*\d|rp\.?\s*\d|\d+\s*(rb|ribu|jt|juta))/i.test(answer)) {
+      console.log('[SELF-LEARNING STYLE] Dilewati: jawaban memuat nominal (harga dari tool, bukan contoh).');
+      return;
+    }
+    // Filter anti-PII: nomor telepon / rekening tidak boleh masuk prompt.
+    const digitsOnly = answer.replace(/\D/g, '');
+    if (digitsOnly.length >= 9 || /\b\d{4}[\s-]?\d{4}[\s-]?\d{4,}\b/.test(answer)) {
+      console.log('[SELF-LEARNING STYLE] Dilewati: terdeteksi deretan digit panjang (risiko PII).');
+      return;
+    }
+    // Filter format gate.
+    if (answer.includes('**')) {
+      console.log('[SELF-LEARNING STYLE] Dilewati: mengandung markdown "**".');
+      return;
+    }
+
+    const { FewShotExemplarBank } = await import('../v3/agent/few-shot-exemplars');
+    await FewShotExemplarBank.createExemplar(
+      {
+        scenario: `Gaya admin (harvest livechat, perlu review): ${refinedFaq.question.slice(0, 120)}`,
+        customerMessage: question.slice(0, 500),
+        idealResponse: answer.slice(0, 800),
+        tags: ['style-harvest', 'needs-review'],
+        isActive: false,
+      },
+      tenantId
+    );
+    console.log('[SELF-LEARNING STYLE] Usulan exemplar gaya dibuat (is_active=false, menunggu review admin).');
   }
 
   private async refineFaqWithLLM(
