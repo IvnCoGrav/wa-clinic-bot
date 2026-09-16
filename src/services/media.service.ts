@@ -26,15 +26,38 @@ export interface SavedMedia {
 }
 
 function extFromMime(mime: string): string {
-  switch (mime) {
+  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
+  switch (cleanMime) {
     case 'image/png':
       return 'png';
     case 'image/webp':
       return 'webp';
     case 'image/gif':
       return 'gif';
+    case 'audio/ogg':
+    case 'audio/opus':
+      return 'ogg';
+    case 'audio/mpeg':
+    case 'audio/mp3':
+      return 'mp3';
+    case 'audio/mp4':
+    case 'audio/m4a':
+    case 'audio/aac':
+      return 'm4a';
+    case 'video/mp4':
+      return 'mp4';
+    case 'video/webm':
+      return 'webm';
+    case 'application/pdf':
+      return 'pdf';
+    case 'application/msword':
+      return 'doc';
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      return 'docx';
+    case 'text/plain':
+      return 'txt';
     default:
-      return 'jpg';
+      return cleanMime.startsWith('audio/') ? 'ogg' : cleanMime.startsWith('video/') ? 'mp4' : 'jpg';
   }
 }
 
@@ -140,7 +163,7 @@ export class MediaService {
     mimeType?: string;
   }): Promise<{ hdPath: string; hdUrl: string; thumbPath: string | null; thumbUrl: string | null }> {
     const { tenantId, buffer, mimeType } = params;
-    const mime = mimeType && ALLOWED_MIME.has(mimeType) ? mimeType : 'image/jpeg';
+    const mime = mimeType || 'image/jpeg';
     const ext = extFromMime(mime);
 
     await this.enforceQuota(tenantId, buffer.length);
@@ -153,15 +176,17 @@ export class MediaService {
 
     let thumbPath: string | null = null;
     let thumbUrl: string | null = null;
-    const blur = await this.createBlurThumb(buffer, mime);
-    if (blur) {
-      const thumbFile = `${stem}_thumb.jpg`;
-      try {
-        thumbPath = path.join(dir, thumbFile);
-        fs.writeFileSync(thumbPath, blur.data);
-        thumbUrl = toRelativeUrl('inbound', tenantId, thumbFile);
-      } catch {
-        // best-effort
+    if (mime.startsWith('image/')) {
+      const blur = await this.createBlurThumb(buffer, mime);
+      if (blur) {
+        const thumbFile = `${stem}_thumb.jpg`;
+        try {
+          thumbPath = path.join(dir, thumbFile);
+          fs.writeFileSync(thumbPath, blur.data);
+          thumbUrl = toRelativeUrl('inbound', tenantId, thumbFile);
+        } catch {
+          // best-effort
+        }
       }
     }
 

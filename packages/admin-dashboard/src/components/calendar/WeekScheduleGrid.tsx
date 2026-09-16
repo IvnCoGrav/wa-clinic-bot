@@ -136,11 +136,17 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     });
   };
 
+  const lastSyncedScrollLeftRef = useRef(-1);
   const handleMainScroll = () => {
     if (isSyncingScrollRef.current) return;
     if (!topScrollbarRef.current || !containerRef.current) return;
+    const currentScrollLeft = containerRef.current.scrollLeft;
+    // Guard: hanya sync jika posisi horizontal berubah lebih dari 0.5px
+    // Ini mencegah layout reflow yang tidak perlu saat pengguna sedang scroll vertikal (jam ke bawah)
+    if (Math.abs(currentScrollLeft - lastSyncedScrollLeftRef.current) < 0.5) return;
+    lastSyncedScrollLeftRef.current = currentScrollLeft;
     isSyncingScrollRef.current = true;
-    topScrollbarRef.current.scrollLeft = containerRef.current.scrollLeft;
+    topScrollbarRef.current.scrollLeft = currentScrollLeft;
     requestAnimationFrame(() => {
       isSyncingScrollRef.current = false;
     });
@@ -449,10 +455,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
-        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing touch-pan-x touch-pan-y overscroll-contain"
+        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing overscroll-contain"
         style={{
           WebkitOverflowScrolling: 'touch',
-          touchAction: 'pan-x pan-y',
+          overscrollBehavior: 'contain',
         }}
       >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
@@ -546,7 +552,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           }
                           onQuickAdd({ date: day, hour });
                         }}
-                        style={{ touchAction: 'pan-x pan-y' }}
                         className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 text-transparent hover:text-[#008069] dark:hover:text-[#00a884] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
                         title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
                       >
