@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { followUpService } from '../../src/services/follow-up.service';
+import { followUpService, CANCEL_REASON } from '../../src/services/follow-up.service';
 import { getRollingFollowUpMessage, FOLLOWUP_ROLLING_TEMPLATES } from '../../src/config/followup-templates';
 import { customerService } from '../../src/services/customer.service';
 import { prisma } from '../../src/db/client';
@@ -262,7 +262,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         tenant_id: DEFAULT_TENANT_ID,
         status: { in: ['PENDING', 'QUEUED'] },
       },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
     });
   });
 

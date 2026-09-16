@@ -1,11 +1,14 @@
-import { vi, describe, it, expect, beforeEach, beforeAll } from 'vitest';
-import { followUpService } from '../../src/services/follow-up.service';
+import { vi, describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import { followUpService, CANCEL_REASON } from '../../src/services/follow-up.service';
 import { cronService } from '../../src/services/cron.service';
 import { broadcastQueueService } from '../../src/services/broadcast-queue.service';
 import { customerService } from '../../src/services/customer.service';
 import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { buildApp } from '../../src/app';
+// PLAN 8 FASE 5a: test ini mengendalikan perilaku via mock prisma.customer langsung,
+// sehingga memakai adapter Postgres (dengan Prisma ter-mock), bukan InMemory.
+import { resetCustomerRepository } from '../../src/repositories/customer.repository';
 
 describe('Follow-Up Schedule & State Transition Tests', () => {
   beforeAll(() => {
@@ -15,6 +18,11 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // PENTING: hook `beforeEach` berjalan terbalik terhadap urutan registrasi.
+    // `tests/setup.ts` (setupFiles) me-reinject InMemoryCustomerRepository SETELAH
+    // blok ini, sehingga reset di sini akan tertimpa. Kembalikan adapter Postgres
+    // (dengan Prisma ter-mock) lagi lewat afterEach agar tidak bergantung urutan.
+    resetCustomerRepository();
     const originalSetTimeout = global.setTimeout;
     vi.spyOn(global, 'setTimeout').mockImplementation((cb: any, ms?: number) => {
       if (ms !== undefined && ms >= 20000) {
@@ -25,6 +33,12 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
       }
       return originalSetTimeout(cb, ms);
     });
+  });
+
+  afterEach(() => {
+    // Pastikan adapter Postgres aktif untuk suite ini meski setup.ts me-reinject
+    // InMemory lewat beforeEach-nya (urutan hook terbalik).
+    resetCustomerRepository();
   });
 
   it('Customer creation -> automatically schedules 3 NO_PURCHASE follow-ups', async () => {
@@ -81,7 +95,7 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: { in: ['f-1', 'f-2'] } },
-        data: { status: 'CANCELLED' }
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED }
       })
     );
 

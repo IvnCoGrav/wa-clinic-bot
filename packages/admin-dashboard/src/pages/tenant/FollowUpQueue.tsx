@@ -60,6 +60,7 @@ interface FollowUpItem {
   scheduled_at: string;
   sent_at: string | null;
   status: string; // PENDING | QUEUED | SENT | CANCELLED | FAILED | SKIPPED
+  cancel_reason?: string | null;
   customer: Customer | null;
   reservation?: {
     id: string;
@@ -103,6 +104,9 @@ export const FollowUpQueue: React.FC = () => {
     id?: string;
   } | null>(null);
 
+  // Alasan pembatalan manual (opsional) — dikirim ke backend sebagai cancel_reason.
+  const [confirmReason, setConfirmReason] = useState('');
+
   // Chat History Modal — render, fetch & quick-reply dimiliki ChatHistoryModal
   // terpusat (mode reply via endpoint live-chat valid; tanpa fallback 404).
   const [chatModal, setChatModal] = useState<{
@@ -137,7 +141,10 @@ export const FollowUpQueue: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (editModal.open) setEditModal({ open: false, newDate: '', stage: 1, variant: 1, customText: '' });
-        if (confirmAction) setConfirmAction(null);
+        if (confirmAction) {
+          setConfirmAction(null);
+          setConfirmReason('');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -262,10 +269,13 @@ export const FollowUpQueue: React.FC = () => {
     }
   };
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = async (id: string, reason?: string) => {
     setActionLoading(id);
     try {
-      await apiRequest(`follow-ups/${id}/cancel`, { method: 'PATCH' });
+      await apiRequest(`follow-ups/${id}/cancel`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reason: reason?.trim() || undefined }),
+      });
       setToastMsg({ type: 'success', text: 'Follow-up berhasil dibatalkan.' });
       loadFollowUps();
     } catch (err: any) {
@@ -275,12 +285,12 @@ export const FollowUpQueue: React.FC = () => {
     }
   };
 
-  const handleBulkCancel = async () => {
+  const handleBulkCancel = async (reason?: string) => {
     setActionLoading('bulk-cancel');
     try {
       const res = await apiRequest('follow-ups/bulk-cancel', {
         method: 'POST',
-        body: JSON.stringify({ status: 'PENDING' }),
+        body: JSON.stringify({ status: 'PENDING', reason: reason?.trim() || undefined }),
       });
       setToastMsg({ type: 'success', text: res.message || 'Semua antrian pending berhasil dibatalkan.' });
       loadFollowUps();
@@ -289,6 +299,11 @@ export const FollowUpQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmAction(null);
+    setConfirmReason('');
   };
 
   // Helper template finder - stage = jadwal, variant = gaya bahasa 1..3
@@ -489,6 +504,21 @@ export const FollowUpQueue: React.FC = () => {
         );
     }
   };
+
+  // Badge status + sub-keterangan alasan pembatalan (CANCELLED / SKIPPED).
+  const renderStatusCell = (fu: FollowUpItem) => (
+    <div className="flex flex-col items-start gap-0.5">
+      {getStatusBadge(fu.status)}
+      {fu.cancel_reason && (fu.status === 'CANCELLED' || fu.status === 'SKIPPED') && (
+        <span
+          className="text-[9px] text-slate-500 italic block max-w-[170px] truncate"
+          title={`Alasan: ${fu.cancel_reason}`}
+        >
+          Alasan: {fu.cancel_reason}
+        </span>
+      )}
+    </div>
+  );
 
   const renderSortIndicator = (field: string) => {
     if (sortBy !== field) {
@@ -709,7 +739,7 @@ export const FollowUpQueue: React.FC = () => {
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${typeMeta.color}`}>
                       {typeMeta.label}
                     </span>
-                    {getStatusBadge(fu.status)}
+                    {renderStatusCell(fu)}
                   </div>
 
                   {/* Customer & Phone info */}
@@ -976,7 +1006,7 @@ export const FollowUpQueue: React.FC = () => {
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-3.5">{getStatusBadge(fu.status)}</td>
+                      <td className="px-4 py-3.5">{renderStatusCell(fu)}</td>
 
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
@@ -1292,7 +1322,7 @@ export const FollowUpQueue: React.FC = () => {
         createPortal(
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
-            onClick={() => setConfirmAction(null)}
+            onClick={closeConfirmModal}
           >
             <div
               className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl my-auto"
@@ -1344,9 +1374,29 @@ export const FollowUpQueue: React.FC = () => {
                   ? 'Follow-up ini akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam yang sudah disetup.'
                   : 'Pesan follow-up akan langsung dikirim sekarang ke nomor WhatsApp customer.'}
               </p>
+
+              {(confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel') && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[#111b21] flex items-center gap-1.5">
+                    <FileText size={12} className="text-[#008069]" />
+                    <span>Alasan Pembatalan (opsional)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={confirmReason}
+                    onChange={(e) => setConfirmReason(e.target.value)}
+                    placeholder="Misal: Customer minta ditunda, nomor salah, dsb."
+                    className="w-full p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] focus:outline-none shadow-xs transition resize-none"
+                  />
+                  <p className="text-[10px] text-[#8696a0] leading-tight">
+                    Jika dikosongkan, sistem memakai alasan default (pembatalan manual oleh Admin).
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
                 <button
-                  onClick={() => setConfirmAction(null)}
+                  onClick={closeConfirmModal}
                   className="px-4 py-2 bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
                 >
                   Batal
@@ -1354,11 +1404,13 @@ export const FollowUpQueue: React.FC = () => {
                 <button
                   onClick={() => {
                     const { type, id } = confirmAction;
+                    const reason = confirmReason;
                     setConfirmAction(null);
+                    setConfirmReason('');
                     if (type === 'reschedule-overdue') handleRescheduleOverdue();
-                    else if (type === 'bulk-cancel') handleBulkCancel();
+                    else if (type === 'bulk-cancel') handleBulkCancel(reason);
                     else if (type === 'bulk-queue') handleBulkQueue();
-                    else if (type === 'cancel' && id) handleCancel(id);
+                    else if (type === 'cancel' && id) handleCancel(id, reason);
                     else if (type === 'queue' && id) handleQueue(id);
                     else if (type === 'send' && id) handleSendNow(id);
                   }}

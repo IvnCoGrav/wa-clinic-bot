@@ -146,14 +146,20 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * PATCH /api/admin/follow-ups/:id/cancel
-   * Membatalkan item follow-up tertentu.
+   * Membatalkan item follow-up tertentu. `reason` opsional disimpan sebagai cancel_reason.
    */
   fastify.patch(
     '/api/admin/follow-ups/:id/cancel',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: { id: string }; Body?: { reason?: string } }>,
+      reply: FastifyReply
+    ) => {
       const { id } = request.params;
+      const reason = (request.body?.reason || '').trim();
       try {
-        const success = await followUpService.cancelFollowUp(id, DEFAULT_TENANT_ID);
+        const success = reason
+          ? await followUpService.cancelFollowUp(id, DEFAULT_TENANT_ID, { reason })
+          : await followUpService.cancelFollowUp(id, DEFAULT_TENANT_ID);
         if (!success) {
           return reply.status(404).send({ error: 'Item follow-up tidak ditemukan' });
         }
@@ -163,7 +169,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity || 'Admin',
           action: 'CANCEL_FOLLOWUP',
           targetId: id,
-          payload: { status: 'CANCELLED' },
+          payload: { status: 'CANCELLED', reason: reason || undefined },
           ipAddress: request.ip,
         });
 
@@ -177,20 +183,27 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/admin/follow-ups/bulk-cancel
    * Membatalkan seluruh antrian follow-up (default: status PENDING).
+   * `reason` opsional disimpan sebagai cancel_reason.
    */
   fastify.post(
     '/api/admin/follow-ups/bulk-cancel',
-    async (request: FastifyRequest<{ Body?: { status?: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Body?: { status?: string; reason?: string } }>,
+      reply: FastifyReply
+    ) => {
       try {
         const targetStatus = request.body?.status || 'PENDING';
-        const cancelledCount = await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, targetStatus);
+        const reason = (request.body?.reason || '').trim();
+        const cancelledCount = reason
+          ? await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, targetStatus, { reason })
+          : await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, targetStatus);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
           action: 'BULK_CANCEL_FOLLOWUP',
           targetId: 'ALL',
-          payload: { count: cancelledCount, targetStatus },
+          payload: { count: cancelledCount, targetStatus, reason: reason || undefined },
           ipAddress: request.ip,
         });
 
