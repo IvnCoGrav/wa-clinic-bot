@@ -1223,4 +1223,141 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. **Matcher `matchCatalogService` token-substring** masih memetakan kata `pijat` saja ke kandidat terdekat; turunan `xyz` tidak cocok → 0 benar, tapi validasi "minimal 1 token signifikan" tetap sederhana — belum ada threshold coverage formal.
   4. **Verifikasi manual belum:** shareloc Sedati → profil Sedati/Sidoarjo, invoice Kec/Kota dari alamat teks, edit reservasi ganti staff/alamat tanpa 500.
 
+---
+
+## 64. [Booking Commit] Sesi 614425 — komitmen booking bergantung judgment LLM → buntu & tanya jam (2026-09-16)
+
+- **Status:** Fase 0–4 selesai terverifikasi (test `tests/unit/v3-booking-commit-session-614425.test.ts` 6/6, `tests/unit/guardrail-visit-time.test.ts` 4/4; `npm run build` exit 0; full suite 295 files, 2172 passed, 0 failures).
+- **Insiden:** Customer menyatakan komitmen ganda ("iya bu saya ambil treatment nya" lalu "inggih bu, besok boleh"), namun `save_reservation` TIDAK PERNAH dipanggil (terbukti di `logs/app-2026-09-16.log`: hanya `calculate_delivery` + `get_catalog_and_price`/`search_knowledge_faq`). Turn 6 & 7 hanya 1 panggilan LLM (`V3_ROUTING`, tanpa Call-2). LLM malah menanyakan JAM kunjungan spesifik — melanggar Aturan Emas.
+- **Akar masalah (multi-layer):**
+  1. Keputusan commit diserahkan ke judgment `gpt-4o-mini` (`persona.ts` save_reservation = "HANYA jika customer sudah menyepakati...") — non-deterministik.
+  2. `conversation-summarizer.ts` menyuntik larangan "Menanyakan 'mau treatment di hari apa'" saat hari sudah disebut TANPA arahan maju → model buntu → menebak tanya jam.
+  3. Tidak ada directive fase `TREATMENT_DISCUSSED + day mention → commit`.
+  4. Tidak ada guardrail penolak pertanyaan jam.
+- **Perbaikan masuk (fondasional, bukan tambal prompt):**
+  1. `ContextGrounder.isBookingCommitReady()` — derivasi deterministik (treatment disepakati + hari disebut + belum ada reservasi), reuse `DAY_EVIDENCE_WORDS`.
+  2. `generation-stage.ts` `dynamicToolChoice` — memaksa `save_reservation` saat commit-ready (prioritas di bawah sinyal medis/vaksin/lokasi).
+  3. `conversation-summarizer.ts` — ganti framing buntu dengan arahan maju + larangan jam spesifik.
+  4. `guardrail-pipeline.ts` `detectVisitTimeQuestion()` + reprompt 7e — jaring pengaman pasca-Call-2.
+- **Sisa & Tech Debt yang disengaja:**
+  1. `isBookingCommitReady` bergantung `DAY_EVIDENCE_WORDS` includes; frasa hari ambigu ("besok-besok", "hari ini juga") bisa memicu commit dini — belum ada gate negasi/konteks. Perlu hardening bila muncul false positive di produksi.
+  2. Guardrail jam memakai token-match terarah (bukan NLP); varian tak terduga ("kira-kira kami datang jam berapa?") mungkin lolos. Diperluas bila ada temuan log.
+  3. Belum ada test end-to-end yang mengeksekusi `save_reservation` sungguhan (DB offline → fallback); verifikasi live di simulator/sandbox dianjurkan sebelum deploy produksi.
+
+---
+
+## 65. [V3 Architectural Trap] Anti-Pattern Patching Case-by-Case & Split-Brain Heuristik Regex (Sesi 887216) — 2026-09-16
+
+- **Status:** Fase 1–6 SELESAI terverifikasi (build exit 0; full suite 301 files, 2201 passed, 0 failed). Test baru: `patient-profile-single-child`, `grounding-catalog-metadata`, `cart-tier-collision`, `summarizer-statement-only-887216`.
+- **Perbaikan yang masuk (fondasional, data-driven):**
+  1. `patient-extractor.ts` — penanda anak-lain naik ke level FRASA (`"anak saya yang"` / `"anaknya yang"` + ordinal eksplisit), kata sambung umum `'kalau'`/`'yang'` telanjang dihapus. Rekonsiliasi audit 854065 (sibling) vs 887216 (anak tunggal) tanpa regresi.
+  2. `goal-tracker.ts` — grounding keranjang menyuntik `Durasi Resmi` + `Batasan Usia` per-item dari `durationMinutes`/`ageTier` katalog DB (untuk item tunggal maupun multi) — zero hardcode.
+  3. `context-grounder.ts` — directive fase `TREATMENT_DISCUSSED` tidak lagi memblokir `get_catalog_and_price` untuk pertanyaan durasi/harga/usia.
+  4. `cart-manager.ts` — resolusi collision multi-tier usia memakai `ageTier.min/maxAgeMonths` dari DB (default tier terendah bila usia tak diketahui); `ageTier` dialirkan dari caller `context-grounder.ts`.
+  5. `conversation-summarizer.ts` — statement-only saat pertanyaan durasi, cabang klarifikasi kategori usia, deteksi variasi kaset todong jadwal diperluas.
+  6. `persona.ts` — KONDISI A.2 anti-amnesia keluhan (larang tanya ulang keluhan yang sudah disebut; tutup empatik / tanya gejala pendamping).
+- **Sisa & Tech Debt yang disengaja:**
+  1. Verifikasi manual `npm run chat` skenario 887216 belum dijalankan (simulator interaktif + butuh LLM live, di luar gate offline) — perlu dijalankan manusia sebelum deploy.
+  2. Marka frasa sibling (`"anak saya yang"`) masih berbasis substring frasa — varian tak lazim ("anak kedua saya yang…") belum diuji; diperluas bila ada temuan.
+  3. Bank keyword hafalan (`SYMPTOM_WORDS`, dsb.) di `patient-extractor.ts` belum dikonsolidasi ke katalog DB — sesi ini fokus pada anti-halusinasi entitas, bukan eliminasi seluruh keyword.
+
+---
+
+## 65-legacy. [V3 Architectural Trap] Anti-Pattern Patching Case-by-Case & Split-Brain Heuristik Regex (Sesi 887216) — 2026-09-16 (ARSIP)
+- **Insiden:** Pada sesi simulator 887216, terjadi rentetan anomali kritis simultan:
+  1. Halusinasi Multi-Anak (anak tunggal terbelah menjadi Adik pilek & Kakak 16 bulan).
+  2. Pemblokiran pemanggilan tool `get_catalog_and_price` pada giliran pertanyaan durasi & usia.
+  3. Halusinasi durasi (mengarang 30 menit lalu berubah 40 menit, aslinya 40 menit).
+  4. Misinformasi klinis (anak 16 bulan disarankan paket *Kids Pulih Ceria*, melanggar batas resmi katalog DB di mana 0–24 bulan adalah *Bayi*).
+  5. Keranjang layanan tertukar ke varian usia tertinggi (*Pijat Kids Pulih Ceria 6–8 Tahun* Rp 100.000).
+  6. Kaset rusak menodong hari jadwal 4 putaran beruntun pada pertanyaan teknis (Turn 4, 5, 6, 7).
+  7. Amnesia keluhan (menanyakan apakah si kecil ada keluhan tepat setelah customer menyatakan anak pilek).
+- **Akar Masalah Sistemik (Multi-Layer Root Cause):**
+  1. **Anti-Pattern "Make-Up / Case-by-Case Patching"**:
+     Alih-alih menyelesaikan pemahaman percakapan secara data-driven melalui Database + Tool Contract + State Machine, commit-commit terdahulu (`c7ade53`, `e8d8fbf`, `882c74e`) menggunakan penambalan reaktif per-kasus audit.
+  2. **Pelanggaran Mandat Minimalisasi Regex & Semantic Gatekeeping**:
+     - Di `patient-extractor.ts:484`, kata penghubung umum `"kalau"` dimasukkan ke array `hasReferentialMarker` untuk menambal audit 854065 ("kalau anak saya yang umur 2 tahun"). Akibatnya, setiap pertanyaan biasa yang diawali kata *"Kalau..."* langsung mengaktifkan slot anak kedua.
+     - Array keyword hafalan (`MOM_COMPLAINT_WORDS`, `SYMPTOM_WORDS`, `hasAnyWord` persona) menduplikasi peran NLU LLM dan memotong konteks bahasa alami.
+  3. **Over-Constrained Phase Directive (`context-grounder.ts:344`)**:
+     Directive fase `TREATMENT_DISCUSSED` melarang pemanggilan `get_catalog_and_price` kecuali untuk treatment baru, sehingga saat customer bertanya durasi/usia paket yang sedang dibahas, LLM dilarang memanggil tool dan terpaksa berhalusinasi.
+  4. **Multi-Tier Collision di Cart Manager (`cart-manager.ts`)**:
+     Fungsi `cleanNameOf` memotong kualifikasi usia dalam kurung, menyebabkan 3 varian usia Kids (2-4th, 4-6th, 6-8th) bertabrakan dan di-overwrite oleh varian terakhir di katalog (6-8 tahun).
+  5. **Bypass Data Usia Klinis DB**:
+     Batas usia klinis (0.5–24 bulan untuk Bayi, 24–48 bulan untuk Kids 2–4th) sudah tersimpan di field `ageTier` tabel `Treatment`, namun tidak diekspos ke grounding sesi ataupun divalidasi via tool saat usia ditanyakan.
+- **Mandat Pencegahan (Anti-Recurrence Mandates):**
+  1. **DILARANG KERAS** menambal intent dengan menambah kata tunggal ke array token/regex heuristik (seperti menambahkan `'kalau'`).
+  2. Pemahaman kesesuaian usia dan layanan WAJIB diserahkan ke tool `get_catalog_and_price` berbasis database, bukan dicegat di lapisan string TypeScript.
+  3. Grounding paket perawatan terpilih WAJIB menyertakan metadata durasi resmi dan label rentang usia langsung dari database.
+  4. Fase percakapan dilarang memblokir pertanyaan hal teknis seputar layanan aktif.
+
+---
+
+## 66. [Audit Pasca PLAN 8 Fase 0-2a] Audit Kecerdasan & Efisiensi Percakapan — Temuan Terbuka (2026-09-16)
+
+- **Status:** open (temuan audit; sebagian belum diperbaiki).
+- **Konteks:** Audit menyeluruh diminta user dengan tujuan eksplisit: chatbot harus **efisien, efektif, dan cerdas membalas seperti pemilik klinik sendiri**. PLAN 8 Fase 0-2a sudah dikerjakan (regression gate, graceful shutdown, tenant seam) — ketiganya benar secara arsitektur operasional, TAPI **tidak ada satu pun yang meningkatkan kecerdasan atau efisiensi percakapan**. Temuan di bawah adalah akar yang sesungguhnya.
+
+### 66.1 — Prompt generasi Call 2 = ~42.000 karakter per putaran, tanpa prompt caching
+- **Bukti:** `logs/llm-2026-09-16.jsonl` — `V3_GENERATION` `systemPrompt.Length` = **42.436** dan **43.673** karakter (~10.000–11.000 token) **per balasan**. Rincian blok:
+  - Head statis (identitas + gaya + hierarki + negative constraints + panduan tools) = **5.149 char**. Terbukti **identik antar-turn** (diverifikasi byte-untuk-byte).
+  - Tail dinamis (status data + ringkasan konteks + phase directive + few-shot terpilih) = **~37.000 char**.
+- **Akar:** `persona.ts` menyuntik blok negative constraints (21 aturan, ~9.600 char) dan blok few-shot ke **setiap** panggilan generation. Tidak ada `cache_control`/prompt caching (grep `cache_control|cached_prompt_tokens` hanya menemukan kolom audit, bukan implementasi).
+- **Dampak:** biaya token & latensi per balasan tinggi; ~5.000 char head identik dibayar ulang setiap putaran tanpa manfaat. Inilah penyebab utama "tidak efisien".
+- **Arah solusi (fondasional, bukan tambal):** (a) aktifkan prompt caching provider untuk prefix statis; (b) pindahkan sebagian besar aturan statis keluar dari prompt per-turn (mis. ke tes/guardrail deterministik) — pertanyaan terbuka: berapa banyak negative constraint yang benar-benar perlu di prompt vs. ditegakkan lewat validator.
+
+### 66.2 — Bank few-shot statis mendominasi; tidak ada loop belajar nyata dari koreksi admin
+- **Bukti:** `tests`/`logs` menunjukkan 8 panggilan ROUTING untuk **1 customer** dalam satu sesi; bank exemplar `few-shot-exemplars.ts` (648 baris) di-seed dari `GOLD_FEW_SHOT_EXEMPLARS` (hardcoded 312 baris) dan kurasi manual.
+- **Akar:** `ENABLE_SELF_LEARNING` default `false` (`.env.example:110`); `self-learning.service.ts:25` early-return bila tidak `true`. Jadi koreksi manual CS ke customer **tidak** otomatis menjadi bahan belajar.
+- **Dampak:** sistem tidak benar-benar "belajar seperti pemilik menjawab" — perbaikan gaya selalu manual (commit + deploy), bukan dari data produksi.
+- **Catatan:** ada `self-learning.service.ts` yang bisa mengekstrak jawaban admin, tetapi **dimatikan** dan tidak jelas apakah kualitas ekstraksinya layak. Ini kandidat ROI tertinggi untuk tujuan "membalas seperti saya".
+
+### 66.3 — Skrip seed exemplar menunjuk direktori yang sudah dihapus
+- **Bukti:** `scripts/seed-curated-gold-exemplars.ts:18` mengimpor `../src/slot-engine/gold-few-shot-exemplars`, tetapi `src/slot-engine/` **sudah tidak ada** (didekomisioning). Verifikasi: `Test-Path src\slot-engine\gold-few-shot-exemplars.ts` = False.
+- **Dampak:** skrip ini pasti gagal bila dijalankan; jalur seed exemplar emas putus. Sama kelas dengan temuan F0-1 (golden runner orphan).
+- **Fix:** arahkan ke `src/v3/agent/gold-few-shot-exemplars.ts`.
+
+### 66.4 — Regression gate belum mengukur kualitas percakapan
+- **Bukti:** `tests/golden-corpus/golden-corpus.test.ts` (baru, Fase 0) menegakkan invarian deterministik (no-silent-drop, format, panjang, retensi slate). Assertion bahasa (`mustContain`) **tidak** ditegakkan karena LLM di-stub.
+- **Akar:** tidak ada evaluator kualitas bahasa otomatis pada gate offline. `llm-evaluator.service.ts` ada, tetapi tidak menjadi bagian gate.
+- **Dampak:** regresi gaya/kehangatan/ketepatan bahasa **tidak terdeteksi** oleh gate; hanya regresi struktural yang tertangkap. Gate menjawab "sistem tidak rusak", bukan "sistem menjawab seperti saya".
+- **Arah solusi:** tambah dimensi evaluasi bahasa (LLM-as-judge dengan rubrik persona) sebagai gate terpisah, dijalankan dengan LLM nyata (bukan offline).
+
+### 66.5 — Kualitas env test LLM masih bocor (TD-7 diperkuat)
+- **Bukti:** `llm-gateway.ts:35` fallback `https://api.openai.com/v1`; `model-fallback.ts` menempuh `DEFAULT_FALLBACK_CHAIN` saat env kosong. Saat Fase 0 pertama dijalankan, ini menyebabkan **48/50 skenario ter-skip** (401 → eskalasi sunyi).
+- **Dampak:** environment test/degradasi tidak benar-benar offline secara default; behavior runtime saat provider bermasalah adalah **eskalasi sunyi tanpa balasan** — perlu dikonfirmasi apakah itu memang diinginkan produk untuk outage total.
+
+### 66.6 — Fase 0-2a belum menyentuh dimensi tujuan user
+- **Ringkas:** Fase 0 = observability gate; Fase 1 = reliability; Fase 2a = tenant foundation. Ketiganya **fondasi operasional** yang benar dan selaras mandat AGENTS.md, tetapi untuk tujuan "efisien, efektif, cerdas seperti saya", prioritas seharusnya mencakup 66.1 (efisiensi token/latensi) dan 66.2 (loop belajar). Peta prioritas ada di `docs/plans/PLAN_8_ARCHITECTURE_FIX.md`.
+
+---
+
+## 67. [Follow-Up] Tumpang-tindih Two Clocks: Sliding Window (inbound) vs Smart Context Guard (`last_message_at`) — 2026-09-16
+
+- **Status:** open (tech debt, disengaja ditunda), **pre-existing pada guard**, terekspos oleh fitur baru.
+- **Konteks:** Fitur *Event-Driven Last-Chat Sliding Window* (`rescheduleNoPurchaseOnInboundChat`) menambatkan jadwal NO_PURCHASE ke **chat masuk terakhir customer** (`direction: 'INBOUND'`), stage 1/2/3 → +3/+7/+14 hari pukul 09:40 WIB. Hook dipasang di `message.service.ts` `logMessage()` (guard `!isHistorical && !isSandboxCustomer && INBOUND`).
+- **Akar masalah (multi-layer):** `processDueFollowUps` masih punya gerbang lama *Smart Context Guard* yang memakai `Conversation.last_message_at` — yaitu **aktivitas terakhir apa pun, termasuk balasan bot sendiri**. Jadi ada **dua definisi waktu acuan yang berbeda**:
+  - Anchor baru = inbound customer saja.
+  - Guard lama = inbound **atau** outbound bot.
+- **Gejala nyata (skenario pembuktian):** customer chat pada `T`; bot membalas pada `T+10 menit` (outbound, meng-update `last_message_at`). Stage 1 dijadwalkan `T+3d 09:40`. Saat worker menyapu pada `T+3d 09:40`, guard lama melihat `now - lastMsgAt = 72 jam − 10 menit < 72 jam` → mem-postpone lagi. Karena hasil snap `lastMsgAt + 72h` jatuh tidak jauh dari `now`, jalur fallback `now + 24 jam` aktif → **jadwal NO_PURCHASE meleset +1 hari tanpa sebab bisnis**. Balasan bot sendiri menunda follow-up klinik.
+- **Dampak:** jadwal "H+3" bisa menjadi H+4/H+5 secara non-deterministik; label UI tetap menampilkan "Hari ke-3" sehingga admin melihat diskrepansi. Tidak ada data yang hilang, hanya presisi penjadwalan.
+- **Mengapa ditunda:** memperbaiki berarti menyatukan definisi "chat terakhir" lintas modul (mengubah query worker + semantik `last_message_at`) — blast radius menyentuh NEXT_TREATMENT, REMINDER_H1, REVIEW_H1, dan test `follow-up-engine.test.ts:5d`. Butuh keputusan produk: apakah balasan bot boleh menunda follow-up (perilaku sekarang) atau hanya chat customer (konsisten dengan anchor baru).
+- **Arah solusi fondasional (bukan tambal):** (a) satukan sumber kebenaran ke `Conversation.last_customer_message_at` untuk **semua** follow-up, atau (b) hapus gerbang cooldown lama sepenuhnya karena sliding window sudah menggantikannya, dan pertahankan satu mesin waktu saja. Opsi (b) lebih bersih bila tidak ada kebutuhan "cooldown pasca-interaksi bot".
+- **Bukti kode:** `src/services/follow-up.service.ts` — `rescheduleNoPurchaseOnInboundChat` (anchor inbound) vs blok *Smart Context Guard* `if (lastMsgAt && (now - lastMsgAt) < cooldownMs)`.
+- **Catatan:** `FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS` (default 72) kini berperan ganda: sebagai sisa guard lama **dan** sebagai kompensasi tidak adanya sliding window. Setelah sliding window stabil di produksi, env ini kandidat untuk dideprecate.
+
+### 67.1 — `DELETE /api/admin/reservation/:id` tidak memanggil `onReservationCancelled`
+
+- **Status:** open (pre-existing gap), terekspos oleh fitur `cancel_reason`.
+- **Bukti:** grep `onReservationCancelled` di `src/routes/admin/reservations.subroute.ts` hanya menemukan baris **1487** dan **1663** (jalur edit & PATCH status). Jalur `DELETE` (soft-cancel, baris ~1970+) hanya meng-`update` status reservasi menjadi `cancelled` lalu **membuat ulang** NO_PURCHASE — tidak pernah membatalkan follow-up yang terikat `reservation_id` tersebut.
+- **Dampak:** row `REMINDER_H1` / `REVIEW_H1_*` milik reservasi yang dibatalkan lewat tombol Hapus tetap berstatus `PENDING`/`QUEUED` dan tanpa `cancel_reason`, sehingga berpotensi dikirim untuk treatment yang sudah batal. Ini menurunkan keandalan fitur "Informasi Alasan Pembatalan": admin melihat antrian aktif untuk reservasi yang sudah dibatalkan.
+- **Arah solusi fondasional:** panggil `followUpService.onReservationCancelled(id, tenantId)` di jalur soft-delete **sebelum** blok re-create NO_PURCHASE, agar kedua jalur pembatalan reservasi (edit/PATCH vs DELETE) memakai satu lifecycle yang sama.
+
+---
+
+## 68. [V3 Grounding] Emitter Metadata Durasi & Batasan Usia Katalog pada Keranjang (Sesi 887216) — FIXED 2026-09-16
+
+- **Status:** fixed (2026-09-16).
+- **Akar masalah:** `GoalTracker.formatGoalSessionForPrompt` sebelumnya hanya merender nama paket, nominal harga, dan recipient scope tanpa durasi resmi dan batasan usia per-item dari database katalog. Akibatnya, LLM berisiko halusinasi durasi untuk item tunggal.
+- **Fix (fondasional, data-driven):** Di `src/v3/state/goal-tracker.ts`, baris item keranjang kini menyuntikkan `[Durasi Resmi: ${svc.durationMinutes} menit | Batasan Usia: ${svc.ageTier.label}]` secara data-driven dari `treatmentCatalogService.getAllServices(true)`.
+- **Verifikasi:** `tests/unit/v3/grounding-catalog-metadata.test.ts` (2/2 passed), `tests/unit/v3/multi-item-duration-grounding.test.ts` (3/3 passed), golden corpus 51/51 passed. Full vitest suite 310 files passed 100%.
 

@@ -4,6 +4,7 @@ import { ConversationState } from '@prisma/client';
 import { isPureLeadGreeting } from '../../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../../config/persona';
 import { extractFastIntents } from '../persona';
+import { DAY_EVIDENCE_WORDS } from '../../tools/save-reservation.tool';
 import type { AgentRunnerOutput, V3RetrievedChunk } from '../agent-runner';
 
 /** Fase percakapan deterministik (derivasi dari session state, bukan keyword). */
@@ -288,6 +289,28 @@ export class ContextGrounder {
   }
 
   /**
+   * Audit sesi 614425 (commit booking deterministik): true bila customer sudah
+   * menyepakati treatment DAN menyebut hari/tanggal pada pesan saat ini atau
+   * riwayat — sehingga save_reservation boleh/wajib dipaksa tanpa menyerahkan
+   * keputusan ke judgment LLM. Reuse DAY_EVIDENCE_WORDS (data-driven includes,
+   * tanpa regex baru). FALSE bila reservasi sudah tercatat (anti dobel-kunci).
+   */
+  public static isBookingCommitReady(
+    session: CustomerGoalSession,
+    incomingText: string,
+    history: Array<{ role: string; content: string }> = []
+  ): boolean {
+    const hasTreatment = session.selectedTreatment != null || (session.cartItems && session.cartItems.length > 0);
+    if (!hasTreatment) return false;
+    if (session.booking?.reservationId != null) return false;
+    if (session.booking?.preferredDate != null) return false;
+    const haystack = [incomingText, ...history.filter((h) => h.role === 'user').map((h) => h.content)]
+      .join(' ')
+      .toLowerCase();
+    return DAY_EVIDENCE_WORDS.some((w) => haystack.includes(w));
+  }
+
+  /**
    * Template directive per fase — disisipkan ke system prompt sebelum Call 1.
    * Semua tool tetap dikirim di tools[] (tidak disembunyikan); LLM diarahkan
    * via instruksi eksplisit — lebih robust untuk model kecil daripada
@@ -318,7 +341,7 @@ export class ContextGrounder {
         break;
       case 'TREATMENT_DISCUSSED':
         lines.push(
-          `• Treatment sudah dibahas${session.selectedTreatment ? `: ${session.selectedTreatment}` : ''}. get_catalog_and_price hanya untuk treatment BARU/berbeda yang ditanyakan customer.`,
+          `• Treatment sudah dibahas${session.selectedTreatment ? `: ${session.selectedTreatment}` : ''}. get_catalog_and_price dipanggil bila customer menanyakan durasi (isi asksDuration:true), rincian harga/promo (isi inquirePrice:true), kesesuaian usia/kategori si kecil, atau treatment BARU/berbeda.`,
           '• Jangan menanyakan ulang "rencana mau treatment apa" dari awal.'
         );
         break;
@@ -742,6 +765,9 @@ export class ContextGrounder {
           promoPrice: s.promoPrice,
           originalPrice: s.originalPrice,
           category: s.category,
+          // Audit 887216: metadata rentang usia mengalir ke cart-manager agar
+          // collision multi-tier usia dapat diputus deterministik dari DB.
+          ageTier: (s as any).ageTier,
           // Phase 2 (audit 315036): metadata komposisi bundle untuk
           // rekonsiliasi bundle vs parsial di syncCartItems (data-driven).
           bundleItemIds: (s as any).bundleItemIds || [],
