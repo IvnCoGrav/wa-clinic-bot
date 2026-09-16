@@ -67,9 +67,22 @@ export const DAY_EVIDENCE_WORDS = [
  * "hari ini" tak disebut harfiah (sesi 138207: "kalau siang ini bisa?").
  * Data-driven includes atas teks evidence yang dinormalisasi.
  */
-const SAME_DAY_EVIDENCE_ALIASES = [
+export const SAME_DAY_EVIDENCE_ALIASES = [
   'siang ini', 'pagi ini', 'sore ini', 'malam ini', 'nanti siang', 'nanti sore', 'hari ini juga',
 ];
+
+/**
+ * True bila teks adalah permintaan same-day ("hari ini"/"sekarang"/varian
+ * waktu hari-ini). Reuse seam SAME_DAY_EVIDENCE_ALIASES — tanpa daftar baru.
+ * Same-day dikecualikan dari fail-closed pertanyaan slot: catatannya sudah
+ * ekspektasi-aman (status pending + tanpa janji kedatangan) agar staf tetap
+ * menerima antrean cek rute (sesi 138207).
+ */
+export function isSameDayRequestText(text: string | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (lower.includes('hari ini') || lower.includes('sekarang')) return true;
+  return SAME_DAY_EVIDENCE_ALIASES.some((a) => lower.includes(a));
+}
 
 /**
  * Audit 833178 — Day Evidence Gate (pure function, testable): pastikan
@@ -107,8 +120,37 @@ export function verifyDayMentioned(
     const c = t.charCodeAt(0);
     return c >= 48 && c <= 57;
   };
+  // Pencocokan lingkup SATU pesan (cermin aturan agregat di bawah — tanpa
+  // daftar frasa tanya baru). Dipakai fail-closed rule pertanyaan slot.
+  const messageSupportsDay = (msg: string): boolean => {
+    const oneText = normJoin([msg]);
+    const toks = oneText.split(' ').filter((t) => t.length > 0);
+    const tokSet = new Set(toks);
+    const words = DAY_EVIDENCE_WORDS.filter((w) => bd.includes(w));
+    if (words.length > 0) {
+      const proven = words.some((w) => {
+        if (w.includes(' ')) return oneText.includes(w);
+        if (w === 'minggu') {
+          return toks.some((t, i) => t === 'minggu' && (i === 0 || !isDigitStart(toks[i - 1])));
+        }
+        return tokSet.has(w);
+      });
+      if (proven) return true;
+      const bdIsSameDay = bd.includes('hari ini') || bd.includes('sekarang');
+      if (bdIsSameDay && SAME_DAY_EVIDENCE_ALIASES.some((a) => oneText.includes(a))) return true;
+      return false;
+    }
+    let digits = '';
+    for (let i = 0; i < bd.length; i++) {
+      const ch = bd[i];
+      digits += (ch >= '0' && ch <= '9') ? ch : ' ';
+    }
+    const dayNums = digits.split(' ').filter((t) => t.length > 0).filter((n) => n.length <= 2);
+    return dayNums.some((n) => tokSet.has(n) || tokSet.has(String(Number(n))));
+  };
   // (a) kata waktu eksplisit di bookingDate
   const bdWords = DAY_EVIDENCE_WORDS.filter((w) => bd.includes(w));
+  let aggregateProven = false;
   if (bdWords.length > 0) {
     const proven = bdWords.some((w) => {
       if (w.includes(' ')) return evText.includes(w);
@@ -119,12 +161,12 @@ export function verifyDayMentioned(
       }
       return evTokens.has(w);
     });
-    if (proven) return null;
+    if (proven) aggregateProven = true;
     // Alias same-day (sesi 138207): booking "hari ini"/"sekarang" terbukti
     // bila evidence memuat varian waktu hari-ini ("siang ini", "pagi ini",
     // "sore ini", "malam ini", "nanti siang/sore", "hari ini juga").
     const bdIsSameDay = bd.includes('hari ini') || bd.includes('sekarang');
-    if (bdIsSameDay && SAME_DAY_EVIDENCE_ALIASES.some((a) => evText.includes(a))) return null;
+    if (bdIsSameDay && SAME_DAY_EVIDENCE_ALIASES.some((a) => evText.includes(a))) aggregateProven = true;
   } else {
     // (b) tanpa kata waktu: angka tanggal bookingDate harus muncul di evidence
     let digits = '';
@@ -135,7 +177,25 @@ export function verifyDayMentioned(
     const nums = digits.split(' ').filter((t) => t.length > 0);
     // Ambil angka tanggal (abaikan tahun 4-digit agar "2026" tak jadi bukti)
     const dayNums = nums.filter((n) => n.length <= 2);
-    if (dayNums.some((n) => evTokens.has(n) || evTokens.has(String(Number(n))))) return null;
+    if (dayNums.some((n) => evTokens.has(n) || evTokens.has(String(Number(n))))) aggregateProven = true;
+  }
+  // Fail-closed pertanyaan ketersediaan slot (lapis kontrak tool):
+  // bukti hari yang SELURUHNYA berasal dari pesan bertanda tanya ("Bisa hari
+  // Selasa?", "Tgl 18 bisa?") = customer baru menanyakan ketersediaan, BUKAN
+  // menyetujui booking final. Tanda "?" adalah level tanda baca (bukan
+  // gatekeeper semantik / daftar hafalan baru) + status evidence.
+  // Pengecualian: permintaan same-day (sesi 138207) — catatannya berstatus
+  // pending ekspektasi-aman sehingga staf tetap menerima antrean cek rute.
+  if (aggregateProven) {
+    if (!isSameDayRequestText(bd)) {
+      const hasNonQuestionSupport = (evidence || []).some(
+        (m) => !(m || '').includes('?') && messageSupportsDay(m)
+      );
+      if (!hasNonQuestionSupport) {
+        return `Jadwal kunjungan ("${bookingDate}") masih dalam tahap pengecekan ketersediaan slot oleh tim Bidan — customer baru menanyakan ketersediaan (bukti hari hanya dari kalimat tanya) dan belum menyetujui booking final. Sampaikan dengan hangat bahwa tim sedang mengecekkan jadwal tersebut. DILARANG memanggil save_reservation sebelum customer menyetujui booking secara tegas tanpa tanda tanya!`;
+      }
+    }
+    return null;
   }
   return `Hari/tanggal "${bookingDate}" belum punya jejak eksplisit di pesan customer. Ketersediaan jadwal masih dalam tahap pengecekan — sampaikan dengan hangat bahwa tim sedang mengecek ketersediaan jadwal, jangan memarahi customer atau meminta tanggal secara kaku. Tanyakan preferensi hari/tanggal kunjungan dengan santai terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
 }
@@ -190,6 +250,21 @@ export function isGenericCustomerName(name: string | undefined): boolean {
   const lower = trimmed.toLowerCase();
   if (lower.includes('*')) return true;
   return GENERIC_CUSTOMER_NAMES.some((g) => lower === g);
+}
+
+/**
+ * Batas usia anak untuk label klinis NIFAS (audit Turn 8: ibu dari anak
+ * usia 2 tahun BUKAN pasien nifas — masa nifas ±40–60 hari pasca persalinan).
+ * TODO(tenant-aware): ambang klinis idealnya dari kebijakan per-tenant di DB
+ * (mis. tabel ClinicPolicy) — konstanta sementara agar guard fail-closed
+ * langsung aktif; tercatat di docs/KNOWN_ISSUES.md.
+ */
+export const POSTPARTUM_MAX_CHILD_AGE_MONTHS = 2;
+
+/** Pure (testable): true bila momStage POSTPARTUM sah ditulis untuk usia anak tertua ini. */
+export function isPostpartumStageValid(eldestChildAgeMonths: number | null | undefined): boolean {
+  if (eldestChildAgeMonths == null) return true; // usia tak diketahui → jangan tolak, cukup grounding
+  return eldestChildAgeMonths <= POSTPARTUM_MAX_CHILD_AGE_MONTHS;
 }
 
 export const SAVE_RESERVATION_TOOL_SCHEMA = {
@@ -394,6 +469,20 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       } catch (_) {}
     }
 
+    // Validasi medis momStage (fail-closed): POSTPARTUM DILARANG ditulis ke
+    // rekam reservasi bila anak tertua sudah lewat masa nifas (mis. balita
+    // 2 tahun) — turunkan ke GENERAL agar label "Paska Salin/Nifas" tak
+    // menempel pada ibu yang bukan pasien nifas. Usia tak diketahui → lolos.
+    const knownAges: number[] = children.length > 0
+      ? children.map((c) => c.ageMonths).filter((n): n is number => typeof n === 'number')
+      : (typeof childAgeMonths === 'number' ? [childAgeMonths] : []);
+    const eldestChildAgeMonths: number | null = knownAges.length > 0 ? Math.max(...knownAges) : null;
+    const effectiveMomStage =
+      momStage === 'POSTPARTUM' && !isPostpartumStageValid(eldestChildAgeMonths) ? undefined : momStage;
+    if (momStage === 'POSTPARTUM' && effectiveMomStage === undefined) {
+      console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_POSTPARTUM_DOWNGRADED', tenantId, eldestChildAgeMonths, timestamp: new Date().toISOString() }));
+    }
+
     // Multi-treatment / multi-pasien: gabung semua layanan; kategori otomatis BOTH bila multi.
     const extraClean = (additionalTreatments || []).map((t) => String(t || '').trim()).filter(Boolean);
     const allTreatments = [treatmentName, ...extraClean.filter((t) => t.toLowerCase() !== treatmentName.toLowerCase())];
@@ -402,7 +491,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     // Kategori data-driven dari master katalog (tanpa tebakan regex):
     const treatmentCategory = resolveTreatmentCategory(allTreatments, {
       tenantId,
-      momStage: momStage || undefined,
+      momStage: effectiveMomStage || undefined,
       gestationalWeeks: gestationalWeeks ?? undefined,
       hasChildren: children.length > 0 || Boolean(childName),
       isMulti,
@@ -434,8 +523,8 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     // mengetahui usia kehamilan pasien — tanpa migrasi kolom baru (pola notes→raw_text).
     const momLines: string[] = [];
     if (gestationalWeeks != null) momLines.push(`Usia Kehamilan: ${gestationalWeeks} minggu`);
-    if (momStage) {
-      const stageLabel = momStage === 'PREGNANT' ? 'Ibu Hamil' : momStage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : 'Relaksasi Umum';
+    if (effectiveMomStage) {
+      const stageLabel = effectiveMomStage === 'PREGNANT' ? 'Ibu Hamil' : effectiveMomStage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : 'Relaksasi Umum';
       momLines.push(`Kondisi Ibu: ${stageLabel}`);
     }
     if (momNotes) momLines.push(`Keluhan Bunda: ${momNotes}`);

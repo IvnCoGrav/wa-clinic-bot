@@ -4,7 +4,7 @@ import { ConversationState } from '@prisma/client';
 import { isPureLeadGreeting } from '../../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../../config/persona';
 import { extractFastIntents } from '../persona';
-import { DAY_EVIDENCE_WORDS } from '../../tools/save-reservation.tool';
+import { DAY_EVIDENCE_WORDS, isSameDayRequestText } from '../../tools/save-reservation.tool';
 import type { AgentRunnerOutput, V3RetrievedChunk } from '../agent-runner';
 
 /** Fase percakapan deterministik (derivasi dari session state, bukan keyword). */
@@ -304,6 +304,11 @@ export class ContextGrounder {
     if (!hasTreatment) return false;
     if (session.booking?.reservationId != null) return false;
     if (session.booking?.preferredDate != null) return false;
+    // Fail-closed pertanyaan slot (cermin Day Evidence Gate di kontrak tool):
+    // giliran bertanda tanya BUKAN komitmen booking — DILARANG memaksa
+    // save_reservation. Level tanda baca, bukan daftar hafalan baru.
+    // Pengecualian same-day (sesi 138207): catatannya pending ekspektasi-aman.
+    if ((incomingText || '').includes('?') && !isSameDayRequestText(incomingText)) return false;
     const haystack = [incomingText, ...history.filter((h) => h.role === 'user').map((h) => h.content)]
       .join(' ')
       .toLowerCase();
@@ -345,12 +350,21 @@ export class ContextGrounder {
           '• Jangan menanyakan ulang "rencana mau treatment apa" dari awal.'
         );
         break;
-      case 'SCHEDULING':
-        lines.push(
-          `• Jadwal sudah dibahas${session.booking?.preferredDate ? `: ${session.booking.preferredDate} ${session.booking.preferredTime || ''}`.trimEnd() : ''}. save_reservation tersedia bila data reservasi lengkap.`,
-          '• Jangan menanyakan ulang hari jadwal yang sudah disepakati.'
-        );
+      case 'SCHEDULING': {
+        const awaitingSlot = session.booking?.pendingScheduleCheck === true && session.booking?.reservationId == null;
+        if (awaitingSlot) {
+          lines.push(
+            `• Jadwal sedang dalam proses pengecekan ketersediaan slot${session.booking?.requestedTimeHint ? `: ${session.booking.requestedTimeHint}` : session.booking?.preferredDate ? `: ${session.booking.preferredDate} ${session.booking.preferredTime || ''}`.trimEnd() : ''}. save_reservation DILARANG DIPANGGIL sebelum customer menyetujui booking final.`,
+            '• Jangan menanyakan ulang hari jadwal yang sudah disampaikan customer.'
+          );
+        } else {
+          lines.push(
+            `• Jadwal sudah dibahas${session.booking?.preferredDate ? `: ${session.booking.preferredDate} ${session.booking.preferredTime || ''}`.trimEnd() : ''}. save_reservation tersedia bila data reservasi lengkap.`,
+            '• Jangan menanyakan ulang hari jadwal yang sudah disepakati.'
+          );
+        }
         break;
+      }
       case 'GENERAL':
       default:
         lines.push('• Jawab pertanyaan customer saat ini berdasar konteks yang sudah diketahui.');

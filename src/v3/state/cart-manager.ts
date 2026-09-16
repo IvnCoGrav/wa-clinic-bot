@@ -192,8 +192,11 @@ export class CartManager {
       const toks = significantTokens(name);
       if (toks.length === 0) return false;
       if (toks.some((t) => t.length >= 7 && !GENERIC_CLINIC_TOKENS.has(t) && text.includes(t) && tokenOwnerCount.get(t) === 1)) return true;
-      const hits = toks.filter((t) => text.includes(t)).length;
-      if (hits >= 2 && hits / toks.length >= 0.5) return true;
+      const hits = toks.filter((t) => text.includes(t));
+      // Audit Turn 6 (anti-kunci sepihak): tumpang-tindih yang SELURUHNYA
+      // kata generik ("pijat balita usia 2 tahun" vs "Pijat Kids Ceria")
+      // BUKAN pilihan paket — wajib ada ≥1 token non-generik yang cocok.
+      if (hits.length >= 2 && hits.length / toks.length >= 0.5 && hits.some((t) => !GENERIC_CLINIC_TOKENS.has(t))) return true;
       // Fallback: filter generic tokens for ratio (e.g., "pulih ceria" vs "Pijat Bayi Pulih Ceria")
       const filteredToks = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
       if (filteredToks.length > 0) {

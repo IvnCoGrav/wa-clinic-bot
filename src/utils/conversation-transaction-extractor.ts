@@ -235,9 +235,10 @@ export function parseIndonesianDate(dateStr: string): Date | null {
 
   // 2. Ekstrak Hari, Bulan, Tahun
   // Format: 12 agustus 26 atau 7 Juli 2026 atau 7-07-2026
+  // Tahun default = tahun berjalan (dinamis — DILARANG hardcode tahun statis).
   let day = 1;
   let month = 6; // default Juli
-  let year = 2026;
+  let year = new Date().getFullYear();
 
   // Cek format angka DD-MM-YYYY atau DD/MM/YYYY
   const numericMatch = raw.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
