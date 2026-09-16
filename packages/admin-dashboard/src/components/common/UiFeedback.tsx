@@ -123,7 +123,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         createPortal(
           <div
             style={{ zIndex: 99999 }}
-            className={`fixed top-4 left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] dark:text-[#e9edef] sm:max-w-sm ${toastBorder(toastState.type)}`}
+            className={`fixed top-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] dark:text-[#e9edef] sm:max-w-sm ${toastBorder(toastState.type)}`}
           >
             {toastIcon(toastState.type)}
             <span className="flex-1 leading-snug">{toastState.text}</span>
@@ -139,13 +139,16 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         createPortal(
           <div
             style={{ zIndex: 99999 }}
-            className="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+            className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
             onClick={() => handleConfirmAnswer(false)}
           >
             <div
-              className="bg-white dark:bg-[#202c33] rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative"
+              className="bg-white dark:bg-[#202c33] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative max-h-[88dvh] overflow-y-auto safe-bottom-padding animate-slideUp sm:animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Mobile Drag Handle */}
+              <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden" />
+
               <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 {confirmState.danger ? (
                   <AlertTriangle className="text-rose-500 flex-shrink-0" size={20} />
@@ -163,14 +166,14 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 <button
                   type="button"
                   onClick={() => handleConfirmAnswer(false)}
-                  className="px-4 py-2.5 bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] rounded-xl text-xs font-bold transition active:scale-95"
+                  className="px-4 py-2.5 bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
                 >
                   {confirmState.cancelText}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleConfirmAnswer(true)}
-                  className={`px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 ${
+                  className={`px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer ${
                     confirmState.danger
                       ? 'bg-rose-600 hover:bg-rose-700'
                       : 'bg-[#008069] hover:bg-[#00a884]'

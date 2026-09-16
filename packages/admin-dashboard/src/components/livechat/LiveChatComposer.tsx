@@ -599,7 +599,7 @@ const LiveChatComposerInner = (
           </button>
 
           {toolsMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 animate-fadeIn space-y-1">
+            <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
               <button
                 type="button"
                 onClick={() => {
