@@ -36,6 +36,15 @@ const DEFAULT_SESSION: CustomerGoalSession = {
   genderGreeting: 'Bunda',
 };
 
+/**
+ * Ambang fase klinis Bunda berbasis usia si kecil (bulan) — grounding
+ * formatGoalSessionForPrompt. Nifas ±0–2 bln, menyusui/balita 3–24 bln.
+ * TODO(tenant-aware): ambang klinis idealnya dari kebijakan per-tenant di DB
+ * (mis. tabel ClinicPolicy); tercatat di docs/KNOWN_ISSUES.md.
+ */
+export const NIFAS_MAX_AGE_MONTHS = 2;
+export const TODDLER_MAX_AGE_MONTHS = 24;
+
 const conversationLocks = new Map<string, Promise<any>>();
 const memorySessions = new Map<string, CustomerGoalSession>();
 
@@ -487,7 +496,15 @@ export class GoalTracker {
         : babyAgeMonths < 1
           ? `${Math.max(1, Math.round(babyAgeMonths * 4.345))} minggu`
           : `${babyAgeMonths} bulan`;
-      lines.push(`• Fase Bunda: PASCA MELAHIRKAN / NIFAS / MENYUSUI (Si kecil sudah lahir, usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage (Pijat Hamil) untuk Bunda yang bayinya sudah lahir! Tawarkan Oksitosin Massage Fullbody atau Paket Laktasi untuk pemulihan dan kelancaran ASI. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'POSTPARTUM'.]`);
+      // Tier klinis usia-aware (audit Turn 6–8): NIFAS hanya untuk bayi baru
+      // lahir; ibu balita BUKAN pasien nifas — DILARANG momStage POSTPARTUM.
+      if (babyAgeMonths <= NIFAS_MAX_AGE_MONTHS) {
+        lines.push(`• Fase Bunda: PASCA MELAHIRKAN / NIFAS (Si kecil baru lahir, usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage (Pijat Hamil) untuk Bunda yang bayinya sudah lahir! Tawarkan Oksitosin Massage Fullbody atau Paket Laktasi untuk pemulihan dan kelancaran ASI. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'POSTPARTUM'.]`);
+      } else if (babyAgeMonths <= TODDLER_MAX_AGE_MONTHS) {
+        lines.push(`• Fase Bunda: MENYUSUI / IBU BALITA (Si kecil usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage! Tawarkan Paket Laktasi atau Relaksasi untuk Bunda. DILARANG mengisi momStage: 'POSTPARTUM' — ibu balita bukan pasien nifas.]`);
+      } else {
+        lines.push(`• Fase Bunda: IBU ANAK (Si kecil usia: ${ageText}) [Fokus pada kebutuhan perawatan relaksasi/nutrisi anak. DILARANG mengisi momStage: 'POSTPARTUM'.]`);
+      }
     }
 
     if (session.selectedTreatment) {

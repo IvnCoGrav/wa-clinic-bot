@@ -1354,6 +1354,33 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 69. [Resolusi Siklus Regresi Chatbot & Isolasi Sandbox CAPI] Tech Debt & Tindak Lanjut Manual (2026-09-16)
+
+### 69.1 — Ambang klinis usia masih konstanta TS (TODO tenant-aware, Confirmation Gate terbuka)
+
+- **Status:** open (tech debt disengaja, opsi (b) saas-readiness: hardcode sementara + TODO + catat audit).
+- **Bukti:** `POSTPARTUM_MAX_CHILD_AGE_MONTHS = 2` (`src/v3/tools/save-reservation.tool.ts`), `NIFAS_MAX_AGE_MONTHS = 2` / `TODDLER_MAX_AGE_MONTHS = 24` (`src/v3/state/goal-tracker.ts`).
+- **Mengapa ditunda:** solusi tenant-aware penuh butuh tabel/kebijakan baru (`ClinicPolicy`) + migrasi + refactor grounding — infrastruktur baru (trigger Confirmation Gate). Guard fail-closed aktif sekarang; nilai medis 2 bln (nifas) / 24 bln (balita) bersifat universal, bukan brand.
+- **Opsi keputusan user:** (a) bangun `ClinicPolicy` per-tenant sekarang; (b) pertahankan konstanta (status quo); (c) pindahkan ke `TenantPromptConfig` eksisting (lebih murah dari tabel baru).
+
+### 69.2 — Pembersihan sandbox di live DB WAJIB 2-step verification (BELUM dieksekusi)
+
+- **Status:** open, menunggu verifikasi 2-langkah user (risiko Meta event trigger).
+- **Target:** reservasi dummy `5eb70cfb-2daf-4d88-b410-2b2992d7bb87`, customer `09fb4b5d-4198-462c-a952-fb40442eb510`, nomor `628999985269` di database live (produksi), via protokol skill `server-access` (SSH 43.157.197.148:1403).
+- **Catatan:** antrean CAPI kini terisolasi di lapis query + presentasi (butir Fase 1' di CHANGELOG) dan pengiriman aktual tetap dijaga CAPI GUARD (`src/services/capi.service.ts:746-753`) — cleanup hanya sanitasi data, bukan penutup celah.
+
+### 69.3 — Replay simulator Turn 1–8 belum dieksekusi (jalur interaktif)
+
+- **Status:** open (verifikasi manual). `npm run chat` interaktif tidak dapat dijalankan agen; skenario Turn 6/7/8 tercakup sebagai unit test (`cart-generic-no-unilateral-lock`, `day-evidence-question-gate`, `catalog-known-symptoms-no-reask`, `booking-commit-ready-gate`) — 27/27 hijau.
+- **Langkah manual:** jalankan simulator untuk Turn 6 ("pijat balita usia 2 tahun" → tanya pilihan, bukan klaim sepakat), Turn 7 ("Bisa selasa? Tgl 18?" → tanpa record confirmed), Turn 8 ("Biasa kembung..." → tanpa tanya ulang skrining, tahun 2026, tanpa label Nifas).
+
+### 69.4 — Kontrak test lama yang mengkodifikasi bug diperbarui (catat keputusan)
+
+- **Status:** fixed (2026-09-16) — perubahan kontrak disengaja, bukan regresi.
+- **Bukti:** `tests/unit/v3/premature-reservation-guard.test.ts` + `reservation-response-copy.test.ts` sebelumnya mengharapkan kalimat tanya ("bisa kak?", "apakah bisa?") MELOLOSKAN penulisan reservasi — persis bug Turn 7 (komit Rp 105.000 atas pertanyaan). Diperbarui ke pernyataan tegas untuk jalur lolos; jalur tanya kini diassert MENOLAK (+1 kasus baru). Same-day (`"kalau siang ini bisa?"`, sesi 138207) SENGAJA dikecualikan — catatannya pending ekspektasi-aman agar staf tetap terima antrean cek rute.
+
+---
+
 ## 68. [V3 Grounding] Emitter Metadata Durasi & Batasan Usia Katalog pada Keranjang (Sesi 887216) — FIXED 2026-09-16
 
 - **Status:** fixed (2026-09-16).

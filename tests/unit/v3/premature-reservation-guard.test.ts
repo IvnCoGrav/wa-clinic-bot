@@ -24,6 +24,10 @@ beforeEach(() => {
 /**
  * Phase 3+5 (audit 833178) — Day Evidence Gate: "Besok" karangan tanpa jejak
  * di pesan user DITOLAK sebelum tulis DB; hari yang disebut user LOLOS.
+ * Fase 2' (fail-closed pertanyaan slot): bukti hari yang SELURUHNYA berasal
+ * dari kalimat tanya ("bisa kak?", "apakah bisa?") = pertanyaan ketersediaan,
+ * BUKAN kesepakatan — kasus tanya DITOLAK (lihat day-evidence-question-gate).
+ * Jalur lolos di bawah memakai pernyataan tegas (tanpa "?").
  */
 describe('verifyDayMentioned (pure)', () => {
   it('"Besok" karangan tanpa jejak -> pesan penolakan', () => {
@@ -33,13 +37,13 @@ describe('verifyDayMentioned (pure)', () => {
   });
 
   it('"besok" disebut user -> lolos (null)', () => {
-    expect(verifyDayMentioned('Besok pagi', ['kalau besok apakah bisa?'])).toBeNull();
+    expect(verifyDayMentioned('Besok pagi', ['besok pagi ya'])).toBeNull();
   });
 
   it('"sabtu" disebut user -> lolos; "minggu" usia (3 minggu) -> tetap tolak', () => {
-    expect(verifyDayMentioned('Sabtu', ['hari sabtu bisa kak?'])).toBeNull();
+    expect(verifyDayMentioned('Sabtu', ['hari sabtu ya kak'])).toBeNull();
     expect(verifyDayMentioned('Minggu', ['bayi saya umur 3 minggu'])).not.toBeNull();
-    expect(verifyDayMentioned('Minggu', ['hari minggu bisa?'])).toBeNull();
+    expect(verifyDayMentioned('Minggu', ['hari minggu ya'])).toBeNull();
   });
 
   it('tanpa evidence (kompatibilitas) -> lolos', () => {
@@ -75,9 +79,19 @@ describe('executeSaveReservation day gate (no DB write on reject)', () => {
     const out = await executeSaveReservation({
       ...base,
       bookingDate: 'Sabtu',
-      dayMentionEvidence: ['kalau hari sabtu bisa kak?'],
+      dayMentionEvidence: ['hari sabtu ya kak'],
     });
     expect(out.success).toBe(true);
     expect(vi.mocked(reservationCoreService.saveReservation)).toHaveBeenCalledTimes(1);
+  });
+
+  it('Fase 2: pertanyaan slot ("bisa kak?") -> success:false + DB TAK ditulis', async () => {
+    const out = await executeSaveReservation({
+      ...base,
+      bookingDate: 'Sabtu',
+      dayMentionEvidence: ['kalau hari sabtu bisa kak?'],
+    });
+    expect(out.success).toBe(false);
+    expect(vi.mocked(reservationCoreService.saveReservation)).not.toHaveBeenCalled();
   });
 });

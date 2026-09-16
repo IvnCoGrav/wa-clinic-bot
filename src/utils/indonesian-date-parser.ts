@@ -43,11 +43,26 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
   const clean = input.toLowerCase().trim();
   const target = new Date(referenceDate.getTime());
 
+  // Domain booking = masa depan: tanggal yang jatuh sebelum hari ini
+  // (mis. tahun lampau "2023" karangan LLM) digulir ke kemunculan
+  // berikutnya — DILARANG menyimpan booking masa lalu ke database.
+  const rollPastToFuture = (): void => {
+    const refDay = new Date(referenceDate.getTime());
+    refDay.setHours(0, 0, 0, 0);
+    if (target.getTime() < refDay.getTime()) {
+      target.setFullYear(referenceDate.getFullYear());
+      if (target.getTime() < refDay.getTime()) {
+        target.setFullYear(target.getFullYear() + 1);
+      }
+    }
+  };
+
   // 1. Standar ISO / YYYY-MM-DD
   const isoMatch = clean.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoMatch) {
     target.setFullYear(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
     target.setHours(9, 0, 0, 0);
+    rollPastToFuture();
     return { date: target, isRecognized: true, rawMatched: isoMatch[0] };
   }
 
@@ -76,6 +91,7 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
     const year = dmMatch[3] ? parseInt(dmMatch[3], 10) : target.getFullYear();
     target.setFullYear(year, month, day);
     target.setHours(9, 0, 0, 0);
+    rollPastToFuture();
     return { date: target, isRecognized: true, rawMatched: dmMatch[0] };
   }
 
@@ -95,7 +111,9 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
   // 5. Fallback ke Date.parse standar jika lolos
   const fallbackTs = Date.parse(input);
   if (!isNaN(fallbackTs)) {
-    return { date: new Date(fallbackTs), isRecognized: true, rawMatched: input };
+    target.setTime(fallbackTs);
+    rollPastToFuture();
+    return { date: new Date(target.getTime()), isRecognized: true, rawMatched: input };
   }
 
   return { date: referenceDate, isRecognized: false, rawMatched: '' };
