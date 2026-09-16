@@ -54,7 +54,7 @@ export const AiPersona: React.FC = () => {
   const [exemplars, setExemplars] = useState<FewShotExemplarItem[]>([]);
   const [exemplarsLoading, setExemplarsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'needs-review'>('all');
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -323,7 +323,11 @@ export const AiPersona: React.FC = () => {
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'active' && ex.isActive !== false) ||
-      (statusFilter === 'inactive' && ex.isActive === false);
+      (statusFilter === 'inactive' && ex.isActive === false) ||
+      // PLAN 9 FASE 9.3: antrean review usulan gaya dari harvest livechat.
+      (statusFilter === 'needs-review' &&
+        ex.isActive === false &&
+        ex.tags && ex.tags.some((t) => t.toLowerCase() === 'needs-review'));
     if (!matchesStatus) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -575,6 +579,17 @@ export const AiPersona: React.FC = () => {
                   }`}
                 >
                   Nonaktif ({inactiveCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter('needs-review')}
+                  title="Usulan gaya dari jawaban admin (harvest livechat) yang menunggu review"
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition border ${
+                    statusFilter === 'needs-review'
+                      ? 'bg-[#d69e2e] border-[#d69e2e] text-white'
+                      : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]'
+                  }`}
+                >
+                  Perlu Review ({exemplars.filter((e) => e.isActive === false && e.tags && e.tags.some((t) => t.toLowerCase() === 'needs-review')).length})
                 </button>
               </div>
             </div>

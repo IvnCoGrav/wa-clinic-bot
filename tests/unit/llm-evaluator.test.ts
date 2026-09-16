@@ -47,7 +47,8 @@ describe('LLM-as-Judge Evaluator (Tahap 3)', () => {
     vi.mocked(prisma.message.findMany).mockResolvedValueOnce(rows as any);
     vi.mocked(axios.post).mockResolvedValueOnce({
       data: {
-        choices: [{ message: { content: JSON.stringify({ score: 4, feedback: 'Jawaban baik dan akurat.' }) } }],
+        // PLAN 9 FASE 9.2: format judge = 5 dimensi rubrik persona (bukan skor tunggal).
+        choices: [{ message: { content: JSON.stringify({ warmth: 4, golden_rules: 4, grounding: 4, format: 4, pronoun: 4, feedback: 'Jawaban baik dan akurat.' }) } }],
       },
     } as any);
     vi.mocked(prisma.aiEvaluation.upsert).mockResolvedValueOnce({} as any);
@@ -60,6 +61,8 @@ describe('LLM-as-Judge Evaluator (Tahap 3)', () => {
     expect(prisma.aiEvaluation.upsert).toHaveBeenCalledTimes(1);
     const upsertArg = vi.mocked(prisma.aiEvaluation.upsert).mock.calls[0][0] as any;
     expect(upsertArg.create.score).toBe(4);
+    // Rincian dimensi tersimpan sebagai JSON di awal feedback (tanpa migrasi skema).
+    expect(upsertArg.create.feedback).toContain('warmth');
   });
 
   it('returns 0 when LLM key is mock (no API call)', async () => {
