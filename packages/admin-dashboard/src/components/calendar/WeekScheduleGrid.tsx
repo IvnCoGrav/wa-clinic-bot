@@ -150,6 +150,56 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
+  // Touch tracking and synthetic click suppression guard for mobile
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchMovedRef = useRef(false);
+  const touchEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (touchEndTimeoutRef.current) {
+        clearTimeout(touchEndTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length > 0) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        time: Date.now(),
+      };
+      touchMovedRef.current = false;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartRef.current && e.touches.length > 0) {
+      const dx = e.touches[0].clientX - touchStartRef.current.x;
+      const dy = e.touches[0].clientY - touchStartRef.current.y;
+      if (Math.hypot(dx, dy) > 6) {
+        touchMovedRef.current = true;
+        dragMovedRef.current = true;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchMovedRef.current) {
+      if (touchEndTimeoutRef.current) {
+        clearTimeout(touchEndTimeoutRef.current);
+      }
+      touchEndTimeoutRef.current = setTimeout(() => {
+        dragMovedRef.current = false;
+        touchMovedRef.current = false;
+      }, 120);
+    } else {
+      dragMovedRef.current = false;
+    }
+    touchStartRef.current = null;
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (target.closest('input') || target.closest('select') || target.closest('textarea') || target.closest('button') || target.closest('[data-event-card]')) {
@@ -292,7 +342,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       </div>
 
       {/* Top Interactive Day Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#182229] px-2 py-1.5 z-30 shrink-0 select-none">
+      <div
+        data-horizontal-scroll="true"
+        data-no-swipe-back="true"
+        className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#182229] px-2 py-1.5 z-30 shrink-0 select-none"
+      >
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -315,8 +369,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
         {/* Clickable Day Pills */}
         <div
+          data-horizontal-scroll="true"
+          data-no-swipe-back="true"
           className="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
         >
           {weekDays.map((d, i) => {
             const isSel = isSameDay(d, selectedDate);
@@ -366,10 +422,13 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1050px Calendar Grid) */}
       <div
         ref={topScrollbarRef}
+        data-horizontal-scroll="true"
+        data-no-swipe-back="true"
         onScroll={handleTopScrollbar}
-        className="overflow-x-auto overflow-y-hidden h-3 sm:h-3.5 bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] select-none cursor-pointer"
+        className="overflow-x-auto overflow-y-hidden h-5 sm:h-3.5 bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] select-none cursor-pointer touch-pan-x"
         style={{
           WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-x',
         }}
         title="Geser kalender secara horizontal"
       >
@@ -386,9 +445,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing touch-pan-x touch-pan-y overscroll-contain"
         style={{
           WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-x pan-y',
         }}
       >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
@@ -475,13 +539,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                     >
                       <button
                         onClick={(e) => {
-                          if (dragMovedRef.current) {
+                          if (dragMovedRef.current || touchMovedRef.current) {
                             e.preventDefault();
                             e.stopPropagation();
                             return;
                           }
                           onQuickAdd({ date: day, hour });
                         }}
+                        style={{ touchAction: 'pan-x pan-y' }}
                         className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 text-transparent hover:text-[#008069] dark:hover:text-[#00a884] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
                         title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
                       >

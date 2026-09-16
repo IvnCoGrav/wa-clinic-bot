@@ -187,14 +187,19 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
       style={{ zIndex }}
       onClick={onClose}
     >
       <div
-        className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[85vh] overflow-hidden"
+        className="bg-white border border-[#e9edef] rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90dvh] sm:max-h-[85vh] overflow-hidden animate-slideUp sm:animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Drag Handle */}
+        <div className="pt-2 pb-1 bg-[#f8fafc] sm:hidden flex justify-center shrink-0">
+          <div className="w-10 h-1 bg-[#d1d7db] rounded-full" />
+        </div>
+
         {/* Header */}
         <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] shrink-0">
           <div className="flex items-center space-x-3 min-w-0">

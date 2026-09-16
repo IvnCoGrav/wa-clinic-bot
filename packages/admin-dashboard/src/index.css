@@ -82,7 +82,8 @@ html {
   width: 100%;
   max-width: 100%;
   overscroll-behavior-x: none;
-  overscroll-behavior-y: auto;
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -169,12 +170,34 @@ aside nav {
 /* UI Selection Control: Prevent text highlight on interactive buttons & nav controls only */
 button,
 nav,
+[role="button"],
+a[role="button"],
+.tab,
+.chip,
+.drag-handle,
 .select-none {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
   -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+/* ⚡ Eliminasi 300ms Click Delay di Mobile Web */
+button,
+a,
+[role="button"],
+.tappable {
+  touch-action: manipulation;
+}
+
+/* 🎯 Emil Kowalski Mechanical Press Feedback */
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active,
+.tappable:active {
+  transform: scale(0.98);
+  transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /* Allow text selection everywhere by default (Logs, code, tables, text, inputs, messages) */
@@ -269,7 +292,7 @@ textarea,
 .gradient-btn {
   background: #008069;
   color: #ffffff;
-  transition: all 0.2s ease-in-out;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 150ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 150ms ease;
 }
 
 .gradient-btn:hover {

@@ -296,11 +296,16 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn" onClick={handleCancel}>
+    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn" onClick={handleCancel}>
       <div
-        className="bg-white rounded-2xl sm:rounded-3xl border border-[#e9edef] overflow-hidden w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl animate-in zoom-in-95"
+        className="bg-white rounded-t-3xl sm:rounded-3xl border border-[#e9edef] overflow-hidden w-full max-w-xl max-h-[90dvh] sm:max-h-[92vh] flex flex-col shadow-2xl animate-slideUp sm:animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Drag Handle */}
+        <div className="pt-2 pb-1 bg-[#f8fafc] sm:hidden flex justify-center shrink-0">
+          <div className="w-10 h-1 bg-[#d1d7db] rounded-full" />
+        </div>
+
         {/* Header */}
         <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
@@ -632,7 +637,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex space-x-2 pt-2 border-t border-[#e9edef] bg-[#f8fafc] -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-4 mt-2 sticky bottom-0">
+          <div className="flex space-x-2 pt-2 border-t border-[#e9edef] bg-[#f8fafc] -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-4 mt-2 sticky bottom-0 safe-bottom-padding z-10">
             <button
               type="button"
               onClick={handleCancel}
