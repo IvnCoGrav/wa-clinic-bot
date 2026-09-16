@@ -4,10 +4,10 @@ node_modules/
 .pnp.js
 
 # Environment & secrets — JANGAN PERNAH commit file ini
-.env
-.env.local
-.env.*.local
+.env*
 !.env.example
+*.pem
+*.key
 
 # Build output
 dist/
@@ -92,3 +92,15 @@ scripts/test-v3-migration-verification.*
 scripts/test-v3-simulation.*
 scripts/test-golden-rules-audit.*
 scripts/process-chat-bank.*
+
+# Database Dumps, Spreadsheets & Customer PII (UU PDP)
+scripts/db_customers.json
+scripts/db_reservations.json
+docs/spreadsheet_booking_data.tsv
+scripts/cleanup-bunda-*.sql
+scripts/add-customers*.sh
+scripts/add-remaining*.sh
+scripts/fix-bunda-gita.ts
+scripts/sync-export-data.ts
+scripts/verify-db-live.js
+scripts/test-customer-case-*.ts
