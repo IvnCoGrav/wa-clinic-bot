@@ -13,6 +13,29 @@ import { ConversationState } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 
 /**
+ * PLAN 8 FASE 5b: fail-closed berarti updateConversationState melempar untuk
+ * conversation phantom. Test integrasi gate ini memakai fixture ber-ID tetap,
+ * sehingga harus ditanam dulu ke InMemory repo (menggantikan perilaku lama yang
+ * diam-diam mengupdate objek phantom di memori).
+ */
+async function seedConversationFixture(conversation: any, tenantId: string, customerId?: string) {
+  const { getConversationRepository, InMemoryConversationRepository } = await import(
+    '../../src/repositories/conversation.repository'
+  );
+  const repo = getConversationRepository();
+  if (repo instanceof InMemoryConversationRepository) {
+    repo.seedForTest([
+      {
+        tenant_id: tenantId,
+        customer_id: customerId || 'cust_fixture',
+        current_state: ConversationState.INITIAL,
+        ...conversation,
+      },
+    ]);
+  }
+}
+
+/**
  * Legacy & Repeat Patient Manual Bypass — ditulis ulang pasca-redesign
  * fondasional klasifikasi lifecycle pasien (insiden Bunda Retno 6282132249740).
  *
@@ -198,6 +221,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         is_human_handling: false,
         last_message_at: null,
       };
+      await seedConversationFixture(conversation, 'default-tenant', 'cust_gate_repeat');
 
       const res = await enforceAiScopeGate({
         customer,
@@ -232,6 +256,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         is_human_handling: false,
         last_message_at: null,
       };
+      await seedConversationFixture(conversation, 'default-tenant', 'cust_gate_active');
 
       const res = await enforceAiScopeGate({
         customer,
@@ -266,6 +291,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         is_human_handling: false,
         last_message_at: null,
       };
+      await seedConversationFixture(conversation, 'default-tenant', 'cust_gate_legacy');
 
       const res = await enforceAiScopeGate({
         customer,
@@ -304,6 +330,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         is_human_handling: false,
         last_message_at: null,
       };
+      await seedConversationFixture(conversation, 'default-tenant', 'cust-retno-6282132249740');
 
       const res = await enforceAiScopeGate({
         customer,
@@ -352,6 +379,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         is_human_handling: false,
         last_message_at: null,
       };
+      await seedConversationFixture(conversation, 'default-tenant', 'cust-retno-6282132249740');
 
       const res = await enforceAiScopeGate({
         customer,

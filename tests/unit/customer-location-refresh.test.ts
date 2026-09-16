@@ -1,21 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../../src/db/client', () => ({
-  prisma: {
-    customer: {
-      findUnique: vi.fn(),
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-    },
-    conversation: {
-      findMany: vi.fn(),
-    },
-    message: {
-      findMany: vi.fn(),
-    },
-  },
-}));
+// PLAN 8 FASE 5a: TIDAK lagi me-mock db/client di level file (menyebabkan instance
+// ganda vs mock setup.ts sehingga assignment tak terlihat repository).
+// Mengandalkan mock global setup.ts + override per-test via vi.mocked().
+import { prisma } from '../../src/db/client';
 
 vi.mock('../../src/services/delivery.service', async () => {
   const actual = await vi.importActual<any>('../../src/services/delivery.service');
@@ -48,6 +36,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    // PLAN 8 FASE 5a: test ini mengendalikan perilaku via mock prisma.customer langsung,
+    // sehingga memakai adapter Postgres (dengan Prisma ter-mock), bukan InMemory.
+    const { resetCustomerRepository } = await import('../../src/repositories/customer.repository');
+    resetCustomerRepository();
     prisma = (await import('../../src/db/client')).prisma;
     const mod = await import('../../src/services/customer.service');
     customerService = mod.customerService;
@@ -98,10 +90,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
   }
 
   it('Tier1: bila ada koordinat dari bidan, pilih bidan (paling valid)', async () => {
-    prisma.customer.findUnique = vi.fn().mockResolvedValue(baseCustomer);
-    prisma.conversation.findMany = vi.fn().mockResolvedValue([{ id: 'conv1' }]);
-    prisma.customer.update = vi.fn().mockResolvedValue({ ...baseCustomer });
-    prisma.message.findMany = vi.fn().mockResolvedValue([
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(baseCustomer);
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([
       makeMsg({ direction: 'INBOUND', content: '[LOCATION SHARE: Lat -7.3900, Lng 112.7300]', sender_type: 'CUSTOMER', created_at: new Date('2026-09-01T10:00:00Z') }),
       makeMsg({ direction: 'OUTBOUND', content: '[LOCATION SHARE: Lat -7.3456, Lng 112.7890]', sender_type: 'STAFF', sender_name: 'Bidan Yusi', created_at: new Date('2026-09-06T10:00:00Z') }),
     ]);
@@ -114,10 +106,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
   });
 
   it('Tier2: bila hanya customer shareloc, pilih customer', async () => {
-    prisma.customer.findUnique = vi.fn().mockResolvedValue({ ...baseCustomer, share_location_sent: false });
-    prisma.conversation.findMany = vi.fn().mockResolvedValue([{ id: 'conv1' }]);
-    prisma.customer.update = vi.fn().mockResolvedValue({ ...baseCustomer });
-    prisma.message.findMany = vi.fn().mockResolvedValue([
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue({ ...baseCustomer, share_location_sent: false });
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([
       makeMsg({ direction: 'INBOUND', content: 'https://maps.app.goo.gl/test', sender_type: 'CUSTOMER', payload_raw: { location: { latitude: -7.35, longitude: 112.75 } } }),
     ]);
 
@@ -127,10 +119,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
   });
 
   it('Tier3: bila tidak ada shareloc tapi ada DB coords, pakai DB', async () => {
-    prisma.customer.findUnique = vi.fn().mockResolvedValue(baseCustomer);
-    prisma.conversation.findMany = vi.fn().mockResolvedValue([{ id: 'conv1' }]);
-    prisma.customer.update = vi.fn().mockResolvedValue({ ...baseCustomer });
-    prisma.message.findMany = vi.fn().mockResolvedValue([]);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(baseCustomer);
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
 
     const res = await customerService.refreshCustomerLocationAndOngkir('cust-refresh-1', 'default-tenant');
     expect(res.success).toBe(true);
@@ -140,10 +132,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
 
   it('Tier4: bila tidak ada GPS sama sekali, fallback geocoding', async () => {
     const noCoordCustomer = { ...baseCustomer, lat: null, lng: null, kelurahan: 'Gedangan', kecamatan: 'Gedangan', kota: 'Kabupaten Sidoarjo' };
-    prisma.customer.findUnique = vi.fn().mockResolvedValue(noCoordCustomer);
-    prisma.conversation.findMany = vi.fn().mockResolvedValue([{ id: 'conv1' }]);
-    prisma.customer.update = vi.fn().mockResolvedValue({ ...noCoordCustomer });
-    prisma.message.findMany = vi.fn().mockResolvedValue([]);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(noCoordCustomer);
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...noCoordCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
 
     const res = await customerService.refreshCustomerLocationAndOngkir('cust-refresh-1', 'default-tenant');
     expect(res.success).toBe(true);
@@ -151,10 +143,10 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
   });
 
   it('kalkulasi ongkir & jarak ter-update', async () => {
-    prisma.customer.findUnique = vi.fn().mockResolvedValue(baseCustomer);
-    prisma.conversation.findMany = vi.fn().mockResolvedValue([{ id: 'conv1' }]);
-    prisma.customer.update = vi.fn().mockResolvedValue({ ...baseCustomer });
-    prisma.message.findMany = vi.fn().mockResolvedValue([
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(baseCustomer);
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([
       makeMsg({ direction: 'OUTBOUND', sender_type: 'BIDAN', content: '[LOCATION SHARE: Lat -7.4000, Lng 112.8000]' }),
     ]);
 

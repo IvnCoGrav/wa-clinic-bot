@@ -29,52 +29,11 @@ export class ConversationService {
    * Cari conversation aktif milik customer, atau buat baru dengan state INITIAL jika belum ada.
    */
   public async getOrCreateConversation(customerId: string, tenantId: string): Promise<any> {
-    try {
-      let conversation = await prisma.conversation.findFirst({
-        where: { customer_id: customerId, tenant_id: tenantId },
-        orderBy: { updated_at: 'desc' },
-      });
-
-      if (!conversation) {
-        conversation = await prisma.conversation.create({
-          data: {
-            tenant_id: tenantId,
-            customer_id: customerId,
-            current_state: ConversationState.INITIAL,
-            is_human_handling: false,
-            is_pinned: false,
-            is_manual_unread: false,
-          },
-        });
-      }
-
-      memoryConversations.set(conversation.id, conversation);
-      return conversation;
-    } catch (error) {
-      // Memory store fallback
-      let conv = Array.from(memoryConversations.values()).find((c) => c && c.customer_id === customerId && c.tenant_id === tenantId);
-      if (!conv) {
-        conv = {
-          id: `conv_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          tenant_id: tenantId,
-          customer_id: customerId,
-          current_state: ConversationState.INITIAL,
-          previous_state: null,
-          location_attempts: 0,
-          is_human_handling: false,
-          human_handling_since: null,
-          consecutive_unknown_count: 0,
-          last_message_at: new Date(),
-          is_pinned: false,
-          pinned_at: null,
-          is_manual_unread: false,
-          created_at: new Date(),
-          updated_at: new Date(),
-        };
-        memoryConversations.set(conv.id, conv);
-      }
-      return conv;
-    }
+    // PLAN 8 FASE 5b: persistensi via Repository seam (fail-closed di produksi).
+    const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
+    const conversation = await repo.getOrCreate(customerId, tenantId);
+    memoryConversations.set(conversation.id, conversation);
+    return conversation;
   }
 
   /**
@@ -93,10 +52,13 @@ export class ConversationService {
    * Cari conversation by id (dengan memory store fallback saat DB offline).
    */
   public async getConversationById(id: string, tenantId: string): Promise<any> {
+    // PLAN 8 FASE 5b: baca via Repository (fail-closed); cache baca dipertahankan.
+    const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
     try {
-      const conv = await prisma.conversation.findUnique({ where: { id } });
+      const conv = await repo.findById(id, tenantId);
       return conv || memoryConversations.get(id) || null;
     } catch (error) {
+      console.warn('[Conversation Service] getConversationById DB error (fail-closed, cek cache baca):', (error as Error)?.message);
       return memoryConversations.get(id) || null;
     }
   }
@@ -401,37 +363,25 @@ export class ConversationService {
     if (updates.escalationReason !== undefined) dataToUpdate.escalation_reason = updates.escalationReason;
     if (updates.consecutiveUnknownCount !== undefined) dataToUpdate.consecutive_unknown_count = updates.consecutiveUnknownCount;
 
-    try {
-      const existing = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenant_id: tenantId },
-      });
-      if (!existing) {
-        throw new Error(`Conversation ${conversationId} not found for tenant ${tenantId}`);
-      }
-
-      const updated = await prisma.conversation.update({
-        where: { id: conversationId },
-        data: dataToUpdate,
-      });
-      memoryConversations.set(conversationId, updated);
-      this.publishConversationUpdated(updated, tenantId);
-      return updated;
-    } catch (error) {
-      // Memory fallback update
-      const conv = memoryConversations.get(conversationId);
-      if (conv && conv.tenant_id === tenantId) {
-        if (updates.currentState !== undefined) conv.current_state = updates.currentState;
-        if (updates.previousState !== undefined) conv.previous_state = updates.previousState;
-        if (updates.locationAttempts !== undefined) conv.location_attempts = updates.locationAttempts;
-        if (updates.isHumanHandling !== undefined) conv.is_human_handling = updates.isHumanHandling;
-        if (updates.humanHandlingSince !== undefined) conv.human_handling_since = updates.humanHandlingSince;
-        if (updates.escalationReason !== undefined) conv.escalation_reason = updates.escalationReason;
-        if (updates.consecutiveUnknownCount !== undefined) conv.consecutive_unknown_count = updates.consecutiveUnknownCount;
-        conv.updated_at = new Date();
-        this.publishConversationUpdated(conv, tenantId);
-      }
-      return conv;
-    }
+    // PLAN 8 FASE 5b: tulis via Repository seam (fail-closed di produksi).
+    const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
+    const updated = await repo.updateState(
+      conversationId,
+      {
+        currentState: updates.currentState,
+        previousState: updates.previousState,
+        locationAttempts: updates.locationAttempts,
+        consecutiveUnknownCount: updates.consecutiveUnknownCount,
+        isHumanHandling: updates.isHumanHandling,
+        humanHandlingSince: updates.humanHandlingSince,
+        escalationReason: updates.escalationReason,
+        lastMessageAt: dataToUpdate.last_message_at,
+      },
+      tenantId
+    );
+    memoryConversations.set(conversationId, updated);
+    this.publishConversationUpdated(updated, tenantId);
+    return updated;
   }
 
   /**

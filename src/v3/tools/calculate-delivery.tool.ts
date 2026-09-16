@@ -2,6 +2,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { getCoverageCities, getInsideRegions, getOutsideCities } from '../../config/coverage';
 import { TEMPLATES } from '../../config/persona';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../../utils/google-maps-url-resolver';
 
@@ -115,12 +116,7 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
 // - Wilayah luas dicek via pencocokan token includes terhadap gazetteer/kota,
 //   bukan regex kaku.
 // ---------------------------------------------------------------------------
-const OUTSIDE_CITY_NAMES = [
-  'malang', 'jakarta', 'bandung', 'semarang', 'yogyakarta', 'jogja', 'bali', 'denpasar',
-  'kediri', 'blitar', 'madiun', 'probolinggo', 'pasuruan', 'jember', 'banyuwangi',
-  'bojonegoro', 'tuban', 'lamongan', 'ngawi', 'magetan', 'ponorogo', 'pacitan',
-  'trenggalek', 'tulungagung', 'lumajang', 'bondowoso', 'situbondo', 'medan',
-];
+const OUTSIDE_CITY_NAMES = getOutsideCities();
 
 /** Sinyal awal kota luar via includes data-driven (bukan regex). */
 function textMentionsOutsideCity(text: string): boolean {
@@ -129,16 +125,16 @@ function textMentionsOutsideCity(text: string): boolean {
   return OUTSIDE_CITY_NAMES.some((c) => lower.includes(c));
 }
 
-/** Kota hasil geocoding di luar hierarki cakupan homecare (Surabaya/Sidoarjo/Gresik). */
+/** Kota hasil geocoding di luar hierarki cakupan homecare — daftar dari config/coverage (env-driven). */
 function isOutsideCoverageKota(kota: string | undefined): boolean {
   const lower = (kota || '').toLowerCase();
   if (!lower) return false;
-  const inside = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda', 'jawa timur'];
+  const inside = getInsideRegions();
   if (inside.some((k) => lower.includes(k))) return false;
   return textMentionsOutsideCity(lower);
 }
 
-const COVERAGE_CITY_NAMES = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda'];
+const COVERAGE_CITY_NAMES = getCoverageCities();
 const CITY_DIRECTION_WORDS = ['barat', 'timur', 'selatan', 'utara', 'pusat'];
 const BROAD_PREFIXES = ['rumah d ', 'rumah di ', 'daerah ', 'wilayah ', 'di ', 'ke ', 'kecamatan ', 'kec ', 'kota '];
 

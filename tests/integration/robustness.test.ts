@@ -172,6 +172,19 @@ describe('Robustness & Hardening Suite', () => {
       const { stateMachine } = await import('../../src/state-machine/machine');
       const { customerService } = await import('../../src/services/customer.service');
       const { typingService } = await import('../../src/services/typing.service');
+      // PLAN 8 FASE 5b: tanam fixture conversation (fail-closed melempar untuk phantom).
+      const { getConversationRepository, InMemoryConversationRepository } = await import(
+        '../../src/repositories/conversation.repository'
+      );
+      const convRepo = getConversationRepository();
+      if (convRepo instanceof InMemoryConversationRepository) {
+        convRepo.seedForTest([
+          {
+            id: 'conv-id', tenant_id: 'default-tenant', customer_id: 'cust-id',
+            current_state: 'LOCATION_CONFIRMED',
+          },
+        ]);
+      }
       
       const clearSpy = vi.spyOn(customerService, 'clearPendingLocation').mockResolvedValue({} as any);
       const typingSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true, bubblesSent: 1 });
