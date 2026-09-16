@@ -20,6 +20,23 @@ const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
+// Offset hari jadwal NO_PURCHASE per stage (stage 1, 2, 3 → +3, +7, +14 hari).
+export const NO_PURCHASE_STAGE_DAYS: readonly number[] = [3, 7, 14];
+
+// Alasan pembatalan kanonis (cancel_reason) — single source of truth agar konsisten lintas titik lifecycle.
+export const CANCEL_REASON = {
+  MANUAL_ADMIN: 'Dibatalkan manual oleh Admin',
+  BULK_ADMIN: 'Dibatalkan massal oleh Admin',
+  RESERVATION_CREATED: 'Customer membuat reservasi baru',
+  RESERVATION_CANCELLED: 'Reservasi terkait dibatalkan',
+  HAS_ACTIVE_RESERVATION: 'Customer sudah memiliki reservasi aktif',
+  INBOUND_HAS_RESERVATION: 'Customer sudah memiliki reservasi',
+  OVERDUE_48H: 'Jadwal kadaluarsa (>48 jam)',
+  BYPASS_LABEL: 'Nomor berlabel Skip/Admin CS',
+  WABA_TEMPLATE_NOT_APPROVED: 'Template WABA belum disetujui',
+  WABA_NO_MARKETING_CONSENT: 'Customer belum opt-in marketing',
+} as const;
+
 // Prioritas Tipe Follow-Up: NEXT_TREATMENT (Prioritas 1) lebih diutamakan daripada NO_PURCHASE (Prioritas 2)
 export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
   NEXT_TREATMENT: 1, // Prioritas #1: Pasien pasca treatment / repeat order bernilai tinggi LTV
@@ -225,7 +242,17 @@ export class FollowUpService {
         prisma.followUp.count({ where }),
         prisma.followUp.findMany({
           where,
-          include: {
+          select: {
+            id: true,
+            type: true,
+            stage: true,
+            custom_text: true,
+            scheduled_at: true,
+            sent_at: true,
+            status: true,
+            cancel_reason: true,
+            created_at: true,
+            updated_at: true,
             customer: {
               select: {
                 id: true,
@@ -371,6 +398,110 @@ export class FollowUpService {
   }
 
   /**
+   * Hitung waktu kirim pada jam operasional ramah 09:40 WIB (= 02:40 UTC)
+   * untuk tanggal anchor + dayOffset hari kalender (mengikuti tanggal WIB).
+   */
+  private computeScheduleAtWib0940(anchor: Date, dayOffset: number): Date {
+    const anchorWib = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
+    const year = anchorWib.getUTCFullYear();
+    const month = anchorWib.getUTCMonth();
+    const day = anchorWib.getUTCDate();
+    return new Date(Date.UTC(year, month, day + dayOffset, 2, 40, 0, 0));
+  }
+
+  /**
+   * Event-Driven Last-Chat Sliding Window untuk follow-up NO_PURCHASE.
+   *
+   * Dipanggil saat customer mengirim pesan masuk (inbound) — best-effort &
+   * non-blocking. Menggeser scheduled_at antrian NO_PURCHASE aktif agar selalu
+   * relatif terhadap chat terakhir customer: stage 1/2/3 → chatAt + 3/7/14 hari
+   * pada pukul 09:40 WIB.
+   *
+   * Jika customer ternyata sudah punya reservasi aktif, antrian NO_PURCHASE
+   * dibatalkan dengan cancel_reason yang jelas (bukan dibiarkan terkirim).
+   *
+   * Offline-safe: DB error → tidak pernah melempar ke pemanggil.
+   */
+  public async rescheduleNoPurchaseOnInboundChat(
+    customerId: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+    chatAt: Date = new Date()
+  ): Promise<{ rescheduled: number; cancelled: number }> {
+    const empty = { rescheduled: 0, cancelled: 0 };
+    try {
+      const anchor = new Date(chatAt);
+      if (isNaN(anchor.getTime())) return empty;
+
+      // 1. Reservasi aktif → batalkan antrian NO_PURCHASE dengan alasan eksplisit.
+      let hasReservation: any = null;
+      try {
+        hasReservation = await prisma.reservation?.findFirst?.({
+          where: {
+            customer_id: customerId,
+            status: { in: ['pending', 'confirmed', 'completed'] },
+          },
+        });
+      } catch (_) {}
+      if (hasReservation) {
+        let cancelled = 0;
+        try {
+          const res = await prisma.followUp.updateMany({
+            where: {
+              customer_id: customerId,
+              tenant_id: tenantId,
+              type: 'NO_PURCHASE',
+              status: { in: ['PENDING', 'QUEUED'] },
+            },
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_HAS_RESERVATION },
+          });
+          cancelled = res?.count || 0;
+        } catch (_) {}
+        if (cancelled > 0) {
+          console.log(`[FollowUp Service] Inbound chat: cancelled ${cancelled} NO_PURCHASE (customer ${customerId} has active reservation).`);
+        }
+        return { rescheduled: 0, cancelled };
+      }
+
+      // 2. Geser jadwal antrian NO_PURCHASE aktif relatif ke chat terakhir.
+      let active: any[] = [];
+      try {
+        active = (await prisma.followUp.findMany({
+          where: {
+            customer_id: customerId,
+            tenant_id: tenantId,
+            type: 'NO_PURCHASE',
+            status: { in: ['PENDING', 'QUEUED'] },
+          },
+          select: { id: true, stage: true, scheduled_at: true },
+        })) || [];
+      } catch (_) {
+        return empty;
+      }
+      if (active.length === 0) return empty;
+
+      let rescheduled = 0;
+      for (const fu of active) {
+        const stageIdx = Math.min(3, Math.max(1, fu.stage)) - 1;
+        const scheduledAt = this.computeScheduleAtWib0940(anchor, NO_PURCHASE_STAGE_DAYS[stageIdx] ?? 14);
+        try {
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { scheduled_at: scheduledAt },
+          });
+          rescheduled++;
+        } catch (_) {}
+      }
+      if (rescheduled > 0) {
+        console.log(`[FollowUp Service] Inbound chat: slid ${rescheduled} NO_PURCHASE schedule(s) for customer ${customerId} from ${anchor.toISOString()}.`);
+      }
+      return { rescheduled, cancelled: 0 };
+    } catch (err: any) {
+      console.warn('[FollowUp Service] rescheduleNoPurchaseOnInboundChat failed:', err?.message || err);
+      return empty;
+    }
+  }
+
+  /**
    * Dipanggil saat reservasi baru dibuat (status pending).
    * Membatalkan semua follow-up pending/queued untuk customer ini,
    * dan menandai is_repeat_order jika ada follow-up pending yang aktif.
@@ -403,7 +534,7 @@ export class FollowUpService {
             where: {
               id: { in: activeFollowUps.map(f => f.id) },
             },
-            data: { status: 'CANCELLED' },
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED },
           });
         } catch (_) {}
         console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId}. Set is_repeat_order = true.`);
@@ -566,7 +697,7 @@ export class FollowUpService {
           tenant_id: tenantId,
           status: { in: ['PENDING', 'QUEUED'] },
         },
-        data: { status: 'CANCELLED' },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
       });
       console.log(`[FollowUp Service] Cancelled follow-ups for reservation ${reservationId}`);
     } catch (err: any) {
@@ -757,23 +888,36 @@ export class FollowUpService {
   }
 
   /**
-   * Cancel single follow-up
+   * Cancel single follow-up.
+   * `options.reason` opsional — tersimpan di cancel_reason agar admin tahu
+   * mengapa antrian ini batal. Default: pembatalan manual oleh Admin.
    */
-  public async cancelFollowUp(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+  public async cancelFollowUp(
+    id: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+    options: { reason?: string } = {}
+  ): Promise<boolean> {
+    const reason = (options.reason || '').trim() || CANCEL_REASON.MANUAL_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { id, tenant_id: tenantId },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', cancel_reason: reason },
     });
     return res.count > 0;
   }
 
   /**
-   * Bulk cancel follow-ups (misal semua PENDING atau QUEUED)
+   * Bulk cancel follow-ups (misal semua PENDING atau QUEUED).
+   * `options.reason` opsional — default: pembatalan massal oleh Admin.
    */
-  public async bulkCancelFollowUps(tenantId: string = DEFAULT_TENANT_ID, status: string = 'PENDING'): Promise<number> {
+  public async bulkCancelFollowUps(
+    tenantId: string = DEFAULT_TENANT_ID,
+    status: string = 'PENDING',
+    options: { reason?: string } = {}
+  ): Promise<number> {
+    const reason = (options.reason || '').trim() || CANCEL_REASON.BULK_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { tenant_id: tenantId, status: status as any },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', cancel_reason: reason },
     });
     console.log(`[FollowUp Service] Bulk cancelled ${res.count} follow-ups with status ${status}.`);
     return res.count;
@@ -1019,7 +1163,7 @@ export class FollowUpService {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} for ${fu.customer?.phone} is SKIPPED (Bypass contact label).`);
           await prisma.followUp.update({
             where: { id: fu.id },
-            data: { status: 'SKIPPED' },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL },
           });
           continue;
         }
@@ -1035,7 +1179,7 @@ export class FollowUpService {
           console.warn(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is overdue (>48h). Marked as SKIPPED to prevent spam blast.`);
           await prisma.followUp.update({
             where: { id: fu.id },
-            data: { status: 'SKIPPED' },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.OVERDUE_48H },
           });
           continue;
         }
@@ -1169,7 +1313,7 @@ export class FollowUpService {
             console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is NO_PURCHASE but customer already has reservation (${res.id}, status: ${res.status}). Auto-cancelling.`);
             await prisma.followUp.update({
               where: { id: fu.id },
-              data: { status: 'CANCELLED' },
+              data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.HAS_ACTIVE_RESERVATION },
             });
             return false;
           }
@@ -1365,7 +1509,7 @@ export class FollowUpService {
         console.warn(`[FollowUp WABA] Template ${templateType} status=${mapping.status} (tenant=${tenantId}). Skipped: NOT_APPROVED.`);
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'SKIPPED' },
+          data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_TEMPLATE_NOT_APPROVED },
         });
         this.notifyTemplateNotApproved(tenantId, templateType, mapping.status);
         return false;
@@ -1378,7 +1522,7 @@ export class FollowUpService {
           console.log(`[FollowUp WABA] Skipped ${templateType} to ${fu.customer.phone}: NO_OPT_IN (tenant=${tenantId}).`);
           await prisma.followUp.update({
             where: { id: fu.id },
-            data: { status: 'SKIPPED' },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_NO_MARKETING_CONSENT },
           });
           return false;
         }
