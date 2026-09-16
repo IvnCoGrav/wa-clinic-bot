@@ -134,11 +134,21 @@ export class V3ConversationSummarizer {
       janganDiulang.push('Sapaan pembuka "Halo Bunda!" atau perkenalan diri "Perkenalkan saya Bidan Yusi..." (ini percakapan lanjutan, langsung jawab inti)');
     }
 
-    // 6. Hari/jadwal
+    // 6. Hari/jadwal — sesi 614425: saat hari SUDAH disebut DAN treatment
+    // sudah disepakati, larangan "jangan tanya hari" saja membuat LLM buntu
+    // sehingga malah menanyakan JAM spesifik. Ganti dengan arahan maju:
+    // kunci reservasi via save_reservation, dan larang tanya jam spesifik.
     const rawInputLower = customerInput.toLowerCase();
     const hasDayMention = /\b(hari\s+(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)|besok|lusa|weekend|akhir\s+pekan|sabtu|minggu|senin|selasa|rabu|kamis|jumat)\b/i.test(rawInputLower);
+    const treatmentAgreedForCommit = Boolean(session.selectedTreatment) || (session.cartItems && session.cartItems.length > 0);
+    const commitReady = hasDayMention && treatmentAgreedForCommit && !scheduleAgreed;
     if (hasDayMention) {
-      janganDiulang.push('Menanyakan "mau treatment di hari apa" karena Bunda sudah menyebutkan hari');
+      janganDiulang.push('Menanyakan "mau treatment di hari apa" (hari sudah disebut Bunda — JANGAN tanya ulang)');
+    }
+    if (commitReady) {
+      sudahDibahas.push('Bunda sudah menyebutkan hari kunjungan — siap dikunci menjadi reservasi');
+      janganDiulang.push('Menanyakan JAM kunjungan spesifik ("jam berapa", "mau jam berapa") — jam diatur tim Bidan sesuai rute harian');
+      janganDiulang.push('Meminta konfirmasi ulang treatment/hari yang sudah disepakati — langsung kunci reservasi');
     }
 
     // 7. Cool-off
@@ -152,7 +162,9 @@ export class V3ConversationSummarizer {
     }
     const askedScheduleRecently = recentAssistantMsgs.some((m) => {
       const c = (m.content || '').toLowerCase();
-      return c.includes('di hari apa') || c.includes('jadwal kunjungan') || c.includes('jadwal bidan') || c.includes('ketersediaan jadwal') || c.includes('rencana mau treatment di hari apa');
+      return c.includes('di hari apa') || c.includes('hari atau tanggal') || c.includes('tanggal yang diinginkan')
+        || c.includes('jadwal kunjungan') || c.includes('jadwal treatment') || c.includes('jadwal bidan')
+        || c.includes('ketersediaan jadwal') || c.includes('rencana mau treatment di hari apa');
     });
     if (askedScheduleRecently && (!hasDayMention || scheduleAgreed)) {
       janganDiulang.push('Menanyakan "mau treatment di hari apa" atau menodong jadwal kunjungan lagi (karena baru saja ditanyakan). Jawab dengan ramah tanpa menodong!');
@@ -179,7 +191,10 @@ export class V3ConversationSummarizer {
     };
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
-    if (hasDayMention) {
+    if (commitReady) {
+      sedangDibahas = 'Bunda sudah memilih treatment dan menyebutkan hari kunjungan';
+      yangPerluDijawab = 'Lokasi sudah diketahui dan hari sudah disebut — KUNCI reservasi lewat save_reservation, sampaikan jadwal akan dikonfirmasi tim Bidan. DILARANG menanyakan JAM spesifik.';
+    } else if (hasDayMention) {
       sedangDibahas = 'Bunda menanyakan ketersediaan jadwal';
       yangPerluDijawab = 'Pola "cekkan/infokan" HANYA bila lokasi Bunda sudah diketahui; bila lokasi BELUM diketahui, tanyakan domisili netral dulu (aturan persona 5a) dan DILARANG berjanji mengecek jadwal. (DILARANG bilang "Tentu bisa" sepihak).';
     } else if ((rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama'))
@@ -192,7 +207,11 @@ export class V3ConversationSummarizer {
       yangPerluDijawab = 'Jelaskan paket apa yang sesuai nominal tersebut dari hasil tool get_catalog_and_price (kutip klarifikasi nominal: promo/normal + durasi), sebutkan durasinya, dan tanyakan ramah apakah perawatan untuk Bunda atau si kecil.';
     } else if (rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama')) {
       sedangDibahas = 'Bunda menanyakan durasi waktu pelaksanaan perawatan';
-      yangPerluDijawab = 'Sebutkan durasi pelaksanaan secara jelas beserta manfaat relaksasinya.';
+      yangPerluDijawab = 'STATEMENT-ONLY RESPONSE (ANTI-TODONG JADWAL): Sebutkan durasi pelaksanaan resmi dari katalog beserta manfaatnya (maksimal 2-3 kalimat). DILARANG KERAS MENAMBAHKAN PERTANYAAN JADWAL / HARI!';
+    } else if ((rawInputLower.includes('bulan') || rawInputLower.includes('tahun') || rawInputLower.includes('umur') || rawInputLower.includes('usia'))
+      && (rawInputLower.includes('ikut') || rawInputLower.includes('masuk') || rawInputLower.includes('kategori'))) {
+      sedangDibahas = 'Bunda mengklarifikasi kategori usia dan kesesuaian perawatan si kecil';
+      yangPerluDijawab = 'Jelaskan kesesuaian paket berdasarkan data resmi katalog DB (kategori BAYI untuk usia 0-24 bulan, kategori KIDS untuk 2-10 tahun). STATEMENT-ONLY RESPONSE: Jawab secara ramah dan tuntas tanpa menodong jadwal kunjungan.';
     } else if (rawInputLower.includes('berapa') || rawInputLower.includes('harga') || rawInputLower.includes('tarif') || rawInputLower.includes('biaya')) {
       sedangDibahas = 'Bunda menanyakan tarif / harga layanan';
       yangPerluDijawab = 'Sebutkan tarif promo paket yang relevan secara jelas dan transparan sesuai data katalog grounding.';
