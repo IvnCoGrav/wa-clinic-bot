@@ -11,8 +11,42 @@ function buildTurn0Guide(isFollowUp: boolean, brandBusinessName: string): string
   return `   - PANDUAN SAPAAN TURN-0 (sesi 309274): ${isFollowUp ? 'Ini percakapan lanjutan — DILARANG mengulang sapaan "Halo Bunda" atau perkenalan diri, langsung jawab inti.' : `Ini chat pembuka — AWALI dengan sapaan hangat dan perkenalan resmi: "Halo Bunda! ✨ Perkenalkan, saya Bidan Yusi dari ${brandBusinessName}."`}`;
 }
 
+/**
+ * State-gated location check (audit 993955): lokasi dianggap DIKETAHUI bila
+ * ada kelurahan/kecamatan/kota/rawText di sesi. Satu definisi, dipakai Call 1
+ * & Call 2 agar pruning konsisten.
+ */
+export function hasKnownLocation(session: { location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } } | null | undefined): boolean {
+  const loc = session?.location;
+  return Boolean(loc && (loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText));
+}
+
+/** Label lokasi untuk aturan jadwal (rawText diutamakan, fallback administratif). */
+export function locationLabel(session: { location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } } | null | undefined): string {
+  const loc = session?.location;
+  return (loc?.rawText || loc?.kelurahan || loc?.kecamatan || loc?.kota || '').trim();
+}
+
+/**
+ * Hierarki jadwal & lokasi dengan STATE-GATED PRUNING (audit 993955):
+ * cabang 5a ("LOKASI BELUM DIKETAHUI") dan cabang lokasi-diketahui TIDAK
+ * PERNAH dikirim bersamaan. Bila sesi sudah mencatat lokasi, 5a dicabut total
+ * (information hiding) sehingga LLM secara fisik tak punya instruksi/contoh
+ * yang menyuruhnya menanyakan alamat.
+ */
+export function buildScheduleHierarchyBlock(
+  session: { location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } } | null | undefined
+): string {
+  const knownRule = `• ATURAN JADWAL (LOKASI SUDAH DIKETAHUI: ${locationLabel(session) || 'tercatat di sistem'}): DILARANG KERAS menanyakan lokasi/daerah rumah lagi! Sampaikan ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. Jika customer menanyakan jadwal hari ini / same-day, sampaikan kemungkinan jadwal hari ini penuh dan akan dicekkan terlebih dahulu.`;
+  const unknownRule = `• 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): Jika status lokasi customer BELUM diketahui (belum ada kelurahan/kecamatan): ABAIKAN pola "cekkan/infokan" dan aturan 5b SEPENUHNYA pada turn ini. Bila customer menanyakan ketersediaan jadwal/slot, WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute perjalanan tanpa mengetahui daerah rumah. DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!`;
+  const sharedRules = `• 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG KERAS menggunakan kata "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan! Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.
+   • 5c. (AKUI JAM KUNJUNGAN, sesi 180166): bila customer menyebut preferensi jam/waktu (mis. "jam 10 pagi") dan treatment belum dipilih — akui dan catat preferensi jam tersebut dengan ramah terlebih dahulu ("Baik Bunda, untuk estimasi jam 10 pagi kami catat terlebih dahulu ya..."), DILARANG keras mengabaikan jam yang baru disampaikan customer! Baru kemudian tanyakan rencana perawatan yang diinginkan.`;
+  const gatedRule = hasKnownLocation(session) ? knownRule : unknownRule;
+  return `ATURAN HIERARKI JADWAL & LOKASI (ANTI-HALUSINASI DOMISILI):\n   ${gatedRule}\n   ${sharedRules}`;
+}
+
 export function buildRouterDirectReplyBlock(
-  session: { genderGreeting: string },
+  session: { genderGreeting: string; location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } },
   isFollowUp: boolean,
   brandBusinessName: string
 ): string {
@@ -27,7 +61,5 @@ ${buildTurn0Guide(isFollowUp, brandBusinessName)}
      • DILARANG MENYEBUT DURASI MENIT bila customer tidak bertanya waktu/durasi ("berapa lama", "berapa menit", "durasinya").
      • DILARANG MENYEBUT HARGA/BIAYA bila customer tidak bertanya harga/tarif/ongkir.
      • KATA GANTI KLINIK: selalu "kami"/"Bidan kami" (DILARANG "saya" di luar kalimat perkenalan Turn-0).
-3. ATURAN HIERARKI JADWAL & LOKASI (ANTI-HALUSINASI DOMISILI):
-   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): Jika status lokasi customer BELUM diketahui (belum ada kelurahan/kecamatan): bila customer menanyakan ketersediaan jadwal/slot (misal: "ada jadwal kosong hari ini jam 3 sore?"), WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute perjalanan tanpa mengetahui daerah rumah. DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!
-   • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG KERAS menggunakan kata "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan! Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.`;
+3. ${buildScheduleHierarchyBlock(session)}`;
 }

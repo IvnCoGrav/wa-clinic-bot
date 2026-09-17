@@ -74,7 +74,7 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
         success: true,
         query,
         chunks: [],
-        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, gunakan informasi resmi dari katalog layanan (tool get_catalog_and_price) dan prinsip kebidanan komplementer umum untuk menjawab pertanyaan Bunda secara ramah, solutif, dan profesional. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer.`,
+        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, gunakan informasi resmi dari katalog layanan (tool get_catalog_and_price) dan prinsip kebidanan komplementer umum untuk menjawab pertanyaan Bunda secara ramah, solutif, dan profesional. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer. DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response untuk pertanyaan teknis/persiapan/SOP).`,
       };
     }
 
@@ -83,7 +83,7 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
       success: true,
       query,
       chunks,
-      message: `Ditemukan ${chunks.length} artikel FAQ relevan untuk "${query}":\n${summary}`,
+      message: `Ditemukan ${chunks.length} artikel FAQ relevan untuk "${query}":\n${summary}\n\nPanduan Bidan: Jawab pertanyaan teknis/persiapan/SOP di atas secara ramah, tuntas, dan meyakinkan (maksimal 2-3 kalimat). DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response untuk pertanyaan teknis/persiapan/SOP) — cukup akhiri dengan pernyataan ramah tanpa menodong hari.`,
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_FAQ_ERROR', tenantId, query, error: error.message, timestamp: new Date().toISOString() }));

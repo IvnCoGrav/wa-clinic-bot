@@ -128,7 +128,7 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         },
         specificTreatmentName: {
           type: 'string',
-          description: 'Nama treatment spesifik yang ditanyakan oleh customer (misal: "Pijat Bayi Ceria", "Pijat Bayi Pulih Ceria", "Cukur Rambut Bayi").'
+          description: 'HANYA diisi bila pesan customer SAAT INI menyebut nama paket secara eksplisit. DILARANG mengisi dari riwayat turn sebelumnya; bila customer hanya menyebut keluhan fisik, isi symptoms saja dan kosongkan field ini.'
         },
         inquirePrice: {
           type: 'boolean',
@@ -254,12 +254,31 @@ export async function executeGetCatalog(
       }
     }
 
-    // 3. Pencarian nama spesifik jika customer menanyakan paket tertentu
+    // 3. Otoritas klinis DB & anti-pembajakan parameter (audit 993955 —
+    // clinical dominance): rekomendasi gejala dihitung DULU dari katalog penuh
+    // (independen dari filter nama). Bila ada gejala DAN filter nama spesifik
+    // akan mengusir rekomendasi klinis dari pool, filter nama DIABAIKAN —
+    // nama bawaan LLM dari turn sebelumnya tak boleh membuang terapi resmi
+    // (mis. "Pijat Lahap Juara" membuang "Pijat Kids Pulih Ceria" untuk
+    // kembung). Tanpa gejala, filter nama berlaku normal (intent eksplisit).
+    let clinicalRecommendation: ClinicServiceItem | undefined = undefined;
+    if (effectiveSymptoms.length > 0) {
+      try {
+        clinicalRecommendation = treatmentCatalogService.recommendServiceBySymptoms(
+          effectiveSymptoms, childAgeMonths ?? null, category as any, tenantId
+        );
+      } catch { clinicalRecommendation = undefined; }
+    }
+    let nameFilterApplied = false;
     if (specificTreatmentName && specificTreatmentName.trim()) {
       const query = specificTreatmentName.toLowerCase();
       const matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
-      if (matched.length > 0) {
+      const evictsClinical = clinicalRecommendation != null
+        && matched.length > 0
+        && !matched.some((s) => s.id === (clinicalRecommendation as ClinicServiceItem).id);
+      if (matched.length > 0 && !evictsClinical) {
         filtered = matched;
+        nameFilterApplied = true;
       }
     }
 
@@ -279,16 +298,32 @@ export async function executeGetCatalog(
       };
     });
 
-    if (effectiveSymptoms.length > 0) {
-      const recommended = treatmentCatalogService.recommendServiceBySymptoms(
-        effectiveSymptoms, childAgeMonths ?? null, category as any
-      );
-      if (recommended) {
-        const hit = formattedTreatments.find((t) => t.id === recommended.id);
-        if (hit) hit.isRecommendedForSymptoms = true;
-        else {
-          // Fallback: bila recommended tidak ada di filtered (mis. filter usia
-          // menyempitkan pool), tandai kecocokan nama terdekat di filtered.
+    if (clinicalRecommendation) {
+      const recommended = clinicalRecommendation;
+      const hit = formattedTreatments.find((t) => t.id === recommended.id);
+      if (hit) hit.isRecommendedForSymptoms = true;
+      else {
+        // Re-insert: rekomendasi klinis WAJIB ada di pool — sisipkan kembali
+        // di indeks 0 bila terfilter keluar (mis. filter nama yang diabaikan
+        // di atas atau filter usia). Integritas usia dijaga: hanya sisipkan
+        // bila lolos ambang ageTier yang sama dengan filter usia pool.
+        const ageOk = childAgeMonths === undefined || childAgeMonths === null
+          || !recommended.ageTier
+          || (recommended.ageTier.minAgeMonths <= childAgeMonths
+            && (recommended.ageTier.maxAgeMonths === null || recommended.ageTier.maxAgeMonths >= childAgeMonths));
+        if (ageOk) {
+          formattedTreatments.unshift({
+            id: recommended.id,
+            name: recommended.name,
+            category: recommended.category,
+            durationMinutes: recommended.durationMinutes,
+            originalPrice: recommended.originalPrice,
+            promoPrice: recommended.promoPrice,
+            description: recommended.description,
+            isRecommendedForSymptoms: true,
+          });
+        } else {
+          // Usia tak cocok: tandai kecocokan nama terdekat di pool (legacy).
           const fallback = formattedTreatments.find((t) => t.name.toLowerCase() === recommended.name.toLowerCase());
           if (fallback) fallback.isRecommendedForSymptoms = true;
         }
@@ -400,9 +435,11 @@ export async function executeGetCatalog(
     // + maksimal 1 pelengkap. Mencegah 5–10 layanan masuk konteks generasi
     // yang memicu pelanggaran 2–3 kalimat. Urutan sudah final di atas
     // (rekomendasi gejala di teratas) — potong ekor saja.
-    // Dikecualikan: nama spesifik eksplisit (intent sempit menang) dan pool
-    // klarifikasi nominal (butuh pembanding lintas-audiens; selalu showPrices).
-    if (!showPrices && !specificTreatmentName?.trim() && formattedTreatments.length > 2) {
+    // Dikecualikan: nama spesifik eksplisit yang BENAR-BENAR diterapkan
+    // (intent sempit menang) dan pool klarifikasi nominal (butuh pembanding
+    // lintas-audiens; selalu showPrices). Nama yang diabaikan karena
+    // membajak rekomendasi klinis TIDAK mengecualikan (pool tetap dirampingkan).
+    if (!showPrices && !nameFilterApplied && formattedTreatments.length > 2) {
       formattedTreatments.length = 2;
     }
 
@@ -416,11 +453,12 @@ export async function executeGetCatalog(
       for (const t of formattedTreatments) {
         delete (t as any).originalPrice;
         delete (t as any).promoPrice;
-        delete (t as any).durationMinutes;
       }
     }
-    // Aturan emas 3 (sesi 834128): durasi disembunyikan bila tidak ditanya —
-    // independen dari showPrices (harga ditanya ≠ durasi ditanya).
+    // Aturan emas 3 (sesi 834128) + audit 310995: durasi & harga di-scope
+    // INDEPENDEN. Durasi mengalir bila customer bertanya lama waktu
+    // (asksDuration) walau TIDAK bertanya harga — dan sebaliknya. Durasi
+    // dihapus HANYA bila !showDuration.
     if (!showDuration) {
       for (const t of formattedTreatments) {
         delete (t as any).durationMinutes;
@@ -452,11 +490,16 @@ export async function executeGetCatalog(
     // per opsi: nama + harga + deskripsi manfaat), TANPA label kaku "Rincian:",
     // "Promo"/"Normal" bertele-tele, atau bullet bertingkat — LLM menjiplak
     // format tool result, jadi tool result sendiri wajib bernada percakapan.
-    const summaryList = formattedTreatments.slice(0, 4).map(t =>
-      showPrices
-        ? `• *${t.name}* (Promo ${formatRp(Number(t.promoPrice ?? 0))}, normal ${formatRp(Number(t.originalPrice ?? 0))}${showDuration && t.durationMinutes != null ? `, ${Number(t.durationMinutes)} menit` : ''}): ${t.description}`
-        : `• *${t.name}*: ${t.description}`
-    ).join('\n');
+    const summaryList = formattedTreatments.slice(0, 4).map(t => {
+      if (showPrices) {
+        const dur = showDuration && t.durationMinutes != null ? `, ${Number(t.durationMinutes)} menit` : '';
+        return `• *${t.name}* (Promo ${formatRp(Number(t.promoPrice ?? 0))}, normal ${formatRp(Number(t.originalPrice ?? 0))}${dur}): ${t.description}`;
+      }
+      // Audit 310995: durasi tetap ditampilkan saat customer HANYA bertanya
+      // lama waktu (tanpa harga) — tanpa membocorkan nominal.
+      const durOnly = showDuration && t.durationMinutes != null ? ` (durasi ${Number(t.durationMinutes)} menit)` : '';
+      return `• *${t.name}*${durOnly}: ${t.description}`;
+    }).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;
     if (showPrices && (formattedTreatments.length === 1 || specificTreatmentName)) {
@@ -513,7 +556,12 @@ export async function executeGetCatalog(
     if (!showPrices && !hasKnownSymptoms && formattedTreatments.length > 0) {
       const focus = formattedTreatments.find((t) => t.isRecommendedForSymptoms) || formattedTreatments[0];
       if (focus) {
-        suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description} Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗\n\n(Panduan sistem: JANGAN sebut nominal rupiah/lama waktu, JANGAN todong jadwal hari — customer belum bertanya harga, masih tahap konsultasi.)`;
+        // Audit 310995: bila customer bertanya DURASI, panduan konsultasi wajib
+        // mengizinkan penyebutan durasi resmi (nominal tetap dilarang).
+        const durClause = showDuration && focus.durationMinutes != null
+          ? ` Durasinya ${Number(focus.durationMinutes)} menit ya Bunda.`
+          : '';
+        suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description}${durClause} Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗\n\n(Panduan sistem: ${showDuration ? 'SEBUTKAN durasi resmi di atas' : 'JANGAN sebut lama waktu'}, JANGAN sebut nominal rupiah, JANGAN todong jadwal hari.)`;
       }
     }
 

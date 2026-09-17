@@ -71,8 +71,10 @@ describe('Cart Add-on Assistant Isolation (anti-phantom basket)', () => {
       catalog
     );
 
-    expect(cart.length).toBe(1);
-    expect(cart[0].name.toLowerCase()).toContain('pulih ceria');
+    // Sesi 337880 + mandat Active User Commitment (AGENTS.md): rekomendasi
+    // asisten BUKAN komitmen user. 'batuk pilek' tak memetakan token unik ke
+    // layanan mana pun, sehingga keranjang tetap KOSONG (bukan Pulih sepihak).
+    expect(cart.length).toBe(0);
     expect(cart.some((c) => c.name.toLowerCase().includes('moksa'))).toBe(false);
   });
 });

@@ -43,7 +43,7 @@ import {
 } from './phases/pricing-catalog.phase';
 import {
   SCHEDULING_HIERARCHY_BLOCK,
-  SCHEDULE_NEG_CONSTRAINTS_HEAD,
+  buildScheduleNegConstraintsHead,
   SCHEDULE_NEG_CONSTRAINTS_TAIL,
   TOOL_GUIDANCE_BLOCK,
 } from './phases/scheduling.phase';
@@ -53,6 +53,9 @@ import {
 import {
   buildRouterDirectReplyBlock,
 } from './phases/router-direct-reply.layer';
+import {
+  getRealTimeTemporalGrounding,
+} from '../../../utils/temporal-grounding';
 
 export const EXAMPLES_START_MARKER = '[CONTOH GAYA CHAT WHATSAPP BIDAN YUSI (FEW-SHOT EXAMPLES)]';
 export const EXAMPLES_END_MARKER = '[ATURAN ANTI-OVERCLAIM MEDIS]';
@@ -79,11 +82,11 @@ export interface DynamicPromptResult {
 
 const NEGATIVE_CONSTRAINTS_HEADER = '[NEGATIVE CONSTRAINTS MUTLAK (ATURAN EMAS KLINIK - WAJIB 100% PATUH)]';
 
-function buildNegativeConstraintsBlock(): string {
+function buildNegativeConstraintsBlock(session?: CustomerGoalSession): string {
   return [
     NEGATIVE_CONSTRAINTS_HEADER,
     TONE_NEG_CONSTRAINTS,
-    SCHEDULE_NEG_CONSTRAINTS_HEAD,
+    buildScheduleNegConstraintsHead(session),
     TONE_NEG_CONSTRAINTS_TAIL,
     SAFETY_NEG_CONSTRAINTS_HEAD,
     NO_GUESS_CITY_RULE,
@@ -196,13 +199,16 @@ export function composeRouterPrompt(
 ): string {
   const brand = getBrandIdentity();
   const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
+  // FM2 (sesi 180166): jangkar kalender real-time di ekor dinamis agar LLM
+  // tak menebak tanggal (router prompt memang volatil per-turn).
+  const temporalSuffix = `\n\n${getRealTimeTemporalGrounding().block}`;
 
   return `Kamu adalah Bidan Yusi, asisten AI konsultan resmi dari "${brand.businessName}" (layanan homecare treatment ibu dan bayi di area Surabaya dan Sidoarjo).
 
 ${buildRouterToolRoutingBlock({ isSaveReservationMasked: opts?.isSaveReservationMasked })}
 ${buildRouterDirectReplyBlock(session, isFollowUp, brand.businessName)}
 
-${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirective ? `${opts.phaseDirective}\n\n` : ''}${goalSummary}`;
+${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirective ? `${opts.phaseDirective}\n\n` : ''}${goalSummary}${temporalSuffix}`;
 }
 /**
  * Varian async tenant-aware (Plan 4): Call 1 Router Prompt menyerap konfigurasi
@@ -257,6 +263,7 @@ export function composeSystemPrompt(
   const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
   const brand = getBrandIdentity();
   const greetingInstruction = buildGreetingInstruction(isFollowUp, brand.businessName);
+  const negConstraints = buildNegativeConstraintsBlock(session);
   const injection = opts?.phaseInjection;
   const focus = injection?.focus && injection.focus.length > 0 ? [...new Set(injection.focus)] : null;
   const hierarchy = focus && injection?.slim ? buildHierarchySlim(focus) : buildHierarchyFull();
@@ -276,12 +283,14 @@ ${FEW_SHOT_EXAMPLES_BLOCK}
 
 ${OVERCLAIM_BLOCK}
 
-${buildNegativeConstraintsBlock()}
+  ${negConstraints}
 
 ${TOOL_GUIDANCE_BLOCK}
 
 ${STABLE_PREFIX_MARKER}
 ${goalSummary}${focusSuffix}
+
+${getRealTimeTemporalGrounding().block}
 
 ${buildGreetingTail(session.genderGreeting, greetingInstruction)}`;
 }
@@ -329,6 +338,8 @@ ${dbPrompt.negativeConstraints}
 
 ${STABLE_PREFIX_MARKER}
 ${goalSummary}
+
+${getRealTimeTemporalGrounding().block}
 
 [ATURAN SAPAAN PEMBUKA — WAJIB]
 - Gunakan sapaan "${session.genderGreeting}" untuk customer ini (atau "Bapak" jika customer laki-laki/suami), wajar 1-2 kali per pesan.

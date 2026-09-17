@@ -97,6 +97,16 @@ describe('Date Confirmation Parity Test (Before vs After)', () => {
       bookingDate: 'hari ke-4',
       evidence: ['bisanya hari ke-5 ya mbak'],
     },
+    {
+      name: 'Adopsi komitmen: verba + ?? memakai tanggal ber-tanya (180166)',
+      bookingDate: 'Selasa',
+      evidence: ['Bisa hari selasa depan?', 'Ambil yang pijat pulih ceria sinar moksa itu ya??'],
+    },
+    {
+      name: 'Tanpa verba komitmen, ?? tetap ditolak',
+      bookingDate: 'Selasa',
+      evidence: ['Bisa hari selasa depan?', 'Oke siap ya??'],
+    },
   ];
 
   for (const tc of testCases) {

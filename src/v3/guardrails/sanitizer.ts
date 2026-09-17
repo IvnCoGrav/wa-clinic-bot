@@ -6,6 +6,30 @@ export class OutputSanitizer {
   public static readonly CATALOG_MAX_CHARS = 1500;
 
   /**
+   * Pembersih artefak placeholder sistem (audit 310995): buang salinan token
+   * template bertanda kurung siku yang dipakai di PROMPT (bukan bahasa
+   * customer), mis. "*Rp [Total]*", "[Harga]", "[OngkirPromo]", "[jarak]".
+   * Pola 1 menangani bentuk nominal ber-placeholder; pola 2 menangani token
+   * sistem telanjang. Tanpa memotong kata/angka nyata di tengah kalimat.
+   */
+  public static stripSystemPlaceholders(text: string): string {
+    if (!text) return text;
+    if (!/\[(?:total|harga|ongkir|promo|normal|promoongkir|ongkirpromo|nominal|nama treatment|kelurahan|jarak|kecamatan|normalprice|promoprice|durasi|x)\]/i.test(text)) {
+      return text; // fast-path: tak ada artefak → teks tak disentuh (anti-mutilasi)
+    }
+    return text
+      // "*Rp [Total]*" / "Rp [total]" / "*Rp[Harga]*" (+ kata sambung "totalnya jadi")
+      .replace(/(?:totalnya\s*(?:men)?jadi\s*)?\*?\s*Rp\s*\[(?:total|harga|ongkir|promo|normal|promoongkir|ongkirpromo|nominal)\]\s*\*?/gi, ' ')
+      // Token sistem telanjang: [Total], [Harga], [Nama Treatment], [Kelurahan], [jarak], dll.
+      .replace(/\[(?:total|harga|ongkir|promo|normal|promoongkir|ongkirpromo|nominal|nama treatment|kelurahan|jarak|kecamatan|normalprice|promoprice|durasi|x)\]/gi, ' ')
+      // Hanya rapikan spasi IN-LINE (bukan newline) & pemisah menggantung.
+      .replace(/[^\S\r\n]{2,}/g, ' ')
+      .replace(/[^\S\r\n]+([,.!?])/g, '$1')
+      .replace(/[^\S\r\n]+$/gm, '')
+      .trim();
+  }
+
+  /**
    * Membersihkan tag thinking, monolog internal, dan artefak AI dari balasan sebelum dikirim ke WhatsApp.
    * Plafon karakter tenant-aware: opts.maxChars eksplisit > TenantPersona.max_chars_per_reply (DB)
    * > default konteks-sadar (1500 katalog / 1200 umum). Param ke-4 number tetap didukung
@@ -20,6 +44,11 @@ export class OutputSanitizer {
     if (!rawText || typeof rawText !== 'string') return '';
 
     let text = rawText;
+
+    // 0. Anti-bocor placeholder sistem (audit 310995): LLM dilarang menyalin
+    // token template bertanda kurung siku (mis. "*Rp [total]*", "[Harga]")
+    // ke balasan customer. Kendali gaya deterministik post-generasi.
+    text = OutputSanitizer.stripSystemPlaceholders(text);
 
     // 1. Hapus tag <think>...</think> dan [THINKING]...[/THINKING]
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
@@ -267,26 +296,50 @@ export class OutputSanitizer {
    */
   public static sanitizeFollowUpGreetingRepetition(text: string, isFollowUp: boolean = false): string {
     if (!text || !isFollowUp) return text;
-    let paragraphs = text.split(/\n\s*\n/);
-    if (paragraphs.length < 2) return text;
-    const isGreetingPara = (p: string): boolean => {
-      const t = p.trim().toLowerCase();
-      return (
-        /^(halo|hai|hei|hey)\s+(bunda|bun|kak|min)\b/.test(t) ||
-        /^selamat\s+(pagi|siang|sore|malam)\b/.test(t) ||
-        /^terima\s+kasih\s+sudah\s+menghubungi/.test(t) ||
-        /^perkenalkan,\s+saya\s+bidan\s+yusi/.test(t)
-      );
-    };
-    // Hapus berurutan semua paragraf awal yang murni sapaan (handle emot split)
-    let cut = 0;
-    while (cut < paragraphs.length - 1 && isGreetingPara(paragraphs[cut])) {
-      cut++;
+    let result = text;
+    const paragraphs = text.split(/\n\s*\n/);
+    if (paragraphs.length >= 2) {
+      const isGreetingPara = (p: string): boolean => {
+        const t = p.trim().toLowerCase();
+        return (
+          /^(halo|hai|hei|hey)\s+(bunda|bun|kak|min)\b/.test(t) ||
+          /^selamat\s+(pagi|siang|sore|malam)\b/.test(t) ||
+          /^terima\s+kasih\s+sudah\s+menghubungi/.test(t) ||
+          /^perkenalkan,\s+saya\s+bidan\s+yusi/.test(t)
+        );
+      };
+      // Hapus berurutan semua paragraf awal yang murni sapaan (handle emot split)
+      let cut = 0;
+      while (cut < paragraphs.length - 1 && isGreetingPara(paragraphs[cut])) {
+        cut++;
+      }
+      if (cut > 0) result = paragraphs.slice(cut).join('\n\n').trim();
     }
-    if (cut > 0) {
-      return paragraphs.slice(cut).join('\n\n').trim();
-    }
-    return text;
+    return OutputSanitizer.limitVocativeQuota(result);
+  }
+
+  /**
+   * Kuota sapaan vokatif deterministik (audit 993955 Turn 9): di chat lanjutan,
+   * panggilan "Bunda"/"Bapak" maksimal 1x. Pertahankan kemunculan PERTAMA;
+   * pengulangan sesudahnya dibersihkan rapi (buang vokatif beserta koma/emot
+   * pengikutnya) tanpa memutilasi kata di tengah kalimat. Bukan gatekeeper
+   * semantik — murni kendali gaya output pasca-generasi.
+   */
+  public static limitVocativeQuota(text: string): string {
+    const quota = 1;
+    const pattern = /\b(Bunda|Bapak)\b/gi;
+    let seen = 0;
+    // Ganti kemunculan melebihi kuota: hapus vokatif + pemisah koma/emoji/spasi
+    // langsung di belakangnya secara tunggal, agar tidak meninggalkan " ," / " ya ,".
+    return text.replace(pattern, (match, _g, offset: number) => {
+      seen += 1;
+      if (seen <= quota) return match;
+      return '\u0000'; // marker sementara, dibersihkan di bawah
+    }).replace(/\u0000\s*[,،]?\s*/g, ' ')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+([,.!?])/g, '$1')
+      .replace(/[ \t]+\n/g, '\n')
+      .trim();
   }
 
   /**
