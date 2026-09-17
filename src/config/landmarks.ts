@@ -623,6 +623,77 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lat: -7.2978835,
     lng: 112.749761,
   },
+  // --- PERUMAHAN SURABAYA SELATAN & PERBATASAN (Agenda 1 Fase 4) ---
+  // Mengunci resolve deterministik Tier-0 agar fallback Google/LLM tidak
+  // menebak "Kutusari" Sukomanunggal untuk "Kutisari" Tenggilis Mejoyo.
+  {
+    name: 'Perumahan Kutisari Indah/Asri/Regency',
+    patterns: [
+      /\bkutisari\s*(indah|asri|regency|selatan|utara)?\b/i,
+      /\bperumahan\s*kutisari\b/i,
+    ],
+    kelurahan: 'Kutisari',
+    kecamatan: 'Tenggilis Mejoyo',
+    kota: 'Kota Surabaya',
+    lat: -7.334617,
+    lng: 112.747986,
+  },
+  {
+    name: 'Perumahan Kendangsari & Kendangsari YKP',
+    patterns: [
+      /\bkendangsari(\s*ykp)?\b/i,
+      /\bperumahan\s*kendangsari\b/i,
+    ],
+    kelurahan: 'Kendangsari',
+    kecamatan: 'Tenggilis Mejoyo',
+    kota: 'Kota Surabaya',
+    lat: -7.325722,
+    lng: 112.749476,
+  },
+  {
+    name: 'Perumahan Rewwin (Rungkut Menanggal Harapan)',
+    patterns: [
+      /\b(rewwin|perumahan\s*rewwin)\b/i,
+    ],
+    kelurahan: 'Wedoro',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.350800,
+    lng: 112.740200,
+  },
+  {
+    name: 'Perumahan Pondok Tjandra/Candra Indah',
+    patterns: [
+      /\bpondok\s*(tjandra|candra)(\s*indah)?\b/i,
+    ],
+    kelurahan: 'Tambaksumur',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.348500,
+    lng: 112.775000,
+  },
+  {
+    name: 'Perumahan Makarya Binangun',
+    patterns: [
+      /\bmakarya(\s*binangun)?\b/i,
+    ],
+    kelurahan: 'Janti',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.358000,
+    lng: 112.731000,
+  },
+  {
+    name: 'Perumahan Rungkut Mapan (Barat/Timur/Utara)',
+    patterns: [
+      /\brungkut\s*mapan(\s*barat|\s*timur|\s*utara)?\b/i,
+    ],
+    kelurahan: 'Rungkut Tengah',
+    kecamatan: 'Gunung Anyar',
+    kota: 'Kota Surabaya',
+    lat: -7.326200,
+    lng: 112.767500,
+  },
 ];
 
 /**
@@ -671,6 +742,13 @@ export const ARTERY_CORRIDORS: ArteryCorridor[] = [
   { key: 'tropodo', kelurahan: 'Tropodo', kecamatan: 'Waru' },
   { key: 'pepelegi', kelurahan: 'Pepelegi', kecamatan: 'Waru' },
   { key: 'pondok jati', kelurahan: 'Pagerwojo', kecamatan: 'Buduran' },
+  // Agenda 1 Fase 4: koridor Surabaya Selatan & perbatasan Waru.
+  { key: 'kutisari', kelurahan: 'Kutisari', kecamatan: 'Tenggilis Mejoyo' },
+  { key: 'kendangsari', kelurahan: 'Kendangsari', kecamatan: 'Tenggilis Mejoyo' },
+  { key: 'panjang jiwo', kelurahan: 'Panjang Jiwo', kecamatan: 'Tenggilis Mejoyo' },
+  { key: 'pondok tjandra', kelurahan: 'Tambaksumur', kecamatan: 'Waru' },
+  { key: 'pondok candra', kelurahan: 'Tambaksumur', kecamatan: 'Waru' },
+  { key: 'rewwin', kelurahan: 'Wedoro', kecamatan: 'Waru' },
 ];
 
 const ARTERY_SORTED = [...ARTERY_CORRIDORS].sort((a, b) => b.key.length - a.key.length);

@@ -1073,6 +1073,9 @@ CONTOH:
 - "tunjungan plaza surabaya" → kelurahan: "Kedungdoro", kecamatan: "Tegalsari", kota: "Kota Surabaya"
 - "galaxy mall surabaya" → kelurahan: "Mulyorejo", kecamatan: "Mulyorejo", kota: "Kota Surabaya"
 - "jl raya wadungasri no 12 waru" → kelurahan: "Wadungasri", kecamatan: "Waru", kota: "Kabupaten Sidoarjo"
+- "kutisari indah surabaya" → kelurahan: "Kutisari", kecamatan: "Tenggilis Mejoyo", kota: "Kota Surabaya"
+- "perumahan rewwin" → kelurahan: "Wedoro", kecamatan: "Waru", kota: "Kabupaten Sidoarjo"
+- "pondok candra" → kelurahan: "Tambaksumur", kecamatan: "Waru", kota: "Kabupaten Sidoarjo"
 
 ATURAN:
 - Hanya return JSON, tanpa penjelasan tambahan

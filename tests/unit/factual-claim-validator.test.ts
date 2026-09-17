@@ -78,7 +78,7 @@ describe('Factual claim validator', () => {
     expect(validateFactualClaims(fiktif, [], [], { locationKnown: false }).isValid).toBe(true);
   });
 
-  it('D5 integrasi: klaim absolut lolos re-prompt → SUNYI TOTAL + unresolved_faq', async () => {
+  it('D5 integrasi: klaim absolut lolos re-prompt → ESKALASI DENGAN BALASAN SOPAN (anti-silent-drop)', async () => {
     const sentToCustomer: string[] = [];
     const sm = new ConversationStateMachine({
       simulateHumanReply: async (params: any) => {
@@ -110,9 +110,13 @@ describe('Factual claim validator', () => {
       },
     });
 
-    expect(result.shouldSendReply).toBe(false);
+    // Hard Invariant: Tidak boleh silent drop — balasan ramah pengalihan tetap terkirim
+    expect(result.shouldSendReply).toBe(true);
+    expect(result.replyText).toMatch(/Mohon maaf Bunda.*kami teruskan langsung ke tim Bidan kami/i);
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(sentToCustomer.length).toBe(0);
+    expect(sentToCustomer.length).toBe(1);
+    expect(sentToCustomer[0]).toMatch(/Bidan kami/i);
+
     const updated = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     expect(updated.is_human_handling).toBe(true);
     expect(updated.escalation_reason).toBe('unresolved_faq');

@@ -4,6 +4,48 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Terapi Bapil KIDS Berjenjang Usia & Paritas Katalog (2026-09-17)
+
+- **Paritas Katalog KIDS Bapil**: Menambahkan varian layanan `kids-pulih-2-4th` (Rp85k), `kids-pulih-4-6th` (Rp90k), dan `kids-pulih-6-8th` (Rp100k) ke `DEFAULT_CLINIC_SERVICES` pada `src/services/treatment-catalog.service.ts` serta menyelaraskan deskripsinya di `services_custom.json` agar mencakup kata kunci batuk, pilek, bapil, flu, kembung, sembelit (tutup Issue #78 item 2).
+- **Rekomendasi Gejala Deterministik**: Sistem kini secara presisi merekomendasikan `Pijat Kids Pulih Ceria (2 - 4 Tahun)` untuk balita 3 tahun dengan keluhan batuk pilek, bukan lagi jatuh ke terapi nafsu makan (*Lahap Juara*).
+- **Verifikasi**: Skenario CM-01 pada `tests/integration/v3-conversation-matrix.test.ts` kini mem-pin nama terapi secara deterministik (20/20 hijau); test unit baru pada `tests/unit/v3/symptom-semantic-scorer.test.ts` (10/10 hijau); V3 unit tests 312/312 hijau; golden corpus 61/61 hijau; typecheck exit 0.
+
+#### Fase 6 Agenda 3 — Pruning, Refusal Metadata & Enforce Readiness (2026-09-17)
+
+- **Smart time-hint koreksi-dulu**: token hari terakhir menang bila ada penanda koreksi; kolokasi `besok lusa` → `lusa`; aposisi & filter usia lestari (tutup Issue #78 item 3).
+- **Structural refusal tagging**: `isRefusalOrEscalation` melewatkan D3 deterministik; regex stop-gap tinggal fallback (tutup Issue #74).
+- **Konsolidasi prompt minimal**: 2 kalimat duplikat tak-terpin dipangkas + direktif positif aditif (pin audit & cache utuh; de-bloat penuh ditunda perlu sign-off per-audit).
+- **Enforce readiness**: telemetri `TOOL_MASKING_ENFORCED_APPLIED` + test lock-in enforce/shadow (default tetap shadow).
+- **Verifikasi**: V3 308/308, matrix 20/20, korpus 61/61, typecheck 0, harness 4.83/5.00 tanpa pelanggaran safety floor; full suite 2405 hijau (2 merah pre-existing).
+
+#### Agenda 2 Fase 5 — Conversation Matrix 20 Skenario (2026-09-17)
+
+- **Suite integrasi multi-turn** (`tests/integration/v3-conversation-matrix.test.ts`): 20 skenario / 5 arketipe via jalur produksi + stub deterministik + spy hasil tool; 20/20 hijau (~3,5 dtk offline).
+- **Fix produk**: lead-greeting tak lagi menelan booking berhari+lokasi (guard nama hari/same-day); temuan tercatat: gap item terapi KIDS-bapil, edge hint dua-hari.
+- **Verifikasi**: matrix 20/20, korpus 61/61, V3 295/295, typecheck 0, harness 4.78/5.00 tanpa pelanggaran safety floor; full suite 2391 hijau (2 merah pre-existing).
+
+#### Agenda 1 Fase 4 — Geocoding Hardening & Gazetteer Wilayah Utama (2026-09-17)
+
+- **Anti-kontradiksi Aturan 21**: kelima pesan `calculate_delivery` yang menganjurkan share location dibersihkan; klausa penjaga "(tanpa menanyakan nomor jalan atau share location)" dipertahankan.
+- **Tier-0 deterministik**: 6 landmark perumahan (Kutisari, Kendangsari, Rewwin, Pondok Tjandra/Candra, Makarya Binangun, Rungkut Mapan) + 6 koridor arteri; contoh grounding LLM anti-Sukomanunggal.
+- **Verifikasi**: test baru 4/4, geocoding eksisting 9/9, V3 295/295, korpus 61/61, typecheck 0.
+
+#### Housekeeping, Dynamic Phase Injection & Taksonomi Usia Deterministik (2026-09-17)
+
+- **Penyelarasan legacy test**: `v3-audit-homecare-fix.test.ts` disesuaikan prasyarat mutlak lokasi homecare (sesi berwilayah tanpa detail jalan) — 14/14 hijau.
+- **Dynamic Phase Injection (Fase 3.5, opt-in)**: `composeSystemPrompt` mendukung `phaseInjection { focus, slim }` + `derivePhaseFocus` murni (EARLY_LOCATION/CONSULTATION/SCHEDULING); default tetap rakitan penuh byte-identik, mode focus melestarikan prefix cache.
+- **Taksonomi usia deterministik**: ambang kanonis 24 bulan (`resolveChildAgeCategory`, <24 BABY / ≥24 KIDS) dipakai extractor, tool katalog (snap kategori), dan service katalog; bridge 0-24 bulan pensiun sebagai kode mati.
+- **Anti-menu brosur**: suplai mode konsultasi dipangkas ke 1 rekomendasi + 1 pelengkap; mode harga/nama eksplisit utuh.
+- **Verifikasi**: V3 291/291, korpus 61/61, paritas 15/15, typecheck 0, eval audit LLM 4.77/5.00 dengan 0 pelanggaran safety floor; full suite 2368 hijau (2 merah pre-existing terdokumentasi).
+
+#### Arsitektur Prompt Modular Berlapis — Dekomposisi Persona Monolitik (2026-09-17)
+
+- **Lapisan Keselamatan Global (`src/v3/agent/prompt/layers/global-safety.layer.ts`)**: isolasi aturan safety-critical (skrining trauma jatuh audit 337101, jeda vaksin 48–72 jam audit 222655, newborn 0–28 hari, anti-overclaim, injection defense) sebagai single source of truth yang selalu disuntikkan tiap turn.
+- **Lapisan Persona Inti (`layers/core-persona.layer.ts`)**: identitas Bidan Yusi, nada WhatsApp mengayomi, kata ganti "kami", format 1-bintang, batas 2–3 kalimat, contoh few-shot statis, sapaan Turn-0/lanjutan.
+- **Direktif Fase Operasional (`prompt/phases/`)**: `location-rules` (ongkir, anti-tanya km, anti-asumsi Waru), `pricing-catalog` (konsultasi vs transaksional, multi-anak, klarifikasi ambigu), `scheduling` (anti-todong jadwal/jam, mandat POV first-person, gating `save_reservation`).
+- **Komposer & Fasad (`prompt/prompt-composer.ts`, `persona.ts` tipis)**: antarmuka `PersonaPromptBuilder` dipertahankan 100%; overlay tenant DB dan brand per-tenant tidak berubah.
+- **Verifikasi zero-regresi**: output byte-identik 4/4 varian; `typecheck` exit 0; paritas tanggal 15/15; tool-masker 10/10; anti-silent-drop 8/8; safety/persona/cache 28/28; korpus emas 61/61. Full suite 2355 hijau, 3 merah pre-existing (tercatat `docs/KNOWN_ISSUES.md` #72/#75).
+
 #### Resolusi Fondasional Siklus Regresi Chatbot Sesi 173235: Anti-Phantom Basket Add-On, Grounding Lokasi Cool-Off, & Fail-Closed Booking Gate (2026-09-16)
 
 - **Fase 1 — Isolasi Keranjang Add-on Anti-Phantom Basket (`src/v3/state/cart-manager.ts`)**:

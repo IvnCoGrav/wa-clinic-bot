@@ -255,11 +255,13 @@ export async function reportTurnError(
       status: 'ERROR',
     });
   } catch {}
+  const greeting = session?.genderGreeting || 'Bunda';
+  const fallbackReply = `Mohon maaf ${greeting}, sistem kami sedang mengalami kendala teknis sejenak. Pesan Bunda sudah kami teruskan ke tim Bidan kami ya agar segera dibantu 🙏😊`;
   return {
-    replyText: '',
+    replyText: fallbackReply,
     executedTools: [],
     updatedSession: session,
-    shouldSendReply: false,
+    shouldSendReply: true,
     isEscalated: true,
     retrievedChunks: turn.retrievedChunks,
     fewShotExemplars: turn.fewShotExemplars,
@@ -349,13 +351,35 @@ export class GenerationStage {
       dynamicToolChoice = { type: 'function', function: { name: 'get_catalog_and_price' } };
     }
 
+    // Tool-Masking Evaluation (FASE 2, SHADOW MODE)
+    const { evaluateToolMasking } = await import('../../tools/tool-masker');
+    const { isToolMaskingEnforced } = await import('../../../config/feature-flags');
+    const maskingEval = evaluateToolMasking(ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory);
+
     // Tool Schema Filtering untuk Call 1:
     // Jika di-forcing ke 1 tool spesifik, kirim HANYA tool tersebut (hemat ~1.500 token).
-    // Jika 'auto', kirim seluruh ALL_V3_TOOLS agar router bebas memilih.
-    let toolsForCall1: any[] = ALL_V3_TOOLS;
+    // Jika enforce mode aktif: kirim maskingEval.availableTools.
+    // Jika shadow mode (default): kirim ALL_V3_TOOLS (perilaku produksi utuh).
+    const baseToolsForCall1 = isToolMaskingEnforced() ? maskingEval.availableTools : ALL_V3_TOOLS;
+    // Fase 6 K4 — telemetri cutover: catat setiap turn di mana enforce aktif
+    // memangkas tool (fail-safe: logging DILARANG menggagalkan turn).
+    if (isToolMaskingEnforced() && maskingEval.maskedToolNames.length > 0) {
+      try {
+        console.log(JSON.stringify({
+          event: 'TOOL_MASKING_ENFORCED_APPLIED',
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          maskedTools: maskingEval.maskedToolNames,
+          maskingReason: maskingEval.reason,
+          toolsSent: baseToolsForCall1.map((t: any) => t?.function?.name || t?.name),
+          timestamp: new Date().toISOString(),
+        }));
+      } catch {}
+    }
+    let toolsForCall1: any[] = baseToolsForCall1;
     if (typeof dynamicToolChoice === 'object' && dynamicToolChoice?.function?.name) {
       const forcedName = dynamicToolChoice.function.name;
-      const matchingTool = ALL_V3_TOOLS.find((t: any) => t.function?.name === forcedName);
+      const matchingTool = baseToolsForCall1.find((t: any) => t.function?.name === forcedName);
       if (matchingTool) {
         toolsForCall1 = [matchingTool];
       }
@@ -394,18 +418,19 @@ export class GenerationStage {
     }
 
     // Tracing Call 1 (Tool Routing): latensi bersih model + token/biaya per-call
+    const parsedCalls = Array.isArray(toolCalls)
+      ? toolCalls.map((tc: any) => {
+          let a: any = {};
+          try {
+            a = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {};
+          } catch {}
+          return { name: tc.function?.name || 'unknown', args: a };
+        })
+      : [];
+
     {
       const firstDurationMs = Date.now() - firstStartedAt;
       const firstUsage: any = (firstData as any)?.usage;
-      const parsedCalls = Array.isArray(toolCalls)
-        ? toolCalls.map((tc: any) => {
-            let a: any = {};
-            try {
-              a = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {};
-            } catch {}
-            return { name: tc.function?.name || 'unknown', args: a };
-          })
-        : [];
       await tel.recordCall({
         flowType: 'V3_ROUTING',
         reply: parsedCalls.length > 0
@@ -422,6 +447,39 @@ export class GenerationStage {
       });
       turn.perCallLogged = true;
     }
+
+    // Telemetri Shadow Evaluation (FASE 2, SHADOW MODE)
+    try {
+      const calledToolNames = parsedCalls.map((t) => t.name);
+      const isSaveCalled = calledToolNames.includes('save_reservation');
+      let classification: string;
+      if (!maskingEval.isSaveReservationAllowed && isSaveCalled) {
+        classification = 'LLM_OVER_TRIGGER';
+      } else if (!maskingEval.isSaveReservationAllowed && maskingEval.suspectOverRestrictive) {
+        classification = 'MASKER_OVER_RESTRICTIVE_SUSPECT';
+      } else if (!maskingEval.isSaveReservationAllowed && !isSaveCalled) {
+        classification = 'ALIGNED_BLOCKED';
+      } else if (maskingEval.isSaveReservationAllowed && isSaveCalled) {
+        classification = 'ALIGNED_ALLOWED';
+      } else {
+        classification = 'LLM_UNDER_TRIGGER';
+      }
+
+      const { maskPhoneNumber } = await import('../../../utils/pii-masker');
+      console.log(JSON.stringify({
+        event: 'TOOL_MASKING_SHADOW_EVAL',
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        phone: maskPhoneNumber(turn.phone),
+        isSaveReservationAllowed: maskingEval.isSaveReservationAllowed,
+        maskedTools: maskingEval.maskedToolNames,
+        maskingReason: maskingEval.reason,
+        calledTools: calledToolNames,
+        classification,
+        suspectOverRestrictive: maskingEval.suspectOverRestrictive,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch {}
 
     return { assistantMessage, toolCalls, reasoning };
   }

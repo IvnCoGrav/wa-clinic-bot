@@ -564,26 +564,38 @@ export class ContextGrounder {
     if (lower.includes('weekdays')) return 'weekday';
     if (lower.includes('weekday')) return 'weekday';
     if (lower.includes('hari ini')) return 'hari ini';
+    // Kolokasi "besok lusa" = lusa (satu leksem, bukan dua hari).
+    if (lower.includes('besok lusa')) return 'lusa';
     let norm = '';
     for (let i = 0; i < lower.length; i++) {
       const ch = lower[i];
       norm += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
     }
+    // Fase 6 K1 (Issue #78 item 3): koreksi hari dalam satu kalimat
+    // ("Sabtu... ganti Minggu", "bukan Senin tapi Rabu") dimenangkan token
+    // hari TERAKHIR — token pertama yang sudah dibatalkan DILARANG menang.
+    // Tanpa penanda koreksi (aposisi "Jumat besok", opsi "Sabtu atau Minggu?")
+    // berlaku first-wins seperti semula. Input satu-hari tak terpengaruh.
     const tokens = norm.split(' ').filter((t) => t.length > 0);
     const HINTS = ['sekarang', 'besok', 'lusa', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'weekend', 'weekday'];
-    for (const t of tokens) {
+    const tokenSet = new Set(tokens);
+    const hasCorrection = ['ganti', 'tapi', 'melainkan', 'rubah', 'ubah', 'koreksi', 'malah', 'tepatnya', 'bukan']
+      .some((w) => tokenSet.has(w));
+    const valid: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
       if (HINTS.includes(t)) {
         if (t === 'minggu') {
-          const idx = tokens.indexOf(t);
-          if (idx > 0) {
-            const c = tokens[idx - 1].charCodeAt(0);
+          if (i > 0) {
+            const c = tokens[i - 1].charCodeAt(0);
             if (c >= 48 && c <= 57) continue; // "3 minggu" = usia, bukan hari
           }
         }
-        return t;
+        valid.push(t);
       }
     }
-    return null;
+    if (valid.length === 0) return null;
+    return hasCorrection ? valid[valid.length - 1] : valid[0];
   }
 
   /**

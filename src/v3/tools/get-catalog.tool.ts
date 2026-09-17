@@ -1,4 +1,5 @@
 import { treatmentCatalogService, ClinicServiceItem } from '../../services/treatment-catalog.service';
+import { PatientProfileExtractor } from '../state/patient-extractor';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -151,8 +152,18 @@ export async function executeGetCatalog(
   tenantId: string = DEFAULT_TENANT_ID,
   sessionCtx?: CatalogSessionContext
 ): Promise<GetCatalogOutput> {
-  const { category, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
+  const { category: requestedCategory, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
   void gestationalWeeks;
+  // Tahap 3 (taksonomi deterministik): kunci kategori BABY/KIDS ke ambang
+  // kanonis 24 bulan bila usia diketahui — <24 BABY murni, ≥24 KIDS murni.
+  // MOMS/BOTH/tanpa-kategori tidak disentuh (bukan pasien usia anak).
+  let category = requestedCategory;
+  const canonicalChildCategory = PatientProfileExtractor.resolveChildAgeCategory(
+    typeof childAgeMonths === 'number' ? childAgeMonths : undefined
+  );
+  if ((category === 'BABY' || category === 'KIDS') && canonicalChildCategory && category !== canonicalChildCategory) {
+    category = canonicalChildCategory;
+  }
   // Fase 4' (anti-kaset rusak): gabung keluhan argumen LLM dengan keluhan
   // yang SUDAH diketahui sesi (dedupe). Menutup kasus LLM lupa mengisi
   // symptoms padahal customer sudah menulis keluhan ("Biasa kembung").
@@ -176,20 +187,14 @@ export async function executeGetCatalog(
     let priceClarification: string | undefined = undefined;
 
     // 1. Filter kategori
-    // Audit 222655 (0-24 Months Bridge): balita < 24 bulan yang terquery KIDS
-    // WAJIB tetap melihat pijat BABY yang fit usia — KIDS massage mulai 24 bln
-    // sehingga tanpa bridge hanya Bubble Spa (specialty) yang tersisa.
-    const toddlerBridgeActive = category === 'KIDS'
-      && childAgeMonths !== undefined && childAgeMonths !== null && childAgeMonths < 24;
+    // Catatan Tahap 3: bridge 0-24 bulan (audit 222655) sudah digantikan snap
+    // taksonomi kanonis di atas — query KIDS dengan usia <24 bulan langsung
+    // menjadi pool BABY yang fit usia (tidak ada lagi kasus "hanya Bubble Spa
+    // tersisa"). Cabang bridge lama dihapus agar tidak menjadi kode mati.
     if (category) {
       filtered = filtered.filter(s => {
         if (s.category === category) return true;
         if (category === 'BABY' && s.category === 'BUNDLE') return true;
-        if (toddlerBridgeActive && s.category === 'BABY' && s.ageTier
-          && s.ageTier.maxAgeMonths !== null && s.ageTier.maxAgeMonths >= childAgeMonths
-          && (s.ageTier.minAgeMonths ?? 0) <= childAgeMonths) {
-          return true;
-        }
         return false;
       });
     }
@@ -290,22 +295,14 @@ export async function executeGetCatalog(
       }
     }
 
-    // Urutkan yang direkomendasikan di atas. Audit 222655 (toddler bridge):
-    // bila bridge aktif, pijat STANDARD yang fit usia didahulukan atas paket
-    // specialty (Bubble Spa tanpa serviceType STANDARD) — data-driven via
-    // serviceType + kecocokan nama 'pijat', tanpa hardcode id layanan.
-    const serviceById = new Map(filtered.map((s) => [s.id, s]));
-    const isBridgeMassage = (id: string): boolean => {
-      if (!toddlerBridgeActive) return false;
-      const s = serviceById.get(id);
-      return !!s && (s as any).serviceType === 'STANDARD' && s.name.toLowerCase().includes('pijat');
-    };
-    // Audit 337101 (therapy routing, DATA-DRIVEN non-hardcode): bila ada
+    // Urutkan yang direkomendasikan di atas. Audit 337101 (therapy routing,
+    // DATA-DRIVEN non-hardcode): bila ada
     // keluhan, skor overlap token gejala atas nama+deskripsi resmi katalog
     // menjadi kunci urut sekunder — layanan terapi penanganan keluhan naik,
     // relaksasi murni (skor 0) tenggelam secara alami TANPA daftar nama
     // hafalan. Cermin logika recommendServiceBySymptoms, tapi di atas pool
     // tenant yang sudah terfilter (tenant-correct).
+    const serviceById = new Map(filtered.map((s) => [s.id, s]));
     const symptomToks = effectiveSymptoms.length > 0
       ? effectiveSymptoms.flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length > 3)
       : [];
@@ -364,7 +361,6 @@ export async function executeGetCatalog(
       ((b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0))
       || (therapyScoreOf(b.id) - therapyScoreOf(a.id))
       || (healthyPriorityOf(a.id) - healthyPriorityOf(b.id))
-      || ((isBridgeMassage(b.id) ? 1 : 0) - (isBridgeMassage(a.id) ? 1 : 0))
       || (babyFirstOf(b.id) - babyFirstOf(a.id))
       || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
     );
@@ -396,6 +392,18 @@ export async function executeGetCatalog(
         formattedTreatments.length = 0;
         formattedTreatments.push(...pool);
       }
+    }
+
+    // Tahap 3 — Anti-menu brosur di level suplai data: bila customer TIDAK
+    // menanyakan daftar lengkap (mode konsultasi: !showPrices, tanpa nama
+    // spesifik dan tanpa klarifikasi nominal), kembalikan 1 rekomendasi utama
+    // + maksimal 1 pelengkap. Mencegah 5–10 layanan masuk konteks generasi
+    // yang memicu pelanggaran 2–3 kalimat. Urutan sudah final di atas
+    // (rekomendasi gejala di teratas) — potong ekor saja.
+    // Dikecualikan: nama spesifik eksplisit (intent sempit menang) dan pool
+    // klarifikasi nominal (butuh pembanding lintas-audiens; selalu showPrices).
+    if (!showPrices && !specificTreatmentName?.trim() && formattedTreatments.length > 2) {
+      formattedTreatments.length = 2;
     }
 
     // Fondational Tool Output Scoping (Akar 1): bila customer TIDAK bertanya

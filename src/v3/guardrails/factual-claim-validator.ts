@@ -34,9 +34,14 @@ const VACCINE_RE = /vaksin|imunisasi|\bbcg\b|\bpolio\b|\bdpt\b/i;
 const ADVISORY_RE =
   /sebaiknya|seharusnya|disarankan|rutinkan|rutin\s+\w+|setiap\s+hari|tidak\s+boleh|dilarang|wajib\s+\w+/i;
 
-/** Bingkai penolakan/defleksi sopan ("belum tersedia, diteruskan ke CS") — aman, bukan anjuran. */
+/**
+ * Bingkai penolakan/defleksi sopan ("belum tersedia, diteruskan ke CS", penolakan resep obat/medis).
+ * TEMPORARY STOP-GAP (lihat tiket structural-refusal-tagging):
+ * Mengecualikan defleksi rujukan medis (ke dokter/faskes/RS dan penolakan resep obat)
+ * dari tuduhan anjuran klinis tak berdasar (D3).
+ */
 const REFUSAL_FRAME_RE =
-  /belum\s+tersedia|tidak\s+tersedia|tidak\s+melayani|belum\s+ada|teruskan\s+ke|\bCS\b|admin/i;
+  /belum\s+tersedia|tidak\s+tersedia|tidak\s+melayani|belum\s+ada|teruskan\s+ke|\bCS\b|admin|tidak\s+(bisa|dapat|memiliki\s+wewenang)\s+(memberikan\s+)?(resep|saran\s+medis|obat)|konsultasi\s+(langsung\s+)?(dengan|ke)\s+(dokter|faskes|puskesmas|rumah\s+sakit|rs)|periksakan\s+(ke|dengan)\s+dokter/i;
 
 /** Atribusi domisili kecamatan ke customer ("Area Kecamatan X", "rumah Bunda di X"). */
 const DOMICILE_ATTR_RE =
@@ -48,6 +53,14 @@ const HOMEBASE_EXEMPT_RE = /homebase\s+(kami|klinik)|klinik\s+kami\s+di/i;
 export interface FactualValidationOptions {
   /** True bila sesi sudah memuat kelurahan/kecamatan customer. */
   locationKnown?: boolean;
+  /**
+   * Fase 6 K2 (Issue #74) — metadata struktural penolakan/eskalasi.
+   * True bila turn ini mengeksekusi escalate_to_human ATAU dipicu sinyal
+   * deterministik trauma-jatuh/vaksin (dihitung call-site, BUKAN dari frasa
+   * balasan). Melewatkan D3 secara deterministik; REFUSAL_FRAME_RE tetap
+   * sebagai fallback warisan bila tag tak tersedia.
+   */
+  isRefusalOrEscalation?: boolean;
 }
 
 /** Kata generik satu-kata yang boleh di-bold tanpa padanan katalog. */
@@ -195,6 +208,7 @@ export function validateFactualClaims(
   if (
     reply.length > 80 &&
     ADVISORY_RE.test(reply) &&
+    !opts?.isRefusalOrEscalation &&
     !REFUSAL_FRAME_RE.test(reply) &&
     !hasSopGrounding
   ) {

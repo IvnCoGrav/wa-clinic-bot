@@ -1,5 +1,6 @@
 import { OutputSanitizer } from '../../guardrails/sanitizer';
 import { validateNumericFacts } from '../../guardrails/numeric-fact-validator';
+import { ContextGrounder } from './context-grounder';
 import { normalizeWhatsAppFormat } from '../../../utils/whatsapp-format';
 import { GoalTracker, CustomerGoalSession } from '../../state/goal-tracker';
 import { maskPhoneNumber } from '../../../utils/pii-masker';
@@ -299,7 +300,15 @@ export class GuardrailPipeline {
     // netral tanya domisili (keputusan) + tandai unresolvedFaq untuk kurasi.
     const { validateFactualClaims } = await import('../../guardrails/factual-claim-validator');
     const locationKnown = !!(session?.location?.kelurahan || (session?.location as any)?.kecamatan);
-    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown });
+    // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
+    // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
+    // deterministik trauma-jatuh/vaksin pada pesan masuk. Dihitung dari
+    // artefak pipeline, BUKAN dari frasa balasan.
+    const isRefusalOrEscalation =
+      executedTools.some((t) => t?.name === 'escalate_to_human') ||
+      ContextGrounder.hasFallInjurySignal(incomingText) ||
+      ContextGrounder.hasVaccineSignal(incomingText);
+    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation });
     if (!factCheck.isValid && shouldSendReply && !isEscalated && finalReply.trim()) {
       console.warn(JSON.stringify({ event: 'FACTUAL_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factCheck.violations, timestamp: new Date().toISOString() }));
       violationsDetected.push(...factCheck.violations);
@@ -354,8 +363,10 @@ export class GuardrailPipeline {
           emptyKnowledgeResult = true;
         } else {
           isEscalated = true;
-          shouldSendReply = false;
-          finalReply = '';
+          shouldSendReply = true;
+          const greeting = session.genderGreeting || 'Bunda';
+          finalReply = `Mohon maaf ${greeting}, untuk pertanyaan ini kami teruskan langsung ke tim Bidan kami ya agar dapat dibantu lebih lanjut 🙏😊`;
+          violationsDetected.push('SILENT_DROP_PREVENTED: balasan kosong diubah ke fallback eskalasi');
         }
       }
     }
@@ -521,6 +532,16 @@ export class GuardrailPipeline {
       const { getBrandIdentity } = await import('../../../config/brand');
       const brand = getBrandIdentity();
       finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di ${brand.businessName}. Ada yang bisa Bidan kami bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
+    }
+
+    // HARD INVARIANT: Bot TIDAK BOLEH PERNAH mengirim balasan kosong ke customer apa pun alasannya.
+    if (!finalReply || !finalReply.trim()) {
+      const greeting = session.genderGreeting || 'Bunda';
+      finalReply = `Mohon maaf ${greeting}, untuk pertanyaan ini kami teruskan langsung ke tim Bidan kami ya agar dapat dibantu lebih lanjut 🙏😊`;
+      shouldSendReply = true;
+      isEscalated = true;
+      violationsDetected.push('TERMINAL_SILENT_DROP_GUARD: finalReply kosong diganti fallback');
+      console.warn(JSON.stringify({ event: 'SILENT_DROP_PREVENTED', tenantId, conversationId, phone: maskPhoneNumber(phone), timestamp: new Date().toISOString() }));
     }
 
     return {
