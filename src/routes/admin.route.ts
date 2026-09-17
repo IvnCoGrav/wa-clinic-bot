@@ -52,6 +52,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // --- REVISI SECURITY: Origin Isolation & Dual Auth Middleware (X-API-KEY or HttpOnly Cookie Session) ---
   fastify.addHook('preHandler', async (request, reply) => {
+    // 0. Cache-Control: seluruh API admin WAJIB no-store. Tanpa header ini browser
+    // (dan proxy di depan) boleh menyimpan respons GET secara heuristik lalu
+    // menyajikan data basi — akar laporan "Delivery Fee Tiering duplikat/basi".
+    if (request.url.startsWith('/api/admin')) {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
+    }
+
     // 1. Layer 1 Origin Isolation Guard: Block /admin/* pada tenant landing pages domain
     const xForwardedHost = request.headers['x-forwarded-host'];
     const hostVal = Array.isArray(xForwardedHost) ? xForwardedHost[0] : xForwardedHost;

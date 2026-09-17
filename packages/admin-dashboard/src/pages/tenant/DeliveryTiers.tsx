@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, refreshApi } from '../../services/api';
 import {
   Truck,
   Plus,
@@ -30,11 +30,15 @@ export const DeliveryTiers: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [previewKm, setPreviewKm] = useState(4.5);
 
-  const loadTiers = async () => {
+  const loadTiers = async (opts: { forceFresh?: boolean } = {}) => {
     setLoading(true);
     setError('');
     try {
-      const res = await apiRequest('/api/admin/delivery-tiers');
+      // Tombol Reload WAJIB bypass cache SWR 15s (forceFresh) agar admin tidak
+      // pernah melihat data basi saat sengaja menyegarkan.
+      const res = opts.forceFresh
+        ? await refreshApi('/api/admin/delivery-tiers')
+        : await apiRequest('/api/admin/delivery-tiers');
       const list = Array.isArray(res) ? res : (res?.data || []);
       setTiers(list);
     } catch (err: any) {
@@ -124,7 +128,7 @@ export const DeliveryTiers: React.FC = () => {
           <p className="text-xs text-[#667781] mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
         </div>
         <button
-          onClick={loadTiers}
+          onClick={() => loadTiers({ forceFresh: true })}
           className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
           title="Reload dari server"
         >

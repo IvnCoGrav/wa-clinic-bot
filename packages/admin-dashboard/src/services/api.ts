@@ -104,21 +104,44 @@ export function clearApiCache(prefix?: string) {
   } catch {}
 }
 
-export function getCachedApiResponse<T = any>(endpoint: string): T | null {
+export function getCachedApiResponse<T = any>(endpoint: string, opts: { allowStale?: boolean } = {}): T | null {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
-  const entry = memoryApiCache.get(url);
-  if (entry) return entry.data as T;
-  try {
-    const raw = sessionStorage.getItem(`apiCache:${url}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.data) {
-        memoryApiCache.set(url, parsed);
-        return parsed.data as T;
+  const entry = memoryApiCache.get(url) || (() => {
+    try {
+      const raw = sessionStorage.getItem(`apiCache:${url}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.data) {
+          memoryApiCache.set(url, parsed);
+          return parsed;
+        }
       }
-    }
-  } catch {}
-  return null;
+    } catch {}
+    return null;
+  })();
+  if (!entry) return null;
+  // TTL-aware: entri kedaluwarsa HARAM disajikan untuk hidrasi awal. Hanya
+  // fallback saat jaringan gagal (allowStale) yang boleh memakai data basi.
+  if (!opts.allowStale && typeof entry.ttlMs === 'number' && entry.ttlMs > 0) {
+    const age = Date.now() - entry.timestamp;
+    if (age >= entry.ttlMs) return null;
+  }
+  return entry.data as T;
+}
+
+/**
+ * Hard refresh: buang entri cache endpoint ini (memory + sessionStorage) lalu
+ * fetch ulang dengan `forceFresh`. Primitive terpusat untuk semua tombol
+ * "Reload/Refresh" admin agar TIDAK pernah menyajikan cache 15s saat admin
+ * sengaja menyegarkan data.
+ */
+export async function refreshApi<T = any>(
+  endpoint: string,
+  options: RequestInit & { timeoutMs?: number; ttlMs?: number } = {}
+): Promise<T> {
+  const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
+  clearApiCache(url);
+  return apiRequest<T>(url, { ...options, forceFresh: true });
 }
 
 export async function apiRequest<T = any>(
@@ -247,7 +270,7 @@ export async function apiRequest<T = any>(
 
     // Stale-While-Revalidate Fallback: Jika koneksi drop di jalan, gunakan data cache yang ada
     if (isGet) {
-      const fallbackCache = getCachedApiResponse<T>(url);
+      const fallbackCache = getCachedApiResponse<T>(url, { allowStale: true });
       if (fallbackCache) {
         console.warn(`[API] Serving stale cached response for ${url} due to network timeout.`);
         return fallbackCache;
