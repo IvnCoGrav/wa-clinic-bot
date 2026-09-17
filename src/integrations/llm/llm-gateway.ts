@@ -27,17 +27,23 @@ export function getLlmEndpointConfig(overrides?: {
   model?: string;
   timeoutMs?: number;
   modelConfigKey?: AiTaskType;
+  tenantId?: string;
 }): LlmEndpointConfig {
+  const tenantId = overrides?.tenantId || 'default-tenant';
+  const activeEndpoint = AiModelConfigService.getActiveEndpointConfig(tenantId);
+
   const modelConfig = overrides?.modelConfigKey
-    ? AiModelConfigService.getModelConfig(overrides.modelConfigKey)
+    ? AiModelConfigService.getModelConfig(overrides.modelConfigKey, tenantId)
     : null;
 
-  const baseUrl = (overrides?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const rawModel = overrides?.model || modelConfig?.modelName || process.env.OPENAI_MODEL || '';
+  const baseUrl = (overrides?.baseUrl || activeEndpoint.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const rawModel = overrides?.model || modelConfig?.modelName || activeEndpoint.defaultModel || process.env.OPENAI_MODEL || '';
   const model = sanitizeModelForProvider(rawModel, baseUrl);
 
+  const apiKey = overrides?.apiKey || activeEndpoint.apiKey || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+
   return {
-    apiKey: overrides?.apiKey || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
+    apiKey,
     baseUrl,
     model,
     fallbackModel: getFallbackModel(),

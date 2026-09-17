@@ -619,8 +619,95 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/ai-models', async (request: FastifyRequest, reply: FastifyReply) => {
     const { AiModelConfigService } = await import('../../config/ai-models.config');
     const configs = AiModelConfigService.getAllTaskConfigs();
-    return reply.status(200).send({ success: true, data: configs });
+    const activeProvider = AiModelConfigService.getActiveProvider();
+    const endpointConfig = AiModelConfigService.getActiveEndpointConfig();
+    const kenariKeyConfigured = Boolean(process.env.KENARI_API_KEY || (activeProvider === 'KENARI' && process.env.LLM_API_KEY));
+    const sumopodKeyConfigured = Boolean(process.env.SUMOPOD_API_KEY || (activeProvider === 'SUMOPOD' && process.env.LLM_API_KEY));
+
+    return reply.status(200).send({
+      success: true,
+      data: configs,
+      activeProvider,
+      activeEndpoint: {
+        provider: endpointConfig.provider,
+        baseUrl: endpointConfig.baseUrl,
+        defaultModel: endpointConfig.defaultModel,
+      },
+      providersStatus: {
+        kenari: {
+          name: 'Kenari AI',
+          baseUrl: (process.env.KENARI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
+          defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash',
+          configured: kenariKeyConfigured,
+        },
+        sumopod: {
+          name: 'SumoPod AI',
+          baseUrl: (process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
+          defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash',
+          configured: sumopodKeyConfigured,
+        },
+      },
+    });
   });
+
+  /**
+   * PATCH /api/admin/ai-models/provider
+   * Mengganti provider AI aktif (Kenari vs SumoPod) dengan 1 klik.
+   */
+  fastify.patch(
+    '/api/admin/ai-models/provider',
+    async (
+      request: FastifyRequest<{
+        Body: { provider: 'KENARI' | 'SUMOPOD' };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { provider } = request.body || {};
+      const upperProvider = (provider || '').toUpperCase();
+
+      if (upperProvider !== 'KENARI' && upperProvider !== 'SUMOPOD') {
+        return reply.status(400).send({
+          error: "Bad Request: Provider tidak valid. Pilihan yang diizinkan: 'KENARI' atau 'SUMOPOD'.",
+        });
+      }
+
+      const { AiModelConfigService } = await import('../../config/ai-models.config');
+      const oldProvider = AiModelConfigService.getActiveProvider(DEFAULT_TENANT_ID);
+
+      try {
+        await AiModelConfigService.setActiveProvider(DEFAULT_TENANT_ID, upperProvider as 'KENARI' | 'SUMOPOD');
+        const activeEndpoint = AiModelConfigService.getActiveEndpointConfig(DEFAULT_TENANT_ID);
+        const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'AI_PROVIDER_SWITCH',
+          targetId: 'ACTIVE_LLM_PROVIDER',
+          payload: {
+            oldProvider,
+            newProvider: upperProvider,
+            endpoint: activeEndpoint.baseUrl,
+            model: chatConfig.modelName,
+            switchedAt: new Date(),
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Provider LLM berhasil diubah ke ${upperProvider} (${activeEndpoint.baseUrl}). Model utama disesuaikan ke ${chatConfig.modelName}.`,
+          activeProvider: upperProvider,
+          activeEndpoint,
+          configs: AiModelConfigService.getAllTaskConfigs(DEFAULT_TENANT_ID),
+        });
+      } catch (err: any) {
+        return reply.status(400).send({
+          error: err.message || 'Bad Request: Gagal mengganti provider LLM.',
+        });
+      }
+    }
+  );
 
   /**
    * PATCH /api/admin/ai-models/:task

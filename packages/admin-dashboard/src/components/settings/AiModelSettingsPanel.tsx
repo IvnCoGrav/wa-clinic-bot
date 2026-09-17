@@ -14,6 +14,7 @@ export interface AiTaskModelConfig {
 }
 
 const PRESET_MODELS: Record<string, string[]> = {
+  Kenari: ['deepseek-v4-1-flash', 'deepseek-v4-pro', 'qwen3-8-flash', 'qwen3-7-plus', 'minimax-m2-7', 'step-3-7-flash:free'],
   OpenAI: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'],
   MiniMax: ['MiniMax-M2.7-highspeed', 'abab6.5s-chat', 'MiniMax-Text-01'],
   DeepSeek: ['deepseek-chat', 'deepseek-coder', 'deepseek-v4-flash'],
@@ -34,6 +35,9 @@ const TASK_LABELS: Record<string, { label: string; badge: string }> = {
 export const AiModelSettingsPanel: React.FC = () => {
   const { toast } = useUiFeedback();
   const [configs, setConfigs] = useState<AiTaskModelConfig[]>([]);
+  const [activeProvider, setActiveProvider] = useState<'KENARI' | 'SUMOPOD'>('KENARI');
+  const [providersStatus, setProvidersStatus] = useState<any>(null);
+  const [switchingProvider, setSwitchingProvider] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingTask, setSavingTask] = useState<string | null>(null);
 
@@ -41,13 +45,45 @@ export const AiModelSettingsPanel: React.FC = () => {
     setLoading(true);
     try {
       const res = await apiRequest('/api/admin/ai-models');
-      if (res.success && Array.isArray(res.data)) {
-        setConfigs(res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK'));
+      if (res.success) {
+        if (Array.isArray(res.data)) {
+          setConfigs(res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK'));
+        }
+        if (res.activeProvider) {
+          setActiveProvider(res.activeProvider);
+        }
+        if (res.providersStatus) {
+          setProvidersStatus(res.providersStatus);
+        }
       }
     } catch (err: any) {
       toast('Gagal memuat konfigurasi model AI: ' + (err.message || err), 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSwitchProvider = async (target: 'KENARI' | 'SUMOPOD') => {
+    if (target === activeProvider || switchingProvider) return;
+    setSwitchingProvider(true);
+    try {
+      const res = await apiRequest('/api/admin/ai-models/provider', {
+        method: 'PATCH',
+        body: JSON.stringify({ provider: target }),
+      });
+      if (res.success) {
+        setActiveProvider(target);
+        if (Array.isArray(res.configs)) {
+          setConfigs(res.configs.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK'));
+        }
+        toast(res.message || `Provider LLM berhasil diubah ke ${target}!`, 'success');
+      } else {
+        toast(res.error || 'Gagal mengubah provider AI', 'error');
+      }
+    } catch (err: any) {
+      toast('Gagal mengubah provider: ' + (err.message || err), 'error');
+    } finally {
+      setSwitchingProvider(false);
     }
   };
 
@@ -109,6 +145,106 @@ export const AiModelSettingsPanel: React.FC = () => {
         </button>
       </div>
 
+      {/* Provider Switcher Card (Kenari vs SumoPod) */}
+      <div className="mb-6 p-4 rounded-xl bg-[#f8fafc] border border-[#e2e8f0]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[#00a884]" />
+              <span className="text-sm font-bold text-[#111b21]">Pilih Provider Utama (One-Click Switch)</span>
+            </div>
+            <p className="text-xs text-[#667781] mt-0.5">
+              Ganti provider dan model utama bot secara instan antara Kenari dan SumoPod.
+            </p>
+          </div>
+          {switchingProvider && (
+            <span className="inline-flex items-center gap-1 text-xs text-[#00a884] font-medium">
+              <RefreshCw size={12} className="animate-spin" /> Mengganti provider...
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Option: Kenari AI */}
+          <button
+            type="button"
+            disabled={switchingProvider}
+            onClick={() => handleSwitchProvider('KENARI')}
+            className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+              activeProvider === 'KENARI'
+                ? 'border-[#00a884] bg-emerald-50/50 shadow-xs ring-1 ring-[#00a884]'
+                : 'border-[#d1d7db] bg-white hover:border-slate-400 opacity-80 hover:opacity-100'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🦜</span>
+                <div>
+                  <span className="text-xs font-bold text-[#111b21] block">Kenari AI</span>
+                  <span className="text-[10px] text-[#667781] font-mono">https://kenari.id/v1</span>
+                </div>
+              </div>
+              {activeProvider === 'KENARI' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00a884] text-white">
+                  <Check size={10} /> Aktif
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-[#667781]">
+                  Pilih
+                </span>
+              )}
+            </div>
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+              <span className="text-[#667781]">
+                Model: <strong className="text-[#111b21] font-mono">deepseek-v4-1-flash</strong>
+              </span>
+              <span className={`text-[10px] ${providersStatus?.kenari?.configured ? 'text-emerald-700 font-semibold' : 'text-slate-500'}`}>
+                {providersStatus?.kenari?.configured ? '● Key Tersambung' : '○ Key di .env'}
+              </span>
+            </div>
+          </button>
+
+          {/* Option: SumoPod AI */}
+          <button
+            type="button"
+            disabled={switchingProvider}
+            onClick={() => handleSwitchProvider('SUMOPOD')}
+            className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+              activeProvider === 'SUMOPOD'
+                ? 'border-[#00a884] bg-emerald-50/50 shadow-xs ring-1 ring-[#00a884]'
+                : 'border-[#d1d7db] bg-white hover:border-slate-400 opacity-80 hover:opacity-100'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚡</span>
+                <div>
+                  <span className="text-xs font-bold text-[#111b21] block">SumoPod AI</span>
+                  <span className="text-[10px] text-[#667781] font-mono">https://ai.sumopod.com/v1</span>
+                </div>
+              </div>
+              {activeProvider === 'SUMOPOD' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00a884] text-white">
+                  <Check size={10} /> Aktif
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-[#667781]">
+                  Pilih
+                </span>
+              )}
+            </div>
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+              <span className="text-[#667781]">
+                Model: <strong className="text-[#111b21] font-mono">deepseek-v4-flash</strong>
+              </span>
+              <span className={`text-[10px] ${providersStatus?.sumopod?.configured ? 'text-emerald-700 font-semibold' : 'text-slate-500'}`}>
+                {providersStatus?.sumopod?.configured ? '● Key Tersambung' : '○ Key di .env'}
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {loading ? (
         <div className="py-12 text-center text-xs text-[#8696a0]">
           <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-[#00a884]" />
@@ -167,6 +303,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                       }}
                       className="w-full bg-white border border-[#d1d7db] rounded-lg px-3 py-2 text-[#111b21] focus:outline-none focus:border-[#00a884]"
                     >
+                      <option value="Kenari">Kenari (https://kenari.id)</option>
                       <option value="MiniMax">MiniMax (Highspeed & Hemat)</option>
                       <option value="OpenAI">OpenAI</option>
                       <option value="DeepSeek">DeepSeek</option>

@@ -189,6 +189,42 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     completionCostPer1kIdr: (0.30 / 1000) * USD_TO_IDR,
   },
 
+  // Kenari Models (https://kenari.id/v1) — harga dalam micro-IDR/1M token, dikonversi ke IDR/1k token.
+  'deepseek-v4-1-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0.15, // 150,000,000 micro-IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.004, // 4,000,000 micro-IDR / 1M
+    completionCostPer1kIdr: 0.30, // 300,000,000 micro-IDR / 1M
+  },
+  'deepseek-v4-pro': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 10.0,
+    promptCacheHitCostPer1kIdr: 0.10,
+    completionCostPer1kIdr: 20.0,
+  },
+  'qwen3-8-flash': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 3.0,
+    promptCacheHitCostPer1kIdr: 0.30,
+    completionCostPer1kIdr: 7.5,
+  },
+  'qwen3-7-plus': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.7,
+    promptCacheHitCostPer1kIdr: 1.3,
+    completionCostPer1kIdr: 26.0,
+  },
+  'minimax-m2-7': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 6.3,
+    promptCacheHitCostPer1kIdr: 1.2,
+    completionCostPer1kIdr: 25.0,
+  },
+  'step-3-7-flash:free': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
 };
 
 const DEFAULT_PRICING: ModelPricing = {
@@ -236,7 +272,7 @@ export function getModelPricing(modelName: string, date: Date = new Date()): Mod
 
 /**
  * Menentukan provider aktual dari base URL yang benar-benar dipakai request
- * (SumoPod vs DeepSeek Direct vs OpenAI), bukan dari nama model — karena nama
+ * (SumoPod vs DeepSeek Direct vs OpenAI vs Kenari), bukan dari nama model — karena nama
  * model bisa sama tapi di-host oleh provider berbeda (mis. deepseek-v4-flash
  * di SumoPod vs di api.deepseek.com).
  */
@@ -246,6 +282,7 @@ export function deriveProvider(baseUrl?: string | null): string {
   if (raw.includes('sumopod')) return 'SumoPod';
   if (raw.includes('api.deepseek.com') || raw.includes('deepseek.com')) return 'DeepSeek Direct';
   if (raw.includes('api.openai.com') || raw.includes('openai.azure') || raw.includes('ai.azure.com')) return 'OpenAI';
+  if (raw.includes('kenari.id')) return 'Kenari';
   try {
     return new URL(raw).host;
   } catch {

@@ -73,4 +73,53 @@ describe('Modul 5.6 & 5.7 — AI Model Registry & System Health Integration Test
 
     expect(body.data.haversineLocationEngine).toContain('MULTIPLIER');
   });
+
+  it('5. Provider Switcher API: PATCH /api/admin/ai-models/provider MUST switch between KENARI and SUMOPOD', async () => {
+    // Switch to KENARI
+    const resKenari = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/ai-models/provider',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { provider: 'KENARI' },
+    });
+    expect(resKenari.statusCode).toBe(200);
+    const bodyKenari = JSON.parse(resKenari.body);
+    expect(bodyKenari.success).toBe(true);
+    expect(bodyKenari.activeProvider).toBe('KENARI');
+    expect(bodyKenari.activeEndpoint.provider).toBe('KENARI');
+    expect(bodyKenari.activeEndpoint.defaultModel).toBe('deepseek-v4-1-flash');
+
+    // Verify GET /api/admin/ai-models returns activeProvider
+    const getRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/ai-models',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+    });
+    expect(getRes.statusCode).toBe(200);
+    const getBody = JSON.parse(getRes.body);
+    expect(getBody.activeProvider).toBe('KENARI');
+    expect(getBody.providersStatus.kenari).toBeDefined();
+    expect(getBody.providersStatus.sumopod).toBeDefined();
+
+    // Switch to SUMOPOD
+    const resSumopod = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/ai-models/provider',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { provider: 'SUMOPOD' },
+    });
+    expect(resSumopod.statusCode).toBe(200);
+    const bodySumopod = JSON.parse(resSumopod.body);
+    expect(bodySumopod.activeProvider).toBe('SUMOPOD');
+    expect(bodySumopod.activeEndpoint.provider).toBe('SUMOPOD');
+
+    // Invalid provider guard
+    const resInvalid = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/ai-models/provider',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { provider: 'INVALID_AI' },
+    });
+    expect(resInvalid.statusCode).toBe(400);
+  });
 });
