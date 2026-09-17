@@ -4,6 +4,7 @@ import {
   evaluateToolMasking,
   buildEvidenceTexts,
   resolveCandidateBookingDate,
+  resolveCandidateTreatment,
 } from '../../src/v3/tools/tool-masker';
 import { CustomerGoalSession } from '../../src/v3/domain/types';
 import * as dateConfirmationModule from '../../src/utils/date-confirmation';
@@ -162,6 +163,56 @@ describe('Tool Masker Engine (Fase 2)', () => {
       const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Apakah bisa hari ini siang kak?');
       expect(result.isSaveReservationAllowed).toBe(true);
       expect(result.maskedToolNames.length).toBe(0);
+    });
+  });
+
+  describe('3. Resolusi kandidat treatment anaphoric (Fase 1 enforce-gap)', () => {
+    const emptySession: CustomerGoalSession = { ...baseSession, cartItems: [] };
+
+    it('selectedTreatment/cart menang langsung tanpa membaca riwayat', () => {
+      expect(
+        resolveCandidateTreatment({ ...emptySession, selectedTreatment: 'Pijat Bayi Ceria' }, 'oke jadwalkan besok ya', [])
+      ).toBe('Pijat Bayi Ceria');
+      expect(
+        resolveCandidateTreatment(
+          { ...emptySession, cartItems: [{ name: 'Oksitosin Massage Fullbody', price: 1, type: 'PRIMARY' }] },
+          'oke jadwalkan besok ya',
+          []
+        )
+      ).toBe('Oksitosin Massage Fullbody');
+    });
+
+    it('komitmen anaphoric + rekomendasi asisten ber-bold → kandidat sah', () => {
+      const history = [
+        { role: 'user', content: 'Anak GTM susah makan usia 2 tahun' },
+        { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },
+      ];
+      expect(resolveCandidateTreatment(emptySession, 'Oke jadwalkan besok lusa ya mbak', history)).toBe(
+        'Pijat Lahap Juara (Nafsu Makan)'
+      );
+    });
+
+    it('tanpa sinyal komitmen → undefined walau asisten menyebut paket (anti 973126-bypass)', () => {
+      const history = [
+        { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },
+      ];
+      expect(resolveCandidateTreatment(emptySession, 'Harganya berapa ya?', history)).toBeUndefined();
+      expect(resolveCandidateTreatment(emptySession, 'Oke jadwalkan besok ya', [])).toBeUndefined();
+      expect(resolveCandidateTreatment(emptySession, 'Oke jadwalkan besok ya')).toBeUndefined();
+    });
+
+    it('masker MEMBUKA save untuk komitmen anaphoric + lokasi + tanggal tegas', () => {
+      const history = [
+        { role: 'user', content: 'Anak GTM susah makan usia 2 tahun' },
+        { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },
+      ];
+      const session: CustomerGoalSession = {
+        ...emptySession,
+        location: { rawText: 'Rungkut Menanggal', kelurahan: 'Rungkut Menanggal' },
+      };
+      const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Oke jadwalkan besok lusa ya mbak', history);
+      expect(result.isSaveReservationAllowed).toBe(true);
+      expect(result.availableTools.some((t) => t.function?.name === 'save_reservation')).toBe(true);
     });
   });
 });

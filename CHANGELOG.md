@@ -10,6 +10,13 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 - **Rekomendasi Gejala Deterministik**: Sistem kini secara presisi merekomendasikan `Pijat Kids Pulih Ceria (2 - 4 Tahun)` untuk balita 3 tahun dengan keluhan batuk pilek, bukan lagi jatuh ke terapi nafsu makan (*Lahap Juara*).
 - **Verifikasi**: Skenario CM-01 pada `tests/integration/v3-conversation-matrix.test.ts` kini mem-pin nama terapi secara deterministik (20/20 hijau); test unit baru pada `tests/unit/v3/symptom-semantic-scorer.test.ts` (10/10 hijau); V3 unit tests 312/312 hijau; golden corpus 61/61 hijau; typecheck exit 0.
 
+#### Rencana Fondasional — Direct Enforce, Dekomposisi Grounder, Split Router (2026-09-17)
+
+- **Direct enforce default-on**: `save_reservation` dipotong fisik dari skema Call-1 bila prasyarat gagal; `hari ke-N` & treatment anaphoric ditutup (`date-confirmation`, `resolveCandidateTreatment`); matrix 20/20 dalam enforce.
+- **Dekomposisi `context-grounder.ts`**: 4 modul domain + fasad re-export (zero breaking changes).
+- **Split router Call 1**: dua layer + varian masker-aware (default byte-identik).
+- **Verifikasi**: V3 315/315, matrix 20/20, korpus 61/61, typecheck 0, build 0, harness 4.71/5.00 tanpa pelanggaran safety floor; full suite 2418 hijau (2 merah pre-existing).
+
 #### Fase 6 Agenda 3 — Pruning, Refusal Metadata & Enforce Readiness (2026-09-17)
 
 - **Smart time-hint koreksi-dulu**: token hari terakhir menang bila ada penanda koreksi; kolokasi `besok lusa` → `lusa`; aposisi & filter usia lestari (tutup Issue #78 item 3).

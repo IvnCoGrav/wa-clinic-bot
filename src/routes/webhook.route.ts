@@ -1419,6 +1419,24 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         incomingMessage,
       });
 
+      // Pre-logging inbound: tampil seketika di LiveChat (SSE message.created)
+      // tanpa tertahan antrean/LLM. Guard _preLogged di machine.ts mencegah catat ganda.
+      if (!coalesceResult.handled && !(incomingMessage as any)._preLogged) {
+        try {
+          await messageService.logMessage({
+            tenantId: resolvedTenantId,
+            conversationId: conversation.id,
+            direction: 'INBOUND' as any,
+            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
+            waMessageId,
+            payloadRaw: mergeMediaIntoPayload(payload),
+          });
+          (incomingMessage as any)._preLogged = true;
+        } catch (preLogErr: any) {
+          console.warn('[PRE-LOG INBOUND WARN]', preLogErr?.message || preLogErr);
+        }
+      }
+
       if (!coalesceResult.handled) {
         await queueService.enqueueMessage({
           tenantId: resolvedTenantId,

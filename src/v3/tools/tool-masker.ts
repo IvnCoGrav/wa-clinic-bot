@@ -101,10 +101,47 @@ export function resolveCandidateBookingDate(
 }
 
 /**
+ * Resolusi kandidat treatment anaphoric (Fase 1 enforce-gap): customer
+ * menyetujui paket TANPA mengulang nama lengkap ("Oke jadwalkan besok lusa
+ * ya mbak") setelah asisten merekomendasikan/memberi harga suatu layanan.
+ *
+ * Rekonsiliasi dengan audit 973126 (hanya USER yang boleh menyetujui):
+ * persetujuan TETAP harus datang dari sinyal komitmen di pesan user saat ini;
+ * riwayat asisten HANYA mengidentifikasi paket mana yang dimaksud (bukan
+ * dianggap persetujuan). Tanpa sinyal komitmen → undefined (tetap diblokir).
+ *
+ * Murni, deterministik; pola `*Nama*` adalah penanda format markdown teknis
+ * (bukan hafalan semantik) — nama valid apa pun yang tertulis di-bold lolos.
+ */
+export function resolveCandidateTreatment(
+  session: CustomerGoalSession,
+  cleanIncomingText: string,
+  conversationHistory?: Array<{ role: string; content: string }>
+): string | undefined {
+  if (session.selectedTreatment?.trim()) return session.selectedTreatment.trim();
+  if (session.cartItems && session.cartItems.length > 0) return session.cartItems[0].name;
+  const lower = (cleanIncomingText || '').toLowerCase();
+  const hasCommitSignal = /(jadwalkan|ambil|deal|fix|pesan|booking|mau yang itu|boleh yang itu)\b/i.test(lower);
+  if (!hasCommitSignal || !conversationHistory) return undefined;
+  // Pindai mundur riwayat asisten: paket katalog terakhir yang ditawarkan
+  // (bold *Nama*) adalah kandidat yang dimaksud customer.
+  for (let i = conversationHistory.length - 1; i >= 0; i--) {
+    const msg = conversationHistory[i];
+    if (msg.role === 'assistant') {
+      const content = msg.content || '';
+      const match = content.match(/\*(Pijat [^*]+|Oksitosin [^*]+|Cukur [^*]+|Paket [^*]+|Prenatal [^*]+|Sinar [^*]+)\*/i);
+      if (match) return match[1].trim();
+    }
+  }
+  return undefined;
+}
+
+/**
  * Evaluasi penyaringan tool (Tool Masking) secara deterministik.
  *
  * Aturan untuk save_reservation:
- * 1. Keranjang layanan tidak boleh kosong (session.cartItems > 0 atau session.selectedTreatment).
+ * 1. Keranjang layanan tidak boleh kosong — session.cartItems/selectedTreatment
+ *    ATAU kandidat anaphoric sah (komitmen user + paket terakhir asisten).
  * 2. Lokasi tidak boleh kosong (minimal salah satu kelurahan/kecamatan/kota/rawText).
  * 3. Tanggal/hari wajib terkonfirmasi via isDateConfirmed(candidateDate, evidenceTexts).
  *    Jika tanggal hanya berasal dari kalimat tanya ("Bisa hari Sabtu?"), fail-closed menolak booking.
@@ -118,10 +155,12 @@ export function evaluateToolMasking(
   const evidenceTexts = buildEvidenceTexts(cleanIncomingText, session, conversationHistory);
   const candidateDate = resolveCandidateBookingDate(session, cleanIncomingText, evidenceTexts);
 
-  // 1. Cek prasyarat layanan/treatment
+  // 1. Cek prasyarat layanan/treatment (termasuk resolusi anaphoric sah).
+  const candidateTreatment = resolveCandidateTreatment(session, cleanIncomingText, conversationHistory);
   const hasTreatment =
     (session.cartItems && session.cartItems.length > 0) ||
-    Boolean(session.selectedTreatment);
+    Boolean(session.selectedTreatment) ||
+    Boolean(candidateTreatment);
 
   // 2. Cek prasyarat lokasi
   const hasLocation = Boolean(

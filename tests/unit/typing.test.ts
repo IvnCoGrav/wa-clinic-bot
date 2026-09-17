@@ -216,6 +216,7 @@ Terimakasih. ☺️`;
       vi.spyOn(wahaClient, 'startTyping').mockResolvedValue(true);
       const stopTypingSpy = vi.spyOn(wahaClient, 'stopTyping').mockResolvedValue(true);
       vi.spyOn(wahaClient, 'sendText').mockResolvedValue(true);
+      vi.spyOn(wahaClient, 'sendTextDetailed').mockResolvedValue({ success: true, messageId: 'wa_mock_1' });
 
       const result = await typingService.simulateHumanReply({
         chatId: '628123456789@c.us',
@@ -264,6 +265,12 @@ Terimakasih. ☺️`;
         if (sendTextCalls === 2) return false; // Fail on bubble 2
         return true;
       });
+      let detailedCalls = 0;
+      const sendDetailedSpy = vi.spyOn(wahaClient, 'sendTextDetailed').mockImplementation(async () => {
+        detailedCalls++;
+        if (detailedCalls === 2) return { success: false };
+        return { success: true, messageId: `wa_mock_${detailedCalls}` };
+      });
 
       const replyText = `Bubble 1: Halo Bunda, selamat datang di Kala Moms and Baby Spa.
 
@@ -280,7 +287,7 @@ Bubble 3: Apakah Bunda tertarik untuk booking jadwal treatment?`;
 
       expect(result.success).toBe(false);
       expect(result.bubblesSent).toBe(1);
-      expect(sendTextSpy).toHaveBeenCalledTimes(2);
+      expect(sendDetailedSpy).toHaveBeenCalledTimes(2);
       expect(stopTypingSpy).toHaveBeenCalledTimes(2);
     });
 
@@ -289,6 +296,7 @@ Bubble 3: Apakah Bunda tertarik untuk booking jadwal treatment?`;
       vi.spyOn(wahaClient, 'startTyping').mockResolvedValue(true);
       vi.spyOn(wahaClient, 'stopTyping').mockResolvedValue(true);
       const sendTextSpy = vi.spyOn(wahaClient, 'sendText').mockResolvedValue(true);
+      const sendDetailedSpy = vi.spyOn(wahaClient, 'sendTextDetailed').mockResolvedValue({ success: true, messageId: 'wa_mock_single' });
 
       const multiParagraphText = `Halo Bunda Rina!
 
@@ -305,8 +313,9 @@ Apakah ada yang bisa kami bantu jadwalkan lagi Bunda? 😊`;
 
       expect(result.success).toBe(true);
       expect(result.bubblesSent).toBe(1);
-      expect(sendTextSpy).toHaveBeenCalledTimes(1);
-      expect(sendTextSpy).toHaveBeenCalledWith('628123456789@c.us', multiParagraphText);
+      expect(sendDetailedSpy).toHaveBeenCalledTimes(1);
+      expect(sendDetailedSpy).toHaveBeenCalledWith('628123456789@c.us', multiParagraphText);
+      expect(result.messageId).toBe('wa_mock_single');
     });
   });
 });
