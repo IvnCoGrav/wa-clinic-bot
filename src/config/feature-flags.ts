@@ -48,3 +48,20 @@ export function isFastFaq1CallEnabled(tenantId?: string): boolean {
   return process.env.FAST_FAQ_1CALL_ENABLED === 'true';
 }
 
+/**
+ * Cek apakah Tool-Masking Shadow Mode aktif (FASE 2).
+ * Default: true (mengevaluasi dan mencatat log masking tanpa memotong tool yang dikirim ke LLM).
+ */
+export function isToolMaskingShadowMode(): boolean {
+  return process.env.TOOL_MASKING_SHADOW_MODE !== 'false';
+}
+
+/**
+ * Cek apakah Tool-Masking Enforce Mode aktif (FASE 3 - pasca lulus gerbang akurasi shadow mode).
+ * Default: false (hanya aktif jika TOOL_MASKING_ENFORCE=true DAN TOOL_MASKING_SHADOW_MODE=false).
+ */
+export function isToolMaskingEnforced(): boolean {
+  return process.env.TOOL_MASKING_ENFORCE === 'true' && process.env.TOOL_MASKING_SHADOW_MODE === 'false';
+}
+
+

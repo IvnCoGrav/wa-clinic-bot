@@ -263,10 +263,10 @@ export class V3AgentRunner {
         await tel.traceExecution({ reply: finalReply, status: 'SUCCESS', tools: turn.executedTools });
       }
       return {
-        replyText: guard.isEscalated ? '' : finalReply,
+        replyText: finalReply,
         executedTools: turn.executedTools,
         updatedSession: session,
-        shouldSendReply: guard.shouldSendReply && !guard.isEscalated,
+        shouldSendReply: guard.shouldSendReply && !!finalReply.trim(),
         isEscalated: guard.isEscalated,
         unresolvedFaq: guard.emptyKnowledgeResult && !guard.isEscalated,
         retrievedChunks,

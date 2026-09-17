@@ -120,8 +120,15 @@ describe('Layer 1 — Tanpa penolakan booking (aturan 21: wilayah sesi cukup)', 
     expect(String(called.rawText)).toContain('kedungkendo');
   });
 
-  it('tanpa lokasi sama sekali → tetap tersimpan (form yang melengkapi)', async () => {
-    await GoalTracker.updateGoalSession('gate-conv-3', { genderGreeting: 'Bunda' } as any);
+  it('wilayah kelurahan tanpa detail jalan → tetap tersimpan (form yang melengkapi)', async () => {
+    // Penyelarasan 03d0e69 (prasyarat mutlak lokasi homecare, Aturan Emas 5a):
+    // reservasi DILARANG tersimpan bila lokasi SAMA SEKALI kosong. Maksud asli
+    // test ini dipertahankan: detail nama jalan/nomor rumah TIDAK wajib di chat
+    // (dilengkapi via form reservasi) — cukup wilayah kelurahan sesi.
+    await GoalTracker.updateGoalSession('gate-conv-3', {
+      genderGreeting: 'Bunda',
+      location: { kelurahan: 'Kureksari' },
+    } as any);
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',

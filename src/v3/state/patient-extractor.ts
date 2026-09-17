@@ -21,7 +21,26 @@ export type {
   CustomerGoalSession,
 } from '../domain/types';
 
+/**
+ * Taksonomi usia deterministik (Tahap 3): ambang matematis tunggal kategori
+ * pasien anak. `< 24 bulan` = BABY murni, `>= 24 bulan` = KIDS murni.
+ * Single source of truth menggantikan perbandingan `>= 24` tersebar agar
+ * kasus perbatasan 2 tahun tidak ambigu di extractor maupun tool katalog.
+ */
+export const CHILD_CATEGORY_AGE_THRESHOLD_MONTHS = 24;
+
 export class PatientProfileExtractor {
+  /**
+   * Klasifikasi kategori usia anak deterministik dari usia bulan:
+   * 0–23 → 'BABY', ≥24 → 'KIDS'. Non-finite → undefined (jangan ditebak).
+   * Murni (tanpa I/O/mutasi) — dipakai extractor, tool katalog, dan service
+   * katalog agar ambang 24 bulan terkunci di satu tempat.
+   */
+  public static resolveChildAgeCategory(ageMonths: number | null | undefined): 'BABY' | 'KIDS' | undefined {
+    if (typeof ageMonths !== 'number' || !Number.isFinite(ageMonths)) return undefined;
+    return ageMonths < CHILD_CATEGORY_AGE_THRESHOLD_MONTHS ? 'BABY' : 'KIDS';
+  }
+
   /**
    * Deklarasi identitas eksplisit orang-pertama ("saya bapak", "panggil ibu").
    * BUKAN inferensi dari nama — hanya frasa di mana customer MENYATAKAN

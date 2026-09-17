@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { allGoldenScenarios, validateGoldenCorpus } from './index';
+import { allCorpusScenarios, validateGoldenCorpus } from './index';
 import type { GoldenTurn, GoldenSlateAssertion } from './types';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
@@ -244,13 +244,13 @@ describe('FASE 0 — Golden Regression Gate (real V3 pipeline, offline)', () => 
     spy.mockRestore();
   });
 
-  it('dataset golden corpus valid: 50 skenario', () => {
+  it('dataset golden corpus valid', () => {
     const v = validateGoldenCorpus();
     expect(v.errors, v.errors.join('\n')).toEqual([]);
-    expect(v.total).toBe(50);
+    expect(v.total).toBeGreaterThanOrEqual(50);
   });
 
-  for (const scenario of allGoldenScenarios) {
+  for (const scenario of allCorpusScenarios) {
     it(`${scenario.id} — ${scenario.description}`, async () => {
       const phone = `6287${String(100000000 + (hashId(scenario.id) % 100000000)).slice(0, 9)}`;
       const ctx = await buildScenario(phone, `Golden ${scenario.id}`);

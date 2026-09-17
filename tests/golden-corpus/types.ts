@@ -4,7 +4,7 @@
  * Bahasa komentar: Indonesia (sesuai AGENTS.md).
  */
 
-export type GoldenCategory = 'clinical' | 'acknowledgement' | 'booking' | 'location' | 'pricing';
+export type GoldenCategory = 'clinical' | 'acknowledgement' | 'booking' | 'location' | 'pricing' | 'adversarial';
 
 export interface GoldenSlateAssertion {
   /** Field CustomerSlate yang harus bernilai tertentu setelah turn ini */
@@ -35,13 +35,15 @@ export interface GoldenTurn {
 }
 
 export interface GoldenScenario {
-  /** ID unik: CLIN-01, ACK-03, BOOK-07, LOC-02, PRIC-01 */
+  /** ID unik: CLIN-01, ACK-03, BOOK-07, LOC-02, PRIC-01, AUDIT-315036, etc. */
   id: string;
   category: GoldenCategory;
   /** Bobot empiris: proporsi kemunculan di log riil (jumlahkan 100%) */
   weight: number;
   /** Deskripsi singkat skenario (Indonesia) */
   description: string;
+  /** Tag audit / safety (misal: 'safety_critical', 'audit_case') */
+  tags?: string[];
   /** Urutan turn (1..n) */
   turns: GoldenTurn[];
 }

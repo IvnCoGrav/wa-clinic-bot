@@ -24,7 +24,7 @@ const TAIL_ELEMENT = `(?:\\s+(?:${HONORIFICS}|${PARTICLES}))*`;
 
 // Guard pertanyaan spesifik: harga, gejala/keluhan medis, jadwal, usia.
 const SPECIFIC_QUESTION_RE =
-  /\b(berapa|brp|harga|harganya|tarif|biaya|ongkir|pricelist|usia|umur|bulan|tahun|jadwal|slot|kapan|besok|lusa|batuk|pilek|bapil|flu|demam|panas|kembung|diare|muntah|ruam|gatal|rewel|sakit|nyeri|bengkak|sesak|asma|kejang|darurat|gejala|sakitnya|keluh)\b|\b\d+\s*(?:bln|bulan|thn|tahun|menit|jam|hari|minggu)\b|\bjam\s*\d+/i;
+  /\b(berapa|brp|harga|harganya|tarif|biaya|ongkir|pricelist|usia|umur|bulan|tahun|jadwal|slot|kapan|besok|lusa|batuk|pilek|bapil|flu|demam|panas|kembung|diare|muntah|ruam|gatal|rewel|sakit|nyeri|bengkak|sesak|asma|kejang|darurat|gejala|sakitnya|keluh)\b|\b\d+\s*(?:bln|bulan|thn|tahun|menit|jam|hari|minggu)\b|\bjam\s*\d+|\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|hari\s+ini|sekarang)\b/i;
 
 const ISLAMIC_RE = /assalamu\x27?alaikum|assalamualaikum|ass(?![a-z])|askum|samlikum/i;
 
