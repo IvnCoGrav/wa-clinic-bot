@@ -259,16 +259,20 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const distanceKm = deliveryResult.distanceKm;
         const ongkirNormal = deliveryResult.normalPrice;
         const ongkirPromo = deliveryResult.ongkir;
-        const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30;
+        // Batas jangkauan & gratis-ongkir WAJIB dari tier DB (SaaS-ready), bukan
+        // literal 30/5. calculateDelivery sudah mengembalikan maxCoverageKm &
+        // freeTierKm dari tier tenant; fallback ke konfigurasi klinik bila kosong.
+        const maxCoverageKm = deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm;
+        const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm;
         const kelurahan = reversed?.kelurahan || 'Titik Lokasi Terpilih';
         const scheduleCta = !isOutOfCoverage ? buildScheduleCta(preferredDate) : undefined;
         const suggestedTemplateReply = isOutOfCoverage
-          ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm: 30 })
+          ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
           : TEMPLATES.ongkirInfo({
               distanceKm,
               normalPrice: ongkirNormal,
               promoPrice: ongkirPromo,
-              freeTierKm: 5,
+              freeTierKm: deliveryResult.freeTierKm,
               candidateTreatmentName,
               // Audit 337101: override CTA di DALAM template (bukan append)
               // agar pertanyaan "hari apa" bawaan template ikut terganti.
@@ -294,7 +298,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           isOutOfCoverage,
           suggestedTemplateReply: urlTemplate,
           message: isOutOfCoverage
-            ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks 30 km). Template penolakan resmi:\n"${urlTemplate}"`
+            ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${urlTemplate}"`
             : `Titik share location berhasil diidentifikasi: Jarak rute kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}${urlCartRecap ? `\n\n${urlCartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`
         };
       }
@@ -432,20 +436,23 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     const distanceKm = deliveryResult.distanceKm;
     const ongkirNormal = deliveryResult.normalPrice;
     const ongkirPromo = deliveryResult.ongkir;
-    // Hierarki batas jangkauan: jarak riil > 30 km ATAU kota administratif hasil
-    // geocoding di luar Surabaya/Sidoarjo/Gresik. Sinyal mention kota luar hanya
-    // dipakai bila geocoding tidak mengembalikan kota pembanding.
+    // Batas jangkauan & gratis-ongkir WAJIB dari tier DB (SaaS-ready), bukan
+    // literal 30/5. Lihat delivery.service.ts (freeTierKm & maxCoverageKm).
+    const maxCoverageKm = deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm;
+    // Hierarki batas jangkauan: jarak riil > maxCoverageKm (dari tier tenant) ATAU
+    // kota administratif hasil geocoding di luar Surabaya/Sidoarjo/Gresik. Sinyal
+    // mention kota luar hanya dipakai bila geocoding tidak mengembalikan kota pembanding.
     const kotaOutside = isOutsideCoverageKota(resolved.kota);
-    const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30 || kotaOutside
+    const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm || kotaOutside
       || (isExplicitOutsideCity && !resolved.kota);
 
     const baseTemplateReply = isOutOfCoverage
-      ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm: 30 })
+      ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
       : TEMPLATES.ongkirInfo({
           distanceKm,
           normalPrice: ongkirNormal,
           promoPrice: ongkirPromo,
-          freeTierKm: 5,
+          freeTierKm: deliveryResult.freeTierKm,
           candidateTreatmentName,
           // Audit 337101: override CTA di DALAM template (bukan append)
           // agar pertanyaan "hari apa" bawaan template ikut terganti.
@@ -473,7 +480,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       isOutOfCoverage,
       suggestedTemplateReply,
       message: isOutOfCoverage
-        ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks 30 km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
+        ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
         : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.${shouldShowCartRecap ? ' Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.' : ' DILARANG menyebut harga treatment / grand total (mode konsultasi) — sampaikan jarak + ongkir promo saja.'}` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
     };
   } catch (error: any) {

@@ -52,14 +52,15 @@ export function calculateOngkirFromTiers(
   const matched = effectiveTiers.find((t) => km <= Number(t.maxDist));
 
   if (!matched) {
-    // Jarak melebihi tier terjauh (Out of coverage)
+    // Jarak melebihi tier terjauh (Out of coverage).
+    // Kontrak disamakan dengan backend `DeliveryService.calculateOngkirByDistance`:
+    // di luar jangkauan TIDAK ada tarif (fee = 0), bukan menagih tarif tier terjauh
+    // yang menyesatkan. `matchedTier` tetap dikembalikan sebagai referensi tampilan.
     const maxTier = effectiveTiers[effectiveTiers.length - 1];
-    const fee = maxTier ? Number(maxTier.fee) : 35000;
-    const promoDiscount = maxTier ? Number(maxTier.promoDiscount || 0) : 0;
     return {
-      fee,
-      promoDiscount,
-      netOngkir: Math.max(0, fee - promoDiscount),
+      fee: 0,
+      promoDiscount: 0,
+      netOngkir: 0,
       isOutOfCoverage: true,
       matchedTier: maxTier,
     };
