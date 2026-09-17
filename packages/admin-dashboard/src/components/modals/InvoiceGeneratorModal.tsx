@@ -21,6 +21,7 @@ import {
   BookmarkPlus,
   RotateCcw,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { ExtractedScheduleData, formatIndonesianDate, cleanBundaName, isFormLabelAge } from '../../utils/chatScheduleExtractor';
 import { useUiFeedback } from '../common/UiFeedback';
@@ -112,6 +113,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const distanceKm = useMemo(()=>{ const n=parseFloat((distanceKmInput||'').replace(',', '.')); return isNaN(n)?0:n; }, [distanceKmInput]);
   const [ongkir, setOngkir] = useState<number | ''>(0);
   const [promoOngkir, setPromoOngkir] = useState<number | ''>(0);
+  const [ongkirOutOfCoverage, setOngkirOutOfCoverage] = useState<boolean>(false);
   const [discountPct, setDiscountPct] = useState<number | ''>(0);
   const [copied, setCopied] = useState(false);
   const [mobileTab, setMobileTab] = useState<'setting' | 'preview'>('setting');
@@ -212,6 +214,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     const calc = calculateOngkirFromTiers(v, deliveryTiers);
     setOngkir(calc.fee);
     setPromoOngkir(calc.promoDiscount);
+    setOngkirOutOfCoverage(calc.isOutOfCoverage);
   }, [distanceKm, deliveryTiers]);
 
   const discountAmount = useMemo(()=> Math.round((Number(treatmentPrice)||0) * (Number(discountPct)||0) / 100), [treatmentPrice, discountPct]);
@@ -901,6 +904,12 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   Net: {Number(netOngkir) === 0 ? 'Free' : `Rp ${formatRp(netOngkir)}`}
                 </span>
               </div>
+              {ongkirOutOfCoverage && (
+                <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-700">
+                  <AlertTriangle size={12} />
+                  <span>Jarak melebihi jangkauan tier ongkir terjauh — ongkir otomatis 0. Mohon konfirmasi manual.</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Jarak (km)</label>
