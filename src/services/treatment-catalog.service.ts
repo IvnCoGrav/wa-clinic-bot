@@ -1338,16 +1338,42 @@ export class TreatmentCatalogService {
     return bestScore > 0 ? best : undefined;
   }
 
-  /** Paket relaksasi umum untuk bayi sehat (tanpa keluhan): ambil layanan BABY/KIDS relaksasi pertama. */
-  public getDefaultRelaxationService(category?: TreatmentCategoryType, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem | undefined {
-    let pool = this.getAllServices(true, tenantId).filter((s) => s.isActive);
+  /** Paket relaksasi umum untuk bayi sehat (tanpa keluhan): ambil layanan BABY/KIDS relaksasi pertama, filter usia bila tersedia (391501 Fase 2). */
+  public getDefaultRelaxationService(
+    category?: TreatmentCategoryType,
+    ageMonthsOrTenantId?: number | string | null,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): ClinicServiceItem | undefined {
+    // Backward-compat: panggilan lama getDefaultRelaxationService(cat, tenantIdString)
+    let ageMonths: number | null = null;
+    let resolvedTenantId = tenantId;
+    if (typeof ageMonthsOrTenantId === 'string') {
+      resolvedTenantId = ageMonthsOrTenantId;
+    } else if (typeof ageMonthsOrTenantId === 'number' && Number.isFinite(ageMonthsOrTenantId)) {
+      ageMonths = ageMonthsOrTenantId;
+    }
+    // Jika argumen ke-3 disediakan sebagai tenantId eksplisit, pakai itu.
+    if (typeof tenantId === 'string' && tenantId !== DEFAULT_TENANT_ID && typeof ageMonthsOrTenantId === 'number') {
+      resolvedTenantId = tenantId;
+    }
+    let pool = this.getAllServices(true, resolvedTenantId).filter((s) => s.isActive);
     if (category && category !== 'BABY' && category !== 'KIDS' && category !== 'BOTH') {
-      // kategori ibu → cari layanan BABY default tetap
       pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
     } else if (category === 'KIDS') {
       pool = pool.filter((s) => s.category === 'KIDS' || s.category === 'BOTH');
     } else {
       pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
+    }
+    // 391501: saring usia data-driven bila tersedia
+    if (ageMonths != null && Number.isFinite(ageMonths)) {
+      const filtered = pool.filter((s) => {
+        const min = s.ageTier?.minAgeMonths ?? 0;
+        const max = s.ageTier?.maxAgeMonths;
+        if (ageMonths! < min) return false;
+        if (max != null && ageMonths! > max) return false;
+        return true;
+      });
+      if (filtered.length > 0) pool = filtered;
     }
     return pool.find((s) => s.name.toLowerCase().includes('ceria') && !s.name.toLowerCase().includes('pulih'))
       || pool.find((s) => s.category === 'BABY')

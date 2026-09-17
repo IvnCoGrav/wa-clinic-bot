@@ -319,23 +319,39 @@ export class OutputSanitizer {
   }
 
   /**
-   * Kuota sapaan vokatif deterministik (audit 993955 Turn 9): di chat lanjutan,
-   * panggilan "Bunda"/"Bapak" maksimal 1x. Pertahankan kemunculan PERTAMA;
-   * pengulangan sesudahnya dibersihkan rapi (buang vokatif beserta koma/emot
-   * pengikutnya) tanpa memutilasi kata di tengah kalimat. Bukan gatekeeper
-   * semantik — murni kendali gaya output pasca-generasi.
+   * Kuota sapaan vokatif deterministik (audit 993955 Turn 9 + 391501 Fase 1):
+   * panggilan "Bunda"/"Bapak" maksimal 1x di chat lanjutan. Pertahankan
+   * kemunculan PERTAMA; pengulangan sesudahnya dibersihkan rapi tanpa
+   * memutilasi kata di tengah kalimat. Proteksi subjek tata bahasa
+   * (sesi 391501): "Bunda" di awal kalimat/klausa yang diikuti verba/modal
+   * (hanya/cukup/bisa/perlu/dapat/mau/ingin/sudah/belum/tidak/harus/tinggal)
+   * adalah subjek, BUKAN vokatif — tidak dihitung kuota & tidak dihapus.
    */
   public static limitVocativeQuota(text: string): string {
     const quota = 1;
     const pattern = /\b(Bunda|Bapak)\b/gi;
+    // Verba/modal yang menandai subjek tata bahasa (391501).
+    const SUBJECT_FOLLOW_RE = /^(?:hanya|cukup|bisa|perlu|dapat|mau|ingin|sudah|belum|tidak|harus|tinggal)\b/i;
     let seen = 0;
-    // Ganti kemunculan melebihi kuota: hapus vokatif + pemisah koma/emoji/spasi
-    // langsung di belakangnya secara tunggal, agar tidak meninggalkan " ," / " ya ,".
-    return text.replace(pattern, (match, _g, offset: number) => {
+    return text.replace(pattern, (match, _g, offset: number, full: string) => {
+      // 391501: proteksi subjek — cek posisi awal kalimat/klausa + verba.
+      const before = full.slice(0, offset);
+      // Cari karakter non-spasi terakhir sebelum match.
+      let j = before.length - 1;
+      while (j >= 0 && /[ \t]/.test(before[j])) j--;
+      const prevChar = j >= 0 ? before[j] : '';
+      const isSentenceStart = j < 0 || /[.!?\n]/.test(prevChar);
+      if (isSentenceStart) {
+        const after = full.slice(offset + match.length).replace(/^[ \t]+/, '');
+        if (SUBJECT_FOLLOW_RE.test(after)) {
+          return match; // subjek tata bahasa — pertahankan & jangan hitung kuota
+        }
+      }
       seen += 1;
       if (seen <= quota) return match;
       return '\u0000'; // marker sementara, dibersihkan di bawah
     }).replace(/\u0000\s*[,،]?\s*/g, ' ')
+      .replace(/,\s*([!?.])/g, '$1')
       .replace(/[ \t]{2,}/g, ' ')
       .replace(/\s+([,.!?])/g, '$1')
       .replace(/[ \t]+\n/g, '\n')

@@ -49,4 +49,29 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     const count = (out.match(/\bBapak\b/gi) || []).length;
     expect(count).toBeLessThanOrEqual(1);
   });
+
+  // 391501 Fase 1 — proteksi subjek & koma menggantung
+  it('proteksi subjek: "Bunda hanya perlu..." tidak dipotong', () => {
+    const input = 'Tenang saja ya Bunda, seluruh peralatan sudah siap. Bunda hanya perlu menyiapkan tempat yang nyaman.';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(input, true);
+    // Bunda kedua adalah subjek tata bahasa → dipertahankan
+    expect(out).toContain('Bunda hanya perlu menyiapkan');
+    // Koma menggantung tidak ada
+    expect(out).not.toContain(' ,');
+    expect(out).not.toMatch(/,\s*[!?.]/);
+  });
+
+  it('koma menggantung ", Bunda!" dibersihkan menjadi "!"', () => {
+    const input = 'Kalau ada yang ingin ditanyakan lagi, jangan ragu untuk bertanya ya, Bunda! 🤗';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(
+      `Halo Bunda! ${input}`,
+      true
+    );
+    // Tidak ada koma menggantung sebelum tanda seru
+    expect(out).not.toContain('ya,!'); 
+    expect(out).not.toContain('ya,!');
+    expect(out).toMatch(/ya! 🤗/);
+    // Subjek tidak relevan di sini, tapi koma harus bersih
+    expect(out).not.toMatch(/,\s*[!?.]/);
+  });
 });
