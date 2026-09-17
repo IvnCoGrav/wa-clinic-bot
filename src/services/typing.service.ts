@@ -18,6 +18,8 @@ export interface HumanReplyResult {
   success: boolean;
   bubblesSent: number;
   error?: string;
+  /** ID WhatsApp resmi bubble terakhir (untuk ACK delivered/read & reaksi). */
+  messageId?: string;
 }
 
 export class TypingService {
@@ -352,6 +354,7 @@ export class TypingService {
     const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false' && this.speedFactor >= 0.01;
 
     let bubblesSent = 0;
+    let lastMessageId: string | undefined = undefined;
     let typingStopped = true; // Status awal typing mati/stop
     const bubbles = params.singleBubble ? [replyText] : this.splitIntoBubbles(replyText);
 
@@ -430,10 +433,24 @@ export class TypingService {
           return { success: false, bubblesSent, error: 'ABORTED_BY_HUMAN_HANDLING' };
         }
 
-        const sentSuccess = await this.client.sendText(chatId, bubbleContent);
+        // Fondasional: pakai sendTextDetailed agar wa_message_id resmi tersimpan
+        // untuk ACK delivered/read & reaksi emoji. Fallback ke sendText bila driver
+        // belum mendukung detailed (kontrak IWahaClient opsional).
+        let sentSuccess = false;
+        let sentMessageId: string | undefined = undefined;
+        if (typeof (this.client as any).sendTextDetailed === 'function') {
+          const detailed = await (this.client as any).sendTextDetailed(chatId, bubbleContent);
+          sentSuccess = !!detailed?.success;
+          sentMessageId = detailed?.messageId;
+        } else {
+          sentSuccess = await this.client.sendText(chatId, bubbleContent);
+        }
 
         if (!sentSuccess) {
           throw new Error(`WAHA sendText failed on bubble ${i + 1} of ${bubbles.length}`);
+        }
+        if (sentMessageId) {
+          lastMessageId = sentMessageId;
         }
 
         const previewText = bubbleContent.slice(0, 45).replace(/\n/g, ' ');
@@ -453,10 +470,10 @@ export class TypingService {
         }
       }
 
-      return { success: true, bubblesSent };
+      return { success: true, bubblesSent, messageId: lastMessageId };
     } catch (error: any) {
       const errMsg = error?.message || 'Unknown error during human reply simulation';
-      return { success: false, bubblesSent, error: errMsg };
+      return { success: false, bubblesSent, error: errMsg, messageId: lastMessageId };
     } finally {
       // Catatan: inFlightBotOutbounds dibiarkan kedaluwarsa secara otomatis sesuai TTL (default 45 detik)
       // di messageService. Ini mencegah race condition di mana webhook echo WAHA untuk bubble terakhir

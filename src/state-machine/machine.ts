@@ -582,13 +582,8 @@ export class ConversationStateMachine {
       );
     }
 
-    // 5. Update timestamp pesan terakhir pada percakapan
-    try {
-      await prisma.conversation?.update?.({
-        where: { id: activeConversation.id },
-        data: { last_message_at: new Date() },
-      });
-    } catch {}
+    // 5. Kronologi last_message_at murni milik messageService.logMessage (pesan riil).
+    // Mutasi prematur di sini dihapus agar chat lama tidak melompat ke atas tanpa pesan baru.
 
     // --- 6. PENGIRIMAN BALASAN (JIKA DIPERLUKAN) ---
     if (result.shouldSendReply && result.replyText) {
@@ -694,6 +689,7 @@ export class ConversationStateMachine {
         conversationId: activeConversation.id,
         direction: Direction.OUTBOUND,
         content: result.replyText,
+        waMessageId: (resultHuman as any).messageId,
         payloadRaw: Object.keys(outboundPayload).length > 0 ? outboundPayload : undefined,
         deliveryStatus: resultHuman.success ? 'sent' : 'failed',
         metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',

@@ -9,4 +9,6 @@ export * from './layers/core-persona.layer';
 export * from './phases/location-rules.phase';
 export * from './phases/pricing-catalog.phase';
 export * from './phases/scheduling.phase';
+export * from './phases/router-tool-routing.layer';
+export * from './phases/router-direct-reply.layer';
 export * from './prompt-composer';

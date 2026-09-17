@@ -16,6 +16,9 @@ export const DAY_EVIDENCE_WORDS = [
   'januari', 'februari', 'maret', 'april', 'mei', 'juni',
   'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
   'tanggal',
+  // Ekspresi hari relatif pasca-vaksin (SOP jeda observasi: "hari ke-4",
+  // "hari ke 3"). Token ganda ('hari ke' + 'hari ke-') menutup varian hubung.
+  'hari ke', 'hari ke-',
   // Varian waktu same-day (sesi 138207: "kalau siang ini bisa?" adalah jejak
   // hari INI — dipetakan via SAME_DAY_EVIDENCE_ALIASES di bawah).
   'siang ini', 'pagi ini', 'sore ini', 'malam ini', 'nanti siang', 'nanti sore', 'hari ini juga',
@@ -74,6 +77,15 @@ export function verifyDayMentioned(
   const evText = normJoin(evidence);
   const evTokenList = evText.split(' ').filter((t) => t.length > 0);
   const evTokens = new Set(evTokenList);
+  // Ekspresi hari relatif (SOP pasca-vaksin "hari ke-4"): angka WAJIB sama —
+  // "hari ke-4" tidak terbukti oleh "hari ke-5". Regex teknis atas teks yang
+  // sudah dinormalisasi (tanda hubung menjadi spasi), bukan hafalan semantik.
+  const relativeDayIn = (scopeText: string): boolean => {
+    const bdRel = /hari\s*ke\s*0*(\d+)/.exec(bd);
+    if (!bdRel) return false;
+    const re = new RegExp(`hari\\s*ke\\s*0*${bdRel[1]}\\b`);
+    return re.test(scopeText);
+  };
   const isDigitStart = (t: string): boolean => {
     if (!t) return false;
     const c = t.charCodeAt(0);
@@ -83,6 +95,7 @@ export function verifyDayMentioned(
   // daftar frasa tanya baru). Dipakai fail-closed rule pertanyaan slot.
   const messageSupportsDay = (msg: string): boolean => {
     const oneText = normJoin([msg]);
+    if (relativeDayIn(oneText)) return true;
     const toks = oneText.split(' ').filter((t) => t.length > 0);
     const tokSet = new Set(toks);
     const words = DAY_EVIDENCE_WORDS.filter((w) => bd.includes(w));
@@ -110,7 +123,10 @@ export function verifyDayMentioned(
   // (a) kata waktu eksplisit di bookingDate
   const bdWords = DAY_EVIDENCE_WORDS.filter((w) => bd.includes(w));
   let aggregateProven = false;
-  if (bdWords.length > 0) {
+  if (/hari\s*ke\s*0*(\d+)/.test(bd)) {
+    // Ekspresi relatif: angka harus sama (lihat relativeDayIn di atas).
+    aggregateProven = relativeDayIn(evText);
+  } else if (bdWords.length > 0) {
     const proven = bdWords.some((w) => {
       if (w.includes(' ')) return evText.includes(w);
       if (w === 'minggu') {

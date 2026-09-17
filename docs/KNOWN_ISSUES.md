@@ -1190,7 +1190,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   1. Rencana verifikasi v3 merujuk `tests/unit/live-chat.test.ts` dan `tests/unit/date-wib.test.ts` — kedua file TIDAK ADA di repo. Cakupan pengganti yang benar-benar ada & hijau: `tests/unit/live-chat-paged-messages.test.ts`, `tests/unit/live-chat-sync-health.test.ts` (baru, 2 tests), `tests/unit/label-lifecycle.test.ts` (8), `tests/unit/waha-label-cache.test.ts`. Jangan klaim file yang tidak ada sebagai gate.
   2. Method `wahaClient.addLabel/removeLabel/batchUpdateLabels` tetap ada di `src/integrations/waha/client.ts` (ditandai `@deprecated` + runtime warning) karena test client-level (`waha-label-cache`, `waha-label-resilience`, `waha-retry`) mengunci perilaku cache/invalidate-nya. Larangan berlaku untuk kode BISNIS (dikunci invariant guard 3 tests, termasuk pola chain multiline).
   3. Verifikasi manual mobile (scythe viewport iPhone, emoji picker, draf antar-chat, kirim) belum dieksekusi di sesi ini — wajib sebelum klaim "100% lancar" ke user.
-  4. Skrip `check-livechat-sync.ts` / `repair-last-message-at.ts` dan endpoint `sync-health` belum dijalankan terhadap DB produksi (lingkungan sesi ini offline).
+  4. Skrip `check-livechat-sync.ts` / `repair-last-message-at.ts` sudah dijalankan 2026-09-17 terhadap DB aktif: repair `--apply` menyentuh 351 baris, drift sisa 0 (idempoten, terverifikasi via sync-check). Sisa historis: 599 outbound tanpa `wa_message_id` (hanya pesan bot baru yang membawa ID resmi via `sendTextDetailed`), 163 phantom conversation (tanpa pesan, difilter by-design di query `messages: { some: {} }`).
 
 ---
 
@@ -1526,4 +1526,25 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **K3 — De-bloat prompt, EKSEKUSI SEBAGAI KONSOLIDASI MINIMAL (deviasi sadar):** inventarisasi menemukan 6+ file test mem-pin teks yang diusulkan untuk dihapus (`KONDISI A.1`, `MANDAT POV`, `DILARANG MENODONG NAMA/ALAMAT`, `MANDAT TOTAL BIAYA`, invarian cache >20k) — tiap pin adalah jejak audit klinis. Yang dipangkas HANYA 2 kalimat duplikat tak-terpin di panduan tool + 1 direktif positif aditif (net −96 char, 46117→46021). De-bloat penuh DITUNDA sebagai tech debt: butuh sign-off per-audit, bukan hapus massal.
 - **K4 — Enforce readiness:** wiring enforce sudah ada sejak Fase 2; ditambah telemetri `TOOL_MASKING_ENFORCED_APPLIED` (fail-safe try/catch) + test lock-in mode-enforce (filter terbukti) / mode-shadow (penuh). Default tetap shadow (matrix/corpus tak tersentuh).
 - **Verifikasi:** V3 308/308, matrix 20/20, korpus 61/61, typecheck 0, harness LLM **4.83** (≥4.50, 0 floor). Full suite 2405 hijau / 2 merah pre-existing (`llm-outage-silent`, `simulator-minggu-waru`).
+
+---
+
+## 80. [Rencana Fondasional] Direct Enforce + Dekomposisi Grounder + Split Router (2026-09-17)
+
+- **Status:** implemented & verified.
+- **Fase 1 — Enforce default-on + 2 gap resolusi:** `isToolMaskingEnforced()` default true / shadow default false (`.env.example` didokumentasikan); `DAY_EVIDENCE_WORDS` + pencocokan ekspresi-sama `hari ke-N` di `date-confirmation.ts` (paritas 17/17); `resolveCandidateTreatment` di masker (komitmen user + paket bold terakhir asisten; selaras audit 973126 — asisten tak bisa menyetujui). Matrix 20/20 lulus DALAM enforce: anaphoric (CM-02T4) & `hari ke-4` (CM-07T4) tertutup.
+- **Fase 2 — Dekomposisi context-grounder (950 LOC):** `medical-signal-detector.ts` (murni + label DB fail-safe), `booking-commit-gate.ts` (impor date-confirmation kanonis), `phase-resolver.ts`, `fast-response-gate.ts`; grounder = koordinator (prepare/latch/summary/ground) + fasad re-export/delegasi (zero breaking, typecheck 0). Satu-satunya berkas uji yang butuh sentuhan: `internal-label-tanya-jadwal` (cek path sumber dialihkan ke rumah baru; maksud zero-WAHA lestari).
+- **Fase 3 — Split router Call 1:** `router-tool-routing.layer.ts` + `router-direct-reply.layer.ts`; default byte-identik (seam boundaries teruji); `isSaveReservationMasked` mengganti bullet-20-larangan dengan 1 baris status (teks bullet tak dipin test mana pun); `agent-runner` pre-eval masker (murni, diduplikasi deterministik di generation-stage).
+- **Temuan samping:** `queue.test.ts` FIFO gagal sekali di bawah beban full-suite (timer 20–600ms) namun hijau isolasi — flake beban, tanpa sentuhan V3.
+- **Verifikasi:** V3 315/315, matrix 20/20 (enforce), korpus 61/61, typecheck 0, `npm run build` 0, harness 4.71/0-floor. Full suite 2418 hijau / 2 merah pre-existing yang sama.
+
+---
+
+## 80. [LiveChat] Comprehensive Fix & Search-to-Message Direct Integration (2026-09-17)
+
+- **Status:** implemented & verified — 5 layer backend+frontend, repair `--apply` 351 baris, drift 0.
+- **Akar masalah (audit read-only):** (1) `updateConversationState` selalu menimpa `last_message_at` tiap mutasi status → chat lama melompat tanpa pesan baru; (2) `machine.ts` mutasi prematur `last_message_at` + `logMessage` bot tanpa `waMessageId` (kirim via `sendText` boolean) → ACK/reaksi tak tercocokkan; (3) webhook normal langsung `enqueue` tanpa pre-log → inbound tertahan antrean/LLM; (4) thread API tanpa `focusMessageId` + frontend hanya 50 pesan terakhir → klik hasil "5km" gagal scroll; (5) `isAwaitingReply: true` buta + `isManualUnread` selalu false + ticks sidebar tak ikut SSE.
+- **Perubahan:** `livechat.subroute.ts` + `live-chat.service.ts` + `message.service.ts` (param `focusMessageId`, focus-window ±25 pesan, tenant-aware); `conversation.service.ts` (hapus mutasi palsu, `lastMessageAt` hanya eksplisit) + `machine.ts` (hapus mutasi prematur, teruskan `waMessageId` dari `sendTextDetailed`); `typing.service.ts` (`HumanReplyResult.messageId`, prefer `sendTextDetailed` + fallback); `webhook.route.ts` (pre-log inbound + flag `_preLogged`, guard machine cegah ganda); `LiveChatMonitor.tsx` (loadThread focus, direct-jump, auto-deep-search sekali-per-query, X terpadu, koreksi awaiting/unread, ticks sidebar via `message.status_updated`); `typing.test.ts` (mock seam baru `sendTextDetailed`).
+- **Verifikasi:** `npm run build` exit 0; dashboard `vite build` exit 0; `repair-last-message-at --apply` 351→0 drift; `check-livechat-sync` drift 0, phantom 163 (by-design), tanpa-ID 880 (INBOUND 281 historis/WA lama, OUTBOUND 599 historis — pesan baru kini ber-ID); full suite 327 files 2409 passed / 2 failed pre-existing terbukti di clean tree (`llm-outage-silent`, `simulator-minggu-waru-replay`, ranah prompt LLM, tak tersentuh perubahan ini).
+- **Sisa disengaja:** 599 outbound historis tetap tanpa ID (backfill butuh ID WAHA asli, tak tersedia); verifikasi manual "5km"/tombol X/centang realtime di browser belum dieksekusi sesi ini.
 

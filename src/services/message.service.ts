@@ -603,10 +603,76 @@ export class MessageService {
     conversationId: string,
     limit: number,
     tenantId: string,
-    before?: string | Date
+    before?: string | Date,
+    focusMessageId?: string
   ): Promise<{ messages: any[]; hasMore: boolean }> {
     const beforeDate = before ? new Date(before) : null;
     const validBefore = beforeDate && !isNaN(beforeDate.getTime()) ? beforeDate : null;
+    // Focus-window: kembalikan batch yang pasti memuat pesan target (search-to-message direct jump).
+    // Tenant-aware via conversation_id + tenant_id; tanpa hardcode bisnis.
+    if (focusMessageId && !validBefore) {
+      try {
+        const target = await prisma.message.findFirst({
+          where: {
+            conversation_id: conversationId,
+            tenant_id: tenantId,
+            OR: [{ id: focusMessageId }, { wa_message_id: focusMessageId }],
+          },
+        });
+        if (target) {
+          const half = Math.max(10, Math.floor(limit / 2));
+          const beforeRows = await prisma.message.findMany({
+            where: {
+              conversation_id: conversationId,
+              tenant_id: tenantId,
+              created_at: { lte: (target as any).created_at },
+            },
+            orderBy: { created_at: 'desc' },
+            take: half + 1,
+          });
+          const afterRows = await prisma.message.findMany({
+            where: {
+              conversation_id: conversationId,
+              tenant_id: tenantId,
+              created_at: { gt: (target as any).created_at },
+            },
+            orderBy: { created_at: 'asc' },
+            take: half,
+          });
+          const combined = [...beforeRows.reverse(), ...afterRows];
+          // Pastikan target ada di hasil (guard idempoten bila created_at kembar)
+          const hasTarget = combined.some(
+            (m: any) => m.id === (target as any).id || ((m as any).wa_message_id && (m as any).wa_message_id === (target as any).wa_message_id)
+          );
+          const messages = hasTarget ? combined : [...combined, target].sort(
+            (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          const oldest = messages.length > 0 ? new Date((messages[0] as any).created_at) : null;
+          let hasMore = false;
+          if (oldest) {
+            const olderCount = await prisma.message.count({
+              where: { conversation_id: conversationId, tenant_id: tenantId, created_at: { lt: oldest } },
+            });
+            hasMore = olderCount > 0;
+          }
+          return { messages, hasMore };
+        }
+      } catch (_) {
+        // Fallback memory di bawah bila DB offline
+      }
+      // Memory fallback untuk focus-window (DB offline / target hanya di memori)
+      const memAll = memoryMessages
+        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      const targetIdx = memAll.findIndex((m) => m.id === focusMessageId || m.wa_message_id === focusMessageId);
+      if (targetIdx >= 0) {
+        const half = Math.max(10, Math.floor(limit / 2));
+        const start = Math.max(0, targetIdx - half);
+        const end = Math.min(memAll.length, targetIdx + half + 1);
+        return { messages: memAll.slice(start, end), hasMore: start > 0 };
+      }
+      // Target tak ditemukan → lanjut ke path normal di bawah
+    }
     try {
       const rows = await prisma.message.findMany({
         where: {

@@ -362,6 +362,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isDeepSearching, setIsDeepSearching] = useState(false);
   const oldestMessageCursorRef = useRef<string | null>(null);
+  // Direct-jump target dari hasil pencarian sidebar (focusMessageId) — dikonsumsi loadThread sekali pakai.
+  const pendingFocusMessageIdRef = useRef<string | null>(null);
+  // Auto-deep-search sekali per query agar tidak loop saat riwayat bertambah bertahap.
+  const autoDeepSearchDoneRef = useRef<string>('');
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -1184,15 +1188,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   };
 
-  const loadThread = async (conversationId: string) => {
+  const loadThread = async (conversationId: string, focusMessageId?: string) => {
     const reqId = ++activeThreadRequestIdRef.current;
+    const effectiveFocus = focusMessageId || pendingFocusMessageIdRef.current || undefined;
+    if (focusMessageId) pendingFocusMessageIdRef.current = focusMessageId;
     setIsThreadLoading(true);
     // Reset cursor pagination setiap ganti/refresh percakapan
     setHasMoreOlderMessages(false);
     setIsLoadingOlder(false);
     oldestMessageCursorRef.current = null;
     try {
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages?limit=50`);
+      const focusQs = effectiveFocus ? `&focusMessageId=${encodeURIComponent(effectiveFocus)}` : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages?limit=50${focusQs}`);
       if (activeThreadRequestIdRef.current !== reqId || selectedIdRef.current !== conversationId) {
         return;
       }
@@ -1230,6 +1237,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) })));
+        // Direct jump: DOM #msg-<focus> sudah ada setelah batch focus-window termuat.
+        if (effectiveFocus) {
+          pendingFocusMessageIdRef.current = null;
+          setHighlightedMsgId(effectiveFocus);
+          setTimeout(() => scrollToMessage(effectiveFocus, true), 80);
+          setTimeout(() => scrollToMessage(effectiveFocus, true), 350);
+        }
       }
     } catch (err: any) {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
@@ -1668,6 +1682,27 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   }, [messages, selectedId, effectiveInChatQuery, scrollToBottom, scrollToMessage]);
 
+  // Auto-deep-search: kata kunci di riwayat lama dicari otomatis di latar tanpa klik manual.
+  // Berhenti otomatis begitu kecocokan pertama ditemukan (via efek scroll di atas).
+  useEffect(() => {
+    if (!effectiveInChatQuery || selectedId == null) {
+      autoDeepSearchDoneRef.current = '';
+      return;
+    }
+    if (
+      matchingMessageIds.length === 0 &&
+      hasMoreOlderMessages &&
+      !isDeepSearching &&
+      !isLoadingOlder &&
+      !isThreadLoading &&
+      messages.length > 0 &&
+      autoDeepSearchDoneRef.current !== `${selectedId}:${effectiveInChatQuery}`
+    ) {
+      autoDeepSearchDoneRef.current = `${selectedId}:${effectiveInChatQuery}`;
+      void handleDeepSearchInHistory();
+    }
+  }, [effectiveInChatQuery, matchingMessageIds.length, hasMoreOlderMessages, isDeepSearching, isLoadingOlder, isThreadLoading, messages.length, selectedId]);
+
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
       if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
@@ -1792,14 +1827,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       isChatHistoryPushedRef.current = true;
     } catch {}
 
-    // Auto mark-as-read jika masih ada unread atau isManualUnread
+    // Auto mark-as-read jika masih ada unread atau isManualUnread.
+    // Kontrak backend: awaiting hanya bila pesan terakhir INBOUND & usia <24 jam.
     const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);
     if (targetChat && ((targetChat.unreadCount || 0) > 0 || targetChat.isManualUnread)) {
       apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
+      const lastMsg = (targetChat.lastMessages || [])[(targetChat.lastMessages || []).length - 1] as any;
+      const isLastInbound = !!lastMsg && lastMsg.direction === 'INBOUND';
+      const lastAgeOk = !!lastMsg && (Date.now() - new Date(lastMsg.created_at).getTime()) <= 24 * 60 * 60 * 1000;
       setChats((prev) => {
         const updated = prev.map((c) =>
           c.conversationId === conversationId
-            ? { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: true }
+            ? { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: isLastInbound && lastAgeOk }
             : c
         );
         chatsRef.current = updated;
@@ -1958,7 +1997,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     lastMessages: [...(c.lastMessages || []), msg].slice(-3),
                     unreadCount: nextUnread,
                     isAwaitingReply: isAdminOutbound ? false : (isCurrentOpen && isMsgInbound),
-                    isManualUnread: isAdminOutbound ? false : false,
+                    isManualUnread: isAdminOutbound ? false : c.isManualUnread,
                   }
             );
             const sorted = sortChats(updated);
@@ -2049,6 +2088,24 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 return m;
               })
             );
+          }
+          // Sinkronisasi ticks sidebar: centang di daftar ikut realtime saat ACK tiba.
+          if (conversationId) {
+            const updatedChats = chatsRef.current.map((c) =>
+              c.conversationId !== conversationId
+                ? c
+                : {
+                    ...c,
+                    lastMessages: (c.lastMessages || []).map((m: any) =>
+                      (messageId && (m.id === messageId || m.wa_message_id === messageId)) ||
+                      (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
+                        ? { ...m, delivery_status: status, delivered_at: deliveredAt || m.delivered_at, read_at: readAt || m.read_at }
+                        : m
+                    ),
+                  }
+            );
+            chatsRef.current = updatedChats;
+            startTransition(() => setChats([...updatedChats]));
           }
         } else if (type === ('sync.progress' as any) || payload?.status) {
           const syncData = payload.payload || payload;
@@ -3430,6 +3487,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }
                           setSearchQuery('');
                           loadChats(true, '', true);
+                          // Unified clear: 1 klik X menutup toolbar in-chat, hapus <mark>, reset scroll.
+                          handleClearInChatSearch();
                         }}
                         className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
                         title="Hapus pencarian"
@@ -3460,6 +3519,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }
                           setSearchQuery('');
                           loadChats(true, '', true);
+                          handleClearInChatSearch();
                         }}
                         className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
                       >
@@ -3518,6 +3578,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         if (searchQuery.trim() && matchedId) {
                           setInChatSearchQuery(searchQuery);
                           setInChatSearchOpen(true);
+                          // Direct jump: backend mengembalikan batch berisi pesan target via focusMessageId.
+                          pendingFocusMessageIdRef.current = matchedId;
                         } else if (searchQuery.trim()) {
                           // Fallback: cari di lastMessages untuk highlight lokal
                           const q = searchQuery.trim().toLowerCase();
@@ -3529,8 +3591,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         }
                         handleSelect(chat.conversationId);
                         if (matchedId) {
-                          setTimeout(() => scrollToMessage(matchedId, true), 600);
-                          setTimeout(() => scrollToMessage(matchedId, true), 1200);
+                          // Batch focus-window dimuat langsung; scroll terjadi di loadThread setelah DOM siap.
+                          loadThread(chat.conversationId, matchedId);
                         }
                       }}
                       onContextMenu={(e) => {
