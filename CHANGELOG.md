@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Remediasi 391501 — Sanitizer Subjek, Rekomendasi Usia & RAG Persiapan (2026-09-17)
+
+- **Fase 1 — Sanitizer subjek tata bahasa (`src/v3/guardrails/sanitizer.ts`, `tests/unit/v3-sanitizer-vocative-quota.test.ts`)**: `limitVocativeQuota` kini memproteksi subjek kalimat ("Bunda hanya/cukup/bisa/perlu/...") di awal kalimat/klausa — tidak dihapus & tidak mengurangi kuota 1 vokatif. Koma menggantung (",!") dibersihkan deterministik (`/,\\s*([!?.])/ → $1`). Menutup mutilasi Turn 8 (" hanya perlu...") & koma menggantung Turn 9 ("ya,! 🤗").
+- **Fase 2 — Rekomendasi usia-aware (`src/services/treatment-catalog.service.ts`, `src/v3/state/goal-tracker.ts`, `tests/unit/treatment-catalog-default-relaxation.test.ts`)**: `getDefaultRelaxationService(category?, ageMonths?, tenantId?)` menyaring `ageTier` (backward-compat: string tenantId sebagai argumen kedua tetap didukung). `goal-tracker.formatGoalSessionForPrompt` menyuntik `childAge` ke rekomendasi bayi sehat — usia 17 bulan → "Pijat Bayi Ceria" (bukan Newborn), 3 bulan → Newborn, 36 bulan → Kids Ceria. 6/6 hijau.
+- **Fase 3 — RAG persiapan (`src/services/keyword-enrichment.service.ts`, `src/cli/faq-corpus.ts`, `scripts/sync-prep-knowledge.ts`, `tests/unit/knowledge-preparation-search.test.ts`)**: keyword persiapan diperkaya (`baby oil, minyak telon, pijat bayi, bayi, anak, si kecil, kudu nyiapin, homecare, peralatan, matras, tempat tidur`); jawaban FAQ dipadatkan steril ("baby oil, minyak telon, matras, perlak... cukup siapkan alas tidur"); skrip sync idempoten untuk DB live. 5/5 hijau.
+- **Fase 4 — Verifikasi**: `tests/integration/deterministic-guardrails-session-391501.test.ts` 2/2, build `tsc` 0. Seluruh gate 20/20 hijau.
+
 #### Over-Kalkulasi Durasi Layanan & Reservasi Siluman Typo Tanggal (2026-09-17)
 
 - **Akar masalah (multi-layer):** `extractDurationMinutes` mengasumsikan SEMUA item bundling 60 menit (`items.length * 60 + 15`) → "Pijat Bayi Pulih Ceria + Sinar Moksa" = 135m (padahal 75m); `tryParseIndonesianDate` membuang tanggal mustahil "41 September" lalu jatuh ke fallback nama-hari `diff += 7` (reservasi siluman +7 hari); auto-capture webhook menyimpan `duration_minutes: NULL`.

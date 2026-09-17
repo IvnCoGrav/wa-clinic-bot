@@ -313,9 +313,11 @@ export class GoalTracker {
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
-      // Bayi sehat tanpa keluhan → paket relaksasi default dari katalog
+      // Bayi sehat tanpa keluhan → paket relaksasi default dari katalog (age-aware 391501 Fase 2)
       try {
-        const def = treatmentCatalogService.getDefaultRelaxationService();
+        const childAge = (session.childProfile as any)?.ageMonths ?? (session.children as any)?.[0]?.ageMonths ?? null;
+        const categoryHint: any = session.targetAudience === 'MOMS' ? 'MOMS' : session.targetAudience === 'KIDS' ? 'KIDS' : 'BABY';
+        const def = treatmentCatalogService.getDefaultRelaxationService(categoryHint, childAge as number | null);
         if (def) {
           pregroundedRecommendation = `• Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan): *${def.name}* — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk bayi sehat; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]\n  [MANDAT: DILARANG memuntahkan harga/promo jika customer belum bertanya harga/biaya!]`;
         }
