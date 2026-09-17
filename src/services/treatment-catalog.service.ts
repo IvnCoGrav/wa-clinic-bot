@@ -659,6 +659,287 @@ export class TreatmentCatalogService {
   }
 
   /**
+   * Resolusi durasi kanonis sebuah `treatment_detail` (Single Source of Truth).
+   * Aturan (tanpa asumsi flat 60 menit, tanpa nama pasien):
+   * 1. Tag eksplisit ([Total XXm], `= XXm]`, `[XXm]` terpisah, "NN menit") diprioritaskan.
+   * 2. Teks gabungan (+, &, dan, koma) dipecah per item dan dicocokkan ke katalog
+   *    tenant (durasi resmi per item; add-on tanpa buffer tambahan).
+   * 3. Total = jumlah durasi item + buffer transisi 20 menit per kunjungan
+   *    bila ada minimal satu layanan utama (selaras bukti DB
+   *    "[Total 55m + Buffer 20m = 75m]" & STAFF_BUFFER 20m di reservation-core).
+   */
+  public resolveCanonicalDuration(treatmentDetail: string | null | undefined, tenantId: string = DEFAULT_TENANT_ID): number {
+    return this.resolveDurationBreakdown(treatmentDetail, tenantId).totalMinutes;
+  }
+
+  /**
+   * Rincian resolusi durasi (untuk keputusan tulis DB): membedakan item yang
+   * benar-benar cocok katalog dari teks tak dikenali. `confident=false` berarti
+   * angka total hanyalah estimasi tampilan dan TIDAK BOLEH dipersist sebagai
+   * durasi resmi (anti-fabrikasi data).
+   */
+  public resolveDurationBreakdown(
+    treatmentDetail: string | null | undefined,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): { totalMinutes: number; matchedItemIds: string[]; unmatchedItems: string[]; usedExplicitTag: boolean; confident: boolean } {
+    const fallback = { totalMinutes: 60, matchedItemIds: [] as string[], unmatchedItems: [] as string[], usedExplicitTag: false, confident: false };
+    if (!treatmentDetail || typeof treatmentDetail !== 'string' || !treatmentDetail.trim()) return fallback;
+    const raw = treatmentDetail.trim();
+    const text = this.stripStructuredMetadata(raw);
+
+    // 1. Tag eksplisit hasil perhitungan (paling otoritatif, dihitung dari katalog saat dibuat).
+    const equalsMatch = text.match(/=\s*(\d+)\s*(?:m|menit|mins?)\b/i);
+    if (equalsMatch && equalsMatch[1]) {
+      const num = parseInt(equalsMatch[1], 10);
+      if (!isNaN(num) && num > 0) return { totalMinutes: Math.min(480, num), matchedItemIds: [], unmatchedItems: [], usedExplicitTag: true, confident: true };
+    }
+    const totalBufferMatch = text.match(/Total\s*(\d+)\s*m?\s*\+\s*Buffer\s*(\d+)\s*m?/i);
+    if (totalBufferMatch && totalBufferMatch[1] && totalBufferMatch[2]) {
+      const pure = parseInt(totalBufferMatch[1], 10);
+      const buf = parseInt(totalBufferMatch[2], 10);
+      if (!isNaN(pure) && !isNaN(buf) && pure + buf > 0) return { totalMinutes: Math.min(480, pure + buf), matchedItemIds: [], unmatchedItems: [], usedExplicitTag: true, confident: true };
+    }
+    const totalMatch = text.match(/\[\s*Total\s*(\d+)\s*(?:m|menit|mins?)\b/i);
+    if (totalMatch && totalMatch[1]) {
+      const num = parseInt(totalMatch[1], 10);
+      if (!isNaN(num) && num > 0) return { totalMinutes: Math.min(480, num), matchedItemIds: [], unmatchedItems: [], usedExplicitTag: true, confident: true };
+    }
+    const bracketMatches = text.match(/\[\s*(\d+)\s*(?:m|menit|mins?)\b/gi);
+    if (bracketMatches && bracketMatches.length > 0) {
+      let sum = 0;
+      for (const b of bracketMatches) {
+        const num = parseInt(b.replace(/\D/g, ''), 10);
+        if (num > 0 && num <= 360) sum += num;
+      }
+      if (sum > 0) return { totalMinutes: Math.min(480, sum), matchedItemIds: [], unmatchedItems: [], usedExplicitTag: true, confident: true };
+    }
+    const minMatches = text.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
+    if (minMatches && minMatches.length > 0) {
+      let sum = 0;
+      for (const m of minMatches) {
+        const num = parseInt(m.replace(/\D/g, ''), 10);
+        if (num > 0 && num <= 360) sum += num;
+      }
+      if (sum > 0) return { totalMinutes: Math.min(480, sum), matchedItemIds: [], unmatchedItems: [], usedExplicitTag: true, confident: true };
+    }
+
+    const items = this.splitTopLevelItems(text);
+    if (items.length === 0) return { ...fallback, totalMinutes: 60 };
+
+    const VISIT_BUFFER_MINUTES = 20;
+    interface ResolvedItem { id: string; durationMinutes: number; isAddon: boolean; isBundle: boolean; componentIds: string[] }
+    const matchedServices: ResolvedItem[] = [];
+    const unmatchedItems: string[] = [];
+
+    for (const item of items) {
+      const matched = this.matchCatalogItem(item, tenantId);
+      if (matched) {
+        matchedServices.push({
+          id: matched.id,
+          durationMinutes: matched.durationMinutes,
+          isAddon: this.isAddonService(matched),
+          isBundle: this.isBundleService(matched),
+          componentIds: matched.bundleItemIds || [],
+        });
+      } else if (this.isAddonKeyword(item)) {
+        // Keyword add-on tanpa entri katalog: hanya durasi add-on, tanpa buffer kunjungan.
+        matchedServices.push({
+          id: item.toLowerCase().includes('nebulizer') ? '__addon_nebulizer__' : '__addon_generic__',
+          durationMinutes: item.toLowerCase().includes('nebulizer') ? 20 : 15,
+          isAddon: true,
+          isBundle: false,
+          componentIds: [],
+        });
+      } else {
+        unmatchedItems.push(item);
+      }
+    }
+
+    // Anti double-count: (a) id duplikat dihitung sekali; (b) komponen bundle yang
+    // juga tampil sebagai item mandiri dibuang karena durasinya sudah termasuk bundle.
+    const unique: ResolvedItem[] = [];
+    const seenIds = new Set<string>();
+    for (const s of matchedServices) {
+      if (seenIds.has(s.id)) continue;
+      seenIds.add(s.id);
+      unique.push(s);
+    }
+    const bundleComponentIds = new Set<string>();
+    for (const s of unique) {
+      if (s.isBundle) for (const cid of s.componentIds) bundleComponentIds.add(cid);
+    }
+    const resolved = unique.filter((s) => !bundleComponentIds.has(s.id));
+
+    let sum = 0;
+    let hasMain = false;
+    let hasBundle = false;
+    for (const s of resolved) {
+      sum += s.durationMinutes;
+      if (s.isBundle) hasBundle = true;
+      else if (!s.isAddon) hasMain = true;
+    }
+    if (unmatchedItems.length > 0) {
+      sum += unmatchedItems.length * 60;
+      hasMain = true;
+    }
+
+    // Buffer kunjungan hanya untuk layanan utama non-bundle (bundle = durasi penuh kunjungan).
+    if (hasMain && !hasBundle) sum += VISIT_BUFFER_MINUTES;
+    const totalMinutes = Math.min(480, Math.max(15, sum));
+    return {
+      totalMinutes,
+      matchedItemIds: resolved.map((s) => s.id),
+      unmatchedItems,
+      usedExplicitTag: false,
+      confident: resolved.length > 0 && unmatchedItems.length === 0,
+    };
+  }
+
+
+  /**
+   * Buang metadata audiens dari format `treatment_detail` DB
+   * ("Baby: X (Bayi: nama, Usia: y) | Moms: Z (Kehamilan: w)").
+   */
+  public stripStructuredMetadata(text: string): string {
+    let s = text;
+    for (let i = 0; i < 3; i++) {
+      s = s.replace(/\(\s*(?:bayi|anak|pasien|kehamilan|usia)\s*:[^()]*\)/gi, ' ');
+    }
+    s = s.replace(/\b(?:baby|moms|kids|combination|pasien|bayi|anak|balita)\s*:/gi, ' ');
+    s = s.replace(/\|/g, ' + ');
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  /** Pecah item pada pemisah + , & dan — HANYA di kedalaman tanda kurung 0. */
+  public splitTopLevelItems(text: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let current = '';
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      if (depth === 0) {
+        if (ch === '+' || ch === ',' || ch === '&') {
+          out.push(current);
+          current = '';
+          continue;
+        }
+        if (ch === ' ') {
+          const rest = text.slice(i).toLowerCase();
+          if (/^ dan\s/.test(rest)) {
+            out.push(current);
+            current = '';
+            i += 3;
+            continue;
+          }
+        }
+      }
+      current += ch;
+    }
+    out.push(current);
+    return out.map((s) => s.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim()).filter((s) => s.length > 2);
+  }
+
+  /**
+   * Pencocokan satu item teks ke katalog tenant (normalisasi alfanumerik +
+   * buang token add-on agar "Sinar Moksa" cocok ke "Sinar Moksa (Add-on)").
+   */
+  /**
+   * Pencocokan keyakinan (dipakai resolusi durasi). Kandidat harus memuat SEMUA
+   * token bermakna item (isi kurung & alias linguistik dinormalisasi); pemenang =
+   * surplus token paling sedikit (paling spesifik), tie-break non-bundle.
+   *
+   * Sifat yang diinginkan: tahan urutan kata ("Pijat Ceria Bayi" → "Pijat Bayi
+   * Ceria") dan menolak fragmen acak ("breast" tidak mengunci bundle besar).
+   * Double-count dicegah di pemanggil dengan pemisah item yang benar (`splitTopLevelItems`).
+   */
+  public matchCatalogItem(itemText: string, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem | undefined {
+    const itemTokens = this.catalogWordTokens(itemText);
+    // Butuh >= 2 token bermakna: kata tunggal generik ("breast", "body") tidak boleh
+    // mengunci layanan utama (dicegah sebagai add-on / unmatched oleh pemanggil).
+    if (itemTokens.size < 2) return undefined;
+    const normItemKey = this.normalizeCatalogKey(itemText);
+    let best: ClinicServiceItem | undefined;
+    let bestKey: [number, number, number] | undefined;
+    for (const s of this.getAllServices(true, tenantId)) {
+      const svcTokens = this.catalogWordTokens(s.name);
+      if (svcTokens.size < itemTokens.size) continue;
+      let containsAll = true;
+      for (const t of itemTokens) {
+        if (!svcTokens.has(t)) { containsAll = false; break; }
+      }
+      if (!containsAll) continue;
+      // Prioritas 1: teks item adalah bagian nama katalog utuh (mis. "Prenatal Massage"
+      // ⊂ "Prenatal Massage (Pijat Hamil)") — paling dapat dipercaya.
+      const normSvc = this.normalizeCatalogKey(this.stripParenthetical(s.name));
+      const isNamedSubset = normItemKey.length >= 4 && normSvc.includes(normItemKey);
+      const surplus = svcTokens.size - itemTokens.size;
+      const bundlePenalty = s.category === 'BUNDLE' ? 1 : 0;
+      const key: [number, number, number] = [isNamedSubset ? 0 : 1, surplus, bundlePenalty];
+      if (!bestKey || key[0] < bestKey[0] ||
+          (key[0] === bestKey[0] && key[1] < bestKey[1]) ||
+          (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] < bestKey[2])) {
+        bestKey = key;
+        best = s;
+      }
+    }
+    return best;
+  }
+
+  /** Buang isi tanda kurung dari nama layanan sebelum pencocokan substring. */
+  private stripParenthetical(name: string | null | undefined): string {
+    return (name || '').replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * Token kata bermakna dari nama layanan: buang isi kurung, token add-on, kata
+   * pendek, dan normalisasi alias linguistik (typo/varian lazim customer).
+   */
+  private catalogWordTokens(name: string | null | undefined): Set<string> {
+    const cleaned = (name || '')
+      .toLowerCase()
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ');
+    const alias: Record<string, string> = {
+      rileksasi: 'relaksasi',
+      rileks: 'relaksasi',
+      pijet: 'pijat',
+      moxa: 'moksa',
+      kidz: 'kids',
+      baby: 'bayi',
+      oksitoksin: 'oksitosin',
+      oksifull: 'oksitosin',
+      therapist: 'terapi',
+    };
+    const stop = new Set(['addon', 'add', 'on', 'dan', 'the', 'paket', 'spa', 'treatment', 'layanan']);
+
+    // Catatan: "massage" DIPERTAHANKAN sebagai token bermakna (mis. membedakan
+    // "Prenatal Massage" dari "Prenatal Yoga").
+    return new Set(
+      cleaned
+        .split(' ')
+        .map((w) => alias[w] || w)
+        .filter((w) => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w))
+    );
+  }
+
+  private normalizeCatalogKey(name: string | null | undefined): string {
+    return (name || '')
+      .toLowerCase()
+      .replace(/\(add-?on\)|\[add-?on\]/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .replace(/addon/g, '');
+  }
+
+  private isAddonKeyword(itemText: string): boolean {
+    const lower = (itemText || '').toLowerCase();
+    return lower.includes('moksa') || lower.includes('moxa') || lower.includes('cukur') ||
+      lower.includes('tindik') || lower.includes('nebulizer') || lower.includes('add-on') ||
+      lower.includes('addon');
+  }
+
+  /**
    * Cek apakah sebuah layanan merupakan Paket Bundle (gabungan 2+ layanan eksisting)
    */
   public isBundleService(serviceOrId: ClinicServiceItem | string): boolean {

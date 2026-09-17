@@ -58,6 +58,7 @@ import {
   DAY_EVIDENCE_WORDS,
   SAME_DAY_EVIDENCE_ALIASES,
   isSameDayRequestText,
+  isPastBookingDateText,
   verifyDayMentioned,
 } from '../../utils/date-confirmation';
 
@@ -65,6 +66,7 @@ export {
   DAY_EVIDENCE_WORDS,
   SAME_DAY_EVIDENCE_ALIASES,
   isSameDayRequestText,
+  isPastBookingDateText,
   verifyDayMentioned,
 };
 
@@ -312,6 +314,19 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       success: false,
       summary: 'Hari/tanggal belum ditentukan oleh customer',
       message: dayGateError,
+    };
+  }
+
+  // Audit 310995 — Temporal Gate (fail-closed): tolak tanggal yang sudah
+  // berlalu. Parser menggulir masa lalu ke masa depan secara SENYAP (mis.
+  // "18 Agustus 2026" saat kini September 2026 → 2027), sehingga tervalidasi
+  // tanpa ini akan menyimpan tanggal yang salah. Wajib konfirmasi ulang.
+  if (isPastBookingDateText(bookingDate)) {
+    console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_PAST_DATE_REJECTED', tenantId, bookingDate, timestamp: new Date().toISOString() }));
+    return {
+      success: false,
+      summary: 'Tanggal kunjungan sudah terlewat',
+      message: `Permintaan jadwal kunjungan pada "${bookingDate}" tidak dapat diproses karena tanggal tersebut sudah berlalu dari kalender hari ini. Mohon tanyakan kembali kepada Bunda tanggal dan bulan yang dimaksud untuk kami bantu cekkan jadwalnya.`,
     };
   }
 

@@ -29,4 +29,10 @@ describe('Router Prompt Layering (Fase 3)', () => {
       composeRouterPrompt(session, true)
     );
   });
+
+  it('mandat preservasi entitas utuh (sesi 337880): locationText DILARANG dipotong', () => {
+    const p = composeRouterPrompt(session, false);
+    expect(p).toContain('secara UTUH tanpa memotong kata apa pun');
+    expect(p).toContain('Waru Kepuh Kiriman');
+  });
 });

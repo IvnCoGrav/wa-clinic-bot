@@ -312,6 +312,25 @@ export class CartManager {
     }
     const primaryTypeOf = (s: (typeof services)[number]): string =>
       s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
+    // Afirmasi telanjang + tawaran tunggal (sesi 337880 Ambiguous-Choice):
+    // user berkata "boleh"/"iya" (tanpa nama, tanpa '?', tanpa negasi) dan
+    // pesan asisten TERAKHIR menawarkan TEPAT SATU layanan → afirmasi itu
+    // ADALAH komitmen aktif user atas tawaran tersebut (asisten hanya
+    // mengidentifikasi, bukan menciptakan isi). Multi-tawaran ("boleh deh
+    // yang itu" pasca ≥2 opsi) tetap terkunci — ambigu, butuh klarifikasi.
+    // Tanpa ini, alur tunggal paling umum ("Bisa dibantu X" → "boleh" + hari)
+    // tak pernah bisa booking (cart kosong → masker TREATMENT_EMPTY).
+    const lastUserMsg = [...history].reverse().find((h) => (h?.role || '').toLowerCase() === 'user');
+    const lastUserBareAffirm = (() => {
+      const raw = (lastUserMsg?.content || '').toLowerCase();
+      if (!raw || raw.includes('?')) return false;
+      const toks = raw.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+      if (toks.length === 0 || toks.length > 4) return false;
+      const AFFIRM = new Set(['iya', 'iyaa', 'ya', 'betul', 'benar', 'ambil', 'mau', 'boleh', 'setuju', 'lanjut', 'deal', 'oke', 'ok', 'sip']);
+      const BLOCK = new Set(['apa', 'berapa', 'kapan', 'bagaimana', 'gimana', 'kenapa', 'dimana', 'mana', 'apakah', 'atau', 'tidak', 'nggak', 'ngga', 'gak', 'jangan', 'batal', 'nanti', 'tanya', 'belum', 'kak', 'mbak', 'bunda']);
+      if (!toks.some((t) => AFFIRM.has(t))) return false;
+      return !toks.some((t) => BLOCK.has(t));
+    })();
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
@@ -434,7 +453,25 @@ export class CartManager {
         }
         fuzzyHits = deduped;
       }
+      const fullSet = new Set(fullHits.map((x) => x.name.toLowerCase()));
+      const cleanSet = new Set(cleanHits.map((x) => x.name.toLowerCase()));
+      const singleExactOffer =
+        new Set([...fullSet, ...cleanSet]).size === 1;
       for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) {
+        // Sesi 337880 (active user commitment mutlak, mandat AGENTS.md):
+        // rekomendasi/tawaran asisten (role === 'assistant') DILARANG
+        // memasukkan layanan ke keranjang secara sepihak. Pesan asisten
+        // HANYA boleh MENGONFIRMASI item yang customer pernah rujuk
+        // (userConfirmedNames dari pesan user) — identifikasi anaphoric,
+        // bukan penciptaan isi.
+        // Pengecualian afirmasi-tunggal: user berkata "boleh"/"iya" atas
+        // TEPAT SATU tawaran exact (full/clean) — afirmasi itu komitmen
+        // aktifnya; teks asisten hanya penunjuk paketnya. Fuzzy asisten
+        // tetap DILARANG selalu (aturan lama lestari).
+        if (isAssistant && !userConfirmedNames.has(s.name.toLowerCase())) {
+          const isExact = fullSet.has(s.name.toLowerCase()) || cleanSet.has(s.name.toLowerCase());
+          if (!(lastUserBareAffirm && singleExactOffer && isExact)) continue;
+        }
         // Sesi 834128: tawaran multi-opsi asisten (≥2 PRIMARY berbeda dalam
         // satu pesan) hanya boleh masuk keranjang bila user pernah merujuk
         // itemnya. Tanpa rujukan user, dorong HANYA yang terkonfirmasi;

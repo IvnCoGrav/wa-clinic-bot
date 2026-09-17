@@ -382,6 +382,11 @@ export class GenerationStage {
       const matchingTool = baseToolsForCall1.find((t: any) => t.function?.name === forcedName);
       if (matchingTool) {
         toolsForCall1 = [matchingTool];
+      } else {
+        // Tool yang di-forcing ternyata di-mask gate pre-LLM (mis. lokasi
+        // disebut tapi tanpa entitas baru) — turunkan ke 'auto' agar LLM tak
+        // dipaksa memanggil tool yang fisiknya absen dari skema.
+        dynamicToolChoice = 'auto';
       }
     }
 
@@ -390,6 +395,7 @@ export class GenerationStage {
       messages,
       tools: toolsForCall1,
       tool_choice: dynamicToolChoice,
+      parallel_tool_calls: false, // MANDAT ATOMIC ROUTING (audit 993955): 1 turn WhatsApp = maksimal 1 tool utama.
       temperature: 0.2,
     };
 

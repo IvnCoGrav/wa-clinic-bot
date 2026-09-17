@@ -28,6 +28,13 @@ import { PersonaPromptBuilder } from '../../src/v3/agent/persona';
  * Rencana Implementasi Perbaikan Fondasional Audit AI Chat & Reservasi Homecare.
  * Offline, tanpa DB (in-memory fallback aktif via tests/setup.ts).
  */
+
+/** Tanggal ISO masa depan (audit 310995: gate temporal menolak tanggal lampau). */
+function futureDate(daysAhead = 7): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,7 +48,7 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
       customerId: 'cust-1',
       chatId: '6281@c.us',
       treatmentName: 'Oksitosin Massage Fullbody',
-      bookingDate: '2026-09-10',
+      bookingDate: futureDate(),
       gestationalWeeks: 38,
       momStage: 'PREGNANT',
     } as any);
@@ -61,7 +68,7 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
       chatId: '6281@c.us',
       treatmentName: 'Oksitosin Massage Fullbody',
       additionalTreatments: ['Pijat Bayi Ceria'],
-      bookingDate: '2026-09-10',
+      bookingDate: futureDate(),
       gestationalWeeks: 38,
       children: [{ ageMonths: 2 }],
     } as any);
@@ -75,7 +82,7 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
       customerId: 'cust-1',
       chatId: '6281@c.us',
       treatmentName: 'Oksitosin Massage Fullbody',
-      bookingDate: '2026-09-10',
+      bookingDate: futureDate(),
     } as any);
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
     // Promo katalog Oksitosin Massage Fullbody = Rp 105.000

@@ -422,6 +422,22 @@ Terimakasih.  ☺️`;
     expect(d!.getHours()).toBe(9); // Default 09:00 WIB, bukan 10:08
     expect(d!.getMinutes()).toBe(0);
   });
+
+  it('20. should recover digit-transposition typo (41 September -> 14 September, cocok hari Senin)', () => {
+    const d = tryParseIndonesianDate('Senin, 41 September 2026 jam 09.30-10.00');
+    expect(d).toBeDefined();
+    expect(d!.getFullYear()).toBe(2026);
+    expect(d!.getMonth()).toBe(8); // September
+    expect(d!.getDate()).toBe(14);
+    expect(d!.getDay()).toBe(1); // Senin
+    expect(d!.getHours()).toBe(9);
+    expect(d!.getMinutes()).toBe(30);
+  });
+
+  it('21. should never silently jump +7 days for impossible dates without transposition (99 September -> null)', () => {
+    const d = tryParseIndonesianDate('99 September 2026 jam 09.30');
+    expect(d).toBeNull();
+  });
 });
 
 
