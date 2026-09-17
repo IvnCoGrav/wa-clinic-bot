@@ -22,8 +22,9 @@ describe('Artery Corridor Gazetteer (Issue #21)', () => {
     expect(hit?.kecamatan.toLowerCase()).toBe('tambaksari');
   });
 
-  it('seluruh 10 koridor ter-resolve ke koordinat dataset (ground-truth)', () => {
-    expect(ARTERY_CORRIDORS).toHaveLength(10);
+  it('seluruh 16 koridor ter-resolve ke koordinat dataset (ground-truth)', () => {
+    // Agenda 1 Fase 4: 10 koridor awal + 6 koridor Surabaya Selatan/Waru.
+    expect(ARTERY_CORRIDORS).toHaveLength(16);
     const failures: string[] = [];
     for (const c of ARTERY_CORRIDORS) {
       const hit = getGazetteerCoordinates(`Saya di ${c.key}`);

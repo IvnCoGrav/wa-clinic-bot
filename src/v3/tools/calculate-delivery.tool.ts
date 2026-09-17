@@ -357,7 +357,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         kecamatan: kecName,
         kota: kotaName,
         isOutOfCoverage: false,
-        message: `Area "${compositeQuery}" adalah nama kecamatan (${kecName}) yang masih luas dan membawahi ${ambiguityList.length} kelurahan/desa. Karena beda kelurahan bisa berbeda jarak dan tarif ongkir, mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau tawarkan opsi kirim share location agar titiknya presisi). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
+        message: `Area "${compositeQuery}" adalah nama kecamatan (${kecName}) yang masih luas dan membawahi ${ambiguityList.length} kelurahan/desa. Karena beda kelurahan bisa berbeda jarak dan tarif ongkir, mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda (tanpa menanyakan nomor jalan atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
       };
     }
 
@@ -382,7 +382,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           kecamatan: kecNoCoords,
           kota: resolved.kota,
           isOutOfCoverage: false,
-          message: `Area "${kecNoCoords}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
+          message: `Area "${kecNoCoords}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda. DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
         };
       }
 
@@ -390,7 +390,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
-        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya (atau tawarkan kirim share location). DILARANG mengeluarkan nominal km atau tarif ongkir!`
+        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya secara ramah. DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
 
@@ -410,7 +410,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         kecamatan: typeof kecLevelName === 'string' ? kecLevelName : undefined,
         kota: resolved.kota,
         isOutOfCoverage: false,
-        message: `Area "${kecLevelName}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
+        message: `Area "${kecLevelName}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda. DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
       };
     }
 
@@ -419,7 +419,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
-        message: `Lokasi "${compositeQuery}" masih terlalu umum (belum ada nama kelurahan/perumahan spesifik). Mohon tanyakan nama kelurahan atau perumahan terdekatnya (atau share location). DILARANG mengeluarkan nominal km atau tarif ongkir!`
+        message: `Lokasi "${compositeQuery}" masih terlalu umum (belum ada nama kelurahan/perumahan spesifik). Mohon tanyakan nama kelurahan atau perumahan terdekatnya secara ramah. DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
 

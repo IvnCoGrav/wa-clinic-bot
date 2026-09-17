@@ -4,6 +4,9 @@ import { acknowledgementScenarios } from './scenarios/acknowledgement';
 import { bookingScenarios } from './scenarios/booking';
 import { locationScenarios } from './scenarios/location';
 import { pricingScenarios } from './scenarios/pricing';
+import { adversarialAuditScenarios } from './scenarios/adversarial-edge-cases';
+
+export { adversarialAuditScenarios };
 
 export const allGoldenScenarios: GoldenScenario[] = [
   ...clinicalScenarios,
@@ -13,11 +16,16 @@ export const allGoldenScenarios: GoldenScenario[] = [
   ...pricingScenarios,
 ];
 
+export const allCorpusScenarios: GoldenScenario[] = [
+  ...allGoldenScenarios,
+  ...adversarialAuditScenarios,
+];
+
 export function validateGoldenCorpus(): { total: number; categories: Record<string, number>; ok: boolean; errors: string[] } {
   const errors: string[] = [];
   const categories: Record<string, number> = {};
   const seen = new Set<string>();
-  for (const s of allGoldenScenarios) {
+  for (const s of allCorpusScenarios) {
     categories[s.category] = (categories[s.category] || 0) + 1;
     if (seen.has(s.id)) errors.push(`Duplicate ID: ${s.id}`);
     seen.add(s.id);
@@ -27,6 +35,6 @@ export function validateGoldenCorpus(): { total: number; categories: Record<stri
       if (!t.input.trim()) errors.push(`Empty input ${s.id} turn ${t.turn}`);
     });
   }
-  if (allGoldenScenarios.length !== 50) errors.push(`Expected 50 scenarios, got ${allGoldenScenarios.length}`);
-  return { total: allGoldenScenarios.length, categories, ok: errors.length === 0, errors };
+  if (allCorpusScenarios.length < 50) errors.push(`Expected at least 50 scenarios, got ${allCorpusScenarios.length}`);
+  return { total: allCorpusScenarios.length, categories, ok: errors.length === 0, errors };
 }

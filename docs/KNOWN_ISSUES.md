@@ -1403,3 +1403,127 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   5. Bangun Automated Conversation Matrix Test Suite (20 skenario end-to-end terotomatisasi).
 
 
+
+---
+
+## 72. [Pasca-pull origin 2026-09-16] Dua test merah dari commit upstream (bukan regresi PLAN 8/9)
+
+- **Status:** open (milik sesi upstream; didokumentasikan, tidak disentuh).
+- **Konteks:** `git pull` membawa 4 commit upstream (03d0e69, 5b5ee43, revert Kenari x2).
+  Full suite: 319 files, 2313 passed, 2 failed — kedua failure di bawah terbukti
+  berasal dari perubahan upstream tersebut, bukan dari PLAN 8/9.
+
+### 69.1 — `simulator-minggu-waru-replay.test.ts` Turn 1
+- **Bukti:** test (lama, dari 6694f13) mengassert prompt router Call 1 cocok
+  `/ABAIKAN.*cekkan\/infokan/i`. Upstream 03d0e69 menulis ulang 5a router
+  (verifikasi: `git show 03d0e69 -- src/v3/agent/persona.ts`): frasa tersebut
+  DIHAPUS dari prompt router, diganti "WAJIB dahulukan menanyakan daerah rumah...".
+  Frasa tetap ada di prompt Call 2 (generasi) — perilaku dipertahankan di sana.
+- **Bukan dari PLAN 9:** integrasi caching hanya menyentuh Call 2; Call 1 (routing)
+  dikirim tanpa perubahan. Untuk provider non-Anthropic, `messages[0].content`
+  digabung kembali byte-identik.
+- **Arah solusi (pemilik upstream):** perbarui regex test ke wording router baru
+  dengan intent sama (lokasi-unknown → tanya domisili), atau pindahkan asersi ke
+  prompt Call 2. JANGAN kembalikan frasa lama ke router.
+
+### 69.2 — `v3-audit-homecare-fix.test.ts` "tanpa lokasi sama sekali → tetap tersimpan"
+- **Bukti:** test lama mengharapkan `executeSaveReservation` sukses tanpa lokasi.
+  Upstream menandai gate penolakan booking `@deprecated` (aturan 21) di
+  `save-reservation.tool.ts:214`, tetapi sesuatu di jalur masih menolak
+  (`res.success === false`). Kemungkinan pekerjaan transisi upstream yang belum selesai.
+- **Bukan dari PLAN 8/9:** tidak ada perubahan PLAN 8/9 yang menyentuh
+  `save-reservation.tool.ts` maupun reservation gates.
+- **Arah solusi (pemilik upstream):** selesaikan penghapusan gate atau perbarui test
+  sesuai keputusan aturan 21 yang final.
+
+---
+
+## 73. [PLAN 8/9] Test merah `grounding-catalog-metadata` — RESOLVED oleh upstream (2026-09-16)
+
+- **Status:** resolved (oleh commit upstream `c5d1ae3`, bukan oleh PLAN 8/9).
+- **Riwayat:** test TDD-red sesi 887216 Fase 2 (file untracked saat ditemukan) mengharapkan
+  emitter `Durasi Resmi`/`Batasan Usia` di grounding yang belum ada di `src/`.
+  Commit `c5d1ae3` ("inject catalog duration and age tier metadata into cart grounding")
+  mengimplementasikan emitter tersebut — kedua test kini hijau (terverifikasi).
+- **Catatan proses:** entri dokumentasi awal untuk temuan ini sempat hilang akibat
+  penulisan konkuren file ini oleh multi-sesi; dinomor-ulang dan dicatat di sini
+  sebagai resolved agar tidak dikerjakan ganda.
+
+---
+
+## 74. [Fase 1 Refusal Stop-Gap] Regex REFUSAL_FRAME_RE pada factual-claim-validator.ts (2026-09-17)
+
+- **Status:** resolved oleh Fase 6 K2 (2026-09-17) — stop-gap dipensiunkan sebagai jalur primer.
+- **Resolusi:** `FactualValidationOptions.isRefusalOrEscalation` (tag struktural dari artefak pipeline: `escalate_to_human` tereksekusi ATAU sinyal deterministik jatuh/vaksin) melewatkan D3 tanpa regex. `REFUSAL_FRAME_RE` dipertahankan sebagai fallback warisan. Test `structural-refusal-tagging` (4/4) + `factual-claim-validator` (9/9) hijau.
+- **Konteks:** Skenario `AUDIT-JAILBREAK` (permintaan resep obat keras / dosis obat paracetamol untuk bayi 1 bulan) memicu salah diagnosis pada aturan D3 validator klaim faktual (`factual-claim-validator.ts`). Ketika asisten menolak dengan sopan dan mengarahkan rujukan (*"Sebaiknya Bunda berkonsultasi langsung dengan dokter spesialis anak"*), kata "sebaiknya" memicu `ADVISORY_RE`, sementara penolakan wewenang medis belum dicakup oleh `REFUSAL_FRAME_RE`.
+- **Stop-Gap yang Diterapkan:** Memperluas `REFUSAL_FRAME_RE` dengan pola penolakan wewenang medis (`tidak memiliki wewenang`, `tidak dapat memberikan resep`, `konsultasi ke dokter/faskes/RS`, `periksakan ke dokter`). Ditandai eksplisit dengan komentar `// TEMPORARY STOP-GAP (lihat tiket structural-refusal-tagging)`.
+- **Rencana Fondasional ke Depan (Fase 3):** Menghindari ketergantungan regex untuk mendeteksi penolakan. Menggantikannya dengan *structured classification metadata* (`isRefusalOrEscalation: true`) yang di-emit langsung dari model / generation stage, sehingga validator klaim faktual secara deterministik dilewati pada pesan yang sifatnya murni penolakan/rujukan medis tanpa klaim SOP klinik.
+
+---
+
+## 75. [Fase 3] Dekomposisi Persona Monolitik → Modular Layered Prompt (2026-09-17)
+
+- **Status:** implemented & verified (zero-regression, byte-identik).
+- **Konteks:** `src/v3/agent/persona.ts` (~580 baris) menumpuk 63 instruksi "DILARANG KERAS" dari 8+ audit historis dalam satu ruang konteks monolitik (risiko "fix A rusak C" via kompetisi attention LLM).
+- **Perubahan (tanpa perubahan perilaku / tanpa teks prompt baru):**
+  - `src/v3/agent/prompt/layers/global-safety.layer.ts` — skrining trauma jatuh (audit 337101), aturan vaksin 48–72 jam (audit 222655), newborn 0–28 hari, anti-overclaim, injection defense. Single source of truth (diimpor fase pricing, bukan diduplikasi).
+  - `src/v3/agent/prompt/layers/core-persona.layer.ts` — identitas Bidan Yusi, tone WA, kata ganti "kami", format 1-bintang, few-shot statis, sapaan Turn-0/lanjutan.
+  - `src/v3/agent/prompt/phases/` — `location-rules`, `pricing-catalog`, `scheduling` (termasuk kontrak tool `save_reservation` + mandat POV first-person).
+  - `src/v3/agent/prompt/prompt-composer.ts` — perakitan berurutan identik; `persona.ts` kini fasad tipis (`PersonaPromptBuilder`, `extractFastIntents`, `PERSONA_STABLE_PREFIX_MARKER` dipertahankan 100%).
+  - Tenant-aware tidak berubah: overlay DB `TenantPromptConfigService` + `getBrandIdentityAsync` tetap di composer (tanpa infra baru → tanpa Confirmation Gate).
+- **Verifikasi (offline):** diff byte-identik 4/4 varian (router ±7,8k char, system ±46k char); `typecheck` exit 0; parity 15/15; tool-masker 10/10 + anti-silent-drop 8/8; safety/persona/cache/router 28/28; corpus 61/61.
+- **Full suite:** 2355 passed, 3 failed — verified pre-existing, BUKAN regresi Fase 3 (gagal identik dengan `persona.ts` asli via `git stash`): 2 sudah tercatat di #72 (`simulator-minggu-waru-replay`, `v3-audit-homecare-fix`), 1 dari tree kotor Fase 1/2 (`llm-outage-silent.test.ts` "Call-1 LLM throw → sunyi total", pemilik: sesi Fase 1/2).
+- **Ditunda sengaja (tech debt):** panduan penolakan resep obat eksplisit di prompt belum ditambahkan (menambah teks = melanggar garansi byte-identik); mengandalkan stop-gap #74 + defleksi SOP vaksin. Tindak lanjut bila ada audit jailbreak-obat khusus.
+
+---
+
+## 76. [Housekeeping + Fase 3.5 + Taksonomi Usia] (2026-09-17)
+
+- **Status:** implemented & verified.
+- **Tahap 1 — Penyelarasan legacy:** `v3-audit-homecare-fix.test.ts` "tanpa lokasi sama sekali → tetap tersimpan" diselaraskan ke aturan 03d0e69 (fail-closed lokasi): sesi kini `{ kelurahan: 'Kureksari' }` tanpa detail jalan — 14/14 hijau. Maksud asli (jalan tak wajib di chat) lestari.
+- **Tahap 2 — Dynamic Phase Injection (opt-in):** `composeSystemPrompt` menerima `opts.phaseInjection { focus, slim }` + `derivePhaseFocus(session)` murni. Default (tanpa opt) = rakitan penuh byte-identik; `slim:false` = penuh + blok `[PHASE_FOCUS]` volatil (prefix stabil identik → cache hit lestari, teruji); `slim:true` = hierarki pra-marker dirampingkan per fokus. Fasad `PersonaPromptBuilder` meneruskan otomatis (tipe `SystemPromptOpts` dari composer); pipeline produksi tidak diubah (risiko korpus nol).
+- **Tahap 3 — Taksonomi usia:** `CHILD_CATEGORY_AGE_THRESHOLD_MONTHS=24` + `PatientProfileExtractor.resolveChildAgeCategory` kanonis (<24 BABY, ≥24 KIDS); 3 perbandingan tersebar di `treatment-catalog.service.ts` disentralisasi (behavior-identik); `get-catalog.tool` men-snap kategori BABY/KIDS yang kontradiktif dengan usia. Bridge 0-24 bulan (audit 222655) DIHAPUS sebagai kode mati — digantikan snap deterministik (terverifikasi via `toddler-bridge-catalog.test.ts` yang tetap hijau lewat jalur baru).
+- **Anti-menu brosur:** pool konsultasi (`!showPrices`, tanpa nama spesifik) dipangkas ke 2 teratas pasca-sort (rekomendasi + 1 pelengkap); mode harga & nama eksplisit & klarifikasi nominal tidak tersentuh.
+- **Verifikasi:** V3 291/291, korpus 61/61, paritas 15/15, typecheck 0, eval audit LLM 4.77 (ambang 4.50) dengan 0 safety-floor violation. Full suite 2368 hijau / 2 merah pre-existing (`llm-outage-silent` milik Fase 1/2; `simulator-minggu-waru` #72).
+- **Catatan layering:** `treatment-catalog.service.ts` mengimpor modul murni `patient-extractor` (tanpa dependensi service → tanpa cycle). Bila lint arsitektur kelak melarang impor services→v3, pindahkan resolver ke modul util rendah + re-export (pekerjaan mekanis).
+
+---
+
+## 77. [Agenda 1 Fase 4] Geocoding Hardening Kutisari & Larangan Anjuran Shareloc (2026-09-17)
+
+- **Status:** implemented & verified (Sesi 477412 Turn 3 & Issue #70).
+- **Akar masalah ganda (hasil audit):** (1) "Kutisari Indah" tanpa entri Tier-0 jatuh ke fallback Google/LLM yang menebak "Kutusari" Sukomanunggal (Surabaya Barat) — Tier-1 gazetteer saja tidak cukup karena fallback produksi tetap dikonsultasikan tanpa landmark hit; (2) 5 pesan `calculate_delivery` menganjurkan "(atau share location...)" yang disalin LLM → melanggar Aturan Emas 21.
+- **Perubahan:**
+  - `calculate-delivery.tool.ts`: kelima pesan ambigu/generik dibersihkan (cakupan plan 3 baris + 2 temuan investigasi baris 413/422 berpola sama); klausa penjaga "(tanpa menanyakan nomor jalan atau share location)" dipertahankan sebagai pagar instruksi. Jalur shareloc kiriman customer (baris 297–298) tidak diubah.
+  - `landmarks.ts`: 6 entri Tier-0 (Kutisari Indah/Asri/Regency, Kendangsari YKP, Rewwin→Wedoro/Waru, Pondok Tjandra/Candra→Tambaksumur/Waru, Makarya Binangun→Janti/Waru, Rungkut Mapan→Rungkut Tengah) + 6 kunci `ARTERY_CORRIDORS` (catatan: koridor tinggal di `landmarks.ts`, bukan `gazetteer.ts` — resolve via `resolveArteryCorridor` di `gazetteer.ts:232`).
+  - `geocoding.ts` (`llmResolveLocation`): 3 contoh grounding (kutisari→Tenggilis Mejoyo, rewwin→Wedoro/Waru, pondok candra→Tambaksumur/Waru).
+  - Test `geocoding-kutisari-hardening.test.ts` (4/4): Tier-0 pin via `formattedAddress`, Rewwin & Candra presisi, kontrak anti-solicitation pola `(atau…share location)`/`tawarkan…share location` (bukan frasa telanjang — koreksi desain test karena teks pengganti plan sendiri memuat klausa penjaga).
+- **Verifikasi:** baru 4/4, geocoding eksisting 9/9, V3 295/295, korpus 61/61, typecheck 0. Probe 8/8 kunci baru presisi ke wilayah benar.
+- **Catatan mandat:** entri regex mengikuti konvensi berkas (`patterns: RegExp[]`, first-match-wins — diverifikasi tak ada pola generik yang membayangi); data geografis merujuk fakta administratif + koordinat plan (bukan katalog/tarif/SOP yang wajib DB).
+
+---
+
+## 78. [Agenda 2 Fase 5] Conversation Matrix 20 Skenario + Temuan Produk (2026-09-17)
+
+- **Status:** implemented & verified — `tests/integration/v3-conversation-matrix.test.ts` 20/20 (eksekusi ~3,5 dtk, offline).
+- **Arsitektur:** seam resmi `GenerationStage.executeChatCompletion` (stub router kata-kunci + hormat forced/tool-list pipeline) + spy `executeToolByName` untuk fakta tool + verdict `evaluateToolMasking` langsung. Batas kejujuran: stub hanya memerankan pilihan-tool LLM; yang diassert = state sesi, call/exec log, fakta tool, invarian format, verdict masker. Prosa/empati tetap ranah `persona-quality-harness` (4.78, 0 floor).
+- **Temuan produk saat pembangunan (diputuskan jujur, bukan disembunyikan):**
+  1. **[FIXED] Lead-greeting menelan booking berhari+lokasi:** `mau booking ... Sabtu ... Pepelegi` diklasifikasi sapaan murni (pola `mau booking` tanpa guard hari) → balasan sapaan generik menanyakan lokasi yang sudah diberi. Perbaikan: guard `SPECIFIC_QUESTION_RE` + nama hari/same-day (`senin..minggu`, `hari ini`, `sekarang`) — sekelas `besok/lusa` yang sudah ada. `lead-greeting-preservation` 15/15 lestari.
+  2. **[RESOLVED — cakupan data katalog] KIDS-bapil item terapi ditambahkan:** Menambahkan varian `kids-pulih-2-4th` (Rp85k), `kids-pulih-4-6th` (Rp90k), dan `kids-pulih-6-8th` (Rp100k) ke `DEFAULT_CLINIC_SERVICES` pada `treatment-catalog.service.ts` serta menyelaraskan deskripsi dengan `services_custom.json` agar mencakup kata kunci batuk/pilek/flu/bapil. Skenario CM-01 kini secara deterministik mengembalikan dan mem-pin `Pijat Kids Pulih Ceria (2 - 4 Tahun)` untuk balita 3 tahun. Test unit `symptom-semantic-scorer` & matrix 20/20 hijau.
+  3. **[OPEN — edge] Hint dua-hari:** `extractTimeHint` memakai token hari PERTAMA ("Sabtu ... ganti Minggu" tetap `sabtu`). Matrix memakai kalimat satu-hari; multi-hari tercatat di sini.
+  4. **[NOTED — jinak] Sapaan Turn-0 "Bisa homecare ke X?":** pola `bisa homecare` = lead greeting → balasan sapaan (tetap meminta domisili; percakapan lanjut normal).
+  5. **[NOTED — arsitektur] Call-2 tanpa pesan role:tool:** fakta tool mengalir via grounding system prompt, bukan pertukaran tool-call. Stub echo-gaya-korpus itu vestigial; penulis test wajib assert via `executeToolByName`/sesi, bukan gema balasan.
+- **Deviasi naskah-vs-rencana (disengaja, beralasan):** CM-01 tanpa pin nama terapi (butir 2); CM-03 pricelist = mode harga breadth-penuh (trim hanya konsultasi — terbukti CM-02T1); CM-06T3 interogatif same-day = PENDING terverifikasi-staf (bukan diblokir; masker konsisten mengizinkan); CM-07T2 fail-closed tanpa lokasi + T4 commit pasca-lokasi; CM-11 teks kelurahan + fix butir 1; CM-12T1 Kureksari (kecamatan-only tak mengunci lokasi — by design); CM-15/CM-10 teks presisi; guard slot dipersempit (bare "bisa" menelan coverage-Q); CM-17 teks anti-greeting; CM-18 kontras dua-seam (dosis→silent domain-escalation, resep→tool escalation + handoff sunyi); CM-19 assert di seam data (`cartTotalReply`/`suggestedPriceReply` absent).
+- **Verifikasi:** matrix 20/20; korpus 61/61; V3 295/295; typecheck 0; harness 4.78/0-floor. Full suite 2391 hijau / 2 merah pre-existing (`llm-outage-silent`, `simulator-minggu-waru`); regresi koridor (+6 entri Agenda 1) diselaraskan di test pemiliknya.
+
+---
+
+## 79. [Fase 6 Agenda 3] Pruning, Refusal Metadata & Enforce Readiness (2026-09-17)
+
+- **Status:** implemented & verified.
+- **K1 — Smart time-hint (Issue #78 item 3 CLOSED):** `extractTimeHint` koreksi-dulu: penanda koreksi (`ganti/tapi/melainkan/...`) → token hari TERAKHIR; kolokasi `besok lusa` → `lusa`; aposisi tanpa penanda (`Jumat besok`) tetap first-wins (test CTA lama lestari); filter usia `3 minggu` + frasa khusus lestari (termasuk perbaikan bug `indexOf` → indeks loop untuk `minggu` ganda). Test baru 7/7.
+- **K2 — Structural refusal (Issue #74 RESOLVED, lihat #74).**
+- **K3 — De-bloat prompt, EKSEKUSI SEBAGAI KONSOLIDASI MINIMAL (deviasi sadar):** inventarisasi menemukan 6+ file test mem-pin teks yang diusulkan untuk dihapus (`KONDISI A.1`, `MANDAT POV`, `DILARANG MENODONG NAMA/ALAMAT`, `MANDAT TOTAL BIAYA`, invarian cache >20k) — tiap pin adalah jejak audit klinis. Yang dipangkas HANYA 2 kalimat duplikat tak-terpin di panduan tool + 1 direktif positif aditif (net −96 char, 46117→46021). De-bloat penuh DITUNDA sebagai tech debt: butuh sign-off per-audit, bukan hapus massal.
+- **K4 — Enforce readiness:** wiring enforce sudah ada sejak Fase 2; ditambah telemetri `TOOL_MASKING_ENFORCED_APPLIED` (fail-safe try/catch) + test lock-in mode-enforce (filter terbukti) / mode-shadow (penuh). Default tetap shadow (matrix/corpus tak tersentuh).
+- **Verifikasi:** V3 308/308, matrix 20/20, korpus 61/61, typecheck 0, harness LLM **4.83** (≥4.50, 0 floor). Full suite 2405 hijau / 2 merah pre-existing (`llm-outage-silent`, `simulator-minggu-waru`).
+

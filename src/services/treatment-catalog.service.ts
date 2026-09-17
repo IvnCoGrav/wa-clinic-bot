@@ -3,6 +3,11 @@ import path from 'path';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
 import { checkMedicalKeywords } from '../config/medical-keywords';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+// Taksonomi usia kanonis (modul murni, tanpa dependensi service → tanpa cycle).
+import {
+  CHILD_CATEGORY_AGE_THRESHOLD_MONTHS,
+  PatientProfileExtractor,
+} from '../v3/state/patient-extractor';
 
 export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE' | 'ADD_ON';
 
@@ -162,6 +167,42 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     // referensi historis (reservasi lama, fallback CAPI) tetap resolvable.
     // Baris clinic_services live perlu penonaktifan yang sama via dashboard/migrasi.
     isActive: false,
+  },
+  {
+    id: 'kids-pulih-2-4th',
+    name: 'Pijat Kids Pulih Ceria (2 - 4 Tahun)',
+    category: 'KIDS',
+    serviceType: 'STANDARD',
+    ageTier: { minAgeMonths: 24, maxAgeMonths: 48, label: '2 - 4 Tahun' },
+    durationMinutes: 45,
+    originalPrice: 100000,
+    promoPrice: 85000,
+    description: 'Terapi khusus batuk, pilek, bapil, flu, kembung, sembelit untuk anak usia 2-4 tahun dengan akupresur & aromaterapi.',
+    isActive: true,
+  },
+  {
+    id: 'kids-pulih-4-6th',
+    name: 'Pijat Kids Pulih Ceria (4 - 6 Tahun)',
+    category: 'KIDS',
+    serviceType: 'STANDARD',
+    ageTier: { minAgeMonths: 48, maxAgeMonths: 72, label: '4 - 6 Tahun' },
+    durationMinutes: 50,
+    originalPrice: 110000,
+    promoPrice: 90000,
+    description: 'Terapi khusus batuk, pilek, bapil, flu, kembung, sembelit untuk anak usia 4-6 tahun dengan akupresur & aromaterapi.',
+    isActive: true,
+  },
+  {
+    id: 'kids-pulih-6-8th',
+    name: 'Pijat Kids Pulih Ceria (6 - 8 Tahun)',
+    category: 'KIDS',
+    serviceType: 'STANDARD',
+    ageTier: { minAgeMonths: 72, maxAgeMonths: 96, label: '6 - 8 Tahun' },
+    durationMinutes: 50,
+    originalPrice: 120000,
+    promoPrice: 100000,
+    description: 'Terapi khusus batuk, pilek, bapil, flu, kembung, sembelit untuk anak usia 6-8 tahun dengan akupresur & aromaterapi.',
+    isActive: true,
   },
   {
     id: 'moms-prenatal-massage',
@@ -908,7 +949,7 @@ export class TreatmentCatalogService {
         if (ageMonths < minAge) return false;
         if (maxAge !== null && ageMonths > maxAge) return false;
 
-        if (ageMonths >= 24) {
+        if (ageMonths >= CHILD_CATEGORY_AGE_THRESHOLD_MONTHS) {
           // Usia anak >= 2 tahun (24 bulan)
           return s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi')) || (s.category === 'BABY' && (maxAge === null || maxAge >= ageMonths));
         } else {
@@ -1054,7 +1095,7 @@ export class TreatmentCatalogService {
     if (isMaternal) {
       audienceIntent = 'MOMS';
     } else if (ageMonths !== null) {
-      audienceIntent = ageMonths >= 24 ? 'KIDS' : 'BABY';
+      audienceIntent = PatientProfileExtractor.resolveChildAgeCategory(ageMonths) ?? 'GENERAL';
     } else if (isKidKeyword) {
       audienceIntent = 'KIDS';
     } else if (isBabyKeyword) {
@@ -1114,7 +1155,7 @@ export class TreatmentCatalogService {
 
       if (isMassage && !isSpa) {
         let massageServices = ageServices.filter((s) => s.name.toLowerCase().includes('pijat') || s.name.toLowerCase().includes('massage'));
-        if (ageMonths >= 24) {
+        if (ageMonths >= CHILD_CATEGORY_AGE_THRESHOLD_MONTHS) {
           // Usia 2 tahun ke atas: utamakan KIDS
           massageServices.sort((a, b) => (b.category === 'KIDS' ? 1 : 0) - (a.category === 'KIDS' ? 1 : 0));
         } else {
