@@ -330,7 +330,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Querystring: { limit?: string; before?: string };
+        Querystring: { limit?: string; before?: string; focusMessageId?: string };
       }>,
       reply
     ) => {
@@ -338,11 +338,13 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
+        const focusMessageId = request.query.focusMessageId?.trim() || undefined;
         const { messages, hasMore } = await liveChatService.getConversationMessagesPaged(
           id,
           DEFAULT_TENANT_ID,
           limit,
-          before
+          before,
+          focusMessageId
         );
         const oldest = messages.length > 0 ? (messages[0] as any)?.created_at : null;
         return reply.status(200).send({

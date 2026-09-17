@@ -348,12 +348,14 @@ export class ConversationService {
       humanHandlingSince?: Date | null;
       escalationReason?: string | null;
       consecutiveUnknownCount?: number;
+      /** Hanya diisi pemanggil saat ada pesan riil; perubahan status TIDAK boleh menyentuh last_message_at. */
+      lastMessageAt?: Date | null;
     },
     tenantId: string
   ): Promise<any> {
-    const dataToUpdate: any = {
-      last_message_at: new Date(),
-    };
+    // Fondasional: last_message_at murni milik messageService.logMessage (pesan riil).
+    // Mutasi status (unknown count, auto-release, eskalasi, dsb) dilarang menyentuh kronologi.
+    const dataToUpdate: any = {};
 
     if (updates.currentState !== undefined) dataToUpdate.current_state = updates.currentState;
     if (updates.previousState !== undefined) dataToUpdate.previous_state = updates.previousState;
@@ -362,6 +364,7 @@ export class ConversationService {
     if (updates.humanHandlingSince !== undefined) dataToUpdate.human_handling_since = updates.humanHandlingSince;
     if (updates.escalationReason !== undefined) dataToUpdate.escalation_reason = updates.escalationReason;
     if (updates.consecutiveUnknownCount !== undefined) dataToUpdate.consecutive_unknown_count = updates.consecutiveUnknownCount;
+    if (updates.lastMessageAt !== undefined) dataToUpdate.last_message_at = updates.lastMessageAt;
 
     // PLAN 8 FASE 5b: tulis via Repository seam (fail-closed di produksi).
     const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
@@ -375,7 +378,7 @@ export class ConversationService {
         isHumanHandling: updates.isHumanHandling,
         humanHandlingSince: updates.humanHandlingSince,
         escalationReason: updates.escalationReason,
-        lastMessageAt: dataToUpdate.last_message_at,
+        ...(updates.lastMessageAt !== undefined ? { lastMessageAt: updates.lastMessageAt ?? undefined } : {}),
       },
       tenantId
     );

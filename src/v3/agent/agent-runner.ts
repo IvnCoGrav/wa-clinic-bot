@@ -115,10 +115,23 @@ export class V3AgentRunner {
       ContextGrounder.deriveConversationPhase(session, isFollowUp), session
     );
     let lastPhaseDirective = phaseDirective;
+    // Fase 3 (router masker-aware): evaluasi masker pra-prompt (murni, murah)
+    // agar teks Call 1 selaras dengan skema tool yang akan dikirim — prompt
+    // tak membahas pemanggilan tool yang di-mask. Evaluasi penuh diulang di
+    // generation-stage dengan data yang sama (deterministik, tanpa drift).
+    let isSaveReservationMasked = false;
+    try {
+      const { evaluateToolMasking } = await import('../tools/tool-masker');
+      const { ALL_V3_TOOLS } = await import('../tools/tool-registry');
+      isSaveReservationMasked = !evaluateToolMasking(
+        ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory
+      ).isSaveReservationAllowed;
+    } catch {}
     const routerPrompt = await PersonaPromptBuilder.buildRouterPromptAsync(session, isFollowUp, {
       contextSummary,
       phaseDirective: lastPhaseDirective,
       tenantId,
+      isSaveReservationMasked,
     });
     const currentSystemPrompt = routerPrompt;
     const fewShotExemplars: any[] = [];

@@ -60,8 +60,8 @@ describe('Tool-Masking Enforce Cutover', () => {
     expect(names).toContain('calculate_delivery');
   });
 
-  it('default shadow: tools penuh terkirim (perilaku produksi utuh)', async () => {
-    delete process.env.TOOL_MASKING_ENFORCE;
+  it('shadow eksplisit (ENFORCE=false): tools penuh terkirim', async () => {
+    process.env.TOOL_MASKING_ENFORCE = 'false';
     const names = await routeWithCapture();
     expect(names).toContain('save_reservation');
   });

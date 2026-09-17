@@ -259,10 +259,14 @@ function routeStub(payload: any, lastTopTreatment?: string): any {
 
 /** Stub generator Call-2: balasan generik higienis (fakta tool TIDAK mengalir
  *  lewat pesan role:tool — Call-2 menerima grounding via system prompt; fakta
- *  tool diassert langsung dari execLog, bukan dari gema stub). */
-function generateStub(payload: any): any {
+ *  tool diassert langsung dari execLog, bukan dari gema stub).
+ *  Realisme LLM: rekomendasi teratas DISEBUTKAN di balasan (bold *Nama*) —
+ *  inilah yang dibaca resolveCandidateTreatment masker pada commit anaphoric.
+ */
+function generateStub(payload: any, lastTop?: string): any {
+  const mention = lastTop ? ` Bisa dibantu dengan *${lastTop}* ya Bunda.` : '';
   return llmResponse(
-    'Baik Bunda, berikut informasi yang bisa kami sampaikan.\n\nApakah ada yang ingin ditanyakan lagi ya Bunda?'
+    `Baik Bunda, berikut informasi yang bisa kami sampaikan.${mention}\n\nApakah ada yang ingin ditanyakan lagi ya Bunda?`
   );
 }
 
@@ -279,7 +283,7 @@ function stubLlm(getLastTop: () => string | undefined) {
         }
         return res;
       }
-      return generateStub(payload);
+      return generateStub(payload, getLastTop());
     });
 }
 

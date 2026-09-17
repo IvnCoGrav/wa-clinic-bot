@@ -55,13 +55,20 @@ describe('Internal Label Tanya Jadwal (zero WAHA)', () => {
     expect(runnerSrc).not.toContain('addLabel');
     expect(runnerSrc).not.toContain('removeLabel');
     // Logika pelabelan internal (DB customerLabel) tinggal di Stage 1 —
-    // tetap 100% database, zero WAHA API.
+    // tetap 100% database, zero WAHA API. Fase 2: rumahnya kini modul
+    // medical-signal-detector.ts (didelegasikan context-grounder.ts).
+    const detectorSrc = fs.readFileSync(
+      path.join(__dirname, '../../../src/v3/agent/pipeline/medical-signal-detector.ts'),
+      'utf-8'
+    );
+    expect(detectorSrc).not.toContain('addLabel');
+    expect(detectorSrc).not.toContain('removeLabel');
+    expect(detectorSrc).toContain('customerLabel');
     const grounderSrc = fs.readFileSync(
       path.join(__dirname, '../../../src/v3/agent/pipeline/context-grounder.ts'),
       'utf-8'
     );
     expect(grounderSrc).not.toContain('addLabel');
     expect(grounderSrc).not.toContain('removeLabel');
-    expect(grounderSrc).toContain('customerLabel');
   });
 });

@@ -306,9 +306,10 @@ export class LiveChatService {
     conversationId: string,
     tenantId: string,
     limit = 50,
-    before?: string | Date
+    before?: string | Date,
+    focusMessageId?: string
   ): Promise<{ messages: any[]; hasMore: boolean }> {
-    return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before);
+    return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before, focusMessageId);
   }
 
   /**

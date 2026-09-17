@@ -87,6 +87,16 @@ describe('Date Confirmation Parity Test (Before vs After)', () => {
       bookingDate: 'Besok',
       evidence: ['iya besok boleh kak'],
     },
+    {
+      name: 'Hari relatif pasca-vaksin cocok (hari ke-4)',
+      bookingDate: 'hari ke-4',
+      evidence: ['Oke ambil Pijat Bayi Ceria hari ke-4 ya mbak'],
+    },
+    {
+      name: 'Hari relatif beda angka (hari ke-4 vs ke-5) tidak terbukti',
+      bookingDate: 'hari ke-4',
+      evidence: ['bisanya hari ke-5 ya mbak'],
+    },
   ];
 
   for (const tc of testCases) {

@@ -1,0 +1,25 @@
+/**
+ * router-tool-routing.layer.ts (Fase 3 — dekomposisi router Call 1).
+ *
+ * Panduan routing pemanggilan tool Call 1. Sadar status masking deterministik:
+ * bila save_reservation di-mask gate pre-LLM (prasyarat final belum lengkap),
+ * bullet panjang 20-larangan diganti satu baris status ringkas — tool tak ada
+ * di skema, prompt tak perlu membahas pemanggilannya (anti attention
+ * interference). Default (tanpa flag) = teks kanonis byte-identik.
+ */
+
+const SAVE_RESERVATION_FULL = `    - "save_reservation": Dipanggil HANYA jika customer sudah menyepakati hari/tanggal dan layanan untuk membuat reservasi. WAJIB DIPANGGIL saat treatment sudah disepakati DAN customer sudah menyebut hari/tanggal (mis. "besok boleh", "hari sabtu bisa") — PADA KONDISI INI JANGAN tanya lagi hari/jam; langsung kunci reservasi. DILARANG KERAS menanyakan JAM kunjungan spesifik ("jam berapa", "mau jam berapa") — jam diatur tim Bidan sesuai rute harian. DILARANG KERAS memanggil save_reservation jika customer hanya merespons persetujuan menunggu ("siap", "baik", "oke", "siap bund", "oke siap", "saya tunggu", "kabari ya") atas pengecekan jadwal — jawab LANGSUNG sebagai Bidan Yusi bahwa pengecekan slot sedang diproses dan akan segera dikabari, tanpa memanggil tool. DILARANG KERAS memanggil save_reservation jika pesan customer SAAT INI bertanda tanya seputar ketersediaan jadwal/slot ("Bisa hari selasa depan?", "Apakah ada slot besok?", "Kalau tgl 18 bisa?") — pertanyaan ketersediaan BUKAN kesepakatan booking; jawab LANGSUNG sebagai Bidan Yusi bahwa tim Bidan sedang bantu cekkan ketersediaan jadwal/rute untuk waktu tersebut, tanpa memanggil tool. KONTRAK BUNDLING (audit 694493): tawaran add-on/bundling (mis. Oksitosin, Sinar Moksa) yang BELUM diafirmasi eksplisit ("iya mau", "boleh", "ikutkan") DILARANG dikunci ke additionalTreatments bila customer hanya tanya jadwal — fokuskan reservasi pada layanan utama yang sudah disepakati, atau konfirmasi ulang apakah paket tambahannya jadi disertakan.`;
+
+const SAVE_RESERVATION_MASKED = `    - "save_reservation": SAAT INI DISEMBUNYIKAN dari daftar tool (prasyarat treatment/lokasi/tanggal final belum lengkap) — JANGAN meminta atau mensimulasikan pemanggilannya; jawab sesuai alur (bantu cek jadwal/rute atau tanyakan yang kurang dengan santai).`;
+
+export function buildRouterToolRoutingBlock(opts?: { isSaveReservationMasked?: boolean }): string {
+  const saveBullet = opts?.isSaveReservationMasked ? SAVE_RESERVATION_MASKED : SAVE_RESERVATION_FULL;
+  return `TUGAS UTAMAMU (CALL 1 - TOOL ROUTING & EVALUASI INTENT):
+1. Evaluasi pesan customer dan riwayat percakapan untuk menentukan apakah perlu memanggil Tool dari daftar tools yang tersedia:
+   - "calculate_delivery": WAJIB dipanggil HANYA jika pesan customer SAAT INI menyebutkan entitas lokasi baru (kelurahan, kecamatan, desa, perumahan, patokan, nama jalan, atau koordinat/link Maps) untuk memeriksa jangkauan dan menghitung ongkir. DILARANG KERAS memanggil ulang calculate_delivery bila pesan saat ini TIDAK menyebut lokasi baru (mis. customer hanya bertanya harga/paket seperti "biayanya brp", "treatmentnya apa saja", "berapa?" — JANGAN memakai nama kota luas dari riwayat lama sebagai locationText; jawab dari konteks/katalog yang sudah ada).
+    - "get_catalog_and_price": Dipanggil jika customer menanyakan harga, tarif, promo, pricelist, rincian biaya, durasi, atau mencari rekomendasi perawatan berdasarkan usia/keluhan. Jika customer menyebut NOMINAL angka tanpa nama paket ("100rb berapa menit pijetnya", "60rb dapat apa") → WAJIB isi targetPrice (rupiah penuh, mis. 100rb=100000) + inquirePrice:true, dan JANGAN kunci category ke BABY/KIDS/MOMS (biarkan kosong agar tool mencocokkan lintas kategori MOMS/BABY/KIDS dari katalog DB). Jika customer menanyakan DURASI/WAKTU ("berapa menit", "berapa lama", "durasinya") → WAJIB isi asksDuration:true; bila durasi TIDAK ditanya → asksDuration:false (durasi disembunyikan otomatis).
+   - "get_clinic_policy_faq": Dipanggil jika customer menanyakan kebijakan klinik, asal/homebase klinik, metode bayar (transfer/QRIS/cash), kualifikasi bidan (STR), atau aturan pasca-vaksinasi/imunisasi.
+    - "search_knowledge_faq": Dipanggil jika customer berkonsultasi seputar keluhan medis, persiapan treatment (mandi/susu/minyak), manfaat terapi khusus (Sinar Moksa), trauma jatuh anak, atau SOP klinis lainnya. Penyebutan keluhan fisik BARU (kembung, batuk, pilek, kolik, rewel, demam, muntah, diare) WAJIB memanggil get_catalog_and_price (teruskan sebagai symptoms) — DILARANG menjawab afirmasi langsung tanpa data tool.
+${saveBullet}
+    - "escalate_to_human": Dipanggil jika ada situasi darurat medis, komplain keras, atau permintaan bicara langsung dengan manusia.`;
+}
