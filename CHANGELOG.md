@@ -4,11 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Over-Kalkulasi Durasi Layanan & Reservasi Siluman Typo Tanggal (2026-09-17)
+
+- **Akar masalah (multi-layer):** `extractDurationMinutes` mengasumsikan SEMUA item bundling 60 menit (`items.length * 60 + 15`) → "Pijat Bayi Pulih Ceria + Sinar Moksa" = 135m (padahal 75m); `tryParseIndonesianDate` membuang tanggal mustahil "41 September" lalu jatuh ke fallback nama-hari `diff += 7` (reservasi siluman +7 hari); auto-capture webhook menyimpan `duration_minutes: NULL`.
+- **Single Source of Truth durasi:** `treatmentCatalogService.resolveDurationBreakdown` (baru) — layanan utama vs add-on berbasis katalog tenant, anti double-count (dedupe id, komponen bundle dibuang, guard ≥2 token), flag `confident`/`usedExplicitTag`. Dipakai `reservation-core.service` + `reservation-lifecycle.service` (webhook auto-capture) + `reservation-text-parser` (ParsedReservation.durationMinutes) agar DB tidak lagi menyimpan NULL untuk layanan valid.
+- **Date guard:** pemulihan transposisi digit ("41 September" → 14 September bila cocok nama hari) + tanggal mustahil tanpa pemulihan → `null` (DILARANG melompat +7 hari).
+- **Frontend:** `durationCalculator.ts` bedakan main vs add-on (bukan flat 60m) + strip metadata audiens terstruktur (`Baby: … (Usia: …) | Moms: …`) yang sebelumnya memecah item hantu; `CreateReservationModal.tsx` tidak lagi default 60 sebelum pencocokan katalog + normalisasi token `(add-on)`.
+- **Remediasi data:** `scripts/backfill-reservation-duration.ts` (idempoten) — 233 reservasi NULL terisi durasi katalog; 276 teks bebas tak dikenali sengaja dibiarkan NULL (anti-fabrikasi).
+- **Verifikasi:** `foundational-duration-resolution` 9/9, `duration-calculator` + `reservation-text-parser` 30/30, typecheck 0, `npm run build` 0, dashboard build 0; probe deterministik `extractDurationMinutes('Pijat Bayi Pulih Ceria + Sinar Moksa')=75` & `tryParseIndonesianDate('Senin, 41 September 2026…')=2026-09-14T02:30:00.000Z`. Full suite 335 hijau (2 merah pre-existing).
+
 #### Terapi Bapil KIDS Berjenjang Usia & Paritas Katalog (2026-09-17)
 
 - **Paritas Katalog KIDS Bapil**: Menambahkan varian layanan `kids-pulih-2-4th` (Rp85k), `kids-pulih-4-6th` (Rp90k), dan `kids-pulih-6-8th` (Rp100k) ke `DEFAULT_CLINIC_SERVICES` pada `src/services/treatment-catalog.service.ts` serta menyelaraskan deskripsinya di `services_custom.json` agar mencakup kata kunci batuk, pilek, bapil, flu, kembung, sembelit (tutup Issue #78 item 2).
 - **Rekomendasi Gejala Deterministik**: Sistem kini secara presisi merekomendasikan `Pijat Kids Pulih Ceria (2 - 4 Tahun)` untuk balita 3 tahun dengan keluhan batuk pilek, bukan lagi jatuh ke terapi nafsu makan (*Lahap Juara*).
 - **Verifikasi**: Skenario CM-01 pada `tests/integration/v3-conversation-matrix.test.ts` kini mem-pin nama terapi secara deterministik (20/20 hijau); test unit baru pada `tests/unit/v3/symptom-semantic-scorer.test.ts` (10/10 hijau); V3 unit tests 312/312 hijau; golden corpus 61/61 hijau; typecheck exit 0.
+
+#### Sesi 337880 — Gerbang Kode Deterministik (2026-09-17)
+
+- **Hapus pengecualian same-day** (interogatif `?` = slot inquiry; adopsi via verba komitmen); **masking fisik `calculate_delivery`** tanpa entitas baru + forcing-downgrade; **cart role-gate** (asisten hanya konfirmasi + afirmasi-tunggal); **mandat locationText UTUH**; normalizer sapaan ditolak (mandat anti-mutilasi).
+- **Verifikasi**: replay 337880 1/1, V3 317/317, matrix 20/20, korpus 61/61, typecheck 0, harness 4.71/5.00 tanpa pelanggaran safety floor; full suite 2440 hijau (2 merah pre-existing).
+
+#### Sesi 180166 — Regresi V3 & Resiliensi Real-Human (2026-09-17)
+
+- **Jangkar kalender WIB** di Call 1/2 (anti-halusinasi tanggal); **sinyal jam + latch `preferredTime`** + Aturan 5c; **adopsi komitmen berverba** atas tanggal ber-`?` (3 gate koheren, pin lama lestari); **mandat harga/durasi dipertegas** tanpa cabut anchor 887216.
+- **Verifikasi**: resilience 1/1, V3 315/315, matrix 20/20, korpus 61/61, typecheck 0, harness 4.74/5.00 tanpa pelanggaran safety floor; full suite 2432 hijau (2 merah pre-existing).
 
 #### Rencana Fondasional — Direct Enforce, Dekomposisi Grounder, Split Router (2026-09-17)
 

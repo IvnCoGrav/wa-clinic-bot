@@ -47,6 +47,29 @@ export function isSameDayRequestText(text: string | undefined): boolean {
 }
 
 /**
+ * Sinyal komitmen transaksi (sesi 180166 FM1, single source): verba pemesanan
+ * eksplisit customer. Dipakai day-gate (adopsi tanggal ber-tanda-tanya),
+ * booking-commit-gate, dan tool-masker — satu definisi, tanpa drift.
+ * Daftar kata setingkat bahasa sapaan (seperti DAY_EVIDENCE_WORDS): HANYA
+ * bermakna sebagai override '?', BUKAN gatekeeper intent umum. 'Oke/siap'
+ * SENGAJA bukan verba komitmen (ack pasca-reservasi, sesi 462651).
+ */
+const BOOKING_COMMIT_SINGLE_TOKENS = [
+  'jadwalkan', 'ambil', 'deal', 'fix', 'pesan', 'booking',
+];
+
+export function hasBookingCommitSignal(text: string | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return false;
+  // Frasa multi-kata via includes (distinctive, tak ambigu).
+  if (lower.includes('mau yang itu') || lower.includes('boleh yang itu')) return true;
+  // Kata tunggal via token-exact agar "fix" tak cocok di "prefix".
+  const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+  const tokSet = new Set(toks);
+  return BOOKING_COMMIT_SINGLE_TOKENS.some((w) => tokSet.has(w));
+}
+
+/**
  * Audit 833178 — Day Evidence Gate (pure function, testable): pastikan
  * hari/tanggal pada bookingDate memiliki jejak di pesan user. Kembalikan null
  * bila terbukti disebut; pesan penolakan (tanpa tulis DB!) bila tidak.
@@ -156,23 +179,77 @@ export function verifyDayMentioned(
   }
   // Fail-closed pertanyaan ketersediaan slot (lapis kontrak tool):
   // bukti hari yang SELURUHNYA berasal dari pesan bertanda tanya ("Bisa hari
-  // Selasa?", "Tgl 18 bisa?") = customer baru menanyakan ketersediaan, BUKAN
-  // menyetujui booking final. Tanda "?" adalah level tanda baca (bukan
-  // gatekeeper semantik / daftar hafalan baru) + status evidence.
-  // Pengecualian: permintaan same-day (sesi 138207) — catatannya berstatus
-  // pending ekspektasi-aman sehingga staf tetap menerima antrean cek rute.
+  // Selasa?", "Tgl 18 bisa?", "ada jadwal kosong hari ini jam 3 sore?") =
+  // customer baru menanyakan ketersediaan, BUKAN menyetujui booking final.
+  // Tanda "?" adalah level tanda baca (bukan gatekeeper semantik / daftar
+  // hafalan baru) + status evidence. Sesi 337880: pengecualian same-day
+  // DIHAPUS — interogatif same-day adalah slot inquiry, BUKAN komitmen;
+  // pencatatan pending MENUNGGU verba komitmen (lihat adopsi di bawah).
+  // Adopsi komitmen (sesi 180166 FM1): pesan TERKINI berverba komitmen
+  // ("Ambil yang ... ya??", "fix ambil ...?") MENGADOPSI tanggal yang sudah
+  // terbukti di evidence — '?' sopan khas WhatsApp DILARANG membatalkan
+  // komitmen transaksi. Tanpa verba komitmen, fail-closed tetap berlaku.
   if (aggregateProven) {
-    if (!isSameDayRequestText(bd)) {
-      const hasNonQuestionSupport = (evidence || []).some(
-        (m) => !(m || '').includes('?') && messageSupportsDay(m)
-      );
-      if (!hasNonQuestionSupport) {
-        return `Jadwal kunjungan ("${bookingDate}") masih dalam tahap pengecekan ketersediaan slot oleh tim Bidan — customer baru menanyakan ketersediaan (bukti hari hanya dari kalimat tanya) dan belum menyetujui booking final. Sampaikan dengan hangat bahwa tim sedang mengecekkan jadwal tersebut. DILARANG memanggil save_reservation sebelum customer menyetujui booking secara tegas tanpa tanda tanya!`;
-      }
+    const hasNonQuestionSupport = (evidence || []).some(
+      (m) => !(m || '').includes('?') && messageSupportsDay(m)
+    );
+    const currentMsg = (evidence || [])[(evidence || []).length - 1] || '';
+    const hasCommitAdoption = hasBookingCommitSignal(currentMsg);
+    if (!hasNonQuestionSupport && !hasCommitAdoption) {
+      return `Jadwal kunjungan ("${bookingDate}") masih dalam tahap pengecekan ketersediaan slot oleh tim Bidan — customer baru menanyakan ketersediaan (bukti hari hanya dari kalimat tanya) dan belum menyetujui booking final. Sampaikan dengan hangat bahwa tim sedang mengecekkan jadwal tersebut. DILARANG memanggil save_reservation sebelum customer menyetujui booking secara tegas tanpa tanda tanya!`;
     }
     return null;
   }
   return `Hari/tanggal "${bookingDate}" belum punya jejak eksplisit di pesan customer. Ketersediaan jadwal masih dalam tahap pengecekan — sampaikan dengan hangat bahwa tim sedang mengecek ketersediaan jadwal, jangan memarahi customer atau meminta tanggal secara kaku. Tanyakan preferensi hari/tanggal kunjungan dengan santai terlebih dahulu, DILARANG memanggil save_reservation sebelum customer menyebut hari!`;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  januari: 0, jan: 0,
+  februari: 1, feb: 1,
+  maret: 2, mar: 2,
+  april: 3, apr: 3,
+  mei: 4,
+  juni: 5, jun: 5,
+  juli: 6, jul: 6,
+  agustus: 7, agu: 7, ags: 7,
+  september: 8, sep: 8, sept: 8,
+  oktober: 9, okt: 9,
+  november: 10, nov: 10,
+  desember: 11, des: 11,
+};
+
+/**
+ * Audit 310995 — deteksi tanggal MASA LALU eksplisit (pure, tanpa I/O).
+ * Berbeda dari `parseIndonesianDate` yang menggulir masa lalu ke masa depan
+ * secara senyap, fungsi ini mengembalikan true bila tanggal eksplisit
+ * (nama bulan + tahun, atau ISO YYYY-MM-DD) jatuh SEBELUM hari ini.
+ *
+ * Sengaja KONSERVATIF: hanya menandai bila ada TAHUN eksplisit ATAU format ISO
+ * lengkap — frasa relatif ("besok", "sabtu") tidak pernah dianggap lampau
+ * (sudah ditangani parser). Tanggal tanpa tahun (mis. "18 agustus") digulir
+ * ke tahun berjalan oleh parser — bukan kasus masa-lalu eksplisit.
+ */
+export function isPastBookingDateText(bookingDate: string | undefined, now: Date = new Date()): boolean {
+  const bd = (bookingDate || '').toLowerCase().trim();
+  if (!bd) return false;
+  const startOfToday = new Date(now.getTime());
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // (a) ISO YYYY-MM-DD
+  const iso = bd.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) {
+    const d = new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10), 9, 0, 0, 0);
+    return d.getTime() < startOfToday.getTime();
+  }
+
+  // (b) "18 agustus 2026" / "18 agu 2026" — butuh TAHUN eksplisit agar tak
+  //     menandai tanggal tanpa tahun (yang digulir ke tahun berjalan).
+  const dm = bd.match(/\b(\d{1,2})\s+([a-z']+)(?:\s+(\d{4}))?\b/);
+  if (dm && MONTH_INDEX[dm[2]] !== undefined && dm[3]) {
+    const d = new Date(parseInt(dm[3], 10), MONTH_INDEX[dm[2]], parseInt(dm[1], 10), 9, 0, 0, 0);
+    return d.getTime() < startOfToday.getTime();
+  }
+  return false;
 }
 
 /**

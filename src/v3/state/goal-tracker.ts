@@ -399,7 +399,7 @@ export class GoalTracker {
       // (Turn 3: Rp 95.000 + todong jadwal tanpa ditanya harga).
       if (session.priceDiscussed) {
         lines.push(`• Total Akumulasi Biaya: ${fmtRp(grandTotal)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
-        lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
+        lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). HANYA sebutkan angka total ini bila customer di turn ini menanyakan biaya/harga/total, ATAU saat merangkum pesanan final sebelum konfirmasi booking! DILARANG KERAS menyebutkan angka total ini di tengah pembicaraan jadwal/jam tanpa ditanya customer! Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
       } else {
         lines.push(`[MODE KONSULTASI: customer BELUM bertanya harga/total — DILARANG menyebut atau menjumlahkan nominal uang apa pun (harga treatment, ongkir, grand total)! Fokus pada manfaat klinis tiap layanan di atas. Total resmi (${fmtRp(grandTotal)}) DISEMBUNYIKAN dari balasan hingga customer bertanya harga.]`);
       }
@@ -423,7 +423,7 @@ export class GoalTracker {
           if (durParts.length > 0 && durTotal > 0) {
             const jam = durTotal >= 60 ? ` (~${(durTotal / 60).toFixed(1).replace('.', ',')} jam)` : '';
             lines.push(`• Total Estimasi Durasi Perawatan: ~${durTotal} menit${jam} (Rincian: ${durParts.join(' + ')}).`);
-            lines.push(`[MANDAT ESTIMASI WAKTU: Saat customer menanyakan total jam/lama waktu pengerjaan, WAJIB jumlahkan seluruh durasi layanan di keranjang di atas secara utuh, termasuk durasi perawatan Bunda. DILARANG melupakan layanan Bunda!]`);
+            lines.push(`[MANDAT ESTIMASI WAKTU: Total durasi ~${durTotal} menit ini HANYA boleh disampaikan jika customer menanyakan durasi/lama pengerjaan. DILARANG KERAS menyebutkan angka durasi menit jika tidak ditanyakan! Saat customer menanyakan total jam/lama waktu pengerjaan, WAJIB jumlahkan seluruh durasi layanan di keranjang di atas secara utuh, termasuk durasi perawatan Bunda. DILARANG melupakan layanan Bunda!]`);
           }
         } catch (_) {}
       }

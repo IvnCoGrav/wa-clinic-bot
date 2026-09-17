@@ -29,6 +29,7 @@ import {
   assignInternalScheduleLabel,
   hasFallInjurySignal,
   extractTimeHint,
+  extractTimeOfDayHint,
   hasVaccineSignal,
   isSubstantiveForPreGrounding,
 } from './medical-signal-detector';
@@ -56,6 +57,7 @@ export {
   extractTimeHint,
   hasVaccineSignal,
   isSubstantiveForPreGrounding,
+  extractTimeOfDayHint,
   FastResponseGate,
   isShortAcknowledgement,
   resolvePostReservationAck,
@@ -103,6 +105,7 @@ export class ContextGrounder {
   public static extractTimeHint = extractTimeHint;
   public static hasVaccineSignal = hasVaccineSignal;
   public static isSubstantiveForPreGrounding = isSubstantiveForPreGrounding;
+  public static extractTimeOfDayHint = extractTimeOfDayHint;
 
   /**
    * Ringkasan konteks deterministik (0 token): apa yang SUDAH dibahas, FOKUS saat ini,
@@ -175,6 +178,16 @@ export class ContextGrounder {
       }
       if (hasLocationOrTreatment && !session.booking?.pendingScheduleCheck) {
         nextBooking.pendingScheduleCheck = true;
+        bookingChanged = true;
+      }
+
+      // Sesi 180166 FM3 (anti-amnesia jam): preferensi jam kunjungan
+      // ("jam 10 pagi") dicatat ke booking.preferredTime. Hanya diisi saat
+      // terdeteksi; DILARANG menghapus preferredTime yang sudah ada bila turn
+      // berikutnya membahas hal lain (tanpa sinyal jam baru).
+      const timeOfDay = extractTimeOfDayHint(cleanIncomingText);
+      if (timeOfDay && timeOfDay !== session.booking?.preferredTime) {
+        nextBooking.preferredTime = timeOfDay;
         bookingChanged = true;
       }
 

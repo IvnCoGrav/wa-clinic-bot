@@ -15,6 +15,8 @@ export interface ParsedReservation {
   kota: string;
   treatmentCategory: TreatmentCategory;
   treatmentDetail: string;
+  /** Durasi resmi katalog (menit) agar auto-capture tidak menyimpan NULL. */
+  durationMinutes?: number;
   bookingDate: Date | null;
   rawText: string;
   babies: BabyDetail[];
@@ -423,6 +425,12 @@ export function parseReservationText(rawText: string): ParseResult {
       }
     : undefined;
 
+  let durationMinutes: number | undefined;
+  try {
+    const breakdown = treatmentCatalogService.resolveDurationBreakdown(treatmentDetail);
+    if (breakdown.confident) durationMinutes = breakdown.totalMinutes;
+  } catch {}
+
   return {
     success: true,
     reservation: {
@@ -433,6 +441,7 @@ export function parseReservationText(rawText: string): ParseResult {
       kota,
       treatmentCategory,
       treatmentDetail,
+      durationMinutes,
        bookingDate,
        rawText,
        babies,
@@ -660,6 +669,37 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     }
   }
 
+  // 4b. Tanggal numerik mustahil ("41 September", "99 September"): JANGAN diam-diam
+  // jatuh ke fallback nama-hari (+7 hari memalsukan jadwal). Coba pemulihan transposisi
+  // digit (41 -> 14); bila tak pulih, return null.
+  const badDayMatch = cleanStr.match(/(\d{2,})\s+([a-z]+)(?:\s+(\d{2,4}))?/i);
+  if (badDayMatch) {
+    const badDay = parseInt(badDayMatch[1], 10);
+    const badMonth = indMonths[badDayMatch[2].toLowerCase()];
+    if (badMonth !== undefined && badDay > 31) {
+      const digits = String(badDay);
+      let rawYear = badDayMatch[3];
+      let year = rawYear ? parseInt(rawYear, 10) : currentYear;
+      if (year < 100) year += 2000;
+      if (digits.length === 2) {
+        const swapped = parseInt(digits[1] + digits[0], 10);
+        if (swapped >= 1 && swapped <= 31) {
+          const candidate = createWibDate(year, badMonth, swapped, hours, minutes);
+          if (!isNaN(candidate.getTime())) {
+            const writtenDay: Record<string, number> = {
+              minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4,
+              jumat: 5, "jum'at": 5, sabtu: 6,
+            };
+            const named = Object.entries(writtenDay).find(([n]) => cleanStr.includes(n));
+            // Tanpa nama hari tertulis, atau hari cocok dengan hasil transposisi -> pulihkan.
+            if (!named || named[1] === candidate.getDay()) return candidate;
+          }
+        }
+      }
+      return null;
+    }
+  }
+
   // 5. Format Kata Relatif: "hari ini", "besok", "lusa"
   if (cleanStr.includes('hari ini')) {
     return createWibDate(wibNow.getFullYear(), wibNow.getMonth(), wibNow.getDate(), hours, minutes);
@@ -834,6 +874,12 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
   const bookingDate = dateStr ? tryParseIndonesianDate(dateStr) : null;
   const treatmentCategory = momProfile && babies.length > 0 ? TreatmentCategory.BOTH : (momProfile ? TreatmentCategory.MOMS : TreatmentCategory.BABY);
 
+  let convDuration: number | undefined;
+  try {
+    const breakdown = treatmentCatalogService.resolveDurationBreakdown(treatmentDetail);
+    if (breakdown.confident) convDuration = breakdown.totalMinutes;
+  } catch {}
+
   return {
     name,
     phone: '',
@@ -842,6 +888,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     kota: '',
     treatmentCategory,
     treatmentDetail: treatmentDetail,
+    durationMinutes: convDuration,
     bookingDate,
     rawText,
     babies,

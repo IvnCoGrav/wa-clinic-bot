@@ -5,6 +5,7 @@ import {
   buildEvidenceTexts,
   resolveCandidateBookingDate,
   resolveCandidateTreatment,
+  hasNewLocationEntity,
 } from '../../src/v3/tools/tool-masker';
 import { CustomerGoalSession } from '../../src/v3/domain/types';
 import * as dateConfirmationModule from '../../src/utils/date-confirmation';
@@ -148,21 +149,32 @@ describe('Tool Masker Engine (Fase 2)', () => {
       ];
       const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Baik saya fix ambil hari Sabtu ya', history);
       expect(result.isSaveReservationAllowed).toBe(true);
-      expect(result.maskedToolNames.length).toBe(0);
+      expect(result.maskedToolNames).toEqual(['calculate_delivery']);
       expect(result.availableTools.some((t) => t.function?.name === 'save_reservation')).toBe(true);
       expect(result.reason).toContain('ALL_PRECONDITIONS_MET');
       expect(result.suspectOverRestrictive).toBe(false);
     });
 
-    it('Skenario G: Permintaan same-day ("bisa hari ini?") dengan lokasi → save_reservation DIBUKA (antrean pending check staf)', () => {
+    it('Skenario G: interogatif same-day ("bisa hari ini?") TANPA verba → save_reservation DIBLOKIR (sesi 337880)', () => {
       const session: CustomerGoalSession = {
         ...baseSession,
         cartItems: [{ name: 'Pijat Bayi Ceria', price: 100000, type: 'PRIMARY' }],
         location: { rawText: 'Sedati', kecamatan: 'Sedati' },
       };
       const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Apakah bisa hari ini siang kak?');
+      expect(result.isSaveReservationAllowed).toBe(false);
+      expect(result.maskedToolNames).toContain('save_reservation');
+    });
+
+    it('Skenario G2: komitmen same-day berverba ("Oke fix hari ini ya") → save_reservation DIBUKA', () => {
+      const session: CustomerGoalSession = {
+        ...baseSession,
+        cartItems: [{ name: 'Pijat Bayi Ceria', price: 100000, type: 'PRIMARY' }],
+        location: { rawText: 'Sedati', kecamatan: 'Sedati' },
+      };
+      const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Oke fix hari ini ya');
       expect(result.isSaveReservationAllowed).toBe(true);
-      expect(result.maskedToolNames.length).toBe(0);
+      expect(result.maskedToolNames).toEqual(['calculate_delivery']);
     });
   });
 
@@ -213,6 +225,44 @@ describe('Tool Masker Engine (Fase 2)', () => {
       const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'Oke jadwalkan besok lusa ya mbak', history);
       expect(result.isSaveReservationAllowed).toBe(true);
       expect(result.availableTools.some((t) => t.function?.name === 'save_reservation')).toBe(true);
+    });
+  });
+
+  describe('4. Masking fisik calculate_delivery (sesi 337880 Issue 2)', () => {
+    const fullSession: CustomerGoalSession = {
+      genderGreeting: 'Bunda',
+      cartItems: [{ name: 'Pijat Bayi Ceria', price: 60000, type: 'PRIMARY' }],
+      location: { rawText: 'Waru Kepuh Kiriman', kelurahan: 'Kepuhkiriman' },
+    };
+
+    it('hasNewLocationEntity: nama kelurahan/kecamatan/jalan/link = true; sapaan/tanya = false', () => {
+      expect(hasNewLocationEntity('Di waru kepuh kiriman')).toBe(true);
+      expect(hasNewLocationEntity('Rumah di Jl Mawar no 12 Waru')).toBe(true);
+      expect(hasNewLocationEntity('Saya di Sedati')).toBe(true);
+      expect(hasNewLocationEntity('Lokasi di Pondok Candra')).toBe(true);
+      expect(hasNewLocationEntity('Bisa homecare ke Tuban?')).toBe(true);
+      expect(hasNewLocationEntity('Mau tanya hari ini masih ada kuota?')).toBe(false);
+      expect(hasNewLocationEntity('Halo kak selamat pagi')).toBe(false);
+      expect(hasNewLocationEntity('Harganya berapa ya?')).toBe(false);
+      expect(hasNewLocationEntity('')).toBe(false);
+    });
+
+    it('"Mau tanya hari ini masih ada kuota?" + sesi penuh → masked delivery DAN save', () => {
+      const result = evaluateToolMasking(
+        ALL_V3_TOOLS, fullSession, 'Mau tanya hari ini masih ada kuota?', []
+      );
+      expect(result.maskedToolNames).toContain('calculate_delivery');
+      expect(result.maskedToolNames).toContain('save_reservation');
+      expect(result.availableTools.some((t) => t.function?.name === 'calculate_delivery')).toBe(false);
+      expect(result.availableTools.some((t) => t.function?.name === 'save_reservation')).toBe(false);
+    });
+
+    it('entitas baru membuat delivery TERSEDIA kembali', () => {
+      const result = evaluateToolMasking(
+        ALL_V3_TOOLS, fullSession, 'Maaf keliru, di Rungkut Menanggal Surabaya', []
+      );
+      expect(result.maskedToolNames).not.toContain('calculate_delivery');
+      expect(result.availableTools.some((t) => t.function?.name === 'calculate_delivery')).toBe(true);
     });
   });
 });

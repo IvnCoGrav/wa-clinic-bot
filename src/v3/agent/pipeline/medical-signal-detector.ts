@@ -40,6 +40,16 @@ export function hasScheduleSignal(text: string): boolean {
     const c = t.charCodeAt(0);
     return c >= 48 && c <= 57;
   };
+  // Sinyal jam (sesi 180166 FM3, gaya token — tanpa regex semantik):
+  // penanda jam/pukul (+singkatan "sktr") yang diikuti angka dalam 2 token
+  // ke depan ("Sktr jam 10 pagi", "pukul 14.00"). Sapaan "Selamat pagi"
+  // (tanpa penanda+angka) DILARANG dihitung sebagai sinyal jadwal.
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (tok === 'jam' || tok === 'pukul' || tok === 'sktr') {
+      if (isDigitStart(tokens[i + 1] || '') || isDigitStart(tokens[i + 2] || '')) return true;
+    }
+  }
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i];
     if (!DAY_WORDS.includes(tok)) continue;
@@ -47,6 +57,43 @@ export function hasScheduleSignal(text: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Ekstrak preferensi jam kunjungan (sesi 180166 FM3, anti-amnesia waktu):
+ * "Sktr jam 10 pagi" → "jam 10 pagi"; "pukul 14.00" → "pukul 14.00".
+ * Pindai karakter manual (tanpa regex): penanda jam/pukul + angka +
+ * opsional periode pagi/siang/sore/malam. Null bila tak ada.
+ */
+export function extractTimeOfDayHint(text: string): string | null {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return null;
+  const PERIODS = ['pagi', 'siang', 'sore', 'malam'];
+  for (const marker of ['jam', 'pukul']) {
+    let idx = lower.indexOf(marker);
+    while (idx >= 0) {
+      let j = idx + marker.length;
+      while (j < lower.length && lower[j] === ' ') j++;
+      let num = '';
+      while (j < lower.length && ((lower[j] >= '0' && lower[j] <= '9') || lower[j] === '.' || lower[j] === ':')) {
+        num += lower[j] === ':' ? '.' : lower[j];
+        j++;
+      }
+      if (num.length > 0) {
+        let rest = lower.slice(j).trimStart();
+        let period = '';
+        for (const p of PERIODS) {
+          if (rest === p || rest.startsWith(p + ' ') || rest.startsWith(p + ',') || rest.startsWith(p + '.')) {
+            period = ` ${p}`;
+            break;
+          }
+        }
+        return `${marker} ${num}${period}`;
+      }
+      idx = lower.indexOf(marker, idx + 1);
+    }
+  }
+  return null;
 }
 
 /**

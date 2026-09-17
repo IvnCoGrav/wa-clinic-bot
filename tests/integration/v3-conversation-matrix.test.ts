@@ -607,15 +607,14 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
 
     activeTurn = 3;
     const r3 = await runTurn(ctx, 'Bisa nanti sore jam 4?');
-    // Pengecualian same-day (sesi 138207): interogatif HARI INI boleh tercatat
-    // sebagai PENDING verifikasi staf — tetapi DILARANG terkonfirmasi.
-    // Masker KONSISTEN mengizinkan same-day (seperti forcing pipeline);
-    // proteksi anti-premature-nya adalah status pending, bukan pemblokiran.
-    expect(vi.mocked(reservationCoreService.saveReservation)).toHaveBeenCalledTimes(1);
+    // Sesi 337880: interogatif (walau same-day) TANPA verba = slot inquiry.
+    // Kontrak: tidak tersimpan, tidak terkonfirmasi, masker memblokir.
+    expect(vi.mocked(reservationCoreService.saveReservation)).toHaveBeenCalledTimes(0);
     const s3 = await sessionOf(ctx);
-    expect(s3.booking?.isConfirmed).toBe(false);
-    expect(s3.booking?.needsStaffVerification).toBe(true);
-    expect(await maskerAllows(ctx, 'Bisa nanti sore jam 4?')).toBe(true);
+    expect(s3.booking?.preferredDate || '').toBe('');
+    expect(s3.booking?.reservationId || '').toBe('');
+    expect(s3.booking?.isConfirmed || false).toBe(false);
+    expect(await maskerAllows(ctx, 'Bisa nanti sore jam 4?')).toBe(false);
     expectNoSilentDrop(r3);
   });
 
@@ -701,6 +700,9 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     const s1 = await sessionOf(ctx);
     expect(s1.location?.kelurahan).toBe('Wedoro');
     expect(String(s1.booking?.requestedTimeHint || '')).toMatch(/hari ini/i);
+    // Sesi 337880: interogatif '?' (walau same-day + lokasi) = slot inquiry,
+    // BUKAN komitmen — masker memblokir, nihil persist.
+    expect(await maskerAllows(ctx, 'Bisa pesan pijat bayi hari ini jam 2 siang di Rewwin Waru?')).toBe(false);
     expect(vi.mocked(reservationCoreService.saveReservation)).toHaveBeenCalledTimes(0);
     expectNoSilentDrop(r1);
 

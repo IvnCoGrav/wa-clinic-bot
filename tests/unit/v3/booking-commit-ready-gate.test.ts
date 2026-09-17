@@ -33,9 +33,15 @@ describe('isBookingCommitReady fail-closed (Fase 3)', () => {
     )).toBe(true);
   });
 
-  it('pengecualian same-day: pertanyaan "siang ini bisa?" tetap commit-ready (pending)', () => {
+  it('pengecualian same-day DIHAPUS: pertanyaan "siang ini bisa?" BUKAN commit (sesi 337880)', () => {
     expect(ContextGrounder.isBookingCommitReady(
       sessionWithTreatment, 'kalau siang ini bisa?', []
+    )).toBe(false);
+  });
+
+  it('komitmen same-day berverba tetap commit-ready', () => {
+    expect(ContextGrounder.isBookingCommitReady(
+      sessionWithTreatment, 'Oke fix siang ini ya', []
     )).toBe(true);
   });
 

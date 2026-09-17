@@ -15,6 +15,13 @@ vi.mock('../../src/services/reservation-core.service', () => ({
 import { executeSaveReservation } from '../../src/v3/tools/save-reservation.tool';
 import { reservationCoreService } from '../../src/services/reservation-core.service';
 
+/** Tanggal ISO masa depan (audit 310995: gate temporal menolak tanggal lampau). */
+function futureDate(daysAhead = 7): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 describe('save_reservation multi-treatment & multi-pasien', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -29,7 +36,7 @@ describe('save_reservation multi-treatment & multi-pasien', () => {
       chatId: '6281@c.us',
       treatmentName: 'Pijat Bayi Pulih Ceria',
       additionalTreatments: ['Oksitosin Massage Fullbody'],
-      bookingDate: '2026-09-10',
+      bookingDate: futureDate(),
       children: [{ ageMonths: 2 }, { name: 'Kakak', ageMonths: 36 }],
     } as any);
 
@@ -49,7 +56,7 @@ describe('save_reservation multi-treatment & multi-pasien', () => {
       customerId: 'cust-1',
       chatId: '6281@c.us',
       treatmentName: 'Pijat Bayi Ceria',
-      bookingDate: '2026-09-10',
+      bookingDate: futureDate(),
       childName: 'Adek',
       childAgeMonths: 3,
     } as any);

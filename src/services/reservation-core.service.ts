@@ -180,7 +180,22 @@ export class ReservationCoreService {
       status = 'confirmed',
     } = params;
 
-    const duration = durationMinutes != null ? effectiveDuration(durationMinutes, 60) : null;
+    // Single Source of Truth: durasi NULL diresolve via katalog kanonis agar DB
+    // tidak menyimpan NULL saat nama layanan valid. Anti-fabrikasi: angka hasil
+    // resolve HANYA dipersist bila seluruh item dikenali katalog / tag eksplisit —
+    // teks tak dikenali dibiarkan null (UI memakai estimasi tampilan).
+    let duration = durationMinutes != null ? effectiveDuration(durationMinutes, 60) : null;
+    if (duration == null && treatmentDetail && treatmentDetail.trim()) {
+      try {
+        const { treatmentCatalogService } = await import('./treatment-catalog.service');
+        const breakdown = treatmentCatalogService.resolveDurationBreakdown(treatmentDetail, tenantId);
+        if (breakdown.confident || breakdown.usedExplicitTag) {
+          duration = effectiveDuration(breakdown.totalMinutes, 60);
+        }
+      } catch {
+        duration = null;
+      }
+    }
     const validCategory = ((treatmentCategory as TreatmentCategory) || TreatmentCategory.BABY) as TreatmentCategory;
     const effectiveRawText =
       rawText ||

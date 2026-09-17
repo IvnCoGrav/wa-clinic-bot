@@ -114,7 +114,9 @@ export function parseTreatmentsFromDetail(
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
     const durationMatch = p.match(/\[\s*(\d+)\s*m.*?\s*\]/i);
-    const durationMinutes = durationMatch ? parseInt(durationMatch[1], 10) : 60;
+    // Fondasional: jangan default 60 sebelum cocok katalog — biarkan undefined
+    // agar durasi resmi katalog (atau add-on 15m) yang menang di bawah.
+    const explicitDuration = durationMatch ? parseInt(durationMatch[1], 10) : undefined;
     
     // Ekstrak nama anak dari kurung sebelum dibersihkan (misal "Pijat Bayi (Nadira)")
     const childNameInParenMatch = p.match(/\(\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)\s*$/);
@@ -131,22 +133,25 @@ export function parseTreatmentsFromDetail(
         continue;
       }
 
-    const normTarget = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Normalisasi buang token (add-on) agar "Sinar Moksa" cocok ke "Sinar Moksa (Add-on)".
+    const normKey = (s: string) =>
+      s.toLowerCase().replace(/\(add-?on\)|\[add-?on\]/g, '').replace(/[^a-z0-9]/g, '').replace(/addon/g, '');
+    const normTarget = normKey(cleanName);
 
     const findHierarchical = (cat: ClinicServiceItem[]) => {
       // Tingkat 1: exact
-      let m = cat.find((s) => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === normTarget);
+      let m = cat.find((s) => normKey(s.name) === normTarget);
       if (m) return m;
       // Tingkat 2: non-bundle yang termuat di target (prioritas layanan tunggal)
       m = cat.find((s) => {
         if ((s.category as any) === 'BUNDLE') return false;
-        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normS = normKey(s.name);
         return normTarget.includes(normS);
       });
       if (m) return m;
       // Tingkat 3: fallback umum (termasuk bundle jika tidak ada yang cocok)
       m = cat.find((s) => {
-        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normS = normKey(s.name);
         return normTarget.includes(normS);
       });
       return m;
@@ -180,7 +185,7 @@ export function parseTreatmentsFromDetail(
       serviceId: matchedService?.id || `custom-${i + 1}`,
       name: matchedService?.name || cleanName,
       category: (category as any) || 'BABY',
-      durationMinutes: durationMinutes || matchedService?.durationMinutes || 60,
+      durationMinutes: explicitDuration ?? matchedService?.durationMinutes ?? (isAddon ? 15 : 60),
       price: price || 0,
       isAddon: isAddon,
       assignedChildIndex,

@@ -1548,3 +1548,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Verifikasi:** `npm run build` exit 0; dashboard `vite build` exit 0; `repair-last-message-at --apply` 351→0 drift; `check-livechat-sync` drift 0, phantom 163 (by-design), tanpa-ID 880 (INBOUND 281 historis/WA lama, OUTBOUND 599 historis — pesan baru kini ber-ID); full suite 327 files 2409 passed / 2 failed pre-existing terbukti di clean tree (`llm-outage-silent`, `simulator-minggu-waru-replay`, ranah prompt LLM, tak tersentuh perubahan ini).
 - **Sisa disengaja:** 599 outbound historis tetap tanpa ID (backfill butuh ID WAHA asli, tak tersedia); verifikasi manual "5km"/tombol X/centang realtime di browser belum dieksekusi sesi ini.
 
+---
+
+## 81. [Sesi 391501] Sanitizer Mid-Sentence Mutilation, Rekomendasi 17-Bulan Tanpa Usia, & RAG Keyword Gap (2026-09-17)
+
+- **Status:** Open (Ditunda untuk dikerjakan pada sesi berikutnya). Full staged-phase plan tersimpan di `docs/plans/SESSION_391501_REMEDIATION_PLAN.md`.
+- **Ditemukan:** 2026-09-17 saat pengujian chat simulator sesi `391501` (Sidoarjo Banjarmukti Residence, anak 17 bulan + balita 2 tahun).
+- **Akar Masalah (3 Temuan):**
+  1. **Sanitizer Mid-Sentence Mutilation (`sanitizer.ts`)**: `limitVocativeQuota` menghapus kata "Bunda" kedua tanpa mengecek fungsi sintaksisnya. Kata "Bunda" yang berfungsi sebagai subjek kalimat (`"Bunda hanya perlu menyiapkan..."`) terpotong menjadi `" hanya perlu menyiapkan..."`. Selain itu, penghapusan sapaan yang didahului koma meninggalkan koma menggantung sebelum tanda seru (`"ya,! 🤗"`).
+  2. **Rekomendasi Paket Default Mengabaikan Usia (`treatment-catalog.service.ts` & `goal-tracker.ts`)**: `getDefaultRelaxationService()` tidak menerima parameter `ageMonths`, sehingga anak usia 17 bulan selalu disodori layanan BABY pertama di database yaitu `*Pijat Bayi Ceria Newborn*` (0-6 bulan), bukan `*Pijat Bayi Ceria*` (7-24 bulan).
+  3. **RAG Knowledge Chunk Retrieval Gap untuk Persiapan & Minyak (`keyword-enrichment.service.ts` & `faq-corpus.ts`)**: Chunk FAQ `Apa saja yang perlu disiapkan sebelum treatment?` tidak memiliki keywords `bayi`, `baby oil`, `minyak telon`, `matras`, `kudu nyiapin`. Akibatnya, query FTS `"persiapan sebelum pijat bayi"` (dibersihkan menjadi `persiapan bayi`) gagal mencocokkan chunk ini karena ketiadaan token `bayi`, dan malah mencatut chunk tindik telinga atau batuk pilek.
+- **Rencana Tindakan:**
+  Eksekusi 4 fase sesuai `docs/plans/SESSION_391501_REMEDIATION_PLAN.md`:
+  - Fase 1: Proteksi subjek tata bahasa & pembersihan koma di `OutputSanitizer.limitVocativeQuota`.
+  - Fase 2: Filter usia data-driven pada `getDefaultRelaxationService(category?, ageMonths?)` & pemanggilan di `goal-tracker.ts`.
+  - Fase 3: Pengayaan `KB_KEYWORD_RULES` & sinkronisasi FAQ chunk persiapan ke DB Postgres.
+  - Fase 4: Pengujian regresi otomatis deterministik & end-to-end typecheck.
+
+

@@ -17,7 +17,72 @@ import {
   DAY_EVIDENCE_WORDS,
   SAME_DAY_EVIDENCE_ALIASES,
   isSameDayRequestText,
+  hasBookingCommitSignal,
 } from '../../utils/date-confirmation';
+import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
+import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
+import { getOutsideCities } from '../../config/coverage';
+
+/**
+ * Detektor entitas lokasi baru (sesi 337880, Issue 2): true bila pesan
+ * customer SAAT INI menyebut nama daerah/kelurahan/kecamatan, landmark
+ * perumahan Tier-0, koridor arteri, penanda jalan (jl/gang/perum/komplek/
+ * blok/patokan), kota luar cakupan (Tuban/Lamongan — butuh verdict tool!),
+ * atau link Google Maps. Murni, data-driven (gazetteer/landmark/koridor/
+ * coverage runtime + token kata utuh ala extractFastIntents — tanpa regex
+ * semantik). Tanpa entitas → calculate_delivery di-mask fisik.
+ */
+export function hasNewLocationEntity(text: string | undefined): boolean {
+  const input = text || '';
+  const lower = input.toLowerCase();
+  if (!lower.trim()) return false;
+  try {
+    if (findPopularLandmark(input) || resolveArteryCorridor(input)) return true;
+  } catch {}
+  try {
+    for (const [areaLower] of getGazetteerAreas().entries()) {
+      if (areaLower.length >= 4 && lower.includes(areaLower)) return true;
+    }
+  } catch {}
+  try {
+    const kecNames = getGazetteerKecamatanNames() || [];
+    for (const n of kecNames) {
+      if (n && n.length >= 4 && lower.includes(n.toLowerCase())) return true;
+    }
+  } catch {}
+  try {
+    const outside = getOutsideCities() || [];
+    for (const c of outside) {
+      const name = String(c || '').toLowerCase();
+      if (name.length >= 3 && lower.includes(name)) return true;
+    }
+  } catch {}
+  const l = lower;
+  if (l.includes('google.com/maps') || l.includes('goo.gl') || l.includes('share.google') || l.includes('maps.app')) {
+    return true;
+  }
+  // Token kata utuh (strip tepi non-alnum): presisi tanpa \b-regex.
+  const stripEdge = (t: string): string => {
+    let s = t;
+    while (s.length > 0) {
+      const c = s.charCodeAt(0);
+      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
+      s = s.slice(1);
+    }
+    while (s.length > 0) {
+      const c = s.charCodeAt(s.length - 1);
+      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
+      s = s.slice(0, -1);
+    }
+    return s;
+  };
+  const STREET_MARKERS = new Set([
+    'jl', 'jln', 'jalan', 'gang', 'gg', 'perum', 'perumahan',
+    'komplek', 'kompleks', 'blok', 'cluster', 'ruko', 'patokan',
+  ]);
+  const toks = lower.split(' ').map(stripEdge).filter((t) => t.length > 0);
+  return toks.some((t) => STREET_MARKERS.has(t));
+}
 
 export interface ToolMaskingEvaluation {
   /** Daftar tool yang diizinkan untuk dikirim ke LLM jika dalam enforce mode */
@@ -121,7 +186,7 @@ export function resolveCandidateTreatment(
   if (session.selectedTreatment?.trim()) return session.selectedTreatment.trim();
   if (session.cartItems && session.cartItems.length > 0) return session.cartItems[0].name;
   const lower = (cleanIncomingText || '').toLowerCase();
-  const hasCommitSignal = /(jadwalkan|ambil|deal|fix|pesan|booking|mau yang itu|boleh yang itu)\b/i.test(lower);
+  const hasCommitSignal = hasBookingCommitSignal(lower);
   if (!hasCommitSignal || !conversationHistory) return undefined;
   // Pindai mundur riwayat asisten: paket katalog terakhir yang ditawarkan
   // (bold *Nama*) adalah kandidat yang dimaksud customer.
@@ -206,6 +271,12 @@ export function evaluateToolMasking(
   const maskedToolNames: string[] = [];
   if (!isSaveReservationAllowed) {
     maskedToolNames.push('save_reservation');
+  }
+  // Sesi 337880 Issue 2: tanpa entitas lokasi baru di pesan SAAT INI,
+  // calculate_delivery dicabut fisik (anti-recycle "Waru Kepuh" dari riwayat
+  // saat customer hanya bertanya kuota/jadwal/harga/sapaan).
+  if (!hasNewLocationEntity(cleanIncomingText)) {
+    maskedToolNames.push('calculate_delivery');
   }
 
   const availableTools = allTools.filter(

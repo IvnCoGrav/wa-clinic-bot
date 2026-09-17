@@ -57,7 +57,9 @@ describe('Tool-Masking Enforce Cutover', () => {
     const names = await routeWithCapture();
     expect(names).not.toContain('save_reservation');
     expect(names).toContain('get_catalog_and_price');
-    expect(names).toContain('calculate_delivery');
+    // 'halo' tanpa entitas lokasi → delivery ikut di-mask (sesi 337880).
+    expect(names).not.toContain('calculate_delivery');
+    expect(names).toContain('escalate_to_human');
   });
 
   it('shadow eksplisit (ENFORCE=false): tools penuh terkirim', async () => {

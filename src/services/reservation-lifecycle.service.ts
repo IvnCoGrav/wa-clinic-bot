@@ -249,6 +249,7 @@ export interface UpsertReservationFormParams {
   chatId: string;
   treatmentCategory?: TreatmentCategory | string | null;
   treatmentDetail?: string | null;
+  durationMinutes?: number | null;
   bookingDate?: Date | null;
   rawText?: string;
   purchaseValue?: number;
@@ -274,6 +275,17 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
   isUpdate: boolean;
 }> {
   const { source, ...rest } = params;
+  // Auto-capture webhook membawa durasi resmi katalog bila pemanggil tak mengisinya
+  // (hanya bila seluruh item dikenali katalog — anti-fabrikasi data).
+  if ((rest.durationMinutes == null) && rest.treatmentDetail && rest.treatmentDetail.trim()) {
+    try {
+      const { treatmentCatalogService } = await import('./treatment-catalog.service');
+      const breakdown = treatmentCatalogService.resolveDurationBreakdown(rest.treatmentDetail, rest.tenantId);
+      if (breakdown.confident || breakdown.usedExplicitTag) {
+        rest.durationMinutes = breakdown.totalMinutes;
+      }
+    } catch {}
+  }
   const { reservationCoreService } = await import('./reservation-core.service');
   // Petakan source lama ke kanal kanonis: admin-outbound & webhook-* → WEBHOOK,
   // V3 tool → AGENT, selain itu → WEBHOOK (idempoten, aman untuk bot).
