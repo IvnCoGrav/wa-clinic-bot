@@ -31,7 +31,7 @@ export const faqs = [
   },
   {
     "question": "Apa saja yang perlu disiapkan sebelum treatment?",
-    "answer": "Tidak perlu menyiapkan apa-apa Bunda, semua perlengkapan treatment (minyak pijat, dll) sudah dibawa oleh tim kami."
+    "answer": "Bunda tidak perlu menyiapkan apa-apa. Seluruh perlengkapan medis dan perawatan sudah disiapkan secara lengkap dan steril oleh Bidan kami, termasuk baby oil, minyak telon, matras, dan perlak. Bunda di rumah cukup menyiapkan tempat yang nyaman/alas tidur untuk si kecil berbaring."
   },
   {
     "question": "Metode pembayaran apa saja yang bisa dipakai?",
