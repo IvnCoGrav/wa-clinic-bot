@@ -25,22 +25,33 @@ export interface AiTaskModelConfig {
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
-  if (!model) return 'gpt-4o-mini';
+  if (!model) return 'deepseek-v4-1-flash';
   const url = (baseUrl || process.env.OPENAI_BASE_URL || '').toLowerCase();
-  if (!model.startsWith('gpt-') && !model.startsWith('o1') && !model.startsWith('o3')) {
-    if (url.includes('api.openai.com') || url.includes('sumopod.com')) {
+  
+  // Jika endpoint resmi OpenAI, pastikan hanya model OpenAI valid
+  if (url.includes('api.openai.com')) {
+    if (!model.startsWith('gpt-') && !model.startsWith('o1') && !model.startsWith('o3')) {
       return 'gpt-4o-mini';
     }
   }
+
+  // Jika endpoint SumoPod dan ada model lama yang tidak disupport, fallback ke model SumoPod valid
+  if (url.includes('sumopod.com')) {
+    if (model === 'gpt-4o' || model === 'gpt-3.5-turbo') {
+      return 'deepseek-v4-flash';
+    }
+  }
+
+  // Kenari.id mendukung penuh deepseek-v4-1-flash, deepseek-v4-pro, qwen3-8-flash, dll.
   return model;
 }
 
-const defaultProvider = process.env.AI_PROVIDER_CHAT || 'OpenAI';
-const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const defaultProvider = process.env.AI_PROVIDER_CHAT || 'Kenari';
+const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'deepseek-v4-1-flash';
 const defaultChatModel = sanitizeModelForProvider(rawChatModel);
 const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const defaultNluModel = sanitizeModelForProvider(rawNluModel);
-const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash';
+const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-1-flash';
 
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
@@ -123,7 +134,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   ],
 ]);
 
-export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen'];
+export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen', 'Kenari'];
 
 // Registry per-tenant: Map<tenantId, Map<AiTaskType, AiTaskModelConfig>>.
 // Default tenant di-seed dari env pada saat modul dimuat.
@@ -142,6 +153,91 @@ function getOrCreateTenantRegistry(tenantId: string): Map<AiTaskType, AiTaskMode
 export class AiModelConfigService {
   /** Status bot aktif per-tenant (disable satu tenant tidak memengaruhi tenant lain). */
   static globalBotActive = new Map<string, boolean>();
+
+  /** Provider aktif per tenant: 'KENARI' | 'SUMOPOD'. */
+  static activeLlmProvider = new Map<string, 'KENARI' | 'SUMOPOD'>();
+
+  static getActiveProvider(tenantId: string = DEFAULT_TENANT_ID): 'KENARI' | 'SUMOPOD' {
+    const cached = this.activeLlmProvider.get(tenantId);
+    if (cached) return cached;
+
+    const envProvider = (process.env.ACTIVE_LLM_PROVIDER || '').toUpperCase();
+    if (envProvider === 'SUMOPOD' || envProvider === 'KENARI') {
+      return envProvider as 'KENARI' | 'SUMOPOD';
+    }
+
+    const currentBaseUrl = (process.env.OPENAI_BASE_URL || '').toLowerCase();
+    if (currentBaseUrl.includes('sumopod')) return 'SUMOPOD';
+    return 'KENARI';
+  }
+
+  static async setActiveProvider(tenantId: string, provider: 'KENARI' | 'SUMOPOD'): Promise<void> {
+    this.activeLlmProvider.set(tenantId, provider);
+
+    // Sinkronkan model chat default sesuai provider yang dipilih
+    if (provider === 'KENARI') {
+      const kenariModel = process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash';
+      this.updateTaskConfig('CHAT_REPLY', { provider: 'Kenari', modelName: kenariModel }, tenantId);
+    } else {
+      const sumopodModel = process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash';
+      this.updateTaskConfig('CHAT_REPLY', { provider: 'MiniMax', modelName: sumopodModel }, tenantId);
+    }
+
+    // Fire-and-forget persist ke DB agar respons HTTP instan & tidak terhambat jika DB offline/lambat
+    (async () => {
+      try {
+        const { prisma } = await import('../db/client');
+        await prisma.tenantAiConfig.upsert({
+          where: {
+            tenant_id_task: {
+              tenant_id: tenantId,
+              task: 'ACTIVE_LLM_PROVIDER',
+            },
+          },
+          create: {
+            tenant_id: tenantId,
+            task: 'ACTIVE_LLM_PROVIDER',
+            provider: 'SYSTEM',
+            model_name: provider,
+            max_tokens: 0,
+            temperature: 0,
+          },
+          update: {
+            model_name: provider,
+          },
+        });
+      } catch (err: any) {
+        console.warn('[AI MODEL CONFIG] Failed to persist active LLM provider:', err.message);
+      }
+    })();
+  }
+
+  /**
+   * Mengembalikan konfigurasi endpoint aktual berdasarkan provider aktif tenant.
+   */
+  static getActiveEndpointConfig(tenantId: string = DEFAULT_TENANT_ID): {
+    provider: 'KENARI' | 'SUMOPOD';
+    baseUrl: string;
+    apiKey: string;
+    defaultModel: string;
+  } {
+    const provider = this.getActiveProvider(tenantId);
+    if (provider === 'KENARI') {
+      return {
+        provider: 'KENARI',
+        baseUrl: (process.env.KENARI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
+        apiKey: process.env.KENARI_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
+        defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash',
+      };
+    }
+
+    return {
+      provider: 'SUMOPOD',
+      baseUrl: (process.env.SUMOPOD_BASE_URL || process.env.OPENAI_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
+      apiKey: process.env.SUMOPOD_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
+      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash',
+    };
+  }
 
   static isBotActive(tenantId: string = DEFAULT_TENANT_ID): boolean {
     return this.globalBotActive.get(tenantId) ?? true;
@@ -191,6 +287,11 @@ export class AiModelConfigService {
         this.globalBotActive.set(tenantId, botActiveConfig.model_name === 'true');
       }
 
+      const providerConfig = dbConfigs.find((c) => c.task === 'ACTIVE_LLM_PROVIDER');
+      if (providerConfig && (providerConfig.model_name === 'KENARI' || providerConfig.model_name === 'SUMOPOD')) {
+        this.activeLlmProvider.set(tenantId, providerConfig.model_name as 'KENARI' | 'SUMOPOD');
+      }
+
       const reg = getOrCreateTenantRegistry(tenantId);
       if (dbConfigs.length > 0) {
         for (const cfg of dbConfigs) {
@@ -222,7 +323,12 @@ export class AiModelConfigService {
   static async saveConfigsToDb(tenantId: string): Promise<boolean> {
     try {
       const { prisma } = await import('../db/client');
-      await prisma.tenantAiConfig.deleteMany({ where: { tenant_id: tenantId, task: { not: 'GLOBAL_BOT_ENABLED' } } });
+      await prisma.tenantAiConfig.deleteMany({
+        where: {
+          tenant_id: tenantId,
+          task: { notIn: ['GLOBAL_BOT_ENABLED', 'ACTIVE_LLM_PROVIDER'] },
+        },
+      });
       const entries = Array.from(getOrCreateTenantRegistry(tenantId).entries())
         .filter(([task]) => task !== 'MEDICAL_CHECK') // locked
         .map(([task, cfg]) => ({
