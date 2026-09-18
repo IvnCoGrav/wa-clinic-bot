@@ -366,7 +366,19 @@ export class OutputSanitizer {
     // Preposisi Indonesia (Fase 5, anti-mutilasi): kata sapaan yang DIdahului
     // preposisi berperan sebagai OBJEK PREPOSISI ("untuk Bunda", "ke Bunda",
     // "dari Bunda"), BUKAN panggilan vokatif — DILARANG dihapus / dihitung kuota.
-    const PREPOSITION_BEFORE_RE = /(?:^|[\s(])(?:untuk|buat|ke|dari|pada|dengan|bersama|bagi|sama|punya|milik|menemani)\s+$/i;
+    //
+    // Zero-Dangling Rule (Fase 4, anti-mutilasi semantik): konjungsi koordinatif
+    // ("dan", "atau", "serta", "maupun") juga melindungi sapaan — menghapusnya
+    // meninggalkan kata sambung menggantung ("atau?") yang merusak sintaksis.
+    // Cek ini adalah GERBANG INTEGRITAS GRAMATIKAL, bukan daftar hafalan frasa
+    // user: "dan/atau/serta/maupun" WAJIB selalu punya pelengkap, tak peduli
+    // konteks kalimatnya.
+    const PREPOSITION_BEFORE_RE = /(?:^|[\s(])(?:untuk|buat|ke|dari|pada|dengan|bersama|bagi|sama|punya|milik|menemani|dan|atau|serta|maupun)\s+$/i;
+    // Plan regresi Fase 1.2 (anti-mutilasi klausa relatif): relativizer "yang"
+    // TIDAK PERNAH mendahului vokatif — "yang Bunda maksud / tanyakan" selalu
+    // menempatkan sapaan sebagai partisipan klausa (subjek), BUKAN panggilan.
+    // Aturan gramatikal produktif (bukan daftar kata user), berlaku umum.
+    const RELATIVIZER_BEFORE_RE = /(?:^|[\s(])yang\s+$/i;
     let seen = 0;
     return text.replace(pattern, (match, _g, offset: number, full: string) => {
       // 391501: proteksi subjek — cek posisi awal kalimat/klausa + verba.
@@ -376,6 +388,12 @@ export class OutputSanitizer {
       // menghabiskan kuota agar tidak ada panggilan vokatif tambahan di pesan
       // yang sama (kontrol overuse Rule 6 tetap terjaga).
       if (PREPOSITION_BEFORE_RE.test(before)) {
+        seen += 1;
+        return match;
+      }
+      // Plan regresi Fase 1.2: subjek klausa relatif — pertahankan utuh,
+      // tetap hitung kuota (kontrol overuse Rule 6 terjaga).
+      if (RELATIVIZER_BEFORE_RE.test(before)) {
         seen += 1;
         return match;
       }
@@ -475,16 +493,6 @@ export class OutputSanitizer {
     const rest = text.slice(header.length).trimStart();
     const trimmedRest = OutputSanitizer.trimToMaxSentences(rest, maxSentences);
     return `${header}${trimmedRest}`.trimEnd();
-  }
-
-  /**
-   * Tone guard pra-lokasi (Rule 5): bila lokasi BELUM diketahui, pembuka
-   * "Bisa banget Bunda" (janji sepihak) diganti nada cek-dulu. Hanya menyentuh
-   * frasa pembuka di awal teks — isi selebihnya utuh.
-   */
-  public static applyPreLocationTone(text: string): string {
-    if (!text) return text;
-    return text.replace(/^\s*Bisa banget\s+Bunda\b\s*,?\s*/i, 'Kami bantu cekkan dulu ya Bunda 😊 ');
   }
 
   /**

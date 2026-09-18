@@ -4,6 +4,122 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Arsitektur Data Murni Tool, Netralitas Agama Lapisan Prompt & D7 Kognitif (2026-09-18)
+
+- **Fase 1 — Netralitas agama di Single Source of Truth** (`src/v3/agent/prompt/layers/core-persona.layer.ts`,
+  `src/v3/agent/prompt/phases/router-direct-reply.layer.ts`): aturan 4b **NETRALITAS AGAMA** yang
+  tadinya hanya di legacy `src/config/persona.ts:93-95` kini injeksi di `TONE_NEG_CONSTRAINTS` (V3)
+  serta sinkron di `router-direct-reply`. Model menerima instruksi eksplisit: DILARANG
+  "Alhamdulillah/Bismillah/Insya Allah/Puji Tuhan" tanpa pemicu; salam "Assalamualaikum" dijawab
+  "Waalaikumsalam Bunda" (pengecualian sah). Verifikasi: `prompt-composer` memuat `NETRALITAS AGAMA` (exit 0).
+- **Fase 2 — Tool ke data murni (pure structured)** (`src/v3/agent/pipeline/tool-pipeline.ts`,
+  `src/v3/tools/calculate-delivery.tool.ts`): `buildLlmSafeToolPayload` kini menghapus
+  `suggestedTemplateReply/suggestedPriceReply/suggestedConsultationReply` + memangkas `"Format
+  penyampaian yang disarankan: ..."` dari `message` (anti parrot-effect). CTA final tanpa suffix
+  "atau Bunda" (Single-Vocative Principle). `message` alat mengembalikan fakta jarak/jangkauan
+  murni (angka via `__internal*`), bukan naskah balasan.
+- **Fase 3 — Guardrail kognitif D7** (`src/v3/guardrails/factual-claim-validator.ts`): tambah
+  `UNPROMPTED_RELIGIOUS_RE` + `CUSTOMER_RELIGIOUS_TRIGGER_RE` sebagai pelanggaran D7
+  (`D7_UNPROMPTED_RELIGIOUS_PHRASE`). Tanpa pemicu customer → invalid (1x re-prompt bersih di
+  `guardrail-pipeline.ts` yang sudah ada); dipicu customer (`assalamu...`/`alhamdulillah`) → valid
+  (netral). Pendekatan kognitif, bukan mutilasi regex tengah kalimat.
+- **Verifikasi**: `npm run build` (tsc) exit 0; D7: `factual-claim-validator.test.ts` 13/13;
+  Fase 1: prompt-composer exit 0; Fase 2: `tool-pipeline-payload-sanitization` 3/3.
+
+#### Fase 3 & 4 Plan Terbaru: Semantik "Berapa" & Zero-Dangling Sanitizer (2026-09-18)
+
+- **Verdict audit plan**: dari 3 Milestone, hanya **Fase 3 & 4** tersisa & fondasional.
+  Fase 1/2 sudah dikerjakan (plan ketinggalan); Fase 6/7/8 sudah selesai di Milestone 2;
+  Fase 9 premis salah (tabel `clinic_policies` belum di-deploy, bukan kode); Fase 10/11 ditunda
+  (Confirmation Gate); Fase 5 salah hitung matriks (23, bukan 24).
+- **Fase 4 — Zero-Dangling Rule** (`src/v3/guardrails/sanitizer.ts`): bug TERBUKTI direproduksi —
+  `"...untuk si kecil atau Bunda? 🤗"` dipangkas kuota vokatif menjadi `"...untuk si kecil atau? 🤗"`
+  (kata sambung menggantung). Akar: `PREPOSITION_BEFORE_RE` tidak memuat konjungsi koordinatif.
+  Fix: tambah `dan|atau|serta|maupun` sebagai gerbang integritas gramatikal (sapaan setelah
+  konjungsi = objek koordinatif, DILARANG dihapus). Test adversarial: "atau Bunda?" tetap utuh,
+  "dan Bunda" tetap utuh, overuse tetap ditegakkan.
+- **Fase 3 — Semantik interogatif "berapa"** (`src/v3/agent/persona.ts`): bug TERBUKTI —
+  `"ke kenjeran berapa"`, `"pijat bayi berapa"`, dan `"berapa"` **TIDAK** memicu `ask_price`
+  (butuh kata biaya eksplisit). Fix fondasional: `berapa` = pertanyaan HARGA by-default, KECUALI
+  terikat satuan non-moneter (durasi/usia/kuantitas/jarak) yang mengikutinya (menoleransi filler
+  "sih/ya/kah"). Mengganti whitelist hafalan kata-biaya. Tech debt `NON_MONETARY_FOLLOWERS` dicatat
+  di `docs/KNOWN_ISSUES.md` (idealnya taksonomi unit terpusat).
+- **Verifikasi**: `npm run build` (tsc) exit 0; 13 suite (sanitizer + NLU + katalog + guardrail +
+  delivery) = **119/119 hijau**; tak ada kebocoran harga (information hiding tetap utuh).
+
+#### Milestone 2 & 3: Data Terstruktur get-catalog, Guardrail Tanpa Overwrite, & Audit ClinicPolicy (2026-09-18)
+
+- **Fase 3 — Output get-catalog jadi data terstruktur** (`src/v3/tools/get-catalog.tool.ts`):
+  tambah `CatalogPricingBreakdown` (`targetName`, `originalPrice`, `promoPrice`, `deliveryFee`,
+  `grandTotal`, `durationMinutes`, `area`) & `CatalogCartRecapBreakdown` (`items`, `subtotalPromo`,
+  `deliveryFee`, `grandTotal`) ke `GetCatalogOutput`; tambah `focusClinicalDescription` +
+  `focusTargetAudience` (MOMS/BABY). `message` tidak lagi memuat instruksi salin-tempel
+  "Format Penyampaian Harga ..." — diganti fakta terstruktur (`Data Finansial Resmi`, total resmi
+  keranjang). LLM menalar dari angka, bukan menyalin prosa (Mandat Non-Hardcode & data-driven).
+- **Fase 4 — Guardrail berhenti menimpa narasi LLM** (`src/v3/agent/pipeline/guardrail-pipeline.ts`):
+  hapus blind overwrite `finalReply = cartTotalFallback || sessionCartFallback ||
+  executedTools[0]?.suggestedPriceReply || suggestedTemplateReply`. Kini HANYA rekap resmi
+  deterministik (total keranjang mesin) yang boleh menggantikan draft; tanpa rekap resmi, draft
+  natural dipertahankan (guardrail hilir yang menangani). CTA rekap keranjang kini **state-aware**
+  (`session.booking.preferredDate`), bukan "hari apa" hardcoded.
+- **Fase 5 — Audit ClinicPolicy (parity)**: investigasi live membuktikan tabel `clinic_policies`
+  **TIDAK ADA di DB produksi** → `get_clinic_policy_faq` selalu fallback statis. Akar: migrasi
+  `20260917000001_add_prompt_policy_tables_align_drift` + `scripts/seed-clinic-policies.ts` **sudah
+  ada di repo** (commit `025aa3b1`) tapi **belum di-deploy** (server di `57e8a0f`, local ahead 1).
+  Tidak ada kode baru yang diperlukan — fix = deploy migrasi + seed. Ditambah test parity: seluruh
+  7 topik wajib punya fallback statis lengkap (`clinic-policy-db-first.test.ts`).
+- **Verifikasi**: `npm run build` (tsc) exit 0; 19 suite (delivery + get-catalog + guardrail +
+  clinic-policy) = **127/127 hijau**.
+- **Ditunda**: Fase 6 (TEMPLATES→DB) tetap ditunda (Confirmation Gate).
+
+#### Milestone 1 (Fase 1–2): Netralitas Agama, CTA State-Aware & Carry-Over Berbasis State (2026-09-18)
+
+- **Fase 1 — Netralitas agama + teks ke template layer** (`src/v3/tools/calculate-delivery.tool.ts`,
+  `src/config/persona.ts`): hapus 2 literal `Alhamdulillah...` (baris 387 & 596) yang ditulis
+  tanpa syarat/flag tenant — inkonsisten dengan jalur `isIslamic` di greeting. Teks jangkauan
+  customer-facing dipindah ke template baru `TEMPLATES.inCoverageNoFee({ kelurahan, scheduleCta })`
+  (bukan literal baru di tool), sesuai Mandat Non-Hardcode. Spasi baris diperbaiki (`\n\n`).
+- **Fase 1 — CTA state-aware** (`buildScheduleCta`): signature diperluas ke
+  `ScheduleCtaOptions { preferredDate?, candidateTreatmentName?, hasCartItems? }` dengan **overload
+  `string | object`** (nol breaking-change untuk call lama). 3 cabang: (1) hari ada → akui+cekkan;
+  (2) treatment/keranjang ada → tanya hari; (3) treatment belum ada → DILARANG menodong jadwal,
+  tanya kebutuhan perawatan (Aturan Emas 20). Semua 6 call-site diharmonisasikan.
+- **Fase 2 — Carry-over ongkir berbasis STATE** (`src/v3/agent/pipeline/tool-pipeline.ts`): draf
+  lama memakai keyword-matching (`startsWith('kalau ke')`, `includes('berapa')`) yang melanggar
+  Mandat Anti-Overfitting. Diganti seam murni `ToolExecutionPipeline.shouldCarryOverDeliveryFee(session)`
+  yang bersandar pada state riil `session.priceDiscussed === true` + `session.location` sudah terisi.
+  Efek: nominal ongkir tetap sah saat customer membandingkan lokasi, **invariant terhadap parafrase**.
+- **Verifikasi**: `npm run build` (tsc) exit 0; `delivery-schedule-cta-context.test.ts` (12 test:
+  4 cabang CTA + netralitas agama + anti format-menempel + 2 skenario end-to-end) &
+  `tool-pipeline-price-intent.test.ts` (7 test state-based incl. invarian parafrase) hijau;
+  9 suite delivery terkait = **78/78 hijau**.
+- **Catatan**: 6 file test v3 yang gagal di suite penuh (`recruitment-loker-gate`,
+  `schedule-check-handoff`, `pediatric-taxonomy-adaptation`, `clinic-area-routing`,
+  `guardrail-no-mutilation`, `context-schedule-duration-governance`) adalah **kegagalan
+  pra-eksisting** dari commit WIP `025aa3b1` (terbukti: 16 gagal juga saat perubahan ini di-stash)
+  — tidak berkaitan dengan Milestone 1 ini.
+- **Ditunda**: Fase 6 (migrasi 30+ `TEMPLATES` persona.ts ke DB) — Confirmation Gate, keputusan
+  user: tunda. Lihat `docs/plans/REVISED_FOUNDATIONAL_PLAN_2026-09-18.md`.
+
+#### Eksekusi Plan Fondasional 3 Sesi Simulator — D6 Kenjeran + Matrix CM-23 (2026-09-18)
+
+- **Verdict audit:** dari 7 fase, hanya Fase 1 gap nyata → dieksekusi. Fase 2/3/5/6 SUDAH dikerjakan sesi sebelumnya (terverifikasi hijau, tanpa kode baru). **Fase 4 DITOLAK** sebagaimana ditulis: normalizer hardcode string Indonesia di TS melanggar Mandat Non-Hardcode; tujuan sudah dicapai kontrak `closingIntent` (matrix CM-22 hijau).
+- **Fixed — Fase 1 D6 grounding exemption** (`factual-claim-validator.ts`): kecamatan yang disebut customer (`customerInput`, pencocokan kata-utuh anti-"warung"→"Waru") ATAU dikembalikan `calculate_delivery` (result.kecamatan/args.locationText) = grounding sah, bukan halusinasi. Threading `customerInput: incomingText` di kedua call-site `guardrail-pipeline.ts`.
+- **Fase 7:** skenario matrix **CM-23** ("ke kenjeran berapa ya" → tool terpanggil, verdict ter-grounding Kel. Kenjeran/Kec. Bulak, tanpa pola minta-maaf/todong-alamat). Matrix kini 23/23.
+- **Verifikasi:** `build` 0; D6 12/12; matrix 23/23; full suite 2714 passed / 39 failed pre-existing / 24 skipped (sebelumnya 2709/40 — 1 regresi lama sembuh, 4 test baru hijau).
+- Detail penolakan Fase 4 + cap opsi di `docs/KNOWN_ISSUES.md` #90.
+
+#### Eksekusi Plan Regresi Oksitosin/Cart/Nominal — 6 Fase Fondasional (2026-09-18)
+
+- **Verdict audit:** plan (`docs/IMPLEMENTATION_PLAN_REGRESI_OKSITOSIN_CART_NOMINAL.md`) SUDAH fondasional (multi-layer root cause Data/State/Tool/Validator/Sanitizer, data-driven, state-gated) — BUKAN tambal-sulam. Dieksekusi penuh; detail + deviasi di `docs/KNOWN_ISSUES.md` #89.
+- **Fixed — Fase 1 sanitizer:** `applyPreLocationTone` dihapus total (anti double-emoji; nada pra-lokasi milik `location-rules.phase.ts`); `limitVocativeQuota` + proteksi subjek klausa relatif ("layanan yang Bunda maksud" utuh — bug TERBUKTI via TDD merah).
+- **Fixed — Fase 2 audience bundle:** `resolveServiceAudience()` derivasi komposisi `bundleItemIds` (tanpa migrasi DB); 7 hafalan `id.includes('moms'/'laktasi'/'kelahiran')` dihapus; paket oksitosin → `[Untuk Bunda]`; fallback grounding buta 'Si Kecil' → audience-aware.
+- **Fixed — Fase 3 cart:** `session.discussedTreatments` baru; pertanyaan konsultatif (`?` tanpa verba komitmen/bukti hari) masuk discussed, BUKAN cart (anti tagihan siluman Rp 155.000). 1 kontrak lama diselaraskan (`v3-audit-homecare-fix` Layer 2: pertanyaan perbandingan bukan komitmen).
+- **Fixed — Fase 4 validator:** `args.targetPrice` terstruktur masuk `authorizedNumbers` (kutipan "Rp 900.000 belum ada paket..." lolos, tanpa reprompt penimpa).
+- **Fixed — Fase 5 closing:** `CLINICAL_PROBE` + `suggestedConsultationReply` audience-aware (ibu → skrining Bunda; discussed → larangan skrining ulang); kontrak `closingIntent` lestari.
+- **Fixed — Fase 6 lokasi:** `hasNewLocationEntity` + token inti kecamatan ("Di tenggilis kak" membuka `calculate_delivery`; "Waru" tetap tertutup).
+- **Verifikasi:** `tsc`/`build` 0; gate per-fase + matrix 22/22 hijau; full suite 2709 passed / 39 failed pre-existing (terbukti via clean-tree stash) / 24 skipped.
+
 #### Perbaikan Holistik Fondasional Chatbot — 6 Guard Deterministik (2026-09-18)
 
 - **Phase 1 — Crash & greeting reset**: guard `(intents/symptoms || [])` di `selectRelevantExemplars` (anti `TypeError symptoms`); `buildInvalidReplyFallback(isFollowUp)` — greeting pembuka hanya Turn-0, follow-up pakai recovery kontekstual.

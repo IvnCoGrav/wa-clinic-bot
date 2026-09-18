@@ -64,9 +64,34 @@ export function extractFastIntents(text: string): string[] {
   });
   const hasExplicitCostWord = hasAnyWord(['biaya', 'hrga', 'harga', 'tarif', 'ongkir', 'pricelist', 'ribu', 'bayar', 'promo', 'diskon', 'total', 'totalnya']);
   const mentionsBerapa = lower.includes('berapa') || tokens.includes('brp');
-  // "berapa" telanjang (mis. "berapa minggu minimal usia...") bukan harga.
-  const berapaWithCost = mentionsBerapa && (hasExplicitCostWord || hasRpToken || hasNominalToken);
-  if (!asksDuration && (hasExplicitCostWord || hasRpToken || hasNominalToken || berapaWithCost)) {
+  // Semantik interogatif Indonesia: kata tanya "berapa" secara default adalah
+  // pertanyaan NOMINAL/harga. Ia BUKAN harga HANYA bila terikat satuan
+  // non-moneter (durasi/usia/kuantitas/jarak) yang mengikutinya.
+  //
+  // Catatan mandat (Anti-Overfitting): daftar `NON_MONETARY_FOLLOWERS` di bawah
+  // adalah pengecualian berbatas yang diakui sebagai tech debt — idealnya
+  // satuan dideteksi via taksonomi unit terpusat (lihat KNOWN_ISSUES). Namun
+  // arah logika ini FONDASIONAL: dari "butuh kata biaya" (whitelist rapuh) ke
+  // "berapa = harga by-default", sehingga varian tanpa kata biaya eksplisit
+  // ("ke kenjeran berapa") tetap dikenali sebagai pertanyaan harga.
+  const NON_MONETARY_FOLLOWERS = [
+    'menit', 'jam', 'lama', 'bln', 'bulan', 'mgg', 'minggu', 'hari', 'thn', 'tahun',
+    'usia', 'umur', 'anak', 'org', 'orang', 'pasien', 'bidan', 'terapis', 'sesi',
+    'kali', 'km', 'kilo', 'meter', 'jauh', 'jarak'
+  ];
+  // Satuan non-moneter boleh dipisahkan oleh filler ringan ("berapa SIH lama...").
+  const FILLERS = new Set(['sih', 'ya', 'kah', 'dong', 'deh', 'itu', 'nih', 'sih?', 'ya?']);
+  const isNonMonetaryBerapa = mentionsBerapa && tokens.some((tok, idx) => {
+    if (tok !== 'berapa' && tok !== 'brp') return false;
+    let k = idx + 1;
+    // lewati filler
+    while (k < tokens.length && FILLERS.has(tokens[k])) k++;
+    const nextTok = tokens[k] || '';
+    return NON_MONETARY_FOLLOWERS.includes(nextTok);
+  });
+  // "berapa" telanjang/umum (bukan durasi & bukan satuan non-moneter) = harga.
+  const isGeneralPriceBerapa = mentionsBerapa && !asksDuration && !isNonMonetaryBerapa;
+  if (!asksDuration && (hasExplicitCostWord || hasRpToken || hasNominalToken || isGeneralPriceBerapa)) {
     intents.push('ask_price');
   }
   // Durasi / spesifikasi layanan (misal "pijat bayi biasanya brp menit")
@@ -93,8 +118,8 @@ export function extractFastIntents(text: string): string[] {
     }
   } catch (_) {}
   // Cukur + kata biaya = pertanyaan TARIF cukur (disambiguasi konteks biaya).
-  // Bare "berapa" tanpa kata biaya BUKAN tarif (mis. "cukurnya gimana" = tanya model).
-  if (lower.includes('cukur') && (hasAnyWord(['biaya', 'hrga', 'harga', 'total', 'ribu', 'termasuk', 'bayar', 'tarif', 'ongkir']) || hasRpToken || hasNominalToken || berapaWithCost)) {
+  // Bare "cukur" tanpa kata biaya/berapa BUKAN tarif (mis. "cukurnya gimana" = tanya model).
+  if (lower.includes('cukur') && (hasAnyWord(['biaya', 'hrga', 'harga', 'total', 'ribu', 'termasuk', 'bayar', 'tarif', 'ongkir']) || hasRpToken || hasNominalToken || isGeneralPriceBerapa)) {
     if (!intents.includes('ask_price')) intents.push('ask_price');
   }
 

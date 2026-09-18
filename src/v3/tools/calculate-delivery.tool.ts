@@ -44,17 +44,36 @@ export interface CalculateDeliveryInput {
   asksDeliveryFee?: boolean;
 }
 
+export interface ScheduleCtaOptions {
+  preferredDate?: string;
+  candidateTreatmentName?: string;
+  hasCartItems?: boolean;
+}
+
 /**
- * Audit 337101: pilih CTA jadwal context-aware (pure function, testable).
- * Ada waktu yang diminta → akui + cekkan (tanpa tanya hari ulang).
- * Belum ada → tanya hari santai (perilaku lama).
+ * Audit 337101 + Aturan Emas 20: pilih CTA jadwal STATE-AWARE (pure function,
+ * testable). Sandaran pada state sesi (hari/treatment/keranjang), BUKAN pola
+ * kalimat. Tiga cabang:
+ *   1. Hari sudah diminta → akui + cekkan (jangan tanya hari lagi).
+ *   2. Treatment sudah dipilih (nama/keranjang) → tanya hari kunjungan.
+ *   3. Treatment belum dipilih → DILARANG menodong jadwal; tanya kebutuhan.
+ * Overload menerima `string` (call lama) maupun object (call baru) agar nol
+ * breaking-change.
  */
-export function buildScheduleCta(preferredDate?: string): string {
-  if (preferredDate && preferredDate.trim()) {
-    const when = preferredDate.trim();
-    return `Untuk ketersediaan jadwal ${when}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`;
+export function buildScheduleCta(opts?: ScheduleCtaOptions | string): string {
+  const o: ScheduleCtaOptions = typeof opts === 'string' ? { preferredDate: opts } : (opts || {});
+  const preferredDate = (o.preferredDate || '').trim();
+  const treatment = (o.candidateTreatmentName || '').trim();
+
+  if (preferredDate) {
+    return `Untuk ketersediaan jadwal ${preferredDate}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`;
   }
-  return 'Untuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊';
+  if (treatment || o.hasCartItems) {
+    const treatClause = treatment ? ` *${treatment}*` : 'nya';
+    return `Untuk layanan${treatClause}, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+  }
+  // Single-Vocative Principle: tanpa akhiran "atau Bunda" agar tidak duplikasi vokatif.
+  return 'Rencana mau dibantu perawatan apa untuk si kecil? 🤗';
 }
 
 /**
@@ -368,7 +387,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const maxCoverageKm = deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm;
         const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm;
         const kelurahan = reversed?.kelurahan || 'Titik Lokasi Terpilih';
-        const scheduleCta = !isOutOfCoverage ? buildScheduleCta(preferredDate) : undefined;
+        const hasCartItems = (cartSnapshot || []).length > 0;
+        const scheduleCta = !isOutOfCoverage
+          ? buildScheduleCta({ preferredDate, candidateTreatmentName, hasCartItems })
+          : undefined;
         // Strict Information Hiding (Rule 2): nominal ongkir HANYA bila customer
         // eksplisit menanyakan biaya. Tanpa itu → konfirmasi jangkauan saja.
         const suggestedTemplateReply = isOutOfCoverage
@@ -384,19 +406,17 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
                 // agar pertanyaan "hari apa" bawaan template ikut terganti.
                 ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
               })
-            : `Alhamdulillah, area ${kelurahan} masuk dalam jangkauan layanan homecare Bidan kami ya Bunda. ${buildScheduleCta(preferredDate)}`;
+            : TEMPLATES.inCoverageNoFee({ kelurahan, scheduleCta: scheduleCta! });
         console.log(JSON.stringify({ event: 'V3_TOOL_DELIVERY_URL_RESOLVED', tenantId, lat, lng, distanceKm, timestamp: new Date().toISOString() }));
         // Phase 2 (audit 315036) diharmonisasikan audit 694493: rekap nota
         // HANYA bila priceDiscussed (mode transaksional).
         const urlCartRecap = isOutOfCoverage || !shouldShowCartRecap ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
         const urlTemplate = urlCartRecap
-          ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
+          ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta({ candidateTreatmentName, hasCartItems: true })}`}`
           : suggestedTemplateReply;
         const urlMessage = isOutOfCoverage
-          ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${urlTemplate}"`
-          : showFeeNominal
-            ? `Titik share location berhasil diidentifikasi: Jarak rute kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}${urlCartRecap ? `\n\n${urlCartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`
-            : `Titik share location berhasil diidentifikasi: Area ${kelurahan} masuk dalam jangkauan layanan homecare Bidan kami.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`;
+          ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km).`
+          : `Area ${kelurahan} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
         const urlOutput: CalculateDeliveryOutput = {
           success: true,
           isPrecise: true,
@@ -580,6 +600,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm || kotaOutside
       || (isExplicitOutsideCity && !resolved.kota);
 
+    const hasCartItemsText = (cartSnapshot || []).length > 0;
     const baseTemplateReply = isOutOfCoverage
       ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
       : showFeeNominal
@@ -591,9 +612,14 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
             candidateTreatmentName,
             // Audit 337101: override CTA di DALAM template (bukan append)
             // agar pertanyaan "hari apa" bawaan template ikut terganti.
-            ...(preferredDate ? { scheduleCta: buildScheduleCta(preferredDate) } : {}),
+            ...(preferredDate
+              ? { scheduleCta: buildScheduleCta({ preferredDate, candidateTreatmentName, hasCartItems: hasCartItemsText }) }
+              : {}),
           })
-        : `Alhamdulillah, area ${locationText} masuk dalam area jangkauan layanan homecare Bidan kami ya Bunda.${buildScheduleCta(preferredDate)}`;
+        : TEMPLATES.inCoverageNoFee({
+            kelurahan: locationText,
+            scheduleCta: buildScheduleCta({ preferredDate, candidateTreatmentName, hasCartItems: hasCartItemsText }),
+          });
 
     // Phase 2 (audit 315036) diharmonisasikan audit 694493:
     // Rekap keranjang + grand total HANYA bila priceDiscussed (transaksional).
@@ -601,7 +627,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // TIDAK BOLEH muncul bila customer belum eksplisit menanyakan biaya.
     const cartRecap = isOutOfCoverage || !shouldShowCartRecap || !showFeeNominal ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
     const suggestedTemplateReply = cartRecap
-      ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
+      ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta({ candidateTreatmentName, hasCartItems: true })}`}`
       : baseTemplateReply;
 
     const mainOutput: CalculateDeliveryOutput = {
@@ -618,10 +644,8 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       isOutOfCoverage,
       suggestedTemplateReply,
       message: isOutOfCoverage
-        ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
-        : showFeeNominal
-          ? `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.${shouldShowCartRecap ? ' Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.' : ' DILARANG menyebut harga treatment / grand total (mode konsultasi) — sampaikan jarak + ongkir promo saja.'}` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
-          : `Area ${locationText} (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}) masuk dalam area jangkauan layanan homecare Bidan kami.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
+        ? `Area ${resolved.kelurahan || locationText} (${resolved.kecamatan || ''}) di luar batas jangkauan layanan homecare klinik (${distanceKm} km, maks ${maxCoverageKm} km).`
+        : `Area ${resolved.kelurahan || locationText} (${resolved.kecamatan || ''}) masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`
     };
     return applyFeeInformationHiding(mainOutput, showFeeNominal);
   } catch (error: any) {

@@ -12,6 +12,13 @@ import type {
   OngkirStatus,
 } from '../domain/types';
 import { GENERIC_CLINIC_TOKENS } from '../domain/types';
+// Plan regresi Fase 2: resolusi audiens bundle dari komposisi komponen
+// katalog (treatment-catalog.service tidak mengimpor modul ini → anti-cycle).
+import { resolveServiceAudience } from '../../services/treatment-catalog.service';
+import type { ServiceAudience } from '../../services/treatment-catalog.service';
+// Plan regresi Fase 3: sinyal komitmen & hari dari SATU sumber kebenaran
+// (utils murni, tanpa I/O → anti-cycle). Tanpa daftar kata baru.
+import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal } from '../../utils/date-confirmation';
 
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
 // Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
@@ -46,7 +53,8 @@ export class CartManager {
    */
   public static detectRecipientScope(
     text: string,
-    service?: { name?: string; category?: string; isAddon?: boolean }
+    service?: { name?: string; category?: string; isAddon?: boolean; bundleItemIds?: string[] },
+    audience?: ServiceAudience | null
   ): RecipientScope {
     const lower = (text || '').toLowerCase();
     const hasAny = (words: string[]) => words.some((w) => lower.includes(w));
@@ -61,7 +69,18 @@ export class CartManager {
       if (hasRealKakak) return 'CHILD_2';
       return 'CHILD_1';
     }
-    if (cat === 'BUNDLE') return 'GENERAL';
+    // Plan regresi Fase 2: bundle ber-audiens ibu (derivasi komposisi,
+    // mis. paket oksitosin) → MOMS agar berlabel [Untuk Bunda], bukan jatuh
+    // buta ke GENERAL/[Untuk Si Kecil]. Bundle anak → slot anak; campuran →
+    // GENERAL (netral, perilaku lama).
+    if (cat === 'BUNDLE') {
+      if (audience === 'MOMS') return 'MOMS';
+      if (audience === 'BABY' || audience === 'KIDS') {
+        if (hasRealKakak) return 'CHILD_2';
+        return 'CHILD_1';
+      }
+      return 'GENERAL';
+    }
     if (cat === 'ADDON' || cat === 'ADD_ON' || service?.isAddon === true) return 'GENERAL';
 
     // RULE 2 (FALLBACK): hanya bila kategori tidak ada/kosong/tak dikenal —
@@ -125,6 +144,9 @@ export class CartManager {
       if (s.id) svcById.set(s.id.toLowerCase(), s);
       svcByName.set(s.name.toLowerCase(), s);
     }
+    // Plan regresi Fase 2: audiens bundle dari komposisi komponen katalog.
+    const audienceOf = (svc: (typeof services)[number]): ServiceAudience =>
+      resolveServiceAudience(svc, (id) => svcById.get(id));
     const compIdsOf = (svc: (typeof services)[number]): Set<string> =>
       new Set((svc.bundleItemIds || []).map((id) => (id || '').toLowerCase()));
     const familyOf = (svc: (typeof services)[number]): Set<string> => {
@@ -205,7 +227,13 @@ export class CartManager {
       }
       return false;
     };
+    // Plan regresi Fase 3: riwayat konsultasi — layanan yang masuk cart
+    // pasti pernah dibahas; di-seed dari sesi agar lintas turn lestari.
+    const discussed = new Set<string>(
+      ((session as CustomerGoalSession).discussedTreatments || []).filter((n) => typeof n === 'string' && n.length > 0)
+    );
     const pushService = (s: (typeof services)[number], scope: RecipientScope) => {
+      discussed.add(s.name);
       const price = typeof s.originalPrice === 'number' ? s.originalPrice : 0;
       const type = s.isAddon ? 'ADDON' : (s.category === 'BUNDLE' ? 'SERVICE' : 'PRIMARY');
       const category = (s.category as CartItem['category']) || (s.isAddon ? 'ADDON' : undefined);
@@ -288,7 +316,7 @@ export class CartManager {
         }
         continue;
       }
-      const scope = stored.recipientScope || CartManager.detectRecipientScope(stored.name, svc);
+      const scope = stored.recipientScope || CartManager.detectRecipientScope(stored.name, svc, audienceOf(svc));
       pushService(svc, scope);
       const cur = cart.find((c) => c.name.toLowerCase() === svc.name.toLowerCase() && (c.recipientScope || 'GENERAL') === scope);
       if (cur && stored.recipientLabel) cur.recipientLabel = stored.recipientLabel;
@@ -457,6 +485,23 @@ export class CartManager {
       const cleanSet = new Set(cleanHits.map((x) => x.name.toLowerCase()));
       const singleExactOffer =
         new Set([...fullSet, ...cleanSet]).size === 1;
+      // Plan regresi Fase 3 (pemisahan konsultasi vs transaksi): pertanyaan
+      // konsultatif user = bertanda '?' TANPA sinyal transaksional (verba
+      // komitmen satu-sumber-kebenaran, bukti hari, atau komitmen sticky
+      // sesi). Cermin fail-closed tanda-tanya di booking-commit-gate —
+      // level tanda baca + state, bukan daftar hafalan kata khasiat.
+      // Contoh: "Breast massage ini bisa untuk memperbanyak asi?" → dicatat
+      // ke discussedTreatments, DILARANG masuk cartItems (anti tagihan
+      // siluman Rp 155.000).
+      const rawMsg = history[i]?.content || '';
+      const hasCommitSignal = hasBookingCommitSignal(rawMsg)
+        || (session as CustomerGoalSession).bookingCommitConfirmed === true;
+      const hasDayEvidence = DAY_EVIDENCE_WORDS.some((w) => text.includes(w));
+      const isConsultativeQuestion = !isAssistant && text.includes('?') && !hasCommitSignal && !hasDayEvidence;
+      if (isConsultativeQuestion) {
+        for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) discussed.add(s.name);
+        continue;
+      }
       for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) {
         // Sesi 337880 (active user commitment mutlak, mandat AGENTS.md):
         // rekomendasi/tawaran asisten (role === 'assistant') DILARANG
@@ -470,7 +515,9 @@ export class CartManager {
         // tetap DILARANG selalu (aturan lama lestari).
         if (isAssistant && !userConfirmedNames.has(s.name.toLowerCase())) {
           const isExact = fullSet.has(s.name.toLowerCase()) || cleanSet.has(s.name.toLowerCase());
-          if (!(lastUserBareAffirm && singleExactOffer && isExact)) continue;
+          // Plan regresi Fase 3: tawaran asisten yang ditolak gerbang tetap
+          // tercatat sebagai bahan konsultasi (bukan transaksi).
+          if (!(lastUserBareAffirm && singleExactOffer && isExact)) { discussed.add(s.name); continue; }
         }
         // Sesi 834128: tawaran multi-opsi asisten (≥2 PRIMARY berbeda dalam
         // satu pesan) hanya boleh masuk keranjang bila user pernah merujuk
@@ -505,7 +552,7 @@ export class CartManager {
           const cartHasNonAddon = cart.some((c) => c.type !== 'ADDON');
           if (!msgHasNonAddon && !cartHasNonAddon) continue;
         }
-        pushService(s, CartManager.detectRecipientScope(text, s));
+        pushService(s, CartManager.detectRecipientScope(text, s, audienceOf(s)));
       }
     }
     // Audit 854065 (pending swap): afirmasi pelanggan atas tawaran tukar
@@ -538,6 +585,9 @@ export class CartManager {
     // bersihkan seluruh item ADDON agar tidak ada tagihan mandiri fiktif
     // (mis. Moksa Rp 15k + ongkir). Add-on yang mendampingi layanan utama
     // tidak tersentuh (hasNonAddon true).
+    // Plan regresi Fase 3: persist riwayat konsultasi ke sesi (unik,
+    // preservasi lintas turn) sebelum keluar — tanpa memengaruhi cart.
+    (session as CustomerGoalSession).discussedTreatments = [...discussed];
     if (!cart.some((it) => it.type !== 'ADDON')) {
       return cart.filter((it) => it.type !== 'ADDON');
     }
@@ -635,7 +685,11 @@ export class CartManager {
       .sort((a, b) => b.name.length - a.name.length);
     if (candidates.length === 0) return null;
     const offered = candidates[0];
-    const scope = CartManager.detectRecipientScope(offerText, offered);
+    // Plan regresi Fase 2: audiens bundle dari komposisi komponen katalog.
+    const swapById = new Map((catalog || []).map((s) => [(s?.id || '').toLowerCase(), s]));
+    const scope = CartManager.detectRecipientScope(
+      offerText, offered, resolveServiceAudience(offered, (id) => swapById.get(id))
+    );
     // 3. Korban A: item PRIMARY/SERVICE se-scope yang namanya berbeda.
     const victim = (session.cartItems || []).find(
       (c) => (c.recipientScope || 'GENERAL') === scope

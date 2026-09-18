@@ -61,4 +61,27 @@ describe('FASE 2c — ClinicPolicy DB-first', () => {
       tool.executeGetClinicFaq({ topic: 'operational_hours_and_booking' } as any, 't-2c')
     ).resolves.toMatchObject({ success: true });
   });
+
+  it('parity: seluruh 7 topik punya fallback statis lengkap (guard kelengkapan seed DB)', async () => {
+    findUnique.mockResolvedValue(null);
+    const tool = await loadTool();
+    const expectedTopics = [
+      'therapist_qualification',
+      'payment_methods',
+      'multi_child_transport',
+      'post_vaccine_rules',
+      'homebase_and_coverage',
+      'operational_hours_and_booking',
+      'general_homecare_info',
+    ];
+    const fallbacks = tool.getStaticFallbackTopics();
+    expect(fallbacks.length).toBe(expectedTopics.length);
+    for (const t of expectedTopics) {
+      const out = await tool.executeGetClinicFaq({ topic: t } as any, 't-parity');
+      expect(out.success, `topic ${t}`).toBe(true);
+      expect(out.topic, `topic ${t}`).toBe(t);
+      expect(out.factualSummary.trim().length, `factualSummary ${t}`).toBeGreaterThan(0);
+      expect(out.suggestedReply.trim().length, `suggestedReply ${t}`).toBeGreaterThan(0);
+    }
+  });
 });

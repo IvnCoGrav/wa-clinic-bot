@@ -280,16 +280,24 @@ export class GuardrailPipeline {
         console.warn(JSON.stringify({ event: 'NUMERIC_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message || String(repromptErr), timestamp: new Date().toISOString() }));
       }
       if (!repromptOk) {
-        // Gunakan template tool ter-grounding jika ada (prioritas: total
-        // resmi keranjang multi-item, lalu template harga, lalu template umum)
+        // Re-prompt numerik gagal total → jangan kirim angka halusinasi ke
+        // customer. Prioritas: total resmi keranjang multi-item dari tool,
+        // lalu rekap keranjang sesi (MESIN, bukan LLM).
+        //
+        // Fase 4 (revisi fondasional 2026-09-18): DILARANG overwrite membabi
+        // buta dengan template harga generik tool (`suggestedPriceReply`/
+        // `suggestedTemplateReply`) — itu membuang narasi natural model dan
+        // pernah menyuntik CTA "hari apa" hardcoded. Hanya rekap resmi
+        // deterministik yang BOLEH menggantikan (koreksi angka, bukan gaya).
         const cartTotalFallback = executedTools
           .map((t) => (t as any)?.result?.cartTotalReply)
           .find((s): s is string => typeof s === 'string' && s.trim().length > 0);
-        // Audit 854065: turn tanpa tool TAK PUNYA template tool — bangun
-        // fallback deterministik dari keranjang sesi (MESIN, bukan LLM):
-        // seluruh item + grand total resmi, anti layanan hilang.
+        // Audit 854065 + Aturan Emas 20: rekap deterministik dari keranjang sesi.
+        // CTA WAJIB state-aware (bukan "hari apa" hardcoded) — pakai jumlah item
+        // keranjang & tanggal terpilih untuk memilih cabang CTA yang benar.
+        const hasCartItems = (session.cartItems || []).length > 0;
         let sessionCartFallback: string | undefined = undefined;
-        if ((session.cartItems || []).length > 0) {
+        if (hasCartItems) {
           const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
           const rows = (session.cartItems || []).map((it) => {
             const p = typeof it.promoPrice === 'number' ? it.promoPrice : it.price;
@@ -302,12 +310,19 @@ export class GuardrailPipeline {
             return `- ${who ? `[${who}] ` : ''}${it.name}: ${fmtRp(p)}`;
           });
           const grand = GoalTracker.calcCartTotal(session);
-          sessionCartFallback = `Berikut rincian resmi keranjang Bunda ya 😊\n${rows.join('\n')}\nTotal keseluruhan: *${fmtRp(grand)}*\n\nRencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+          const preferredDate = (session.booking as any)?.preferredDate;
+          const ctaLine = preferredDate
+            ? `Untuk ketersediaan jadwal ${preferredDate}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`
+            : `Untuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+          sessionCartFallback = `Berikut rincian resmi keranjang Bunda ya 😊\n${rows.join('\n')}\nTotal keseluruhan: *${fmtRp(grand)}*\n\n${ctaLine}`;
         }
-        const fallbackToolReply = cartTotalFallback || sessionCartFallback || executedTools[0]?.result?.suggestedPriceReply || executedTools[0]?.result?.suggestedTemplateReply;
-        if (fallbackToolReply) {
-          finalReply = fallbackToolReply;
+        const deterministicFallback = cartTotalFallback || sessionCartFallback;
+        if (deterministicFallback) {
+          finalReply = deterministicFallback;
         }
+        // Tanpa rekap resmi: JANGAN overwrite — biarkan guardrail hilir
+        // (validator klaim faktual / silent-drop) yang menangani, agar narasi
+        // natural model tetap utuh bila memungkinkan.
       }
     }
 
@@ -325,7 +340,9 @@ export class GuardrailPipeline {
       executedTools.some((t) => t?.name === 'escalate_to_human') ||
       ContextGrounder.hasFallInjurySignal(incomingText) ||
       ContextGrounder.hasVaccineSignal(incomingText);
-    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation });
+    // Plan regresi Fase 1 (Sesi 580976): teruskan pesan customer agar D6
+    // mengenali kecamatan yang disebut customer sebagai grounding sah.
+    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation, customerInput: incomingText });
     if (!factCheck.isValid && shouldSendReply && !isEscalated && finalReply.trim()) {
       console.warn(JSON.stringify({ event: 'FACTUAL_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factCheck.violations, timestamp: new Date().toISOString() }));
       violationsDetected.push(...factCheck.violations);
@@ -347,7 +364,7 @@ export class GuardrailPipeline {
         const factRetryText = (factRetryData?.choices?.[0]?.message?.content || '').trim();
         if (factRetryText) {
           const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp, sanitizeOpts);
-          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown });
+          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown, customerInput: incomingText });
           if (factRecheck.isValid) {
             finalReply = factCleaned;
             factRepromptOk = true;
@@ -567,17 +584,15 @@ export class GuardrailPipeline {
       finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
     }
 
-    // Deterministic Output Normalizers (Rule 1 & 5) di gate akhir:
-    // - trimmer 3-kalimat untuk balasan PROSA (termasuk multi-paragraf sapaan),
-    //   TETAPI senarai katalog/formulir terstruktur DILARANG dipotong;
-    // - tone guard pra-lokasi HANYA bila lokasi sesi belum diketahui.
+    // Deterministic Output Normalizer (Rule 1) di gate akhir: trimmer
+    // 3-kalimat untuk balasan PROSA (termasuk multi-paragraf sapaan), TETAPI
+    // senarai katalog/formulir terstruktur DILARANG dipotong. Nada pra-lokasi
+    // ("bantu cekkan jangkauan") didelegasikan seutuhnya ke layer prompt
+    // (location-rules.phase.ts) — tanpa manipulasi string pembuka di sini
+    // (anti double-emoji & anti mid-sentence mutilation, plan regresi Fase 1).
     if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
       if (!OutputSanitizer.hasStructuredContent(finalReply)) {
         finalReply = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(finalReply, 3);
-      }
-      const loc = (session as any)?.location;
-      if (!(loc?.kelurahan || loc?.kecamatan || loc?.kota || loc?.rawText)) {
-        finalReply = OutputSanitizer.applyPreLocationTone(finalReply);
       }
     }
 
