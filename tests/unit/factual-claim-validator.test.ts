@@ -9,7 +9,7 @@ import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
- * Fase D — Validator klaim faktual non-angka (D1..D5).
+ * Fase D — Validator klaim faktual non-angka (D1..D5, D7).
  * Gagal setelah re-prompt 1x → SUNYI TOTAL + eskalasi unresolved_faq.
  */
 describe('Factual claim validator', () => {
@@ -69,6 +69,35 @@ describe('Factual claim validator', () => {
     expect(bad.violations.join(' ')).toMatch(/Domicile/i);
   });
 
+  // Plan regresi Fase 1 (Sesi 580976): kecamatan yang ditanyakan customer
+  // adalah grounding sah — DILARANG dituduh halusinasi walau sesi kosong.
+  it('D6: Kecamatan Kenjeran valid jika ditanyakan customer di incoming input', () => {
+    const draft = 'Untuk area Kecamatan Kenjeran, wilayahnya masih cukup luas ya Bunda 🙏 Kalau boleh tahu rumahnya di kelurahan atau perumahan mana ya? Biar sekalian kami bantu cekkan jarak pasti dan ongkir promonya 🤗';
+    const ok = validateFactualClaims(draft, [], [], { locationKnown: false, customerInput: 'ke kenjeran berapa ya' });
+    expect(ok.isValid).toBe(true);
+    // Kontrol negatif: tanpa disebut customer → tetap halusinasi.
+    const bad = validateFactualClaims(draft, [], [], { locationKnown: false, customerInput: 'pijat bayi berapa' });
+    expect(bad.isValid).toBe(false);
+    expect(bad.violations.join(' ')).toMatch(/Domicile/i);
+  });
+
+  it('D6: Kecamatan Kenjeran valid jika dikembalikan oleh calculate_delivery', () => {
+    const draft = 'Untuk area Kecamatan Kenjeran, wilayahnya masih cukup luas ya Bunda 🙏 Kalau boleh tahu rumahnya di kelurahan atau perumahan mana ya?';
+    const tools = [{ name: 'calculate_delivery', args: { locationText: 'Kenjeran' }, result: { success: true, kecamatan: 'Kenjeran' } }];
+    const ok = validateFactualClaims(draft, tools, [], { locationKnown: false, customerInput: 'ke kenjeran berapa ya' });
+    expect(ok.isValid).toBe(true);
+    // Grounding via args.locationText saja (tanpa result.kecamatan) ikut sah.
+    const toolsArgsOnly = [{ name: 'calculate_delivery', args: { locationText: 'Kenjeran, Surabaya' }, result: { success: false } }];
+    expect(validateFactualClaims(draft, toolsArgsOnly, [], { locationKnown: false }).isValid).toBe(true);
+  });
+
+  it('D6 adversarial: "warung" TIDAK membebaskan klaim "Waru" (kata-utuh, bukan substring)', () => {
+    const draft = 'Area Kecamatan Waru ini masih cukup luas. Kalau boleh tahu, rumah Bunda di kelurahan mana ya?';
+    const bad = validateFactualClaims(draft, [], [], { locationKnown: false, customerInput: 'di warung depan gang' });
+    expect(bad.isValid).toBe(false);
+    expect(bad.violations.join(' ')).toMatch(/Domicile/i);
+  });
+
   it('D6: fakta homebase dikecualikan; lokasi dikenal dilewati; kecamatan fiktif di luar cakupan', () => {
     const homebase = 'Homebase kami ada di Waru, Sidoarjo ya Bunda. Kalau boleh tahu rumah Bunda di daerah mana ya?';
     expect(validateFactualClaims(homebase, [], [], { locationKnown: false }).isValid).toBe(true);
@@ -76,6 +105,33 @@ describe('Factual claim validator', () => {
     expect(validateFactualClaims(known, [], [], { locationKnown: true }).isValid).toBe(true);
     const fiktif = 'Area Kecamatan Ngalor Kidul ini masih cukup luas ya Bunda';
     expect(validateFactualClaims(fiktif, [], [], { locationKnown: false }).isValid).toBe(true);
+  });
+
+  it('D7: draf memuat kata keagamaan tanpa pemicu -> invalid; bila dipicu customer -> valid', () => {
+    const unprompted = validateFactualClaims(
+      'Alhamdulillah, area Bungurasih masuk dalam jangkauan layanan homecare kami ya Bunda.',
+      [],
+      [],
+      { customerInput: 'bungurasih kal' }
+    );
+    expect(unprompted.isValid).toBe(false);
+    expect(unprompted.violations.join(' ')).toContain('D7_UNPROMPTED_RELIGIOUS_PHRASE');
+
+    const prompted = validateFactualClaims(
+      'Waalaikumsalam Bunda, area Bungurasih masuk dalam jangkauan Bidan kami.',
+      [],
+      [],
+      { customerInput: 'assalamualaikum mbak bungurasih bisa?' }
+    );
+    expect(prompted.isValid).toBe(true);
+
+    const feedback = validateFactualClaims(
+      'Alhamdulillah, kami ikut senang mendengarnya Bunda 🤗',
+      [],
+      [],
+      { customerInput: 'alhamdulillah pijatnya enak banget' }
+    );
+    expect(feedback.isValid).toBe(true);
   });
 
   it('D5 integrasi: klaim absolut lolos re-prompt → ESKALASI DENGAN BALASAN SOPAN (anti-silent-drop)', async () => {

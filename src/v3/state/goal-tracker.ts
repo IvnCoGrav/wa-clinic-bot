@@ -376,8 +376,11 @@ export class GoalTracker {
       const rows = session.cartItems.map((it) => {
         const scope = it.recipientScope || 'GENERAL';
         const hasAgeInLabel = it.recipientLabel ? /\(\d+\s*(bln|th)\)/.test(it.recipientLabel) : false;
+        // Plan regresi Fase 2.3: fallback buta 'Si Kecil' dihapus. Scope
+        // GENERAL/nihil merujuk audiens sesi: MOMS/momProfile → 'Bunda'.
         const who = it.recipientLabel
-          || (scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil' : 'Si Kecil');
+          || (scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil'
+            : (session.targetAudience === 'MOMS' || session.momProfile != null ? 'Bunda' : 'Si Kecil'));
         const priceLabel = it.type === 'ADDON'
           ? `Tambahan: ${fmtRp(it.promoPrice ?? it.price)}`
           : it.type === 'SERVICE'

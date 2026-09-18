@@ -1,4 +1,4 @@
-import { treatmentCatalogService, ClinicServiceItem } from '../../services/treatment-catalog.service';
+import { treatmentCatalogService, resolveServiceAudience, ClinicServiceItem } from '../../services/treatment-catalog.service';
 import { PatientProfileExtractor } from '../state/patient-extractor';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -66,6 +66,23 @@ export type CatalogClosingIntent =
   | 'PRICE_SUBJECT_CLARIFY'
   | 'CLINICAL_PROBE';
 
+export interface CatalogPricingBreakdown {
+  targetName?: string;
+  originalPrice?: number;
+  promoPrice?: number;
+  deliveryFee?: number;
+  grandTotal?: number;
+  durationMinutes?: number;
+  area?: string;
+}
+
+export interface CatalogCartRecapBreakdown {
+  items: Array<{ name: string; promoPrice: number }>;
+  subtotalPromo: number;
+  deliveryFee?: number;
+  grandTotal: number;
+}
+
 export interface GetCatalogOutput {
   success: boolean;
   treatments: CatalogTreatmentDetail[];
@@ -87,6 +104,16 @@ export interface GetCatalogOutput {
    * punya template konsultasi resmi (bukan menjiplak template transaksional).
    */
   suggestedConsultationReply?: string;
+  /**
+   * Kontrak data terstruktur (fondasional): fakta finansial & klinis mentah,
+   * terpisah dari narasi. LLM menalar dari angka ini — bukan menyalin prosa.
+   */
+  pricingBreakdown?: CatalogPricingBreakdown;
+  cartRecapBreakdown?: CatalogCartRecapBreakdown;
+  /** Deskripsi klinis murni layanan fokus (tanpa salam/pertanyaan hafalan). */
+  focusClinicalDescription?: string;
+  /** Audiens layanan fokus: MOMS / BABY. */
+  focusTargetAudience?: 'MOMS' | 'BABY';
   message: string;
 }
 
@@ -112,6 +139,18 @@ export interface CatalogSessionContext {
    * padahal customer sudah menulis keluhan ("Biasa kembung").
    */
   knownSymptoms?: string[];
+  /**
+   * Plan regresi Fase 3+5: layanan yang SEDANG/TELAH dikonsultasikan
+   * (session.discussedTreatments, diisi CartManager) — agar tool DILARANG
+   * menyuruh LLM menanyakan keluhan/paket yang sudah dibahas (anti-kaset).
+   */
+  discussedTreatments?: string[];
+  /**
+   * Plan regresi Fase 5: audiens sesi (MOMS/BABY/KIDS/BOTH) agar panduan
+   * penutup audience-aware — paket ibu DILARANG ditutup dengan skrining
+   * batuk/pilek bayi.
+   */
+  targetAudience?: string;
 }
 
 export const GET_CATALOG_TOOL_SCHEMA = {
@@ -521,6 +560,7 @@ export async function executeGetCatalog(
     }).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;
+    let pricingBreakdown: CatalogPricingBreakdown | undefined = undefined;
     if (showPrices && (formattedTreatments.length === 1 || specificTreatmentName)) {
       const target = formattedTreatments[0];
       // Aturan emas 3: template harga TETAP disusun tanpa durasi bila durasi
@@ -532,11 +572,20 @@ export async function executeGetCatalog(
         // pakai template harga murni (tanpa todongan jadwal — priceInfo memang
         // tidak memuat CTA hari; CTA jadwal terpisah di priceCta).
         const quotedOngkir = sessionCtx?.ongkirPromo;
+        pricingBreakdown = {
+          targetName: target.name,
+          originalPrice: Number(target.originalPrice),
+          promoPrice: Number(target.promoPrice),
+          durationMinutes: showDuration && target.durationMinutes != null ? Number(target.durationMinutes) : undefined,
+        };
         if (quotedOngkir != null && Number.isFinite(Number(quotedOngkir))) {
           const grand = Number(target.promoPrice) + Number(quotedOngkir);
           const area = sessionCtx?.kelurahan ? ` ke ${sessionCtx.kelurahan}` : '';
           const durClause = showDuration && target.durationMinutes != null ? `durasinya ${target.durationMinutes} menit dan ` : '';
           suggestedPriceReply = `Untuk *${target.name}*, ${durClause}saat ini ada promo jadi *Rp ${Number(target.promoPrice).toLocaleString('id-ID')}* (harga normal *Rp ${Number(target.originalPrice).toLocaleString('id-ID')}*). Ditambah ongkir promo${area} (*Rp ${Number(quotedOngkir).toLocaleString('id-ID')}*), total keseluruhannya menjadi *Rp ${grand.toLocaleString('id-ID')}* ya Bunda 😊`;
+          pricingBreakdown.deliveryFee = Number(quotedOngkir);
+          pricingBreakdown.grandTotal = grand;
+          pricingBreakdown.area = sessionCtx?.kelurahan;
         } else {
           suggestedPriceReply = TEMPLATES.priceInfo({
             name: target.name,
@@ -552,6 +601,7 @@ export async function executeGetCatalog(
     // bila snapshot cart memuat ≥2 item dan harga ditanya, susun template
     // total resmi agar LLM tinggal mengutip (anti 75k+105k+15k=120k).
     let cartTotalReply: string | undefined = undefined;
+    let cartRecapBreakdown: CatalogCartRecapBreakdown | undefined = undefined;
     const cartSnap = Array.isArray(sessionCtx?.cartItems) ? sessionCtx.cartItems : [];
     if (showPrices && cartSnap.length >= 2) {
       const pick = (c: { promoPrice?: number | null; price?: number | null }): number =>
@@ -563,24 +613,64 @@ export async function executeGetCatalog(
       const grand = sub + (ongKnown ? Number(ong) : 0);
       const rincian = ongKnown ? `${parts.join(' + ')} + Ongkir ${formatRp(Number(ong))}` : parts.join(' + ');
       cartTotalReply = `Untuk keranjang saat ini, total resmi yang sudah dihitung sistem adalah *Rp ${grand.toLocaleString('id-ID')}* (${rincian}) ya Bunda 😊`;
+      cartRecapBreakdown = {
+        items: cartSnap.map((c) => ({ name: String(c.name || 'Layanan'), promoPrice: pick(c) })),
+        subtotalPromo: sub,
+        deliveryFee: ongKnown ? Number(ong) : undefined,
+        grandTotal: grand,
+      };
     }
+
+    // Plan regresi Fase 5 (audience-aware closing): panduan penutup
+    // DITURUNKAN dari state (kategori argumen, momStage/kehamilan, audiens
+    // sesi, audiens layanan fokus via komposisi katalog) — BUKAN template
+    // "si kecil batuk/pilek" untuk semua kasus. Layanan ibu DILARANG ditutup
+    // skrining bayi; kebutuhan yang sudah dibahas DILARANG ditanya ulang.
+    const catById = new Map(allServices.map((s) => [(s?.id || '').toLowerCase(), s]));
+    const audienceOfId = (id: string | undefined): string =>
+      resolveServiceAudience(
+        catById.get((id || '').toLowerCase()) || { category: undefined },
+        (cid) => catById.get(cid)
+      );
+    const focusForAudience = formattedTreatments.find((t) => t.isRecommendedForSymptoms) || formattedTreatments[0];
+    const isMomContext = category === 'MOMS'
+      || momStage != null
+      || gestationalWeeks != null
+      || (sessionCtx?.targetAudience || '').toUpperCase() === 'MOMS'
+      || (clinicalRecommendation != null && audienceOfId(clinicalRecommendation.id) === 'MOMS')
+      || (focusForAudience != null && audienceOfId((focusForAudience as any).id) === 'MOMS');
+    const hasDiscussed = Array.isArray(sessionCtx?.discussedTreatments)
+      && (sessionCtx?.discussedTreatments || []).length > 0;
 
     // Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): bila customer TIDAK
     // bertanya harga, sediakan template konsultasi resmi — fokus manfaat
     // klinis, TANPA penjumlahan nominal, TANPA todongan jadwal. Komplemen
     // dari suggestedPriceReply/cartTotalReply yang khusus mode transaksional.
     let suggestedConsultationReply: string | undefined = undefined;
+    let focusClinicalDescription: string | undefined = undefined;
+    let focusTargetAudience: 'MOMS' | 'BABY' | undefined = undefined;
     // Fase 4': bila keluhan SUDAH diketahui (argumen/sesi), DILARANG
     // menanyakan ulang "apakah ada keluhan" (anti-kaset rusak).
     if (!showPrices && !hasKnownSymptoms && formattedTreatments.length > 0) {
-      const focus = formattedTreatments.find((t) => t.isRecommendedForSymptoms) || formattedTreatments[0];
+      const focus = focusForAudience;
       if (focus) {
+        // Kontrak data terstruktur (fondasional): deskripsi klinis murni tanpa
+        // salam pembuka & tanpa pertanyaan hafalan — LLM menalar dari data.
+        focusClinicalDescription = focus.description;
+        focusTargetAudience = isMomContext ? 'MOMS' : 'BABY';
         // Audit 310995: bila customer bertanya DURASI, panduan konsultasi wajib
         // mengizinkan penyebutan durasi resmi (nominal tetap dilarang).
         const durClause = showDuration && focus.durationMinutes != null
           ? ` Durasinya ${Number(focus.durationMinutes)} menit ya Bunda.`
           : '';
-        suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description}${durClause} Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗\n\n(Panduan sistem: ${showDuration ? 'SEBUTKAN durasi resmi di atas' : 'JANGAN sebut lama waktu'}, JANGAN sebut nominal rupiah, JANGAN todong jadwal hari.)`;
+        // Plan regresi Fase 5.2: kebutuhan sudah dibahas (discussed) → tutup
+        // pernyataan hangat TANPA pertanyaan ulang; layanan ibu → fokus Bunda.
+        const closingQuestion = hasDiscussed
+          ? `Nantinya bisa kami sesuaikan dengan kondisi ${isMomContext ? 'Bunda' : 'si kecil'} 😊`
+          : isMomContext
+            ? `Nantinya bisa kami sesuaikan dengan kondisi Bunda. Bunda ingin kami bantu pilihkan yang paling sesuai, atau sudah ada yang Bunda incar? 🤗`
+            : `Nantinya bisa kami sesuaikan dengan kondisi si kecil. Saat ini si kecil apakah sedang ada keluhan tertentu, atau untuk pijat sehat relaksasi saja Bunda? 🤗`;
+        suggestedConsultationReply = `Pilihan yang bagus Bunda 😊 *${focus.name}* ini ${focus.description}${durClause} ${closingQuestion}\n\n(Panduan sistem: ${showDuration ? 'SEBUTKAN durasi resmi di atas' : 'JANGAN sebut lama waktu'}, JANGAN sebut nominal rupiah, JANGAN todong jadwal hari.)`;
       }
     }
 
@@ -612,7 +702,17 @@ export async function executeGetCatalog(
       ASK_DOMICILE: `Lokasi/domisili customer BELUM DIKETAHUI. Jelaskan rekomendasi perawatan di atas secara hangat (maksimal 2-3 kalimat), lalu TANYAKAN DOMISILI/KECAMATAN RUMAH BUNDA. DILARANG menodong hari/jadwal kunjungan sebelum lokasi diketahui.`,
       ASK_SCHEDULE: `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi preferensi hari kunjungan.`,
       PRICE_SUBJECT_CLARIFY: `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`,
-      CLINICAL_PROBE: 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit atau ingin pijat sehat relaksasi saja.',
+      // Plan regresi Fase 5.1: hardcoded "si kecil batuk/pilek" dicabut.
+      // CLINICAL_PROBE audience-aware: konteks ibu → skrining Bunda
+      // (hamil/nifas/menyusui/relaksasi), DILARANG bawa batuk/pilek bayi.
+      // Kebutuhan sudah dibahas (discussed) → DILARANG skrining ulang;
+      // tutup pernyataan hangat + arahkan konfirmasi jadwal/domisi sesuai
+      // status lokasi (cermin hierarki ASK_SCHEDULE/ASK_DOMICILE).
+      CLINICAL_PROBE: hasDiscussed
+        ? `Kebutuhan layanan (${(sessionCtx?.discussedTreatments || []).slice(0, 3).join(', ')}) SUDAH dibahas — DILARANG mengulang skrining keluhan generik (anti-kaset rusak). Sampaikan rekomendasi hangat, lalu ${locationKnown ? 'ajak konfirmasi preferensi hari kunjungan' : 'tanyakan domisili/kelurahan rumah Bunda'}.`
+        : isMomContext
+          ? 'Wajib tutup dengan pertanyaan pemantik klinis untuk Bunda: tanyakan apakah Bunda saat ini sedang hamil, nifas/menyusui, atau ingin relaksasi saja. DILARANG membawa topik batuk/pilek bayi — layanan ini untuk ibu.'
+          : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit atau ingin pijat sehat relaksasi saja.',
     };
     const closingGuide = closingDirectives[closingIntent];
     return {
@@ -624,7 +724,11 @@ export async function executeGetCatalog(
       suggestedPriceReply,
       cartTotalReply,
       suggestedConsultationReply,
-      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${priceClarification ? `\n\nKlarifikasi Nominal (data katalog — WAJIB dikutip, DILARANG mengarang):\n"${priceClarification}"` : ''}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}${cartTotalReply ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang):\n"${cartTotalReply}"\nBila customer menanyakan total belanjaan, WAJIB kutip angka total resmi di atas persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}${suggestedConsultationReply ? `\n\nMode Konsultasi (customer BELUM bertanya harga — JANGAN sebut nominal, JANGAN todong jadwal):\n"${suggestedConsultationReply}"` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! ${closingGuide}`
+      pricingBreakdown,
+      cartRecapBreakdown,
+      focusClinicalDescription,
+      focusTargetAudience,
+      message: `Ditemukan ${formattedTreatments.length} pilihan perawatan:\n${summaryList}${priceClarification ? `\n\nKlarifikasi Nominal (data katalog — WAJIB dikutip, DILARANG mengarang):\n"${priceClarification}"` : ''}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${pricingBreakdown ? `\n\nData Finansial Resmi (Katalog): ${pricingBreakdown.targetName} promo Rp ${Number(pricingBreakdown.promoPrice).toLocaleString('id-ID')} (normal Rp ${Number(pricingBreakdown.originalPrice).toLocaleString('id-ID')})${pricingBreakdown.deliveryFee != null ? ` + ongkir Rp ${Number(pricingBreakdown.deliveryFee).toLocaleString('id-ID')} = total Rp ${Number(pricingBreakdown.grandTotal).toLocaleString('id-ID')}` : ''}. Sampaikan secara hangat dalam narasi 2-3 kalimat.` : ''}${cartRecapBreakdown ? `\n\nTotal Resmi Keranjang Multi-Item (sudah dijumlahkan sistem — JANGAN hitung ulang): subtotal Rp ${Number(cartRecapBreakdown.subtotalPromo).toLocaleString('id-ID')}${cartRecapBreakdown.deliveryFee != null ? ` + ongkir Rp ${Number(cartRecapBreakdown.deliveryFee).toLocaleString('id-ID')}` : ''} = total *Rp ${Number(cartRecapBreakdown.grandTotal).toLocaleString('id-ID')}*. Bila customer menanyakan total belanjaan, WAJIB kutip angka total resmi ini persis apa adanya. DILARANG menghitung sendiri atau mengubah nominal!` : ''}${suggestedConsultationReply ? `\n\nMode Konsultasi (customer BELUM bertanya harga — JANGAN sebut nominal, JANGAN todong jadwal):\n"${suggestedConsultationReply}"` : ''}\n\nPanduan Bidan: Sampaikan opsi di atas dalam 1 PARAGRAF narasi yang hangat dan mengalir (maksimal 2-3 kalimat), DILARANG membuat bullet list bertingkat ATAU daftar bernomor kaku "1. ... 2. ..." layaknya menu brosur! ${closingGuide}`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_CATALOG_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));

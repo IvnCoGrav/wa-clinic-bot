@@ -164,14 +164,27 @@ describe('Layer 2 — Substring anti-collision syncCartItems', () => {
       { name: 'Induksi Massage', promoPrice: 50000, originalPrice: 70000, category: 'MOMS', isAddon: false },
       { name: 'Induksi Massage Fullbody', promoPrice: 105000, originalPrice: 130000, category: 'MOMS', isAddon: false },
     ];
-    const cart = GoalTracker.syncCartItems(
-      { genderGreeting: 'Bunda', cartItems: [] } as any,
+    // Plan regresi Fase 3 (Active User Commitment Mutlak): pertanyaan
+    // perbandingan "bedanya X dengan Y apa?" adalah KONSULTASI, bukan
+    // komitmen — DILARANG mengunci cart sepihak. Substring-collision tetap
+    // diuji via pernyataan komitmen deklaratif di bawah (tanpa '?').
+    const session: any = { genderGreeting: 'Bunda', cartItems: [] };
+    const consultCart = GoalTracker.syncCartItems(
+      session,
       [{ role: 'user', content: 'Kak, bedanya pregnant massage dengan induksi massage fullbody apa ya ?' }],
       catalog as any
     );
-    expect(cart).toHaveLength(1);
-    expect(cart[0].name).toBe('Induksi Massage Fullbody');
-    expect(cart[0].promoPrice).toBe(105000);
+    expect(consultCart).toHaveLength(0);
+    expect(session.discussedTreatments || []).toContain('Induksi Massage Fullbody');
+    // Pernyataan komitmen deklaratif → Fullbody terisi TEPAT SATU (anti-collision lestari).
+    const commitCart = GoalTracker.syncCartItems(
+      { genderGreeting: 'Bunda', cartItems: [] } as any,
+      [{ role: 'user', content: 'Saya ambil induksi massage fullbody' }],
+      catalog as any
+    );
+    expect(commitCart).toHaveLength(1);
+    expect(commitCart[0].name).toBe('Induksi Massage Fullbody');
+    expect(commitCart[0].promoPrice).toBe(105000);
   });
 });
 

@@ -13,6 +13,49 @@ export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE'
 
 export type ClinicServiceType = 'STANDARD' | 'BUNDLE' | 'ADD_ON';
 
+/** Audiens kanonis layanan (plan regresi Fase 2, data-driven). */
+export type ServiceAudience = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH' | 'GENERAL';
+
+/**
+ * Resolusi audiens layanan dari METADATA katalog (plan regresi Fase 2).
+ * - Kategori langsung (MOMS/BABY/KIDS/BOTH/ADD_ON) dipetakan 1:1.
+ * - BUNDLE diderivasi dari KOMPOSISI komponennya (bundleItemIds → kategori
+ *   komponen via lookup): semua-MOMS → MOMS, semua-BABY → BABY, dst.;
+ *   campuran ibu+anak → BOTH. Tanpa lookup → GENERAL (netral, aman).
+ * DILARANG menghafal substring ID/nama ('moms'/'laktasi'/'kelahiran') —
+ * layanan baru (ID apa pun) otomatis terklasifikasi dari komposisinya.
+ */
+export function resolveServiceAudience(
+  service: { category?: string | null; bundleItemIds?: string[] | null },
+  lookup?: (id: string) => { category?: string | null } | undefined,
+): ServiceAudience {
+  const cat = (service?.category || '').toUpperCase();
+  if (cat === 'MOMS') return 'MOMS';
+  if (cat === 'BABY') return 'BABY';
+  if (cat === 'KIDS') return 'KIDS';
+  if (cat === 'BOTH') return 'BOTH';
+  if (cat === 'ADD_ON' || cat === 'ADDON') return 'GENERAL';
+  if (cat === 'BUNDLE' || ((service?.bundleItemIds || []).length > 0)) {
+    const compCats = new Set<string>();
+    if (lookup) {
+      for (const cid of service?.bundleItemIds || []) {
+        const c = lookup((cid || '').toLowerCase());
+        const cc = (c?.category || '').toUpperCase();
+        if (cc === 'MOMS' || cc === 'BABY' || cc === 'KIDS' || cc === 'BOTH') compCats.add(cc);
+      }
+    }
+    if (compCats.size === 0) return 'GENERAL';
+    const hasMoms = compCats.has('MOMS') || compCats.has('BOTH');
+    const hasBaby = compCats.has('BABY') || compCats.has('BOTH');
+    const hasKids = compCats.has('KIDS') || compCats.has('BOTH');
+    if (hasMoms && !hasBaby && !hasKids) return 'MOMS';
+    if (hasBaby && !hasMoms && !hasKids) return 'BABY';
+    if (hasKids && !hasMoms && !hasBaby) return 'KIDS';
+    return 'BOTH';
+  }
+  return 'GENERAL';
+}
+
 export interface AgeTier {
   minAgeMonths: number;        // Batas minimal usia (dalam bulan), misal 0
   maxAgeMonths: number | null; // Batas maksimal usia (dalam bulan), null jika tidak ada batas (misal > 24 bulan atau dewasa)
@@ -1209,20 +1252,28 @@ export class TreatmentCatalogService {
     }
   ): ClinicServiceItem[] {
     const { ageMonths, audienceIntent, isMaternalKeyword } = context;
+    // Plan regresi Fase 2: klasifikasi bundle dari KOMPOSISI komponen
+    // (data katalog per-tenant), bukan hafalan substring ID. Lookup dibangun
+    // dari array services yang sedang difilter — layanan baru otomatis ikut.
+    const byId = new Map((services || []).map((s) => [(s?.id || '').toLowerCase(), s]));
+    const audienceOf = (s: ClinicServiceItem): ServiceAudience =>
+      resolveServiceAudience(s, (id) => byId.get(id));
+    const isMomBundle = (s: ClinicServiceItem): boolean => audienceOf(s) === 'MOMS';
 
     // 1. Context Kehamilan / Maternal / Ibu Hamil / Nifas
     if (audienceIntent === 'MOMS' || isMaternalKeyword) {
       return services.filter(
-        (s) => s.category === 'MOMS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && (s.id.includes('moms') || s.id.includes('laktasi') || s.id.includes('kelahiran')))
+        (s) => s.category === 'MOMS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && isMomBundle(s))
       );
     }
 
     // 2. Context Usia Anak / Bayi (dalam bulan)
     if (ageMonths != null && ageMonths > 0) {
       return services.filter((s) => {
-        // Blokir mutlak kategori MOMS jika mencari untuk anak
+        // Blokir mutlak kategori MOMS (termasuk bundle ber-audiens ibu)
+        // jika mencari untuk anak.
         if (s.category === 'MOMS') return false;
-        if (s.category === 'BUNDLE' && (s.id.includes('moms') || s.id.includes('laktasi') || s.id.includes('kelahiran'))) return false;
+        if (s.category === 'BUNDLE' && isMomBundle(s)) return false;
 
         const minAge = s.ageTier?.minAgeMonths ?? 0;
         const maxAge = s.ageTier?.maxAgeMonths ?? null;
@@ -1232,23 +1283,23 @@ export class TreatmentCatalogService {
 
         if (ageMonths >= CHILD_CATEGORY_AGE_THRESHOLD_MONTHS) {
           // Usia anak >= 2 tahun (24 bulan)
-          return s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi')) || (s.category === 'BABY' && (maxAge === null || maxAge >= ageMonths));
+          return s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !isMomBundle(s)) || (s.category === 'BABY' && (maxAge === null || maxAge >= ageMonths));
         } else {
           // Usia bayi < 2 tahun
-          return s.category === 'BABY' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi') && !s.id.includes('kelahiran'));
+          return s.category === 'BABY' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !isMomBundle(s));
         }
       });
     }
 
     // 3. Audience KIDS
     if (audienceIntent === 'KIDS') {
-      return services.filter((s) => s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi')));
+      return services.filter((s) => s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !isMomBundle(s)));
     }
 
     // 4. Audience BABY
     if (audienceIntent === 'BABY') {
       return services.filter(
-        (s) => s.category === 'BABY' || s.category === 'BOTH' || s.category === 'ADD_ON' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi') && !s.id.includes('kelahiran'))
+        (s) => s.category === 'BABY' || s.category === 'BOTH' || s.category === 'ADD_ON' || (s.category === 'BUNDLE' && !isMomBundle(s))
       );
     }
 
@@ -1734,6 +1785,11 @@ export class TreatmentCatalogService {
     if (!symptoms || symptoms.length === 0) return [];
     const all = this.getAllServices().filter((s) => s.isActive && !s.isAddon);
     const symLower = symptoms.map((s) => s.toLowerCase());
+    // Plan regresi Fase 2: lookup komposisi bundle dari data katalog —
+    // pengganti hafalan `name.includes('laktasi')`.
+    const byIdSym = new Map(all.map((s) => [(s?.id || '').toLowerCase(), s]));
+    const audienceOfSym = (s: ClinicServiceItem): ServiceAudience =>
+      resolveServiceAudience(s, (id) => byIdSym.get(id));
 
     const scored = all.map((service) => {
       let score = 0;
@@ -1747,7 +1803,7 @@ export class TreatmentCatalogService {
           if (service.name.toLowerCase().includes('lahap')) score += 3;
         }
         if (sym.includes('laktasi') || sym.includes('asi') || sym.includes('oksitosin')) {
-          if (service.category === 'MOMS' || service.name.toLowerCase().includes('laktasi')) score += 3;
+          if (service.category === 'MOMS' || audienceOfSym(service) === 'MOMS') score += 3;
         }
       }
       return { service, score };

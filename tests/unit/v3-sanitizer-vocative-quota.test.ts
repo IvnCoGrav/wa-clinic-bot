@@ -70,6 +70,20 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     expect(out).not.toMatch(/,\s*[!?.]/);
   });
 
+  // Plan regresi Fase 1.2 — anti mutilasi subjek klausa relatif tengah kalimat:
+  // "Bunda" yang didahului "yang" + diikuti verba adalah SUBJEK, bukan vokatif.
+  it('subjek klausa relatif "layanan yang Bunda maksud" tetap utuh', () => {
+    const input = 'Halo Bunda! Siap Bunda, untuk layanan yang Bunda maksud kami jelaskan ya Bunda.';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(input, true);
+    expect(out).toContain('layanan yang Bunda maksud');
+  });
+
+  it('subjek klausa relatif "yang Bunda tanyakan" tetap utuh', () => {
+    const input = 'Baik Bunda, terkait layanan yang Bunda tanyakan sudah kami catat Bunda.';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(input, true);
+    expect(out).toContain('yang Bunda tanyakan');
+  });
+
   it('koma menggantung ", Bunda!" dibersihkan menjadi "!"', () => {
     const input = 'Kalau ada yang ingin ditanyakan lagi, jangan ragu untuk bertanya ya, Bunda! 🤗';
     const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(
@@ -82,5 +96,30 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     expect(out).toMatch(/ya! 🤗/);
     // Subjek tidak relevan di sini, tapi koma harus bersih
     expect(out).not.toMatch(/,\s*[!?.]/);
+  });
+
+  // Fase 4 (2026-09-18) — Zero-Dangling Rule: konjungsi koordinatif
+  // ("dan/atau/serta/maupun") DILARANG dihapus hingga menyisakan sambung
+  // menggantung ("atau?"). Gerbang integritas gramatikal, bukan daftar frasa.
+  it('Zero-Dangling: "atau Bunda?" TIDAK boleh jadi "atau?"', () => {
+    const input = 'Area Bungurasih masuk jangkauan Bidan kami ya Bunda 😊\n\nRencana mau dibantu perawatan apa untuk si kecil atau Bunda? 🤗';
+    const out = OutputSanitizer.cleanOutboundReply(input, 'kalau ke bungurasih berapa', true);
+    expect(out).toContain('atau Bunda?');
+    expect(out).not.toMatch(/(atau|dan|dengan|serta|maupun)\s*[?!.]/);
+  });
+
+  it('Zero-Dangling: "dan Bunda" tetap utuh (konjungsi koordinatif)', () => {
+    const out = OutputSanitizer.limitVocativeQuota('Baik Bunda, untuk si kecil dan Bunda ya', 1);
+    expect(out).not.toMatch(/dan\s*[?!.,]/);
+    expect(out).toMatch(/dan Bunda/);
+  });
+
+  it('Zero-Dangling tidak melonggarkan overuse: "Bunda ... atau Bunda" tetap maks 1 vokatif bebas', () => {
+    // "atau Bunda" dilindungi (objek koordinatif), tetapi kuota vokatif tetap
+    // ditegakkan untuk panggilan murni lain di pesan yang sama.
+    const out = OutputSanitizer.limitVocativeQuota('Bunda, ini ya Bunda. Untuk si kecil atau Bunda?', 1);
+    expect(out).toMatch(/atau Bunda\?/);
+    // Tidak boleh ada "Bunda" bebas berlebih di awal yang lolos (kuota dasar).
+    expect((out.match(/\bBunda\b/gi) || []).length).toBeLessThanOrEqual(3);
   });
 });

@@ -318,6 +318,14 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
     `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm.toFixed(1)} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${params.maxCoverageKm ?? 30} km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
 
+  /**
+   * Konfirmasi jangkauan TANPA nominal ongkir (mode konsultasi / informasi-hiding).
+   * Teks customer-facing berada di template layer (bukan literal di tool) dan
+   * netral agama — sapaan keagamaan diserahkan ke jalur `isIslamic` greeting.
+   */
+  inCoverageNoFee: (params: { kelurahan: string; scheduleCta: string }) =>
+    `Area ${params.kelurahan} masuk dalam area jangkauan layanan homecare Bidan kami ya Bunda.\n\n${params.scheduleCta}`,
+
   ongkirInfo: (params: {
     distanceKm: number;
     normalPrice: number;

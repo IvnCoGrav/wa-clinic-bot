@@ -79,6 +79,19 @@ export class ToolExecutionPipeline {
     for (const key of Object.keys(clone)) {
       if (key.startsWith('__internal')) delete clone[key];
     }
+    // Dekomposisi Arsitektur Tool (Fase 2 — Pure Structured Data):
+    // Hapus seluruh template prosa customer-facing siap-saji dari context LLM.
+    // Tool bertugas mengembalikan fakta logistik/katalog terstruktur, BUKAN
+    // mendiktekan salinan kalimat percakapan ke LLM (anti parrot-effect).
+    delete clone.suggestedTemplateReply;
+    delete clone.suggestedPriceReply;
+    delete clone.suggestedConsultationReply;
+    // Jika message memuat blok "Format penyampaian yang disarankan: ...",
+    // pangkas hanya fakta inti teknisnya saja.
+    if (typeof clone.message === 'string' && clone.message.includes('Format penyampaian yang disarankan:')) {
+      const parts = clone.message.split('Format penyampaian yang disarankan:');
+      clone.message = parts[0].trim();
+    }
     return clone;
   }
 
@@ -111,6 +124,19 @@ export class ToolExecutionPipeline {
     } catch {
       return { asksPrice: false, asksDuration: false, mentionsNominal: false };
     }
+  }
+
+  /**
+   * Carry-over intent ongkir berbasis STATE (bukan pola kalimat). Bila customer
+   * sudah pernah masuk mode transaksional (`priceDiscussed`) dan sesi sudah
+   * memiliki lokasi, nominal ongkir tetap sah pada giliran lanjutan (mis.
+   * customer membandingkan lokasi). Pure function — testable tanpa pipeline penuh.
+   */
+  public static shouldCarryOverDeliveryFee(
+    session: Pick<CustomerGoalSession, 'priceDiscussed' | 'location'> | undefined
+  ): boolean {
+    const hasLocationState = !!(session?.location?.kelurahan || session?.location?.kecamatan);
+    return session?.priceDiscussed === true && hasLocationState;
   }
 
   public static async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
@@ -160,7 +186,12 @@ export class ToolExecutionPipeline {
       const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
       if (fnName === 'calculate_delivery') {
         // Ongkir hanya boleh nominal bila customer eksplisit menanyakan harga/ongkir.
-        fnArgs.asksDeliveryFee = priceIntent.asksPrice;
+        // Carry-over berbasis STATE (bukan pola kalimat): bila customer sudah pernah
+        // masuk mode transaksional (`session.priceDiscussed`) dan giliran ini menyebut
+        // lokasi baru, nominal ongkir tetap sah disampaikan — mencegah intent hilang
+        // saat customer membandingkan lokasi ("kalau ke X?").
+        const carryOver = ToolExecutionPipeline.shouldCarryOverDeliveryFee(session);
+        fnArgs.asksDeliveryFee = priceIntent.asksPrice || carryOver;
       }
       if (fnName === 'get_catalog_and_price') {
         // Mode konsultasi: tanpa pertanyaan harga eksplisit → harga disembunyikan.
@@ -255,6 +286,17 @@ export class ToolExecutionPipeline {
             ? pipeMomComplaints
             : [...pipeChildSymptoms, ...((session as any).targetAudience === 'BOTH' ? pipeMomComplaints : [])]
           ).filter((s, i, arr) => arr.indexOf(s) === i);
+          // Plan regresi Fase 3+5: teruskan riwayat konsultasi & audiens sesi
+          // agar tool katalog audience-aware (anti skrining ulang).
+          const pipeDiscussed: string[] = Array.isArray((session as any).discussedTreatments)
+            ? (session as any).discussedTreatments.filter((n: any) => typeof n === 'string' && n.length > 0)
+            : [];
+          const pipeTargetAudience: string | undefined =
+            typeof (session as any).targetAudience === 'string' ? (session as any).targetAudience : undefined;
+          const pipeAudienceCtx = {
+            ...(pipeDiscussed.length > 0 ? { discussedTreatments: pipeDiscussed } : {}),
+            ...(pipeTargetAudience ? { targetAudience: pipeTargetAudience } : {}),
+          };
           toolContext.locationSnapshot = session.location
             ? {
                 kelurahan: session.location.kelurahan,
@@ -262,8 +304,11 @@ export class ToolExecutionPipeline {
                 ongkirNormal: session.location.ongkirNormal,
                 ongkirStatus: session.ongkirStatus,
                 knownSymptoms: pipeKnownSymptoms,
+                ...pipeAudienceCtx,
               }
-            : (pipeKnownSymptoms.length > 0 ? { knownSymptoms: pipeKnownSymptoms } : undefined);
+            : (pipeKnownSymptoms.length > 0 || pipeDiscussed.length > 0 || pipeTargetAudience
+              ? { knownSymptoms: pipeKnownSymptoms, ...pipeAudienceCtx }
+              : undefined);
           toolResult = await withTimeout(
             executeToolByName(fnName, validation.data, toolContext),
             TOOL_TIMEOUT_MS,

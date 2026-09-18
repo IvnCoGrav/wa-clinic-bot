@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
 
 /**
- * Deterministic Output Normalizers: pemotong kalimat (Rule 1) + tone guard
- * pra-lokasi (Rule 5). Tanpa memutilasi tengah kalimat.
+ * Deterministic Output Normalizer: pemotong kalimat (Rule 1). Nada pra-lokasi
+ * didelegasikan ke layer prompt (location-rules.phase.ts) — tanpa manipulasi
+ * string pembuka (plan regresi Fase 1). Tanpa memutilasi tengah kalimat.
  */
-describe('sanitizer — sentence trimmer & tone guard', () => {
+describe('sanitizer — sentence trimmer', () => {
   it('maksimal 3 kalimat, tanda baca akhir utuh', () => {
     const text = 'Halo Bunda 😊 Pijat bayi bagus untuk relaksasi. Sinar moksa membantu menghangatkan. Nebulizer melegakan napas. Yuk jadwalkan hari ini ya Bunda!';
     const out = OutputSanitizer.trimToMaxSentences(text, 3);
@@ -27,15 +28,12 @@ describe('sanitizer — sentence trimmer & tone guard', () => {
     expect(out).toContain('09.30');
   });
 
-  it('tone guard: lokasi belum tahu + "Bisa banget Bunda" → diganti', () => {
-    const out = OutputSanitizer.applyPreLocationTone('Bisa banget Bunda, kami bantu!');
-    expect(out).not.toMatch(/^Bisa banget Bunda/i);
-    expect(out).toContain('Kami bantu cekkan dulu ya Bunda');
-  });
-
-  it('tone guard: teks tanpa pembuka itu tidak disentuh', () => {
-    const text = 'Tentu Bunda, kami bantu cekkan jadwalnya ya.';
-    expect(OutputSanitizer.applyPreLocationTone(text)).toBe(text);
+  // Plan regresi Fase 1: tone guard pra-lokasi dicabut total — pembuka
+  // "Bisa banget Bunda" TIDAK lagi dimanipulasi di sanitizer (anti
+  // double-emoji). Nada cek-dulu diatur layer prompt (location-rules.phase.ts).
+  it('pembuka "Bisa banget Bunda" tidak dimanipulasi (delegasi prompt)', () => {
+    const text = 'Bisa banget Bunda, kami bantu cekkan jadwalnya ya.';
+    expect(OutputSanitizer.trimToMaxSentences(text, 3)).toBe(text);
   });
 
   // Rule 1 — pemangkasan prosa multi-paragraf (sapaan) tanpa memotong senarai.
