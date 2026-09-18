@@ -50,9 +50,30 @@ const DOMICILE_ATTR_RE =
 /** Pengecualian: fakta homebase klinik sendiri ("homebase kami di X"). */
 const HOMEBASE_EXEMPT_RE = /homebase\s+(kami|klinik)|klinik\s+kami\s+di/i;
 
+/**
+ * Pencocokan frasa kata-utuh (sliding window token): "warung" DILARANG
+ * membebaskan klaim "waru"; "ke kenjeran berapa ya" membebaskan "kenjeran".
+ * Tokenisasi teknis, bukan hafalan kalimat.
+ */
+function mentionsPhrase(haystack: string, phrase: string): boolean {
+  const hToks = (haystack || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const pToks = (phrase || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (pToks.length === 0 || hToks.length < pToks.length) return false;
+  for (let i = 0; i <= hToks.length - pToks.length; i++) {
+    if (pToks.every((t, j) => hToks[i + j] === t)) return true;
+  }
+  return false;
+}
+
 export interface FactualValidationOptions {
   /** True bila sesi sudah memuat kelurahan/kecamatan customer. */
   locationKnown?: boolean;
+  /**
+   * Plan regresi Fase 1 (Sesi 580976): pesan customer turn ini. Kecamatan
+   * yang DISEBUT CUSTOMER atau DIKEMBALIKAN tool calculate_delivery adalah
+   * grounding sah — BUKAN halusinasi — walau session.location masih kosong.
+   */
+  customerInput?: string;
   /**
    * Fase 6 K2 (Issue #74) — metadata struktural penolakan/eskalasi.
    * True bila turn ini mengeksekusi escalate_to_human ATAU dipicu sinyal
@@ -128,6 +149,10 @@ function mentionsVaccine(text: string): boolean {
   return /vaksin|imunisasi/i.test(text || '');
 }
 
+/** Ekspresi keagamaan yang dilarang muncul tanpa pemicu dari customer. */
+const UNPROMPTED_RELIGIOUS_RE = /\b(alhamdulillah|bismillah|insya\s*allah|puji\s*tuhan)\b/i;
+const CUSTOMER_RELIGIOUS_TRIGGER_RE = /\b(assalamu|alhamdulillah|bismillah|insya\s*allah|puji\s*tuhan)\b/i;
+
 export function validateFactualClaims(
   replyText: string,
   executedTools: ToolExec[],
@@ -156,6 +181,15 @@ export function validateFactualClaims(
     );
   if (VACCINE_RE.test(reply) && !vaccineGrounded) {
     violations.push('Pembahasan vaksin/imunisasi tanpa landasan tool get_clinic_policy_faq atau artikel knowledge.');
+  }
+
+  // D7 — Netralitas Agama: asisten DILARANG memulai percakapan dengan kata
+  // keagamaan ("Alhamdulillah", "Bismillah", "Insya Allah", "Puji Tuhan")
+  // secara sepihak tanpa dipicu customer. Ditangani via kognisi (re-prompt),
+  // BUKAN via mutilasi regex di tengah kalimat.
+  const hasCustomerReligiousTrigger = !!opts?.customerInput && CUSTOMER_RELIGIOUS_TRIGGER_RE.test(opts.customerInput);
+  if (!hasCustomerReligiousTrigger && UNPROMPTED_RELIGIOUS_RE.test(reply)) {
+    violations.push('D7_UNPROMPTED_RELIGIOUS_PHRASE: Draf balasan memuat kata keagamaan sepihak tanpa dipicu customer. Jaga netralitas agama dan susun ulang kalimat secara profesional.');
   }
 
   // D1 — nama layanan di-bold/dikutip wajib ada di katalog turn ini.
@@ -218,19 +252,32 @@ export function validateFactualClaims(
   // D6 — anti-halu domisili (kasus simulator 725870): bila sesi belum memuat
   // lokasi, draf DILARANG mengatribusikan kecamatan ke customer. Fakta homebase
   // klinik dikecualikan. Daftar kecamatan dari gazetteer runtime (data-driven).
+  // Plan regresi Fase 1 (Sesi 580976, false positive): kecamatan yang disebut
+  // customer di pesan turn ini ATAU dikembalikan tool calculate_delivery turn
+  // ini adalah grounding sah — DILARANG dituduh halusinasi.
   if (opts?.locationKnown === false) {
     const dm = DOMICILE_ATTR_RE.exec(reply);
     const claimed = dm ? (dm[1] || dm[2] || dm[3] || '').trim().toLowerCase() : '';
     if (claimed && !HOMEBASE_EXEMPT_RE.test(reply)) {
-      let isRealKecamatan = false;
-      try {
-        const names: string[] = getGazetteerKecamatanNames() || [];
-        isRealKecamatan = names.some(
-          (n) => n && (claimed === n.toLowerCase() || claimed.includes(n.toLowerCase()))
-        );
-      } catch {}
-      if (isRealKecamatan) {
-        violations.push(`Domicile "${claimed}" disebut tanpa lokasi sesi — halusinasi slot kecamatan.`);
+      // Pengecualian Grounding Sah (data, bukan hafalan): customer atau tool.
+      const isInputMentioned = !!opts?.customerInput && mentionsPhrase(opts.customerInput, claimed);
+      const deliveryTool = (executedTools || []).find((t) => t?.name === 'calculate_delivery');
+      const toolKecamatan = deliveryTool?.result?.kecamatan ? String(deliveryTool.result.kecamatan).toLowerCase() : '';
+      const toolLocationText = typeof deliveryTool?.args?.locationText === 'string'
+        ? deliveryTool.args.locationText.toLowerCase() : '';
+      const isToolGrounded = (toolKecamatan && (claimed === toolKecamatan || mentionsPhrase(toolKecamatan, claimed) || mentionsPhrase(claimed, toolKecamatan)))
+        || (toolLocationText && mentionsPhrase(toolLocationText, claimed));
+      if (!isInputMentioned && !isToolGrounded) {
+        let isRealKecamatan = false;
+        try {
+          const names: string[] = getGazetteerKecamatanNames() || [];
+          isRealKecamatan = names.some(
+            (n) => n && (claimed === n.toLowerCase() || claimed.includes(n.toLowerCase()))
+          );
+        } catch {}
+        if (isRealKecamatan) {
+          violations.push(`Domicile "${claimed}" disebut tanpa lokasi sesi — halusinasi slot kecamatan.`);
+        }
       }
     }
   }

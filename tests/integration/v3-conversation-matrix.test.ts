@@ -158,7 +158,7 @@ function isDrugRequest(text: string): boolean {
 }
 
 function isLocationText(text: string): boolean {
-  return /kelurahan|kecamatan|desa|alamat|rumah|tinggal|lokasi|di [a-z]{3,}|sedati|rungkut|waru|tuban|sidoarjo|surabaya|lamongan|gedangan|buduran|kutisari|kendangsari|rewwin|pondok|tropodo|pepelegi|pagerwojo|menanggal|deltasari/i.test(text);
+  return /kelurahan|kecamatan|desa|alamat|rumah|tinggal|lokasi|di [a-z]{3,}|sedati|rungkut|waru|tuban|sidoarjo|surabaya|lamongan|gedangan|buduran|kutisari|kendangsari|rewwin|pondok|tropodo|pepelegi|pagerwojo|menanggal|deltasari|kenjeran/i.test(text);
 }
 
 /** Stub router Call-1: peta kata kunci eksplisit → tool + argumen waras. */
@@ -1022,5 +1022,28 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     expect(cat3[0].result.closingIntent).toBe('STATEMENT_ONLY_DURATION');
     expectNoSilentDrop(r3);
     expectHygienic(r3);
+  });
+
+  it('CM-23: Tanya ongkir kecamatan Kenjeran (Sesi 580976) — tanpa false-positive D6', async () => {
+    const id = 'CM-23';
+    activeScenario = id;
+    const ctx = await buildScenario('Matrix CM-23');
+
+    activeTurn = 1;
+    const r1 = await runTurn(ctx, 'ke kenjeran berapa ya');
+    // Masker deterministik WAJIB membuka calculate_delivery (token inti
+    // kecamatan, Fase 6) — lokasi diproses tool, bukan ditutup hening.
+    expect(callsFor(id, 1, 'calculate_delivery')).toHaveLength(1);
+    const del1 = execFor(id, 1, 'calculate_delivery');
+    expect(del1).toHaveLength(1);
+    // Verdict tool ter-grounding pada sebutan customer: geocoder meresolusi
+    // presisi (Kel. Kenjeran, Kec. Bulak) lalu menghitung — tanpa tuduhan
+    // halusinasi, tanpa reprompt paksa.
+    expect(String(del1[0].result.kelurahan || del1[0].result.kecamatan || del1[0].result.message || '')).toMatch(/kenjeran|bulak/i);
+    expectNoSilentDrop(r1);
+    expectHygienic(r1);
+    // Anti pola lama Sesi 580976: balasan DILARANG meminta maaf halusinasi
+    // dan DILARANG menodong alamat lengkap rumah.
+    expect(r1).not.toMatch(/mohon maaf.*salah|tidak.*mengetahui.*kenjeran|alamat lengkap/i);
   });
 });

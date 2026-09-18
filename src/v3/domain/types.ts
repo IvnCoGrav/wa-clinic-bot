@@ -117,6 +117,14 @@ export interface CustomerGoalSession {
   selectedTreatment?: string;
   booking?: BookingState;
   cartItems?: CartItem[];
+  /**
+   * Plan regresi Fase 3 (pemisahan konsultasi vs transaksi): riwayat nama
+   * layanan resmi yang sedang/telah DIKONSULTASIKAN (tanya khasiat, cara
+   * kerja, kecocokan, durasi) — TERPISAH dari cartItems (transaksi).
+   * Diisi deterministik oleh CartManager.syncCartItems; dibaca tool katalog
+   * (closingIntent) agar tak menanyakan keluhan/paket berulang.
+   */
+  discussedTreatments?: string[];
   ongkirStatus?: OngkirStatus;
   totalPrice?: number;
   /**

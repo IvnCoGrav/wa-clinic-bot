@@ -31,9 +31,20 @@ export interface NumericValidationOptions {
   };
 }
 
+/**
+ * Tool yang dieksekusi di turn ini. `args` adalah argumen TERSTRUKTUR yang
+ * dikirim ke tool (mis. targetPrice tawar customer) — otoritas tertinggi
+ * untuk whitelist nominal kutipan, di atas hasil result semata.
+ */
+export interface ExecutedToolCall {
+  name: string;
+  args?: any;
+  result: any;
+}
+
 export function validateNumericFacts(
   replyText: string,
-  executedTools: Array<{ name: string; result: any }>,
+  executedTools: Array<ExecutedToolCall>,
   opts?: NumericValidationOptions
 ): NumericValidationResult {
   const violations: string[] = [];
@@ -61,6 +72,16 @@ export function validateNumericFacts(
   };
 
   for (const t of executedTools) {
+    // Plan regresi Fase 4 (anti-reprompt hallucination): nominal tawar
+    // customer (args.targetPrice terstruktur dari router Call 1) adalah angka
+    // KUTIPAN yang sah — LLM boleh menyebutnya untuk mengklarifikasi/
+    // menolak penawaran ("Untuk nominal Rp 900.000 belum ada paket...").
+    // DILARANG men-cap-nya halusinasi & DILARANG menimpa jadi total cart.
+    // Tanpa regex parser baru: sumber = kontrak args tool, bukan teks.
+    if (t.name === 'get_catalog_and_price') {
+      const tp = Number(t.args?.targetPrice);
+      if (Number.isFinite(tp) && tp > 0) authorizedNumbers.add(Math.round(tp));
+    }
     if (t.name === 'get_catalog_and_price' && Array.isArray(t.result?.treatments)) {
       for (const item of t.result.treatments) {
         if (item.promoPrice) {

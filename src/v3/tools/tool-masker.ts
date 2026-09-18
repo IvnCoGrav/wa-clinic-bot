@@ -32,6 +32,22 @@ import { getOutsideCities } from '../../config/coverage';
  * coverage runtime + token kata utuh ala extractFastIntents — tanpa regex
  * semantik). Tanpa entitas → calculate_delivery di-mask fisik.
  */
+/** Cache token inti kecamatan (lazy, data-driven dari gazetteer runtime). */
+let kecamatanCoreTokensCache: Set<string> | null = null;
+function getKecamatanCoreTokens(): Set<string> {
+  if (kecamatanCoreTokensCache) return kecamatanCoreTokensCache;
+  const set = new Set<string>();
+  try {
+    for (const n of getGazetteerKecamatanNames() || []) {
+      for (const tok of String(n || '').toLowerCase().split(/[^a-z0-9]+/)) {
+        if (tok.length >= 6) set.add(tok);
+      }
+    }
+  } catch {}
+  kecamatanCoreTokensCache = set;
+  return set;
+}
+
 export function hasNewLocationEntity(text: string | undefined): boolean {
   const input = text || '';
   const lower = input.toLowerCase();
@@ -48,6 +64,18 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
     const kecNames = getGazetteerKecamatanNames() || [];
     for (const n of kecNames) {
       if (n && n.length >= 4 && lower.includes(n.toLowerCase())) return true;
+    }
+  } catch {}
+  // Plan regresi Fase 6 (anti-amnesia jawaban domisili): nama kecamatan yang
+  // disebut PARSIAL inti ("Di tenggilis kak" ⊂ "Tenggilis Mejoyo") TETAP
+  // membuka calculate_delivery — presisi (kelurahan vs kecamatan luas)
+  // diputuskan TOOL via jalur broad-region, bukan masker. Token inti ≥6
+  // huruf dicocokkan KATA UTUH (bukan substring) agar "Waru" (basecamp,
+  // 4 huruf) tetap tertutup anti-asumsi domisili. Fail-open di sini AMAN:
+  // tool sendiri memvalidasi & meminta detail bila terlalu luas.
+  try {
+    for (const tok of getKecamatanCoreTokens()) {
+      if (lower.split(/[^a-z0-9]+/).includes(tok)) return true;
     }
   } catch {}
   try {

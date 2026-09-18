@@ -1690,6 +1690,49 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 81. [DB/Deploy] Tabel `clinic_policies` & `tenant_prompt_configs` tidak ada di DB produksi
+
+- **Status:** open (deployment gap) — **memerlukan deploy**, bukan perubahan kode.
+- **Ditemukan:** 2026-09-18, saat audit Fase 5 (ClinicPolicy parity).
+- **Gejala:** `get_clinic_policy_faq` **selalu** mengembalikan fallback statis (7 topik), tidak pernah
+  membaca DB. Query live: `ERROR: relation "clinic_policies" does not exist`.
+- **Akar masalah (multi-layer):**
+  1. Migrasi `prisma/migrations/20260917000001_add_prompt_policy_tables_align_drift/migration.sql`
+     (membuat `clinic_policies` + `tenant_prompt_configs`) dan `scripts/seed-clinic-policies.ts`
+     **SUDAH ADA & ter-commit** di `025aa3b1`.
+  2. Commit `025aa3b1` **belum di-push ke origin** (local `master` ahead 1) → server (`57e8a0f`)
+     belum memilikinya.
+  3. `npx prisma migrate status` di server melaporkan "up to date" karena folder migrasi server
+     memang belum memuat file itu → blind spot.
+- **Dampak:** seluruh SOP klinis (kualifikasi bidan, pembayaran, ongkir multi-anak, pasca-vaksin,
+  homebase, jam operasional) dibaca dari kode statis — admin **tidak bisa** update via DB.
+- **Fix:** deploy commit `025aa3b1` (atau cherry-pick migrasi + seed) → `prisma migrate deploy` →
+  `npx tsx scripts/seed-clinic-policies.ts`. **Belum dilakukan** (menunggu keputusan user; commit
+  `025aa3b1` juga memuat WIP paralel lain).
+- **Catatan:** `tenant_prompt_configs` juga belum ada → `TenantPromptConfigService` selalu fallback
+  ke `getDefaultConfig()`.
+
+---
+
+## 82. [NLU] Daftar `NON_MONETARY_FOLLOWERS` untuk semantik "berapa" — pengecualian berbatas
+
+- **Status:** open (tech debt), sengaja ditunda.
+- **Ditemukan:** 2026-09-18 saat Fase 3 (semantik interogatif "berapa").
+- **Konteks:** `extractFastIntents` (`src/v3/agent/persona.ts`) kini memperlakukan "berapa" sebagai
+  pertanyaan HARGA by-default, kecuali diikuti satuan non-moneter (durasi/usia/kuantitas/jarak).
+  Daftar satuan (`menit, jam, bulan, minggu, tahun, usia, umur, anak, orang, km, meter, ...`)
+  adalah **whitelist hafalan** — sedikit lebih baik dari whitelist kata-biaya lama, tapi tetap rapuh
+  terhadap satuan tak terdaftar (mis. "berapa gram", "berapa liter", "berapa sendok").
+- **Arah fondasional yang disetujui:** logika "harga by-default" BENAR; daftar satuan adalah
+  pengecualian berbatas yang diakui. Idealnya satuan dideteksi via **taksonomi unit terpusat**
+  (data-driven, mis. di gazetteer/konfigurasi), bukan array hardcoded di kode.
+- **Dampak saat ini:** rendah — satuan medis/klinik yang relevan (durasi, usia, jarak, kuantitas)
+  sudah terdaftar. Satuan langka yang tak terdaftar akan salah terdeteksi sebagai harga (aman:
+  hanya memicu `ask_price`, tidak membocorkan angka).
+- **Rencana:** pindahkan daftar ke taksonomi unit terpusat saat menyentuh modul NLU berikutnya.
+
+---
+
 ## 85. [Audit Simulator DeepSeek] Clinical Dominance Katalog, DSML Tag Leakage & Escalation Hard-Guards
 
 - **Status:** Fase 1–3 implemented & verified. `npm run build` exit 0; full suite **349 hijau / 5 merah pre-existing** (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning` ×2 — semuanya gagal identik tanpa perubahan ini, dibuktikan via stash).
@@ -1821,6 +1864,38 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   6. **Trimmer fix:** `trimToMaxSentences`/`truncateToMaxChars` kini mengenali batas kalimat setelah `)`/`*`/quote (anti under-count pada "... (fokus bahu).") dan mengabaikan titik penomoran daftar ("1. ").
 - **Verifikasi:** build 0 error; full suite 357 hijau / 5 file merah PRE-EXISTING (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning`, `live-chat-reply` berbagi akar `resolveChunkKeywords` 'kabel olor'). Live Kasus #1 (89 turns): **Rule 1 = 0, Rule 5 = 0, Rule 6 = 0**; Turn 1 tepat 2 kalimat.
 - **Sisa disengaja / risiko:** (a) Rule 2/Rule 3 yang tersisa pada audit = **false-positive** (customer memang menyebut nominal "975k"/"900k" atau membahas durasi "1 jam"); audit regex belum mengenali nominal telanjang. (b) Rule 8 (kasus rusak) 1 turn — di luar scope. (c) `live-chat-reply`/`keyword-enrichment` merah karena gap keyword 'kabel olor' (pre-existing). (d) Date-grounding mismatch Kasus #8 (dari #87) masih terbuka.
+
+---
+
+## 89. [Plan Regresi] Eksekusi 6 Fase Oksitosin/Cart/Nominal/Sanitizer/Lokasi (2026-09-18)
+
+- **Status:** implemented & verified. Verdict audit: plan SUDAH fondasional (multi-layer root cause, data-driven, state-gated, hapus-bukan-tambah) — BUKAN tambal-sulam. Dieksekusi penuh dengan 3 deviasi terdokumentasi di bawah.
+- **Verifikasi klaim plan (read-only):** `applyPreLocationTone` ✅ masih ada; `limitVocativeQuota` ✅ ada TAPI sudah punya proteksi subjek/preposisi (klaim "replacement string kosong" basi); hardcoded `CLINICAL_PROBE` ✅ ada (baris bergeser 564/576→615); fallback buta `'Si Kecil'` ✅ (`goal-tracker.ts:380`); validator buta `targetPrice` ✅ (signature `{name,result}` tanpa args); fuzzy-scan cart ✅; hafalan `s.id.includes('moms'/'laktasi'/'kelahiran')` ✅ 6 titik + `name.includes('laktasi')`; masker `calculate_delivery` ✅ deterministik; ingestion `session.location` ✅ ada (`applyToolEffectsToSession`). `logs/llm-2026-09-18.jsonl` yang diklaim plan TIDAK ADA di repo (klaim sumber tak terverifikasi — root cause tetap terbukti via kode).
+- **Perubahan per fase:**
+  1. **Sanitizer:** `applyPreLocationTone` dihapus total (fungsi + pemakaian `guardrail-pipeline.ts` + 2 test); nada pra-lokasi didelegasikan ke `location-rules.phase.ts` (sudah mencakup). `limitVocativeQuota` TIDAK di-rewrite (hindari regresi 391501) — ditambah proteksi gramatikal subjek klausa relatif (`RELATIVIZER_BEFORE_RE`: "yang Bunda maksud/tanyakan" utuh, tetap hitung kuota). Bug mutilasi TERBUKTI via TDD merah (`"layanan yang maksud"`) lalu hijau.
+  2. **Audience bundle:** `resolveServiceAudience()` — derivasi KOMPOSISI `bundleItemIds` (tanpa migrasi DB, tanpa hafalan ID). **Deviasi plan:** plan minta field `targetAudience` eksplisit per layanan (= migrasi Prisma + backfill); derivasi mencapai acceptance criteria sama (paket oksitosin → `[Untuk Bunda]`) dengan biaya nol. 7 hafalan ID dihapus (`filterServicesByAudience` 6 titik + `matchServicesBySymptoms` 1 titik). `detectRecipientScope` param `audience?` opsional (backward-compat); `goal-tracker.ts:380` fallback audience-aware (MOMS/momProfile → 'Bunda').
+  3. **Konsultasi vs transaksi:** `CustomerGoalSession.discussedTreatments` baru; gerbang tanda-tanya di `syncCartItems` (`?` tanpa verba komitmen/`DAY_EVIDENCE_WORDS`/sticky flag → discussed, bukan cart; reuse `hasBookingCommitSignal` — tanpa daftar kata baru). Tawaran asisten yang ditolak gerbang ikut tercatat konsultasi.
+  4. **Validator:** `ExecutedToolCall.args` di-threading (pipeline SUDAH bawa args; hanya signature validator yang buta) → `args.targetPrice` masuk `authorizedNumbers`. Violation+reprompt otomatis padam untuk kutipan tawar.
+  5. **Closing:** `CatalogSessionContext` += `discussedTreatments`/`targetAudience` (diisi `tool-pipeline` dari sesi); `CLINICAL_PROBE` + `suggestedConsultationReply` audience-aware (ibu → skrining Bunda hamil/nifas/menyusui; discussed → larangan skrining ulang + arah jadwal/domisili). Kontrak `closingIntent` (nama intent) dipertahankan — 7 test lama hijau.
+  6. **Lokasi:** masker `calculate_delivery` TERBUKTI menutup "Di tenggilis kak" (root cause amnesia di KODE, bukan prompt) → `hasNewLocationEntity` + token inti kecamatan (≥6 huruf, kata utuh, cache lazy gazetteer; "Waru" 4 huruf tetap tertutup anti-asumsi basecamp). **Deviasi plan:** prioritas Call-1 TIDAK dituang prose prompt (itu make-up); dikunci test deterministik (masker buka + ingestion tersimpan).
+- **Regresi ditemukan & diperbaiki:** `v3-audit-homecare-fix` Layer 2 ("bedanya X dengan Y apa?" → cart kosong) — test lama mengabadikan penguncian sepihak atas pertanyaan perbandingan; diselaraskan ke kontrak mandat (cart kosong + discussed terisi + kontrol komitmen deklaratif tetap isi 1 item anti-collision).
+- **Verifikasi:** `tsc`/`npm run build` 0; gate per-fase hijau (F1 20, F2 12+48, F3 9+62, F4 5+38, F5 12+42, F6 3+43); matrix 22/22 tiap gate. Full suite: **2709 passed / 40 failed / 24 skipped** — 39 sisa TERBUKTI pre-existing (6 di 4 file kandidat diverifikasi via `git stash` clean-tree; sisanya `is-not-a-function`/mock-mismatch pada file src yang TIDAK disentuh sesi ini: queue, typing, self-learning, evaluator, idempotency, recruitment, schedule-handoff, pediatric, clinic-area, context-governance).
+- **Sisa disengaja / tech debt baru:** (a) hafalan `s.id.includes('moksa')` (`get-catalog.tool.ts:499`, combo pernapasan) BELUM dicabut — butuh metadata companion baru (scope creep, di luar plan); (b) pertanyaan konsultatif deklaratif TANPA '?' ("Breast massage bisa untuk asi") masih masuk cart — batasan fail-closed level tanda baca, bukan alasan daftar kata; (c) pesan multi-kalimat campuran deklaratif+tanya diblokir seutuhnya (granularitas level pesan).
+
+---
+
+## 90. [Plan 3 Sesi] Audit 7 fase: 1 gap dieksekusi, 4 verify-only, 2 ditolak beralasan (2026-09-18)
+
+- **Status:** Fase 1 + Fase 7 implemented & verified; Fase 2/3/5/6 confirmed-done (no-op); Fase 4 & cap-opsi Fase 6 REJECTED.
+- **Audit read-only per fase:**
+  1. **Fase 1 D6 — GAP NYATA, dieksekusi.** `DOMICILE_ATTR_RE` menuduh "Area Kecamatan Kenjeran" walau customer yang menyebutnya (Sesi 580976). Fix fondasional: pengecualian grounding berbasis data (pesan customer + output/args `calculate_delivery`), tanpa daftar kalimat, tanpa prose prompt. Penguatan atas snippet plan: pencocokan kata-utuh (`mentionsPhrase`) agar substring "warung" tidak membebaskan klaim "Waru". `ToolExec.args` sudah ada — tanpa perubahan kontrak. Test: 3 baru (Kenjeran via input, via tool, adversarial warung) + 9 lama hijau (12/12).
+  2. **Fase 2 — SUDAH DONE.** `sawan/sawanen/step` → HIGH ada + test; `SAFETY_NO_MATCH`/`STATEMENT_ONLY_DURATION`/`ASK_DOMICILE` ada + 7 test + matrix CM-21/CM-22. Klaim "baris 573" basi (kode bergeser). Verify-only: 3+7 hijau.
+  3. **Fase 3 — SUDAH DONE.** D6-murni → template netral + tetap terkirim; non-D6 → `sentence-salvage` → fallback eskalasi (invariant never-silent). Proposal "surgical cleanup" = duplikat `sentence-salvage.ts`. Verify-only: 5/5 hijau.
+  4. **Fase 4 — DITOLAK.** `closing-intent-normalizer.ts` baru dengan string Indonesia hardcode ("Kalau boleh tahu, rumah Bunda...") = pelanggaran ganda: (a) Mandat Non-Hardcode (template WAJIB dari DB), (b) duplikasi kontrak `closingIntent` yang sudah state-gated di tool + matrix CM-22 hijau, (c) rewrite kalimat LLM pasca-generasi = kelas make-up. File TIDAK dibuat.
+  5. **Fase 5 — SUDAH DONE.** `parallel_tool_calls: false` ada (`generation-stage.ts:472`); persiapan/minyak → `search_knowledge_faq` ada di router layer. Sisa over-calling = judgment LLM (tak bisa dikunci unit test). Verify-only: tool-pipeline 4/4.
+  6. **Fase 6 — SEPARUH.** Taksonomi 24 bln single-source + test ✅ (verify-only 6/6). Cap "maks 1–2 opsi" DITOLAK: kosmetik (panjang sudah diatur `trimToMaxSentences` + narasi 1-paragraf) + berisiko merusak `priceClarification` diversitas/comparator lintas-audiens.
+  7. **Fase 7 — dieksekusi parsial.** Matrix sudah 22 skenario (sawan/234800/newborn/same-day/24bln ter stimoni). Ditambah **CM-23 Kenjeran** end-to-end (masker buka → tool ter-grounding Kel. Kenjeran/Kec. Bulak → terkirim, anti pola minta-maaf Sesi 580976). Matrix 23/23.
+- **Verifikasi:** `build` 0; full suite 2714 passed / 39 failed pre-existing / 24 skipped (keluarga gagal sama dengan baseline: mock-mismatch + `is-not-a-function` sesi paralel, tak menyentuh file sesi ini).
 
 
 
