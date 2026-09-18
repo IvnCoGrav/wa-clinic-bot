@@ -199,9 +199,18 @@ export class ConversationStateMachine {
           }
         }
 
+        // Eskalasi AMAN (revisi fondasional P3, 2026-09-17): eskalasi medis
+        // WAJIB disertai balasan keselamatan deterministik — diam total saat
+        // potensi darurat adalah bug keselamatan (melanggar anti-silent-drop).
+        // Template tetap: tanpa dosis/angka obat, tanpa tawaran pijat, tanpa
+        // ajakan jadwal, tanpa klaim sembuh. Nol risiko nasihat medis.
+        const safetyReply = isHigh
+          ? 'Mohon maaf Bunda 🙏 Keluhan seperti ini membutuhkan perhatian medis segera dan tidak bisa ditangani dengan pijat. Jika si kecil demam tinggi, kejang, sesak napas, atau lemas tak merespons, segera bawa ke dokter/faskes/IGD terdekat ya Bunda. Chat ini sudah kami teruskan ke tim Bidan kami agar segera dibantu.'
+          : 'Terima kasih infonya Bunda 🙏 Untuk keluhan seperti ini, tim Bidan kami akan membantu mengecek lebih lanjut ya Bunda. Bila kondisi si kecil memburuk (demam tinggi, sesak, atau lemas), segera periksa ke dokter/faskes. Chat ini sudah kami teruskan ke tim Bidan kami.';
         return {
           nextState: ConversationState.HUMAN_HANDLING,
-          shouldSendReply: false,
+          shouldSendReply: true,
+          replyText: safetyReply,
           isHumanHandling: true,
         };
       }

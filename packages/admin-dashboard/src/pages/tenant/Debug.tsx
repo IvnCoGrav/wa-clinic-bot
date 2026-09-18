@@ -674,8 +674,11 @@ interface LlmLogEntry {
   modelUsed?: string;
   durationMs?: number;
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+  errorMessage?: string;
   promptTokens?: number;
   completionTokens?: number;
+  cachedPromptTokens?: number;
+  reasoningTokens?: number;
   totalTokens?: number;
   costIdr?: number;
   toolsCalled?: Array<{ name: string; args: any }>;
@@ -699,13 +702,16 @@ interface GroupedCustomerLlmLogs {
   bubbles: GroupedBubbleChat[];
 }
 
-const getFlowBadge = (flowType: string) => {
+const getFlowBadge = (flowType: string, isDirectReply = false) => {
   switch (flowType) {
     case 'NLU_EXTRACTOR':
       return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
     case 'SLOT_EXTRACTOR':
       return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
     case 'V3_ROUTING':
+      if (isDirectReply) {
+        return { label: '⚡ Direct Reply (1 Call)', short: 'DIRECT', icon: '⚡', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40' };
+      }
       return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-sky-500/15 text-sky-900 dark:text-sky-300 border-sky-300 dark:border-sky-500/40' };
     case 'V3_GENERATION':
       return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
@@ -721,6 +727,9 @@ const getFlowBadge = (flowType: string) => {
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
   }
 };
+
+const isDirectReplyCall = (call: { flowType: string; toolsCalled?: Array<{ name: string; args: any }>; finalReply?: string }): boolean =>
+  call.flowType === 'V3_ROUTING' && (!call.toolsCalled || call.toolsCalled.length === 0) && !!call.finalReply;
 
 function formatPhoneDisplay(phone?: string): string {
   if (!phone || phone === 'Unknown / General' || phone === 'unknown') return 'Umum / Tidak Dikenal';
@@ -1214,7 +1223,7 @@ function LlmLogsSection() {
                               {/* PIPELINE STEPPER VISUALIZATION */}
                               <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80 dark:border-[#2a3942]">
                                 {bubble.aiCalls.map((step, sIdx) => {
-                                  const badge = getFlowBadge(step.flowType);
+                                  const badge = getFlowBadge(step.flowType, isDirectReplyCall(step));
                                   const isSuccess = step.status === 'SUCCESS';
                                   const isFallback = step.status === 'FALLBACK';
 
@@ -1242,7 +1251,7 @@ function LlmLogsSection() {
                             {isBubbleExpanded && (
                               <div className="p-4 bg-slate-50/60 dark:bg-black/30 space-y-3.5">
                                 {bubble.aiCalls.map((call, cIdx) => {
-                                  const badge = getFlowBadge(call.flowType);
+                                  const badge = getFlowBadge(call.flowType, isDirectReplyCall(call));
                                   const displayReasoning = call.rawReasoning || call.reasoning || 'Tidak ada reasoning teks terpisah.';
                                   const detailKey = `${call.id || cIdx}_detail`;
                                   const isDetailOpen = !!expandedDetails[detailKey];
@@ -1304,6 +1313,18 @@ function LlmLogsSection() {
                                         </div>
                                       </div>
 
+                                      {/* ERROR BANNER — pesan error teknis konkret */}
+                                      {call.status === 'ERROR' && (
+                                        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 rounded-xl p-3 space-y-1">
+                                          <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider block">
+                                            ⛔ Error Eksekusi LLM
+                                          </span>
+                                          <p className="text-rose-950 dark:text-rose-200 font-mono text-[11px] font-semibold whitespace-pre-wrap break-words">
+                                            {call.errorMessage || 'Terjadi kesalahan pada eksekusi LLM'}
+                                          </p>
+                                        </div>
+                                      )}
+
                                       {/* STEP BODY — V3 PIPELINE & LEGACY */}
                                       {(call.flowType === 'NLU_EXTRACTOR' || call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_ROUTING' || call.flowType === 'V3_GENERATION' || call.flowType === 'V3_REPROMPT' || call.flowType === 'V3_AGENT') && (
                                         <div className="space-y-2.5 text-xs">
@@ -1323,24 +1344,31 @@ function LlmLogsSection() {
                                           </div>
 
                                           {/* Reasoning Ringkas */}
-                                          {call.reasoning && (
+                                          {(call.reasoning || call.rawReasoning) && (
                                             <div className="bg-purple-50/80 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 uppercase tracking-wider block">
                                                 🧠 AI Reasoning & Context Analysis
                                               </span>
-                                              <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning}</p>
+                                              <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning || call.rawReasoning}</p>
                                             </div>
                                           )}
 
                                           {/* Token & biaya per-call */}
-                                          {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined) && (
-                                            <div className="bg-sky-50/70 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/40 rounded-xl p-3">
+                                          {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined || (call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
+                                            <div className="bg-sky-50/70 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/40 rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-sky-900 dark:text-sky-300 uppercase tracking-wider block">
                                                 📊 Token & Biaya
                                               </span>
                                               <p className="text-sky-950 dark:text-sky-200 font-mono text-[11px] font-semibold">
                                                 📥 {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
                                               </p>
+                                              {((call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
+                                                <p className="text-sky-800 dark:text-sky-300 font-mono text-[10px]">
+                                                  {((call as any).cachedPromptTokens !== undefined) && <>💾 Cache Hit: {(call as any).cachedPromptTokens} tokens</>}
+                                                  {((call as any).cachedPromptTokens !== undefined && (call as any).reasoningTokens !== undefined) && ' | '}
+                                                  {((call as any).reasoningTokens !== undefined) && <>🧠 Thinking: {(call as any).reasoningTokens} tokens</>}
+                                                </p>
+                                              )}
                                             </div>
                                           )}
 
@@ -1473,7 +1501,7 @@ function LlmLogsSection() {
             </div>
           ) : (
             flatLogs.map((log) => {
-              const badge = getFlowBadge(log.flowType);
+              const badge = getFlowBadge(log.flowType, isDirectReplyCall(log));
               const displayReasoning = log.rawReasoning || log.reasoning || '-';
 
               return (

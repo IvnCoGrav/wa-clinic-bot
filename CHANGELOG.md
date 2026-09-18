@@ -21,6 +21,168 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 - **Verifikasi**: `tests/unit/ors-profile-nontol.test.ts` (4/4), `tests/unit/capi-tenant-isolation.test.ts` (8/8), gate regresi landing/CAPI/atribusi/delivery 50+53 hijau; build `tsc` exit 0.
 - **Operasional**: pindahkan `FB_PIXEL_ID` + `FB_CAPI_ACCESS_TOKEN` milik klinik ke DB via Admin Dashboard → Settings (tersimpan terenkripsi), lalu kosongkan di `.env` server.
 
+#### Cache-Control `no-store` untuk Seluruh API Admin (Anti Data Basi Browser/Proxy) (2026-09-17)
+
+- **Akar masalah laporan "Delivery Fee Tiering 14 tier (duplikat)"** (diverifikasi via browser user:
+  buka `/api/admin/delivery-tiers` langsung = 14, padahal dari dalam proses app = 7, DB = 7, file = 7):
+  route `/api/admin/*` **TIDAK mengirim header `Cache-Control`**. Tanpa header itu, browser (dan proxy
+  di depan) boleh menyimpan respons GET secara heuristik dan menyajikan payload lama pada navigasi
+  langsung maupun reload — sehingga admin melihat data basi/duplikat meski server & DB benar.
+- **Fix fondasional (`src/routes/admin.route.ts`):** hook `preHandler` kini menyetel
+  `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0`, `Pragma: no-cache`,
+  `Expires: 0` untuk **semua** request `/api/admin*` (di-set SEBELUM auth, jadi respons 401 pun
+  no-store). Berlaku global untuk seluruh endpoint admin, bukan tambal per-route.
+- **Lanjutan fix klien sebelumnya** (`packages/admin-dashboard/src/services/api.ts`): `getCachedApiResponse`
+  TTL-aware + primitive `refreshApi` (lihat entri di bawah) tetap berlaku; kini ada dua lapis
+  (server no-store + klien forceFresh).
+- **Verifikasi**: `npm run build` (tsc) exit 0; build dashboard Vite exit 0;
+  `tests/unit/admin-api-cache.test.ts` (11 test: 7 cache/TTL/refreshApi + 2 header no-store pada
+  respons 200 & 401, dst) + 3 suite delivery + `ai-health` = **52/52 hijau**.
+
+#### Cache SWR Admin Dashboard: TTL-Aware & Primitive Hard-Refresh (2026-09-17)
+
+- **Investigasi laporan "Delivery Fee Tiering duplikat"**: terbukti **bukan bug server** — DB
+  `delivery_tiers` bersih (7 baris, `COUNT(DISTINCT max_dist)=7`) dan live API di produksi
+  mengembalikan `LEN=7` (id 1..7 tanpa duplikat). Penyebab = **cache SWR klien** yang basi
+  (`memoryApiCache` + `sessionStorage` `apiCache:*`, TTL 15s); tombol Reload tidak melewatinya.
+- **Fix fondasional (`packages/admin-dashboard/src/services/api.ts`):**
+  1. `getCachedApiResponse(endpoint, { allowStale })` kini **hormat TTL** — entri kedaluwarsa HARAM
+     disajikan untuk hidrasi awal; hanya fallback kegagalan jaringan (`allowStale: true`) yang boleh
+     memakai data basi. Menutup 5 titik hidrasi (`Overview`, `Reservations`, `CustomerDatabase`,
+     `TodayTreatments`) yang sebelumnya bisa render data tua.
+  2. Ditambah primitive **`refreshApi(endpoint, options)`** = `clearApiCache(url)` +
+     `apiRequest(forceFresh: true)` — kontrak terpusat untuk tombol Reload/Refresh admin.
+  3. `DeliveryTiers.tsx` Reload di-wire ke `refreshApi` (memperbaiki kasus yang dilaporkan).
+- **Audit sistem menyeluruh**: ditemukan **31 kontrol Refresh manual di 20+ file** yang masih pakai
+  GET biasa (bisa sajikan cache 15s). Migrasi sisanya **ditunda sengaja** dan dicatat di
+  `docs/KNOWN_ISSUES.md` #79 (menghindari blast radius 20+ file dalam satu PR).
+- **Verifikasi**: `npm run build` (tsc) exit 0; build dashboard Vite exit 0;
+  `tests/unit/admin-api-cache.test.ts` (baru, 7 test: TTL fresh/expired/allowStale, cache-hit tanpa
+  network, refreshApi bypass+replace, dua refresh berturut hit network, normalisasi endpoint) +
+  3 suite delivery = **47/47 hijau**.
+
+#### Perbaikan Delivery Fee Tiering: Hardcode Bebas & Paritas Out-of-Coverage (2026-09-17)
+
+- **Audit live (read-only)**: `delivery_tiers` produksi default-tenant sehat (7 tier,
+  `updated_at` 2026-08-23, tidak ter-overwrite). Seeding-overwrite (dugaan awal) **tidak terjadi** —
+  data tier aman. Temuan nyata ada di lapisan **kode**, bukan data.
+- **BUG A — Hardcode `freeTierKm: 5` & batas jangkauan `30 km`** (`src/v3/tools/calculate-delivery.tool.ts`):
+  dua jalur (URL Maps resolved & geocoding teks) mem-passing `freeTierKm: 5` + `maxCoverageKm: 30`
+  literal ke `TEMPLATES.ongkirInfo`/`outOfCoverage`, padahal `calculateDelivery()` sudah mengembalikan
+  `freeTierKm` & `maxCoverageKm` dari tier tenant. Jika admin mengubah tier gratis/jangkauan via DB,
+  pesan WA tetap memakai angka lama → janji ke customer salah. **Fix**: pakai
+  `deliveryResult.freeTierKm` & `deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm`
+  di kedua jalur; `message` diagnostik agent (`maks 30 km`) ikut dinamis.
+- **BUG B — Inkonsistensi out-of-coverage backend vs frontend**
+  (`packages/admin-dashboard/src/utils/deliveryTierCalculator.ts`): sebelumnya jarak > tier terjauh
+  mengembalikan `fee = maxTier.fee` (mis. Rp 35.000) di frontend, sedangkan backend
+  (`DeliveryService.calculateOngkirByDistance`) mengembalikan `normalPrice = 0`. **Fix**: frontend
+  disamakan — out-of-coverage → `fee: 0, netOngkir: 0`, `matchedTier` tetap sebagai referensi tampilan.
+  `InvoiceGeneratorModal` kini menampilkan peringatan deterministik (`ongkirOutOfCoverage`) agar staf
+  tidak salah menagih ongkir 0 untuk area di luar jangkauan.
+- **Tidak ada bug** pada panel "Simulasi Ongkir" `DeliveryTiers.tsx` — cabang out-of-coverage sudah
+  benar (klaim awal keliru setelah verifikasi kode).
+- **Verifikasi**: `npm run build` (tsc) exit 0; build dashboard Vite exit 0;
+  `tests/unit/delivery-tier-db-driven.test.ts` (baru, 10 test adversarial: kontrak `freeTierKm`/
+  `maxCoverageKm` dari tier, paritas boundary 0/5/5.01/…/30/30.01/99 km backend↔frontend, fallback
+  tier kosong tanpa NaN) + 8 suite terkait = **65/65 hijau**.
+
+#### Penyelarasan Model–Provider Aktif (Anti `no price for model` / `401`) (2026-09-17)
+
+- **Akar masalah (audit live):** `ACTIVE_LLM_PROVIDER="KENARI"` + `KENARI_API_KEY` kosong →
+  fallback key `LLM_API_KEY` (SumoPod) ditolak kenari.id (`401 invalid key`); setelah key diisi,
+  muncul `400 no price for model 'gpt-4o-mini'` karena DB `tenant_ai_config` masih menyimpan
+  `CHAT_REPLY=OpenAI/gpt-4o-mini` (stale pra-migrasi) dan endpoint tunggal aktif = Kenari.
+- **Fix fondasional (`src/config/ai-models.config.ts`):** `sanitizeModelForProvider` kini punya
+  cabang Kenari — model native OpenAI (`gpt-*`/`o1*`/`o3*`) di-remap ke `KENARI_DEFAULT_MODEL`
+  saat baseUrl `kenari.id` (aturan provider-level, mirror logika OpenAI/SumoPod). `getModelConfig`
+  & `getAllTaskConfigs` di-sanitize dengan baseUrl endpoint **aktif** (single source of truth),
+  sehingga seluruh pemanggil lintas-task (NLU, verifier, summarization, PII, geocoding, harvesting)
+  tidak lagi mengirim model non-Kenari ke Kenari. `agent-runner` memakai `endpointConfig.model`
+  (baseUrl-aware) untuk `selectedModel`.
+- **Perbaikan data:** re-seed `tenant_ai_config` default-tenant dari registry env →
+  `CHAT_REPLY`/`CHAT_REPLY_DEEP`/`HARVESTING` = `Kenari/deepseek-v4-1-flash`; task sisa
+  (`INTENT_CLASSIFICATION`, `PII_SCRUBBING`, `SUMMARIZATION`) tetap `OpenAI/gpt-4o-mini` di DB
+  namun otomatis di-remap saat resolusi. `ACTIVE_LLM_PROVIDER` tidak di-set di DB → fallback env `KENARI`.
+- **Verifikasi:** `npm run build` (tsc) exit 0; `tests/unit/provider-model-alignment.test.ts` 6/6 hijau
+  (remap gpt/o1/o3, preserve model Kenari valid, case-insensitive host, non-Kenari tak terpengaruh).
+
+#### Dedicated LLM Execution Tracing & DeepSeek Observability (2026-09-17)
+
+- **Fase 1 — Skema & logging error transparan** (`src/utils/llm-execution-logger.ts`,
+  `src/v3/agent/pipeline/generation-stage.ts`): `LlmExecutionRecord` + `RecordCallParams` diperluas
+  dengan `errorMessage`, `cachedPromptTokens`, `reasoningTokens`. `reportTurnError` kini
+  mengekstrak pesan error teknis konkret (axios `response.data.error.message` → `response.data` string
+  → `err.message` → fallback generik) dan menyertakan `promptPayload` konteks pesan. Error 401/400/timeout
+  tampil apa adanya di UI Tracing, bukan lagi kotak merah tanpa isi.
+- **Fase 2 — Ekstraksi CoT universal** (`extractReasoningAndCleanContent`, diekspor untuk testability):
+  mendukung `reasoning_content` native maupun tag `<think>...</think>` inline (case-insensitive,
+  multi-blok). Artefak tag thinking dibersihkan dari `finalReply` sebelum guardrail — tanpa
+  mutilasi semantik (murni cleanup teknis mesin, sesuai mandat).
+- **Fase 3 — Telemetri biaya & token akurat** (`extractUsageTelemetry`): membaca cache prompt dari
+  `prompt_cache_hit_tokens` (DeepSeek native) ATAU `prompt_tokens_details.cached_tokens`
+  (OpenAI-compatible/proxy SumoPod), plus `completion_tokens_details.reasoning_tokens`. `calcCostFor`
+  kini meneruskan token cache ke `calculateLlmCost` sehingga diskon cache-hit benar-benar dihitung
+  (sebelumnya hardcode `0`).
+- **Fase 4 — Stepper & filter admin dashboard** (`packages/admin-dashboard/src/pages/tenant/Debug.tsx`,
+  `getLlmExecutionLogs`): turn tanpa tool (DeepSeek menjawab langsung) dilabeli
+  **⚡ Direct Reply (1 Call)** di kartu, stepper, dan flat feed; filter `V3_GENERATION` ikut
+  menyertakan direct reply (deterministik dari state `toolsCalled`/`finalReply`, bukan pencocokan teks);
+  banner merah menampilkan `errorMessage` saat status ERROR; token Cache Hit & Thinking ditampilkan.
+- **Fase 5 — Unit test adversarial** (`tests/unit/llm-execution-tracing-deepseek.test.ts` 17/17):
+  schema tracing, CoT (`<think>` multi-blok/case/null/unclosed), dual-shape usage, diskon biaya
+  (timestamp di-pin off-peak agar deterministik), grouping Direct Reply vs multi-call, dan ekstraksi
+  error `reportTurnError` (Error object / axios 401 / tanpa pesan).
+- **Verifikasi**: `npm run build` (tsc) exit 0; build dashboard Vite exit 0; test terkait
+  32/32 hijau (`llm-execution-tracing-deepseek` 17, `hierarchical-debug-logs` 3, `cost-calculator` 12).
+  Catatan: suite penuh memiliki kegagalan pra-eksisting pada file test untracked dari pekerjaan paralel
+  (mis. `llm-outage-silent`, `schedule-check-handoff`) — tidak berkaitan dengan perubahan ini (diff
+  tidak menyentuh `shouldSendReply`/state machine).
+
+#### Revisi Fondasional P1–P4: Sawan-HIGH, closingIntent, Eskalasi Medis Aman, Salvage Kalimat (2026-09-17)
+
+- **Konteks review:** dokumen rencana 6 fase diaudit terhadap repo — ~60% sudah implemented
+  (death-penalty guardrail, `parallel_tool_calls:false`, taksonomi 24 bln, matrix 20 skenario).
+  Dieksekusi hanya gap nyata dalam bentuk revisi mandiri-patuh (tanpa rewrite regex output,
+  tanpa prose "DILARANG" sebagai satu-satunya pagar). Detail verdict + item tunda di
+  `docs/KNOWN_ISSUES.md` #83.
+- **P1 — Skrining sawan fail-closed HIGH** (`src/config/medical-keywords.ts`,
+  `tests/unit/medical-sawan-screening.test.ts` 3/3): `sawan`/`sawanen`/`sawan tangis` → HIGH
+  (menumpang eskalasi deterministik `machine.ts` + supresi rekomendasi usia di katalog).
+  Pengecualian hardcode sementara via seam designated (persetujuan user); matcher ≤6 huruf
+  boundary-safe dari `kawasan` (dipin adversarial).
+- **P2 — Kontrak data closingIntent** (`src/v3/tools/get-catalog.tool.ts`,
+  `tests/unit/v3/get-catalog-closing-intent.test.ts` 7/7): 6 intent deterministik dari state
+  (SAFETY_NO_MATCH > STATEMENT_ONLY_DURATION > PRICE_SUBJECT_CLARIFY > ASK_SCHEDULE/ASK_DOMICILE
+  by location > CLINICAL_PROBE); hanya direktif intent terpilih dikirim ke LLM (state-gated pruning).
+- **P3 — Eskalasi medis AMAN + matrix CM-21/CM-22** (`src/state-machine/machine.ts`,
+  `tests/unit/medical-silent-escalation.test.ts`, `tests/integration/v3-conversation-matrix.test.ts`
+  22/22): eskalasi HIGH/MEDIUM kini mengirim balasan keselamatan deterministik (tanpa dosis,
+  tanpa tawaran pijat, tanpa ajakan jadwal) — pembalikan disengaja kontrak diam lama.
+  CM-21 (sawan end-to-end), CM-22 (alur 234800: domicile → durasi statement-only via closingIntent).
+  Fidelitas stub tool_choice-forced diperbaiki (inferensi asksDuration/inquirePrice/symptoms).
+- **P4 — Salvage tingkat kalimat** (`src/v3/guardrails/sentence-salvage.ts` baru,
+  `tests/unit/v3/sentence-salvage.test.ts` 5/5, wiring `guardrail-pipeline.ts`): saat reprompt
+  faktual gagal, kalimat valid dipertahankan verbatim + catatan handoff; hanya bila nihil
+  yang lolos dipakai fallback generik. Tanpa edit isi kalimat (anti-mutilasi).
+- **Verifikasi:** `npm run build` (tsc) exit 0; matrix 22/22; medical 3+5; catalog 18;
+  factual/anti-silent 17 — tanpa regresi.
+
+#### Investigasi & Remediasi Fallback "Kendala Teknis" Sesi 554018 (2026-09-17)
+
+- **Fixed — drift migrasi DB lokal:** apply 3 migrasi pending via `migrate deploy`
+  (`ensure_tenants_settings_column`, `message_tenant_wa_message_unique`, `add_followup_cancel_reason`);
+  migrasi bedah baru `20260917000001_add_prompt_policy_tables_align_drift` membuat 2 tabel yang ada di
+  schema tapi tak pernah punya migrasi (`tenant_prompt_configs`, `clinic_policies`) + menyelaraskan default
+  (`reservations.status`, `tenants.settings`); `schema.prisma` Message diselaraskan dari `@unique` global ke
+  `@@unique([tenant_id, wa_message_id])` mengikuti maksud `20260913000000` (kompatibel: tanpa `findUnique`
+  by `wa_message_id` di `src/`).
+- **Akar masalah LLM (terbukti, belum bisa diperbaiki tanpa aksi user):** `KENARI_API_KEY` kosong di `.env`
+  sehingga key efektif jatuh ke `LLM_API_KEY` yang ditolak `kenari.id` (`401 invalid key`, direproduksi terisolasi).
+  Detail dan sisa terbuka dicatat di `docs/KNOWN_ISSUES.md` #82.
+- **Verifikasi:** drift `migrate diff --from-url` = empty migration; `prisma generate` penuh; `npm run build` (tsc)
+     exit 0; test fokus 10/10 (`clinic-policy-db-first`, `tenant-settings-resilience`, `dynamic-router-prompt`).
+
 #### Integrasi LLM Kenari, Primary Model deepseek-v4-1-flash, & Toggle Switcher Provider (2026-09-17)
 
 - **Konfigurasi Ganda Provider (`.env` & `.env.example`)**: Menambahkan blok konfigurasi `ACTIVE_LLM_PROVIDER="KENARI"` dengan variabel terpisah `KENARI_BASE_URL="https://kenari.id/v1"`, `KENARI_API_KEY`, dan `KENARI_DEFAULT_MODEL="deepseek-v4-1-flash"`, serta variabel SumoPod terisolasi (`SUMOPOD_BASE_URL`, `SUMOPOD_API_KEY`, `SUMOPOD_DEFAULT_MODEL`). Model utama default disetel ke `deepseek-v4-1-flash` dan rantai fallback diperbarui.

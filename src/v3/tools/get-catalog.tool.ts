@@ -51,11 +51,30 @@ export interface CatalogTreatmentDetail {
   isRecommendedForSymptoms?: boolean;
 }
 
+/**
+ * Kontrak data intent penutup (pengganti prose closingGuide per-kasus):
+ * SATU intent deterministik per pemanggilan tool, diturunkan dari state
+ * (kecocokan klinis x asksDuration x lokasi sesi x nominal). State-gated
+ * pruning: hanya direktif intent terpilih yang dikirim ke LLM; cabang
+ * kontradiktif disembunyikan di level kode (mandat anti make-up prompt).
+ */
+export type CatalogClosingIntent =
+  | 'SAFETY_NO_MATCH'
+  | 'STATEMENT_ONLY_DURATION'
+  | 'ASK_DOMICILE'
+  | 'ASK_SCHEDULE'
+  | 'PRICE_SUBJECT_CLARIFY'
+  | 'CLINICAL_PROBE';
+
 export interface GetCatalogOutput {
   success: boolean;
   treatments: CatalogTreatmentDetail[];
   recommendationReason?: string;
   suggestedPriceReply?: string;
+  /** Intent penutup deterministik turn ini (lihat CatalogClosingIntent). */
+  closingIntent?: CatalogClosingIntent;
+  /** Keluhan efektif (argumen + sesi) yang mendasari intent — untuk audit. */
+  closingSymptoms?: string[];
   /**
    * Template total resmi keranjang multi-item (sesi 214956): dihitung 100%
    * mesin dari snapshot cart + ongkir sesi. Dipakai panduan LLM DAN fallback
@@ -565,18 +584,42 @@ export async function executeGetCatalog(
       }
     }
 
-    // Sesi 973126: bila nominal dicocokkan, tutup pemantik klinis generik diganti
-    // klarifikasi subjek pasien (Bunda vs si kecil) — paket belum dipilih.
-    // Fase 4' (anti-kaset rusak): keluhan yang SUDAH diketahui sesi/argumen
-    // DILARANG ditanyakan ulang — jelaskan manfaat untuk keluhan tersebut.
-    const closingGuide = hasKnownSymptoms
-      ? `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi jadwal kunjungan.`
-      : priceClarification
-        ? `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`
-        : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.';
+    // Kontrak closingIntent (fondasional, anti make-up prompt): SATU intent
+    // deterministik dari state — clinical dominance memegang otoritas tertinggi,
+    // keselamatan di atas durasi, durasi di atas domisili. Hanya direktif intent
+    // terpilih yang dikirim ke LLM (state-gated pruning).
+    const hasClinicalMatch = clinicalRecommendation != null;
+    const locationKnown = Boolean(sessionCtx?.kelurahan || sessionCtx?.ongkirStatus);
+    const specificName = specificTreatmentName?.trim() ? specificTreatmentName.trim() : '';
+    let closingIntent: CatalogClosingIntent;
+    if (hasKnownSymptoms && !hasClinicalMatch && !specificName) {
+      closingIntent = 'SAFETY_NO_MATCH';
+    } else if (showDuration) {
+      closingIntent = 'STATEMENT_ONLY_DURATION';
+    } else if (priceClarification) {
+      closingIntent = 'PRICE_SUBJECT_CLARIFY';
+    } else if (hasKnownSymptoms) {
+      // Inti perbaikan 234800: gejala dikenal + lokasi BELUM diketahui →
+      // tanya domisili, BUKAN todong jadwal. Klasik save-reservation masking
+      // sudah menutup booking; ini menutup ajakan jadwal di teks.
+      closingIntent = locationKnown ? 'ASK_SCHEDULE' : 'ASK_DOMICILE';
+    } else {
+      closingIntent = 'CLINICAL_PROBE';
+    }
+    const closingDirectives: Record<CatalogClosingIntent, string> = {
+      SAFETY_NO_MATCH: `Keluhan (${effectiveSymptoms.join(', ')}) TIDAK terdaftar dalam katalog terapi klinik. Jelaskan secara ramah bahwa layanan kami difokuskan pada perawatan kebidanan komplementer untuk ibu dan anak sehat (seperti bapil, kembung, nafsu makan, relaksasi). DILARANG mengklaim bisa menyembuhkan keluhan tersebut. Bila ada tanda bahaya (demam tinggi, kejang, sesak, lemas tak merespons), arahkan segera periksa ke dokter/faskes.`,
+      STATEMENT_ONLY_DURATION: `Customer menanyakan DURASI. Sampaikan durasi resmi paket di atas secara ramah, lalu TUTUP DENGAN PERNYATAAN RAMAH TANPA PERTANYAAN — DILARANG menodong hari/jadwal kunjungan.`,
+      ASK_DOMICILE: `Lokasi/domisili customer BELUM DIKETAHUI. Jelaskan rekomendasi perawatan di atas secara hangat (maksimal 2-3 kalimat), lalu TANYAKAN DOMISILI/KECAMATAN RUMAH BUNDA. DILARANG menodong hari/jadwal kunjungan sebelum lokasi diketahui.`,
+      ASK_SCHEDULE: `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi preferensi hari kunjungan.`,
+      PRICE_SUBJECT_CLARIFY: `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`,
+      CLINICAL_PROBE: 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit atau ingin pijat sehat relaksasi saja.',
+    };
+    const closingGuide = closingDirectives[closingIntent];
     return {
       success: true,
       treatments: formattedTreatments.slice(0, 5),
+      closingIntent,
+      closingSymptoms: [...effectiveSymptoms],
       recommendationReason,
       suggestedPriceReply,
       cartTotalReply,
