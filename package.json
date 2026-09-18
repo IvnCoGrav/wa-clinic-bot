@@ -14,6 +14,8 @@
     "test:corpus": "vitest run tests/golden-corpus",
     "test:parity": "vitest run tests/unit/date-confirmation-parity.test.ts",
     "eval:audit": "tsx tests/evals/persona-quality-harness.ts --audit-only --runs=3",
+    "test:cases": "tsx scripts/run-real-conversation-tests.ts",
+    "test:clean": "tsx scripts/clean-qa-tests.ts",
     "test:real-replay": "tsx scripts/replay-real-customer-cases.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",

@@ -54,9 +54,15 @@ export function extractFastIntents(text: string): string[] {
     if (t === 'rp' || t === 'ribu' || t === 'rb' || t === 'juta' || t === 'jt') return true;
     const hasDigit = t.includes('0') || t.includes('1') || t.includes('2') || t.includes('3') || t.includes('4') || t.includes('5') || t.includes('6') || t.includes('7') || t.includes('8') || t.includes('9');
     if (!hasDigit) return false;
+    // Token nominal WAJIB diawali angka (mis. "50rb", "75k", "900k"). Token
+    // alfanumerik yang diawali huruf (mis. kode alamat "K5", "B2", "RT3")
+    // BUKAN nominal — anti false-positive pada pesan lokasi/alamat.
+    const firstChar = t.charCodeAt(0);
+    const startsWithDigit = firstChar >= 48 && firstChar <= 57;
+    if (!startsWithDigit) return false;
     return t.includes('rb') || t.includes('ribu') || t.includes('juta') || t.includes('jt') || t.includes('rp') || t.includes('k');
   });
-  const hasExplicitCostWord = hasAnyWord(['biaya', 'hrga', 'harga', 'tarif', 'ongkir', 'pricelist', 'ribu', 'bayar', 'promo', 'diskon']);
+  const hasExplicitCostWord = hasAnyWord(['biaya', 'hrga', 'harga', 'tarif', 'ongkir', 'pricelist', 'ribu', 'bayar', 'promo', 'diskon', 'total', 'totalnya']);
   const mentionsBerapa = lower.includes('berapa') || tokens.includes('brp');
   // "berapa" telanjang (mis. "berapa minggu minimal usia...") bukan harga.
   const berapaWithCost = mentionsBerapa && (hasExplicitCostWord || hasRpToken || hasNominalToken);

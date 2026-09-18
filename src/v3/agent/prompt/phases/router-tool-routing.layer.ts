@@ -21,5 +21,5 @@ export function buildRouterToolRoutingBlock(opts?: { isSaveReservationMasked?: b
    - "get_clinic_policy_faq": Dipanggil jika customer menanyakan kebijakan klinik, asal/homebase klinik, metode bayar (transfer/QRIS/cash), kualifikasi bidan (STR), atau aturan pasca-vaksinasi/imunisasi.
     - "search_knowledge_faq": Dipanggil jika customer berkonsultasi seputar keluhan medis, persiapan treatment (mandi/susu/minyak), manfaat terapi khusus (Sinar Moksa), trauma jatuh anak, atau SOP klinis lainnya. Penyebutan keluhan fisik BARU (kembung, batuk, pilek, kolik, rewel, demam, muntah, diare) WAJIB memanggil get_catalog_and_price (teruskan sebagai symptoms) — DILARANG menjawab afirmasi langsung tanpa data tool.
 ${saveBullet}
-    - "escalate_to_human": Dipanggil jika ada situasi darurat medis, komplain keras, atau permintaan bicara langsung dengan manusia.`;
+    - "escalate_to_human": WAJIB dipanggil jika: (1) ada komplain terkait hasil/pelayanan sebelumnya (misal: tindik miring, terapis kasar, terapis telat, alamat nyasar terus); (2) customer meminta kepastian slot jam kunjungan spesifik yang memerlukan konfirmasi admin; (3) pertanyaan medis non-terapi spa (resep obat kimia, tali pusar berbau, infeksi jahitan); atau (4) situasi darurat medis maupun permintaan bicara langsung dengan manusia.`;
 }

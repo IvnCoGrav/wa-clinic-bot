@@ -36,13 +36,19 @@ export function isBookingCommitReady(
   );
   if (!hasLocation) return false;
 
+  // Rule 5 (Active User Commitment Gate, sticky): hari/tanggal terkonfirmasi
+  // BUKAN komitmen final. Dua sumber komitmen (satu kebenaran verba):
+  // (a) flag lengket session.bookingCommitConfirmed (diset lintas turn), atau
+  // (b) verba komitmen pada pesan saat ini.
+  if (session.bookingCommitConfirmed !== true && !hasBookingCommitSignal(incomingText)) return false;
+
   // Fail-closed pertanyaan slot (cermin Day Evidence Gate di kontrak tool):
   // giliran bertanda tanya BUKAN komitmen booking — DILARANG memaksa
   // save_reservation. Level tanda baca, bukan daftar hafalan baru.
   // Sesi 337880: pengecualian same-day DIHAPUS (koheren dengan day-gate).
   // Adopsi komitmen (sesi 180166 FM1, koheren dengan day-gate): verba
   // komitmen ("Ambil yang ... ya??") MENGADOPSI tanggal yang sudah terbukti
-  // di evidence — '?' sopan DILARANG membatalkan komitmen transaksi.
+  // di evidence — '?' sopan khas WhatsApp DILARANG membatalkan komitmen transaksi.
   if ((incomingText || '').includes('?') && !hasBookingCommitSignal(incomingText)) return false;
   const haystack = [incomingText, ...history.filter((h) => h.role === 'user').map((h) => h.content)]
     .join(' ')

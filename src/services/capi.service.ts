@@ -4,6 +4,7 @@ import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 import { decryptSecret } from '../utils/encryption';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import { prisma } from '../db/client';
@@ -480,6 +481,86 @@ export function decryptCapiToken(raw: string): string | null {
   }
 }
 
+export interface TenantCapiCredentials {
+  pixelId?: string;
+  accessToken?: string;
+  source: 'db' | 'env' | 'none';
+}
+
+/**
+ * Resolusi kredensial Meta CAPI/Pixel per-tenant — SATU-SATUNYA sumber kebenaran.
+ * Dipakai oleh sendCapiEvent maupun testCapiConnection agar tidak ada drift.
+ *
+ * Kebijakan isolasi multi-tenant (fail-closed, anti-leakage):
+ * - Kredensial DB tenant (meta_pixel_id / meta_capi_access_token) SELALU menang bila valid.
+ * - Fallback ke process.env (FB_PIXEL_ID / FB_CAPI_ACCESS_TOKEN) HANYA bila
+ *   tenantId === DEFAULT_TENANT_ID secara eksplisit (backward compat klinik sendiri).
+ * - Tenant non-default tanpa kredensial DB valid → source 'none' (caller WAJIB skip,
+ *   tidak boleh menyentuh env) — mencegah event bocor ke akun iklan pemilik bot.
+ * - tenantId kosong/undefined → source 'none' (seluruh caller produksi wajib mengirim tenantId).
+ * - DB error / token gagal decrypt pada tenant non-default → 'none' (fail-closed),
+ *   bukan fallback env.
+ */
+export async function resolveTenantCapiCredentials(tenantId?: string): Promise<TenantCapiCredentials> {
+  const isDefaultTenant = tenantId === DEFAULT_TENANT_ID;
+
+  if (tenantId && !isDefaultTenant) {
+    try {
+      const { prisma } = await import('../db/client');
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      let pixelId: string | undefined;
+      let accessToken: string | undefined;
+      if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
+      if (tenant?.meta_capi_access_token) {
+        const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
+        if (decrypted) {
+          accessToken = decrypted;
+        } else {
+          const token = tenant.meta_capi_access_token;
+          const mask = token.length > 10 ? `${token.substring(0, 4)}…${token.slice(-4)}` : '(token sangat pendek)';
+          console.warn(`[CAPI ISOLATION] Token CAPI tenant ${tenantId} gagal didecrypt (${mask}) — event di-skip, TIDAK fallback ke env.`);
+        }
+      }
+      if (pixelId && accessToken) return { pixelId, accessToken, source: 'db' };
+      console.warn(`[CAPI ISOLATION] Kredensial CAPI tenant ${tenantId} tidak lengkap di DB — event di-skip, TIDAK fallback ke env.`);
+      return { source: 'none' };
+    } catch (err) {
+      console.warn(`[CAPI ISOLATION] Gagal baca config CAPI tenant ${tenantId} — event di-skip (fail-closed):`, (err as Error).message);
+      return { source: 'none' };
+    }
+  }
+
+  if (!isDefaultTenant) {
+    console.warn('[CAPI ISOLATION] Permintaan CAPI tanpa tenantId — event di-skip (fail-closed). Seluruh caller wajib mengirim tenantId.');
+    return { source: 'none' };
+  }
+
+  // default-tenant: DB menang, env fallback (backward compat).
+  let pixelId = process.env.FB_PIXEL_ID;
+  let accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
+  let source: 'db' | 'env' | 'none' = 'none';
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
+    if (tenant?.meta_capi_access_token) {
+      const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
+      if (decrypted) {
+        accessToken = decrypted;
+      } else {
+        const token = tenant.meta_capi_access_token;
+        const mask = token.length > 10 ? `${token.substring(0, 4)}…${token.slice(-4)}` : '(token sangat pendek)';
+        console.warn(`[CAPI WARNING] Token CAPI tenant ${tenantId} gagal didecrypt (${mask}), pakai env fallback.`);
+      }
+    }
+    if (tenant?.meta_pixel_id || tenant?.meta_capi_access_token) source = 'db';
+  } catch (err) {
+    console.warn(`[CAPI WARNING] Gagal baca config CAPI tenant ${tenantId}, pakai env fallback:`, (err as Error).message);
+  }
+  if (source === 'none' && pixelId && accessToken) source = 'env';
+  return { pixelId, accessToken, source };
+}
+
 /**
  * Menormalkan landingUrl agar merefleksikan URL landing page asli (First-Touch URL)
  * dengan mengekstrak nested query `landing_url` bila ada atau memetakan domain backend /cta
@@ -801,33 +882,12 @@ export class CapiService {
 
     const isPaid = !!effectiveAdClick;
 
-    // 2. Tenant-aware credentials (DB menang, env fallback)
-    let pixelId = process.env.FB_PIXEL_ID;
-    let accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
-    if (tenantId) {
-      try {
-        const { prisma } = await import('../db/client');
-        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-        if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
-        if (tenant?.meta_capi_access_token) {
-          const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
-          if (decrypted) accessToken = decrypted;
-          else {
-            // Tampilkan prefix termask (mis. "EAA…abcd") supaya ops tahu apakah
-            // token DB plaintext legacy valid atau korup/salah format.
-            const token = tenant.meta_capi_access_token;
-            const mask = token.length > 10 ? `${token.substring(0, 4)}…${token.slice(-4)}` : '(token sangat pendek)';
-            console.warn(`[CAPI WARNING] Token CAPI tenant ${tenantId} gagal didecrypt (${mask}), pakai env fallback.`);
-          }
-        }
-      } catch (err) {
-        console.warn(`[CAPI WARNING] Gagal baca config CAPI tenant ${tenantId}, pakai env fallback:`, (err as Error).message);
-      }
-    }
+    // 2. Tenant-aware credentials — SATU pintu via resolveTenantCapiCredentials (fail-closed, anti-leakage).
+    const { pixelId, accessToken } = await resolveTenantCapiCredentials(tenantId);
 
     if (!pixelId || !accessToken) {
-      console.warn(`[CAPI WARNING] CAPI credentials missing: FB_PIXEL_ID=${pixelId ? 'configured' : 'missing'}, FB_CAPI_ACCESS_TOKEN=${accessToken ? 'configured' : 'missing'}`);
-      return { success: false, message: 'Skipped: Credentials missing' };
+      console.warn(`[CAPI WARNING] CAPI credentials missing for tenant ${tenantId || '(tanpa tenantId)'}: FB_PIXEL_ID=${pixelId ? 'configured' : 'missing'}, FB_CAPI_ACCESS_TOKEN=${accessToken ? 'configured' : 'missing'}`);
+      return { success: false, message: `Skipped: Credentials missing for tenant ${tenantId || 'unknown'}` };
     }
 
     try {
@@ -1177,7 +1237,8 @@ export class CapiService {
    * @param params.currency    Mata uang (default 'IDR')
    * @param params.testEventCode  Kode Test Events dari Meta Events Manager (opsional).
    *                              Bila diisi, event tidak akan dihitung di Ads Manager.
-   * @param params.tenantId    Tenant-aware: fallback env FB_PIXEL_ID / FB_CAPI_ACCESS_TOKEN
+   * @param params.tenantId    Tenant-aware fail-closed: env fallback HANYA untuk
+   *                              DEFAULT_TENANT_ID; tenant lain tanpa DB config → skip.
    * @param params.ipAddress   IP request admin (dipakai sebagai client_ip_address test)
    * @param params.userAgent   User-Agent request admin
    */
@@ -1200,28 +1261,8 @@ export class CapiService {
     tokenConfigured: boolean;
     source: 'db' | 'env' | 'none';
   }> {
-    // 1. Resolve credentials tenant-aware (DB menang, env fallback) — sama dengan sendCapiEvent
-    let pixelId = process.env.FB_PIXEL_ID;
-    let accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
-    let source: 'db' | 'env' | 'none' = 'none';
-
-    if (params.tenantId) {
-      try {
-        const { prisma } = await import('../db/client');
-        const tenant = await prisma.tenant.findUnique({ where: { id: params.tenantId } });
-        if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
-        if (tenant?.meta_capi_access_token) {
-          const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
-          if (decrypted) accessToken = decrypted;
-        }
-        if (tenant?.meta_pixel_id || tenant?.meta_capi_access_token) source = 'db';
-      } catch (err) {
-        console.warn(`[CAPI TEST WARNING] Gagal baca config CAPI tenant ${params.tenantId}, pakai env fallback:`, (err as Error).message);
-      }
-    }
-    if (source === 'none' && process.env.FB_PIXEL_ID && process.env.FB_CAPI_ACCESS_TOKEN) {
-      source = 'env';
-    }
+    // 1. Resolve credentials tenant-aware — SATU pintu via resolveTenantCapiCredentials (fail-closed).
+    const { pixelId, accessToken, source } = await resolveTenantCapiCredentials(params.tenantId);
 
     const pixelIdConfigured = Boolean(pixelId);
     const tokenConfigured = Boolean(accessToken);

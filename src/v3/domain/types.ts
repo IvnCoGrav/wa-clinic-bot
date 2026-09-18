@@ -120,6 +120,16 @@ export interface CustomerGoalSession {
   ongkirStatus?: OngkirStatus;
   totalPrice?: number;
   /**
+   * Rule 5 (Active User Commitment Gate, sticky): true bila customer PERNAH
+   * menyampaikan verba komitmen booking eksplisit ("deal", "fix", "booking",
+   * "jadwalkan", "ambil", "mau yang itu", ...) di sesi ini. Bersifat lengket
+   * (tidak di-reset oleh turn lanjutan) karena alur nyata: customer menyetujui
+   * komitmen di satu turn, lalu MENJAWAB pertanyaan hari asisten di turn
+   * berikutnya tanpa mengulang verba komitmen. save_reservation hanya boleh
+   * dibuka bila flag ini true (via isDateConfirmed + gate masker).
+   */
+  bookingCommitConfirmed?: boolean;
+  /**
    * Audit 854065 (MODE KONSULTASI vs TRANSASIONAL): true bila customer sudah
    * pernah bertanya harga/total di sesi ini. Mengontrol eksposur angka total
    * resmi di grounding prompt (disembunyikan selama konsultasi murni).

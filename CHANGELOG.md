@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Perbaikan Holistik Fondasional Chatbot — 6 Guard Deterministik (2026-09-18)
+
+- **Phase 1 — Crash & greeting reset**: guard `(intents/symptoms || [])` di `selectRelevantExemplars` (anti `TypeError symptoms`); `buildInvalidReplyFallback(isFollowUp)` — greeting pembuka hanya Turn-0, follow-up pakai recovery kontekstual.
+- **Phase 2 — Information hiding ongkir**: `asksDeliveryFee` baru di `calculate_delivery` (schema + registry); nominal rupiah disembunyikan bila customer tak bertanya biaya (bagian get-catalog sudah dikerjakan sesi sebelumnya, dikunci test).
+- **Phase 3 — Pruning Call-2 + pin lokasi**: `buildLocationHierarchyBlock(session)` (cabang tanya-lokasi dicabut bila lokasi diketahui + pin permanen; byte-identik bila belum); pin `[LOKASI TERKUNCI]` di baris teratas `buildContextSummary`.
+- **Phase 4 — Centroid fallback**: kecamatan + detail spesifik (streetDetail/penanda generik/nama perumahan menempel) → sentroid gazetteer `success:true isEstimatedCentroid` tersimpan ke sesi (tanpa tandai QUOTED); tanpa detail tetap minta kelurahan.
+- **Phase 5 — Normalizer output**: `trimToMaxSentences` (maks 3 kalimat, anti desimal/jam) hanya satu-paragraf + `applyPreLocationTone` di gate akhir pipeline.
+- **Verifikasi**: 6 file uji baru + 2 kontrak lama diselaraskan; `tsc` 0, `npm run build` 0; full suite 355 hijau / 4 merah pre-existing (terbukti di clean tree via stash).
+
+#### Isolasi Multi-Tenant Meta CAPI/Pixel & Profil ORS Mobil Non-Tol (2026-09-18)
+
+- **Isolasi kredensial CAPI (`src/services/capi.service.ts`)**: fungsi baru `resolveTenantCapiCredentials(tenantId)` sebagai SATU-SATUNYA pintu resolusi kredensial (fail-closed) — dipakai `sendCapiEvent` maupun `testCapiConnection`, menggantikan dua blok copy-paste. Fallback `.env` HANYA untuk `default-tenant` eksplisit; tenant non-default tanpa kredensial DB valid, DB error, token gagal decrypt, atau tanpa tenantId → skip (`Skipped: Credentials missing for tenant <id>`), axios tidak dipanggil.
+- **Landing anti-leakage (`landing-content.service.ts`, `landing.route.ts`, `html-sanitizer.ts`, `landings.subroute.ts`)**: dummy `'123456789012345'` dihapus; env `FB_PIXEL_ID` hanya untuk default-tenant; `injectTracking` tidak menyuntik pixel bila ID kosong (click-catcher atribusi tetap jalan); template `go.html` men-strip total blok pixel bila ID kosong; query `?p=` di `/cta` hanya berlaku untuk default-tenant (anti-spoofing attribution).
+- **ORS mobil non-tol (`.env`)**: `ORS_PROFILE="cycling-electric"` → `"driving-car"` + `ORS_AVOID_FEATURES="tollways"` (`.env.example` sudah mendokumentasikan nilai ini).
+- **Verifikasi**: `tests/unit/ors-profile-nontol.test.ts` (4/4), `tests/unit/capi-tenant-isolation.test.ts` (8/8), gate regresi landing/CAPI/atribusi/delivery 50+53 hijau; build `tsc` exit 0.
+- **Operasional**: pindahkan `FB_PIXEL_ID` + `FB_CAPI_ACCESS_TOKEN` milik klinik ke DB via Admin Dashboard → Settings (tersimpan terenkripsi), lalu kosongkan di `.env` server.
+
 #### Integrasi LLM Kenari, Primary Model deepseek-v4-1-flash, & Toggle Switcher Provider (2026-09-17)
 
 - **Konfigurasi Ganda Provider (`.env` & `.env.example`)**: Menambahkan blok konfigurasi `ACTIVE_LLM_PROVIDER="KENARI"` dengan variabel terpisah `KENARI_BASE_URL="https://kenari.id/v1"`, `KENARI_API_KEY`, dan `KENARI_DEFAULT_MODEL="deepseek-v4-1-flash"`, serta variabel SumoPod terisolasi (`SUMOPOD_BASE_URL`, `SUMOPOD_API_KEY`, `SUMOPOD_DEFAULT_MODEL`). Model utama default disetel ke `deepseek-v4-1-flash` dan rantai fallback diperbarui.

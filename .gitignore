@@ -30,6 +30,7 @@ yarn-error.log*
 # Test & coverage
 coverage/
 .vitest-cache/
+test-results/
 
 # Graphify generated output (regenerate lokal, tidak perlu di-versioning)
 graphify-out/

@@ -135,8 +135,12 @@ export class TenantHtmlService {
 
     const clickPixelEvents = JSON.stringify(events.filter((e) => CLICK_EVENTS.includes(e)));
 
-    // 1. Inject Meta Pixel into <head> with nonce
-    const pixelSnippet = `
+    // 1. Inject Meta Pixel into <head> with nonce — DITIADAKAN bila ID kosong
+    // (isolasi multi-tenant: tenant tanpa pixel tidak memuat fbevents.js sama sekali).
+    // Click-catcher (bagian 2) tetap dipasang karena tidak bergantung pada Pixel.
+    const hasPixel = !!(metaPixelId && metaPixelId.trim());
+    const pixelSnippet = hasPixel
+      ? `
       <script nonce="${nonce}">
         !function(f,b,e,v,n,t,s)
         {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -150,12 +154,15 @@ export class TenantHtmlService {
         fbq('track', 'PageView');
 ${pixelOnloadLines}
       </script>
-    `;
+    `
+      : '';
 
-    if ($('head').length > 0) {
-      $('head').append(pixelSnippet);
-    } else {
-      $.root().prepend(`<head>${pixelSnippet}</head>`);
+    if (pixelSnippet) {
+      if ($('head').length > 0) {
+        $('head').append(pixelSnippet);
+      } else {
+        $.root().prepend(`<head>${pixelSnippet}</head>`);
+      }
     }
 
     // 2. Inject Click-Catcher Script before </body> with nonce (Zero Trust for tenant DOM attributes)

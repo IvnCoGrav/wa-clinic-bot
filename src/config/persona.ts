@@ -243,21 +243,22 @@ export const TEMPLATES = {
   // Dipakai sebagai prefix ketika customer mengirim pertanyaan di awal chat
   // agar jawaban AI tetap diawali sapaan resmi.
   firstContactGreetingHeader: (params?: { isIslamic?: boolean }) => {
-    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda ! ✨' : 'Halo Bunda ! ✨';
-    return `${greetingWord}\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).`;
+    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda! ✨' : 'Halo Bunda! ✨';
+    // Rule 1: 2 kalimat. Marker "Perkenalkan, saya <bot>" dipertahankan agar
+    // generation-stage tidak menambah prefix ganda.
+    return `${greetingWord} Perkenalkan, saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName} — layanan homecare treatment moms & baby ke rumah.`;
   },
 
   greeting: (params?: { skipGreeting?: boolean; isIslamic?: boolean }) => {
     if (params?.skipGreeting) {
-      return `Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare). Kalau boleh tau rumahnya dimana ya Bunda? 😊`;
+      return `Kami melayani treatment Moms & Baby homecare ke rumah. Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊`;
     }
-    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda ! ✨' : 'Halo Bunda ! ✨';
-    return `${greetingWord}
-Terima kasih sudah menghubungi kami.
-
-Perkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).
-
-Kalau boleh tau rumahnya dimana ya Bunda? 😊`;
+    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda' : 'Halo Bunda';
+    // Rule 1 (tepat 2 kalimat): salam + perkenalan + identitas homecare dalam
+    // satu kalimat (batas kalimat tidak dipecah tanda seru), lalu pemantik
+    // domisili. Marker "Perkenalkan, saya <bot>" dipertahankan.
+    return `${greetingWord} ✨, perkenalkan saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName} — layanan homecare treatment moms & baby langsung ke rumah.
+Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊`;
   },
 
   // Sapaan hangat untuk sesi idle panjang (1-2 hari): customer kembali chat dengan

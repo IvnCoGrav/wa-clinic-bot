@@ -431,7 +431,7 @@ export const LiveChatMonitor: React.FC = () => {
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation' | 'sandbox'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
@@ -1113,8 +1113,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
-      // Sandbox (chat test/QA) tidak pernah ditampilkan di daftar — selalu minta mode real.
-      const backendMode = 'real';
+      // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real
+      const backendMode = sourceFilter === 'sandbox' ? 'sandbox' : 'real';
       const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
@@ -3128,8 +3128,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   };
 
   const filteredChats = useMemo(() => chats.filter((chat) => {
-    // 0. Sandbox (chat test/QA) tidak pernah tampil — termasuk yang masuk via SSE/live insert.
-    if ((chat as any).isSandboxTest) return false;
+    // 0. Filter Sandbox vs Real
+    if (sourceFilter === 'sandbox') {
+      if (!(chat as any).isSandboxTest) return false;
+    } else {
+      if ((chat as any).isSandboxTest) return false;
+    }
     // 1. Filter reservasi aktif (pending/hold/terjadwal)
     if (sourceFilter === 'reservation') {
       const hasRes = !!(chat as any).hasActiveHold || !!(chat as any).hasUpcomingBooking || !!(chat as any).hasPendingBooking;
@@ -3379,11 +3383,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
                   <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
                     {[
-                      { value: 'all', title: 'Semua Percakapan', icon: Layers },
+                      { value: 'all', title: 'Semua Percakapan WhatsApp', icon: Layers },
                       { value: 'reservation', title: 'Reservasi Aktif (Pending/Hold/Terjadwal)', icon: ShoppingBag },
+                      { value: 'sandbox', title: 'QA Tester / Sandbox (Simulasi Lokal)', icon: FlaskConical },
                     ].map((opt) => {
                       const Icon = opt.icon;
                       const isActive = sourceFilter === opt.value;
+                      const activeClass = opt.value === 'sandbox'
+                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-2xs'
+                        : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
                       return (
                         <button
                           key={opt.value}
@@ -3398,7 +3406,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }}
                           title={opt.title}
                           className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
-                            isActive ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs' : 'text-[#667781] hover:text-[#111b21]'
+                            isActive ? activeClass : 'text-[#667781] hover:text-[#111b21]'
                           }`}
                         >
                           <Icon size={13} />
