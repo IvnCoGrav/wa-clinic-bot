@@ -218,7 +218,7 @@ model Message {
   tenant_id             String       @default("default-tenant")
   conversation_id       String
   conversation          Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
-  wa_message_id         String?      @unique
+  wa_message_id         String?
   direction             Direction
   content               String
   sender_type           String?      @default("BOT")
@@ -237,6 +237,7 @@ model Message {
 
   @@index([tenant_id])
   @@index([conversation_id, tenant_id, created_at])
+  @@unique([tenant_id, wa_message_id])
   @@map("messages")
 }
 

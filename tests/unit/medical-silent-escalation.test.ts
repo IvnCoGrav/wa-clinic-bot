@@ -8,8 +8,12 @@ import { conversationService } from '../../src/services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
- * Test: Medical escalation → alert HANYA ke admin (Telegram), chat customer DIAM TOTAL.
- * Tidak ada template darurat yang dikirim ke customer.
+ * KONTRAK BARU (pembalikan disengaja 2026-09-17, revisi fondasional P3):
+ * Medical escalation WAJIB disertai balasan keselamatan deterministik ke
+ * customer (eskalasi AMAN, bukan diam). Template tetap tanpa anjuran dosis,
+ * tanpa tawaran pijat, tanpa ajakan jadwal — nol risiko nasihat medis.
+ * Kontrak lama ("Alert Admin Only, Customer Silent") dipensiunkan karena
+ * diam total saat potensi darurat melanggar invarian anti-silent-drop.
  */
 
 vi.mock('../../src/integrations/llm/llm-gateway', async (importOriginal) => {
@@ -46,7 +50,7 @@ vi.mock('../../src/integrations/llm/model-fallback', async (importOriginal) => {
   };
 });
 
-describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
+describe('Medical Escalation — Alert Admin + Balasan Keselamatan Deterministik', () => {
   let sentToCustomer: string[] = [];
   let notifyAlertCalls: any[] = [];
 
@@ -70,7 +74,7 @@ describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
     (AlertService as any).prototype.notifyAlert = async (payload: any) => { notifyAlertCalls.push(payload); };
   });
 
-  it('HIGH severity → alert admin terkirim, TIDAK ada pesan ke customer (diam total)', async () => {
+  it('HIGH severity → alert admin + balasan darurat deterministik (TANPA diam)', async () => {
     const phone = `62891${Date.now()}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Medical', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -95,14 +99,17 @@ describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
 
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(result.isHumanHandling).toBe(true);
-    expect(result.shouldSendReply).toBe(false);
-
-    // TIDAK ada template yang dikirim ke customer
-    expect(sentToCustomer.length).toBe(0);
-    expect(result.replyText).toBeUndefined();
+    // Eskalasi AMAN: customer langsung menerima arahan keselamatan.
+    expect(result.shouldSendReply).toBe(true);
+    expect(String(result.replyText || '')).toMatch(/dokter\/faskes|IGD/i);
+    expect(String(result.replyText || '')).toMatch(/tim Bidan kami/i);
+    // Nol risiko nasihat medis: tanpa dosis/angka obat, tanpa klaim sembuh,
+    // tanpa ajakan jadwal. ("pijat"/"hari" telanjang tidak dilarang: template
+    // memakai negasi klarifikasi "tidak bisa ditangani dengan pijat".)
+    expect(String(result.replyText || '')).not.toMatch(/paracetamol|dosis|\b\d+\s*ml\b|menyembuhkan|konfirmasi jadwal/i);
   });
 
-  it('MEDIUM severity → alert admin terkirim, TIDAK ada pesan ke customer', async () => {
+  it('MEDIUM severity → alert admin + balasan concern deterministik (TANPA diam)', async () => {
     const phone = `62892${Date.now()}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Med2', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -126,9 +133,9 @@ describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
     });
 
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(result.shouldSendReply).toBe(false);
-    expect(sentToCustomer.length).toBe(0);
-    expect(result.replyText).toBeUndefined();
+    expect(result.shouldSendReply).toBe(true);
+    expect(String(result.replyText || '')).toMatch(/tim Bidan kami/i);
+    expect(String(result.replyText || '')).toMatch(/dokter\/faskes/i);
   });
 
   it('Non-medical message → normal flow, tidak ter-escalate', async () => {

@@ -42,6 +42,65 @@ export const SAME_DAY_DISCLAIMER =
   'Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏';
 
 /**
+ * Ekstraksi Chain-of-Thought universal + pembersihan artefak tag `<think>`.
+ * Mendukung dua bentuk keluaran model penalaran (DeepSeek R1/Reasoner, dsb):
+ *   1. Properti native `reasoning_content`.
+ *   2. Tag inline `<think>...</think>` di dalam `content`.
+ * Murni non-semantik: hanya memisahkan tag thinking AI dari teks balasan
+ * (diizinkan mandat — bukan gatekeeper intent).
+ */
+export function extractReasoningAndCleanContent(msg: any): { reasoning: string | null; cleanContent: string } {
+  let reasoning: string | null = null;
+  let cleanContent = typeof msg?.content === 'string' ? msg.content : '';
+
+  if (typeof msg?.reasoning_content === 'string' && msg.reasoning_content.trim()) {
+    reasoning = msg.reasoning_content.trim();
+  }
+
+  if (/<think>/i.test(cleanContent)) {
+    const match = cleanContent.match(/<think>([\s\S]*?)<\/think>/i);
+    if (match) {
+      if (!reasoning && match[1].trim()) reasoning = match[1].trim();
+      cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    }
+  }
+
+  return { reasoning, cleanContent };
+}
+
+/**
+ * Ekstraksi telemetri usage lintas-provider.
+ * - Token cache prompt: DeepSeek native `prompt_cache_hit_tokens` ATAU
+ *   gaya OpenAI-compatible `prompt_tokens_details.cached_tokens`
+ *   (dipakai proxy SumoPod/OpenRouter untuk model yang sama).
+ * - Token penalaran: `completion_tokens_details.reasoning_tokens`.
+ */
+export function extractUsageTelemetry(usage: any): {
+  promptTokens?: number;
+  completionTokens?: number;
+  cachedPromptTokens?: number;
+  reasoningTokens?: number;
+} {
+  if (!usage || typeof usage !== 'object') return {};
+  const promptTokens = Number(usage.prompt_tokens) || undefined;
+  const completionTokens = Number(usage.completion_tokens) || undefined;
+  const cachedRaw =
+    usage.prompt_cache_hit_tokens ??
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.prompt_tokens_details?.cache_read_input_tokens ??
+    0;
+  const reasoningRaw = usage.completion_tokens_details?.reasoning_tokens ?? 0;
+  const cachedPromptTokens = Number(cachedRaw) || 0;
+  const reasoningTokens = Number(reasoningRaw) || 0;
+  return {
+    promptTokens,
+    completionTokens,
+    cachedPromptTokens: cachedPromptTokens > 0 ? cachedPromptTokens : undefined,
+    reasoningTokens: reasoningTokens > 0 ? reasoningTokens : undefined,
+  };
+}
+
+/**
  * Status turn bersama yang di-threading lintas stage (menggantikan closure
  * monolitik): observability, messages LLM, dan akumulasi tool/chunks.
  */
@@ -75,6 +134,9 @@ export interface RecordCallParams {
   toolsCalled?: Array<{ name: string; args: any }>;
   promptTokens?: number;
   completionTokens?: number;
+  cachedPromptTokens?: number;
+  reasoningTokens?: number;
+  errorMessage?: string;
   callSequence?: number;
   groundTruth?: any;
 }
@@ -115,10 +177,10 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
       });
     } catch {}
   };
-  const calcCostFor = async (prompt: number, completion: number): Promise<number> => {
+  const calcCostFor = async (prompt: number, completion: number, cachedPrompt = 0): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.selectedModel, prompt, completion, 0).totalCostIdr || 0;
+      return calculateLlmCost(turn.selectedModel, prompt, completion, cachedPrompt).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -136,6 +198,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
       const { recordLlmExecution } = await import('../../../utils/llm-execution-logger');
       const p = params.promptTokens || 0;
       const c = params.completionTokens || 0;
+      const cached = params.cachedPromptTokens || 0;
       recordLlmExecution({
         flowType: params.flowType as any,
         customerPhone: turn.phone,
@@ -152,10 +215,13 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
         modelUsed: turn.selectedModel,
         durationMs: params.durationMs,
         status: params.status,
+        errorMessage: params.errorMessage,
         promptTokens: p || undefined,
         completionTokens: c || undefined,
+        cachedPromptTokens: cached || undefined,
+        reasoningTokens: params.reasoningTokens,
         totalTokens: p || c ? p + c : undefined,
-        costIdr: p || c ? await calcCostFor(p, c) : undefined,
+        costIdr: p || c ? await calcCostFor(p, c, cached) : undefined,
         toolsCalled: params.toolsCalled,
         callSequence: params.callSequence,
       });
@@ -226,6 +292,13 @@ export async function reportTurnError(
 ): Promise<AgentRunnerOutput> {
   const { maskPhoneNumber } = await import('../../../utils/pii-masker');
   console.error(JSON.stringify({ event: 'V3_AGENT_RUNNER_ERROR', tenantId: turn.tenantId, conversationId: turn.conversationId, phone: maskPhoneNumber(turn.phone), error: err.response?.data || err.message, timestamp: new Date().toISOString() }));
+  const errorDetails =
+    err?.response?.data?.error?.message ||
+    (typeof err?.response?.data === 'string' ? err.response.data : null) ||
+    err?.response?.data?.message ||
+    err?.message ||
+    'Unknown LLM execution error';
+  const safeErrorMessage = String(errorDetails).slice(0, 500);
   try {
     const { auditLlmCall } = await import('../../../utils/llm-audit-buffer');
     auditLlmCall({
@@ -247,12 +320,13 @@ export async function reportTurnError(
       customerPhone: turn.phone,
       customerInput: incomingText,
       bubbleCorrelationId: bubbleCorrelationId || `${turn.phone}_${Date.now()}`,
-      promptPayload: { model: turn.selectedModel },
+      promptPayload: { model: turn.selectedModel, baseUrl: turn.baseUrl, messages: turn.messages.slice(-2) },
       reasoning: turn.reasoning,
       finalReply: '',
       modelUsed: turn.selectedModel,
       durationMs: Date.now() - turn.turnStartedAt,
       status: 'ERROR',
+      errorMessage: safeErrorMessage,
     });
   } catch {}
   const greeting = session?.genderGreeting || 'Bunda';
@@ -417,9 +491,10 @@ export class GenerationStage {
     const choice = firstData?.choices?.[0];
     const assistantMessage = choice?.message;
     const toolCalls = assistantMessage?.tool_calls;
+    const { reasoning: callReasoning, cleanContent } = extractReasoningAndCleanContent(assistantMessage);
     let reasoning = turn.reasoning;
-    if (!reasoning && typeof (assistantMessage as any)?.reasoning_content === 'string') {
-      reasoning = (assistantMessage as any).reasoning_content;
+    if (!reasoning && callReasoning) {
+      reasoning = callReasoning;
       turn.reasoning = reasoning;
     }
 
@@ -436,19 +511,21 @@ export class GenerationStage {
 
     {
       const firstDurationMs = Date.now() - firstStartedAt;
-      const firstUsage: any = (firstData as any)?.usage;
+      const firstUsageTel = extractUsageTelemetry((firstData as any)?.usage);
       await tel.recordCall({
         flowType: 'V3_ROUTING',
         reply: parsedCalls.length > 0
           ? `[Memanggil Tool: ${parsedCalls.map((t) => t.name).join(', ')}]`
-          : assistantMessage?.content || '',
+          : cleanContent,
         status: 'SUCCESS',
         durationMs: firstDurationMs,
         promptPayload: { model: turn.selectedModel, systemPrompt: turn.currentSystemPrompt, messages: messages.slice(1), tools: toolsForCall1 },
         callReasoning: reasoning,
         toolsCalled: parsedCalls,
-        promptTokens: Number(firstUsage?.prompt_tokens) || undefined,
-        completionTokens: Number(firstUsage?.completion_tokens) || undefined,
+        promptTokens: firstUsageTel.promptTokens,
+        completionTokens: firstUsageTel.completionTokens,
+        cachedPromptTokens: firstUsageTel.cachedPromptTokens,
+        reasoningTokens: firstUsageTel.reasoningTokens,
         callSequence: 1,
       });
       turn.perCallLogged = true;
@@ -573,9 +650,11 @@ export class GenerationStage {
       return data;
     });
 
-    let finalReply = secondData?.choices?.[0]?.message?.content || '';
-    if (!turn.reasoning && typeof (secondData?.choices?.[0]?.message as any)?.reasoning_content === 'string') {
-      turn.reasoning = (secondData.choices[0].message as any).reasoning_content;
+    const secondMessage = secondData?.choices?.[0]?.message;
+    const { reasoning: secondCallReasoning, cleanContent: cleanSecondContent } = extractReasoningAndCleanContent(secondMessage);
+    let finalReply = cleanSecondContent;
+    if (!turn.reasoning && secondCallReasoning) {
+      turn.reasoning = secondCallReasoning;
     }
 
     // Plan 7 (Audit 216683 - Garansi Sapaan Resmi Turn-0):
@@ -595,10 +674,8 @@ export class GenerationStage {
     // Tracing Call 2 (Response Generation): latensi bersih + grounding yang dipakai
     {
       const secondDurationMs = Date.now() - secondStartedAt;
-      const secondUsage: any = (secondData as any)?.usage;
-      const secondReasoning = typeof (secondData?.choices?.[0]?.message as any)?.reasoning_content === 'string'
-        ? (secondData.choices[0].message as any).reasoning_content
-        : turn.reasoning;
+      const secondUsageTel = extractUsageTelemetry((secondData as any)?.usage);
+      const secondReasoning = secondCallReasoning || turn.reasoning;
       await tel.recordCall({
         flowType: 'V3_GENERATION',
         reply: finalReply,
@@ -607,8 +684,10 @@ export class GenerationStage {
         promptPayload: { model: turn.selectedModel, systemPrompt: fullSystemPrompt, messages: messages.slice(1) },
         callReasoning: secondReasoning,
         toolsCalled: turn.executedTools.map((t) => ({ name: t.name, args: t.args })),
-        promptTokens: Number(secondUsage?.prompt_tokens) || undefined,
-        completionTokens: Number(secondUsage?.completion_tokens) || undefined,
+        promptTokens: secondUsageTel.promptTokens,
+        completionTokens: secondUsageTel.completionTokens,
+        cachedPromptTokens: secondUsageTel.cachedPromptTokens,
+        reasoningTokens: secondUsageTel.reasoningTokens,
         callSequence: 2,
         groundTruth: {
           executedTools: turn.executedTools.map((t) => t.name),

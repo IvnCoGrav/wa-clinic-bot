@@ -25,6 +25,12 @@ export const HIGH_SEVERITY_MEDICAL_KEYWORDS: string[] = [  // Qualitative & Quan
   'kejang-kejang',
   'step',
   'kaku',
+  // Istilah kultural "sawan" beririsan kejang demam (audit 234800/477412) —
+  // fail-closed HIGH. Matcher ≤6 huruf boundary-safe dari "kawasan"/"kesawan".
+  // Pengecualian hardcode sementara (gate user 2026-09-17); sinonim klinis DB = tech debt.
+  'sawan',
+  'sawanen',
+  'sawan tangis',
 
   // Respiratory Distress / Breathing Issues
   'sesak',

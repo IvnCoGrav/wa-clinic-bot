@@ -42,6 +42,17 @@ export function sanitizeModelForProvider(model: string, baseUrl?: string): strin
     }
   }
 
+  // Kenari.id TIDAK melayani model native OpenAI (gpt-*/o1*/o3*) — hanya katalog
+  // Kenari (deepseek/qwen/glm/kimi/mimo/dll). Karena satu endpoint aktif dipakai
+  // lintas-task, model OpenAI-only WAJIB di-remap ke model Kenari default agar
+  // tidak menghasilkan 400 `no price for model`. Ini aturan provider-level
+  // (bukan data bisnis tenant) — mirror logika OpenAI/SumoPod di atas.
+  if (url.includes('kenari.id')) {
+    if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
+      return process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash';
+    }
+  }
+
   // Kenari.id mendukung penuh deepseek-v4-1-flash, deepseek-v4-pro, qwen3-8-flash, dll.
   return model;
 }
@@ -376,7 +387,7 @@ export class AiModelConfigService {
       };
     }
 
-    const sanitizedModel = sanitizeModelForProvider(config.modelName);
+    const sanitizedModel = sanitizeModelForProvider(config.modelName, this.getActiveEndpointConfig(tenantId).baseUrl);
     if (sanitizedModel !== config.modelName) {
       return { ...config, modelName: sanitizedModel };
     }

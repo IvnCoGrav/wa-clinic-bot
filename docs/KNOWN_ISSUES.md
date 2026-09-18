@@ -1563,7 +1563,130 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Fase 1: Proteksi subjek tata bahasa & pembersihan koma di `OutputSanitizer.limitVocativeQuota`.
   - Fase 2: Filter usia data-driven pada `getDefaultRelaxationService(category?, ageMonths?)` & pemanggilan di `goal-tracker.ts`.
   - Fase 3: Pengayaan `KB_KEYWORD_RULES` & sinkronisasi FAQ chunk persiapan ke DB Postgres.
-  - Fase 4: Pengujian regresi otomatis deterministik & end-to-end typecheck.
+   - Fase 4: Pengujian regresi otomatis deterministik & end-to-end typecheck.
+
+---
+
+## 82. [LLM + DB] Fallback "kendala teknis" sesi simulator 554018 — key Kenari kosong & drift migrasi (2026-09-17)
+
+- **Status:** DB fixed & verified; LLM **terbuka — butuh aksi user** (isi `KENARI_API_KEY` valid).
+- **Insiden:** simulator "mau pijat ceria" → fallback `generation-stage.ts:259` ("sistem kami sedang mengalami kendala teknis").
+  Bukti `logs/app-2026-09-17.log`: `V3_AGENT_RUNNER_ERROR "invalid key"` + `[Circuit Breaker: V3 LLM Primary Gateway] 401 ... Response Body: invalid key`
+  (2x, 12:56:50 & 12:57:10Z, model `deepseek-v4-1-flash` = default Kenari).
+- **Akar 1 (fatal, konfigurasi):** `KENARI_API_KEY` di `.env` KOSONG → `getActiveEndpointConfig` (`ai-models.config.ts:229`)
+  jatuh ke `LLM_API_KEY` → `kenari.id/v1` menolak 401. Reproduksi terisolasi (tanpa membocorkan secret):
+  `POST https://kenari.id/v1/chat/completions` dengan key efektif yang sama → `401`. Catatan jebakan:
+  `GET /models` Kenari bersifat PUBLIK (200 tanpa auth) — jangan dijadikan bukti key valid.
+- **Akar 2 (pendamping, degraded):** DB lokal ketinggalan 3 migrasi (`tenants.settings` P2022 di `capi.service.ts:600`
+  → fallback default) + 2 tabel ada di `schema.prisma` tapi TIDAK PERNAH punya migrasi
+  (`tenant_prompt_configs` → prompt persona fallback; `clinic_policies` → FAQ kebijakan kosong).
+- **Perbaikan masuk (sesi ini, terverifikasi):**
+  1. `migrate deploy`: 3 pending (`ensure_tenants_settings_column`, `message_tenant_wa_message_unique`, `add_followup_cancel_reason`).
+  2. Migrasi bedah `20260917000001_add_prompt_policy_tables_align_drift`: CREATE 2 tabel + index,
+     `reservations.status SET DEFAULT 'confirmed'` (selaras `@default`), `tenants.settings DROP DEFAULT`
+     (selaras schema; kode null-safe di `brand.ts`, `few-shot-exemplars.ts`).
+  3. `schema.prisma` Message: `@unique` global → `@@unique([tenant_id, wa_message_id])`, menyelaraskan
+     maksud migrasi `20260913000000` (dedup tenant-scoped, aman sandbox). Kompatibel: tidak ada
+     `findUnique` by `wa_message_id` di `src/` (semua `findFirst`/`updateMany` + `tenant_id`).
+  4. Gate drift `migrate diff --from-url ... --to-schema-datamodel` → `-- This is an empty migration.`
+  5. `prisma generate` penuh (dev server `tsx watch` sempat dihentikan karena mengunci DLL engine —
+     user WAJIB `npm run dev` ulang), `npm run build` (tsc) exit 0, test fokus 10/10
+     (`clinic-policy-db-first`, `tenant-settings-resilience`, `dynamic-router-prompt`).
+- **Sisa TERBUKA:**
+  1. Isi `KENARI_API_KEY` valid di `.env` lalu restart `npm run dev` — tanpa ini chat tetap fallback 401.
+  2. Key SumoPod lolos autentikasi (`/models` 200) tetapi `POST /chat/completions` → `400` body kosong
+     berulang (3 varian payload) — **JANGAN switch `ACTIVE_LLM_PROVIDER` ke SUMOPOD** sebelum jelas.
+  3. Verifikasi end-to-end simulator menunggu key valid (butuh LLM live, di luar gate offline).
+
+---
+
+## 83. [Revisi Fondasional] Review rencana 6 fase: 60% basi, eksekusi P1–P4 versi patuh-mandat (2026-09-17)
+
+- **Status:** implemented & verified (P1–P4). Rencana 6 fase diaudit read-only sebelum eksekusi.
+- **Verdict review (bukti file:baris):**
+  1. Fase 2 death-penalty SUDAH tiada (`guardrail-pipeline.ts:354-371` — `shouldSendReply=true` + `SILENT_DROP_PREVENTED`).
+  2. Fase 4 `parallel_tool_calls:false` SUDAH (`generation-stage.ts:398`).
+  3. Fase 5 taksonomi 24 bln SUDAH (`patient-extractor.ts:30-41`, KNOWN_ISSUES #76).
+  4. Fase 6 matrix SUDAH ADA 20 skenario (KNOWN_ISSUES #78) — yang baru hanya CM-21/CM-22.
+  5. Gap nyata: `closingGuide` buta lokasi/durasi/no-match (`get-catalog.tool.ts:572-576`);
+     `sawan` tak dikenal; eskalasi medis diam total (bug keselamatan).
+- **Konflik mandat & resolusi (Confirmation Gate — disetujui user 2026-09-17, opsi Revisi Fondasional):**
+  1. Keyword hardcode vs Non-Hardcode/Anti-Overfitting → DISETUJUI pengecualian sementara via
+     seam `medical-keywords.ts` (3 string, matcher boundary-safe). Tech debt: sinonim klinis DB.
+  2. Prose closingGuide "DILARANG..." vs Anti-Case-by-Case → diganti kontrak data `closingIntent`
+     (6 intent, state-gated pruning, tanpa rewrite output).
+  3. Normalizer regex rewrite vs Minimalisasi Regex → GUGUR; diganti enforcement saat compose
+     (P2) + filter tingkat kalimat tanpa edit isi (P4 `sentence-salvage.ts`).
+- **Pembalikan kontrak disengaja (dicatat agar tak dianggap regresi):**
+  1. `medical-silent-escalation.test.ts` + CM-18 T1: diam → balasan keselamatan deterministik.
+  2. CM-18 T2: `r2 === ''` → assert panjang sentTexts (harness akumulatif; slice(-1) basi).
+  3. Stub matrix cabang tool_choice-forced kini menginferensi asksDuration/inquirePrice/symptoms
+     (fidelitas = LLM kompeten; sebelumnya args miskin terbukti di CM-22 T3).
+- **Ditunda sengaja (tech debt):**
+  1. Separasi router minyak-vs-katalog (Fase 4 plan): tidak ada seam jujur untuk menguji
+     eksklusivitas tanpa LLM — butuh enforcement di tool_choice/masker dulu.
+  2. Skenario penitipan anak: belum ada seam deterministik (kebijakan/biaya penitipan).
+  3. `escalate_to_human` tool-level tetap silent-handoff (di luar cakupan P4).
+  4. Sinonim klinis DB (pengganti `medical-keywords.ts`) + prompt-caching (66.1) + loop belajar (66.2).
+- **Verifikasi:** tsc 0; matrix 22/22; medical 3+5; catalog 18 (intent+grounding+price);
+  factual 9 + anti-silent 8 + salvage 5 — tanpa regresi.
+
+---
+
+## 79. [Admin Dashboard] 30 tombol Refresh lain belum memakai hard-refresh terpusat
+
+- **Status:** open (tech debt), **pre-existing**.
+- **Ditemukan:** 2026-09-17, saat audit laporan "Delivery Fee Tiering duplikat".
+- **Konteks:** Laporan duplikasi tier ternyata **bukan bug server** — DB `delivery_tiers` bersih
+  (7 baris) dan live API `GET /api/admin/delivery-tiers` mengembalikan `LEN=7`. Penyebabnya adalah
+  cache SWR klien (`apiRequest` menyimpan GET ke `memoryApiCache` + `sessionStorage` `apiCache:*`,
+  TTL 15s). Tombol "Reload" tidak melewati cache tersebut.
+- **Perbaikan yang SUDAH dilakukan (fondasional, `packages/admin-dashboard/src/services/api.ts`):**
+  1. `getCachedApiResponse(endpoint, { allowStale })` kini **hormat TTL**: entri kedaluwarsa TIDAK
+     lagi disajikan untuk hidrasi awal; hanya fallback kegagalan jaringan (`allowStale: true`) yang
+     boleh memakai data basi.
+  2. Ditambah primitive `refreshApi(endpoint, options)` = `clearApiCache(url)` + `apiRequest(forceFresh: true)`
+     untuk semua tombol Reload/Refresh di masa depan.
+  3. Tombol Reload `DeliveryTiers.tsx` sudah di-wire ke `refreshApi`.
+- **Sisa tech debt (BELUM di-wire ke `refreshApi`):** audit menemukan **31 kontrol Refresh manual di
+  20+ file** yang semuanya masih memanggil GET biasa (bisa menyajikan cache 15s bila diklik <15s
+  setelah fetch sebelumnya). Daftar lengkap ada di riwayat audit; di antaranya:
+  `Overview.tsx`, `Reservations.tsx`, `FinancialAnalytics.tsx`, `MetaCapiQueue.tsx`,
+  `FollowUpQueue.tsx`, `FollowUpTemplates.tsx`, `AiEvaluations.tsx`, `ChatMigration.tsx`,
+  `ChatExport.tsx`, `CustomerLabels.tsx`, `CustomerDatabase.tsx`, `QuickReplies.tsx`,
+  `LandingPage.tsx`, `KnowledgeBase.tsx` (2 queue), `Debug.tsx` (2), `MetaClickCatcher.tsx` (3),
+  panel settings (`AiModelSettingsPanel`, `GoogleIntegrationPanel` x2, `DailyReportPanel`,
+  `WhatsAppProviderPanel` x2), `TodayTreatments.tsx`, `StaffToday.tsx`.
+- **Rencana:** migrasikan bertahap ke `refreshApi` (atau `forceFresh: true`) saat menyentuh file
+  terkait. Tidak dijadikan satu PR besar untuk menghindari blast radius 20+ file sekaligus.
+- **Verifikasi perbaikan yang sudah ada:** `tests/unit/admin-api-cache.test.ts` (7 test adversarial:
+  TTL fresh/expired/allowStale, cache-hit tanpa network, `refreshApi` bypass + replace entry,
+  dua refresh berturut selalu hit network, normalisasi endpoint bare).
+
+---
+
+## 80. [Admin API] Respons API admin historis tanpa `Cache-Control` (FIXED 2026-09-17)
+
+- **Status:** fixed 2026-09-17.
+- **Gejala:** halaman "Delivery Fee Tiering" menampilkan **14 tier** (7 tier terduplikasi penuh) dan
+  validasi "Tier X harus lebih besar dari tier sebelumnya (X)". Buka `/api/admin/delivery-tiers`
+  **langsung dari browser** mengembalikan 14, sementara query dari dalam proses app (dan DB, dan file
+  `delivery_tiers_custom.json`) mengembalikan **7**. Reload halaman tidak mengubah apa pun.
+- **Akar masalah (multi-layer):**
+  1. **Server:** route `/api/admin/*` tidak mengirim header `Cache-Control` sama sekali. Tanpa
+     directive eksplisit, browser boleh menyimpan respons GET secara heuristik lalu menyajikan payload
+     lama pada navigasi langsung/reload — inilah yang menampilkan 14 (payload basi) sementara server
+     sudah 7.
+  2. **Klien:** cache SWR `apiRequest` (`memoryApiCache` + `sessionStorage`) TTL 15s, dan tombol
+     Reload tidak mem-bypass cache; `getCachedApiResponse` pun mengabaikan TTL saat hidrasi.
+- **Perbaikan:**
+  1. `src/routes/admin.route.ts` — hook `preHandler` menyetel `no-store` untuk semua `/api/admin*`
+     (di-set sebelum auth; 401 pun no-store).
+  2. `packages/admin-dashboard/src/services/api.ts` — `getCachedApiResponse` TTL-aware +
+     `refreshApi()`; `DeliveryTiers.tsx` Reload memakai `refreshApi`.
+- **Catatan:** sisa 30 tombol Refresh lain yang belum di-wire ke `refreshApi` tetap dicatat sebagai
+  tech debt di #79.
+- **Verifikasi:** 52/52 hijau (termasuk assert header `no-store` pada respons 200 & 401).
 
 ---
 

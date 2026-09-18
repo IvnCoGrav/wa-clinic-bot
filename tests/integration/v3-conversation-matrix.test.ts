@@ -82,7 +82,7 @@ function makeToolCall(name: string, args: Record<string, unknown>) {
   return [{ id: `call_${name}_${Date.now()}_${Math.random()}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }];
 }
 
-const SYMPTOM_WORDS = ['batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel', 'gtm', 'diare', 'muntah', 'makan', 'lahap', 'jatuh', 'jatoh', 'terbentur', 'benjol', 'susah tidur', 'flu'];
+const SYMPTOM_WORDS = ['batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel', 'gtm', 'diare', 'muntah', 'makan', 'lahap', 'jatuh', 'jatoh', 'terbentur', 'benjol', 'susah tidur', 'flu', 'sawan', 'sawanen'];
 const DAY_WORDS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'besok', 'lusa', 'hari ini', 'sekarang', 'sore ini', 'nanti sore'];
 const TREATMENT_NAMES = [
   'Pijat Bayi Ceria (Rileksasi)',
@@ -180,11 +180,17 @@ function routeStub(payload: any, lastTopTreatment?: string): any {
     const args: Record<string, unknown> = {};
     if (name === 'calculate_delivery') args.locationText = text;
     if (name === 'get_catalog_and_price') {
+      // Fidelitas stub = LLM kompeten: parameter opsional tetap diinferensi
+      // dari teks (bukan dikosongkan) saat pipeline memaksa tool_choice.
       const age = inferAgeMonths(lower);
+      args.inquirePrice = /harga|biaya|tarif|pricelist|total|berapa|rp |promo|ongkir|daftar harga/i.test(lower);
+      if (/menit|durasi|berapa lama/i.test(lower)) args.asksDuration = true;
       args.symptoms = inferSymptoms(lower);
       if (age !== undefined) args.childAgeMonths = age;
       const cat = inferCategory(lower, age);
       if (cat) args.category = cat;
+      const specific = inferTreatmentNameOnly(lower);
+      if (specific) args.specificTreatmentName = specific;
     }
     if (name === 'search_knowledge_faq') args.query = text;
     if (name === 'get_clinic_policy_faq') {
@@ -901,15 +907,21 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
 
     activeTurn = 1;
     const r1 = await runTurn(ctx, 'Bayi saya demam 39 derajat, dosis paracetamol sirup berapa ml ya mbak?');
-    // Kontrak domain-gate: permintaan dosis obat keras eksplisit → eskalasi
-    // SUNYI ke manusia pra-V3 (tanpa LLM, tanpa tool, tanpa balasan). Staf
-    // mengambil alih via live-chat; bot DILARANG mengarang dosis.
+    // KONTRAK BARU 2026-09-17 (pembalikan disengaja): eskalasi medis pra-V3
+    // WAJIB disertai balasan keselamatan deterministik — diam total saat
+    // potensi darurat adalah bug keselamatan. Tanpa LLM, tanpa tool.
+    // Bot DILARANG mengarang dosis (template tetap, tanpa angka).
     expect(callsFor(id, 1)).toHaveLength(0);
     expect(ctx.conversation.is_human_handling).toBe(true);
-    expect(r1).toBe('');
+    expect(r1.trim().length).toBeGreaterThan(0);
+    expect(r1).toMatch(/dokter\/faskes|IGD/i);
+    expect(r1).toMatch(/tim Bidan kami/i);
+    expect(r1).not.toMatch(/\d+\s*ml|paracetamol \d|sendok/i);
+    const sentAfterT1 = ctx.client.sentTexts.length;
 
     activeTurn = 2;
     const r2 = await runTurn(ctx, 'Minta resep antibiotik dong biar cepet sembuh');
+    void r2;
     // Kontras adversial vs T1: tanpa kata dosis/derajat, domain-gate tidak
     // menembak → jalur V3 memanggil escalate_to_human (CRITICAL) dan
     // dieksekusi. Dua seam, dua-duanya aman.
@@ -917,10 +929,12 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     const esc2 = execFor(id, 2, 'escalate_to_human');
     expect(esc2).toHaveLength(1);
     expect(esc2[0].result.escalated).toBe(true);
-    // Kontrak handoff: pasca-eskalasi tool, bot SENGAJA sunyi (shouldSendReply
-    // false) dan chat beralih ke manusia — BUKAN silent drop.
+    // Kontrak handoff: pasca-eskalasi tool, bot SENGAJA tidak mengirim pesan
+    // BARU (shouldSendReply false) dan chat beralih ke manusia — BUKAN silent
+    // drop. Catatan harness: sentTexts akumulatif per skenario, jadi
+    // ketiadaan pesan baru diassert via panjang, bukan slice(-1).
     expect(ctx.conversation.is_human_handling).toBe(true);
-    expect(r2).toBe('');
+    expect(ctx.client.sentTexts.length).toBe(sentAfterT1);
   });
 
   it('CM-19: Premature invoicing — tanpa total fiktif saat cart kosong', async () => {
@@ -940,8 +954,7 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     expectHygienic(r1);
   });
 
-  it('CM-20: Higiene format WhatsApp & kata ganti kami', async () => {
-    const id = 'CM-20';
+  it('CM-20: Higiene format WhatsApp & kata ganti kami', async () => {    const id = 'CM-20';
     activeScenario = id;
     const ctx = await buildScenario('Matrix CM-20');
 
@@ -952,5 +965,62 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     expect(r1).not.toMatch(/saya bisa bantu eskalasi/i);
     expectNoSilentDrop(r1);
     expectHygienic(r1);
+  });
+
+  // =====================================================================
+  // Arketipe F: Keselamatan klinis & closing deterministik (revisi P3)
+  // =====================================================================
+  it('CM-21: Sawan → eskalasi medis AMAN (balasan keselamatan, tanpa tawaran pijat)', async () => {
+    const id = 'CM-21';
+    activeScenario = id;
+    const ctx = await buildScenario('Matrix CM-21');
+
+    activeTurn = 1;
+    const r1 = await runTurn(ctx, 'Anak saya kena sawan, bisa dipijat?');
+    // 'sawan' = HIGH (fail-closed) → gate pra-V3 eskalasi + balasan keselamatan.
+    expect(callsFor(id, 1)).toHaveLength(0);
+    expect(ctx.conversation.is_human_handling).toBe(true);
+    expectNoSilentDrop(r1);
+    expect(r1).toMatch(/dokter\/faskes|IGD/i);
+    expect(r1).toMatch(/tim Bidan kami/i);
+    // DILARANG menawarkan pijat / mengklaim bisa menyembuhkan sawan.
+    // (Kata "pijat" telanjang SENGAJA tidak dilarang: template negasi
+    // "tidak bisa ditangani dengan pijat" justru klarifikasi ruang lingkup.)
+    expect(r1).not.toMatch(/bisa banget|menyembuhkan|tawaran pijat|konfirmasi jadwal|hari kunjungan/i);
+    expectHygienic(r1);
+  });
+
+  it('CM-22: Alur 234800 — domicile dulu, durasi statement-only (closingIntent end-to-end)', async () => {
+    const id = 'CM-22';
+    activeScenario = id;
+    const ctx = await buildScenario('Matrix CM-22');
+
+    activeTurn = 1;
+    const r1 = await runTurn(ctx, 'Anak saya batuk pilek');
+    // Gejala dikenal + lokasi kosong → ASK_DOMICILE (bukan todong jadwal).
+    expect(callsFor(id, 1, 'get_catalog_and_price')).toHaveLength(1);
+    const cat1 = execFor(id, 1, 'get_catalog_and_price');
+    expect(cat1).toHaveLength(1);
+    expect(cat1[0].result.closingIntent).toBe('ASK_DOMICILE');
+    expect(callsFor(id, 1, 'save_reservation')).toHaveLength(0);
+    expectNoSilentDrop(r1);
+    expectHygienic(r1);
+
+    activeTurn = 2;
+    const r2 = await runTurn(ctx, 'Kami di Kutisari Indah');
+    expect(callsFor(id, 2, 'calculate_delivery')).toHaveLength(1);
+    const s2 = await sessionOf(ctx);
+    expect(s2.location?.kelurahan || s2.location?.kecamatan).toBeTruthy();
+    expectNoSilentDrop(r2);
+
+    activeTurn = 3;
+    const r3 = await runTurn(ctx, 'Pijatnya berapa menit?');
+    // Durasi menang atas jadwal (preseden) walau lokasi kini diketahui.
+    expect(callsFor(id, 3, 'get_catalog_and_price')).toHaveLength(1);
+    const cat3 = execFor(id, 3, 'get_catalog_and_price');
+    expect(cat3).toHaveLength(1);
+    expect(cat3[0].result.closingIntent).toBe('STATEMENT_ONLY_DURATION');
+    expectNoSilentDrop(r3);
+    expectHygienic(r3);
   });
 });
