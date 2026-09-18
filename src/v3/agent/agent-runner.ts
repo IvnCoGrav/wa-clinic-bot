@@ -99,7 +99,10 @@ export class V3AgentRunner {
     // 2. Endpoint & model LLM.
     const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
     const endpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
-    const selectedModel = forceModel || modelConfig?.modelName || 'gpt-4o-mini';
+    // endpointConfig.model sudah di-sanitize terhadap baseUrl provider aktif
+    // (mis. model OpenAI-only di-remap saat endpoint Kenari) — pakai itu agar
+    // model & endpoint selalu konsisten, hindari 400 `no price for model`.
+    const selectedModel = forceModel || endpointConfig.model || modelConfig?.modelName || 'gpt-4o-mini';
     const baseUrl = endpointConfig.baseUrl;
     const apiKey = endpointConfig.apiKey;
 

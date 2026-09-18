@@ -30,8 +30,11 @@ export interface LlmExecutionRecord {
   modelUsed?: string;
   durationMs?: number;
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+  errorMessage?: string;
   promptTokens?: number;
   completionTokens?: number;
+  cachedPromptTokens?: number;
+  reasoningTokens?: number;
   totalTokens?: number;
   costIdr?: number;
   toolsCalled?: Array<{ name: string; args: any }>;
@@ -143,8 +146,11 @@ export function recordLlmExecution(
     modelUsed: data.modelUsed,
     durationMs: data.durationMs,
     status: data.status || 'SUCCESS',
+    errorMessage: data.errorMessage,
     promptTokens: data.promptTokens,
     completionTokens: data.completionTokens,
+    cachedPromptTokens: data.cachedPromptTokens,
+    reasoningTokens: data.reasoningTokens,
     totalTokens: data.totalTokens,
     costIdr: data.costIdr,
     toolsCalled: data.toolsCalled,
@@ -244,7 +250,18 @@ export async function rehydrateLlmBuffer(): Promise<void> {
 export function getLlmExecutionLogs(limit = 100, flowFilter?: string): LlmExecutionRecord[] {
   let logs = llmExecutionBuffer;
   if (flowFilter && flowFilter !== 'all') {
-    logs = logs.filter((l) => l.flowType === flowFilter);
+    if (flowFilter === 'V3_GENERATION') {
+      // Direct Reply: DeepSeek menjawab langsung tanpa tool di Call 1.
+      // Sertakan agar operator tak mengira bot gagal menghasilkan balasan
+      // saat memfilter Reply Generation (Call 2).
+      logs = logs.filter(
+        (l) =>
+          l.flowType === 'V3_GENERATION' ||
+          (l.flowType === 'V3_ROUTING' && (!l.toolsCalled || l.toolsCalled.length === 0) && !!l.finalReply)
+      );
+    } else {
+      logs = logs.filter((l) => l.flowType === flowFilter);
+    }
   }
   return logs.slice(0, Math.max(1, Math.min(limit, MAX_LLM_LOGS)));
 }

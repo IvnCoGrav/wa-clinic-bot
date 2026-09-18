@@ -381,9 +381,25 @@ export class GuardrailPipeline {
         } else {
           isEscalated = true;
           shouldSendReply = true;
-          const greeting = session.genderGreeting || 'Bunda';
-          finalReply = `Mohon maaf ${greeting}, untuk pertanyaan ini kami teruskan langsung ke tim Bidan kami ya agar dapat dibantu lebih lanjut 🙏😊`;
-          violationsDetected.push('SILENT_DROP_PREVENTED: balasan kosong diubah ke fallback eskalasi');
+          // P4 — surgical salvage TINGKAT KALIMAT (bukan buang seluruh balasan):
+          // kalimat valid dipertahankan verbatim, yang melanggar dibuang +
+          // catatan handoff deterministik. Tanpa edit isi kalimat (anti-mutilasi).
+          let salvaged = false;
+          try {
+            const { salvageValidSentences } = await import('../../guardrails/sentence-salvage');
+            const salvage = salvageValidSentences(finalReply, executedTools, retrievedChunks, { locationKnown });
+            if (salvage.kept.length > 0 && salvage.dropped.length > 0) {
+              finalReply = `${salvage.kept.join(' ')} Untuk detail pastinya, tim Bidan kami akan segera membantu mengecek dan melengkapinya ya Bunda 🙏`;
+              violationsDetected.push(...salvage.droppedViolations);
+              violationsDetected.push(`SENTENCE_SALVAGE_APPLIED: ${salvage.kept.length} kalimat valid dipertahankan, ${salvage.dropped.length} dibuang`);
+              salvaged = true;
+            }
+          } catch {}
+          if (!salvaged) {
+            const greeting = session.genderGreeting || 'Bunda';
+            finalReply = `Mohon maaf ${greeting}, untuk pertanyaan ini kami teruskan langsung ke tim Bidan kami ya agar dapat dibantu lebih lanjut 🙏😊`;
+            violationsDetected.push('SILENT_DROP_PREVENTED: balasan kosong diubah ke fallback eskalasi');
+          }
         }
       }
     }
