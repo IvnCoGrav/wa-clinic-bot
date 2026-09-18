@@ -18,6 +18,18 @@ const INDONESIAN_STOP_WORDS = new Set([
   'saya', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'anda', 'bunda', 'bund', 'kak', 'kakak', 'min', 'admin', 'sis', 'gan', 'mbak', 'mas', 'ya', 'ampun', 'elah', 'yaelah', 'yaampun', 'kok', 'gitu', 'sih', 'dong', 'saja', 'aja', 'mahal', 'murah', 'ongkir', 'ongkirnya', 'tarif', 'tarifnya', 'biaya', 'biayanya', 'ongkos', 'ongkosnya', 'harga', 'harganya', 'berapa', 'berapaan', 'kena', 'hitung', 'itung', 'cek', 'info', 'tanya', 'lokasi', 'alamat', 'rumah', 'jalan', 'gang', 'no', 'nomor', 'rt', 'rw', 'kelurahan', 'kecamatan', 'kabupaten', 'kota', 'desa', 'dusun', 'provinsi', 'homecare', 'spa', 'treatment', 'massage', 'pijat', 'booking', 'reservasi', 'jadwal', 'hari', 'tanggal', 'bulan', 'tahun', 'jam', 'waktu', 'bisa', 'mau', 'ingin', 'akan', 'sudah', 'belum', 'tidak', 'bukan', 'ada', 'tidakada', 'gratis', 'free', 'promo', 'diskon', 'banget', 'sangat', 'sekali', 'itu', 'ini', 'yang', 'dari', 'ke', 'di', 'pada', 'untuk', 'dengan', 'atau', 'dan', 'adalah', 'seperti', 'kalau', 'kalo', 'jika', 'bila', 'karena', 'sebab', 'tetapi', 'tapi', 'namun', 'melayani', 'panggil', 'datang', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'hola', 'hei', 'helo', 'assalamualaikum', 'salam', 'permisi', 'terima', 'kasih', 'terimakasih', 'thank', 'you'
 ]);
 
+/**
+ * Penanda alamat generik (jalan/gang/perumahan/blok/nomor — linguistik, bukan
+ * data bisnis): dipakai geocoding + calculate-delivery tanpa duplikasi pola.
+ */
+const STREET_ADDRESS_MARKERS = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|no|nomor|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|land|park|townhouse|village|garden|green|estate|kost|kos|graha|griya|wisma|dusun|rt|rw|pos|rumdis|tni|al|lanudal|asrama|kavling|kav)\b/i;
+
+export function hasStreetAddressDetail(text: string | null | undefined): boolean {
+  if (!text) return false;
+  STREET_ADDRESS_MARKERS.lastIndex = 0;
+  return STREET_ADDRESS_MARKERS.test(text);
+}
+
 export interface ResolvedLocation {
   isPrecise: boolean;
   isFuzzyMatch?: boolean;
@@ -617,7 +629,7 @@ export class GeocodingService {
       const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
       return kelLower !== kecLower && reg.test(lower);
     }) : false;
-    const hasStreetAddressKeyword = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|no|nomor|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|land|park|townhouse|village|garden|green|estate|kost|kos|graha|griya|wisma|dusun|rt|rw|pos|rumdis|tni|al|lanudal|asrama|kavling|kav)\b/i.test(lower);
+    const hasStreetAddressKeyword = hasStreetAddressDetail(lower);
 
     // Periksa apakah ada kata bermakna lain di luar nama kota/kecamatan dan stop words
     // Misal: "banjarmukti", "wonosari", "safira", "sukodono permai", "citragarden"

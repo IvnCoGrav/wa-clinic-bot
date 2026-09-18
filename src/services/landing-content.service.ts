@@ -55,7 +55,8 @@ export function defaultLandingContent(slug: string): LandingContent {
     benefits: FALLBACK_BENEFITS,
     faq: FALLBACK_FAQ,
     whatsapp_number: process.env.DEFAULT_WHATSAPP_PHONE || '',
-    meta_pixel_id: process.env.FB_PIXEL_ID || '123456789012345',
+    // default-tenant boleh fallback env; dummy ID dihapus (isolasi multi-tenant).
+    meta_pixel_id: process.env.FB_PIXEL_ID || '',
   };
 }
 
@@ -89,9 +90,12 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
     }
 
     const landingJson = (landing.structured_content as any) || {};
+    // Isolasi multi-tenant: env FB_PIXEL_ID HANYA untuk default-tenant; tenant lain
+    // tanpa pixel DB mendapat '' (render tanpa pixel, bukan pinjam milik owner).
+    const landingTenantId = landing.tenant_id || DEFAULT_TENANT_ID;
 
     return {
-      tenant_id: landing.tenant_id || DEFAULT_TENANT_ID,
+      tenant_id: landingTenantId,
       slug: landing.slug,
       title: landing.title || '',
       landing_type: landing.landing_type || 'RAW_HTML',
@@ -103,7 +107,10 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
       benefits: landingJson.benefits || FALLBACK_BENEFITS,
       faq: landingJson.faq || FALLBACK_FAQ,
       whatsapp_number: landing.whatsapp_number || tenantForLanding?.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
-      meta_pixel_id: landing.meta_pixel_id || tenantForLanding?.meta_pixel_id || process.env.FB_PIXEL_ID || '123456789012345',
+      meta_pixel_id:
+        landing.meta_pixel_id ||
+        tenantForLanding?.meta_pixel_id ||
+        (landingTenantId === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : ''),
     };
   }
 
@@ -143,8 +150,9 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
 
   if (tenant) {
     const landingJson = (tenant.landing_content as any) || {};
+    const legacyTenantId = tenant.id || DEFAULT_TENANT_ID;
     return {
-      tenant_id: tenant.id || DEFAULT_TENANT_ID,
+      tenant_id: legacyTenantId,
       slug: tenant.slug || normalized || 'default',
       title: tenant.name || '',
       landing_type: tenant.landing_type || 'STRUCTURED_JSON',
@@ -156,7 +164,10 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
       benefits: landingJson.benefits || FALLBACK_BENEFITS,
       faq: landingJson.faq || FALLBACK_FAQ,
       whatsapp_number: tenant.whatsapp_number || landingJson.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
-      meta_pixel_id: tenant.meta_pixel_id || landingJson.meta_pixel_id || process.env.FB_PIXEL_ID || '123456789012345',
+      meta_pixel_id:
+        tenant.meta_pixel_id ||
+        landingJson.meta_pixel_id ||
+        (legacyTenantId === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : ''),
     };
   }
 

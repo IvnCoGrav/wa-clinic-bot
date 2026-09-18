@@ -45,6 +45,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
       const input: CalculateDeliveryInput = {
         locationText: args.locationText,
         streetDetail: args.streetDetail,
+        asksDeliveryFee: args.asksDeliveryFee,
         tenantId: ctx.tenantId,
         candidateTreatmentName: ctx.selectedTreatment,
         cartSnapshot: ctx.cartSnapshot,

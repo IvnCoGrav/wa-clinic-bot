@@ -47,9 +47,11 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     const result = await run('halo kak', 'mock-rules-1');
     expect(result.replyText).toBe(TEMPLATES.greeting({ isIslamic: false }));
     expect(result.replyText).toContain('Halo Bunda');
-    expect(result.replyText).toContain('Kalau boleh tau rumahnya dimana ya Bunda? 😊');
+    expect(result.replyText).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda?');
     expect(result.replyText.length).toBeLessThanOrEqual(500);
     expect(axios.post).not.toHaveBeenCalled();
+    // Rule 1: tepat 2 kalimat (salam+identitas homecare, lalu pemantik domisili).
+    expect(countSentences(result.replyText)).toBeLessThanOrEqual(2);
   });
 
   it('Test 2: Pertanyaan Lokasi (Turn-1) — Waru 30km, tanpa English leak, Bunda ≤2, ≤3 kalimat', async () => {

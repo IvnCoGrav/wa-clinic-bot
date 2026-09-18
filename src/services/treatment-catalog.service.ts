@@ -1320,10 +1320,31 @@ export class TreatmentCatalogService {
         'susah tidur', 'kembung perut', 'batuk pilek', 'batuk dahak',
         'rewel menangis', 'pegal lelah', 'pilek flu',
       ];
+      // Audit simulator (Bapil -> Cukur Selapan): normalisasi tanda baca agar
+      // "batuk, pilek" (koma di deskripsi katalog) tetap cocok dengan frasa
+      // "batuk pilek". Normalisasi teknis tanda baca, bukan hafalan semantik.
+      const normText = rawText.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
       for (const phrase of phrasePatterns) {
-        if (rawText.includes(phrase) && haystack.includes(phrase)) {
+        if (normText.includes(phrase) && normHaystack.includes(phrase)) {
           score += 8;
         }
+      }
+
+      // Clinical dominance (keputusan user): keluhan medis MURNI tanpa indikasi
+      // cukur/rambut/tindik/paket → terapi tunggal WAJIB menang atas kombo.
+      // Paket kombo (BUNDLE) didenda; terapi tunggal penanda-terapi dibonus —
+      // keduanya murni dari metadata katalog (category/nama), tanpa daftar nama.
+      const wantsShaveOrBundle = /(cukur|rambut|gundul|tindik|paket|selapan)/.test(normText);
+      const isBundleService = (item.category || '').toUpperCase() === 'BUNDLE'
+        || /paket|\+/.test(nameLower);
+      if (!wantsShaveOrBundle && isBundleService) {
+        score -= 10;
+      }
+      const isSingleTherapy = (item.category === 'BABY' || item.category === 'KIDS')
+        && /terapi|pulih/.test(nameLower);
+      if (isSingleTherapy && tokens.some((t) => CORE_COMPLAINT_NOUNS.has(t) && normHaystack.includes(t))) {
+        score += 5;
       }
 
       if (score > bestScore) { bestScore = score; best = item; }

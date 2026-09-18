@@ -65,11 +65,11 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   },
   {
     id: 'location_ongkir_confirmation',
-    scenario: 'Customer menyebutkan lokasi/kecamatan untuk cek layanan & ongkir',
+    scenario: 'Customer menyebutkan lokasi/kecamatan — konfirmasi jangkauan TANPA menyebut nominal ongkir (mode konsultasi)',
     tags: ['lokasi', 'domisili', 'alamat', 'kecamatan', 'kec', 'kelurahan', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'ongkir', 'jarak', 'dimana', 'mana', 'daerah', 'kota', 'datang'],
     customerMessage: 'Saya di Balongdowo Candi Sidoarjo kak',
     idealResponse:
-      'Baik Bunda 😊 Jika dilihat dari Waru jaraknya kurang lebih 23 km dengan ongkir promo Rp 25.000 yaa. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
+      'Baik Bunda 😊 Area Balongdowo Candi Sidoarjo sudah masuk jangkauan layanan homecare kami. Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗',
     isActive: true,
     sortOrder: 33,
   },
@@ -585,6 +585,14 @@ export class FewShotExemplarBank {
     tenantId: string = DEFAULT_TENANT_ID
   ): FewShotExemplar[] {
     const inputLower = (customerInput || '').toLowerCase();
+    // Hard guard: ekstraksi parsial (intents/symptoms undefined) dari NLU/LLM
+    // DILARANG menjatuhkan engine (TypeError crash produksi).
+    const safeIntents: string[] = Array.isArray((extraction as any)?.intents)
+      ? (extraction as any).intents
+      : [];
+    const safeSymptoms: string[] = Array.isArray((extraction as any)?.symptoms)
+      ? (extraction as any).symptoms
+      : [];
     const cached = tenantExemplarsCache.get(tenantId) || DEFAULT_FEW_SHOT_EXEMPLARS;
     const activeExemplars = cached.filter((e) => e.isActive !== false);
     const priorityGroups = getPriorityGroupsForTenant(tenantId);
@@ -604,19 +612,19 @@ export class FewShotExemplarBank {
           if (genericWords.has(tag)) genericOnlyScore += 3;
           else score += 3;
         }
-        if (extraction.intents.some((i) => i === tag || i.includes(tag))) score += 4;
-        if (extraction.symptoms.some((s) => s === tag || s.includes(tag))) score += 4;
+        if (safeIntents.some((i) => i === tag || i.includes(tag))) score += 4;
+        if (safeSymptoms.some((s) => s === tag || s.includes(tag))) score += 4;
       }
 
       // 2. Prioritaskan jadwal jika ada mention hari/jadwal — berbasis TAG,
       //    sehingga exemplar kustom bertag jadwal ikut diprioritaskan.
       const hasScheduleTag = hasAnyTag(exTags, priorityGroups.schedule);
-      if (hasScheduleTag && (extraction.intents.includes('ask_schedule') || Boolean(extraction.preferredDateText))) {
+      if (hasScheduleTag && (safeIntents.includes('ask_schedule') || Boolean(extraction.preferredDateText))) {
         score += 5;
       }
 
       // 3. Prioritaskan harga jika ada intent ask_price.
-      if (hasAnyTag(exTags, priorityGroups.price) && extraction.intents.includes('ask_price')) {
+      if (hasAnyTag(exTags, priorityGroups.price) && safeIntents.includes('ask_price')) {
         score += 5;
       }
 
@@ -626,8 +634,8 @@ export class FewShotExemplarBank {
       const hasLocationSignal =
         hasAnyTag(exTags, priorityGroups.location) &&
         (exTags.some((t) => inputLower && isWordTagMatch(inputLower, t)) ||
-          extraction.intents.includes('provide_location') ||
-          extraction.intents.includes('supplement_address'));
+          safeIntents.includes('provide_location') ||
+          safeIntents.includes('supplement_address'));
       if (hasLocationSignal) {
         score += 5;
       }
@@ -635,7 +643,7 @@ export class FewShotExemplarBank {
       // 4. Prioritaskan keluhan jika ada symptoms.
       if (
         hasAnyTag(exTags, priorityGroups.symptom) &&
-        (extraction.symptoms.length > 0 || extraction.intents.includes('consult_symptom'))
+        (safeSymptoms.length > 0 || safeIntents.includes('consult_symptom'))
       ) {
         score += 5;
       }
@@ -672,15 +680,33 @@ export class FewShotExemplarBank {
   /**
    * Format exemplar menjadi blok teks ramah prompt.
    */
-  public static formatExemplarsForPrompt(exemplars: FewShotExemplar[]): string {
+  /**
+   * Format exemplar untuk prompt. Bila `hidePrices` true (mode konsultasi —
+   * customer belum menanyakan harga/ongkir), SELURUH nominal rupiah di
+   * `idealResponse` dan `customerMessage` diredam deterministik agar LLM tidak
+   * menyalin angka dari contoh. Ini menutup jalur bocor Rule 2 dari exemplar
+   * yang tersimpan di DB (seeding lama) maupun default statis.
+   */
+  public static formatExemplarsForPrompt(exemplars: FewShotExemplar[], hidePrices = false): string {
     if (!exemplars || exemplars.length === 0) return '';
+
+    const scrub = (text: string): string => {
+      if (!hidePrices || !text) return text;
+      return text
+        .replace(/[\s]*[+*]?\s*Rp\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?\s*\*?/gi, '')
+        .replace(/[\s]*[+*]?\s*\d{1,3}(?:\.\d{3})*\s*(?:ribu|rb|k)\b/gi, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/[ \t]+([,.!?])/g, '$1')
+        .replace(/\s*\n\s*\n\s*/, '\n\n')
+        .trim();
+    };
 
     const formatted = exemplars
       .map(
         (e, idx) =>
           `Contoh ${idx + 1} (${e.scenario}):\n` +
-          `Pasien: "${e.customerMessage}"\n` +
-          `Bidan Yusi: "${e.idealResponse}"`
+          `Pasien: "${scrub(e.customerMessage)}"\n` +
+          `Bidan Yusi: "${scrub(e.idealResponse)}"`
       )
       .join('\n\n');
 

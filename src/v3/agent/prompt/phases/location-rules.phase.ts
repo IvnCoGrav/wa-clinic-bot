@@ -38,6 +38,44 @@ Untuk layanan *Pijat Bayi Ceria (Relaksasi)* totalnya tetap *Rp 60.000* ya Bunda
      - JIKA TREATMENT BELUM PERNAH DIBAHAS SAMA SEKALI:
        • Infokan jarak dan ongkir promo, lalu tanyakan: "Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗"`;
 
+/**
+ * State-gated prompt pruning (Rule 16 anti-amnesia): bila lokasi SUDAH tersimpan
+ * di sesi, SELURUH cabang instruksi tanya-lokasi dicabut dari prompt dan diganti
+ * pin permanen. Tanpa lokasi → blok kanonis utuh (byte-identik, aman cache).
+ *
+ * Rule 2 (Strict Information Hiding): bila customer BELUM pernah menanyakan
+ * harga/ongkir (priceDiscussed !== true), cabang instruksi penyampaian ongkir
+ * nominal di-DIRECT-CABUT dan diganti pin larangan tegas.
+ */
+export function buildLocationHierarchyBlock(session?: {
+  location?: {
+    rawText?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    distanceKm?: number | null;
+  } | null;
+  priceDiscussed?: boolean;
+}): string {
+  const loc = session?.location;
+  if (!loc || !(loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText)) {
+    return LOCATION_HIERARCHY_BLOCK;
+  }
+  // Pin anti-bocor hanya saat lokasi sudah diketahui (saat cabang ongkir relevan).
+  const feeHidingPin = session?.priceDiscussed === true ? '' : `\n${FEE_INFORMATION_HIDING_PIN}`;
+  const label = loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText || 'lokasi Bunda';
+  const dist = loc.distanceKm != null ? ` (~${loc.distanceKm} km)` : '';
+  return `[HIERARKI & ALUR MENJAWAB (ANTI-MENODONG DATA & ANTI-AMNESIA)]
+LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah customer lagi! Rujuk langsung lokasi yang sudah ada jika relevan, lalu lanjutkan ke langkah perawatan/jadwal berikutnya.${feeHidingPin}`;
+}
+
+/**
+ * Pin deterministik Rule 2: melarang LLM menyebut nominal rupiah ongkir/harga
+ * selama customer belum menanyakan biaya. Gerbang kode di atas kepatuhan prompt.
+ */
+export const FEE_INFORMATION_HIDING_PIN = `[DILARANG SEBUT NOMINAL ONGKIR/HARGA — MODE KONSULTASI]
+Customer BELUM menanyakan biaya/ongkir/harga. DILARANG KERAS menyebut nominal rupiah apa pun (ongkir, promo, harga treatment, total) — termasuk menyalin angka dari contoh pada instruksi di atas. Setelah lokasi diketahui, cukup sampaikan bahwa area customer MASUK dalam jangkauan layanan homecare kami (tanpa nominal dan tanpa jarak km). Baru bahas nominal HANYA jika customer menanyakan biaya/ongkir secara eksplisit.`;
+
 /** Butir negative-constraints lokasi: aturan 11 (tebak kota). */
 export const NO_GUESS_CITY_RULE = `11. DILARANG TEBAK KOTA: Dilarang menyebutkan nama kota/wilayah yang belum disebutkan customer. "Waru" HANYA lokasi basecamp klinik (Sidoarjo) — DILARANG mengasumsikan customer berdomisili di Waru kecuali customer menyebutkannya eksplisit.`;
 

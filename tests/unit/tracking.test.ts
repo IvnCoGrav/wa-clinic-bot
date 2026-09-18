@@ -3,6 +3,7 @@ import { generateTrackingCode, isBotOrCrawler } from '../../src/routes/tracking.
 
 import { safeCompare } from '../../src/utils/auth';
 import { normalizePhoneToE164, sha256Hash, capiService, capiBreaker } from '../../src/services/capi.service';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { prisma } from '../../src/db/client';
 
 describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
@@ -85,6 +86,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
         eventName: 'Lead',
         customer: { id: 'cust-organic-123', phone: '08123456789' },
         adClick: undefined, // missing attribution data -> Organic traffic
+        tenantId: DEFAULT_TENANT_ID,
       });
       expect(response.success).toBe(true);
 
@@ -124,6 +126,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
           eventName: 'Lead',
           customer: { phone: '08123456789' },
           adClick,
+          tenantId: DEFAULT_TENANT_ID,
         })
       ).resolves.toEqual({ success: false, message: 'Network Timeout / DNS failure' });
     });
@@ -200,6 +203,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
         eventName: 'Lead',
         customer: { id: 'cust_12345', phone: '08123456789', name: 'Bunda Jane Doe' },
         adClick,
+        tenantId: DEFAULT_TENANT_ID,
       });
 
       expect(res.success).toBe(true);

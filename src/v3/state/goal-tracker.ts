@@ -188,6 +188,7 @@ export class GoalTracker {
         ongkirStatus: prefs.ongkirStatus || undefined,
         totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
         priceDiscussed: prefs.priceDiscussed === true ? true : undefined,
+        bookingCommitConfirmed: prefs.bookingCommitConfirmed === true ? true : undefined,
         formRetryCount: typeof prefs.formRetryCount === 'number' ? prefs.formRetryCount : undefined,
       };
     } catch (err: any) {
@@ -333,7 +334,13 @@ export class GoalTracker {
 
     if (session.location?.kelurahan || session.location?.distanceKm) {
       lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!]`);
-      if (session.location.ongkirPromo != null) {
+      // Rule 2 (Strict Information Hiding, state-gated prompt pruning): nominal
+      // ongkir DILARANG disuntik ke prompt LLM bila customer belum pernah
+      // menanyakan biaya/ongkir (mode konsultasi). Menyembunyikan di payload
+      // tool saja tidak cukup — grounding prompt ini adalah jalur bocor kedua.
+      // Eksposur dibuka hanya bila transaksional (priceDiscussed) — konsisten
+      // dengan gatekeeper audit 694493.
+      if (session.location.ongkirPromo != null && session.priceDiscussed === true) {
         const ongkirState = session.ongkirStatus === 'CONFIRMED'
           ? 'SUDAH DIKONFIRMASI - DILARANG ULANG HITUNGAN KM/ONGKIR!'
           : session.ongkirStatus === 'QUOTED'

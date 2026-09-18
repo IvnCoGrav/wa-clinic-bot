@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveLandingContent, defaultLandingContent, LandingContent } from '../services/landing-content.service';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 const RESERVED_SLUGS = new Set([
   'go',
@@ -54,7 +55,9 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
 
     const injectedHtml = TenantHtmlService.injectTracking(
       sanitizedHtml,
-      content.meta_pixel_id || process.env.FB_PIXEL_ID || '',
+      // Isolasi multi-tenant: env FB_PIXEL_ID HANYA untuk default-tenant.
+      content.meta_pixel_id ||
+        (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : ''),
       nonce,
       {
         trackingApiBaseUrl: '',
@@ -91,6 +94,16 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .map((e) => `      if (typeof fbq !== 'undefined') { fbq('track', '${e}', {}, { eventID: trackingCode }); }`)
     .join('\n');
 
+  const resolvedPixelId =
+    content.meta_pixel_id ||
+    (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : '');
+
+  // Isolasi multi-tenant (Q4): tanpa pixel valid, blok Meta Pixel dihapus total
+  // dari template (tidak ada fbevents.js / fbq('init') / noscript img).
+  if (!resolvedPixelId) {
+    htmlContent = htmlContent.replace(/<!-- Meta Pixel Code -->[\s\S]*?<!-- End Meta Pixel Code -->/g, '');
+  }
+
   htmlContent = htmlContent
     .replace(/__CLINIC_NAME__/g, content.clinic_name || 'Moms & Baby Spa Homecare')
     .replace(/__HEADLINE__/g, content.headline || 'Solusi Pijat & Perawatan Bayi')
@@ -98,7 +111,7 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .replace(/__BENEFITS_HTML__/g, benefitsHtml)
     .replace(/__TRACKING_API_BASE_URL__/g, '')
     .replace(/__TRACKING_API_KEY__/g, '')
-    .replace(/__FB_PIXEL_ID__/g, content.meta_pixel_id || process.env.FB_PIXEL_ID || '')
+    .replace(/__FB_PIXEL_ID__/g, resolvedPixelId)
     .replace(/__DEFAULT_WHATSAPP_PHONE__/g, content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '')
     .replace(/__TENANT_ID__/g, content.tenant_id)
     .replace(/__TENANT_SLUG__/g, content.slug || slug)
@@ -124,7 +137,14 @@ export async function landingRoutes(fastify: FastifyInstance) {
     const tenantSlug = query.slug || 'default';
     const content = (await resolveLandingContent(tenantSlug)) || defaultLandingContent(tenantSlug);
 
-    const pixelId = query.p || content.meta_pixel_id || process.env.FB_PIXEL_ID || '';
+    // Isolasi multi-tenant (Q5): override pixel via query ?p= HANYA untuk default-tenant
+    // (anti-spoofing attribution); tenant lain selalu memakai pixel DB-nya sendiri.
+    // Env FB_PIXEL_ID juga HANYA untuk default-tenant.
+    const isDefaultTenant = content.tenant_id === DEFAULT_TENANT_ID;
+    const pixelId =
+      (isDefaultTenant ? query.p : undefined) ||
+      content.meta_pixel_id ||
+      (isDefaultTenant ? process.env.FB_PIXEL_ID || '' : '');
     
     // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth), dengan fallback query.phone & env.
     const phone = content.whatsapp_number || query.phone || process.env.DEFAULT_WHATSAPP_PHONE || '';

@@ -60,8 +60,8 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
       originalText: raw,
     });
     expect(result.replyText).toBe(TEMPLATES.greeting({ isIslamic: false }));
-    expect(result.replyText).toContain('Perkenalkan, saya Bidan Yusi');
-    expect(result.replyText).toContain('Kalau boleh tau rumahnya dimana ya Bunda? 😊');
+    expect(result.replyText).toMatch(/perkenalkan saya Bidan Yusi/i);
+    expect(result.replyText).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊');
     expect(result.shouldSendReply).toBe(true);
     expect(result.executedTools).toEqual([]);
     expect(axios.post).not.toHaveBeenCalled();

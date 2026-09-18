@@ -28,4 +28,38 @@ describe('GoalTracker.formatGoalSessionForPrompt — grounding bulletproof', () 
     expect(text).toContain('Belum diketahui');
     expect(text).not.toContain('DILARANG TANYA ALAMAT LAGI');
   });
+
+  // Rule 2 — Strict Information Hiding (state-gated prompt pruning).
+  it('lokasi ada + priceDiscussed BUKAN true → nominal ongkir TIDAK disuntik ke prompt', () => {
+    const text = GoalTracker.formatGoalSessionForPrompt({
+      ...baseSession,
+      location: {
+        kelurahan: 'Tenggilis Mejoyo',
+        kecamatan: 'Tenggilis Mejoyo',
+        kota: 'Surabaya',
+        distanceKm: 12.3,
+        ongkirPromo: 15000,
+        ongkirNormal: 25000,
+      },
+    } as any);
+    expect(text).not.toMatch(/Rp\s*15\.000/);
+    expect(text).not.toMatch(/Rp\s*25\.000/);
+    expect(text).not.toContain('• Ongkir:');
+  });
+
+  it('lokasi ada + priceDiscussed true → nominal ongkir boleh disuntik (mode transaksional)', () => {
+    const text = GoalTracker.formatGoalSessionForPrompt({
+      ...baseSession,
+      priceDiscussed: true,
+      location: {
+        kelurahan: 'Tenggilis Mejoyo',
+        kecamatan: 'Tenggilis Mejoyo',
+        kota: 'Surabaya',
+        distanceKm: 12.3,
+        ongkirPromo: 15000,
+        ongkirNormal: 25000,
+      },
+    } as any);
+    expect(text).toContain('• Ongkir: Rp 15.000');
+  });
 });
