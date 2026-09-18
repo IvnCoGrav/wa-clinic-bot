@@ -25,7 +25,10 @@ export interface AiTaskModelConfig {
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
-  if (!model) return 'deepseek-v4-1-flash';
+  // Alias legacy: deepseek-v4-1-flash di-rename provider menjadi deepseek-v4-flash (2026-09)
+  const legacyAlias = (m: string) => m === 'deepseek-v4-1-flash' ? 'deepseek-v4-flash' : m;
+  if (!model) return 'deepseek-v4-flash';
+  model = legacyAlias(model);
   const url = (baseUrl || process.env.OPENAI_BASE_URL || '').toLowerCase();
   
   // Jika endpoint resmi OpenAI, pastikan hanya model OpenAI valid
@@ -49,20 +52,20 @@ export function sanitizeModelForProvider(model: string, baseUrl?: string): strin
   // (bukan data bisnis tenant) — mirror logika OpenAI/SumoPod di atas.
   if (url.includes('kenari.id')) {
     if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
-      return process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash';
+      return legacyAlias(process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash');
     }
   }
 
-  // Kenari.id mendukung penuh deepseek-v4-1-flash, deepseek-v4-pro, qwen3-8-flash, dll.
+  // Kenari.id mendukung penuh deepseek-v4-flash, deepseek-v4-pro, qwen3-8-flash, dll.
   return model;
 }
 
 const defaultProvider = process.env.AI_PROVIDER_CHAT || 'Kenari';
-const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'deepseek-v4-1-flash';
+const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
 const defaultChatModel = sanitizeModelForProvider(rawChatModel);
 const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const defaultNluModel = sanitizeModelForProvider(rawNluModel);
-const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-1-flash';
+const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash';
 
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
@@ -187,7 +190,7 @@ export class AiModelConfigService {
 
     // Sinkronkan model chat default sesuai provider yang dipilih
     if (provider === 'KENARI') {
-      const kenariModel = process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash';
+      const kenariModel = process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash';
       this.updateTaskConfig('CHAT_REPLY', { provider: 'Kenari', modelName: kenariModel }, tenantId);
     } else {
       const sumopodModel = process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash';
@@ -238,7 +241,7 @@ export class AiModelConfigService {
         provider: 'KENARI',
         baseUrl: (process.env.KENARI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
         apiKey: process.env.KENARI_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
-        defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash',
+        defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash',
       };
     }
 
