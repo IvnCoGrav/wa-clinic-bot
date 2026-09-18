@@ -1,115 +1,163 @@
-# Implementation Plan: Fondasional Remediasi Kegagalan Berantai Percakapan (Sesi Oksitosin, Keranjang, Nominal, & Sanitizer)
+# Implementation Plan: Arsitektur Fondasional Penyelesaian Regresi Percakapan Sesi Oksitosin, Keranjang, Nominal, & Sanitizer
 
-Berdasarkan hasil investigasi mendalam terhadap pengetesan live chat, log `llm-2026-09-18.jsonl`, dan arsitektur `src/v3/`, sistem mengalami **cascading failure** akibat interaksi beberapa komponen:
-1. **Mutilasi Semantik String** di `OutputSanitizer.limitVocativeQuota` dan `applyPreLocationTone` yang memenggal kata "Bunda" di tengah klausa (`layanan yang maksud`, `catat dulu kebutuhan, saat ini`, `layanan yang tanyakan`, serta double emoji `😊 😊`).
-2. **Pembajakan Keranjang (*Inquiry Cart Hijacking*)** di `CartManager.syncCartItems`: pertanyaan medis informatif (*"Breast massage ini bisa untuk memperbanyak asi?"*) diserap sebagai komitmen beli paket seharga Rp 155.000.
-3. **Salah Label Subjek Klinis Maternal**: Bundle laktasi ibu (`Breast + Oksitoksin Fullbody Massage`) berkategori `BUNDLE` dialokasikan ke `RecipientScope: GENERAL` dan secara buta diubah di `goal-tracker.ts` menjadi `[Untuk Si Kecil]`, meracuni prompt LLM sehingga merekomendasikan *Newborn Treatment* 14 sesi bayi.
-4. **Halusinasi Paksa Reprompt Numerik**: `validateNumericFacts` menganggap angka budget tawar-menawar customer (Rp 900.000 / Rp 975.000) sebagai halusinasi, lalu reprompt engine memaksa LLM menimpanya dengan isi keranjang (Rp 155.000) menghasilkan kalimat kontradiktif: *"Hmm, untuk nominal \*Rp 155.000\* sendiri belum ada paket..."*.
-5. **Amnesia Lokasi**: Router Turn 2 gagal memanggil `calculate_delivery` pada pesan *"Di tenggilis kak"*, sehingga `session.location` kosong dan prompt hierarki jadwal terus menagih alamat.
-6. **Kaset Rusak / Looping**: Ketiadaan state pembatas keluhan membuat bot mengulang pertanyaan penutup *"ada keluhan tertentu atau untuk relaksasi saja?"* hingga 7 kali.
-
----
-
-## User Review Required
-
-> [!IMPORTANT]
-> - **Zero Mid-Sentence Regex Mutilation**: Sapaan "Bunda" di tengah struktur kalimat klausa TIDAK BOLEH lagi dihapus via regex. Kontrol vokatif HANYA diperbolehkan di level prompt few-shot dan sanitasi sapaan pembuka di awal baris/paragraf.
-> - **Komitmen Keranjang Ketat (Active User Commitment Mutlak)**: Kalimat tanya (`?`), tanya durasi, atau pertanyaan manfaat/medis TIDAK BOLEH mengunci paket ke dalam keranjang. Keranjang hanya bertambah jika ada kata komitmen eksplisit.
-> - **Integritas Validator Numerik**: Angka nominal yang diajukan oleh customer (`customerTargetPrice`) otomatis di-whitelist saat bot merespons/menolak penawaran tersebut, sehingga tidak memicu false-positive halusinasi reprompt.
+Dokumen ini menggantikan pendekatan kosmetik/tambal-sulam terdahulu dengan **solusi arsitektural fondasional lintas lapisan** (Data/DB Schema, State Machine, Tool Contract, dan Sanitizer). Rencana ini disusun untuk mematuhi secara mutlak seluruh mandat di `AGENTS.md`:
+- **Mandat Solusi Fondasional & Larangan Solusi Kosmetik / "Make-up"**
+- **Mandat Non-Hardcode & Data-Driven Architecture**
+- **Mandat Anti-Overfitting & Larangan Hafalan Pola Kalimat / Hardcoded If-Else**
+- **Mandat Minimalisasi Regex & Mid-Sentence Mutilation Ban**
+- **Mandat Active User Commitment Mutlak**
 
 ---
 
-## Proposed Changes (Staged Phases & Micro-Tasks)
+## 1. Multi-Layer Root Cause Audit
 
-### Phase 1: Eliminasi Mutilasi Semantik pada Sanitizer (Anti-Mid-Sentence Mutilation)
+Berdasarkan audit log mesin (`logs/llm-2026-09-18.jsonl`) dan codebase `src/v3/`:
 
-Tujuan: Menghentikan pemenggalan kata "Bunda" di tengah kalimat dan menghilangkan glitch double emoji `😊 😊`.
-
-#### [MODIFY] `src/v3/guardrails/sanitizer.ts`
-- **Tugas Mikro 1.1**: Revisi `limitVocativeQuota`. Ubah agar HANYA menargetkan panggilan vokatif di awal baris/paragraf atau sapaan pembuka ganda (`Bunda ... Bunda`). Hentikan penggantian string kosong `""` pada kata "Bunda" yang berstatus sebagai bagian kalimat utuh (klausa kata ganti orang / kepemilikan / subjek / objek).
-- **Tugas Mikro 1.2**: Hapus `applyPreLocationTone` yang mereplace string awalan `"Bisa banget Bunda"` menjadi `"Kami bantu cekkan dulu ya Bunda 😊 "`, karena menyebabkan tabrakan emoji ganda `😊 😊`. Kontrol nada pre-lokasi dipindahkan sepenuhnya ke prompt layer `location-rules.phase.ts`.
-
----
-
-### Phase 2: Pemisahan Inquiry Medis dari Mutasi Keranjang di CartManager
-
-Tujuan: Menjamin pertanyaan edukasi/khasiat medis tidak membajak keranjang belanja.
-
-#### [MODIFY] `src/v3/state/cart-manager.ts`
-- **Tugas Mikro 2.1**: Tambahkan detektor kalimat interogatif/konsultasi di `CartManager.syncCartItems`.
-  - Jika pesan user mengandung tanda tanya `?`, atau kata tanya mekanisme (`bisa untuk`, `apakah bisa`, `manfaat`, `khasiat`, `fungsi`, `buat apa`, `cara kerja`), pesan tersebut DIKATEGORIKAN SEBAGAI INQUIRY dan DILARANG menambahkan item ke keranjang.
-  - Komitmen aktif HANYA sah bila kalimat user memuat verba pemilihan/kesepakatan: `mau`, `ambil`, `pilih`, `booking`, `pesan`, `jadwalkan`, `deal`, `fix`, `iya saya ambil`, `oke yang itu`.
-
----
-
-### Phase 3: Koreksi Domain Model & Recipient Scope untuk Bundle Maternal
-
-Tujuan: Mencegah paket laktasi/oksitosin ibu dilabeli sebagai `[Untuk Si Kecil]`.
-
-#### [MODIFY] `src/v3/state/cart-manager.ts`
-- **Tugas Mikro 3.1**: Di `CartManager.detectRecipientScope`:
-  - Jika layanan berkategori `BUNDLE`, periksa komponen `bundleItemIds` atau nama layanannya.
-  - Bila nama/komponen memuat kata `'laktasi'`, `'oksitosin'`, `'breast'`, `'prenatal'`, `'postpartum'`, `'perineum'`, scope WAJIB dikembalikan sebagai `'MOMS'`, BUKAN `'GENERAL'`.
-
-#### [MODIFY] `src/v3/state/goal-tracker.ts`
-- **Tugas Mikro 3.2**: Di baris 380:
-  - Perbaiki fallback label penerima: jika `scope === 'GENERAL'` dan `session.targetAudience === 'MOMS'` atau `session.momProfile != null`, label penerima default adalah `'Bunda'`, BUKAN `'Si Kecil'`.
-
----
-
-### Phase 4: Context-Aware Numeric Fact Validator (Anti-Reprompt Hallucination)
-
-Tujuan: Menghentikan penolakan angka tawar-menawar customer (Rp 900k / 975k) dan mencegah LLM reprompt menimpanya secara paksa dengan Rp 155.000.
-
-#### [MODIFY] `src/v3/guardrails/numeric-fact-validator.ts`
-- **Tugas Mikro 4.1**: Tambahkan opsi `customerMentionedPrices?: number[]` ke `NumericValidationOptions`.
-- **Tugas Mikro 4.2**: Ekstrak nominal angka yang disebut customer di turn saat ini (misal dari `targetPrice` tool argument atau parsing regex `900k` -> `900000`, `975k` -> `975000`).
-- **Tugas Mikro 4.3**: Daftarkan nominal customer tersebut ke `authorizedNumbers`.
-  - Jika LLM mengutip angka yang sama untuk menolak atau mengklarifikasi (*"Untuk nominal Rp 900.000 belum ada paket..."*), validator menganggap angka tersebut SAH dan TIDAK MEMICU VIOLATION.
-  - Reprompt engine TIDAK AKAN AKTIF dan tidak akan menimpa nominal customer dengan Rp 155.000.
-
-#### [MODIFY] `src/v3/agent/pipeline/guardrail-pipeline.ts`
-- **Tugas Mikro 4.4**: Teruskan nominal dari input pesan customer ke `validateNumericFacts`.
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 1. DATA/DB SCHEMA LAYER (treatment-catalog.service.ts)                           │
+│ Layanan bundle "moms-laktasi-oksitosin-full" hanya bertipe BUNDLE tanpa          │
+│ metadata kanonis targetAudience: 'MOMS'. Akibatnya detectRecipientScope jatuh ke │
+│ GENERAL, lalu di-fallback secara buta menjadi label "[Untuk Si Kecil]".          │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 2. STATE MACHINE & CART LAYER (cart-manager.ts & context-grounder.ts)            │
+│ CartManager berjalan pasif di background sebelum router, memindai seluruh kata   │
+│ di riwayat chat via fuzzy string matching! Saat customer bertanya medis/khasiat  │
+│ ("Breast massage ini bisa untuk memperbanyak asi?"), kata cocok -> MASUK CART    │
+│ Rp 155.000 sepihak, tanpa ada komitmen aktif transaksi.                          │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 3. TOOL CONTRACT LAYER (get-catalog.tool.ts)                                     │
+│ Baris 564 & 576 secara HARDCODED mendikte template balasan:                      │
+│ "Wajib tutup... tanyakan apakah si kecil sedang batuk/pilek/kembung", bahkan     │
+│ saat layanan adalah Oksitosin Ibu -> Memaksa LLM kaset rusak 7x & ganti subjek!  │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 4. GUARDRAIL & VALIDATOR LAYER (numeric-fact-validator.ts)                      │
+│ Router Call 1 sudah mengekstrak argumen terstruktur targetPrice: 900000, tetapi  │
+│ validator hanya memeriksa treatments & cart resmi, buta terhadap parameter tool. │
+│ Angka 900k dicap halusinasi -> Reprompt engine memaksa LLM menimpa jadi 155k!   │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 5. POST-PROCESSING MUTILATION (sanitizer.ts)                                     │
+│ Regex limitVocativeQuota memenggal kata "Bunda" kedua di tengah klausa kalimat   │
+│ -> Cacat tata bahasa: "layanan yang [Bunda] maksud", "layanan yang tanyakan".    │
+│ applyPreLocationTone menimpa awalan balasan -> Double emoji glitch "😊 😊".      │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-### Phase 5: Deterministic Location Ingestion pada Router
+## 2. Staged Implementation Phases & Micro-Tasks
 
-Tujuan: Memastikan daerah domisili yang disebut customer (seperti *"Di tenggilis kak"*) langsung dicatat ke `session.location` sejak turn pertama.
+### Fase 1: Pembersihan Sanitizer & Penghapusan Total Mutilasi Regex (Zero Mid-Sentence Mutation)
 
-#### [MODIFY] `src/v3/agent/prompt/phases/router-tool-routing.layer.ts`
-- **Tugas Mikro 5.1**: Pertegas aturan routing Call 1: jika customer menyebut nama daerah/kelurahan (termasuk respons pendek seperti *"Di tenggilis kak"*), `calculate_delivery` adalah prioritas nomor 1 di atas `get_clinic_policy_faq`.
-- **Tugas Mikro 5.2**: Di `context-grounder.ts`, jika deteksi regex/gazetteer menemukan entitas lokasi valid dari pesan customer, pastikan status lokasi di-grounding sehingga pruner memotong penagihan alamat di turn berikutnya.
+**Tujuan**: Mematuhi *Mid-Sentence Mutilation Ban*. Hentikan pemotongan kata bahasa alami di tengah kalimat dan hapus penggantian string pembuka yang memicu double emoji.
 
----
-
-### Phase 6: State-Driven Anti-Kaset Rusak (Anti-Looping Pertanyaan Keluhan)
-
-Tujuan: Mencegah bot mengulang-ulang *"Apakah saat ini sedang ada keluhan tertentu, atau untuk relaksasi saja?"* sampai 7 kali.
-
-#### [MODIFY] `src/v3/domain/types.ts`
-- **Tugas Mikro 6.1**: Tambahkan state flag `complaintOrTreatmentClarified?: boolean;` di `CustomerGoalSession`.
-
-#### [MODIFY] `src/v3/agent/pipeline/context-grounder.ts`
-- **Tugas Mikro 6.2**: Jika dalam riwayat percakapan asisten sudah pernah menanyakan keluhan/relaksasi DAN customer sudah merespons (atau customer sudah memilih treatment spesifik seperti Oksitosin), set `session.complaintOrTreatmentClarified = true`.
-
-#### [MODIFY] `src/v3/agent/prompt/layers/core-persona.layer.ts` & `src/v3/agent/prompt/phases/pricing-catalog.phase.ts`
-- **Tugas Mikro 6.3**: Bila `complaintOrTreatmentClarified === true`, instruksikan prompt secara tegas untuk TIDAK LAGI menanyakan keluhan fisik vs relaksasi. Cukup gunakan statement penutup hangat atau tanyakan kesiapan waktu/hari.
+- **File Target**: `src/v3/guardrails/sanitizer.ts`
+- **Tugas Mikro 1.1**: Hapus fungsi `applyPreLocationTone`. Logika manipulasi teks di awal balasan (`text.replace(/^\s*Bisa banget Bunda.../i, ...)`) dicabut seluruhnya. Kontrol nada bicara pra-lokasi didelegasikan seutuhnya ke layer prompt (`location-rules.phase.ts`).
+- **Tugas Mikro 1.2**: Rekonstruksi `limitVocativeQuota`.
+  - Hapus logika regex replacement string kosong `""` pada kata "Bunda"/"Bapak" di tengah kalimat.
+  - Pembatasan kuota vokatif HANYA berlaku untuk sapaan pembuka di awal pesan atau awal paragraf baru (`^Halo Bunda... Bunda,...`).
+  - DILARANG MENYENTUH kata sapaan yang berada di dalam struktur klausa kalimat (seperti `yang Bunda maksud`, `kebutuhan Bunda`, `Bunda tanyakan`).
+- **Acceptance Criteria**:
+  - `npx vitest run tests/unit/v3-sanitizer-vocative-quota.test.ts` lulus tanpa ada kata "Bunda" yang terpotong di tengah kalimat.
+  - Kalimat `"layanan yang Bunda maksud"` tetap utuh `"layanan yang Bunda maksud"`.
 
 ---
 
-## Verification Plan
+### Fase 2: Data Schema & Domain Model Layanan Bundle (Data-Driven Audience)
 
-### Automated Tests
-1. **Unit Test Sanitizer Vocative**:
-   - Menjamin kalimat *"layanan yang Bunda maksud"* dan *"kebutuhan Bunda"* tidak dimutilasi.
-   - Command: `npx vitest run tests/unit/v3-sanitizer-vocative-quota.test.ts`
-2. **Unit Test Cart Inquiry Isolation**:
-   - Menjamin pertanyaan *"Breast massage ini bisa untuk memperbanyak asi?"* TIDAK menambahkan item ke keranjang.
-   - Command: `npx vitest run tests/unit/v3/cart-single-primary-domain.test.ts`
-3. **Unit Test Numeric Whitelist Target Price**:
-   - Menjamin penolakan nominal Rp 900.000 / Rp 975.000 tidak memicu reprompt 155.000.
-   - Command: `npx vitest run tests/unit/v3-numeric-fact-validator.test.ts`
-4. **Full Test Suite & Build Verification**:
-   - `npm run build`
-   - `npm test`
+**Tujuan**: Menyelesaikan akar masalah salah label `[Untuk Si Kecil]` pada paket ibu di level Data Katalog, bukan if-else hafalan nama layanan di kode runtime.
+
+- **File Target**:
+  - `src/services/treatment-catalog.service.ts`
+  - `src/v3/state/cart-manager.ts`
+  - `src/v3/state/goal-tracker.ts`
+- **Tugas Mikro 2.1**: Tambahkan field metadata kanonis `targetAudience: 'MOMS' | 'BABY' | 'KIDS' | 'BOTH'` pada definisi setiap layanan di katalog. Untuk `moms-laktasi-oksitosin-full`, tetapkan secara eksplisit `targetAudience: 'MOMS'`.
+- **Tugas Mikro 2.2**: Di `CartManager.detectRecipientScope`:
+  - Baca langsung `service.targetAudience` dari data katalog.
+  - Jika `service.targetAudience === 'MOMS'`, kembalikan scope `'MOMS'`. DILARANG menggunakan pencocokan string regex terhadap kata `'laktasi'` atau `'oksitosin'`.
+- **Tugas Mikro 2.3**: Di `goal-tracker.ts` baris 380:
+  - Hilangkan fallback buta yang mengubah scope apa pun yang tidak bertuan menjadi `'Si Kecil'`.
+  - Jika `session.targetAudience === 'MOMS'` atau `session.momProfile != null`, fallback penerima adalah `'Bunda'`.
+- **Acceptance Criteria**:
+  - Paket `Breast + Oksitoksin Fullbody Massage` di grounding keranjang berlabel `[Untuk Bunda]`, bukan `[Untuk Si Kecil]`.
+
+---
+
+### Fase 3: Pemisahan State Konsultasi vs State Transaksi (Decouple Cart from Chat Text)
+
+**Tujuan**: Mencegah pertanyaan konsultasi medis/khasiat membajak keranjang belanja (`session.cartItems`).
+
+- **File Target**:
+  - `src/v3/state/cart-manager.ts`
+  - `src/v3/agent/pipeline/context-grounder.ts`
+  - `src/v3/domain/types.ts`
+- **Tugas Mikro 3.1**: Tambahkan field `discussedTreatments?: string[]` pada `CustomerGoalSession` untuk menampung riwayat layanan yang sedang dikonsultasikan, terpisah dari `cartItems` (transaksi).
+- **Tugas Mikro 3.2**: Matikan penyerapan pasif berbasis fuzzy-scanning di `CartManager.syncCartItems`.
+  - Suatu pesan HANYA boleh memutasi `session.cartItems` jika terdapat komitmen transaksional aktif (state transisi pemesanan / kesepakatan paket definitif).
+  - Pertanyaan mengenai khasiat, cara kerja, durasi, atau kecocokan usia DICATAT ke `session.discussedTreatments`, **DILARANG dimasukkan ke `cartItems`**.
+- **Acceptance Criteria**:
+  - Pertanyaan *"Breast massage ini bisa untuk memperbanyak asi?"* TIDAK menambahkan item apa pun ke `session.cartItems`.
+  - `session.cartItems` tetap kosong selama fase konsultasi, mencegah munculnya total tagihan siluman Rp 155.000.
+
+---
+
+### Fase 4: Data-Driven Whitelist pada Numeric Fact Validator (Anti-Reprompt Hallucination)
+
+**Tujuan**: Menghentikan penolakan angka tawar-menawar customer (Rp 900k / 975k) dan mencegah LLM reprompt menimpanya secara paksa dengan Rp 155.000, tanpa menambah satu baris pun regex parser baru.
+
+- **File Target**:
+  - `src/v3/guardrails/numeric-fact-validator.ts`
+  - `src/v3/agent/pipeline/guardrail-pipeline.ts`
+- **Tugas Mikro 4.1**: Perbarui `validateNumericFacts` untuk membaca parameter terstruktur dari tool yang dieksekusi di turn saat ini (`executedTools`).
+  - Jika terdapat tool call `get_catalog_and_price` dengan argumen `args.targetPrice`, masukkan nilai `args.targetPrice` tersebut ke dalam set `authorizedNumbers`.
+- **Tugas Mikro 4.2**: Di `attemptNumericReprompt`:
+  - Jika angka yang dipermasalahkan berasal dari `args.targetPrice` atau konteks penolakan penawaran customer, DILARANG mengeluarkan violation dan DILARANG memicu reprompt penggantian angka ke total keranjang.
+- **Acceptance Criteria**:
+  - Saat customer menanyakan *"Kalau 900k apakah boleh kak?"*, AI router mengekstrak `targetPrice: 900000`. Balasan LLM *"Untuk nominal Rp 900.000 belum ada paket..."* lolos validasi tanpa dipaksa berubah menjadi Rp 155.000.
+
+---
+
+### Fase 5: Pembersihan Hardcoded Template Kaset Rusak di Tool Catalog Contract
+
+**Tujuan**: Menghilangkan akar masalah pengulangan pertanyaan penutup *"apakah si kecil ada keluhan batuk/pilek..."* yang diulang 7 kali.
+
+- **File Target**: `src/v3/tools/get-catalog.tool.ts`
+- **Tugas Mikro 5.1**: Hapus teks hardcoded pada baris 564 dan baris 576:
+  - Cabut kalimat: `'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit (batuk/pilek/kembung) atau ingin pijat sehat relaksasi saja.'`
+- **Tugas Mikro 5.2**: Jadikan panduan penutup dinamis (*data-driven*):
+  - Jika layanan ber-target `MOMS`, panduan penutup berfokus pada kenyamanan dan keluhan Bunda (nifas, ASI, pegal), DILARANG membawa topik batuk/pilek bayi.
+  - Jika dalam sesi keluhan atau kebutuhan sudah dibahas (`knownSymptoms` ada atau `session.discussedTreatments` sudah terisi), tool DILARANG menyuruh AI menanyakan keluhan lagi; arahkan langsung ke konfirmasi ketersediaan atau preferensi hari.
+- **Acceptance Criteria**:
+  - Bot tidak lagi mengulang *"Apakah saat ini sedang ada keluhan tertentu atau relaksasi saja?"* lebih dari 1 kali dalam satu sesi percakapan.
+
+---
+
+### Fase 6: Deterministic Location Ingestion di Router Call 1
+
+**Tujuan**: Memastikan nama lokasi yang disebut customer pada Turn 1/2 (seperti *"Di tenggilis kak"*) langsung diproses oleh `calculate_delivery` dan tersimpan di `session.location`, mencegah amnesia lokasi di turn berikutnya.
+
+- **File Target**: `src/v3/agent/prompt/phases/router-tool-routing.layer.ts`
+- **Tugas Mikro 6.1**: Perjelas prioritas Call 1 Router: jika customer merespons pertanyaan domisili dengan menyebut nama entitas wilayah (kelurahan/kecamatan/perumahan), pemanggilan `calculate_delivery` adalah **prioritas utama (Call Sequence 1)** sebelum FAQ kebijakan operasional.
+- **Acceptance Criteria**:
+  - Pesan *"Di tenggilis kak"* langsung memicu eksekusi `calculate_delivery(locationText: "Tenggilis")`.
+  - `session.location` terisi, sehingga prompt hierarki lokasi memotong penagihan alamat pada turn 6 dan 8.
+
+---
+
+## 3. Verification & Regression Gate
+
+Sebelum dinyatakan selesai:
+1. **Typecheck**: `npm run build` (`tsc`) wajib lulus dengan 0 kesalahan.
+2. **Unit Tests**:
+   - `npx vitest run tests/unit/v3-sanitizer-vocative-quota.test.ts` (uji anti-mutilasi semantik).
+   - `npx vitest run tests/unit/v3/cart-single-primary-domain.test.ts` (uji pemisahan konsultasi vs transaksi).
+   - `npx vitest run tests/unit/v3-numeric-fact-validator.test.ts` (uji whitelist data-driven targetPrice).
+3. **Full Regression**: `npm test` wajib berjalan hijau pada seluruh test suite tanpa regresi.
