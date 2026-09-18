@@ -131,10 +131,10 @@ export class ConversationService {
         tenant_id: tenantId,
         messages: { some: {} },
       };
-      if (mode !== 'all') {
-        where.customer = { is_sandbox_test: mode === 'sandbox' };
-      } else if (process.env.NODE_ENV === 'production') {
+      if (process.env.NODE_ENV === 'production') {
         where.customer = { is_sandbox_test: false };
+      } else if (mode !== 'all') {
+        where.customer = { is_sandbox_test: mode === 'sandbox' };
       }
       if (search && search.trim()) {
         const query = search.trim();

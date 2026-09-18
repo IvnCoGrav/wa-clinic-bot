@@ -65,7 +65,13 @@ export const HIGH_SEVERITY_MEDICAL_KEYWORDS: string[] = [  // Qualitative & Quan
 // karena merupakan keluhan komplementer yang diarahkan ke Pijat Bayi Pulih Ceria / Kolik, bukan silent drop.
 export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   // Navel & Skin Concerns (ruam non-parah tetap, ruam parah dikeluarkan karena sering false positive)
+  // Audit simulator (DeepSeek Flash over-helpful): varian bahasa non-formal
+  // infeksi tali pusat WAJIB eskalasi deterministik, bukan dijawab LLM.
   'tali pusat',
+  'tali pusar',
+  'tali pusarnya bau',
+  'pusar bau',
+  'pusarnya bau',
   'pusar berbau',
   'pusar berdarah',
   'pusar bernanah',
@@ -84,11 +90,18 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'kontraksi',
 
   // Postpartum & Maternal Health Concerns
+  // Audit simulator: varian non-formal nyeri nifas + laktasi berat WAJIB
+  // eskalasi deterministik (mitigasi risiko malapraktik medis).
   'jahitan pasca melahirkan',
   'jahitan nifas',
   'nyeri jahitan',
+  'jahitan ngilu',
+  'jahitannya ngilu',
+  'jahitan masih ngilu',
+  'ngilu bekas jahitan',
   'darah nifas berbau',
   'payudara bengkak keras',
+  'payudara mengeras nyeri',
   'mastitis',
 
   // Infant Gastrointestinal & General Health (kolik/kembung parah dikeluarkan)

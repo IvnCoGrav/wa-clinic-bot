@@ -1565,4 +1565,143 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Fase 3: Pengayaan `KB_KEYWORD_RULES` & sinkronisasi FAQ chunk persiapan ke DB Postgres.
   - Fase 4: Pengujian regresi otomatis deterministik & end-to-end typecheck.
 
+---
+
+## 85. [Audit Simulator DeepSeek] Clinical Dominance Katalog, DSML Tag Leakage & Escalation Hard-Guards
+
+- **Status:** Fase 1–3 implemented & verified. `npm run build` exit 0; full suite **349 hijau / 5 merah pre-existing** (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning` ×2 — semuanya gagal identik tanpa perubahan ini, dibuktikan via stash).
+- **Keputusan user (Confirmation Gate):** (1) keluhan medis murni → terapi tunggal WAJIB menang atas paket kombo; (2) infeksi non-akut + komplain fisik pasca-tindakan → eskalasi deterministik HUMAN_HANDLING.
+- **Perubahan (fondasional):**
+  1. **Sanitizer DSML/XML** (`sanitizer.ts` langkah 1b): hapus `<｜｜DSML｜｜…>`, `<result>`, `<tool_call>`, `<calls|invoke|parameter>` — teknis mesin non-semantik; kata "result" bahasa alami lolos. Test `sanitizer-dsml` 5/5.
+  2. **Clinical dominance katalog** (`treatment-catalog.service.ts`): normalisasi tanda baca untuk phrase-match ("batuk, pilek" → "batuk pilek"); penalti −10 BUNDLE bila input tanpa sinyal cukur/rambut/tindik/paket/selapan; bonus +5 terapi tunggal BABY/KIDS berpenanda terapi yang overlap keluhan. Terverifikasi: "batuk pilek" → Pulih Ceria (21 vs 6), bukan Selapan. Test `treatment-symptom-scoring` 4/4; 53 test katalog eksisting hijau.
+  3. **Escalation hard-guards:** `MEDIUM_SEVERITY_MEDICAL_KEYWORDS` + varian non-formal (tali pusar bau, jahitan ngilu, payudara mengeras nyeri) → jalur deterministik `machine.ts` gate medis → HUMAN_HANDLING; bullet `escalate_to_human` dipertajam (komplain purna-layanan, slot spesifik, medis non-spa). Test `escalation-hard-guards` 5/5; `medical_detection` + `medical-silent-escalation` hijau.
+- **Sisa & Tech Debt yang disengaja:**
+  1. Fase 4 plan (`scripts/run-test-plan.ts --llm`, 50 skenario) butuh LLM live + API key — TIDAK dijalankan; daftar manual: `--only 6`, `--only 18`, `--from 31 --to 41`, lalu full `--llm` (target 0 Auto-FAIL, 0 DSML/XML leaks).
+  2. Komplain non-medis ("tindik miring", "nyasar terus") hanya via bullet router (LLM memanggil `escalate_to_human`) — belum ada gate deterministik pre-LLM untuk komplain; kandidat hardening berikutnya bila LLM masih over-helpful.
+  3. Bonus terapi tunggal memakai penanda nama (`terapi|pulih`) — sempit tapi eksplisit sesuai plan; bila katalog menambah merek terapi baru tanpa kata itu, perlu penanda metadata `serviceType` sebagai gantinya.
+
+---
+
+### Batch 1 Audit Percakapan Nyata Pelanggan (September 2026)
+
+- **Tanggal & Sesi:** 18 September 2026 — Evaluasi 10 Kasus Percakapan Utuh Real Database (Batch 1: Kasus #01 s/d #10, 494 Turns).
+- **Temuan & Pelanggaran Terdeteksi:**
+  1. **Aturan Emas #2 (Bocor Harga Tanpa Ditanya):** Terdeteksi 2 insiden kritis (Kasus #1 Turn 5 & Kasus #4 Turn 4) di mana bot menyertakan nominal harga padahal customer baru menanyakan paket atau konsultasi keluhan kembung. Akar masalah: payload output tool `get_catalog_and_price` tetap menyertakan field harga (`price_formatted`) ke context LLM walau parameter `inquirePrice !== true`.
+  2. **Aturan Emas #3 (Bocor Durasi Menit):** Terdeteksi 1 insiden di Kasus #8 Turn 5 di mana durasi 45 menit disebut tanpa ditanya customer.
+  3. **Aturan Emas #5 (Afirmasi Jadwal Sebelum Lokasi):** Terdeteksi 1 insiden di Kasus #1 Turn 6 di mana bot menggunakan frasa "Bisa banget Bunda" sebelum lokasi diketahui.
+  4. **Aturan Emas #1 (Melebihi 2-3 Kalimat):** Terdeteksi 35x balasan sepanjang 4-6 kalimat saat menjelaskan manfaat klinis gabungan.
+  5. **Aturan Emas #6 (Overuse Sapaan Bunda):** Terdeteksi 5x penggunaan sapaan "Bunda" >1x dalam chat lanjutan.
+- **Rencana Mitigasi Fondasional yang Ditunda (Menunggu Selesai Pengujian Seluruh Batch):**
+  - Penerapan *Information Hiding* pada `get-catalog.tool.ts` (strip field nominal harga jika `inquirePrice !== true`).
+  - Strict masking durasi `(XX menit)` jika `asksDuration !== true`.
+  - Sentence splitter deterministik di `guardrail-pipeline.ts` untuk memangkas balasan > 3 kalimat.
+  - Sanitizer token limiter untuk sapaan "Bunda".
+
+---
+
+### Batch 2 Audit Percakapan Nyata Pelanggan (September 2026)
+
+- **Tanggal & Sesi:** 18 September 2026 — Evaluasi 10 Kasus Percakapan Utuh Real Database (Batch 2: Kasus #11 s/d #20, 319 Turns).
+- **Temuan & Pelanggaran Terdeteksi:**
+  1. **Aturan Emas #16 (Amnesia Lokasi pada Chat Panjang):** Terdeteksi pada Kasus #11 Turn 34 & 36 di mana setelah 30+ putaran chat mengenai jadwal dan keluhan, bot kembali menanyakan "boleh info daerah rumahnya di mana yaa?" padahal customer sudah menyebutkan "Surabaya Barat, Gadel Timur" di Turn 5–6. Akar masalah: ringkasan sesi dan context window LLM pada turn-turn akhir tergeser oleh riwayat panjang jadwal sehingga prompt kehilangan penekanan lokasi tersimpan.
+  2. **Aturan Emas #2 (Bocor Harga Tanpa Ditanya):** Terdeteksi 1 insiden di Kasus #19 Turn 4 ("ongkir promo Rp 15.000") saat customer menanyakan kemungkinan memijat 2 anak sekaligus tanpa menanyakan nominal biaya.
+  3. **Aturan Emas #3 (Sebut Durasi Tanpa Ditanya):** Terdeteksi 1 insiden di Kasus #17 Turn 3 ("1–2 menit secara berkala") pada penjelasan edukasi posisi tummy time *chest-to-chest*.
+  4. **Aturan Emas #5 (Afirmasi Jadwal Sebelum Lokasi):** Terdeteksi 2 insiden di Kasus #14 Turn 2 dan Kasus #18 Turn 2 di mana bot membuka dengan kalimat "Bisa banget Bunda" sebelum lokasi customer teridentifikasi.
+  5. **Aturan Emas #1 (Melebihi 2-3 Kalimat):** Terdeteksi 28x balasan melebihi 3 kalimat (4–7 kalimat), terutama saat menguraikan jam operasional 08.00–17.00 WIB, rute harian, dan penjelasan keluhan klinis.
+  6. **Aturan Emas #6 (Overuse Sapaan Bunda):** Terdeteksi 11x kemunculan sapaan "Bunda" >1x dalam satu balasan lanjutan atau >2x di pesan greeting.
+  7. **Anomali & Bug Teknis Sistem:**
+     - **Crash Unhandled Exception `few-shot-exemplars.ts:608`:** Di Kasus #11 Turn 4, bot membalas `[ERROR SYSTEM]: Cannot read properties of undefined (reading 'symptoms')`. Akar masalah: fungsi `selectRelevantExemplars` memanggil `extraction.symptoms.some(...)` dan `.length` tanpa safe navigation / fallback array `(extraction.symptoms || [])`, sehingga crash ketika objek ekstraksi tidak memiliki field `symptoms`.
+     - **Reset Greeting di Tengah Obrolan (9 Turns):** Pada Kasus #11 T6/T8, Kasus #13 T3/T15/T20, Kasus #14 T7, Kasus #15 T8/T10, dan Kasus #20 T5, bot tiba-tiba mengirimkan pesan perkenalan awal: *"Halo Bunda... Terima kasih sudah menghubungi kami di Kala Moms and Baby Spa. Ada yang bisa Bidan kami bantu..."*. Akar masalah: pada pesan customer yang sangat singkat (misal hanya menyebut nama kelurahan atau nama paket), Call 2 LLM menghasilkan balasan kosong/undefined yang ditolak oleh `OutputSanitizer.isValidReply`, lalu guardrail pipeline secara keliru menggantinya dengan template sapaan awal (`genderGreeting` + `brand.businessName`).
+- **Poin Positif & Kepatuhan Tinggi di Batch 2:**
+  - **Tool Masking Integritas Transaksi:** 100% patuh, nol pemanggilan `save_reservation` prematur atau spekulatif.
+  - **Deteksi Komplain & Medical Safety Escalation:** 
+    - Kasus #20 Turn 16: Komplain customer mengenai posisi tindik telinga kanan yang miring (*"Ini setelah tindik kok posisinya agak miring ya bu telinga kanannya"*) berhasil dideteksi secara tepat dan langsung mengeksekusi `escalate_to_human`, diikuti transisi senyap (*silent handoff*) ke CS manusia.
+    - Kasus #18 Turn 17: Balita 2 tahun dengan batuk pilek 1 minggu dan sudah minum obat tanpa perbaikan berhasil dieskalasi ke manusia untuk evaluasi medis lebih lanjut.
+  - **Akurasi Spatial RAG & Geocoding:** Perhitungan jarak dan promo ongkir via OpenRouteService terbukti akurat: Semolowaru (11.6 km, promo Rp 15.000), Sawotratap (6.0 km, promo Rp 5.000), Siwalankerto (8.5 km, promo Rp 10.000).
+
+---
+
+### Batch 3 Audit Percakapan Nyata Pelanggan (September 2026)
+
+- **Tanggal & Sesi:** 18 September 2026 — Evaluasi 10 Kasus Percakapan Utuh Real Database (Batch 3: Kasus #21 s/d #30, 278 Turns).
+- **Temuan & Pelanggaran Terdeteksi:**
+  1. **Aturan Emas #2 (Bocor Harga Tanpa Ditanya):** Terdeteksi 3 insiden kritis di mana bot menyebut nominal ongkir atau tarif paket:
+     - Kasus #24 Turn 5: Customer hanya menyebut `"Sawahan mba"`, bot langsung menyebut nominal *"Ongkirnya tetap sama ya, cukup Rp 20.000 (promo dari normal Rp 25.000)"*.
+     - Kasus #25 Turn 8: Customer mengatakan `"Mau pijat hamil mbak."`, bot langsung membocorkan rincian tarif *"promo jadi Rp 90.000... ditambah ongkir promo ke Bungurasih Rp 5.000, total keseluruhannya menjadi Rp 95.000"* padahal customer belum menanyakan harga/ongkir.
+     - Kasus #29 Turn 5: Customer menyebut kelurahan `"Kel : Buduran"`, bot menyebut *"ongkirnya tetap sama ya Rp 20.000 (promo)"*.
+  2. **Aturan Emas #16 (Amnesia Lokasi pada Percakapan Lanjut):** Terdeteksi berulang pada Kasus #25 (Bungurasih), Kasus #26 (Jambangan), dan Kasus #29 (Damarsih) di mana bot kembali menanyakan alamat/kelurahan saat customer menanyakan ketersediaan slot hari/tanggal lanjutan.
+  3. **Aturan Emas #5 (Afirmasi Jadwal Sebelum Lokasi):** Terdeteksi 1 insiden di Kasus #28 Turn 2 (*"Bisa banget Bunda 😊"* sebelum lokasi diverifikasi).
+  4. **Aturan Emas #1 (Melebihi 2-3 Kalimat):** Terdeteksi 36x balasan sepanjang 4–6 kalimat saat menguraikan rute dan keunggulan paket.
+  5. **Aturan Emas #6 (Overuse Sapaan Bunda):** Terdeteksi 6x kemunculan sapaan Bunda >1x dalam chat lanjutan atau >2x di greeting.
+- **Poin Positif & Respon Empati Kunci:**
+  - **Tool Masking Mutlak (0x `save_reservation`):** 100% patuh di seluruh 278 turns.
+  - **Penanganan Kedukaan & Pembatalan (Kasus #30 Turn 23–26):** Ketika customer mengabarkan mertua meninggal dunia (*"Mertua saya meninggal pagi ini... besok masih mau masuk peti"*), bot menunjukkan empati alami yang sangat menyentuh (*"Innalillahi wa inna ilaihi raji'un... Turut berduka cita yang sedalam-dalamnya... Bunda tidak perlu memikirkan jadwal treatment dulu, urus dan dampingi keluarga..."*), membatalkan jadwal tanpa mendesak reservasi ulang.
+- **Investigasi Mendalam Akar Masalah Kasus #26 (Loop Tanya Alamat 6x di Jambangan):**
+  - Customer menyebut `"Jambangan"`, lalu merinci `"Jambangan persada no 36"`, lalu patokan `"Gang Depannya pemadam kebakaran jambangan"`.
+  - Akar masalah: `geocodingService` hanya memetakan Jambangan ke level Kecamatan (`isPrecise: false`) karena *Jambangan Persada* belum ada di gazetteer kelurahan/landmark lokal. Akibatnya, `calculate_delivery` mengembalikan `success: false` terus-menerus dan melarang penguncian lokasi di sesi. Ketika customer menanyakan slot hari di Turn 7, 8, 9, dan 11, aturan hardcode *"Wajib tanya lokasi sebelum pastikan jadwal"* terpicu berulang-ulang tanpa henti. Solusi fondasional: bila customer sudah memberikan nama perumahan/gang di dalam kecamatan yang terdeteksi, sistem harus mengunci titik sentroid kecamatan sebagai fallback operasional daripada mengulang pertanyaan kelurahan secara kaku.
+
+---
+
+### Batch 4 & 5 Audit Percakapan Nyata Pelanggan (Kasus #31 s/d #50 — MQL & Edge Cases)
+
+- **Tanggal & Sesi:** 18 September 2026 — Evaluasi 20 Kasus Terakhir (Kasus #31 s/d #50, 199 Turns). Melengkapi total 50 Kasus (1.290 Turns) Pengujian Database Nyata.
+- **Temuan & Pelanggaran Terdeteksi:**
+  1. **Aturan Emas #2 (Bocor Harga Tanpa Ditanya):** Terdeteksi 3 insiden kritis:
+     - Kasus #39 Turn 3: Customer hanya menyatakan `"Mau treatment paket laktasi"`, bot merinci *"Promonya Rp 85.000 (normal Rp 110.000)... Ditambah ongkir promo ke Ponokawan (Rp 25.000), total keseluruhannya menjadi Rp 115.000"*.
+     - Kasus #47 Turn 5: Customer hanya mengirim pancingan `"Halo kak?"`, bot menyahut *"Jadi tadi sudah kami sampaikan kalau ongkir ke Jajar Tunggal sedang promo jadi Rp 15.000 saja"*.
+     - Kasus #49 Turn 3: Customer mengoreksi domisili `"Bukat rungkut bu bid, siwalankerto, kelurahan nya siwalankerto, kec. Wonocolo"`, bot menyebut *"ongkirnya tetap Rp 10.000 (promo) ya"*.
+  2. **Aturan Emas #5 (Afirmasi Jadwal Sebelum Lokasi):** Terdeteksi 4 insiden di mana bot menyambut dengan frasa *"Bisa banget Bunda 😊"* saat customer bertanya jadwal/katalog sebelum wilayah rumah terverifikasi (Kasus #31 T3, #33 T2, #43 T9, #48 T6).
+  3. **Aturan Emas #1 (Melebihi 2-3 Kalimat):** Terdeteksi 52x balasan sepanjang 4–6 kalimat, didorong oleh penjelasan rute dan rekomendasi komprehensif.
+  4. **Aturan Emas #6 (Overuse Sapaan Bunda):** Terdeteksi 8x penggunaan Bunda berlebih.
+- **Poin Positif & Kepatuhan Arsitektural Seluruh 50 Kasus:**
+  - **Tool Masking Keamanan Transaksi:** 100% patuh di seluruh 50 kasus (1.290 turns). Tool `save_reservation` **0x terpanggil prematur**.
+  - **Spatial RAG Jarak & Ongkir:** Geocoding gazetteer lokal dan ORS API bekerja sangat presisi di perumahan-perumahan utama (Pondok Tjandra 5.2 km, Bratang Gede 12.6 km, Damarsi Buduran 15.6 km, Jajar Tunggal Wiyung, Ponokawan Krian).
+   - **Integritas Medis & SOP Jam Operasional:** Bot teguh menolak permintaan malam hari di atas pukul 17.00 WIB (Kasus #13 & #50), konsisten menawarkan slot operasional 08.00–17.00 WIB.
+
+---
+
+## 86. [Holistik Fondasional] 6 Guard Deterministik Audit 50 Kasus (2026-09-18)
+
+- **Status:** implemented & verified — eksekusi celah (gap) yang belum dikerjakan sesi paralel; yang sudah ada di-reuse + dikunci test.
+- **Audit read-only:** crash `symptoms` + greeting-reset TERKONFIRMASI; get-catalog hiding SUDAH ada (sisa asksDeliveryFee); file plan `location-rules.ts` tidak ada (aktual `location-rules.phase.ts`, statis — pruning Call-1 sudah ada, sisa Call-2); centroid terkonfirmasi + `getGazetteerCoordinates` tersedia untuk reuse; `limitVocativeQuota` SUDAH ada (sisa trimmer + tone guard).
+- **Perubahan:** (1) guard `(intents/symptoms||[])` di `selectRelevantExemplars` + `buildInvalidReplyFallback(isFollowUp)`; (2) `asksDeliveryFee` di `calculate_delivery` (schema+registry, nominal disembunyikan bila false); (3) `buildLocationHierarchyBlock(session)` + pin `[LOKASI TERKUNCI]` di `buildContextSummary`; (4) centroid kecamatan via gazetteer (`success:true isEstimatedCentroid`, tanpa tandai QUOTED, tanpa todong kelurahan bila ada detail); (5) `trimToMaxSentences` (3 kalimat, satu-paragraf) + `applyPreLocationTone` di gate akhir pipeline; helper `hasStreetAddressDetail` diekstrak ke `geocoding.ts` (reuse).
+- **Regresi yang diperbaiki saat implementasi:** token typo kecamatan ("memganti") + artefak tag `<customer_message>` + kata jauh ("Alhamdulillah") sempat memicu centroid palsu → adjacency ±1 + stopword pronomina; 2 kontrak lama diselaraskan (`agent-runner` Trosobo pakai `asksDeliveryFee:true`, `anti-silent-drop` ekspektasi recovery baru).
+- **Verifikasi:** 6 file uji baru + TDD merah→hijau tiap fase; `tsc` 0, `npm run build` 0; full suite 355 hijau / 4 merah pre-existing terbukti di clean tree (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning`).
+- **Sisa disengaja:** live matrix `--llm` (kasus 11/19/24/25/26/39) butuh LLM live — belum dieksekusi; trimmer hanya satu-paragraf (balasan katalog multi-paragraf tidak dipotong).
+
+---
+
+## 87. [Rule 2/5/6] Batch 1 Kasus #01–#10 — Information Hiding Berlapis & Commitment Gate (2026-09-18)
+
+- **Status:** implemented & verified (batch 1 live `--llm`). Sisa pelanggaran = audit false-positive, bukan kebocoran.
+- **Konfirmasi multi-layer root cause (audit read-only):**
+  1. **Rule 2 jalur 1 (payload tool):** `tool-pipeline.ts` mem-push `JSON.stringify(toolResult)` ke `messages` LLM; `calculate_delivery` mengembalikan `ongkirNormal/ongkirPromo` walau `asksDeliveryFee=false`. `numeric-fact-validator` justru MENGOTORISASI angka tsb → tidak menahan.
+  2. **Rule 2 jalur 2 (grounding prompt):** `GoalTracker.formatGoalSessionForPrompt` menyuntik `• Ongkir: Rp ...` tanpa gating; `V3ConversationSummarizer` menyebut nominal di ringkasan; exemplar statis (`core-persona` Contoh 5) & dinamis DB (`location_ongkir_confirmation`) memuat nominal untuk pesan LOKASI-SAJA → LLM menyalin.
+  3. **Rule 5:** `tool-masker.evaluateToolMasking` hanya cek treatment+location+tanggal; `isDateConfirmed` meloloskan kalimat hari non-tanya.
+- **Perubahan fondasional:** (1) `applyFeeInformationHiding` — properti nominal di-OMIT dari payload LLM, nilai asli dipindah ke `__internalOngkir*` (state sesi tetap utuh) + `ToolExecutionPipeline.buildLlmSafeToolPayload`; (2) state-gated pruning `priceDiscussed` pada `formatGoalSessionForPrompt`, `V3ConversationSummarizer`, `FEE_INFORMATION_HIDING_PIN` di `buildLocationHierarchyBlock`, `FEW_SHOT` Contoh 5→6 + scrub rupiah exemplar via `formatExemplarsForPrompt(hidePrices)`; (3) sticky `session.bookingCommitConfirmed` (latch di `applySessionLatches` dari `hasBookingCommitSignal`) diwajibkan di `tool-masker` + `isBookingCommitReady`; (4) `limitVocativeQuota` mencakup varian `bund`/`bun`; (5) `trimToMaxSentencesPreservingGreetingHeader` + `hasStructuredContent` (prosa multi-paragraf dipangkas, senarai/formulir dilindungi).
+- **Verifikasi live (534 turns):** Rule 1 24→10, Rule 2 8→0 kebocoran lokasi-murni (7 sisa = false-positive saat customer memang tanya harga), Rule 3 4→0, **Rule 5 3→0**, Rule 6 5→1. Turn 2 Kasus #1 ("Di tenggilis kak") kini hanya konfirmasi jangkauan tanpa nominal.
+- **Sisa disengaja / risiko:** (a) audit script `scratch/audit-batch1-post-fix.ts` memakai regex kasar (menghitung "brapa mbak" sebagai bukan-tanya) → false-positive; (b) **temuan baru belum diperbaiki:** Kasus #8 Turn 14 — customer menyebut "Selasa tgl 18 agt" tetapi reservasi tercatat "Selasa, 22 September 2026" (date grounding mismatch, bukan Rule 5); (c) full suite 4 file merah pre-existing (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning`) — bukan dari sesi ini.
+- **Catatan insiden:** saat refactor `location-rules.phase.ts`, `git checkout` tak sengaja membuang perubahan uncommitted `buildLocationHierarchyBlock` (perubahan sesi paralel); fungsi dipulihkan kembali dari jejak baca + build hijau.
+
+---
+
+## 88. [Fase 1/2/5/6] Deterministic Tool-Arg Gate, KM Hiding, Grammar-Aware Quota & Greeting Compact (2026-09-18)
+
+- **Status:** implemented & verified. Fase 3 (commitment) & Fase 4 (router affinity) DILEWATI — sudah selesai di entri #87 (audit Rule 5 = 0, Turn 2 lokasi → `calculate_delivery` benar).
+- **Bukti root cause Fase 1 (log `logs/llm-2026-09-18.jsonl`):** idx 475 `V3_ROUTING` mengisi `asksDeliveryFee: true` pada pesan MURNI LOKASI "Wisma indah 2 K5 gunung anyar tambak" → idx 476 payload tool memuat `ongkirNormal:25000,ongkirPromo:15000`. Information Hiding berbasis flag LLM = rapuh. **Temuan tambahan:** `get_catalog_and_price` bocor via `targetPrice` halusinasi (LLM isi `targetPrice:60000` pada pesan "1 jam" → `showPrices=true`).
+- **Perubahan fondasional:**
+  1. **Deterministic Tool-Arg Gate** di `tool-pipeline.ts`: `asksDeliveryFee`/`inquirePrice` dipaksa dari `extractFastIntents` (kamus terpusat); `targetPrice` dihapus bila tak ada nominal eksplisit di teks customer. Helper `detectPriceIntent`.
+  2. **`extractFastIntents` diperkuat:** token nominal wajib diawali angka (anti "K5" alamat dianggap "5k"); `total`/`totalnya` masuk cost-word.
+  3. **KM hiding:** `applyFeeInformationHiding` juga menyembunyikan `distanceKm` (→ `__internalDistanceKm`); template jangkauan `calculate_delivery` (non-transaksional) tidak lagi menyebut "berjarak sekitar X km" (Aturan Emas 20).
+  4. **Grammar-aware quota:** `limitVocativeQuota` melindungi objek preposisi ("untuk Bunda", "ke Bunda") dari mutilasi, tetapi objek tetap menghabiskan kuota (kontrol overuse). Proteksi subjek kini juga menghabiskan kuota.
+  5. **Greeting compact:** `TEMPLATES.greeting`/`firstContactGreetingHeader` dipadatkan jadi 2 kalimat; few-shot Contoh 1 diselaraskan.
+  6. **Trimmer fix:** `trimToMaxSentences`/`truncateToMaxChars` kini mengenali batas kalimat setelah `)`/`*`/quote (anti under-count pada "... (fokus bahu).") dan mengabaikan titik penomoran daftar ("1. ").
+- **Verifikasi:** build 0 error; full suite 357 hijau / 5 file merah PRE-EXISTING (`keyword-enrichment`, `llm-evaluator`, `llm-outage-silent`, `self-learning`, `live-chat-reply` berbagi akar `resolveChunkKeywords` 'kabel olor'). Live Kasus #1 (89 turns): **Rule 1 = 0, Rule 5 = 0, Rule 6 = 0**; Turn 1 tepat 2 kalimat.
+- **Sisa disengaja / risiko:** (a) Rule 2/Rule 3 yang tersisa pada audit = **false-positive** (customer memang menyebut nominal "975k"/"900k" atau membahas durasi "1 jam"); audit regex belum mengenali nominal telanjang. (b) Rule 8 (kasus rusak) 1 turn — di luar scope. (c) `live-chat-reply`/`keyword-enrichment` merah karena gap keyword 'kabel olor' (pre-existing). (d) Date-grounding mismatch Kasus #8 (dari #87) masih terbuka.
+
+
+
+
+
+
 

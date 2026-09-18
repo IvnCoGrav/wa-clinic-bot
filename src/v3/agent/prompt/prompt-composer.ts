@@ -35,6 +35,7 @@ import {
   LOCATION_HIERARCHY_BLOCK,
   NO_GUESS_CITY_RULE,
   LOCATION_NEG_CONSTRAINTS,
+  buildLocationHierarchyBlock,
 } from './phases/location-rules.phase';
 import {
   buildPricingCatalogBlock,
@@ -168,12 +169,12 @@ function buildPhaseFocusBlock(focus: PhaseFocus[]): string {
 }
 
 /** Rakitan hierarki penuh (urutan kanonis Fase 3 — JANGAN diubah). */
-function buildHierarchyFull(): string {
-  return `${LOCATION_HIERARCHY_BLOCK}\n${buildPricingCatalogBlock()}\n${SCHEDULING_HIERARCHY_BLOCK}`;
+function buildHierarchyFull(session?: CustomerGoalSession): string {
+  return `${buildLocationHierarchyBlock(session)}\n${buildPricingCatalogBlock()}\n${SCHEDULING_HIERARCHY_BLOCK}`;
 }
 
 /** Subset hierarki per fokus (urutan kanonis dipertahankan). */
-function buildHierarchySlim(focus: PhaseFocus[]): string {
+function buildHierarchySlim(focus: PhaseFocus[], session?: CustomerGoalSession): string {
   const wantLocation = focus.includes('EARLY_LOCATION') || focus.includes('CONSULTATION');
   // SCHEDULING ramping: paket/keluhan dianggap selesai diputuskan (lihat
   // neg-constraints + tool guidance yang selalu utuh); totals resmi tetap
@@ -181,7 +182,7 @@ function buildHierarchySlim(focus: PhaseFocus[]): string {
   const wantPricing = focus.includes('CONSULTATION');
   const wantScheduling = focus.includes('SCHEDULING');
   const parts: string[] = [];
-  if (wantLocation) parts.push(LOCATION_HIERARCHY_BLOCK);
+  if (wantLocation) parts.push(buildLocationHierarchyBlock(session));
   if (wantPricing) parts.push(buildPricingCatalogBlock());
   if (wantScheduling) parts.push(SCHEDULING_HIERARCHY_BLOCK);
   return parts.join('\n');
@@ -266,7 +267,7 @@ export function composeSystemPrompt(
   const negConstraints = buildNegativeConstraintsBlock(session);
   const injection = opts?.phaseInjection;
   const focus = injection?.focus && injection.focus.length > 0 ? [...new Set(injection.focus)] : null;
-  const hierarchy = focus && injection?.slim ? buildHierarchySlim(focus) : buildHierarchyFull();
+  const hierarchy = focus && injection?.slim ? buildHierarchySlim(focus, session) : buildHierarchyFull(session);
   const focusSuffix = focus ? `\n\n${buildPhaseFocusBlock(focus)}` : '';
 
   return `${buildPersonaHeader(brand.businessName)}
@@ -389,7 +390,11 @@ ${greetingInstruction}`;
 
     const dynamicBlock =
       `[CONTOH GAYA CHAT WHATSAPP BIDAN YUSI (DINAMIS DARI BANK — TIRU POLA & NADANYA)]:\n` +
-      FewShotExemplarBank.formatExemplarsForPrompt(picked);
+      FewShotExemplarBank.formatExemplarsForPrompt(
+        picked,
+        // Rule 2: redam nominal di exemplar selama customer belum tanya biaya.
+        (session as any)?.priceDiscussed !== true
+      );
     // PLAN 9 FASE 9.1: buang blok contoh STATIS dari body, lalu sisipkan blok
     // DINAMIS tepat SETELAH penanda stabil (wilayah volatil) — sehingga prefix
     // statis tetap byte-identik antar-turn dan layak prompt caching.

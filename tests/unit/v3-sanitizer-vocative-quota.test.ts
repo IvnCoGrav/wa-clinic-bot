@@ -50,6 +50,15 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     expect(count).toBeLessThanOrEqual(1);
   });
 
+  it('vokatif varian "bund"/"bun" ikut dihitung (kasus "Bunda ... bund")', () => {
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(
+      'Oh jadi tidak perlu mandi dulu ya Bunda 😊 Justru mandinya disarankan setelah pijat. Untuk waktunya bebas ya bund.',
+      true
+    );
+    const count = (out.match(/\b(Bunda|bund|bun)\b/gi) || []).length;
+    expect(count).toBeLessThanOrEqual(1);
+  });
+
   // 391501 Fase 1 — proteksi subjek & koma menggantung
   it('proteksi subjek: "Bunda hanya perlu..." tidak dipotong', () => {
     const input = 'Tenang saja ya Bunda, seluruh peralatan sudah siap. Bunda hanya perlu menyiapkan tempat yang nyaman.';

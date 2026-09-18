@@ -1,4 +1,5 @@
-import { geocodingService } from '../../integrations/google-maps/geocoding';
+import { geocodingService, hasStreetAddressDetail } from '../../integrations/google-maps/geocoding';
+import { getGazetteerCoordinates } from '../../utils/gazetteer';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -35,6 +36,12 @@ export interface CalculateDeliveryInput {
    * sudah pernah tanya harga/total). Bila false/undefined: HANYA jarak + ongkir.
    */
   priceDiscussed?: boolean;
+  /**
+   * Strict Information Hiding (Rule 2): nominal rupiah ongkir DITAMPILKAN hanya
+   * bila customer eksplisit menanyakan ongkir/biaya/promo. Default false =
+   * output HANYA konfirmasi jangkauan (tanpa nominal) agar LLM tak membocorkan.
+   */
+  asksDeliveryFee?: boolean;
 }
 
 /**
@@ -72,9 +79,61 @@ export function buildCartTotalRecap(
   return { block, grandTotal, subtotal };
 }
 
+/**
+ * Detail alamat spesifik di query selain nama kecamatan/kota: streetDetail
+ * eksplisit, penanda alamat generik (perum/gang/blok/no), ATAU token bermakna
+ * (nama perumahan/POI seperti "Persada") — tanpa daftar hafalan bisnis.
+ */
+/** Jarak edit ≤1 (typo ringan nama kecamatan, mis. "memganti"≈"menganti"). */
+function isNearEqual(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    edits++;
+    if (edits > 1) return false;
+    if (la === lb) { i++; j++; } else if (la > lb) { i++; } else { j++; }
+  }
+  return edits + (la - i) + (lb - j) <= 1;
+}
+
+export function hasSpecificAddressDetail(query: string | null | undefined, streetDetail?: string): boolean {
+  if (streetDetail && streetDetail.trim().length > 0) return true;
+  // Bersihkan artefak format mesin (tag XML prompt <customer_message>) agar tak
+  // dikira token alamat — pembersihan teknis non-semantik.
+  const q = (query || '').replace(/<[^>]*>/g, ' ').toLowerCase();
+  if (!q) return false;
+  if (hasStreetAddressDetail(q)) return true;
+  const stop = new Set([
+    'di', 'ke', 'dari', 'kecamatan', 'kec', 'kota', 'kabupaten', 'desa', 'kelurahan',
+    'rumah', 'saya', 'kami', 'kita', 'kamu', 'anda', 'bunda', 'kakak', 'mbak', 'mas',
+    'bapak', 'ibu', 'alamat', 'daerah', 'wilayah', 'jawa', 'timur', 'surabaya', 'sidoarjo', 'gresik', 'sby', 'sda',
+  ]);
+  const kecName = findKecamatanInQuery(query || '');
+  const kecTokens = (kecName || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const allTokens = q.split(/[^a-z0-9]+/).filter(Boolean);
+  // Detail spesifik (nama perumahan/POI) MENEMPEL LANGSUNG pada nama kecamatan
+  // ("Jambangan Persada") — bukan kata berjarak ("Alhamdulillah, ... Sedati",
+  // "kami di Sedati"). Jendela ±1 token dari sebutan kecamatan.
+  const kecIdx = allTokens.findIndex((t) => kecTokens.includes(t));
+  const windowTokens: string[] =
+    kecIdx >= 0 ? allTokens.slice(Math.max(0, kecIdx - 1), kecIdx + 2) : [];
+  const tokens = windowTokens.filter((t) => {
+    if (t.length < 4 || stop.has(t) || kecTokens.includes(t)) return false;
+    // Token yang sejatinya typo nama kecamatan itu sendiri (bukan detail alamat).
+    if (kecTokens.some((k) => isNearEqual(t, k) || (t.length >= 5 && (t.includes(k) || k.includes(t))))) return false;
+    return true;
+  });
+  return tokens.length > 0;
+}
+
 export interface CalculateDeliveryOutput {
   success: boolean;
   isPrecise: boolean;
+  /** True bila koordinat adalah sentroid kecamatan (estimasi wilayah, bukan titik presisi). */
+  isEstimatedCentroid?: boolean;
   kelurahan?: string;
   kecamatan?: string;
   kota?: string;
@@ -85,6 +144,43 @@ export interface CalculateDeliveryOutput {
   isOutOfCoverage: boolean;
   suggestedTemplateReply?: string;
   message: string;
+  /**
+   * Internal-only (Rule 2 Information Hiding): nominal ongkir asli yang WAJIB
+   * disimpan ke state sesi meski disembunyikan dari LLM. tool-pipeline
+   * memakainya untuk persist session, lalu MENGHAPUS field ini (dan semua
+   * properti nominal) sebelum mem-push payload tool ke `messages` LLM.
+   */
+  __internalOngkirNormal?: number;
+  __internalOngkirPromo?: number;
+  /** Internal-only: jarak km asli bila disembunyikan dari payload LLM. */
+  __internalDistanceKm?: number;
+}
+
+/**
+ * Strict Tool Information Hiding (Rule 2): bila customer TIDAK menanyakan
+ * ongkir/biaya, nominal rupiah DILARANG ikut di payload JSON tool yang
+ * dikirim ke LLM (payload inilah yang dibaca model — lihat tool-pipeline.ts
+ * yang mem-push JSON.stringify(toolResult) ke messages). `distanceKm` juga
+ * disembunyikan (Aturan Emas: DILARANG menyebut jarak km bila tidak ditanya).
+ * Properti di-OMIT dari payload LLM, sedangkan nilai asli dipindah ke field
+ * internal `__internal*` agar state sesi tetap utuh. Teks
+ * `message`/`suggestedTemplateReply` WAJIB sudah disusun tanpa nominal di
+ * titik konstruksinya (bukan dipotong belakangan — anti mutilasi).
+ */
+export function applyFeeInformationHiding(
+  output: CalculateDeliveryOutput,
+  showFeeNominal: boolean
+): CalculateDeliveryOutput {
+  if (showFeeNominal) return output;
+  return {
+    ...output,
+    ongkirNormal: undefined,
+    ongkirPromo: undefined,
+    distanceKm: undefined,
+    __internalOngkirNormal: output.ongkirNormal,
+    __internalOngkirPromo: output.ongkirPromo,
+    __internalDistanceKm: output.distanceKm,
+  };
 }
 
 export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
@@ -102,6 +198,10 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
         streetDetail: {
           type: 'string',
           description: 'Detail nomor rumah atau RT/RW jika ada.'
+        },
+        asksDeliveryFee: {
+          type: 'boolean',
+          description: 'TRUE hanya bila customer eksplisit menanyakan ongkir/biaya/promo ("ada ongkir?", "berapa ongkirnya"). Bila ragu, isi false.'
         }
       },
       required: ['locationText']
@@ -232,10 +332,13 @@ function findKecamatanInQuery(query: string): string | null {
 }
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
-  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate, priceDiscussed } = input;
+  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate, priceDiscussed, asksDeliveryFee } = input;
   // Audit 694493: gatekeeper mode konsultasi vs transaksional — rekap nota
   // HANYA bila customer sudah tanya harga/total.
   const shouldShowCartRecap = priceDiscussed === true;
+  // Strict Information Hiding (Rule 2): nominal rupiah ongkir HANYA bila
+  // customer eksplisit menanyakannya. Default: konfirmasi jangkauan saja.
+  const showFeeNominal = asksDeliveryFee === true;
   // `let` agar fallback addressQuery dari link Maps bisa menggantikan query
   // mentah secara transparan (Phase 0 audit 315036).
   let compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
@@ -266,18 +369,22 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm;
         const kelurahan = reversed?.kelurahan || 'Titik Lokasi Terpilih';
         const scheduleCta = !isOutOfCoverage ? buildScheduleCta(preferredDate) : undefined;
+        // Strict Information Hiding (Rule 2): nominal ongkir HANYA bila customer
+        // eksplisit menanyakan biaya. Tanpa itu → konfirmasi jangkauan saja.
         const suggestedTemplateReply = isOutOfCoverage
           ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
-          : TEMPLATES.ongkirInfo({
-              distanceKm,
-              normalPrice: ongkirNormal,
-              promoPrice: ongkirPromo,
-              freeTierKm: deliveryResult.freeTierKm,
-              candidateTreatmentName,
-              // Audit 337101: override CTA di DALAM template (bukan append)
-              // agar pertanyaan "hari apa" bawaan template ikut terganti.
-              ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
-            });
+          : showFeeNominal
+            ? TEMPLATES.ongkirInfo({
+                distanceKm,
+                normalPrice: ongkirNormal,
+                promoPrice: ongkirPromo,
+                freeTierKm: deliveryResult.freeTierKm,
+                candidateTreatmentName,
+                // Audit 337101: override CTA di DALAM template (bukan append)
+                // agar pertanyaan "hari apa" bawaan template ikut terganti.
+                ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
+              })
+            : `Alhamdulillah, area ${kelurahan} masuk dalam jangkauan layanan homecare Bidan kami ya Bunda. ${buildScheduleCta(preferredDate)}`;
         console.log(JSON.stringify({ event: 'V3_TOOL_DELIVERY_URL_RESOLVED', tenantId, lat, lng, distanceKm, timestamp: new Date().toISOString() }));
         // Phase 2 (audit 315036) diharmonisasikan audit 694493: rekap nota
         // HANYA bila priceDiscussed (mode transaksional).
@@ -285,7 +392,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const urlTemplate = urlCartRecap
           ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
           : suggestedTemplateReply;
-        return {
+        const urlMessage = isOutOfCoverage
+          ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${urlTemplate}"`
+          : showFeeNominal
+            ? `Titik share location berhasil diidentifikasi: Jarak rute kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}${urlCartRecap ? `\n\n${urlCartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`
+            : `Titik share location berhasil diidentifikasi: Area ${kelurahan} masuk dalam jangkauan layanan homecare Bidan kami.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`;
+        const urlOutput: CalculateDeliveryOutput = {
           success: true,
           isPrecise: true,
           kelurahan,
@@ -297,10 +409,9 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           ongkirPromo,
           isOutOfCoverage,
           suggestedTemplateReply: urlTemplate,
-          message: isOutOfCoverage
-            ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${urlTemplate}"`
-            : `Titik share location berhasil diidentifikasi: Jarak rute kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}${urlCartRecap ? `\n\n${urlCartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${urlTemplate}"`
+          message: urlMessage,
         };
+        return applyFeeInformationHiding(urlOutput, showFeeNominal);
       }
       // Fallback alamat (audit 315036): pin tempat tanpa koordinat tetapi
       // membawa teks alamat (?q=...) → gantikan query mentah dengan teks
@@ -351,8 +462,31 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       }
     }
 
+    // Centroid fallback (kasus #26 Jambangan — anti infinite-loop tanya kelurahan):
+    // kecamatan terdeteksi + detail alamat spesifik → kunci ke sentroid kecamatan
+    // gazetteer (success:true, isEstimatedCentroid) agar tersimpan ke sesi.
+    // Tanpa detail spesifik → perilaku lama (minta kelurahan).
+    let centroidActive = false;
+    if (!resolved.isPrecise && !resolved.kelurahan && !(resolved.lat != null && resolved.lng != null)) {
+      const kecName = findKecamatanInQuery(compositeQuery);
+      if (kecName && hasSpecificAddressDetail(compositeQuery, streetDetail)) {
+        const centro = getGazetteerCoordinates(kecName);
+        if (centro && Number.isFinite(centro.lat) && Number.isFinite(centro.lng)) {
+          resolved = {
+            isPrecise: false,
+            kecamatan: centro.kecamatan,
+            kota: centro.kota,
+            lat: centro.lat,
+            lng: centro.lng,
+            formattedAddress: `${centro.kecamatan} (estimasi wilayah)`,
+          };
+          centroidActive = true;
+        }
+      }
+    }
+
     const ambiguityList = (resolved as any).ambiguityResults;
-    if (ambiguityList && ambiguityList.length > 1 && !streetDetail) {
+    if (!centroidActive && ambiguityList && ambiguityList.length > 1 && !streetDetail) {
       const kecName = ambiguityList[0]?.Kecamatan || locationText;
       const kotaName = ambiguityList[0]?.Kabupaten_Kota || resolved.kota || 'Surabaya/Sidoarjo';
       return {
@@ -407,7 +541,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       : (Array.isArray(kecAmbiguity) && kecAmbiguity.length > 0
         ? (kecAmbiguity[0]?.Kecamatan || (resolved as any).matchedSpan || null)
         : findKecamatanInQuery(compositeQuery));
-    if (!resolved.isPrecise && !resolved.kelurahan && !streetDetail && kecLevelName) {
+    if (!centroidActive && !resolved.isPrecise && !resolved.kelurahan && !streetDetail && kecLevelName) {
       return {
         success: false,
         isPrecise: false,
@@ -418,7 +552,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       };
     }
 
-    if (!resolved.isPrecise && !resolved.kelurahan && !streetDetail) {
+    if (!centroidActive && !resolved.isPrecise && !resolved.kelurahan && !streetDetail) {
       return {
         success: false,
         isPrecise: false,
@@ -448,28 +582,32 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
 
     const baseTemplateReply = isOutOfCoverage
       ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
-      : TEMPLATES.ongkirInfo({
-          distanceKm,
-          normalPrice: ongkirNormal,
-          promoPrice: ongkirPromo,
-          freeTierKm: deliveryResult.freeTierKm,
-          candidateTreatmentName,
-          // Audit 337101: override CTA di DALAM template (bukan append)
-          // agar pertanyaan "hari apa" bawaan template ikut terganti.
-          ...(preferredDate ? { scheduleCta: buildScheduleCta(preferredDate) } : {}),
-        });
+      : showFeeNominal
+        ? TEMPLATES.ongkirInfo({
+            distanceKm,
+            normalPrice: ongkirNormal,
+            promoPrice: ongkirPromo,
+            freeTierKm: deliveryResult.freeTierKm,
+            candidateTreatmentName,
+            // Audit 337101: override CTA di DALAM template (bukan append)
+            // agar pertanyaan "hari apa" bawaan template ikut terganti.
+            ...(preferredDate ? { scheduleCta: buildScheduleCta(preferredDate) } : {}),
+          })
+        : `Alhamdulillah, area ${locationText} masuk dalam area jangkauan layanan homecare Bidan kami ya Bunda.${buildScheduleCta(preferredDate)}`;
 
     // Phase 2 (audit 315036) diharmonisasikan audit 694493:
     // Rekap keranjang + grand total HANYA bila priceDiscussed (transaksional).
-    // Mode konsultasi: HANYA jarak + ongkir promo.
-    const cartRecap = isOutOfCoverage || !shouldShowCartRecap ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
+    // Strict Information Hiding (Rule 2): rekap nota (yang memuat nominal)
+    // TIDAK BOLEH muncul bila customer belum eksplisit menanyakan biaya.
+    const cartRecap = isOutOfCoverage || !shouldShowCartRecap || !showFeeNominal ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
     const suggestedTemplateReply = cartRecap
       ? `Jika dilihat dari jaraknya kurang lebih ${distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${ongkirNormal.toLocaleString('id-ID')}, tetapi karena promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')} saja ya Bunda ☺️\n\n${cartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta(undefined)}`}`
       : baseTemplateReply;
 
-    return {
+    const mainOutput: CalculateDeliveryOutput = {
       success: true,
       isPrecise: resolved.isPrecise || Boolean(resolved.kelurahan),
+      isEstimatedCentroid: centroidActive ? true : undefined,
       kelurahan: resolved.kelurahan,
       kecamatan: resolved.kecamatan,
       kota: resolved.kota,
@@ -481,8 +619,11 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       suggestedTemplateReply,
       message: isOutOfCoverage
         ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
-        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.${shouldShowCartRecap ? ' Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.' : ' DILARANG menyebut harga treatment / grand total (mode konsultasi) — sampaikan jarak + ongkir promo saja.'}` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
+        : showFeeNominal
+          ? `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.${shouldShowCartRecap ? ' Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.' : ' DILARANG menyebut harga treatment / grand total (mode konsultasi) — sampaikan jarak + ongkir promo saja.'}` : ''}${cartRecap ? `\n\n${cartRecap.block}` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
+          : `Area ${locationText} (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}) masuk dalam area jangkauan layanan homecare Bidan kami.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}.` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
     };
+    return applyFeeInformationHiding(mainOutput, showFeeNominal);
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_DELIVERY_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
     return {

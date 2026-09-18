@@ -24,6 +24,7 @@ import {
   isBookingCommitReady,
   detectAgreedTreatment,
 } from './booking-commit-gate';
+import { hasBookingCommitSignal } from '../../../utils/date-confirmation';
 import {
   hasScheduleSignal,
   assignInternalScheduleLabel,
@@ -117,10 +118,19 @@ export class ContextGrounder {
     conversationHistory: Array<{ role: string; content: string }>
   ): string {
     try {
-      return V3ConversationSummarizer.summarize(session, cleanIncomingText, {
+      const summary = V3ConversationSummarizer.summarize(session, cleanIncomingText, {
         history: conversationHistory.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
         customerInput: cleanIncomingText,
       });
+      // Pin lokasi permanen di baris teratas grounding (Rule 16 anti-amnesia):
+      // begitu lokasi tersimpan di sesi, LLM melihatnya SEBELUM ringkasan lain.
+      const loc = (session as any)?.location;
+      if (loc && (loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText)) {
+        const label = loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText;
+        const dist = loc.distanceKm != null ? ` (${loc.distanceKm} km, rute aktif)` : '';
+        return `[LOKASI TERKUNCI]: ${label}${dist}\n${summary}`;
+      }
+      return summary;
     } catch (e) {
       return '';
     }
@@ -201,6 +211,19 @@ export class ContextGrounder {
         } catch (e) {}
       }
     }
+    // Rule 5 (Active User Commitment Gate, sticky latch): bila pesan customer
+    // saat ini memuat verba komitmen booking eksplisit, kunci flag sesi agar
+    // tetap terbaca pada turn-turn berikutnya (customer menjawab hari/jam di
+    // turn terpisah tanpa mengulang verba komitmen). Data-driven via
+    // hasBookingCommitSignal — satu sumber kebenaran, tanpa regex hafalan.
+    if (conversationId && !session.bookingCommitConfirmed) {
+      if (hasBookingCommitSignal(cleanIncomingText)) {
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: true }, tenantId);
+        } catch (e) {}
+      }
+    }
+
     return session;
   }
 

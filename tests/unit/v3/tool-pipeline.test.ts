@@ -24,7 +24,7 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     conversationId: 'conv-tp-1',
     chatId: '6281@c.us',
     conversationHistory: [],
-    cleanIncomingText: 'pijat bayi ceria berapa?',
+    cleanIncomingText: 'pijat bayi ceria harganya berapa?',
     grounding: {
       phase: 'GENERAL',
       phaseDirective: '',

@@ -55,7 +55,7 @@ describe('Cart Single Primary Domain (no regex)', () => {
 
   it('geocoding bratang gede 3H -> Ngagelrejo Wonokromo', async () => {
     const { executeCalculateDelivery } = await import('../../../src/v3/tools/calculate-delivery.tool');
-    const res: any = await executeCalculateDelivery({ locationText: 'bratang gede 3H' });
+    const res: any = await executeCalculateDelivery({ locationText: 'bratang gede 3H', asksDeliveryFee: true });
     expect(res.success).toBe(true);
     expect(res.kelurahan).toBe('Ngagelrejo');
     expect(res.kecamatan).toBe('Wonokromo');

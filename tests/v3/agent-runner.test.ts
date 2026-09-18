@@ -26,7 +26,8 @@ describe('V3 Agent Runner End-to-End Suite', () => {
                     type: 'function',
                     function: {
                       name: 'calculate_delivery',
-                      arguments: JSON.stringify({ locationText: 'Trosobo Sidoarjo' }),
+                      // Customer eksplisit tanya ongkir → asksDeliveryFee:true agar nominal tampil.
+                      arguments: JSON.stringify({ locationText: 'Trosobo Sidoarjo', asksDeliveryFee: true }),
                     },
                   },
                 ],

@@ -161,7 +161,7 @@ describe('CapiService — tenant-aware credentials', () => {
     expect(url).toContain('access_token=EAA_legacy_token_tenant_1');
   });
 
-  it('should fallback to env credentials when tenant has no config', async () => {
+  it('ISOLASI: tenant non-default tanpa DB config WAJIB SKIP (tidak boleh pinjam env)', async () => {
     const { prisma } = await import('../../src/db/client');
     vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
       id: 'tenant-y',
@@ -169,22 +169,21 @@ describe('CapiService — tenant-aware credentials', () => {
       meta_capi_access_token: null,
     } as any);
 
-    mockedAxios.post.mockResolvedValueOnce({ status: 200, data: {} });
     const prevPixel = process.env.FB_PIXEL_ID;
     const prevToken = process.env.FB_CAPI_ACCESS_TOKEN;
     process.env.FB_PIXEL_ID = 'PIXEL_ENV';
     process.env.FB_CAPI_ACCESS_TOKEN = 'TOKEN_ENV';
 
     try {
-      await capiService.sendCapiEvent({
+      const res = await capiService.sendCapiEvent({
         eventName: 'Lead',
         customer: { phone: '081234567890' },
         adClick: { ipAddress: '1.2.3.4' },
         tenantId: 'tenant-y',
       });
-      const url = mockedAxios.post.mock.calls[0][0] as string;
-      expect(url).toContain('PIXEL_ENV/events');
-      expect(url).toContain('access_token=TOKEN_ENV');
+      expect(res.success).toBe(false);
+      expect(res.message || '').toContain('tenant-y');
+      expect(mockedAxios.post).not.toHaveBeenCalled();
     } finally {
       process.env.FB_PIXEL_ID = prevPixel;
       process.env.FB_CAPI_ACCESS_TOKEN = prevToken;

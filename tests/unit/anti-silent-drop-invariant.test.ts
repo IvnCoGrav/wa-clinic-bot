@@ -48,7 +48,7 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
   });
 
   describe('1. Double-Layer Protection Terhadap Draf Kosong / Spasi', () => {
-    it('Draf kosong murni ("") pada non-eskalasi → ditangkap OutputSanitizer menjadi sapaan brand resmi (tidak kosong)', async () => {
+    it('Draf kosong murni ("") pada non-eskalasi follow-up → recovery kontekstual TANPA greeting pembuka (tidak kosong)', async () => {
       const result = await GuardrailPipeline.verifyAndReprompt({
         ...defaultPipelineParams,
         draftReply: '',
@@ -57,7 +57,8 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
 
       expect(result.finalReply).toBeDefined();
       expect(result.finalReply.trim().length).toBeGreaterThan(0);
-      expect(result.finalReply).toMatch(/Halo Bunda.*Ada yang bisa Bidan kami bantu/is);
+      expect(result.finalReply).toMatch(/Baik Bunda.*Kami pastikan informasi/is);
+      expect(result.finalReply).not.toMatch(/Terima kasih sudah menghubungi kami/);
       expect(result.shouldSendReply).toBe(true);
     });
 

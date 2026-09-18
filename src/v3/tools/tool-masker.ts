@@ -248,6 +248,18 @@ export function evaluateToolMasking(
   let reason = '';
   let suspectOverRestrictive = false;
 
+  // Aturan 4 (Rule 5 — Active User Commitment Gate, sticky): hari/tanggal
+  // terkonfirmasi saja TIDAK cukup. Customer yang baru menjawab preferensi
+  // hari tentatif ("Besok, tpi bisanya siang diatas jam 1") atau menyebut
+  // tanggal saat menjawab pertanyaan asisten BUKAN komitmen booking final.
+  // Dua sumber komitmen (satu sumber kebenaran verba: hasBookingCommitSignal):
+  // (a) flag lengket session.bookingCommitConfirmed (diset di lintas turn oleh
+  //     ContextGrounder.applySessionLatches) — agar jawaban hari di turn
+  //     terpisah TETAP membuka booking;
+  // (b) verba komitmen pada pesan saat ini (komitmen + hari dalam satu turn).
+  const hasCommitment = session.bookingCommitConfirmed === true
+    || hasBookingCommitSignal(cleanIncomingText);
+
   if (!hasTreatment) {
     isSaveReservationAllowed = false;
     reason = 'TREATMENT_EMPTY: Layanan/keranjang belum dipilih';
@@ -263,9 +275,17 @@ export function evaluateToolMasking(
     if (containsAnyTimeWord) {
       suspectOverRestrictive = true;
     }
+  } else if (!hasCommitment) {
+    // Hari/tanggal sudah disebut, tetapi customer belum memberi komitmen final
+    // (baru memilih hari/jam tentatif sebagai respon pertanyaan asisten).
+    isSaveReservationAllowed = false;
+    reason = 'BOOKING_COMMIT_PENDING: Customer menyebut preferensi hari/jam tentatif, belum memberikan persetujuan final booking';
+    if (containsAnyTimeWord) {
+      suspectOverRestrictive = true;
+    }
   } else {
     isSaveReservationAllowed = true;
-    reason = 'ALL_PRECONDITIONS_MET: Layanan, lokasi, dan tanggal terkonfirmasi';
+    reason = 'ALL_PRECONDITIONS_MET: Layanan, lokasi, tanggal, dan komitmen booking terkonfirmasi';
   }
 
   const maskedToolNames: string[] = [];

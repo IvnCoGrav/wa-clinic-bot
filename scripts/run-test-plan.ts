@@ -43,6 +43,8 @@ async function main() {
   };
   const onlyNo = parseInt(valOf('--only'), 10);
   const onlyCat = valOf('--cat').toUpperCase();
+  const fromNo = parseInt(valOf('--from'), 10);
+  const toNo = parseInt(valOf('--to'), 10);
 
   // Muat .env (jangan override WAHA_MOCK/BURST yang sudah diset di atas).
   await import('dotenv/config');
@@ -69,6 +71,10 @@ async function main() {
   const { clinicConfig } = await import('../src/config/clinic');
   const { RecordingWahaClient } = await import('./lib/recording-client');
   const { buildAutoFlags } = await import('./lib/persona-rules');
+  const { AiModelConfigService } = await import('../src/config/ai-models.config');
+  if (useLLM) {
+    await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID).catch(() => {});
+  }
 
   // ============ 3. DI INSTANCES ============
   const recorder = new RecordingWahaClient();
@@ -415,6 +421,8 @@ async function main() {
     if (V2 && (s.no < 21 || s.no > 44)) return false; // v2 scope: #21-44 (kategori D-G + E)
     if (onlyNo) return s.no === onlyNo;
     if (onlyCat) return s.category === onlyCat;
+    if (!isNaN(fromNo) && s.no < fromNo) return false;
+    if (!isNaN(toNo) && s.no > toNo) return false;
     return true;
   });
   console.log(`\n=== RUN TEST PLAN — ${selected.length} skenario${useLLM ? ' (MODE: LLM ASLI)' : ' (MODE: OFFLINE/FALLBACK)'} ===\n`);

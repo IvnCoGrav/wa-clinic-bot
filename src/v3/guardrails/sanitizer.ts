@@ -54,6 +54,16 @@ export class OutputSanitizer {
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     text = text.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/gi, '');
 
+    // 1b. Hapus artefak native tool-calling LLM (DeepSeek DSML, XML tool
+    // call, result tags — audit DeepSeek Flash): model via gateway
+    // OpenAI-compatible kadang memuntahkan format tool XML ke properti teks
+    // `content`. Pembersihan teknis mesin non-semantik — tak menyentuh kata
+    // bahasa alami customer (mis. kata "result" tanpa kurung siku lolos).
+    text = text.replace(/<｜｜DSML｜｜[\s\S]*?<\/｜｜DSML｜｜\s*(?:calls)?>/gi, '');
+    text = text.replace(/<result>[\s\S]*?<\/result>/gi, '');
+    text = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '');
+    text = text.replace(/<\/?(?:calls|invoke|parameter)[^>]*>/gi, '');
+
     // 2. Hapus blok kode markdown jika model membungkus balasan dengan ```
     text = text.replace(/^```(?:markdown|text)?\s*/i, '').replace(/\s*```$/i, '');
 
@@ -85,6 +95,12 @@ export class OutputSanitizer {
     // - Hanya pertahankan sanitizer non-mutilasi: STR mention & followUp greeting minimal
     text = OutputSanitizer.sanitizeUnpromptedStrMention(text, customerInput);
     text = OutputSanitizer.sanitizeFollowUpGreetingRepetition(text, isFollowUp);
+    // Rule 6 (anti-overuse "Bunda"): chat pembuka maksimal 2x; chat lanjutan
+    // maksimal 1x (sudah via sanitizeFollowUpGreetingRepetition). Deterministik
+    // di pipeline output, bukan mengandalkan kepatuhan teks prompt.
+    if (!isFollowUp) {
+      text = OutputSanitizer.limitVocativeQuotaForTurn(text, false);
+    }
     text = OutputSanitizer.truncateToMaxChars(text, OutputSanitizer.resolveMaxChars(maxCharsOrOpts));
     text = text.replace(/[^\S\r\n]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
@@ -227,9 +243,13 @@ export class OutputSanitizer {
       if (ch === '.') {
         const prev = idx > 0 ? rawSlice[idx - 1] : '';
         const next = idx + 1 < rawSlice.length ? rawSlice[idx + 1] : '';
-        const prevIsLetter = /[a-zA-Z\u00C0-\u024F]/.test(prev);
         const nextIsBoundary = next === '' || next === ' ' || next === '\n' || next === '\r' || next === '\t';
-        if (!prevIsLetter || !nextIsBoundary) continue;
+        const isDecimal = /\d/.test(prev) && /\d/.test(next);
+        const lineStart = rawSlice.lastIndexOf('\n', idx - 1) + 1;
+        const beforeLine = rawSlice.slice(lineStart, idx);
+        const isListNumber = /^\s*\d+$/.test(beforeLine) && next === ' ';
+        const prevIsWordEnd = /[a-zA-Z\u00C0-\u024F0-9)\]*"'’”]/.test(prev);
+        if (!prevIsWordEnd || !nextIsBoundary || isDecimal || isListNumber) continue;
       }
       lastSentenceEnd = idx;
     }
@@ -319,6 +339,16 @@ export class OutputSanitizer {
   }
 
   /**
+   * Kuota sapaan Turn-0: HANYA membatasi bila jumlah kemunculan melebihi
+   * kuota (default 2 untuk chat pembuka). Chat lanjutan tetap memakai
+   * limitVocativeQuota(1) via sanitizeFollowUpGreetingRepetition.
+   */
+  public static limitVocativeQuotaForTurn(text: string, isFollowUp: boolean): string {
+    if (!text) return text;
+    return OutputSanitizer.limitVocativeQuota(text, isFollowUp ? 1 : 2);
+  }
+
+  /**
    * Kuota sapaan vokatif deterministik (audit 993955 Turn 9 + 391501 Fase 1):
    * panggilan "Bunda"/"Bapak" maksimal 1x di chat lanjutan. Pertahankan
    * kemunculan PERTAMA; pengulangan sesudahnya dibersihkan rapi tanpa
@@ -327,15 +357,28 @@ export class OutputSanitizer {
    * (hanya/cukup/bisa/perlu/dapat/mau/ingin/sudah/belum/tidak/harus/tinggal)
    * adalah subjek, BUKAN vokatif — tidak dihitung kuota & tidak dihapus.
    */
-  public static limitVocativeQuota(text: string): string {
-    const quota = 1;
-    const pattern = /\b(Bunda|Bapak)\b/gi;
+  public static limitVocativeQuota(text: string, quota: number = 1): string {
+    // Varian vokatif yang dihitung sebagai SATU kuota: "Bunda", "Bapak", dan
+    // singkatan akrab "bund"/"bun" (audit Rule 6: "Bunda ... bund" = 2x panggilan).
+    const pattern = /\b(Bunda|Bapak|bund|bun)\b/gi;
     // Verba/modal yang menandai subjek tata bahasa (391501).
     const SUBJECT_FOLLOW_RE = /^(?:hanya|cukup|bisa|perlu|dapat|mau|ingin|sudah|belum|tidak|harus|tinggal)\b/i;
+    // Preposisi Indonesia (Fase 5, anti-mutilasi): kata sapaan yang DIdahului
+    // preposisi berperan sebagai OBJEK PREPOSISI ("untuk Bunda", "ke Bunda",
+    // "dari Bunda"), BUKAN panggilan vokatif — DILARANG dihapus / dihitung kuota.
+    const PREPOSITION_BEFORE_RE = /(?:^|[\s(])(?:untuk|buat|ke|dari|pada|dengan|bersama|bagi|sama|punya|milik|menemani)\s+$/i;
     let seen = 0;
     return text.replace(pattern, (match, _g, offset: number, full: string) => {
       // 391501: proteksi subjek — cek posisi awal kalimat/klausa + verba.
       const before = full.slice(0, offset);
+      // Fase 5: proteksi objek preposisi — cek kata tepat sebelum sapaan.
+      // Objek preposisi DILARANG dihapus (anti-mutilasi), TETAPI tetap
+      // menghabiskan kuota agar tidak ada panggilan vokatif tambahan di pesan
+      // yang sama (kontrol overuse Rule 6 tetap terjaga).
+      if (PREPOSITION_BEFORE_RE.test(before)) {
+        seen += 1;
+        return match;
+      }
       // Cari karakter non-spasi terakhir sebelum match.
       let j = before.length - 1;
       while (j >= 0 && /[ \t]/.test(before[j])) j--;
@@ -344,7 +387,8 @@ export class OutputSanitizer {
       if (isSentenceStart) {
         const after = full.slice(offset + match.length).replace(/^[ \t]+/, '');
         if (SUBJECT_FOLLOW_RE.test(after)) {
-          return match; // subjek tata bahasa — pertahankan & jangan hitung kuota
+          seen += 1;
+          return match; // subjek tata bahasa — pertahankan (tetap hitung kuota)
         }
       }
       seen += 1;
@@ -356,6 +400,91 @@ export class OutputSanitizer {
       .replace(/\s+([,.!?])/g, '$1')
       .replace(/[ \t]+\n/g, '\n')
       .trim();
+  }
+
+  /**
+   * Pemotong kalimat deterministik (Rule 1): batasi maksimal N kalimat.
+   * Batas dihitung pada akhir kalimat valid (./!? dengan huruf-sebelum +
+   * boundary-sesudah — anti memotong desimal "60.000"/jam "09.30" — atau emoji
+   * penutup). Tanpa batas yang cukup → teks utuh (anti-mutilasi).
+   */
+  public static trimToMaxSentences(text: string, maxSentences: number = 3): string {
+    if (!text || maxSentences <= 0) return text;
+    const ends: number[] = [];
+    const pushEnd = (idx: number): void => {
+      if (idx >= 0 && (ends.length === 0 || idx > ends[ends.length - 1])) ends.push(idx);
+    };
+    const punctRe = /[.!?]/g;
+    let m: RegExpExecArray | null;
+    while ((m = punctRe.exec(text)) !== null) {
+      const idx = m.index;
+      if (m[0] === '.') {
+        const prev = idx > 0 ? text[idx - 1] : '';
+        const next = idx + 1 < text.length ? text[idx + 1] : '';
+        const nextIsBoundary = next === '' || next === ' ' || next === '\n' || next === '\r' || next === '\t';
+        // Abaikan desimal/angka bertitik (60.000, 09.30): digit diikuti digit.
+        const isDecimal = /\d/.test(prev) && /\d/.test(next);
+        // Abaikan titik penomoran daftar ("1. ", "2. " di awal baris).
+        const lineStart = text.lastIndexOf('\n', idx - 1) + 1;
+        const beforeLine = text.slice(lineStart, idx);
+        const isListNumber = /^\s*\d+$/.test(beforeLine) && next === ' ';
+        if (!nextIsBoundary || isDecimal || isListNumber) continue;
+        // Titik akhir kalimat sah bila didahului huruf ATAU penutup klausa
+        // ()"*]) / digit akhir kalimat (mis. "... total 100.").
+        const prevIsWordEnd = /[a-zA-Z\u00C0-\u024F0-9)\]*"'’”]/.test(prev);
+        if (!prevIsWordEnd) continue;
+      }
+      pushEnd(idx);
+    }
+    const emojiRe = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+(?=\s|\n|$)/gu;
+    let em: RegExpExecArray | null;
+    while ((em = emojiRe.exec(text)) !== null) {
+      pushEnd(em.index + em[0].length - 1);
+    }
+    ends.sort((a, b) => a - b);
+    if (ends.length <= maxSentences) return text;
+    return text.slice(0, ends[maxSentences - 1] + 1).trimEnd();
+  }
+
+  /**
+   * Deteksi konten terstruktur (senarai bernomor/bullet, formulir, rincian
+   * katalog) yang DILARANG dipotong oleh trimmer kalimat. Balasan prosa
+   * (sapaan/penjelasan) tanpa penanda ini aman dipangkas ke batas kalimat.
+   */
+  public static hasStructuredContent(text: string): boolean {
+    if (!text) return false;
+    // Baris bernomor ("1. ") atau bullet ("- "/"• ") — senarai/daftar.
+    if (/(^|\n)\s*(?:\d+\.|[-•*])\s+\S/.test(text)) return true;
+    // Formulir reservasi (blok "Hari dan tanggal :", "Nama Bunda :").
+    if (/Nama Bunda\s*:|Hari dan tanggal\s*:/i.test(text)) return true;
+    return false;
+  }
+
+  /**
+   * Trimmer Rule 1 sadar-header: header sapaan Turn-0 yang di-prepend
+   * deterministik (`Halo X! ✨ Perkenalkan, saya Bidan Yusi dari ...`) TIDAK
+   * dihitung sebagai bagian kuota 3 kalimat balasan inti — jika dihitung,
+   * jawaban substantif (mis. rekomendasi treatment) ikut terpotong. Header
+   * dipertahankan utuh; sisa teks dipangkas ke `maxSentences`.
+   */
+  public static trimToMaxSentencesPreservingGreetingHeader(text: string, maxSentences = 3): string {
+    if (!text) return text;
+    const headerMatch = text.match(/^Halo\s+[^!?.\n]+!\s*✨\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i);
+    if (!headerMatch) return OutputSanitizer.trimToMaxSentences(text, maxSentences);
+    const header = headerMatch[0];
+    const rest = text.slice(header.length).trimStart();
+    const trimmedRest = OutputSanitizer.trimToMaxSentences(rest, maxSentences);
+    return `${header}${trimmedRest}`.trimEnd();
+  }
+
+  /**
+   * Tone guard pra-lokasi (Rule 5): bila lokasi BELUM diketahui, pembuka
+   * "Bisa banget Bunda" (janji sepihak) diganti nada cek-dulu. Hanya menyentuh
+   * frasa pembuka di awal teks — isi selebihnya utuh.
+   */
+  public static applyPreLocationTone(text: string): string {
+    if (!text) return text;
+    return text.replace(/^\s*Bisa banget\s+Bunda\b\s*,?\s*/i, 'Kami bantu cekkan dulu ya Bunda 😊 ');
   }
 
   /**

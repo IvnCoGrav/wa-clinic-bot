@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const CalculateDeliveryArgsSchema = z.object({
   locationText: z.string().min(1, 'locationText tidak boleh kosong'),
   streetDetail: z.string().optional(),
+  asksDeliveryFee: z.boolean().optional().default(false),
 });
 
 export const GetCatalogArgsSchema = z.object({

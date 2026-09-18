@@ -38,7 +38,10 @@ export class V3ConversationSummarizer {
       const locLabel = session.location.kelurahan || session.location.kecamatan || 'lokasi Bunda';
       const distLabel = session.location.distanceKm != null ? `, ~${session.location.distanceKm} km` : '';
       const promo = session.location.ongkirPromo;
-      if (promo != null) {
+      // Rule 2 (Strict Information Hiding): nominal ongkir HANYA disebut di
+      // ringkasan prompt bila customer sudah pernah menanyakan biaya/ongkir
+      // (priceDiscussed). Mode konsultasi → cukup lokasi tanpa nominal.
+      if (promo != null && session.priceDiscussed === true) {
         sudahDibahas.push(`Ongkir Rp ${promo.toLocaleString('id-ID')} promo (${locLabel}${distLabel})`);
         banOnce('Info ongkir atau perhitungan jarak (sudah disampaikan di chat atas)');
       } else {

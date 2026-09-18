@@ -153,6 +153,23 @@ export async function attemptNumericReprompt(deps: NumericRepromptDeps): Promise
 }
 
 /**
+ * Fallback balasan tak-valid deterministik (pure): greeting pembuka HANYA untuk
+ * Turn-0 (bukan follow-up). Di tengah obrolan, recovery kontekstual TANPA
+ * sapaan pembuka agar tak terjadi greeting-reset.
+ */
+export function buildInvalidReplyFallback(
+  isFollowUp: boolean,
+  genderGreeting: string,
+  businessName: string
+): string {
+  const greet = genderGreeting || 'Bunda';
+  if (!isFollowUp) {
+    return `Halo ${greet} 😊\n\nTerima kasih sudah menghubungi kami di ${businessName}. Ada yang bisa Bidan kami bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
+  }
+  return `Baik ${greet} 😊 Kami pastikan informasinya terlebih dahulu yaa. Ada hal lain terkait si kecil atau perawatan yang ingin kami bantu cekkan? 🤗`;
+}
+
+/**
  * Penegak disclaimer same-day deterministik (pure, sesi 462651): bila
  * balasan tidak mengandung indikasi jadwal-penuh, sisipkan disclaimer
  * resmi. Tanpa angka/pronoun bermasalah — aman pasca-validator.
@@ -531,7 +548,21 @@ export class GuardrailPipeline {
       console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
       const { getBrandIdentity } = await import('../../../config/brand');
       const brand = getBrandIdentity();
-      finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di ${brand.businessName}. Ada yang bisa Bidan kami bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
+      finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
+    }
+
+    // Deterministic Output Normalizers (Rule 1 & 5) di gate akhir:
+    // - trimmer 3-kalimat untuk balasan PROSA (termasuk multi-paragraf sapaan),
+    //   TETAPI senarai katalog/formulir terstruktur DILARANG dipotong;
+    // - tone guard pra-lokasi HANYA bila lokasi sesi belum diketahui.
+    if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
+      if (!OutputSanitizer.hasStructuredContent(finalReply)) {
+        finalReply = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(finalReply, 3);
+      }
+      const loc = (session as any)?.location;
+      if (!(loc?.kelurahan || loc?.kecamatan || loc?.kota || loc?.rawText)) {
+        finalReply = OutputSanitizer.applyPreLocationTone(finalReply);
+      }
     }
 
     // HARD INVARIANT: Bot TIDAK BOLEH PERNAH mengirim balasan kosong ke customer apa pun alasannya.

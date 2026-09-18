@@ -10,6 +10,7 @@ describe('V3 Native Agent Tools Suite', () => {
     it('harus menghitung jarak & ongkir promo untuk daerah Trosobo Sidoarjo', async () => {
       const result = await executeCalculateDelivery({
         locationText: 'Trosobo Sidoarjo',
+        asksDeliveryFee: true,
       });
 
       expect(result.success).toBe(true);
@@ -28,8 +29,9 @@ describe('V3 Native Agent Tools Suite', () => {
 
       expect(result.success).toBe(true);
       expect(result.isOutOfCoverage).toBe(false);
-      expect(result.distanceKm).toBeDefined();
-      expect(result.distanceKm).toBeLessThan(30); // Harus < 30 km (Surabaya Barat), bukan 165 km Bojonegoro!
+      // Mode konsultasi: distanceKm disembunyikan dari payload LLM → verifikasi internal.
+      expect(result.__internalDistanceKm).toBeDefined();
+      expect(result.__internalDistanceKm).toBeLessThan(30); // Harus < 30 km (Surabaya Barat), bukan 165 km Bojonegoro!
     });
 
     it('harus menolak menghitung jarak jika customer hanya menyebut area luas seperti "Rumah d Surabaya barat" (isPrecise: false)', async () => {
@@ -125,7 +127,7 @@ describe('V3 Native Agent Tools Suite', () => {
     it('harus membuang tag <think> dan monolog internal AI', () => {
       const rawWithThink = '<think>Kita perlu membalas Bunda dengan sopan dan ramah</think>Halo Bunda ! ✨ Ada yang bisa Bidan Yusi bantu?';
       const cleaned = OutputSanitizer.cleanOutboundReply(rawWithThink);
-      expect(cleaned).toBe('Halo Bunda ! ✨\n\nAda yang bisa Bidan Yusi bantu?');
+      expect(cleaned).toBe('Halo Bunda! ✨\n\nAda yang bisa Bidan Yusi bantu?');
     });
 
     it('harus membuang monolog pembuka bahasa Indonesia "Kita perlu menyusun..."', () => {

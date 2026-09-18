@@ -47,7 +47,7 @@ describe('calculate_delivery — intersepsi kecamatan luas', () => {
       messageTemplate: '',
     } as any);
 
-    const res = await executeCalculateDelivery({ locationText: 'Pelemwatu Menganti Gresik' });
+    const res = await executeCalculateDelivery({ locationText: 'Pelemwatu Menganti Gresik', asksDeliveryFee: true });
     expect(res.success).toBe(true);
     expect(res.isPrecise).toBe(true);
     expect(res.kelurahan).toBe('Pelemwatu');

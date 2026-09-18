@@ -11,6 +11,7 @@ describe('Calculate Delivery URL Resolution', () => {
   it('URL maps berkoordinat langsung -> isPrecise + ongkir valid (tanpa network)', async () => {
     const out = await executeCalculateDelivery({
       locationText: 'https://www.google.com/maps/@-7.340000,112.720000,17z',
+      asksDeliveryFee: true,
     });
     expect(out.success).toBe(true);
     expect(out.isPrecise).toBe(true);

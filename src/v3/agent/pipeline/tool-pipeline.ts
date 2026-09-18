@@ -64,6 +64,55 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
  * (state reducer terpusat — bukan mutasi tersebar).
  */
 export class ToolExecutionPipeline {
+  /**
+   * Strict Tool Information Hiding (Rule 2) — gerbang payload LLM:
+   * menyusun salinan hasil tool yang aman dikirim ke `messages` LLM. Field
+   * internal ber-prefix `__internal` dan properti nominal yang sudah
+   * disembunyikan DILARANG ikut. Ini lapisan pertahanan terakhir: meski tool
+   * lupa menyembunyikan nominal, payload LLM tetap bersih bila `ongkirNormal`/
+   * `ongkirPromo` bernilai undefined. State sesi memakai objek asli (lihat
+   * applyToolEffectsToSession), bukan salinan ini.
+   */
+  public static buildLlmSafeToolPayload(fnName: string, toolResult: any): any {
+    if (!toolResult || typeof toolResult !== 'object') return toolResult;
+    const clone: any = { ...toolResult };
+    for (const key of Object.keys(clone)) {
+      if (key.startsWith('__internal')) delete clone[key];
+    }
+    return clone;
+  }
+
+  /**
+   * Fase 1 — deteksi deterministik intent harga/ongkir/durasi dari teks nyata,
+   * BUKAN dari boolean yang diisi LLM. Memakai `extractFastIntents` (kamus
+   * terpusat, data-driven) sebagai sumber kebenaran. Murni & murah.
+   */
+  public static async detectPriceIntent(
+    cleanIncomingText: string
+  ): Promise<{ asksPrice: boolean; asksDuration: boolean; mentionsNominal: boolean }> {
+    const text = cleanIncomingText || '';
+    if (!text.trim()) return { asksPrice: false, asksDuration: false, mentionsNominal: false };
+    try {
+      const raw = text.toLowerCase();
+      const intents = (await import('../persona')).extractFastIntents(text);
+      // Deteksi nominal eksplisit (angka + satuan rupiah) — cermin hasNominalToken.
+      const toks = raw.split(/\s+/).map((t) => t.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '')).filter(Boolean);
+      const mentionsNominal = toks.some((t) => {
+        if (t === 'rp' || t === 'ribu' || t === 'rb' || t === 'juta' || t === 'jt') return true;
+        const c = t.charCodeAt(0);
+        if (!(c >= 48 && c <= 57)) return false;
+        return t.includes('rb') || t.includes('ribu') || t.includes('juta') || t.includes('jt') || t.includes('rp') || t.includes('k');
+      });
+      return {
+        asksPrice: intents.includes('ask_price'),
+        asksDuration: intents.includes('ask_duration'),
+        mentionsNominal,
+      };
+    } catch {
+      return { asksPrice: false, asksDuration: false, mentionsNominal: false };
+    }
+  }
+
   public static async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
     const {
       toolCalls, assistantMessage, tenantId, phone, conversationId,
@@ -101,6 +150,34 @@ export class ToolExecutionPipeline {
           ? JSON.parse(tc.function.arguments)
           : tc.function?.arguments || {};
       } catch (_) {}
+
+      // ── Fase 1: Deterministic Tool-Arg Gate (anti-halusinasi router) ──
+      // Aturan bisnis mutlak DILARANG diserahkan ke parameter boolean LLM
+      // probabilistik. Log bukti (Kasus #9 T3): LLM mengisi
+      // `asksDeliveryFee: true` pada pesan MURNI LOKASI → nominal ongkir bocor.
+      // Seam ini menimpa argumen LLM deterministik dari teks customer via
+      // `extractFastIntents` (satu sumber kebenaran intent ask_price/ongkir).
+      const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
+      if (fnName === 'calculate_delivery') {
+        // Ongkir hanya boleh nominal bila customer eksplisit menanyakan harga/ongkir.
+        fnArgs.asksDeliveryFee = priceIntent.asksPrice;
+      }
+      if (fnName === 'get_catalog_and_price') {
+        // Mode konsultasi: tanpa pertanyaan harga eksplisit → harga disembunyikan.
+        // Efek samping: state-reducer hanya men-set `priceDiscussed` bila arg ini
+        // true, sehingga sinyal `inquirePrice` liar dari LLM tak lagi membuka
+        // mode transaksional (gate gabungan deterministik + tool signal).
+        fnArgs.inquirePrice = priceIntent.asksPrice;
+        // Anti-halusinasi nominal: `targetPrice` (pemicu showPrices) HANYA sah
+        // bila customer benar-benar menyebut nominal angka. LLM sempat mengisi
+        // targetPrice:60000 pada pesan "1 jam" → membuka seluruh harga katalog.
+        if (!priceIntent.mentionsNominal) {
+          delete fnArgs.targetPrice;
+        }
+        // Catatan: `asksDuration` TIDAK dipaksa di sini — durasi sering berupa
+        // jawaban lintas-turn ("1 jam") yang wajar; kebocoran utamanya adalah
+        // harga via targetPrice, yang sudah ditutup di atas.
+      }
 
       // Pengayaan deterministik: bila LLM memanggil save_reservation tanpa
       // data ibu padahal session.momProfile sudah diketahui dari turn
@@ -244,7 +321,9 @@ export class ToolExecutionPipeline {
         role: 'tool',
         tool_call_id: tc.id,
         name: fnName,
-        content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+        content: typeof toolResult === 'string' ? toolResult : JSON.stringify(
+          ToolExecutionPipeline.buildLlmSafeToolPayload(fnName, toolResult)
+        ),
       });
 
       if (fnName === 'save_reservation' && toolResult?.success === true) {
@@ -283,14 +362,17 @@ export class ToolExecutionPipeline {
           kelurahan: toolResult.kelurahan,
           kecamatan: toolResult.kecamatan,
           kota: toolResult.kota,
-          distanceKm: toolResult.distanceKm,
-          ongkirNormal: toolResult.ongkirNormal,
-          ongkirPromo: toolResult.ongkirPromo,
+          distanceKm: toolResult.distanceKm ?? toolResult.__internalDistanceKm,
+          // Rule 2: nilai nominal asli disimpan dari field internal saat
+          // disembunyikan dari payload LLM (ongkirNormal/Promo = undefined).
+          ongkirNormal: toolResult.ongkirNormal ?? toolResult.__internalOngkirNormal,
+          ongkirPromo: toolResult.ongkirPromo ?? toolResult.__internalOngkirPromo,
           isOutOfCoverage: toolResult.isOutOfCoverage,
         },
       }, tenantId);
       // Lifecycle ongkir: hasil kalkulasi akan disampaikan ke customer → QUOTED.
-      if (!toolResult.isOutOfCoverage) {
+      // Estimasi sentroid kecamatan BUKAN kutipan pasti → jangan tandai QUOTED.
+      if (!toolResult.isOutOfCoverage && !toolResult.isEstimatedCentroid) {
         session = await GoalTracker.markOngkirQuoted(conversationId, tenantId);
       }
     } else if (fnName === 'get_catalog_and_price' && toolResult.success) {

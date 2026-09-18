@@ -62,7 +62,29 @@ describe('Fase 3: Booking Commit & Location Prerequisite Gate', () => {
       expect(ready).toBe(false);
     });
 
-    it('MELOLOSKAN (true) bila lokasi SUDAH diketahui dan treatment sudah disepakati', () => {
+    it('MELOLOSKAN (true) bila lokasi SUDAH diketahui + treatment disepakati + komitmen eksplisit', () => {
+      const sessionWithLocation: CustomerGoalSession = {
+        genderGreeting: 'Bunda',
+        selectedTreatment: TREATMENT,
+        cartItems: [{ name: TREATMENT, promoPrice: 75000 } as any],
+        location: {
+          kelurahan: 'Waru',
+          kecamatan: 'Waru',
+          distanceKm: 5,
+        } as any,
+        booking: {},
+      };
+
+      const ready = ContextGrounder.isBookingCommitReady(
+        sessionWithLocation,
+        'siap bund, saya ambil hari ini jam 3 sore',
+        []
+      );
+
+      expect(ready).toBe(true);
+    });
+
+    it('MENOLAK (false) afirmasi ambigu "siap bund" tanpa verba komitmen (Rule 5)', () => {
       const sessionWithLocation: CustomerGoalSession = {
         genderGreeting: 'Bunda',
         selectedTreatment: TREATMENT,
@@ -78,6 +100,29 @@ describe('Fase 3: Booking Commit & Location Prerequisite Gate', () => {
       const ready = ContextGrounder.isBookingCommitReady(
         sessionWithLocation,
         'siap bund hari ini jam 3 sore',
+        []
+      );
+
+      expect(ready).toBe(false);
+    });
+
+    it('MELOLOSKAN (true) via sticky flag walau pesan terkini hanya menyebut hari', () => {
+      const sessionWithLocation: CustomerGoalSession = {
+        genderGreeting: 'Bunda',
+        selectedTreatment: TREATMENT,
+        cartItems: [{ name: TREATMENT, promoPrice: 75000 } as any],
+        location: {
+          kelurahan: 'Waru',
+          kecamatan: 'Waru',
+          distanceKm: 5,
+        } as any,
+        booking: {},
+        bookingCommitConfirmed: true,
+      };
+
+      const ready = ContextGrounder.isBookingCommitReady(
+        sessionWithLocation,
+        'hari ini jam 3 sore',
         []
       );
 

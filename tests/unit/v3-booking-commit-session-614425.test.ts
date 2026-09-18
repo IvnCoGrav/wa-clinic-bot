@@ -22,6 +22,10 @@ const committedSession: CustomerGoalSession = {
   targetAudience: 'KIDS' as any,
   selectedTreatment: TREATMENT,
   cartItems: [{ name: TREATMENT, promoPrice: 75000 } as any],
+  // Rule 5 (sticky): komitmen eksplisit "iya bu saya ambil treatment nya" di
+  // turn sebelumnya dikunci ke session (ContextGrounder.applySessionLatches),
+  // sehingga jawaban hari "besok boleh" di turn terpisah tetap commit-ready.
+  bookingCommitConfirmed: true,
 };
 
 const historyBeforeCommit = [
