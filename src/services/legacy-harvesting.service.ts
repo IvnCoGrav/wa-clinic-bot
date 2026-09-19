@@ -1,7 +1,7 @@
 import { prisma } from '../db/client';
 import { wahaClient } from '../integrations/waha/client';
 import { MedicalDetectionService } from './medical-detection.service';
-import { AiModelConfigService } from '../config/ai-models.config';
+import { AiModelConfigService, KENARI_PRIMARY_MODEL } from '../config/ai-models.config';
 import { parseReservationText } from '../utils/reservation-text-parser';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 
@@ -400,7 +400,7 @@ ${existingFaqTitles}
 
         const apiKey = process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
         const baseUrl = (process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
-        const model = process.env.AI_MODEL_HARVESTING || 'deepseek-chat';
+        const model = process.env.AI_MODEL_HARVESTING || KENARI_PRIMARY_MODEL;
 
         let extractedResult: { medicalFaqs: any[]; generalFaqs: any[] } = { medicalFaqs: [], generalFaqs: [] };
 

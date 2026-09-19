@@ -16,18 +16,18 @@ describe('AiModelConfigService — tenant-aware registry', () => {
     // Update tenant A
     const updated = AiModelConfigService.updateTaskConfig(
       'CHAT_REPLY',
-      { modelName: 'deepseek-v4-flash', provider: 'DeepSeek' },
+      { modelName: 'deepseek-v4-1-flash', provider: 'Kenari' },
       'tenant-A'
     );
-    expect(updated.modelName).toBe('deepseek-v4-flash');
+    expect(updated.modelName).toBe('deepseek-v4-1-flash');
 
-    // Tenant B TIDAK berubah
+    // Tenant B TIDAK berubah — tetap default registry (model kanonik Kenari).
     const tenantB = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-B');
-    expect(tenantB.modelName).toBe(process.env.AI_MODEL_CHAT || 'MiniMax-M2.7-highspeed');
+    expect(tenantB.modelName).toBe('deepseek-v4-1-flash');
 
     // Tenant default TIDAK berubah
     const def = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
-    expect(def.modelName).toBe(process.env.AI_MODEL_CHAT || 'MiniMax-M2.7-highspeed');
+    expect(def.modelName).toBe('deepseek-v4-1-flash');
   });
 
   it('getAllTaskConfigs per-tenant mengembalikan daftar terpisah', async () => {
@@ -39,7 +39,8 @@ describe('AiModelConfigService — tenant-aware registry', () => {
     const cSum = c.find((x) => x.task === 'SUMMARIZATION')!;
     const defSum = def.find((x) => x.task === 'SUMMARIZATION')!;
     expect(cSum.modelName).toBe('qwen3.7-flash-2026-07-15');
-    expect(defSum.modelName).toBe(process.env.AI_MODEL_SUMMARIZATION || 'MiniMax-M2.7-highspeed');
+    // Default tenant tetap memakai default registry (model kanonik Kenari).
+    expect(defSum.modelName).toBe('deepseek-v4-1-flash');
   });
 
   it('globalBotActive per-tenant: disable tenant A tidak memengaruhi tenant B', () => {

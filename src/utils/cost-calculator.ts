@@ -102,6 +102,12 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
   },
 
   // DeepSeek Models (Direct & Proxy Fallback with Peak/Off-Peak Support)
+  'deepseek-flash': {
+    provider: 'DeepSeek Direct',
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Off-Peak Cache Miss ($0.14 / 1M)
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Off-Peak Cache Hit ($0.003 / 1M)
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR, // Off-Peak Output ($0.28 / 1M)
+  },
   'deepseek-chat': {
     provider: 'DeepSeek Direct',
     promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss ($0.14 / 1M)
@@ -236,21 +242,33 @@ const DEFAULT_PRICING: ModelPricing = {
 /**
  * Memeriksa apakah waktu saat ini berada pada Peak Hours DeepSeek.
  * Peak Hours: 08:30 - 20:30 UTC+8 (Beijing Time) = 00:30 - 12:30 UTC = 07:30 - 19:30 WIB.
+ * CATATAN: tarif peak-hour HANYA berlaku untuk model DeepSeek yang di-host SumoPod
+ * atau DeepSeek Direct. Model `deepseek-v4-1-flash` (Kenari) berharga FLAT.
  */
 export function isDeepSeekPeakHour(date: Date = new Date()): boolean {
   const utcMins = date.getUTCHours() * 60 + date.getUTCMinutes();
   return utcMins >= 30 && utcMins < (12 * 60 + 30);
 }
 
+/** Model DeepSeek yang tarifnya mengikuti peak/off-peak (SumoPod & DeepSeek Direct). */
+const PEAK_HOUR_MODELS = new Set(['deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner', 'deepseek-flash']);
+
+/** Normalisasi nama model ke key harga kanonik (mis. deepseek-chat -> deepseek-flash di DeepSeek Direct). */
+function normalizePricingKey(modelName: string): string {
+  return (modelName || '').toLowerCase().trim();
+}
+
 /**
  * Resolusi tarif model dengan mempertimbangkan Peak Hours dinamis.
  */
 export function getModelPricing(modelName: string, date: Date = new Date()): ModelPricing {
-  const normalizedName = (modelName || '').toLowerCase().trim();
+  const normalizedName = normalizePricingKey(modelName);
   const basePricing = MODEL_PRICING_MAP[normalizedName] || DEFAULT_PRICING;
 
-  // DeepSeek Peak Hour adjustment (Input $0.44/1M, Hit $0.014/1M, Output $1.32/1M saat peak hours)
-  if (normalizedName.startsWith('deepseek') && isDeepSeekPeakHour(date)) {
+  // DeepSeek Peak Hour adjustment — HANYA untuk model yang memang di-host
+  // SumoPod/DeepSeek Direct (deepseek-v4-flash / deepseek-chat). Model Kenari
+  // (deepseek-v4-1-flash) TIDAK kena peak-hour (harga flat).
+  if (PEAK_HOUR_MODELS.has(normalizedName) && isDeepSeekPeakHour(date)) {
     if (normalizedName === 'deepseek-v4-flash') {
       return {
         ...basePricing,
@@ -301,7 +319,7 @@ export function calculateLlmCost(
   timestamp: Date = new Date()
 ): { provider: string; promptCostIdr: number; completionCostIdr: number; totalCostIdr: number; isPeak?: boolean } {
   const normalizedName = (modelName || '').toLowerCase().trim();
-  const isPeak = normalizedName.startsWith('deepseek') ? isDeepSeekPeakHour(timestamp) : false;
+  const isPeak = PEAK_HOUR_MODELS.has(normalizedName) ? isDeepSeekPeakHour(timestamp) : false;
   const pricing = getModelPricing(modelName, timestamp);
 
   const hitTokens = Math.min(promptTokens, Math.max(0, cachedPromptTokens));

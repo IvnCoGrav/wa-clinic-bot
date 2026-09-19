@@ -42,24 +42,25 @@ describe('Modul 5.3 — Legacy AI Harvesting Engine & Dynamic AI Model Registry 
     expect(bodyGet.data.length).toBeGreaterThan(0);
 
     // 2b. Update AI Model mapping dynamically for HARVESTING task
+    // (provider Kenari = provider aktif; model kanonik deepseek-v4-1-flash).
     const resPatch = await app.inject({
       method: 'PATCH',
       url: '/api/admin/ai-models/HARVESTING',
       headers: { 'x-api-key': 'test_admin_key_999' },
       payload: {
-        provider: 'OpenAI',
-        modelName: 'gpt-4o-mini',
+        provider: 'Kenari',
+        modelName: 'deepseek-v4-1-flash',
       },
     });
 
     expect(resPatch.statusCode).toBe(200);
     const bodyPatch = JSON.parse(resPatch.body);
     expect(bodyPatch.success).toBe(true);
-    expect(bodyPatch.data.modelName).toBe('gpt-4o-mini');
+    expect(bodyPatch.data.modelName).toBe('deepseek-v4-1-flash');
 
     // Verify change took effect in service
     const config = AiModelConfigService.getModelConfig('HARVESTING');
-    expect(config.modelName).toBe('gpt-4o-mini');
+    expect(config.modelName).toBe('deepseek-v4-1-flash');
   });
 
   it('3. Async Trigger & Polling API: POST /api/admin/harvest/legacy-chat & GET /api/admin/harvest/status', async () => {

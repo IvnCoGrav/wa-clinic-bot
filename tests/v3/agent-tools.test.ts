@@ -29,9 +29,9 @@ describe('V3 Native Agent Tools Suite', () => {
 
       expect(result.success).toBe(true);
       expect(result.isOutOfCoverage).toBe(false);
-      // Mode konsultasi: distanceKm disembunyikan dari payload LLM → verifikasi internal.
-      expect(result.__internalDistanceKm).toBeDefined();
-      expect(result.__internalDistanceKm).toBeLessThan(30); // Harus < 30 km (Surabaya Barat), bukan 165 km Bojonegoro!
+      // Kontrak 779408: lokasi presisi mengekspos distanceKm langsung (bukan __internal).
+      expect(result.distanceKm).toBeDefined();
+      expect(result.distanceKm).toBeLessThan(30); // Harus < 30 km (Surabaya Barat), bukan 165 km Bojonegoro!
     });
 
     it('harus menolak menghitung jarak jika customer hanya menyebut area luas seperti "Rumah d Surabaya barat" (isPrecise: false)', async () => {

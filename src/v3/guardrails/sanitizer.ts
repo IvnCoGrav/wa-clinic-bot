@@ -379,6 +379,14 @@ export class OutputSanitizer {
     // menempatkan sapaan sebagai partisipan klausa (subjek), BUKAN panggilan.
     // Aturan gramatikal produktif (bukan daftar kata user), berlaku umum.
     const RELATIVIZER_BEFORE_RE = /(?:^|[\s(])yang\s+$/i;
+    // Sesi 779408 (Mid-Sentence Mutilation Ban): sapaan yang berposisi sebagai
+    // SUBJEK/AGEN klausa di TENGAH kalimat — didahului modal verb ("ingin",
+    // "bisa", "mau", "perlu", ...) atau konjungsi subordinatif ("kalau",
+    // "jika", "apabila", ...). Proteksi lama hanya cek awal kalimat, sehingga
+    // "Ada yang ingin Bunda konsultasikan..." kehilangan kata "Bunda" →
+    // gramatikal rusak. Ini gerbang gramatikal produktif, bukan hafalan frasa.
+    const MODAL_BEFORE_RE = /(?:^|[\s(])(?:ingin|mau|bisa|perlu|dapat|sedang|sudah|akan|belum|harus|boleh|sempat)\s+$/i;
+    const SUBORDINATE_BEFORE_RE = /(?:^|[\s(])(?:kalau|jika|apabila|bila|apakah|agar|supaya|saat|ketika)\s+$/i;
     let seen = 0;
     return text.replace(pattern, (match, _g, offset: number, full: string) => {
       // 391501: proteksi subjek — cek posisi awal kalimat/klausa + verba.
@@ -394,6 +402,13 @@ export class OutputSanitizer {
       // Plan regresi Fase 1.2: subjek klausa relatif — pertahankan utuh,
       // tetap hitung kuota (kontrol overuse Rule 6 terjaga).
       if (RELATIVIZER_BEFORE_RE.test(before)) {
+        seen += 1;
+        return match;
+      }
+      // Sesi 779408: subjek/agen klausa yang didahului modal verb atau
+      // konjungsi subordinatif di TENGAH kalimat — DILARANG dipotong.
+      // Tetap hitung kuota agar kontrol overuse tidak longgar.
+      if (MODAL_BEFORE_RE.test(before) || SUBORDINATE_BEFORE_RE.test(before)) {
         seen += 1;
         return match;
       }

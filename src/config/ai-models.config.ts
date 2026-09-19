@@ -22,15 +22,62 @@ export interface AiTaskModelConfig {
   confidenceThreshold?: number;
 }
 
+// === Sumber kebenaran tunggal nama model per-provider (Fase 1 plan standardisasi) ===
+// Tier 1 (primary)  : Kenari        -> deepseek-v4-1-flash  (label display: "DeepSeek-V4.1-Flash")
+// Tier 2 (secondary): SumoPod       -> deepseek-v4-flash
+// Tier 3 (last)     : DeepSeek Direct -> deepseek-flash
+export const KENARI_PRIMARY_MODEL = 'deepseek-v4-1-flash';
+export const SUMOPOD_SECONDARY_MODEL = 'deepseek-v4-flash';
+export const DEEPSEEK_DIRECT_MODEL = 'deepseek-flash';
+
+/** Satu-satunya string model DeepSeek yang dipakai sebagai default runtime. */
+export const DISPLAY_MODEL_LABEL = 'DeepSeek-V4.1-Flash';
+
+/** Nama model legacy -> model kanonik per provider (alias dua arah, provider-aware). */
+const KENARI_CATALOG = new Set([
+  KENARI_PRIMARY_MODEL,
+  'deepseek-v4-pro',
+  'qwen3-8-flash',
+  'qwen3-7-plus',
+  'minimax-m2-7',
+  'step-3-7-flash:free',
+]);
+
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
-  // Alias legacy: deepseek-v4-1-flash di-rename provider menjadi deepseek-v4-flash (2026-09)
-  const legacyAlias = (m: string) => m === 'deepseek-v4-1-flash' ? 'deepseek-v4-flash' : m;
-  if (!model) return 'deepseek-v4-flash';
-  model = legacyAlias(model);
   const url = (baseUrl || process.env.OPENAI_BASE_URL || '').toLowerCase();
-  
+
+  // Alias legacy dua arah: nama lama model DeepSeek apapun diarahkan ke model kanonik
+  // sesuai provider yang aktif (mis. kenari: deepseek-v4-flash/deepseek-chat -> deepseek-v4-1-flash).
+  const legacyDeepseekAlias = (m: string): string | null => {
+    const lower = m.toLowerCase();
+    if (
+      lower === 'deepseek-v4-flash' ||
+      lower === 'deepseek-chat' ||
+      lower === 'deepseek-v4-1-flash' ||
+      lower === 'deepseek-reasoner' ||
+      lower === 'deepseek-coder'
+    ) {
+      if (url.includes('sumopod')) return SUMOPOD_SECONDARY_MODEL;
+      if (url.includes('api.deepseek.com') || url.includes('deepseek.com')) return DEEPSEEK_DIRECT_MODEL;
+      if (url.includes('api.openai.com')) return null; // biarkan aturan OpenAI di bawah yang menangani
+      if (url.includes('kenari.id')) return KENARI_PRIMARY_MODEL;
+      return null; // provider tak dikenal: jangan paksa remap
+    }
+    return null;
+  };
+
+  if (!model) {
+    if (url.includes('api.openai.com')) return 'gpt-4o-mini';
+    if (url.includes('sumopod')) return SUMOPOD_SECONDARY_MODEL;
+    if (url.includes('api.deepseek.com') || url.includes('deepseek.com')) return DEEPSEEK_DIRECT_MODEL;
+    return KENARI_PRIMARY_MODEL;
+  }
+
+  const aliased = legacyDeepseekAlias(model);
+  if (aliased) return aliased;
+
   // Jika endpoint resmi OpenAI, pastikan hanya model OpenAI valid
   if (url.includes('api.openai.com')) {
     if (!model.startsWith('gpt-') && !model.startsWith('o1') && !model.startsWith('o3')) {
@@ -38,34 +85,30 @@ export function sanitizeModelForProvider(model: string, baseUrl?: string): strin
     }
   }
 
-  // Jika endpoint SumoPod dan ada model lama yang tidak disupport, fallback ke model SumoPod valid
+  // SumoPod: model lama tak didukung -> model SumoPod valid
   if (url.includes('sumopod.com')) {
     if (model === 'gpt-4o' || model === 'gpt-3.5-turbo') {
-      return 'deepseek-v4-flash';
+      return SUMOPOD_SECONDARY_MODEL;
     }
   }
 
-  // Kenari.id TIDAK melayani model native OpenAI (gpt-*/o1*/o3*) — hanya katalog
-  // Kenari (deepseek/qwen/glm/kimi/mimo/dll). Karena satu endpoint aktif dipakai
-  // lintas-task, model OpenAI-only WAJIB di-remap ke model Kenari default agar
-  // tidak menghasilkan 400 `no price for model`. Ini aturan provider-level
-  // (bukan data bisnis tenant) — mirror logika OpenAI/SumoPod di atas.
+  // Kenari.id TIDAK melayani model native OpenAI (gpt-*/o1*/o3*) & model katalog asing.
+  // Remap SEMUA model non-katalog-Kenari ke model Kenari default agar tidak 400.
   if (url.includes('kenari.id')) {
-    if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
-      return legacyAlias(process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash');
+    if (!KENARI_CATALOG.has(model)) {
+      return KENARI_PRIMARY_MODEL;
     }
   }
 
-  // Kenari.id mendukung penuh deepseek-v4-flash, deepseek-v4-pro, qwen3-8-flash, dll.
   return model;
 }
 
 const defaultProvider = process.env.AI_PROVIDER_CHAT || 'Kenari';
-const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || KENARI_PRIMARY_MODEL;
 const defaultChatModel = sanitizeModelForProvider(rawChatModel);
 const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const defaultNluModel = sanitizeModelForProvider(rawNluModel);
-const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash';
+const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || KENARI_PRIMARY_MODEL;
 
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
@@ -94,7 +137,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY_DEEP',
     {
       task: 'CHAT_REPLY_DEEP',
-      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'DeepSeek',
+      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'Kenari',
       modelName: defaultDeepModel,
       description: 'Digunakan untuk menghasilkan respon percakapan mendalam pada konsultasi klinis multi-gejala / multi-treatment.',
       maxTokens: 1024,
@@ -148,7 +191,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   ],
 ]);
 
-export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen', 'Kenari'];
+export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen', 'Kenari', 'SumoPod'];
 
 // Registry per-tenant: Map<tenantId, Map<AiTaskType, AiTaskModelConfig>>.
 // Default tenant di-seed dari env pada saat modul dimuat.
@@ -190,10 +233,10 @@ export class AiModelConfigService {
 
     // Sinkronkan model chat default sesuai provider yang dipilih
     if (provider === 'KENARI') {
-      const kenariModel = process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash';
+      const kenariModel = process.env.KENARI_DEFAULT_MODEL || KENARI_PRIMARY_MODEL;
       this.updateTaskConfig('CHAT_REPLY', { provider: 'Kenari', modelName: kenariModel }, tenantId);
     } else {
-      const sumopodModel = process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash';
+      const sumopodModel = process.env.SUMOPOD_DEFAULT_MODEL || SUMOPOD_SECONDARY_MODEL;
       this.updateTaskConfig('CHAT_REPLY', { provider: 'MiniMax', modelName: sumopodModel }, tenantId);
     }
 
@@ -241,7 +284,7 @@ export class AiModelConfigService {
         provider: 'KENARI',
         baseUrl: (process.env.KENARI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
         apiKey: process.env.KENARI_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
-        defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-flash',
+        defaultModel: process.env.KENARI_DEFAULT_MODEL || KENARI_PRIMARY_MODEL,
       };
     }
 
@@ -249,7 +292,7 @@ export class AiModelConfigService {
       provider: 'SUMOPOD',
       baseUrl: (process.env.SUMOPOD_BASE_URL || process.env.OPENAI_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
       apiKey: process.env.SUMOPOD_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
-      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash',
+      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || SUMOPOD_SECONDARY_MODEL,
     };
   }
 

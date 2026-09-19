@@ -122,4 +122,38 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     // Tidak boleh ada "Bunda" bebas berlebih di awal yang lolos (kuota dasar).
     expect((out.match(/\bBunda\b/gi) || []).length).toBeLessThanOrEqual(3);
   });
+
+  // Sesi 779408 (Mid-Sentence Mutilation Ban) — proteksi subjek/agen klausa
+  // yang didahului modal verb atau konjungsi subordinatif. Klaim bug: sapaan
+  // "Bunda" pada "Ada yang ingin Bunda konsultasikan..." TERPOTONG karena
+  // proteksi lama hanya mengecek awal kalimat + kata "yang" persis.
+  it('proteksi subjek modal: "Ada yang ingin Bunda konsultasikan" tetap utuh (sesi 779408)', () => {
+    const input = 'Bungurasih masih masuk area jangkauan kami ya Bunda 😊\n\nAda yang ingin Bunda konsultasikan atau ada keluhan tertentu pada si kecil? 🤗';
+    const out = OutputSanitizer.limitVocativeQuota(input, 1);
+    expect(out).toContain('ingin Bunda konsultasikan');
+    expect(out).not.toContain('ingin konsultasikan');
+  });
+
+  it('proteksi modal verbs lain: bisa/mau/perlu/sudah + Bunda + verba tetap utuh', () => {
+    for (const modal of ['bisa', 'mau', 'perlu', 'sudah', 'sedang', 'dapat', 'belum']) {
+      const input = `Baik Bunda, ${modal} Bunda lakukan kapan saja ya.`;
+      const out = OutputSanitizer.limitVocativeQuota(input, 1);
+      expect(out).toContain(`${modal} Bunda lakukan`);
+    }
+  });
+
+  it('proteksi konjungsi subordinatif: "kalau Bunda ingin" tetap utuh', () => {
+    const input = 'Baik Bunda, kalau Bunda ingin, kami bantu atur jadwalnya.';
+    const out = OutputSanitizer.limitVocativeQuota(input, 1);
+    expect(out).toContain('kalau Bunda ingin');
+  });
+
+  it('vokatif periferal tetap dipangkas meski ada modal jauh sebelumnya', () => {
+    // "Bunda kedua" (setelah koma di akhir) tetap panggilan periferal → dipangkas.
+    const out = OutputSanitizer.limitVocativeQuota(
+      'Baik Bunda, kami catat ya Bunda',
+      1
+    );
+    expect((out.match(/\bBunda\b/gi) || []).length).toBeLessThanOrEqual(1);
+  });
 });

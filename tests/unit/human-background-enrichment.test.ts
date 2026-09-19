@@ -57,6 +57,15 @@ vi.mock('../../src/services/conversation.service', () => ({
   },
 }));
 
+// RC-3: pastikan enrichSync TIDAK memanggil LLM (EntityExtractor.extract) saat lokasi
+// sudah bisa diekstrak deterministik dari pesan customer yang sudah di HUMAN_HANDLING.
+vi.mock('../../src/services/entity-extractor.service', () => ({
+  EntityExtractor: {
+    extract: vi.fn().mockResolvedValue({ intents: ['chitchat'], locationText: null, symptoms: [] }),
+    preExtractDeterministic: vi.fn(),
+  },
+}));
+
 describe('Human Background Enrichment Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -188,5 +197,67 @@ describe('Human Background Enrichment Service', () => {
       }),
       'default-tenant'
     );
+  });
+
+  // === RC-3 (Fase 3): enrichment saat HUMAN_HANDLING tidak boleh memanggil LLM ===
+  it('RC-3: lokasi terdeteksi deterministik → TIDAK memanggil LLM (EntityExtractor.extract)', async () => {
+    const { EntityExtractor } = await import('../../src/services/entity-extractor.service');
+    vi.mocked(EntityExtractor.preExtractDeterministic).mockReturnValue({
+      intents: ['provide_location'],
+      locationText: 'Kebraon, Karangpilang',
+      streetDetail: null,
+      symptoms: [],
+    } as any);
+
+    const ctx: any = {
+      customer: {
+        id: 'cust-6',
+        phone: '6289900112200',
+        lat: null,
+        lng: null,
+        distance_km: null,
+        zipcode: null,
+        pending_zipcode: null,
+      },
+      conversation: { id: 'conv-1' },
+      incomingMessage: { type: 'text', text: { body: 'Rumah saya di Kebraon Karangpilang ya kak' } },
+      history: [],
+    };
+
+    const res = await humanBackgroundEnrichmentService.enrichSync(ctx, 'default-tenant');
+
+    // Jalur deterministik dipakai; LLM TIDAK dipanggil sama sekali.
+    expect(EntityExtractor.preExtractDeterministic).toHaveBeenCalled();
+    expect(EntityExtractor.extract).not.toHaveBeenCalled();
+    expect(res.enriched).toBe(true);
+  });
+
+  it('RC-3: deterministik kosong & lokasi sudah ada → tetap TIDAK memanggil LLM', async () => {
+    const { EntityExtractor } = await import('../../src/services/entity-extractor.service');
+    vi.mocked(EntityExtractor.preExtractDeterministic).mockReturnValue({
+      intents: ['chitchat'],
+      locationText: null,
+      streetDetail: null,
+      symptoms: [],
+    } as any);
+
+    const ctx: any = {
+      customer: {
+        id: 'cust-7',
+        phone: '6289900112201',
+        lat: -7.34,
+        lng: 112.75,
+        distance_km: 12,
+        zipcode: '60222',
+        pending_zipcode: null,
+      },
+      conversation: { id: 'conv-1' },
+      incomingMessage: { type: 'text', text: { body: 'nanti dikabari ya kak' } },
+      history: [],
+    };
+
+    await humanBackgroundEnrichmentService.enrichSync(ctx, 'default-tenant');
+
+    expect(EntityExtractor.extract).not.toHaveBeenCalled();
   });
 });

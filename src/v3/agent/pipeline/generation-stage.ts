@@ -14,20 +14,29 @@ export const v3LlmCircuitBreaker = new CircuitBreaker(
     return response.data;
   },
   async (url: string, payload: any, headers: any) => {
-    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || '';
-    const fallbackBaseUrl = (process.env.LLM_FALLBACK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-    const fallbackModel = process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
-    const fallbackPayload = { ...payload, model: fallbackModel };
-    const fallbackHeaders = { Authorization: `Bearer ${fallbackApiKey}`, 'Content-Type': 'application/json' };
-    console.warn(`[CIRCUIT BREAKER FALLBACK] Executing fallback to ${fallbackModel}...`);
-    if (!fallbackApiKey) {
-      throw new Error('LLM_FALLBACK_API_KEY not configured');
+    // Fallback LINTAS-PROVIDER berjenjang (Tier 2 SumoPod -> Tier 3 DeepSeek Direct),
+    // via resolver tier terpusat — bukan hardcode api.deepseek.com.
+    const { resolveFallbackTiers } = await import('../../../integrations/llm/model-fallback');
+    const tiers = resolveFallbackTiers();
+    if (tiers.length === 0) {
+      throw new Error('LLM circuit breaker fallback: tidak ada tier provider cadangan yang terkonfigurasi');
     }
-    const fallbackResponse = await axios.post(`${fallbackBaseUrl}/chat/completions`, fallbackPayload, {
-      headers: fallbackHeaders,
-      timeout: 20000,
-    });
-    return fallbackResponse.data;
+    let lastErr: any;
+    for (const tier of tiers) {
+      try {
+        const fallbackPayload = { ...payload, model: tier.model };
+        const fallbackHeaders = { Authorization: `Bearer ${tier.apiKey}`, 'Content-Type': 'application/json' };
+        console.warn(`[CIRCUIT BREAKER FALLBACK] Executing fallback to Tier ${tier.name} (${tier.model})...`);
+        const fallbackResponse = await axios.post(`${tier.baseUrl}/chat/completions`, fallbackPayload, {
+          headers: fallbackHeaders,
+          timeout: 20000,
+        });
+        return fallbackResponse.data;
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('LLM circuit breaker fallback: seluruh tier gagal');
   },
   {
     name: 'V3 LLM Primary Gateway',

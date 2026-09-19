@@ -4,11 +4,14 @@ import { executeCalculateDelivery } from '../../src/v3/tools/calculate-delivery.
 import { deliveryService } from '../../src/services/delivery.service';
 
 /**
- * Strict Information Hiding (Rule 2): nominal rupiah DILARANG muncul di output
- * tool saat customer TIDAK bertanya harga/biaya. Garis pertahanan = data dipotong
- * fisik di tool, bukan kepatuhan prompt.
+ * Information Hiding — kontrak sesi 779408:
+ * 1. HARGA PAKET/treatment DILARANG bocor bila customer belum tanya biaya
+ *    (get-catalog mode konsultasi) — tetap berlaku.
+ * 2. ONGKIR/JARAK: dibuka bila lokasi PRESISI terverifikasi; disembunyikan bila
+ *    area masih luas (imprecise) atau di luar jangkauan.
+ * Garis pertahanan = data dipotong fisik di tool, bukan kepatuhan prompt.
  */
-describe('catalog-information-hiding — zero price leaks mode konsultasi', () => {
+describe('information-hiding — harga paket vs ongkir lokasi presisi', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -29,13 +32,15 @@ describe('catalog-information-hiding — zero price leaks mode konsultasi', () =
     expect(String(res.message || '')).not.toMatch(/Rp\s*[\d.]+/);
   });
 
-  it('calculate-delivery tanpa asksDeliveryFee: tanpa nominal rupiah', async () => {
+  it('calculate-delivery lokasi PRESISI tanpa asksDeliveryFee: jarak & ongkir dibuka (kontrak 779408)', async () => {
     vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
       distanceKm: 28.33,
       ongkir: 30000,
       normalPrice: 35000,
       promoPrice: 30000,
       isOutOfCoverage: false,
+      maxCoverageKm: 30,
+      freeTierKm: 5,
       messageTemplate: '',
     } as any);
     const res: any = await executeCalculateDelivery({
@@ -43,58 +48,46 @@ describe('catalog-information-hiding — zero price leaks mode konsultasi', () =
       asksDeliveryFee: false,
     });
     expect(res.success).toBe(true);
-    expect(String(res.message || '')).not.toMatch(/Rp\s*[\d.]+/);
-    expect(String(res.suggestedTemplateReply || '')).not.toMatch(/Rp\s*[\d.]+/);
+    expect(res.isPrecise).toBe(true);
+    expect(res.ongkirNormal).toBe(35000);
+    expect(res.ongkirPromo).toBe(30000);
+    expect(res.distanceKm).toBeCloseTo(28.33, 2);
+    expect(String(res.suggestedTemplateReply || '')).toMatch(/Rp\s*[\d.]+/);
   });
 
-  it('calculate-delivery tanpa asksDeliveryFee: payload JSON LLM TANPA ongkirNormal/ongkirPromo (anti-bocor key-value)', async () => {
-    vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
-      distanceKm: 12.33,
-      ongkir: 15000,
-      normalPrice: 25000,
-      promoPrice: 15000,
-      isOutOfCoverage: false,
-      messageTemplate: '',
-    } as any);
+  it('calculate-delivery area LUAS (imprecise): nominal & km disembunyikan', async () => {
     const res: any = await executeCalculateDelivery({
-      locationText: 'Pelemwatu Menganti Gresik',
+      locationText: 'Menganti Gresik',
       asksDeliveryFee: false,
     });
-    expect(res.success).toBe(true);
-    // Bukti leak vector: properti nominal di payload tool yang dibaca LLM.
+    expect(res.success).toBe(false);
+    expect(res.isPrecise).toBe(false);
     expect(res.ongkirNormal).toBeUndefined();
     expect(res.ongkirPromo).toBeUndefined();
-    // Aturan Emas: jarak km juga DILARANG bocor bila tidak ditanya.
     expect(res.distanceKm).toBeUndefined();
-    // Nilai asli tetap tersimpan internal untuk state sesi.
-    expect(res.__internalOngkirNormal).toBe(25000);
-    expect(res.__internalOngkirPromo).toBe(15000);
-    expect(res.__internalDistanceKm).toBeDefined();
-    // Payload yang benar-benar dikirim ke LLM bersih dari key-value nominal.
-    const { ToolExecutionPipeline } = await import('../../src/v3/agent/pipeline/tool-pipeline');
-    const llmPayload = ToolExecutionPipeline.buildLlmSafeToolPayload('calculate_delivery', res);
-    const serialized = JSON.stringify(llmPayload);
-    expect(serialized).not.toContain('25000');
-    expect(serialized).not.toContain('15000');
-    expect(serialized).not.toContain('__internal');
+    expect(String(res.message || '')).not.toMatch(/Rp\s*[\d.]+/);
+    expect(String(res.message || '')).not.toMatch(/\d+[.,]\d+\s*km/);
   });
 
-  it('calculate-delivery dengan asksDeliveryFee: nominal tampil normal', async () => {
+  it('calculate-delivery di luar jangkauan: tidak mengekspos ongkir promo dalam jangkauan', async () => {
     vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
-      distanceKm: 28.33,
-      ongkir: 30000,
-      normalPrice: 35000,
-      promoPrice: 30000,
-      isOutOfCoverage: false,
+      distanceKm: 45,
+      ongkir: 0,
+      normalPrice: 0,
+      promoPrice: 0,
+      isOutOfCoverage: true,
+      maxCoverageKm: 30,
+      freeTierKm: 5,
       messageTemplate: '',
     } as any);
     const res: any = await executeCalculateDelivery({
       locationText: 'Pelemwatu Menganti Gresik',
       asksDeliveryFee: true,
     });
-    expect(res.success).toBe(true);
-    expect(String(res.message || '')).toMatch(/Rp\s*[\d.]+/);
-    expect(res.ongkirNormal).toBe(35000);
-    expect(res.ongkirPromo).toBe(30000);
+    expect(res.isOutOfCoverage).toBe(true);
+    // Payload LLM tetap bersih dari __internal.
+    const { ToolExecutionPipeline } = await import('../../src/v3/agent/pipeline/tool-pipeline');
+    const llmPayload = ToolExecutionPipeline.buildLlmSafeToolPayload('calculate_delivery', res);
+    expect(JSON.stringify(llmPayload)).not.toContain('__internal');
   });
 });

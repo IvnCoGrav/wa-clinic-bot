@@ -34,17 +34,19 @@ describe('V3 anti-todong jadwal & anti-halusinasi domisili (sesi 435731)', () =>
     expect(slice).not.toContain('Mau kami bantu jadwalkan');
   });
 
-  it('Waru ditegaskan sebagai basecamp; dilarang mengasumsikan domisili customer', () => {
+  it('anti-halusinasi domisili: dilarang mengasumsikan domisili customer (tenant-agnostic, tanpa hardcode Waru)', () => {
     const p = prompt();
-    expect(p).toContain('Waru');
-    expect(p).toContain('DILARANG mengasumsikan customer berdomisili di Waru');
-    expect(p).toContain('DILARANG KERAS mengasumsikan customer berdomisili di Waru/kecamatan mana pun');
+    // Fase 2 sesi 779408: hardcode "Waru" dicabut dari prompt (SaaS-readiness).
+    // Guard anti-asumsi domisili TETAP ada, kini berbasis data/aturan umum.
+    expect(p).toContain('DILARANG TEBAK KOTA/WILAYAH');
+    expect(p).toContain('DILARANG dijadikan asumsi domisili customer');
+    expect(p).not.toContain('"Waru" HANYA lokasi basecamp');
   });
 
   it('menyebut "Admin CS" hanya di baris larangan', () => {
     const outsideBan = prompt()
       .split('\n')
-      .filter((line) => line.includes('Admin CS') && !line.includes('DILARANG SEBUT'));
+      .filter((line) => line.includes('Admin CS') && !line.includes('DILARANG'));
     expect(outsideBan).toEqual([]);
   });
 
