@@ -826,6 +826,10 @@ export class MessageService {
     const revokedContent = '🚫 Pesan ini telah ditarik';
     let conversationId: string | null = null;
 
+    // ID kanonik untuk SSE (lihat updateMessageContent): frontend match via id internal.
+    let resolvedMessageId = messageId;
+    let resolvedWaMessageId: string | null = null;
+
     try {
       const msg = await prisma.message.findFirst({
         where: {
@@ -841,6 +845,8 @@ export class MessageService {
         });
         if (msgWa) {
           conversationId = msgWa.conversation_id;
+          resolvedMessageId = msgWa.id;
+          resolvedWaMessageId = msgWa.wa_message_id ?? null;
           await prisma.message.update({
             where: { id: msgWa.id },
             data: {
@@ -855,6 +861,8 @@ export class MessageService {
         }
       } else {
         conversationId = msg.conversation_id;
+        resolvedMessageId = msg.id;
+        resolvedWaMessageId = msg.wa_message_id ?? null;
         await prisma.message.update({
           where: { id: msg.id },
           data: {
@@ -877,6 +885,8 @@ export class MessageService {
         inMem.content = revokedContent;
         inMem.payload_raw = { ...inMem.payload_raw, is_revoked: true };
         conversationId = inMem.conversation_id;
+        resolvedMessageId = inMem.id;
+        resolvedWaMessageId = inMem.wa_message_id ?? null;
       }
     }
 
@@ -888,7 +898,8 @@ export class MessageService {
         tenantId,
         payload: {
           conversationId,
-          messageId,
+          messageId: resolvedMessageId,
+          waMessageId: resolvedWaMessageId,
           content: revokedContent,
           isRevoked: true,
         },
@@ -927,6 +938,12 @@ export class MessageService {
       orConds.push({ wa_message_id: { endsWith: `_${cleanId}` }, tenant_id: tenantId });
     }
 
+    // ID kanonik untuk SSE: frontend mencocokkan bubble via `m.id` internal.
+    // Kalau input berupa raw key/serialized WAHA, resolve ke id internal agar
+    // event tidak terbuang (sebelumnya payload memakai raw key → tidak match).
+    let resolvedMessageId = messageId;
+    let resolvedWaMessageId: string | null = null;
+
     try {
       const msg = await prisma.message.findFirst({
         where: { OR: orConds },
@@ -934,6 +951,8 @@ export class MessageService {
 
       if (msg) {
         conversationId = msg.conversation_id;
+        resolvedMessageId = msg.id;
+        resolvedWaMessageId = msg.wa_message_id ?? null;
         await prisma.message.update({
           where: { id: msg.id },
           data: {
@@ -949,12 +968,14 @@ export class MessageService {
     } catch (error) {
       console.warn('DB updateMessageContent error (using memory fallback):', (error as Error).message);
       const inMem = memoryMessages.find(
-        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+        (m) => (m.id === messageId || m.wa_message_id === messageId || (cleanId && m.wa_message_id && m.wa_message_id.endsWith(`_${cleanId}`))) && m.tenant_id === tenantId
       );
       if (inMem) {
         inMem.content = newContent;
         inMem.payload_raw = { ...inMem.payload_raw, is_edited: true, edited_at: new Date().toISOString() };
         conversationId = inMem.conversation_id;
+        resolvedMessageId = inMem.id;
+        resolvedWaMessageId = inMem.wa_message_id ?? null;
       }
     }
 
@@ -966,7 +987,8 @@ export class MessageService {
         tenantId,
         payload: {
           conversationId,
-          messageId,
+          messageId: resolvedMessageId,
+          waMessageId: resolvedWaMessageId,
           content: newContent,
           isEdited: true,
           editedAt: new Date().toISOString(),
