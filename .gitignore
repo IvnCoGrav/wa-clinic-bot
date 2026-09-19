@@ -78,6 +78,7 @@ data/
 # local desktop tool state
 .freebuff/
 .commandcode/
+.opencode/
 
 # Local evaluation scripts and live chat data dumps (protect customer PII)
 scripts/*.ps1

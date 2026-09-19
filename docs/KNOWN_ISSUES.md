@@ -1832,3 +1832,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `buildToneNegConstraints` state-gate bergantung pada `session.childProfile`/`children[].ageMonths`;
     bila usia hanya tersedia di form reservasi (belum di sesi), bot tetap menanyakan — perilaku benar.
 - **Verifikasi:** `npm run build` 0; unit/integrasi terkait 37/37 hijau; suite v3 tidak ada regresi baru.
+
+---
+
+## 94. [Simulator] "Error calling AI Generator: Failed to fetch" + leak Waru lanjutan (2026-09-19)
+
+- **Status:** RESOLVED (leak Waru) / DIJELASKAN (Failed to fetch).
+- **Gejala 1 — "Failed to fetch":** Simulator sesi 538631 menampilkan error network dua kali ("halo kak", "bungurasih").
+  - **Akar:** BUKAN bug kode. `tsx watch` melakukan hot-reload 3x dalam 30 detik tepat pada jam sesi (log `app-2026-09-19.log`: `03:55:14`, `03:55:35`, `03:55:44` UTC = 10:55 WIB) karena aktivitas edit file. Setiap restart memutus request in-flight -> `fetch()` browser melempar `Failed to fetch`.
+  - **Resolusi:** tidak ada (transient). Endpoint terbukti sehat: 3/3 `POST /api/admin/sandbox/chat` -> 200 OK.
+  - **Catatan:** saat mengedit kode, jangan jalankan simulator pada window yang sama dengan hot-reload.
+- **Gejala 2 — balasan menyebut "Waru":** balasan "Bungurasih, Waru ya Bunda" muncul. **DIPUTUSKAN BUKAN BUG** (koreksi 2026-09-19): "Bungurasih" MEMANG kelurahan di Kecamatan Waru, jadi penyebutan "Waru" adalah **fakta geografis sah** (wilayah customer sendiri), bukan halusinasi.
+  - **Deliberasi:** Percobaan awal (menghapus field `kecamatan`/`kota` dari payload LLM) DIBATALKAN — itu menghilangkan info faktual yang sah. Keputusan user: **kecamatan target BOLEH disebut**.
+  - **Perbaikan (fondasional) yang benar:**
+    1. `buildLlmSafeToolPayload` **mempertahankan** `kecamatan`/`kota` (template prosa tetap dicabut, anti parrot-effect). Test `tool-pipeline` 9/9.
+    2. **Rule 11 dipersempit** (`NO_GUESS_CITY_RULE`): larangan hanya untuk wilayah TANPA dasar (tidak disebut customer DAN bukan hasil tool). Kecamatan yang merupakan bagian administratif wilayah target (tool-grounded) DIKECUALIKAN sebagai fakta sah.
+  - **Validator sudah konsisten:** `factual-claim-validator.ts` (`isToolGrounded`, baris ~268) memperlakukan kecamatan hasil `calculate_delivery` sebagai grounding sah — tidak diflag halusinasi. `factual-claim-validator` 13/13.
+  - **Catatan:** "Waru" tetap nama basecamp klinik; menyebutnya atas dasar KLIEN (basecamp) tetap DILARANG Rule 11 (BUKAN wilayah target customer) — `HOMEBASE_EXEMPT_RE` membedakan konteks "homebase kami di Waru" (sah) vs atribusi domisili salah (haram).
+- **Tech debt baru (belum diperbaiki):** balasan konsultasi masih menyebut nominal ongkir (`Rp 5.000`) meski customer belum bertanya biaya — RC-1 Information Hiding di lapisan **generasi** (bukan lagi prompt/lifecycle). Perlu audit terpisah pada grounding/generation Call 2.

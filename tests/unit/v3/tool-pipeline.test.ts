@@ -184,4 +184,28 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     expect(delivery.args.locationText).toBe('Bungurasih');
     expect(out.updatedSession.location?.kelurahan).toBe('Bungurasih');
   });
+
+  // RC-2 (keputusan user 2026-09-19): kecamatan TARGET adalah fakta geografis
+  // SAH (mis. "Bungurasih" memang kelurahan Kecamatan Waru) — payload LLM
+  // DILARANG menghapusnya. Yang dilarang Rule 11 hanyalah kecamatan yang BUKAN
+  // wilayah target (halusinasi murni).
+  it('buildLlmSafeToolPayload(calculate_delivery) MEMPERTAHANKAN kecamatan target', () => {
+    const toolResult = {
+      success: true,
+      isPrecise: true,
+      kelurahan: 'Bungurasih',
+      kecamatan: 'Waru',
+      kota: 'Kabupaten Sidoarjo',
+      distanceKm: 5.51,
+      ongkirNormal: 15000,
+      ongkirPromo: 5000,
+      suggestedTemplateReply: 'Area Bungurasih masuk dalam area jangkauan...',
+      message: 'Area Bungurasih masuk dalam area jangkauan layanan homecare Bidan kami (5.51 km).',
+    };
+    const payload: any = ToolExecutionPipeline.buildLlmSafeToolPayload('calculate_delivery', toolResult);
+    expect(payload.kecamatan).toBe('Waru');
+    expect(payload.kelurahan).toBe('Bungurasih');
+    // Template prosa tetap dicabut (anti parrot-effect) — hanya data mentah yang lolos.
+    expect(payload.suggestedTemplateReply).toBeUndefined();
+  });
 });
