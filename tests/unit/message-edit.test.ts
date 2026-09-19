@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { messageService } from '../../src/services/message.service';
 import { prisma } from '../../src/db/client';
+import { liveChatHubService } from '../../src/services/live-chat-hub.service';
 
 /**
  * Regresi bug: pesan yang diedit di WhatsApp (admin/kustomer) TIDAK ter-update
@@ -90,5 +91,23 @@ describe('messageService.updateMessageContent (WAHA message.edited)', () => {
     await expect(
       messageService.updateMessageContent(RAW_KEY, 'text', TENANT)
     ).resolves.toBe(true);
+  });
+
+  it('E6: SSE message.updated memakai id internal (bukan raw key) agar cocok di livechat', async () => {
+    const publishSpy = vi
+      .spyOn(liveChatHubService, 'publish')
+      .mockResolvedValue(undefined as any);
+
+    await messageService.updateMessageContent(RAW_KEY, 'Teks edit live', TENANT);
+
+    expect(publishSpy).toHaveBeenCalled();
+    const evt = publishSpy.mock.calls[0][0] as any;
+    expect(evt.type).toBe('message.updated');
+    // Harus id internal (UUID), BUKAN raw key WAHA.
+    expect(evt.payload.messageId).toBe('local-uuid-1');
+    expect(evt.payload.waMessageId).toBe(STORED_WA_ID);
+    expect(evt.payload.isEdited).toBe(true);
+
+    publishSpy.mockRestore();
   });
 });

@@ -2025,12 +2025,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           const sorted = sortChats(updated);
           startTransition(() => setChats(sorted));
           chatsRef.current = sorted;
-        } else if (type === 'message.updated' && payload?.messageId) {
-          const { messageId, content, isRevoked } = payload;
+        } else if (type === 'message.updated' && (payload?.messageId || payload?.waMessageId)) {
+          const { messageId, waMessageId, content, isRevoked, isEdited } = payload;
+          const matchesUpdated = (m: any) => {
+            if (messageId && (m.id === messageId || m.wa_message_id === messageId)) return true;
+            if (waMessageId && (m.id === waMessageId || m.wa_message_id === waMessageId)) return true;
+            const shortA = messageId ? String(messageId).split('_').pop() : null;
+            if (shortA && m.wa_message_id && String(m.wa_message_id).endsWith(`_${shortA}`)) return true;
+            return false;
+          };
           if (selectedIdRef.current === payload.conversationId) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
+                matchesUpdated(m)
+                  ? { ...m, content, is_revoked: isRevoked, is_edited: isEdited ?? (m as any).is_edited }
+                  : m
               )
             );
           }
