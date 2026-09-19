@@ -25,8 +25,8 @@ export interface SaveReservationInput {
   children?: SaveReservationChild[];
   /** Usia kehamilan ibu (minggu) bila pasien adalah ibu hamil — first-class, bukan usia anak. */
   gestationalWeeks?: number;
-  /** Kondisi ibu: Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum. */
-  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
+  /** Kondisi ibu: Hamil, Paska Melahirkan/Nifas, Menyusui, atau Relaksasi Umum. */
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
   /** Keluhan/catatan ibu untuk bidan & admin (mis. "capek, kaki bengkak"). */
   momNotes?: string;
   notes?: string;
@@ -224,7 +224,7 @@ export function resolveTreatmentCategory(
   treatmentNames: string[],
   opts: {
     tenantId?: string;
-    momStage?: 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
+    momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
     gestationalWeeks?: number;
     hasChildren?: boolean;
     isMulti?: boolean;

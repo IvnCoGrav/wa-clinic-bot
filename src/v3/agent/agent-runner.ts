@@ -7,9 +7,34 @@ import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { ContextGrounder, FastResponseGate } from './pipeline/context-grounder';
 import { ToolExecutionPipeline } from './pipeline/tool-pipeline';
+import { DeliveryFastPath } from './pipeline/delivery-fast-path';
 import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
 import { telemetryService } from '../../services/telemetry.service';
+
+/**
+ * Detektor semantik token-based (sesi 951450): apakah pesan adalah komitmen
+ * asisten/klinik untuk MENGECEK ketersediaan jadwal (3 komponen AND: subjek
+ * klinik + verba cek/koordinasi + nomina jadwal/slot), dengan guard pertanyaan
+ * balik ke customer ("jadwalnya kapan ya?") agar tidak salah terdeteksi.
+ * DILARANG berbasis regex hafalan kalimat — murni token & state semantik.
+ */
+export function isScheduleCheckCommitment(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  const tokens = lower.replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 0);
+  if (tokens.length === 0) return false;
+  // Guard pertanyaan balik ke customer (anti false-positive).
+  if (lower.includes('?')) return false;
+  const questionWords = ['kapan', 'bagaimana', 'gimana', 'kenapa', 'dimana', 'mana', 'apakah', 'berapa', 'kenapa'];
+  if (tokens.some((t) => questionWords.includes(t))) return false;
+  if (tokens.includes('hari') && tokens.includes('apa')) return false;
+  if (tokens.includes('jam') && tokens.includes('berapa')) return false;
+  // 3 komponen AND: subjek klinik + verba cek + nomina jadwal.
+  const hasClinicSubject = tokens.some((t) => t === 'kami' || t === 'bidan');
+  const hasCheckVerb = tokens.some((t) => t.includes('cek') || t.includes('koordinasi'));
+  const hasScheduleNoun = tokens.some((t) => t.includes('jadwal') || t === 'slot');
+  return hasClinicSubject && hasCheckVerb && hasScheduleNoun;
+}
 
 export interface AgentRunnerInput {
   tenantId?: string;
@@ -217,14 +242,29 @@ export class V3AgentRunner {
             nextState: ConversationState.HUMAN_HANDLING,
           };
         }
-        // Stage 4: Call 2 Persona Generation.
-        const gen = await GenerationStage.generateReply(turn, tel, {
-          session, isFollowUp, cleanIncomingText, conversationHistory,
-          messages, preGroundingBlock, tenantId,
+        // Stage 3b: Gerbang Deterministik Balasan Lokasi Murni (Fast SOP).
+        // Giliran lokasi-murni dibalas template resmi tool tanpa Call 2
+        // (hemat token, nol parafrase/narasi basecamp). Konsumsi RAW
+        // executedTools (template utuh) — payload LLM tetap murni terstruktur
+        // (anti parrot-effect). Giliran campuran → fail-open ke Call 2 + D8.
+        // draftReply tetap mengalir ke Stage 5 (validator + sanitizer).
+        const fastPath = DeliveryFastPath.evaluate({
+          executedTools: turn.executedTools, cleanIncomingText, isFollowUp, tenantId,
         });
-        lastContextSummary = gen.contextSummary;
-        lastPhaseDirective = gen.phaseDirective;
-        draftReply = gen.finalReply;
+        if (fastPath.eligible) {
+          console.log(JSON.stringify({ event: 'DELIVERY_FAST_PATH_ELIGIBLE', tenantId, conversationId, timestamp: new Date().toISOString() }));
+          await tel.traceExecution({ reply: fastPath.reply, status: 'SUCCESS', tools: turn.executedTools });
+          draftReply = fastPath.reply;
+        } else {
+          // Stage 4: Call 2 Persona Generation.
+          const gen = await GenerationStage.generateReply(turn, tel, {
+            session, isFollowUp, cleanIncomingText, conversationHistory,
+            messages, preGroundingBlock, tenantId,
+          });
+          lastContextSummary = gen.contextSummary;
+          lastPhaseDirective = gen.phaseDirective;
+          draftReply = gen.finalReply;
+        }
       } else {
         draftReply = routing.assistantMessage?.content || '';
       }

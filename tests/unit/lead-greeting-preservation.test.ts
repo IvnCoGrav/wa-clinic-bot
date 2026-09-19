@@ -60,11 +60,21 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
       originalText: raw,
     });
     expect(result.replyText).toBe(TEMPLATES.greeting({ isIslamic: false }));
-    expect(result.replyText).toMatch(/perkenalkan saya Bidan Yusi/i);
+    expect(result.replyText).toMatch(/perkenalkan,?\s+saya\s+Bidan Yusi/i);
     expect(result.replyText).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊');
     expect(result.shouldSendReply).toBe(true);
     expect(result.executedTools).toEqual([]);
     expect(axios.post).not.toHaveBeenCalled();
+  });
+
+  it('SOP admin: TEMPLATES.greeting memuat terima kasih + perkenalan + pemantik domisili', () => {
+    const g = TEMPLATES.greeting({ isIslamic: false });
+    expect(g).toContain('Terima kasih sudah menghubungi kami');
+    expect(g).toMatch(/perkenalkan,?\s+saya\s+Bidan Yusi/i);
+    expect(g).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊');
+    const gIslamic = TEMPLATES.greeting({ isIslamic: true });
+    expect(gIslamic.startsWith('Waalaikumsalam Bunda')).toBe(true);
+    expect(gIslamic).toContain('Terima kasih sudah menghubungi kami');
   });
 
   it('V3 gate: DB audit mencatat teks mentah lengkap dengan Promo[b8]', async () => {

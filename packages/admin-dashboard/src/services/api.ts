@@ -25,6 +25,49 @@ export function fetchMetaClicks<T = any>(params: MetaClicksParams = {}): Promise
   return apiRequest(`/api/admin/debug/meta-clicks${qs ? `?${qs}` : ''}`);
 }
 
+/** Satu titik sebaran pelanggan untuk peta geografis. */
+export interface MapPoint {
+  id: string;
+  name?: string | null;
+  phone: string;
+  lat: number;
+  lng: number;
+  kota?: string | null;
+  kecamatan?: string | null;
+  kelurahan?: string | null;
+  status: string;
+  is_mql: boolean;
+  is_out_of_coverage: boolean;
+  distance_km?: number | null;
+  /** True bila koordinat adalah sentroid estimasi wilayah (bukan GPS presisi). */
+  is_estimated_centroid?: boolean;
+}
+
+/** Metadata basecamp klinik (tenant-aware) untuk marker & radius jangkauan. */
+export interface ClinicMapMeta {
+  lat: number;
+  lng: number;
+  name: string;
+  maxCoverageKm: number;
+  rings: number[];
+}
+
+/** Titik sebaran pelanggan untuk peta (GET /api/admin/customers/map-points). */
+export function fetchCustomerMapPoints(
+  kota?: string,
+  scope?: 'all',
+  opts: { fresh?: boolean } = {}
+): Promise<{ success: boolean; points: MapPoint[]; total: number; clinic?: ClinicMapMeta }> {
+  const q = new URLSearchParams();
+  if (kota) q.set('kota', kota);
+  if (scope) q.set('scope', scope);
+  const qs = q.toString();
+  const url = `/api/admin/customers/map-points${qs ? `?${qs}` : ''}`;
+  return opts.fresh
+    ? refreshApi(url, { timeoutMs: 15000 })
+    : apiRequest(url, { timeoutMs: 15000 });
+}
+
 /** Ringkasan KPI atribusi & kesehatan CAPI (GET /api/admin/debug/meta-summary). */
 export function fetchMetaSummary<T = any>(params: { startDate?: string; endDate?: string; utmCampaign?: string; search?: string } = {}): Promise<T> {
   const q = new URLSearchParams();

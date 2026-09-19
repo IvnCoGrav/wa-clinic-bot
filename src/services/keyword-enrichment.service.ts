@@ -46,7 +46,7 @@ export const KB_KEYWORD_RULES: KeywordRule[] = [
   { keys: ['moksa', 'inframerah'],
     keywords: K('moksa, sinar moksa, inframerah, terapi hangat, lampu merah, khasiat, fungsi, cara kerja, gimana, gmn, guna, manfaat, tambahan, add on, hangat') },
   { keys: ['disiapkan', 'perlengkapan', 'perlu disiapkan'],
-    keywords: K('siap, persiapan, disiapkan, menyiapkan, sedia, menyediakan, perlengkapan, peralatan, alat, matras, perlak, alas tidur, tempat tidur, minyak, baby oil, minyak telon, minyak pijat, bawa apa saja, bawa apa, sebelum treatment, perlu bawa, pijat bayi, bayi, anak, si kecil, homecare, perlengkapan bidan, kudu nyiapin') },
+    keywords: K('siap, persiapan, disiapkan, menyiapkan, sedia, menyediakan, perlengkapan, peralatan, alat, matras, perlak, alas tidur, tempat tidur, minyak, baby oil, minyak telon, minyak pijat, bawa apa saja, bawa apa, sebelum treatment, perlu bawa, pijat bayi, bayi, anak, si kecil, homecare, perlengkapan bidan, kudu nyiapin, kabel olor') },
   { keys: ['pembayaran', 'transfer', 'bayar'],
     keywords: K('bayar, pembayaran, transfer, tf, rekening, bca, mandiri, bri, qris, shopeepay, dana, gopay, ovo, cash, tunai, metode bayar, bayar pake apa, pake apa, bisa transfer') },
   { keys: ['pilihan treatment untuk bayi', 'pilihan treatment untuk anak'],

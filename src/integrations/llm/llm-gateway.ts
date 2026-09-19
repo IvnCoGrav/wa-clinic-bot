@@ -40,7 +40,12 @@ export function getLlmEndpointConfig(overrides?: {
   const rawModel = overrides?.model || modelConfig?.modelName || activeEndpoint.defaultModel || process.env.OPENAI_MODEL || '';
   const model = sanitizeModelForProvider(rawModel, baseUrl);
 
-  const apiKey = overrides?.apiKey || activeEndpoint.apiKey || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  const legacyKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  // Konvensi sentinel repo-wide: bila env legacy dinyatakan 'mock…' (test/dev),
+  // key tersebut DIHARGAI dan mengalahkan key registry yang disemai .env asli —
+  // agar layanan (eval, self-learning, dsb.) benar-benar offline tanpa panggilan nyata.
+  const mockSentinelActive = !overrides?.apiKey && legacyKey.startsWith('mock');
+  const apiKey = overrides?.apiKey || (mockSentinelActive ? legacyKey : activeEndpoint.apiKey || legacyKey || '');
 
   return {
     apiKey,

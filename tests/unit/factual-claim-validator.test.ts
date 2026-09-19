@@ -177,4 +177,45 @@ describe('Factual claim validator', () => {
     expect(updated.is_human_handling).toBe(true);
     expect(updated.escalation_reason).toBe('unresolved_faq');
   });
+
+  // D8 (fondasional, gerbang kode deterministik): narasi asal basecamp/homebase
+  // yang disisipkan ke balasan info ongkir — preseden D7 (kognitif re-prompt,
+  // bukan mutilasi regex). Gate berbasis kontrak tool turn ini, bukan hafalan
+  // kalimat: calculate_delivery sukses + get_clinic_policy_faq TIDAK terpanggil.
+  describe('D8: narasi asal basecamp pada info ongkir (tanpa tanya lokasi klinik)', () => {
+    const deliveryTools = () => [{
+      name: 'calculate_delivery',
+      args: { locationText: 'bungurasih' },
+      result: { success: true, kelurahan: 'Bungurasih', kecamatan: 'Waru' },
+    }];
+    const policyTools = () => [{ name: 'get_clinic_policy_faq', args: {}, result: { success: true } }];
+
+    it.each([
+      'Jika dilihat dari jaraknya kurang lebih 5.5 km dari basecamp kami di Waru ya Bunda',
+      'Dari homebase kami di Waru ke Bungurasih kurang lebih 5.5 km ya Bunda',
+      'Basecamp kami berada di daerah Waru, jaraknya kurang lebih 5.5 km ya Bunda',
+      'Jarak dari klinik kami di Waru kurang lebih 5.5 km ya Bunda',
+    ])('varian parafrase "%s" → invalid bila delivery sukses tanpa tool kebijakan', (text) => {
+      const bad = validateFactualClaims(text, deliveryTools(), [], { locationKnown: true });
+      expect(bad.isValid).toBe(false);
+      expect(bad.violations.join(' ')).toMatch(/D8_ORIGIN_NARRATION/);
+    });
+
+    it('dibebaskan bila get_clinic_policy_faq terpanggil (jawaban asal klinik sah)', () => {
+      const text = 'Basecamp kami berada di daerah Waru, perbatasan Surabaya Sidoarjo ya Bunda';
+      const ok = validateFactualClaims(text, [...deliveryTools(), ...policyTools()], [], { locationKnown: true });
+      expect(ok.isValid).toBe(true);
+    });
+
+    it('dibebaskan bila tanpa calculate_delivery (jawaban murni tanya lokasi)', () => {
+      const text = 'Basecamp kami berada di daerah Waru, perbatasan Surabaya Sidoarjo ya Bunda';
+      expect(validateFactualClaims(text, [], [], { locationKnown: false }).isValid).toBe(true);
+    });
+
+    it('template ongkir SOP murni tanpa narasi asal → valid (tanpa false positive)', () => {
+      const text = 'Jika dilihat dari jaraknya kurang lebih 5.5 km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp 15.000* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp 5.000* saja bunda. Jadi bisa ya bunda';
+      const ok = validateFactualClaims(text, deliveryTools(), [], { locationKnown: true });
+      expect(ok.isValid).toBe(true);
+    });
+  });
 });

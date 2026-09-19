@@ -1352,11 +1352,14 @@ export class TreatmentCatalogService {
       let score = 0;
 
       for (const tok of tokens) {
+        // Generic "anak" DILARANG membajak skor usia spesifik bila usia belum diketahui
+        if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
         if (nameLower.includes(tok)) score += 4;
         else if (descLower.includes(tok)) score += 2;
       }
 
       for (const tok of tokens) {
+        if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
         if (CORE_COMPLAINT_NOUNS.has(tok)) {
           if (haystack.includes(tok)) score += 4;
         } else if (!CLINICAL_MODIFIERS.has(tok)) {
