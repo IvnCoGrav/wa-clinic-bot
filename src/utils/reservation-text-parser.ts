@@ -571,6 +571,47 @@ function createWibDate(year: number, monthZeroIndexed: number, day: number, hour
   return new Date(`${y}-${mo}-${d}T${h}:${mi}:00+07:00`);
 }
 
+/**
+ * Cross-validation HARI vs ANGKA TANGGAL.
+ *
+ * Customer sering menulis hari dan tanggal yang tidak sinkron (mis. "Selasa, 21
+ * September 2026" padahal 21 Sep 2026 = Senin) — slip 1 hari adalah typo manusia
+ * yang sangat umum. Bila nama hari eksplisit tertulis dan selisihnya TEPAT ±1 hari
+ * dari tanggal numerik, snap ke tanggal yang cocok dengan nama hari. Selisih > 1
+ * hari diperlakukan sebagai kontradiksi berat → nama hari diabaikan (tanggal numerik
+ * menang) agar tidak melompat liar ke tanggal tak terduga.
+ */
+const WRITTEN_DAY_NAMES: Record<string, number> = {
+  minggu: 0, ahad: 0,
+  senin: 1,
+  selasa: 2,
+  rabu: 3,
+  kamis: 4,
+  jumat: 5, "jum'at": 5,
+  sabtu: 6,
+};
+
+function findWrittenDayOfWeek(cleanStr: string): number | undefined {
+  for (const [name, dayOfWeek] of Object.entries(WRITTEN_DAY_NAMES)) {
+    const pattern = new RegExp(`(?:^|[^a-z])${name.replace("'", "['’]?")}(?:[^a-z]|$)`);
+    if (pattern.test(cleanStr)) return dayOfWeek;
+  }
+  return undefined;
+}
+
+function reconcileWrittenDayWithDate(candidate: Date, cleanStr: string): Date {
+  const writtenDay = findWrittenDayOfWeek(cleanStr);
+  if (writtenDay === undefined) return candidate;
+  const diff = ((writtenDay - candidate.getDay() + 7) % 7);
+  // diff 0 = konsisten; 1 = tanggal maju 1 hari; 6 = tanggal mundur 1 hari (slip -1).
+  if (diff === 0) return candidate;
+  if (diff === 1 || diff === 6) {
+    const corrected = new Date(candidate.getTime() + (diff === 1 ? 1 : -1) * 24 * 60 * 60 * 1000);
+    if (!isNaN(corrected.getTime())) return corrected;
+  }
+  return candidate;
+}
+
 export function tryParseIndonesianDate(dateStr: string): Date | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const cleanStr = dateStr.toLowerCase().replace(/[*_~`]/g, '').trim();
@@ -623,7 +664,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     const month = parseInt(isoMatch[2], 10) - 1;
     const day = parseInt(isoMatch[3], 10);
     const date = createWibDate(year, month, day, hours, minutes);
-    if (!isNaN(date.getTime())) return date;
+    if (!isNaN(date.getTime())) return reconcileWrittenDayWithDate(date, cleanStr);
   }
 
   // 3. Format DD-MM-YYYY atau DD-MM-YY (pemisah -, /, .)
@@ -634,7 +675,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     const month = parseInt(indNumMatch[2], 10) - 1;
     const day = parseInt(indNumMatch[1], 10);
     const date = createWibDate(year, month, day, hours, minutes);
-    if (!isNaN(date.getTime())) return date;
+    if (!isNaN(date.getTime())) return reconcileWrittenDayWithDate(date, cleanStr);
   }
 
   // Map nama bulan Indonesia ke angka index 0-11
@@ -665,7 +706,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
       let year = rawYear ? parseInt(rawYear, 10) : currentYear;
       if (year < 100) year += 2000;
       const date = createWibDate(year, month, day, hours, minutes);
-      if (!isNaN(date.getTime())) return date;
+      if (!isNaN(date.getTime())) return reconcileWrittenDayWithDate(date, cleanStr);
     }
   }
 
@@ -686,13 +727,9 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
         if (swapped >= 1 && swapped <= 31) {
           const candidate = createWibDate(year, badMonth, swapped, hours, minutes);
           if (!isNaN(candidate.getTime())) {
-            const writtenDay: Record<string, number> = {
-              minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4,
-              jumat: 5, "jum'at": 5, sabtu: 6,
-            };
-            const named = Object.entries(writtenDay).find(([n]) => cleanStr.includes(n));
+            const written = findWrittenDayOfWeek(cleanStr);
             // Tanpa nama hari tertulis, atau hari cocok dengan hasil transposisi -> pulihkan.
-            if (!named || named[1] === candidate.getDay()) return candidate;
+            if (written === undefined || written === candidate.getDay()) return candidate;
           }
         }
       }

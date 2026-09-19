@@ -185,6 +185,14 @@ export class ToolExecutionPipeline {
       // `extractFastIntents` (satu sumber kebenaran intent ask_price/ongkir).
       const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
       if (fnName === 'calculate_delivery') {
+        // RC-4 (sesi 535222): router Call 1 dapat menggabungkan wilayah BASI
+        // (kecamatan yang sudah dikenal sesi) dengan entitas BARU ("Buduran
+        // Bungurasih"). Guard deterministik membuang prefiks basi agar hanya
+        // entitas baru yang di-geocode. Fail-open bila tak ada wilayah basi.
+        if (typeof fnArgs.locationText === 'string') {
+          const { stripStaleRegionPrefix } = await import('../../tools/entity-concatenation-guard');
+          fnArgs.locationText = stripStaleRegionPrefix(fnArgs.locationText, session.location);
+        }
         // Ongkir hanya boleh nominal bila customer eksplisit menanyakan harga/ongkir.
         // Carry-over berbasis STATE (bukan pola kalimat): bila customer sudah pernah
         // masuk mode transaksional (`session.priceDiscussed`) dan giliran ini menyebut
@@ -415,9 +423,16 @@ export class ToolExecutionPipeline {
           isOutOfCoverage: toolResult.isOutOfCoverage,
         },
       }, tenantId);
-      // Lifecycle ongkir: hasil kalkulasi akan disampaikan ke customer → QUOTED.
-      // Estimasi sentroid kecamatan BUKAN kutipan pasti → jangan tandai QUOTED.
-      if (!toolResult.isOutOfCoverage && !toolResult.isEstimatedCentroid) {
+      // Lifecycle ongkir (RC-3, sesi 535222; diperluas sesi 779408): QUOTED sah
+      // bila nominal ongkir BENAR-BENAR diekspos ke LLM/customer. Kontrak baru:
+      // ekspos terjadi bila customer menanya biaya (asksDeliveryFee) ATAU lokasi
+      // terverifikasi presisi (ongkirPromo tersedia & bukan centroid). Estimasi
+      // sentroid kecamatan BUKAN kutipan pasti → tetap jangan tandai QUOTED.
+      const ongkirExposed =
+        !toolResult.isOutOfCoverage &&
+        !toolResult.isEstimatedCentroid &&
+        (fnArgs.asksDeliveryFee === true || typeof toolResult.ongkirPromo === 'number');
+      if (ongkirExposed) {
         session = await GoalTracker.markOngkirQuoted(conversationId, tenantId);
       }
     } else if (fnName === 'get_catalog_and_price' && toolResult.success) {

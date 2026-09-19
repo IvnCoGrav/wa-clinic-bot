@@ -4,6 +4,101 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Perampingan Rules Fondasional, Ongkir Lokasi Presisi & Remediasi Gramatikal Sanitizer (2026-09-19)
+
+- **Keputusan kebijakan (sesi 779408):** saat lokasi PRESISI terverifikasi, bot LANGSUNG
+  menyampaikan jarak & ongkir promo meskipun customer hanya menyebut lokasi tanpa menanya biaya.
+  Rule 2 (Information Hiding) direvisi: yang tetap dilarang adalah membeberkan **harga paket
+  perawatan**/grand total sebelum ditanya/dipilih — bukan jarak/ongkir.
+- **Fase 1 — Harmonisasi kontrak ongkir:**
+  - `calculate-delivery.tool.ts`: `showFeeNominal` kini = `askedFee || (lokasi presisi & bukan
+    centroid & dalam jangkauan)`. Kecamatan luas (imprecise) & luar jangkauan tetap menyembunyikan nominal.
+  - `tool-pipeline.ts`: `markOngkirQuoted` dipicu saat ongkir benar-benar diekspos (bukan hanya
+    `asksDeliveryFee`). Data terstruktur (`distanceKm`/`ongkirPromo`) dikirim apa adanya ke LLM —
+    **`suggestedTemplateReply` TIDAK dikembalikan** ke payload LLM (menjaga dekomposisi anti-parrot).
+  - `location-rules.phase.ts`: pin larangan ongkir diganti pin larangan **harga paket** (state-gated).
+- **Fase 2 — Perampingan negative constraints (non-hardcode & SaaS-ready):**
+  - Rule 4 direvisi jadi state-gated (`buildToneNegConstraints`): wajib tanya usia saat tanya
+    harga paket anak HANYA bila usia belum ada di sesi; bila sudah ada → dilarang menodong usia.
+  - Rule 10 (Newborn 0-28 hari) Dihapus → otoritas `Treatment.min_age_months`/`max_age_months` + tool.
+  - Rule 15 (anti-tanya KM) dihapus (redundan dengan tool `calculate_delivery`).
+  - Rule 17 (asumsi selapan & model cukur) dihapus → dialihkan ke RAG `search_knowledge_faq`.
+  - Rule 11 dibuat tenant-agnostic (hapus hardcode "Waru"); homebase dirujuk ke `get_clinic_policy_faq`.
+  - Rule 14 dibersihkan dari hardcode "alas tidur" → grounding ke [PANDUAN & KNOWLEDGE BASE]/RAG.
+  - Rule 7 ditambah larangan menyebut "Admin CS".
+  - `tenant-prompt-config.service.ts` default `negativeConstraints` diselaraskan (17 butir).
+- **Fase 3 — Remediasi Mid-Sentence Mutilation (`sanitizer.ts`):** `limitVocativeQuota` kini
+  melindungi sapaan berposisi SUBJEK/AGEN klausa di tengah kalimat — didahului modal verb
+  (`ingin/mau/bisa/perlu/dapat/sedang/sudah/akan/belum/harus/boleh/sempat`) atau konjungsi
+  subordinatif (`kalau/jika/apabila/bila/apakah/agar/supaya/saat/ketika`). Kasus nyata
+  "Ada yang ingin Bunda konsultasikan..." tidak lagi terpotong.
+- **Verifikasi:** `npm run build` 0; `v3-sanitizer-vocative-quota` 17/17,
+  `calculate-delivery-precise-fee` 3/3, `calculate-delivery-broad-region` 5/5,
+  `location-prompt-pruning` 8/8, `catalog-information-hiding` 4/4, `capi-repeat-order` 8/8,
+  `parser-day-date-cross-validation` 6/6, integrasi `active-reservations-endpoint` 3/3;
+  suite v3 620 passed (28 pre-existing failures tidak berubah).
+
+#### Meta CAPI New vs Repeat Order & Peringatan Jadwal Aktif Admin (2026-09-19)
+
+- **Masalah (multi-layer):**
+  1. **RC-1 (Data/DB):** `Reservation.is_repeat_order` hanya di-set oleh `followUpService.onReservationCreated`
+     berdasarkan ada/tidaknya *follow-up pending* — semantik salah (bukan riwayat transaksi). Kolom juga
+     belum pernah tercatat di chain migrasi (ditambahkan via `db push`) sehingga fresh deploy kehilangan kolom.
+  2. **RC-2 (Tool/Payload Contract):** `capiService.sendCapiEvent` tidak menyuntikkan pembeda new/repeat ke
+     `custom_data` Purchase sama sekali, sehingga advertiser tidak bisa membuat Custom Conversion.
+  3. **RC-3 (Query/Daftar):** `GET /api/admin/capi-queue` tidak menyertakan `is_repeat_order`/`order_number`,
+     dan query `leadAuditLogs` TANPA `orderBy` → Prisma default asc → `sentMap` menimpa dengan log TERTUA,
+     menghilangkan status moderasi MQL terbaru dari antrean.
+  4. **RC-4 (Parser):** `tryParseIndonesianDate` buta terhadap kontradiksi nama hari vs angka tanggal
+     (mis. "Selasa, 21 September 2026" padahal 21 Sep = Senin) → jadwal tersimpan di hari salah.
+  5. **RC-5 (Admin UX):** Tidak ada peringatan jadwal aktif saat admin membuat reservasi baru → risiko
+     *split-brain duplicate booking*.
+- **Perbaikan (fondasional):**
+  1. `reservation-core.service.ts`: `computeIsRepeatOrder()` menghitung riwayat `confirmed`/`completed`
+     (di luar reservasi yang sedang di-update) dan mempersist `is_repeat_order` di SEMUA jalur create/update
+     (anti-fabrikasi, fail-safe DB offline → new). Ini menjadikan core sebagai single source of truth.
+  2. `capi.service.ts`: `resolveNewVsRepeatContext()` + injeksi `custom_data` untuk event `Purchase`:
+     `is_repeat_order`, `customer_type: 'new'|'repeat'`, `order_number`, `prior_orders_count`.
+     **Event name tetap `Purchase`** (standar Meta) agar Value-Based Bidding/ROAS tidak terganggu.
+  3. `reservations.subroute.ts`: capi-queue menyertakan `is_repeat_order`/`order_number`/`customer_type`
+     (ordinal dari urutan `created_at` per customer, 1 query); `leadAuditLogs` di-`orderBy created_at desc`.
+  4. `reservation-text-parser.ts`: `reconcileWrittenDayWithDate()` — koreksi slip hari ±1 (typo manusia);
+     kontradiksi > 1 hari mengabaikan nama hari (tanggal numerik menang) agar tidak melompat liar.
+  5. Endpoint baru `GET /api/admin/customers/:id/active-reservations` (confirmed|hold, `booking_date >=`
+     awal hari WIB) untuk Konsumsi modal Create Reservation & Live Chat.
+  6. Dashboard: badge `✨ Pasien Baru` / `🔁 Repeat Order` + filter tipe order + field payload JSON di
+     Meta CAPI Queue; warning banner jadwal aktif di `CreateReservationModal` (tombol Edit Reservasi
+     Eksisting via `onEditReservation`); Live Chat badge confirmed kini date-aware (hari ini/ke depan).
+- **Migrasi:** `prisma/migrations/20260919000000_add_reservation_is_repeat_order` (idempotent, aman DB live & fresh).
+- **Verifikasi:** `npm run build` (root & admin-dashboard) 0; unit `capi-repeat-order` 8/8,
+  `parser-day-date-cross-validation` 6/6, integrasi `active-reservations-endpoint` 3/3; regression
+  capi/reservation/parser 121/121 hijau.
+
+#### Standardisasi Model `deepseek-v4-1-flash` + Fallback LLM 3-Tier (2026-09-19)
+
+- **Masalah (RC-1/RC-2/RC-3):** DB `tenant_ai_config` & `.env` menyimpan model provider-asing
+  (`MiniMax-M2.7-highspeed`, `gpt-4o-mini`, `deepseek-chat`) padahal provider aktif KENARI →
+  log `[LLM MODEL FALLBACK] ... 400` beruntun; chain fallback tidak provider-aware; enrichment
+  saat human-handling tetap memanggil LLM yang selalu gagal.
+- **Sumber kebenaran tunggal** (`src/config/ai-models.config.ts`): konstanta `KENARI_PRIMARY_MODEL`
+  (`deepseek-v4-1-flash`, label "DeepSeek-V4.1-Flash"), `SUMOPOD_SECONDARY_MODEL` (`deepseek-v4-flash`),
+  `DEEPSEEK_DIRECT_MODEL` (`deepseek-flash`). `sanitizeModelForProvider` kini provider-aware penuh
+  (alias dua arah + remap katalog asing per-provider).
+- **Fallback 3-Tier** (`src/integrations/llm/model-fallback.ts`): `resolveFallbackTiers()` →
+  Tier 1 Kenari → Tier 2 SumoPod → Tier 3 DeepSeek Direct, guard skip bila baseUrl/apiKey kosong.
+  `generation-stage.ts` circuit-breaker memakai resolver yang sama (hilangkan hardcode `api.deepseek.com`).
+  `DEFAULT_FALLBACK_CHAIN` = model primer Kenari (tanpa chain internal sesuai keputusan desain).
+- **Enrichment deterministik** (`src/services/human-background-enrichment.service.ts`): coba
+  `preExtractDeterministic` (0 token) dulu; LLM hanya dipanggil bila kosong (TDD: 2 test adversarial baru).
+- **Cost calculator** (`src/utils/cost-calculator.ts`): peak-hour dibatasi ke model SumoPod/DeepSeek Direct;
+  entry `deepseek-flash` ditambah.
+- **Config & DB**: `.env`/`.env.example` diselaraskan ke `Kenari/deepseek-v4-1-flash`; blok `SUMOPOD_*` eksplisit;
+  chain fallback baru; plus script migrasi idempoten `scripts/migrate-model-config-to-deepseek-v41.ts`
+  (dry-run + guard production). DB `tenant_ai_config` 6/6 baris kini kanonik.
+- **Admin dashboard**: katalog provider SumoPod + label tier (rebuild `packages/admin-dashboard`).
+- **Verifikasi**: `npm run build` 0; fallback-chain 16/16, provider-alignment 9/9, enrichment 7/7,
+  cost-calculator 12/12; full suite 2762 passed / 41 failed (semua sisa pre-existing).
+
 #### Arsitektur Data Murni Tool, Netralitas Agama Lapisan Prompt & D7 Kognitif (2026-09-18)
 
 - **Fase 1 — Netralitas agama di Single Source of Truth** (`src/v3/agent/prompt/layers/core-persona.layer.ts`,

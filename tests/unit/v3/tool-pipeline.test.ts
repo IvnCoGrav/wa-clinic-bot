@@ -101,4 +101,87 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     expect(out.executedTools[1].name).toBe('get_catalog_and_price');
     expect(out.executedTools[1].result.success).toBe(true);
   });
+
+  // Kontrak 779408: ongkirStatus QUOTED bila nominal benar-benar diekspos —
+  // customer menanya biaya ATAU lokasi presisi terverifikasi. Area luas
+  // (imprecise) tetap UNQUOTED.
+  it('calculate_delivery area LUAS (imprecise, tanpa tanya biaya) → ongkirStatus tetap UNQUOTED', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'rumah saya di Menganti Gresik',
+      toolCalls: [
+        {
+          id: 'call-5',
+          function: {
+            name: 'calculate_delivery',
+            arguments: JSON.stringify({ locationText: 'Menganti Gresik' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const delivery = out.executedTools.find((t: any) => t.name === 'calculate_delivery')!;
+    expect(delivery.result.success).toBeFalsy();
+    expect(out.updatedSession.ongkirStatus).not.toBe('QUOTED');
+  });
+
+  it('calculate_delivery lokasi PRESISI tanpa tanya biaya → ongkirStatus QUOTED (kontrak 779408)', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'rumah saya di Kebraon Karangpilang',
+      toolCalls: [
+        {
+          id: 'call-5b',
+          function: {
+            name: 'calculate_delivery',
+            arguments: JSON.stringify({ locationText: 'Kebraon Karangpilang' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const delivery = out.executedTools.find((t: any) => t.name === 'calculate_delivery')!;
+    expect(delivery.result.success).toBe(true);
+    expect(out.updatedSession.ongkirStatus).toBe('QUOTED');
+  });
+
+  it('calculate_delivery mode transaksional (asksDeliveryFee true) → ongkirStatus QUOTED', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'kalau ke Kebraon Karangpilang ongkirnya berapa kak?',
+      toolCalls: [
+        {
+          id: 'call-6',
+          function: {
+            name: 'calculate_delivery',
+            arguments: JSON.stringify({ locationText: 'Kebraon Karangpilang', asksDeliveryFee: true }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const delivery = out.executedTools.find((t: any) => t.name === 'calculate_delivery')!;
+    expect(delivery.result.success).toBe(true);
+    expect(out.updatedSession.ongkirStatus).toBe('QUOTED');
+  });
+
+  // RC-4 (sesi 535222): router menggabungkan kecamatan basi + kelurahan baru
+  // ("Buduran Bungurasih") padahal sesi sudah mengenal "Buduran". Guard
+  // deterministik harus memakai hanya entitas baru ("Bungurasih").
+  it('calculate_delivery: argumen gabungan wilayah basi+baru dipangkas ke entitas baru', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'bungurasih kak',
+      session: { cartItems: [], location: { kecamatan: 'Buduran' } } as any,
+      toolCalls: [
+        {
+          id: 'call-7',
+          function: {
+            name: 'calculate_delivery',
+            arguments: JSON.stringify({ locationText: 'Buduran Bungurasih' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const delivery = out.executedTools.find((t: any) => t.name === 'calculate_delivery')!;
+    expect(delivery.args.locationText).toBe('Bungurasih');
+    expect(out.updatedSession.location?.kelurahan).toBe('Bungurasih');
+  });
 });

@@ -17,7 +17,8 @@ const PRESET_MODELS: Record<string, string[]> = {
   Kenari: ['deepseek-v4-1-flash', 'deepseek-v4-pro', 'qwen3-8-flash', 'qwen3-7-plus', 'minimax-m2-7', 'step-3-7-flash:free'],
   OpenAI: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'],
   MiniMax: ['MiniMax-M2.7-highspeed', 'abab6.5s-chat', 'MiniMax-Text-01'],
-  DeepSeek: ['deepseek-chat', 'deepseek-coder', 'deepseek-v4-flash'],
+  DeepSeek: ['deepseek-flash', 'deepseek-v4-pro'],
+  SumoPod: ['deepseek-v4-flash', 'MiniMax-M2.7-highspeed', 'mimo-v2.5'],
   Groq: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   Anthropic: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022'],
 };
@@ -304,9 +305,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                       className="w-full bg-white border border-[#d1d7db] rounded-lg px-3 py-2 text-[#111b21] focus:outline-none focus:border-[#00a884]"
                     >
                       <option value="Kenari">Kenari (https://kenari.id)</option>
+                      <option value="SumoPod">SumoPod (Tier 2 Fallback)</option>
                       <option value="MiniMax">MiniMax (Highspeed & Hemat)</option>
                       <option value="OpenAI">OpenAI</option>
-                      <option value="DeepSeek">DeepSeek</option>
+                      <option value="DeepSeek">DeepSeek Direct (Tier 3)</option>
                       <option value="Groq">Groq</option>
                       <option value="Anthropic">Anthropic</option>
                     </select>

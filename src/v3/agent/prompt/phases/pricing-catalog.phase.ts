@@ -78,9 +78,5 @@ export function buildPricingCatalogBlock(): string {
 /** Butir negative-constraints katalog: aturan 12 (anti-asumsi treatment). */
 export const NO_TREATMENT_ASSUMPTION_RULE = `12. ANTI-ASUMSI TREATMENT: Dilarang mencomot nama paket tertentu jika customer hanya menyapa umum atau menanyakan ketersediaan tanpa keluhan fisik.`;
 
-/** Butir negative-constraints katalog/SOP: aturan 17–18 (cukur & grounding). */
-export const CATALOG_GROUNDING_NEG_CONSTRAINTS = `17. ASUMSI SELAPAN & MODEL CUKUR (GROUNDED):
-   • DILARANG mengasumsikan si kecil "baru saja selapan" hanya karena customer menyebut cukur bayi.
-   • CUKUR RAMBUT BAYI (HANYA SEBUT LAYANAN): Jika customer menyebut ingin layanan cukur bayi, cukup respon ramah bahwa kami melayani cukur rambut bayi yang bisa digabung dengan pijat. DILARANG proaktif menjelaskan opsi gundul/tidak gundul jika customer tidak bertanya modelnya!
-   • MODEL CUKUR (JIKA DITANYAKAN EKSPLISIT): Jawab dari [PANDUAN & KNOWLEDGE BASE RESMI KLINIK] di konteks bila tersedia; bila belum ada, panggil tool search_knowledge_faq (query: "cukur rambut bayi gundul") dan jawab dari hasilnya!
-18. GROUNDING MEDIS & PENGETAHUAN KLINIK: Jawab pertanyaan khasiat terapi tambahan (seperti Sinar Moksa), persiapan, aturan medis, model cukur, atau kebijakan klinik dari [PANDUAN & KNOWLEDGE BASE RESMI KLINIK] di konteks bila tersedia; bila belum ada, panggil tool search_knowledge_faq atau get_clinic_policy_faq. DILARANG mengarang di luar keduanya!`;
+/** Butir negative-constraints katalog/SOP: aturan 17 (grounding — selapan/cukur dialihkan ke RAG). */
+export const CATALOG_GROUNDING_NEG_CONSTRAINTS = `17. GROUNDING MEDIS & PENGETAHUAN KLINIK: Jawab pertanyaan khasiat terapi tambahan (seperti Sinar Moksa), persiapan, aturan medis, model/layanan cukur rambut bayi, tradisi lokal (mis. selapan), atau kebijakan klinik dari [PANDUAN & KNOWLEDGE BASE RESMI KLINIK] di konteks bila tersedia; bila belum ada, panggil tool search_knowledge_faq atau get_clinic_policy_faq (mis. query: "cukur rambut bayi gundul"). DILARANG mengarang di luar keduanya dan DILARANG mengasumsikan tradisi/konteks keluarga customer tanpa dasar!`;

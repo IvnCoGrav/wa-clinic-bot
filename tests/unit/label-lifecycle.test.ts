@@ -175,7 +175,9 @@ describe('Label Lifecycle (DB-only)', () => {
   });
 
   it('3. Customer riwayat confirmed ≥1 kirim form baru → DB: tambah Repeat Order, hapus New Customer + Pending Payment', async () => {
-    vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(1);
+    // Riwayat confirmed konsisten sepanjang alur (core menghitung repeat status,
+    // lalu lifecycle membacanya) — bukan agains urutan pemanggilan yang rapuh.
+    vi.mocked(prisma.reservation.count as any).mockResolvedValue(1);
     const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289931${Date.now()}`, 'Bunda Repeat');

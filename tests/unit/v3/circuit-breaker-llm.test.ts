@@ -15,6 +15,10 @@ describe('V3 LLM CircuitBreaker fail-fast', () => {
     process.env.LLM_FALLBACK_API_KEY = 'fallback_key';
     process.env.LLM_FALLBACK_BASE_URL = 'https://fallback.test';
     process.env.AI_MODEL_FALLBACK = 'fallback-model';
+    // Isolasi Tier 3 agar test fokus pada circuit-breaker (Tier 2 SumoPod dinonaktifkan).
+    delete process.env.SUMOPOD_BASE_URL;
+    delete process.env.SUMOPOD_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
   });
 
   it('fail-fast aktif setelah 3 gagal beruntun, panggilan ke-4 langsung fallback <50ms', async () => {
