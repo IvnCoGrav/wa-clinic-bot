@@ -371,13 +371,28 @@ export class HumanBackgroundEnrichmentService {
 
       const { EntityExtractor } = await import('./entity-extractor.service');
       const history = (ctx as any).history || [];
-      const extraction = await EntityExtractor.extract(textForEnrich, {
-        history,
-        customerPhone: customer.phone,
-        conversationId: ctx.conversation?.id,
-        tenantId: tid,
-        incomingMessage,
-      });
+
+      // RC-3 (Fase 3): coba ekstraksi DETERMINISTIK lebih dulu (0 token, 0 API call).
+      // Saat mode HUMAN_HANDLING, customer sudah dipegang manusia — panggilan LLM
+      // hanya membuang request (dan berisiko 400 saat provider mismatch). LLM
+      // hanya dipanggil bila deterministik benar-benar tidak menemukan lokasi.
+      const det = EntityExtractor.preExtractDeterministic(textForEnrich, incomingMessage);
+      const detHasLocation = Boolean(det?.locationText && det.locationText.trim().length > 1);
+      const detHasProvideIntent = (det?.intents || []).includes('provide_location');
+
+      const extraction = (detHasLocation || detHasProvideIntent)
+        ? {
+            intents: det.intents || [],
+            locationText: det.locationText || null,
+            streetDetail: det.streetDetail || null,
+          }
+        : await EntityExtractor.extract(textForEnrich, {
+            history,
+            customerPhone: customer.phone,
+            conversationId: ctx.conversation?.id,
+            tenantId: tid,
+            incomingMessage,
+          });
 
       const hasLocation = Boolean(extraction.locationText && extraction.locationText.trim().length > 1);
       const hasProvideIntent = (extraction.intents || []).includes('provide_location');

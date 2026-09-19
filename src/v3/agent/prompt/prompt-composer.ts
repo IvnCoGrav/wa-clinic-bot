@@ -20,7 +20,7 @@ import {
   EMPATI_IDENTITAS_BLOCK,
   OPERATIONAL_POLICY_BLOCK,
   FEW_SHOT_EXAMPLES_BLOCK,
-  TONE_NEG_CONSTRAINTS,
+  buildToneNegConstraints,
   TONE_NEG_CONSTRAINTS_TAIL,
   FORMAT_NEG_CONSTRAINTS,
   buildGreetingTail,
@@ -86,7 +86,7 @@ const NEGATIVE_CONSTRAINTS_HEADER = '[NEGATIVE CONSTRAINTS MUTLAK (ATURAN EMAS K
 function buildNegativeConstraintsBlock(session?: CustomerGoalSession): string {
   return [
     NEGATIVE_CONSTRAINTS_HEADER,
-    TONE_NEG_CONSTRAINTS,
+    buildToneNegConstraints(session as any),
     buildScheduleNegConstraintsHead(session),
     TONE_NEG_CONSTRAINTS_TAIL,
     SAFETY_NEG_CONSTRAINTS_HEAD,

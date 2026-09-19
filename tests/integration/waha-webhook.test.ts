@@ -306,4 +306,32 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     const since = new Date(refreshed.human_handling_since).getTime();
     expect(since).toBeGreaterThan(Date.now() - 5000);
   });
+
+  it('POST /webhook: message.edited (payload resmi WAHA) meneruskan editedMessageId + body', async () => {
+    const spy = vi
+      .spyOn(messageService, 'updateMessageContent')
+      .mockResolvedValue(true);
+
+    const payload = {
+      event: 'message.edited',
+      session: 'default',
+      payload: {
+        id: 'false_628123456789@c.us_EDITACTIONKEY',
+        editedMessageId: '3EB0ABCDEF123456',
+        body: 'Teks yang sudah diedit admin',
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'EDIT_PROCESSED' });
+    expect(spy).toHaveBeenCalledWith(
+      '3EB0ABCDEF123456',
+      'Teks yang sudah diedit admin',
+      expect.anything()
+    );
+
+    spy.mockRestore();
+  });
 });

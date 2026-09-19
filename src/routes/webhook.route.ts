@@ -268,13 +268,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       if (isEditedEvent) {
         const editPayload: any = event.payload || {};
+        // Payload resmi WAHA message.edited: { id (aksi edit), editedMessageId (raw key
+        // pesan target), body }. Urutkan editedMessageId lebih dulu agar tidak tertukar
+        // dengan id aksi edit; cadangan untuk engine lain yang memakai protocolMessage.
         const targetMsgId =
+          editPayload.editedMessageId ||
+          editPayload.message?.protocolMessage?.key?.id ||
+          editPayload.protocolMessage?.key?.id ||
           editPayload.messageId ||
           editPayload.id?._serialized ||
           editPayload.id ||
-          editPayload.key?.id ||
-          editPayload.protocolMessage?.key?.id ||
-          editPayload.message?.protocolMessage?.key?.id;
+          editPayload.key?.id;
         const newBody =
           editPayload.body ||
           editPayload.text?.body ||

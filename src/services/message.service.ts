@@ -911,19 +911,26 @@ export class MessageService {
   ): Promise<boolean> {
     let conversationId = '';
 
-    try {
-      let msg = await prisma.message.findFirst({
-        where: {
-          id: messageId,
-          tenant_id: tenantId,
-        },
-      });
-
-      if (!msg) {
-        msg = await prisma.message.findFirst({
-          where: { wa_message_id: messageId, tenant_id: tenantId },
-        });
+    // WAHA mengirim id pesan target dalam berbagai bentuk: serialized
+    // `true_{chatId}_{key}`, raw key `{key}`, atau id aksi edit. Cocokkan
+    // terhadap id internal, wa_message_id persis, maupun suffix key — pola
+    // yang sama dengan addOrUpdateReaction/updateDeliveryStatus.
+    const cleanId = extractShortMessageId(messageId);
+    const orConds: any[] = [
+      { id: messageId, tenant_id: tenantId },
+      { wa_message_id: messageId, tenant_id: tenantId },
+    ];
+    if (cleanId) {
+      if (cleanId !== messageId) {
+        orConds.push({ wa_message_id: cleanId, tenant_id: tenantId });
       }
+      orConds.push({ wa_message_id: { endsWith: `_${cleanId}` }, tenant_id: tenantId });
+    }
+
+    try {
+      const msg = await prisma.message.findFirst({
+        where: { OR: orConds },
+      });
 
       if (msg) {
         conversationId = msg.conversation_id;

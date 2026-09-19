@@ -67,4 +67,24 @@ describe('calculate_delivery — intersepsi kecamatan luas', () => {
     expect(precise.isPrecise).toBe(true);
     expect(precise.kelurahan).toBe('Petiken');
   });
+
+  // RC-2 (sesi 535222): output `message` DILARANG menyuntik nama kecamatan
+  // dalam tanda kurung "Area X (Kecamatan)". Leak "Bungurasih (Waru)" membuat
+  // LLM menyebut basecamp klinik "Waru" (melanggar Rule 11).
+  it('kelurahan presisi → message TIDAK memuat "(${kecamatan})" / "(Waru)"', async () => {
+    vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
+      distanceKm: 5.51,
+      ongkir: 20000,
+      normalPrice: 25000,
+      promoPrice: 20000,
+      isOutOfCoverage: false,
+      messageTemplate: '',
+    } as any);
+
+    const res = await executeCalculateDelivery({ locationText: 'Bungurasih' });
+    expect(res.success).toBe(true);
+    expect(res.message).toMatch(/Bungurasih/);
+    expect(res.message).not.toMatch(/\(Waru\)/);
+    expect(res.message).not.toMatch(/\(\s*\)/);
+  });
 });

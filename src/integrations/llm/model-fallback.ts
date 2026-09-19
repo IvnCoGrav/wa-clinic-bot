@@ -1,11 +1,60 @@
 import axios from 'axios';
+import { KENARI_PRIMARY_MODEL, SUMOPOD_SECONDARY_MODEL, DEEPSEEK_DIRECT_MODEL } from '../../config/ai-models.config';
 
-export const DEFAULT_FALLBACK_CHAIN = [
-  'gpt-4o-mini',
-  'deepseek-v4-flash',
-  'MiniMax-M2.7-highspeed',
-  'mimo-v2.5',
-];
+/**
+ * Arsitektur fallback 3-TIER (plan standardisasi model 2026-09-19):
+ *   Tier 1 (primary)   : Kenari        -> deepseek-v4-1-flash  (baseUrl + apiKey dari call)
+ *   Tier 2 (secondary) : SumoPod       -> deepseek-v4-flash    (SUMOPOD_* / OPENAI_BASE_URL + LLM_API_KEY)
+ *   Tier 3 (last)      : DeepSeek Direct -> deepseek-flash     (LLM_FALLBACK_BASE_URL + LLM_FALLBACK_API_KEY)
+ *
+ * DEFAULT_FALLBACK_CHAIN kini HANYA berisi model kanonik Tier 1 (satu model, tanpa chain
+ * internal Kenari sesuai keputusan desain). Env AI_MODEL_FALLBACK_CHAIN masih bisa
+ * meng-override bila ingin chain internal tambahan.
+ */
+export const DEFAULT_FALLBACK_CHAIN = [KENARI_PRIMARY_MODEL];
+
+/** Definisi sebuah tier provider untuk fallback lintas-provider. */
+export interface ProviderTier {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+/**
+ * Resolver tier provider dari env. Tier hanya aktif bila baseUrl DAN apiKey tersedia
+ * (mencegah request 400 ke endpoint tanpa kredensial).
+ */
+export function resolveFallbackTiers(): ProviderTier[] {
+  const tiers: ProviderTier[] = [];
+
+  // Tier 2 — SumoPod. Terima SUMOPOD_* eksplisit, atau fallback ke OPENAI_BASE_URL + LLM_API_KEY
+  // (setup historis di mana SumoPod adalah satu-satunya endpoint).
+  const sumopodBase = (process.env.SUMOPOD_BASE_URL || process.env.OPENAI_BASE_URL || '').replace(/\/+$/, '');
+  const sumopodKey = process.env.SUMOPOD_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  if (sumopodBase && sumopodKey && sumopodBase.toLowerCase().includes('sumopod')) {
+    tiers.push({
+      name: 'SumoPod',
+      baseUrl: sumopodBase,
+      apiKey: sumopodKey,
+      model: process.env.SUMOPOD_DEFAULT_MODEL || SUMOPOD_SECONDARY_MODEL,
+    });
+  }
+
+  // Tier 3 — DeepSeek Direct (external last resort).
+  const directBase = (process.env.LLM_FALLBACK_BASE_URL || '').replace(/\/+$/, '');
+  const directKey = process.env.LLM_FALLBACK_API_KEY || '';
+  if (directBase && directKey) {
+    tiers.push({
+      name: 'DeepSeek Direct',
+      baseUrl: directBase,
+      apiKey: directKey,
+      model: process.env.AI_MODEL_FALLBACK || DEEPSEEK_DIRECT_MODEL,
+    });
+  }
+
+  return tiers;
+}
 
 export class LlmOutageError extends Error {
   public readonly isLlmOutage = true;
@@ -16,13 +65,12 @@ export class LlmOutageError extends Error {
 }
 
 export function getFallbackModel(): string {
-  return process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
+  return process.env.AI_MODEL_FALLBACK || DEEPSEEK_DIRECT_MODEL;
 }
 
 /**
- * Rantai fallback DALAM provider yang sama (mis. SumoPod), dipisah koma.
- * Menggunakan DEFAULT_FALLBACK_CHAIN (gpt-4o-mini -> deepseek-v4-flash -> MiniMax -> mimo)
- * sebagai sumber kebenaran; env hanya override jika terisi.
+ * Rantai fallback DALAM provider yang sama (mis. tambahan model Kenari), dipisah koma.
+ * Default kini hanya model primer Kenari (tanpa chain internal). Env dapat meng-override.
  */
 export function getFallbackChain(): string[] {
   const envChain = (process.env.AI_MODEL_FALLBACK_CHAIN || '')
@@ -167,9 +215,10 @@ export async function callChatCompletionsWithFallback(
       }
     }
 
-    // 1) Rantai model cadangan dalam provider yang sama (mis. SumoPod: deepseek → qwen).
-    //    Bisa dikosongkan via env AI_MODEL_FALLBACK_CHAIN untuk perilaku lama.
+    // 1) Rantai model cadangan dalam provider yang sama (Tier 1 internal).
+    //    Default kini hanya model primer; env AI_MODEL_FALLBACK_CHAIN bisa menambah.
     for (const fbModel of chain) {
+      if (fbModel === call.model) continue;
       try {
         console.warn(
           `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${fbModel} via provider yang sama (${lastErr?.message || String(lastErr)})`
@@ -182,40 +231,27 @@ export async function callChatCompletionsWithFallback(
       }
     }
 
-    // 2) Penyelamat terakhir: provider EKSTERNAL (mis. DeepSeek Direct) bila
-    //    LLM_FALLBACK_BASE_URL dikonfigurasi. Model = fallbackModel (AI_MODEL_FALLBACK).
-    const externalBaseUrl = process.env.LLM_FALLBACK_BASE_URL ? process.env.LLM_FALLBACK_BASE_URL.replace(/\/$/, '') : null;
-    if (externalBaseUrl && call.fallbackModel && call.fallbackModel !== call.model) {
+    // 2) Fallback LINTAS-PROVIDER berjenjang (Tier 2 SumoPod -> Tier 3 DeepSeek Direct).
+    //    Tier yang baseUrl-nya sama dengan primary di-skip (sudah dicoba di atas).
+    const tiers = resolveFallbackTiers();
+    for (const tier of tiers) {
+      if (tier.baseUrl === call.baseUrl.replace(/\/+$/, '')) continue;
+      if (!tier.model || tier.model === call.model) continue;
       try {
-        const externalApiKey = process.env.LLM_FALLBACK_API_KEY || call.apiKey;
         console.warn(
-          `[LLM MODEL FALLBACK] ${call.model}${chain.length ? '/' + chain.join(',') : ''} gagal, mencoba last-resort ${call.fallbackModel} via ${externalBaseUrl} (${lastErr?.message || String(lastErr)})`
+          `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba Tier ${tier.name} (${tier.model}) via ${tier.baseUrl} (${lastErr?.message || String(lastErr)})`
         );
-        const resp = await attemptWithFormatRetry(call.fallbackModel, externalBaseUrl, externalApiKey);
-        console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${externalBaseUrl}`);
-        return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: externalBaseUrl };
+        const resp = await attemptWithFormatRetry(tier.model, tier.baseUrl, tier.apiKey);
+        console.log(`[LLM FALLBACK OK] ${tier.model} berhasil via Tier ${tier.name} (${tier.baseUrl})`);
+        return { data: resp.data, model: tier.model, usedFallback: true, baseUrl: tier.baseUrl };
       } catch (e: any) {
         lastErr = e;
       }
     }
 
-    // 3) Perilaku lama (tanpa AI_MODEL_FALLBACK_CHAIN & tanpa LLM_FALLBACK_BASE_URL):
-    //    fallback tunggal dengan baseUrl/key yang sama dengan primary.
-    if (chain.length === 0 && !externalBaseUrl && call.fallbackModel && call.fallbackModel !== call.model) {
-      try {
-        console.warn(
-          `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${call.fallbackModel} (${lastErr?.message || String(lastErr)})`
-        );
-        const resp = await attemptWithFormatRetry(call.fallbackModel);
-        console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${call.baseUrl}`);
-        return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: call.baseUrl };
-      } catch (e: any) {
-        lastErr = e;
-      }
-    }
-
+    const tierNames = tiers.map((t) => `${t.name}:${t.model}`).join(' -> ');
     const outageErr = new LlmOutageError(
-      `Seluruh model LLM fallback (${[call.model, ...chain, call.fallbackModel].filter(Boolean).join(' -> ')}) gagal merespons: ${lastErr?.message || String(lastErr)}`
+      `Seluruh model LLM fallback (${[call.model, ...chain.filter((m) => m !== call.model), tierNames].filter(Boolean).join(' -> ')}) gagal merespons: ${lastErr?.message || String(lastErr)}`
     );
     (outageErr as any).cause = lastErr;
     throw outageErr;

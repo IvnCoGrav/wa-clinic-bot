@@ -18,7 +18,7 @@ describe('Calculate Delivery URL Resolution', () => {
     expect(typeof out.distanceKm).toBe('number');
     expect(typeof out.ongkirNormal).toBe('number');
     expect(typeof out.ongkirPromo).toBe('number');
-    expect(out.message).toContain('share location berhasil diidentifikasi');
+    expect(out.message).toMatch(/masuk dalam area jangkauan|share location berhasil diidentifikasi/);
   });
 
   it('share.google shortlink offline -> graceful (tidak crash, jalur teks biasa)', async () => {

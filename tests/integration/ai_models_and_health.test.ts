@@ -15,19 +15,19 @@ describe('Modul 5.6 & 5.7 — AI Model Registry & System Health Integration Test
       method: 'PATCH',
       url: '/api/admin/ai-models/CHAT_REPLY',
       headers: { 'x-api-key': 'test_admin_key_999' },
-      payload: { provider: 'OpenAI', modelName: 'gpt-4o-mini' },
+      payload: { provider: 'Kenari', modelName: 'deepseek-v4-1-flash' },
     });
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
-    expect(body.data.modelName).toBe('gpt-4o-mini');
+    expect(body.data.modelName).toBe('deepseek-v4-1-flash');
     expect(body.message).toContain('Audit trail telah dicatat');
 
     // Empirical Verification: Query AiModelConfigService directly
     const activeConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
-    expect(activeConfig.provider).toBe('OpenAI');
-    expect(activeConfig.modelName).toBe('gpt-4o-mini');
+    expect(activeConfig.provider).toBe('Kenari');
+    expect(activeConfig.modelName).toBe('deepseek-v4-1-flash');
   });
 
   it('2. Provider Allowlist Guard: Invalid provider MUST return 400 Bad Request', async () => {

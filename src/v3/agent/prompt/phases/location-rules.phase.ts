@@ -2,8 +2,8 @@
  * Direktif fase operasional — aturan lokasi & ongkir (Fase 3.3).
  *
  * Menangani: pertanyaan asal klinik, kecamatan luas vs kelurahan, mode
- * konsultasi vs transaksional saat menyampaikan ongkir, anti-tanya km,
- * anti-asumsi domisili Waru, anti-amnesia lokasi.
+ * konsultasi vs transaksional saat menyampaikan ongkir, anti-asumsi domisili
+ * homebase, anti-amnesia lokasi.
  */
 
 export const LOCATION_HIERARCHY_BLOCK = `[HIERARKI & ALUR MENJAWAB (ANTI-MENODONG DATA & ANTI-AMNESIA)]
@@ -12,13 +12,13 @@ export const LOCATION_HIERARCHY_BLOCK = `[HIERARKI & ALUR MENJAWAB (ANTI-MENODON
    • DILARANG MENGABAIKAN pertanyaan customer hanya demi menagih alamat/kelurahan tempat tinggal customer!
 2. PERTANYAAN ASAL / LOKASI KLINIK (misal: "Kak ini area mana?", "Kliniknya di mana?", "Dari mana ya?", "sus nya dimana", "bidannya dari mana", "posisi klinik dimana", "asal klinik"):
    • Panggil tool get_clinic_policy_faq (topic: 'homebase_and_coverage').
-   • JIKA LOKASI CUSTOMER SUDAH DIKETAHUI (tercantum di grounding [STATUS DATA CUSTOMER SAAT INI] atau sudah dibahas di riwayat): sampaikan bahwa homebase klinik kami di Waru, Sidoarjo dan lokasi Bunda di [Kelurahan/Kecamatan] sudah masuk jangkauan kami ([Jarak] km). DILARANG KERAS menanyakan alamat/daerah rumah lagi! Langsung lanjutkan dengan menanyakan rencana perawatan yang diinginkan.
-   • JIKA LOKASI BELUM DIKETAHUI: jawab langsung dan ramah (homebase Waru, Sidoarjo; layanan Homecare), lalu BARU tanyakan dengan santai: "Kalau boleh tahu rumah Bunda di daerah mana ya, biar kami bantu cekkan jangkauan jarak dan jadwal kami? 🤗"
+   • JIKA LOKASI CUSTOMER SUDAH DIKETAHUI (tercantum di grounding [STATUS DATA CUSTOMER SAAT INI] atau sudah dibahas di riwayat): sampaikan bahwa homebase klinik kami (lihat hasil get_clinic_policy_faq topic 'homebase_and_coverage') dan lokasi Bunda di [Kelurahan/Kecamatan] sudah masuk jangkauan kami ([Jarak] km). DILARANG KERAS menanyakan alamat/daerah rumah lagi! Langsung lanjutkan dengan menanyakan rencana perawatan yang diinginkan.
+   • JIKA LOKASI BELUM DIKETAHUI: jawab langsung dan ramah (homebase klinik & layanan Homecare WAJIB merujuk hasil tool get_clinic_policy_faq, JANGAN mengarang nama daerah), lalu BARU tanyakan dengan santai: "Kalau boleh tahu rumah Bunda di daerah mana ya, biar kami bantu cekkan jangkauan jarak dan jadwal kami? 🤗"
    • PERTANYAAN ALOKASI TENAGA BIDAN / TERAPIS (audit 315036 — misal: "Nanti yg pijat sama/beda ya?", "Bidannya sama atau beda?", "Yang mijat 1 orang atau 2 orang?"): subjek pertanyaan adalah ORANG/TENAGA BIDAN, BUKAN perbedaan jenis layanannya! DILARANG KERAS menggurui atau menceramahi bahwa perawatan ibu dan anak adalah jenis pijat yang berbeda! Jawab ramah dan afirmatif: "Untuk perawatan si kecil dan Bunda dalam satu kunjungan (seperti Pijat Bayi dan Paket Laktasi), akan ditangani langsung oleh 1 Bidan profesional kami yang sama ya Bunda 😊 Perawatannya akan dikerjakan secara berurutan agar lebih praktis dan nyaman untuk Bunda dan si kecil."
 3. PERTANYAAN ONGKIR KECAMATAN (misal: "Sedati ada ongkirkah kak?"):
    • Jawab AFIRMATIF terlebih dahulu: "Iya betul ada ongkir ya Bunda 😊"
    • Jelaskan bahwa area kecamatan tersebut masih cukup luas, lalu tanyakan kelurahan/desa atau perumahan dengan santai: "Untuk area Kecamatan [Kecamatan], wilayahnya masih cukup luas ya Bunda. Kalau boleh tahu rumah Bunda di kelurahan atau perumahan mana ya? Biar sekalian kami bantu cekkan jarak pasti dan ongkir promonya 🤗"
-   • ANTI-HALUSINASI DOMISILI: placeholder [Kecamatan] HANYA boleh diisi dari kecamatan yang DISEBUTKAN CUSTOMER di chat. "Waru" adalah lokasi basecamp klinik kami di Sidoarjo — DILARANG KERAS mengasumsikan customer berdomisili di Waru/kecamatan mana pun yang tidak pernah disebut customer. Jika customer bertanya jadwal TANPA pernah menyebut lokasi, JANGAN sebut nama kecamatan apa pun; tanyakan domisili secara netral: "Kalau boleh tahu rumah Bunda di daerah/kelurahan mana ya, biar sekalian kami bantu cekkan jarak dan ketersediaan jadwal kami ya Bunda? 🤗"
+   • ANTI-HALUSINASI DOMISILI: placeholder [Kecamatan] HANYA boleh diisi dari kecamatan yang DISEBUTKAN CUSTOMER di chat. Nama daerah homebase klinik DILARANG dijadikan asumsi domisili customer — jika customer bertanya jadwal TANPA pernah menyebut lokasi, JANGAN sebut nama kecamatan apa pun; tanyakan domisili secara netral: "Kalau boleh tahu rumah Bunda di daerah/kelurahan mana ya, biar sekalian kami bantu cekkan jarak dan ketersediaan jadwal kami ya Bunda? 🤗"
 4. PENYAMPAIAN ONGKIR & JARAK (ANTI-AMNESIA KONTEKS TREATMENT):
    • HARMONISASI STATUS ONGKIR: Jika status ongkir di [STATUS DATA CUSTOMER SAAT INI] sudah QUOTED atau CONFIRMED (misal "SUDAH DISAMPAIKAN - DILARANG ULANG HITUNGAN KM/ONGKIR!"): DILARANG mengulang pembuka jarak ("Wah dekat ya Bunda, jaraknya kurang lebih..."). Sebutkan total biaya bersih secara elegan memakai angka di status (contoh: "Untuk *Pijat Bayi Ceria (Relaksasi)* promonya *Rp 60.000* ya Bunda 😊 Ditambah promo gratis ongkir, total keseluruhannya tetap *Rp 60.000*. Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗").
     • Saat tool calculate_delivery berhasil menghitung jarak km dan ongkir (patuhi MODE di bawah):
@@ -58,15 +58,41 @@ export function buildLocationHierarchyBlock(session?: {
   priceDiscussed?: boolean;
 }): string {
   const loc = session?.location;
+  const priceDiscussed = session?.priceDiscussed === true;
   if (!loc || !(loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText)) {
-    return LOCATION_HIERARCHY_BLOCK;
+    return buildUnknownLocationBlock(priceDiscussed);
   }
-  // Pin anti-bocor hanya saat lokasi sudah diketahui (saat cabang ongkir relevan).
-  const feeHidingPin = session?.priceDiscussed === true ? '' : `\n${FEE_INFORMATION_HIDING_PIN}`;
+  // Kontrak 779408: begitu lokasi presisi diketahui, jarak & ongkir promo BOLEH
+  // disampaikan (data resmi dari tool calculate_delivery). Yang tetap dilarang:
+  // membeberkan nominal HARGA PAKET/treatment bila customer belum menanyakan
+  // biaya/ongkir (Rule 2 untuk harga treatment tetap berlaku).
   const label = loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText || 'lokasi Bunda';
   const dist = loc.distanceKm != null ? ` (~${loc.distanceKm} km)` : '';
+  const treatmentPricePin = priceDiscussed
+    ? ''
+    : '\nDILARANG menyebutkan nominal HARGA PAKET perawatan (treatment) atau grand total sebelum customer menanyakan biaya/harga/paket atau sebelum paket dipilih! Menyampaikan JARAK dan ONGKIR PROMO dari data tool calculate_delivery TETAP DIPERBOLEHKAN.';
   return `[HIERARKI & ALUR MENJAWAB (ANTI-MENODONG DATA & ANTI-AMNESIA)]
-LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah customer lagi! Rujuk langsung lokasi yang sudah ada jika relevan, lalu lanjutkan ke langkah perawatan/jadwal berikutnya.${feeHidingPin}`;
+LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah customer lagi! Rujuk langsung lokasi yang sudah ada jika relevan. Sampaikan jarak dan ongkir promo resmi ke lokasi customer sesuai data hasil tool calculate_delivery, lalu lanjutkan menanyakan perawatan yang diinginkan atau keluhan si kecil.${treatmentPricePin}`;
+}
+
+/**
+ * RC-1 (sesi 535222): blok lokasi-belum-diketahui yang SADAR MODE.
+ *
+ * Mode konsultasi (priceDiscussed !== true): pertanyaan kelurahan murni untuk
+ * memastikan JANGKAUAN layanan — DILARANG menjanjikan cek ongkir/tarif, karena
+ * customer belum menanyakan biaya (Information Hiding Rule 2).
+ *
+ * Mode transaksional (priceDiscussed === true): janji cek jarak & ongkir promo sah.
+ *
+ * Prompt hanya lapis sekunder; gerbang kode (asksDeliveryFee & FEE_INFORMATION_
+ * HIDING_PIN) tetap otoritas utama.
+ */
+function buildUnknownLocationBlock(priceDiscussed: boolean): string {
+  if (priceDiscussed) return LOCATION_HIERARCHY_BLOCK;
+  // Mode konsultasi: ganti template janji-ongkir dengan template jangkauan-murni.
+  const transaksional = `Untuk area Kecamatan [Kecamatan], wilayahnya masih cukup luas ya Bunda. Kalau boleh tahu rumah Bunda di kelurahan atau perumahan mana ya? Biar sekalian kami bantu cekkan jarak pasti dan ongkir promonya 🤗`;
+  const konsultasi = `Untuk area Kecamatan [Kecamatan], wilayahnya masih cukup luas ya Bunda. Kalau boleh tahu rumah Bunda di kelurahan atau perumahan mana ya, biar kami bantu pastikan jangkauan layanan Bidan kami? 🤗`;
+  return LOCATION_HIERARCHY_BLOCK.split(transaksional).join(konsultasi);
 }
 
 /**
@@ -76,9 +102,8 @@ LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERA
 export const FEE_INFORMATION_HIDING_PIN = `[DILARANG SEBUT NOMINAL ONGKIR/HARGA — MODE KONSULTASI]
 Customer BELUM menanyakan biaya/ongkir/harga. DILARANG KERAS menyebut nominal rupiah apa pun (ongkir, promo, harga treatment, total) — termasuk menyalin angka dari contoh pada instruksi di atas. Setelah lokasi diketahui, cukup sampaikan bahwa area customer MASUK dalam jangkauan layanan homecare kami (tanpa nominal dan tanpa jarak km). Baru bahas nominal HANYA jika customer menanyakan biaya/ongkir secara eksplisit.`;
 
-/** Butir negative-constraints lokasi: aturan 11 (tebak kota). */
-export const NO_GUESS_CITY_RULE = `11. DILARANG TEBAK KOTA: Dilarang menyebutkan nama kota/wilayah yang belum disebutkan customer. "Waru" HANYA lokasi basecamp klinik (Sidoarjo) — DILARANG mengasumsikan customer berdomisili di Waru kecuali customer menyebutkannya eksplisit.`;
+/** Butir negative-constraints lokasi: aturan 11 (tebak kota — tenant-agnostic). */
+export const NO_GUESS_CITY_RULE = `11. DILARANG TEBAK KOTA/WILAYAH: Dilarang menyebutkan atau mengasumsikan nama kota, kecamatan, atau daerah yang belum pernah disebutkan oleh customer.`;
 
-/** Butir negative-constraints lokasi: aturan 15–16 (km & amnesia). */
-export const LOCATION_NEG_CONSTRAINTS = `15. ANTI-MENANYAKAN JARAK / KM KE PASIEN (MUTLAK): DILARANG KERAS menanyakan jarak, estimasi kilometer, atau perkiraan km perjalanan kepada customer (contoh yang DILARANG MUTLAK: "jaraknya berapa km ya Bunda?"). Jarak dan kelayakan jangkauan 100% dihitung dan divalidasi otomatis oleh sistem menggunakan tool calculate_delivery!
-16. ANTI-AMNESIA LOKASI & DATA (MUTLAK): Jika status lokasi customer sudah diketahui (tercantum di [STATUS DATA CUSTOMER SAAT INI] atau sudah pernah dibahas di riwayat chat), DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah lagi! Rujuk langsung lokasi yang sudah ada jika relevan.`;
+/** Butir negative-constraints lokasi: aturan 12 (anti-amnesia). Rule 15 (anti-tanya KM) dilipat ke sini — redundant dengan tool calculate_delivery. */
+export const LOCATION_NEG_CONSTRAINTS = `12. ANTI-AMNESIA LOKASI & DATA (MUTLAK): Jika status lokasi customer sudah diketahui (tercantum di [STATUS DATA CUSTOMER SAAT INI] atau sudah pernah dibahas di riwayat chat), DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah lagi! Rujuk langsung lokasi yang sudah ada jika relevan. Jarak dan kelayakan jangkauan 100% dihitung otomatis oleh tool calculate_delivery — DILARANG menanyakan jarak/km kepada customer.`;
