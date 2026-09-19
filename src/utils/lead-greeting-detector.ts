@@ -36,6 +36,17 @@ export function stripAdTags(text: string): string {
   return text.replace(AD_TAG_RE, '').trim();
 }
 
+/**
+ * Deteksi salam Islami pembuka secara mandiri (tanpa mensyaratkan sapaan
+ * murni): dipakai memilih varian header sapaan Turn-0 pada giliran yang
+ * memuat konten lain (mis. lokasi). Domain linguistik yang sama dengan
+ * ISLAMIC_RE di modul ini — bukan regex intent baru.
+ */
+export function hasIslamicSalutation(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  return ISLAMIC_RE.test(stripAdTags(text));
+}
+
 export function isPureLeadGreeting(text: string): LeadGreetingResult {
   const notIslamic = { isLeadGreeting: false, isIslamic: false };
   if (!text || typeof text !== 'string') return notIslamic;

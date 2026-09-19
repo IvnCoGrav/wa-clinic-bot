@@ -81,13 +81,17 @@ export function extractFastIntents(text: string): string[] {
   ];
   // Satuan non-moneter boleh dipisahkan oleh filler ringan ("berapa SIH lama...").
   const FILLERS = new Set(['sih', 'ya', 'kah', 'dong', 'deh', 'itu', 'nih', 'sih?', 'ya?']);
+  // Satuan non-moneter juga boleh MENDAPAHUI berapa (urutan alami "usia berapa",
+  // "umur brp") — bukan hanya membuntuti ("berapa usia"). "usia berapa minimal
+  // boleh dipijat" adalah pertanyaan usia, BUKAN harga.
   const isNonMonetaryBerapa = mentionsBerapa && tokens.some((tok, idx) => {
     if (tok !== 'berapa' && tok !== 'brp') return false;
     let k = idx + 1;
     // lewati filler
     while (k < tokens.length && FILLERS.has(tokens[k])) k++;
     const nextTok = tokens[k] || '';
-    return NON_MONETARY_FOLLOWERS.includes(nextTok);
+    const prevTok = idx > 0 ? tokens[idx - 1] : '';
+    return NON_MONETARY_FOLLOWERS.includes(nextTok) || NON_MONETARY_FOLLOWERS.includes(prevTok);
   });
   // "berapa" telanjang/umum (bukan durasi & bukan satuan non-moneter) = harga.
   const isGeneralPriceBerapa = mentionsBerapa && !asksDuration && !isNonMonetaryBerapa;

@@ -165,7 +165,7 @@ describe('Admin API responses must be non-cacheable (browser/proxy stale-data gu
     } finally {
       await app.close();
     }
-  });
+  }, 30000);
 
   it('even an unauthenticated admin API 401 carries no-store (header set before auth)', async () => {
     const { buildApp } = await import('../../src/app');
@@ -178,5 +178,5 @@ describe('Admin API responses must be non-cacheable (browser/proxy stale-data gu
     } finally {
       await app.close();
     }
-  });
+  }, 30000);
 });

@@ -7,6 +7,7 @@ import { conversationService } from '../../services/conversation.service';
 import { ConversationState } from '@prisma/client';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 import { responseCacheService } from '../../services/response-cache.service';
+import { getClinicLocationAsync } from '../../config/clinic-location';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
@@ -35,6 +36,174 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ success: false, error: err.message });
     }
   });
+
+  /**
+   * GET /api/admin/customers/map-points
+   * Endpoint ringan untuk peta sebaran: hanya kolom spasial + identitas ringkas.
+   *
+   * - Default difokuskan ke wilayah layanan dengan filter toleran: teks
+   *   kota/kecamatan mengandung surabaya/sidoarjo/gresik/sby/sda, ATAU
+   *   distance_km <= 35, ATAU koordinat di dalam bounding box Surabaya Raya.
+   * - `?scope=all` menampilkan seluruh titik tanpa batas wilayah.
+   * - `?includeCentroids=false` mematikan titik sentroid estimasi.
+   * - Titik sentroid: pelanggan dengan lat NULL tetapi punya kelurahan/kecamatan
+   *   valid → di-resolve ke koordinat gazetteer, ditandai `is_estimated_centroid`.
+   * - `clinic` memuat lokasi basecamp tenant-aware (getClinicLocationAsync).
+   */
+  const SURABAYA_RAYA_BBOX = { minLat: -7.65, maxLat: -7.05, minLng: 112.45, maxLng: 113.05 };
+  const AREA_KEYWORDS = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda'];
+
+  const isWithinServiceArea = (c: any): boolean => {
+    const areaText = `${c.kota || ''} ${c.kecamatan || ''}`.toLowerCase();
+    if (AREA_KEYWORDS.some((w) => areaText.includes(w))) return true;
+    if (typeof c.distance_km === 'number' && c.distance_km <= 35) return true;
+    if (typeof c.lat === 'number' && typeof c.lng === 'number') {
+      return (
+        c.lat >= SURABAYA_RAYA_BBOX.minLat &&
+        c.lat <= SURABAYA_RAYA_BBOX.maxLat &&
+        c.lng >= SURABAYA_RAYA_BBOX.minLng &&
+        c.lng <= SURABAYA_RAYA_BBOX.maxLng
+      );
+    }
+    return false;
+  };
+
+  fastify.get(
+    '/api/admin/customers/map-points',
+    async (
+      request: FastifyRequest<{
+        Querystring: { kota?: string; scope?: string; includeCentroids?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const kota = request.query?.kota?.trim();
+        const showAll = request.query?.scope === 'all';
+        const includeCentroids = request.query?.includeCentroids !== 'false';
+
+        const coordsRows = await prisma.customer.findMany({
+          where: {
+            tenant_id: DEFAULT_TENANT_ID,
+            is_sandbox_test: false,
+            lat: { not: null },
+            lng: { not: null },
+            ...(kota ? { kota: { contains: kota, mode: 'insensitive' } } : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            lat: true,
+            lng: true,
+            kota: true,
+            kecamatan: true,
+            kelurahan: true,
+            status: true,
+            is_mql: true,
+            is_out_of_coverage: true,
+            distance_km: true,
+          },
+          take: 5000,
+        });
+
+        let points: any[] = coordsRows
+          .filter(
+            (c: any) =>
+              typeof c.lat === 'number' &&
+              typeof c.lng === 'number' &&
+              c.lat >= -90 &&
+              c.lat <= 90 &&
+              c.lng >= -180 &&
+              c.lng <= 180
+          )
+          .map((c: any) => ({ ...c, is_estimated_centroid: false }));
+
+        if (!showAll) {
+          points = points.filter(isWithinServiceArea);
+        }
+
+        // Titik sentroid estimasi: pelanggan tanpa koordinat presisi namun punya wilayah valid.
+        if (includeCentroids) {
+          try {
+            const nullRows = await prisma.customer.findMany({
+              where: {
+                tenant_id: DEFAULT_TENANT_ID,
+                is_sandbox_test: false,
+                lat: null,
+                ...(kota ? { kota: { contains: kota, mode: 'insensitive' } } : {}),
+              },
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                kota: true,
+                kecamatan: true,
+                kelurahan: true,
+                status: true,
+                is_mql: true,
+                is_out_of_coverage: true,
+                distance_km: true,
+              },
+              take: 5000,
+            });
+
+            const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
+            const { getGazetteerCoordinates } = await import('../../utils/gazetteer');
+            const { isValidAreaName } = await import('../../utils/wilayah-normalizer');
+
+            for (const c of nullRows) {
+              const kelurahan = isValidAreaName(c.kelurahan) ? c.kelurahan : null;
+              const kecamatan = isValidAreaName(c.kecamatan) ? c.kecamatan : null;
+              if (!kelurahan && !kecamatan) continue;
+              // Prioritas kelurahan (lebih presisi) lalu kecamatan.
+              const gaz = getGazetteerCoordinates(kelurahan || kecamatan || '');
+              if (!gaz || !Number.isFinite(gaz.lat) || !Number.isFinite(gaz.lng)) continue;
+              const centroidPoint: any = {
+                id: c.id,
+                name: c.name,
+                phone: c.phone,
+                lat: gaz.lat,
+                lng: gaz.lng,
+                kota: c.kota || gaz.kota,
+                kecamatan: c.kecamatan || gaz.kecamatan,
+                kelurahan: c.kelurahan || gaz.kelurahan,
+                status: c.status,
+                is_mql: c.is_mql,
+                is_out_of_coverage: c.is_out_of_coverage,
+                distance_km: c.distance_km,
+                is_estimated_centroid: true,
+              };
+              if (showAll || isWithinServiceArea(centroidPoint)) {
+                points.push(centroidPoint);
+              }
+            }
+          } catch (centroidErr: any) {
+            // Sentroid bersifat pelengkap; kegagalan tidak boleh menggagalkan peta.
+            console.warn('[map-points] sentroid gagal:', centroidErr?.message);
+          }
+        }
+
+        const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
+        return reply
+          .header('Cache-Control', 'private, max-age=15, stale-while-revalidate=60')
+          .status(200)
+          .send({
+            success: true,
+            points,
+            total: points.length,
+            clinic: {
+              lat: clinic.lat,
+              lng: clinic.lng,
+              name: clinic.name,
+              maxCoverageKm: clinic.maxCoverageKm,
+              rings: [5, 15, clinic.maxCoverageKm],
+            },
+          });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 
   /**
    * GET /api/admin/customers

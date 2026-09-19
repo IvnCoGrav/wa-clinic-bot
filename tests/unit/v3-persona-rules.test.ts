@@ -50,8 +50,11 @@ describe('V3 Persona Rules — Aturan Emas Klinik', () => {
     expect(result.replyText).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda?');
     expect(result.replyText.length).toBeLessThanOrEqual(500);
     expect(axios.post).not.toHaveBeenCalled();
-    // Rule 1: tepat 2 kalimat (salam+identitas homecare, lalu pemantik domisili).
-    expect(countSentences(result.replyText)).toBeLessThanOrEqual(2);
+    // SOP resmi tim admin: template deterministik Turn-0 4-blok (salam, terima
+    // kasih, perkenalan homecare, pemantik domisili). Kuota kalimat Rule 1
+    // mengatur prosa generation LLM, bukan template baku — batas di sini = 4.
+    expect(result.replyText).toContain('Terima kasih sudah menghubungi kami');
+    expect(countSentences(result.replyText)).toBeLessThanOrEqual(4);
   });
 
   it('Test 2: Pertanyaan Lokasi (Turn-1) — Waru 30km, tanpa English leak, Bunda ≤2, ≤3 kalimat', async () => {

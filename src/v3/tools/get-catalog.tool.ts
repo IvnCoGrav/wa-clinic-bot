@@ -14,8 +14,8 @@ export interface GetCatalogInput {
   childAgeMonths?: number;
   /** Usia kehamilan Ibu (minggu) bila pasien adalah Ibu Hamil (kategori MOMS). JANGAN diisi untuk bayi/anak. */
   gestationalWeeks?: number;
-  /** Kondisi Ibu: Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum. */
-  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
+  /** Kondisi Ibu: Hamil, Paska Melahirkan/Nifas, Menyusui, atau Relaksasi Umum. */
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
   symptoms?: string[];
   specificTreatmentName?: string;
   /**
@@ -64,7 +64,8 @@ export type CatalogClosingIntent =
   | 'ASK_DOMICILE'
   | 'ASK_SCHEDULE'
   | 'PRICE_SUBJECT_CLARIFY'
-  | 'CLINICAL_PROBE';
+  | 'CLINICAL_PROBE'
+  | 'MOM_GENERAL_UNSUPPORTED';
 
 export interface CatalogPricingBreakdown {
   targetName?: string;
@@ -92,6 +93,8 @@ export interface GetCatalogOutput {
   closingIntent?: CatalogClosingIntent;
   /** Keluhan efektif (argumen + sesi) yang mendasari intent — untuk audit. */
   closingSymptoms?: string[];
+  /** SOP klinis: true bila keluhan multi-tier butuh klarifikasi usia netral bulan/tahun. */
+  needsAgeClarification?: boolean;
   /**
    * Template total resmi keranjang multi-item (sesi 214956): dihitung 100%
    * mesin dari snapshot cart + ongkir sesi. Dipakai panduan LLM DAN fallback
@@ -222,10 +225,20 @@ export async function executeGetCatalog(
   if ((category === 'BABY' || category === 'KIDS') && canonicalChildCategory && category !== canonicalChildCategory) {
     category = canonicalChildCategory;
   }
+  // Anti-overconstraint "anak" → KIDS sepihak: bila usia belum diketahui,
+  // jangan kunci ke KIDS (BABY 0-24 bln ikut tereliminasi). Longgarkan ke
+  // lintas BABY/KIDS agar Pijat Bayi Pulih Ceria tidak terbuang.
+  if (category === 'KIDS' && (childAgeMonths == null || childAgeMonths === undefined)) {
+    category = undefined as any;
+  }
   // Fase 4' (anti-kaset rusak): gabung keluhan argumen LLM dengan keluhan
-  // yang SUDAH diketahui sesi (dedupe). Menutup kasus LLM lupa mengisi
-  // symptoms padahal customer sudah menulis keluhan ("Biasa kembung").
-  const effectiveSymptoms: string[] = [...(symptoms || []), ...((sessionCtx?.knownSymptoms || []) as string[])]
+  // yang SUDAH diketahui sesi (dedupe). Isolasi pasien: bila target MOMS,
+  // gejala anak (bapil/kembung) di knownSymptoms DILARANG mencemari query ibu.
+  const isTargetingMoms = category === 'MOMS' || momStage != null;
+  const inheritedSymptoms: string[] = isTargetingMoms
+    ? [] // momStage GENERAL/BOTH: jangan wariskan keluhan anak; hanya gejala eksplisit di turn ini
+    : ((sessionCtx?.knownSymptoms || []) as string[]);
+  const effectiveSymptoms: string[] = [...(symptoms || []), ...inheritedSymptoms]
     .filter((s, i, arr) => arr.indexOf(s) === i);
   const hasKnownSymptoms = effectiveSymptoms.length > 0;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
@@ -458,25 +471,34 @@ export async function executeGetCatalog(
       || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
     );
 
-    // Phase 2 — Clinical linkage: ibu PASCA MELAHIRKAN (bayi sudah lahir)
+    // Phase 2 — Clinical linkage: ibu PASCA MELAHIRKAN / MENYUSUI
     // DILARANG ditawari Prenatal (Pijat Hamil). Keluarkan layanan prenatal
-    // dari daftar (kecuali customer menyebut namanya eksplisit via
-    // specificTreatmentName — intent eksplisit menang), lalu posisikan
-    // Oksitosin Fullbody & Paket Laktasi di urutan 1 & 2.
-    if (category === 'MOMS' && momStage === 'POSTPARTUM') {
+    // dari daftar (kecuali customer menyebut namanya eksplisit), lalu posisikan
+    // Laktasi/Oksitosin/Relaksasi sesuai fase.
+    let momGeneralUnsupported = false;
+    if (category === 'MOMS' && (momStage === 'POSTPARTUM' || momStage === 'BREASTFEEDING')) {
       const isPrenatalId = (id: string): boolean =>
         id === 'moms-prenatal-massage' || id === 'moms-prenatal-yoga';
       const explicitPrenatalQuery = (specificTreatmentName || '').toLowerCase();
       const explicitlyWantsPrenatal = explicitPrenatalQuery.includes('prenatal')
         || explicitPrenatalQuery.includes('hamil')
         || explicitPrenatalQuery.includes('yoga');
-      // Intent eksplisit menang: lewati SELURUH reorder klinis (filter + demosi).
       if (!explicitlyWantsPrenatal) {
         const pool = formattedTreatments.filter((t) => !isPrenatalId(t.id));
-        const priorityOf = (id: string): number =>
-          id === 'moms-oksitosin-fullbody' ? 0
-          : id === 'moms-paket-laktasi' ? 1
-          : isPrenatalId(id) ? 99 : 2;
+        const priorityOf = (id: string): number => {
+          if (momStage === 'BREASTFEEDING') {
+            return id === 'moms-paket-laktasi' ? 0
+              : id === 'moms-oksitosin-fullbody' ? 1
+              : id === 'moms-relaksasi' ? 2
+              : id === 'moms-postpartum-massage' ? 3
+              : isPrenatalId(id) ? 99 : 4;
+          }
+          return id === 'moms-oksitosin-fullbody' ? 0
+            : id === 'moms-paket-laktasi' ? 1
+            : id === 'moms-postpartum-massage' ? 2
+            : id === 'moms-relaksasi' ? 3
+            : isPrenatalId(id) ? 99 : 4;
+        };
         pool.sort((a, b) => {
           const p = priorityOf(a.id) - priorityOf(b.id);
           if (p !== 0) return p;
@@ -484,6 +506,43 @@ export async function executeGetCatalog(
         });
         formattedTreatments.length = 0;
         formattedTreatments.push(...pool);
+      }
+    }
+
+    // momStage GENERAL: bila GENERAL dipanggil tanpa konteks bayi, jangan
+    // wipe bila ada relaksasi; bila ada bayi (≤24 bln) elevasi ke BREASTFEEDING.
+    if (category === 'MOMS' && momStage === 'GENERAL') {
+      const hasInfant = typeof childAgeMonths === 'number' && childAgeMonths <= 24;
+      if (hasInfant) {
+        // Salah momStage: seharusnya BREASTFEEDING — terapkan prioritas breastfeeding transparan
+        const isPrenatalId = (id: string): boolean => id === 'moms-prenatal-massage' || id === 'moms-prenatal-yoga';
+        const pool = formattedTreatments.filter((t) => !isPrenatalId(t.id));
+        const priorityOf = (id: string): number =>
+          id === 'moms-paket-laktasi' ? 0
+          : id === 'moms-oksitosin-fullbody' ? 1
+          : id === 'moms-relaksasi' ? 2
+          : id === 'moms-postpartum-massage' ? 3
+          : isPrenatalId(id) ? 99 : 4;
+        pool.sort((a, b) => {
+          const p = priorityOf(a.id) - priorityOf(b.id);
+          if (p !== 0) return p;
+          return (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0);
+        });
+        formattedTreatments.length = 0;
+        formattedTreatments.push(...pool);
+      } else {
+        const explicitQuery = (specificTreatmentName || '').toLowerCase();
+        const wantsSpecificMoms = explicitQuery.trim().length > 0;
+        if (!wantsSpecificMoms) {
+          const relaxationServices = formattedTreatments.filter((t) => t.id === 'moms-relaksasi' || /relaksasi/i.test(t.name));
+          if (relaxationServices.length > 0) {
+            formattedTreatments.length = 0;
+            formattedTreatments.push(...relaxationServices);
+          } else {
+            formattedTreatments.length = 0;
+            momGeneralUnsupported = true;
+          }
+        }
       }
     }
 
@@ -681,8 +740,22 @@ export async function executeGetCatalog(
     const hasClinicalMatch = clinicalRecommendation != null;
     const locationKnown = Boolean(sessionCtx?.kelurahan || sessionCtx?.ongkirStatus);
     const specificName = specificTreatmentName?.trim() ? specificTreatmentName.trim() : '';
+    // Multi-tier age clarification: bila usia belum diketahui dan rekomendasi
+    // masuk keluarga multi-tier (BABY vs KIDS varian Pulih/Sembelit), jangan
+    // kunci tier spesifik — tanya usia netral bulan/tahun dulu.
+    const needsAgeClarification = childAgeMonths == null && hasClinicalMatch
+      && (() => {
+        const normalizeFam = (name: string): string =>
+          name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+        const famBase = normalizeFam(clinicalRecommendation!.name);
+        const hasBabyVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'BABY' || s.ageTier?.label?.toLowerCase().includes('bayi')));
+        const hasKidsVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'KIDS' || s.ageTier?.label?.toLowerCase().includes('kids')));
+        return hasBabyVariant && hasKidsVariant;
+      })();
     let closingIntent: CatalogClosingIntent;
-    if (hasKnownSymptoms && !hasClinicalMatch && !specificName) {
+    if (momGeneralUnsupported) {
+      closingIntent = 'MOM_GENERAL_UNSUPPORTED';
+    } else if (hasKnownSymptoms && !hasClinicalMatch && !specificName) {
       closingIntent = 'SAFETY_NO_MATCH';
     } else if (showDuration) {
       closingIntent = 'STATEMENT_ONLY_DURATION';
@@ -693,6 +766,11 @@ export async function executeGetCatalog(
       // tanya domisili, BUKAN todong jadwal. Klasik save-reservation masking
       // sudah menutup booking; ini menutup ajakan jadwal di teks.
       closingIntent = locationKnown ? 'ASK_SCHEDULE' : 'ASK_DOMICILE';
+    } else if (needsAgeClarification) {
+      // Refinement CLINICAL_PROBE (SUBORDINAT terhadap hierarki di atas —
+      // durasi/domisili/jadwal menang atas klarifikasi tier, sesi 951450):
+      // usia multi-tier belum dikenal → tanya bulan/tahun netral.
+      closingIntent = 'CLINICAL_PROBE';
     } else {
       closingIntent = 'CLINICAL_PROBE';
     }
@@ -708,11 +786,20 @@ export async function executeGetCatalog(
       // Kebutuhan sudah dibahas (discussed) → DILARANG skrining ulang;
       // tutup pernyataan hangat + arahkan konfirmasi jadwal/domisi sesuai
       // status lokasi (cermin hierarki ASK_SCHEDULE/ASK_DOMICILE).
-      CLINICAL_PROBE: hasDiscussed
+      // needsAgeClarification: usia multi-tier belum diketahui → tanya bulan/tahun + sebut famili terapi.
+      CLINICAL_PROBE: needsAgeClarification
+        ? (() => {
+            const fmtTitle = (raw: string): string => raw.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            const normFam = (name: string): string => name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+            const famName = clinicalRecommendation ? fmtTitle(normFam(clinicalRecommendation.name)) : 'Pijat Pulih Ceria';
+            return `Keluhan (${effectiveSymptoms.join(', ')}) dapat dibantu dengan terapi *${famName}*. Karena layanan ini memiliki varian paket berdasarkan usia (Bayi vs Anak) dan usia si kecil belum diketahui di sesi, SEBUTKAN rekomendasi terapi *${famName}* beserta manfaatnya secara ringkas, lalu TANYAKAN USIA netral: "Kalau boleh tahu, saat ini si kecil usianya berapa bulan atau berapa tahun ya Bunda? Biar kami bantu sesuaikan perawatannya 🤗" (DILARANG menodong hanya "berapa tahun").`;
+          })()
+        : hasDiscussed
         ? `Kebutuhan layanan (${(sessionCtx?.discussedTreatments || []).slice(0, 3).join(', ')}) SUDAH dibahas — DILARANG mengulang skrining keluhan generik (anti-kaset rusak). Sampaikan rekomendasi hangat, lalu ${locationKnown ? 'ajak konfirmasi preferensi hari kunjungan' : 'tanyakan domisili/kelurahan rumah Bunda'}.`
         : isMomContext
           ? 'Wajib tutup dengan pertanyaan pemantik klinis untuk Bunda: tanyakan apakah Bunda saat ini sedang hamil, nifas/menyusui, atau ingin relaksasi saja. DILARANG membawa topik batuk/pilek bayi — layanan ini untuk ibu.'
           : 'Wajib tutup dengan pertanyaan pemantik klinis: tanyakan apakah saat ini si kecil sedang ada keluhan sakit atau ingin pijat sehat relaksasi saja.',
+      MOM_GENERAL_UNSUPPORTED: `Layanan homecare klinik untuk Bunda saat ini berfokus pada perawatan kebidanan komplementer: Ibu Hamil (Prenatal), Ibu Pasca Melahirkan/Nifas, dan Ibu Menyusui (Laktasi/Oksitosin). Pijat relaksasi umum untuk wanita di luar kondisi hamil/nifas/menyusui belum tersedia. Sampaikan hal ini dengan ramah dan sopan kepada Bunda, tanpa menawarkan Prenatal/Postpartum.`,
     };
     const closingGuide = closingDirectives[closingIntent];
     return {
@@ -720,6 +807,7 @@ export async function executeGetCatalog(
       treatments: formattedTreatments.slice(0, 5),
       closingIntent,
       closingSymptoms: [...effectiveSymptoms],
+      needsAgeClarification,
       recommendationReason,
       suggestedPriceReply,
       cartTotalReply,

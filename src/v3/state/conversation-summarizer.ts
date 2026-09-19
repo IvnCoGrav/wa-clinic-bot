@@ -147,6 +147,11 @@ export class V3ConversationSummarizer {
     const commitReady = hasDayMention && treatmentAgreedForCommit && !scheduleAgreed;
     if (hasDayMention) {
       janganDiulang.push('Menanyakan "mau treatment di hari apa" (hari sudah disebut Bunda — JANGAN tanya ulang)');
+      // TAHAP 2 (sesi 951450) — Rule 4 anti-todong usia saat negosiasi jadwal:
+      // bila hari disebut sementara usia belum tercatat, DILARANG menodong usia.
+      if (ageMonths == null) {
+        janganDiulang.push('Menanyakan usia si kecil saat negosiasi jadwal (durasi usia tidak relevan untuk ketersediaan jadwal)');
+      }
     }
     if (commitReady) {
       sudahDibahas.push('Bunda sudah menyebutkan hari kunjungan — siap dikunci menjadi reservasi');
@@ -196,7 +201,7 @@ export class V3ConversationSummarizer {
       yangPerluDijawab = 'Lokasi sudah diketahui dan hari sudah disebut — KUNCI reservasi lewat save_reservation, sampaikan jadwal akan dikonfirmasi tim Bidan. DILARANG menanyakan JAM spesifik.';
     } else if (hasDayMention) {
       sedangDibahas = 'Bunda menanyakan ketersediaan jadwal';
-      yangPerluDijawab = 'Pola "cekkan/infokan" HANYA bila lokasi Bunda sudah diketahui; bila lokasi BELUM diketahui, tanyakan domisili netral dulu (aturan persona 5a) dan DILARANG berjanji mengecek jadwal. (DILARANG bilang "Tentu bisa" sepihak).';
+      yangPerluDijawab = 'Pola "cekkan/infokan" HANYA bila lokasi Bunda sudah diketahui; bila lokasi BELUM diketahui, tanyakan domisili netral dulu (aturan persona 5a) dan DILARANG berjanji mengecek jadwal. (DILARANG bilang "Tentu bisa" sepihak). DILARANG menanyakan usia si kecil saat negosiasi jadwal.';
     } else if ((rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama'))
       && hasNominalToken(rawInputLower)) {
       // Sesi 973126: pertanyaan komposit nominal + durasi tanpa nama paket pasti
@@ -207,7 +212,8 @@ export class V3ConversationSummarizer {
       yangPerluDijawab = 'Jelaskan paket apa yang sesuai nominal tersebut dari hasil tool get_catalog_and_price (kutip klarifikasi nominal: promo/normal + durasi), sebutkan durasinya, dan tanyakan ramah apakah perawatan untuk Bunda atau si kecil.';
     } else if (rawInputLower.includes('menit') || rawInputLower.includes('durasi') || rawInputLower.includes('berapa lama')) {
       sedangDibahas = 'Bunda menanyakan durasi waktu pelaksanaan perawatan';
-      yangPerluDijawab = 'STATEMENT-ONLY RESPONSE (ANTI-TODONG JADWAL): Sebutkan durasi pelaksanaan resmi dari katalog beserta manfaatnya (maksimal 2-3 kalimat). DILARANG KERAS MENAMBAHKAN PERTANYAAN JADWAL / HARI!';
+      yangPerluDijawab = 'STATEMENT-ONLY RESPONSE (TUTUP TANPA PERTANYAAN): Sebutkan durasi pelaksanaan resmi dari katalog beserta manfaatnya (maksimal 2-3 kalimat). DILARANG KERAS MENAMBAHKAN PERTANYAAN JADWAL / HARI!';
+      banOnce('Menanyakan "mau rencana ambil treatment apa" atas jawaban durasi (informasi statement saja — tutup langsung tanpa pertanyaan jadwal/hari)');
     } else if ((rawInputLower.includes('bulan') || rawInputLower.includes('tahun') || rawInputLower.includes('umur') || rawInputLower.includes('usia'))
       && (rawInputLower.includes('ikut') || rawInputLower.includes('masuk') || rawInputLower.includes('kategori'))) {
       sedangDibahas = 'Bunda mengklarifikasi kategori usia dan kesesuaian perawatan si kecil';

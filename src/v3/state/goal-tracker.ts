@@ -303,8 +303,11 @@ export class GoalTracker {
       ? momComplaints
       : [...childSymptoms, ...(session.targetAudience === 'BOTH' ? momComplaints : [])]
         .filter((s, i, arr) => arr.indexOf(s) === i);
+    const isFeverContraindicated = session.feverContraindication === true;
     let pregroundedRecommendation: string | null = null;
-    if (allSymptoms.length > 0 && !session.selectedTreatment) {
+    if (isFeverContraindicated) {
+      pregroundedRecommendation = `[KONTRAINDIKASI DEMAM AKTIF]: Suhu tubuh si kecil terindikasi demam (≥38°C). Pijat/terapi DIKONTRAINDIKASIKAN sementara waktu hingga suhu tubuh kembali normal dan anak aktif. DILARANG mempromosikan atau menawarkan jadwal pemesanan paket berulang-ulang! Berikan respon empati singkat (maks 2-3 kalimat), edukasi observasi suhu, dan tegaskan pemijatan dapat dijadwalkan setelah si kecil pulih.`;
+    } else if (allSymptoms.length > 0 && !session.selectedTreatment) {
       try {
         const categoryHint = session.targetAudience === 'MOMS' ? 'MOMS' as any : session.targetAudience === 'BOTH' ? undefined : session.targetAudience as any;
         const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint);
@@ -522,9 +525,9 @@ export class GoalTracker {
       if (babyAgeMonths <= NIFAS_MAX_AGE_MONTHS) {
         lines.push(`• Fase Bunda: PASCA MELAHIRKAN / NIFAS (Si kecil baru lahir, usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage (Pijat Hamil) untuk Bunda yang bayinya sudah lahir! Tawarkan Oksitosin Massage Fullbody atau Paket Laktasi untuk pemulihan dan kelancaran ASI. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'POSTPARTUM'.]`);
       } else if (babyAgeMonths <= TODDLER_MAX_AGE_MONTHS) {
-        lines.push(`• Fase Bunda: MENYUSUI / IBU BALITA (Si kecil usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage! Tawarkan Paket Laktasi atau Relaksasi untuk Bunda. DILARANG mengisi momStage: 'POSTPARTUM' — ibu balita bukan pasien nifas.]`);
+        lines.push(`• Fase Bunda: MENYUSUI / IBU BALITA (Si kecil usia: ${ageText}) [MANDAT KLINIS: DILARANG menawarkan Prenatal Massage! Tawarkan Paket Laktasi, Oksitosin Massage Fullbody, atau Pijat Relaksasi Ibu. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'BREASTFEEDING'.]`);
       } else {
-        lines.push(`• Fase Bunda: IBU ANAK (Si kecil usia: ${ageText}) [Fokus pada kebutuhan perawatan relaksasi/nutrisi anak. DILARANG mengisi momStage: 'POSTPARTUM'.]`);
+        lines.push(`• Fase Bunda: IBU ANAK (Si kecil usia: ${ageText}) [Fokus pada kebutuhan perawatan relaksasi/nutrisi anak. Saat memanggil get_catalog_and_price kategori MOMS, isi momStage: 'GENERAL'.]`);
       }
     }
 

@@ -79,6 +79,7 @@ Sistem ini membantu klinik mengotomasi percakapan dari sapaan awal, deteksi loka
 - **Meta Pixel + Server-Side CAPI**: Tracking event (`PageView`, `Lead`, `Purchase`, `Contact`, dll) dengan atribusi same-origin (`fbclid`, `_fbp`, `_fbc`, UTM).
 - **Price Answer & Phrasing Services**: Deterministic price answer service dari catalog DB + natural phrasing service LLM dengan fallback template statis & opener tracker.
 - **Reservation Lifecycle & Label Reconciliation**: Cron periodik (60 menit) penyelarasan label WA vs DB (`repeat`, `pending payment`, hapus `new customer`).
+- **Dashboard Peta Sebaran Pelanggan** ✅ (2026-09-19): Tab "Sebaran Peta" di Database Customer — peta geografis presisi (Leaflet CDN) berbasis koordinat `Customer.lat/lng`, marker clustering, filter kota data-driven, endpoint ringan `GET /api/admin/customers/map-points`. Tanpa dependency runtime npm. Diperluas (2026-09-19): marker basecamp tenant-aware (`Tenant.settings.clinicLocation`), radius jangkauan 5/15/max km, titik sentroid estimasi (gazetteer Sby-Sda), KPI spasial, filter status interaktif, dan `scripts/backfill-customer-centroids.ts`.
 
 ---
 

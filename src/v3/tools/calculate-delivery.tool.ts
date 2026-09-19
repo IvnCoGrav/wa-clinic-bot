@@ -360,9 +360,18 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
   // final per-branch di bawah — bergantung hasil geocoding). Centroid kecamatan
   // (estimasi) & kecamatan luas (imprecise) TIDAK membuka nominal.
   const askedFee = asksDeliveryFee === true;
+  // Normalisasi deterministik singkatan wilayah (anti-degradasi akurasi)
+  let normalizedLocation = locationText.trim();
+  if (/^kel\.?\s+/i.test(normalizedLocation)) {
+    normalizedLocation = normalizedLocation.replace(/^kel\.?\s+/i, 'Kelurahan ');
+  } else if (/^kec\.?\s+/i.test(normalizedLocation)) {
+    normalizedLocation = normalizedLocation.replace(/^kec\.?\s+/i, 'Kecamatan ');
+  } else if (/^ds\.?\s+/i.test(normalizedLocation)) {
+    normalizedLocation = normalizedLocation.replace(/^ds\.?\s+/i, 'Desa ');
+  }
   // `let` agar fallback addressQuery dari link Maps bisa menggantikan query
   // mentah secara transparan (Phase 0 audit 315036).
-  let compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
+  let compositeQuery = streetDetail ? `${normalizedLocation} ${streetDetail}` : normalizedLocation;
 
   // Phase 0 — Resolusi shortlink Google Maps (share.google / maps.app.goo.gl /
   // goo.gl/maps): customer yang kirim link lokasi LANGSUNG dihitung jarak &
@@ -416,9 +425,15 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         const urlTemplate = urlCartRecap
           ? `${suggestedTemplateReply}\n\n${urlCartRecap.block}${preferredDate ? '' : `\n\n${buildScheduleCta({ candidateTreatmentName, hasCartItems: true })}`}`
           : suggestedTemplateReply;
-        const urlMessage = isOutOfCoverage
+        // Mandat total otomatis (audit 315036): recap grand total ikut di
+        // `message` (payload LLM), bukan hanya di suggestedTemplateReply —
+        // Call 2 tidak boleh "kehilangan" total biaya saat mode transaksional.
+        const urlMessageBase = isOutOfCoverage
           ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km).`
           : `Area ${kelurahan} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
+        const urlMessage = urlCartRecap
+          ? `${urlMessageBase}\n\n${urlCartRecap.block}`
+          : urlMessageBase;
         const urlOutput: CalculateDeliveryOutput = {
           success: true,
           isPrecise: true,
@@ -517,6 +532,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         kecamatan: kecName,
         kota: kotaName,
         isOutOfCoverage: false,
+        suggestedTemplateReply: TEMPLATES.askKelurahanAmbiguous({ kecamatanName: kecName }),
         message: `Area "${compositeQuery}" adalah nama kecamatan (${kecName}) yang masih luas dan membawahi ${ambiguityList.length} kelurahan/desa. Karena beda kelurahan bisa berbeda jarak dan tarif ongkir, mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda (tanpa menanyakan nomor jalan atau share location). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
       };
     }
@@ -542,6 +558,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           kecamatan: kecNoCoords,
           kota: resolved.kota,
           isOutOfCoverage: false,
+          suggestedTemplateReply: TEMPLATES.askKelurahanAmbiguous({ kecamatanName: kecNoCoords }),
           message: `Area "${kecNoCoords}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda. DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
         };
       }
@@ -550,6 +567,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
+        suggestedTemplateReply: TEMPLATES.askKelurahanRetry({ textLocation: compositeQuery, currentAttempts: 1 }),
         message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya secara ramah. DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
@@ -570,6 +588,9 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         kecamatan: typeof kecLevelName === 'string' ? kecLevelName : undefined,
         kota: resolved.kota,
         isOutOfCoverage: false,
+        suggestedTemplateReply: TEMPLATES.askKelurahanAmbiguous({
+          kecamatanName: typeof kecLevelName === 'string' ? kecLevelName : compositeQuery,
+        }),
         message: `Area "${kecLevelName}" adalah nama kecamatan yang masih cukup luas dan membawahi banyak kelurahan/desa. Mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, perumahan, atau patokan terdekatnya secara ramah Bunda. DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
       };
     }
@@ -579,6 +600,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
+        suggestedTemplateReply: TEMPLATES.askKelurahanRetry({ textLocation: compositeQuery, currentAttempts: 1 }),
         message: `Lokasi "${compositeQuery}" masih terlalu umum (belum ada nama kelurahan/perumahan spesifik). Mohon tanyakan nama kelurahan atau perumahan terdekatnya secara ramah. DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
@@ -641,6 +663,11 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // disebut kecuali customer menyebutkannya (Rule 11). Cukup label kelurahan/
     // lokasi terbaik; kecamatan tetap tersedia sebagai field terstruktur.
     const targetAreaLabel = resolved.kelurahan || resolved.kecamatan || locationText;
+    // Mandat total otomatis (audit 315036): recap grand total ikut di `message`
+    // (payload LLM) pada mode transaksional, selaras dengan cabang URL-Maps.
+    const textMessageBase = isOutOfCoverage
+      ? `Area ${targetAreaLabel} di luar batas jangkauan layanan homecare klinik (${distanceKm} km, maks ${maxCoverageKm} km).`
+      : `Area ${targetAreaLabel} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
     const mainOutput: CalculateDeliveryOutput = {
       success: true,
       isPrecise: resolvedIsPrecise,
@@ -654,9 +681,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       ongkirPromo,
       isOutOfCoverage,
       suggestedTemplateReply,
-      message: isOutOfCoverage
-        ? `Area ${targetAreaLabel} di luar batas jangkauan layanan homecare klinik (${distanceKm} km, maks ${maxCoverageKm} km).`
-        : `Area ${targetAreaLabel} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`
+      message: cartRecap ? `${textMessageBase}\n\n${cartRecap.block}` : textMessageBase,
     };
     return applyFeeInformationHiding(mainOutput, showFeeNominal);
   } catch (error: any) {

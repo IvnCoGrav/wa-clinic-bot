@@ -1,7 +1,75 @@
-﻿# Known Issues & Tech Debt
+# Known Issues & Tech Debt
 
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
+
+---
+
+## 0. [Dashboard] Peta Sebaran Pelanggan bergantung CDN unpkg + internet
+
+- **Status:** open (by design), sejak fitur peta sebaran (2026-09-19).
+- **Konteks:** `packages/admin-dashboard/src/utils/leafletLoader.ts` memuat Leaflet + MarkerCluster
+  dari CDN unpkg saat tab "Sebaran Peta" dibuka. Ini disengaja untuk menghindari dependency runtime
+  npm baru (Mandat Zero New Runtime Dependencies).
+- **Limitasi:** (1) butuh koneksi internet selain tile peta, (2) tidak dapat di-bundle/pre-cache
+  sebagai aset lokal, (3) supply-chain: script eksternal dimuat runtime. Bila CDN diblokir/down,
+  tab menampilkan fallback ramah, bukan blank.
+- **Opsi perbaikan (bila diperlukan):** migrasi ke `npm i leaflet leaflet.markercluster` + chunk
+  terpisah via `manualChunks` di `vite.config.ts`, lalu hapus `leafletLoader.ts`. Ini menambah 2
+  dependency runtime sehingga butuh persetujuan eksplisit.
+
+---
+
+## 0b. [Dashboard] Batas poligon GeoJSON kecamatan belum tersedia di peta sebaran
+
+- **Status:** resolved 2026-09-19 (grid-snap dissolve).
+- **Konteks:** Peta sebaran pelanggan kini telah menggunakan **Basemap CartoDB Positron** (jalan,
+  bangunan, nama jalan/wilayah dan geografis jelas, menyelesaikan bug "white board"). Batas wilayah
+  poligon khusus kecamatan/kelurahan (garis batas GeoJSON) belum disertakan karena belum ada sumber data statis di repo.
+- **Percobaan sumber data:** Overpass API (OSM) **tidak layak produksi** — rate-limit 2 slot,
+  sering 429/503/504, dan struktur relasi kabupaten (Gresik) berbeda. Pengambilan runtime ditolak.
+- **Resolusi:** build script `scripts/build-surabaya-sidoarjo-svg.ts` ditulis ulang dengan algoritma
+  **grid-snap dissolve** (snap vertex ke grid `0.0002°`/~22 m) sehingga sisi batas antar kelurahan
+  persis berimpit, lalu edge diklasifikasi deterministik & disambung via node degree-2 → **157 line
+  batas (38 regency + 119 district)**, output `packages/admin-dashboard/public/geo/surabaya-sidoarjo.geojson`
+  **462,5 KB**. Titik Gubeng dihilangkan dari garis batas kota (false positive lama). Tidak lagi
+  bergantung SVG internal; `geo-metadata.json` menyimpan bbox efektif + jumlah kecamatan.
+- **Sisa limitasi (non-blocking):** dataset HDX (JfrAziz/indonesia-district Jatim) **tidak mencakup
+  Gresik** — toggle "Semua wilayah" tetap menunjukkan titik Gresik di basemap Peta Jalan, namun saat
+  mode Area Vektor poligon Gresik tidak dirender (improve bila dataset Gresik tersedia).
+
+---
+
+## 0c. [Dashboard] Sentroid gazetteer hanya mencakup Surabaya & Sidoarjo (bukan Gresik)
+
+- **Status:** open (limitasi data), sejak 2026-09-19.
+- **Konteks:** Fitur "estimasi wilayah" pada peta sebaran (`GET /api/admin/customers/map-points`
+  dengan `includeCentroids=true`) serta `scripts/backfill-customer-centroids.ts` meresolusi
+  koordinat dari `src/config/surabaya_sidoarjo_subdistricts.json` — **hanya mencakup Surabaya &
+  Sidoarjo** (3.748 kelurahan/desa).
+- **Dampak:** Customer Gresik yang hanya punya nama kecamatan/kelurahan (tanpa lat/lng) **tidak
+  akan** mendapat titik sentroid; tercatat sebagai `skipped (no gazetteer)`.
+- **Selain itu:** mayoritas customer `lat NULL` juga tidak punya kecamatan/kelurahan sama sekali
+  (data kosong) sehingga tidak dapat di-resolve — bukan bug, murni keterbatasan data sumber.
+- **Rencana perbaikan (bila diperlukan):** tambahkan dataset gazetteer Gresik (dan kota lain bila
+  cakupan meluas) ke `src/config/` dengan format `GazetteerRow` yang sama. Butuh sumber data
+  eksternal & kurasi manual.
+
+---
+
+## 0d. [Architecture] V3 goal-tracker tidak menyimpan lat/lng (di-cover jalur enrichment)
+
+- **Status:** open (tech debt, bukan bug aktif), sejak audit 2026-09-19.
+- **Konteks:** `src/v3/state/goal-tracker.ts` saat mem-persist `location` dari `calculate_delivery`
+  hanya menulis kelurahan/kecamatan/kota/distance_km/ongkir — **tidak** `lat`/`lng`.
+- **Mengapa bukan bug:** jalur `human-background-enrichment.service.ts` (dipanggil setiap pesan
+  masuk & balasan admin via `webhook.route.ts`) sudah menyimpan lat/lng via
+  `customerService.updateCustomerLocation()`. Audit DB live (2026-09-19) membuktikan 135 customer
+  sudah memiliki lat yang tersimpan lewat jalur ini.
+- **Rencana (opsional, fase terpisah):** sinkronkan goal-tracker agar juga menulis lat/lng sebagai
+  defense-in-depth. Menyentuh jalur produksi AI → butuh regression gate & review terpisah. Bila
+  dilakukan, WAJIB memakai field internal (`__internalLat`/`__internalLng`) agar tidak bocor ke
+  payload LLM (Rule 2 Information Hiding).
 
 ---
 
@@ -1850,3 +1918,91 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Validator sudah konsisten:** `factual-claim-validator.ts` (`isToolGrounded`, baris ~268) memperlakukan kecamatan hasil `calculate_delivery` sebagai grounding sah — tidak diflag halusinasi. `factual-claim-validator` 13/13.
   - **Catatan:** "Waru" tetap nama basecamp klinik; menyebutnya atas dasar KLIEN (basecamp) tetap DILARANG Rule 11 (BUKAN wilayah target customer) — `HOMEBASE_EXEMPT_RE` membedakan konteks "homebase kami di Waru" (sah) vs atribusi domisili salah (haram).
 - **Tech debt baru (belum diperbaiki):** balasan konsultasi masih menyebut nominal ongkir (`Rp 5.000`) meski customer belum bertanya biaya — RC-1 Information Hiding di lapisan **generasi** (bukan lagi prompt/lifecycle). Perlu audit terpisah pada grounding/generation Call 2.
+
+---
+
+## 95. [Plan Validasi] Restorasi Template SOP Greeting & Info Ongkir (2026-09-19)
+
+- **Status:** RESOLVED sebagian (revisi fondasional); 2 Fase plan asli DITOLAK, 1 deviasi terbuka.
+- **Validasi klaim plan vs kode nyata:**
+  1. Greeting 2-kalimat: BENAR ada (kompresi Rule 1 di 91ade27e), tapi bentuknya template
+     deterministik Turn-0 (jalur gate statis 0-token, bukan prosa LLM) — restorasi SOP
+     4-blok aman (kuota vokatif 2x, bypass trimmer di gate statis).
+  2. `delete clone.suggestedTemplateReply` (`tool-pipeline.ts:86`): BENAR ada, tapi
+     keputusan fondasional anti-parrot yang disengaja (CHANGELOG 2026-09-19) — BUKAN bug.
+  3. "b5b2f3cd mengubah CTA": KELIRU — diff commit hanya menambah `inCoverageNoFee`;
+     CTA state-aware sudah ada sejak 91ade27e.
+  4. "dari basecamp kami di Waru": TIDAK ADA di template/RAG/few-shot mana pun (murni
+     karangan LLM); `logs/llm-2026-09-19.jsonl` kosong (tanpa bukti live).
+- **Solusi yang DITOLAK:** (a) kembalikan `suggestedTemplateReply` ke payload LLM
+  (regresi parrot-effect, merusak garansi sapaan Turn-0 Plan 7); (b) klausul prompt
+  "WAJIB pakai template persis / DILARANG sebut basecamp" (make-up, dilarang mandat);
+  (c) perluasan regex header tanpa template kanonis (diobati sekalian lewat F3 di bawah).
+- **Eksekusi fondasional:** (F1) `TEMPLATES.greeting()` 4-blok SOP; (F2) validator
+  **D8_ORIGIN_NARRATION** (gate kontrak tool + re-prompt kognitif + salvage, preseden D7);
+  (F3) header-protector sanitizer mengenali header kanonis SOP.
+- **Deviasi terbuka (perlu konfirmasi tim admin):** default CTA ongkir TIDAK dikembalikan
+  ke verbatim "Mau pilih treatment apa bunda ?" — CTA state-aware audit 337101
+  dipertahankan (verbatim membunuh context-awareness + inkonsisten dengan prompt/few-shot).
+- **Tech debt sisa:** (a) `TEMPLATES` masih hardcode di `persona.ts` (migrasi DB = effort
+  High, lihat SAAS_READINESS_AUDIT) — edit ini fallback sementara; (b) few-shot exemplar
+  positif phrasing ongkir (tanpa narasi asal) belum ditambah — DITUNDA (risiko pergeseran
+  ranking retrieval, butuh kurasi DB); (c) `cart-dedup-total` 1 gagal pre-existing
+  (terverifikasi via git stash, di luar blast radius).
+
+---
+
+## 96. [Fixing Plan] Gerbang Deterministik Lokasi Murni — Fast SOP (2026-09-19)
+
+- **Status:** RESOLVED (kode + test TDD + docs). Plan divalidasi penuh sebelum eksekusi.
+- **Koreksi klaim plan:**
+  1. "Hemat ~13.000 token / 0ms": TAK TERVERIFIKASI (log 09-19 kosong, tak ada baris
+     `prompt_tokens` di log 09-18). Arah penghematan benar (1 Call LLM dihapus) tapi
+     angka plan tidak terbukti — JANGAN dikutip sebagai fakta.
+  2. "100% patuh kata-demi-kata": SALAH di bawah pipeline saat ini. TERBUKTI via
+     eksekusi `cleanOutboundReply`: kuota vokatif Stage 5 memangkas bunda ekor
+     ("saja bunda. Jadi bisa ya bunda" → "saja. Jadi bisa ya"). Verbatim penuh butuh
+     SALAH SATU dari: (i) pengecualian template SOP dari normalizer kuota (pengecualian
+     arsitektur baru, belum disetujui), atau (ii) tulis ulang template hemat-bunda
+     (perlu sign-off admin). Sampai itu diputuskan, klaim jujurnya ≈95%.
+  3. "symptom score = 0": TIDAK ADA di codebase — dipetakan ke
+     `consult_symptom`/`ask_schedule`/`ask_duration` + `hasFallInjurySignal`/
+     `hasVaccineSignal` + sebutan nama katalog (DB-driven).
+- **Keputusan arsitektur (menyimpang dari plan, beralasan):**
+  - Exemption `suggestedTemplateReply` di pipeline DITOLAK — fast-path memakai RAW
+    `executedTools` (template utuh di memori); sanitasi payload LLM tak tersentuh.
+  - Prompt "WAJIB/DILARANG" DITOLAK — compound turn dijaga D8 (KNOWN_ISSUES #95).
+  - CTA verbatim DITOLAK (alasan di #95, ditegaskan ulang).
+  - Turn-0 lokasi-pertama: prepend `firstContactGreetingHeader` (tanpanya sapaan
+    hilang — regresi SOP yang bakal diperkenalkan plan asli).
+- **File:** `delivery-fast-path.ts` (baru), `agent-runner.ts` (Stage 3b),
+  `calculate-delivery.tool.ts` (4 cabang ambigu + template),
+  `lead-greeting-detector.ts` (`hasIslamicSalutation`).
+- **Tech debt sisa:** (a) klaim token plan belum diukur — ukur riil via telemetri
+  (`V3_GENERATION` vs `DELIVERY_FAST_PATH_ELIGIBLE`) sebelum klaim hemat; (b) paket
+  generik tanpa nama ("paket apa aja?") masih mengandalkan router Call-1 memanggil
+  katalog (gate kedua) — pertimbangkan intent `ask_package` deterministik bila
+  router terbukti meleset; (c) `lastContextSummary` basi satu turn setelah fast-path
+  (dampak: ringkasan router turn berikut) — minor, monitor.
+
+---
+
+## 97. [Fixing Plan] Resolusi Fondasional Sesi 284330/594329 — 7 Fase (2026-09-19)
+
+- **Status:** RESOLVED (kode + test TDD). Plan tervalidasi vs 5 dimensi audit (Rules/Flow/Log/RAG/Prompt).
+- **P1 Cart Hijack** `src/v3/state/cart-manager.ts:213` — gejala `kembung` (7 huruf, `GENERIC_CLINIC_TOKENS` tidak ada `kembung`, ownerCount 1 di `treatment-catalog.service.ts:116`) memang hijack `Pijat Bayi Pulih Ceria` via single-token. Fix: hapus jalur `t.length>=7 && ownerCount===1` (0 hardcode baru), `significantTokens` tetap raw `name` (usia ikut, `cleanNameOf` dipakai untuk exact match). Parafrasa ≥2 token tetap sah.
+- **P2 Isolasi** `src/v3/tools/get-catalog.tool.ts:228` — `effectiveSymptoms` isolasi pasien `isTargetingMoms ? [] : knownSymptoms` (tanpa regex). `momStage GENERAL` `src/v3/tools/get-catalog.tool.ts:467` → `formattedTreatments=[]` + `MOM_GENERAL_UNSUPPORTED` (tanpa hardcode nama kalimat; id kontrak kategori, tech-debt: label `Hamil/Menyusui` masih implisit di katalog, migrasi `applicableMomStage` bila tenant butuh).
+- **P3 Validator** `src/v3/guardrails/factual-claim-validator.ts:168` — agama `insyaa Allah` lolos lama, obat belum ada. Fix guardrail linguistik (bukan DB) sesuai Gate.
+- **P4 Demam** `src/v3/domain/types.ts:97` `feverContraindication?:boolean` (Json preferences, tanpa migrasi) + `patient-extractor.ts:parseFeverTemperature` (35-42°C, window 20 char) + `context-grounder.ts:145` threshold ClinicPolicy. `goal-tracker.ts:310` prune mandat. `sanitizer.ts:487` persempit `hasStructuredContent` → bullet `•`/`-`/`1.` tidak lagi bypass (test `sanitizer-sentence-trimmer` diselaraskan). Nota/form tetap utuh.
+- **P5 Ongkir** — tetap state-aware `src/config/persona.ts:355` (3 cabang audit 337101). Ekor `bunda` tetap terpotong kuota vokatif `sanitizer.ts:346` → 95% verbatim (whitelist tidak dibuat, catat).
+- **P6 RAG** `src/services/knowledge.service.ts:193/254/360` uniform `rank>=0.25` (sebelumnya 0.025) + Step1 gated + defense `context-grounder.ts:403`. In-memory fallback tanpa threshold sebelumnya — kini threshold. File `knowledge-retrieval.service.ts` fiktif di plan (tidak ada).
+- **Gates:** `persona-ongkir.test.ts`/`treatment-symptom-scoring.test.ts` (root) fiktif — path benar `tests/unit/v3/...`; `cart-manager.test.ts` tidak ada — pakai `cart-single-primary-domain`. Full suite 2872/50 vs baseline 2855/58.
+- **Tech debt sisa:** (a) `isSickTherapyService:443` dan `isPrenatalId:467` masih hardcode list — butuh `resolveServiceAudience`/`serviceType`; (b) `GENERIC_CLINIC_TOKENS` hardcode generik — stop-word; (c) threshold 0.25 belum tenant-aware; (d) `hasStructuredContent` kini memotong `•` katalog (`get-catalog.tool.ts:551`) — trade-off; (e) usia multi-tier `needsAgeClarification` deteksi base 2 kata (`fam.split 0,2`) rapuh untuk nama panjang — monitor.
+
+## 98. [Komprehensif] Sesi 622098/284330/594329 — 8 Fase (Amnesia, Jambangan, Usia, RAG) — Revisi (2026-09-19)
+
+- **Status:** RESOLVED (8 fase). Plan 8 fase tervalidasi 5 dimensi; 3 micro-task hardcode DITOLAK (CLINICAL_SYMPTOM_TOKENS, verbatim ongkir, knowledge-retrieval.service.ts fiktif).
+- **P1 D9** `router-direct-reply.layer.ts:57` prune + `factual-claim-validator.ts:289` D9 + `guardrail-pipeline.ts:389` fallback jadwal. Sliding window `slice(-8)` `agent-runner.ts:144` tetap — amnesia dijaga D9, bukan window.
+- **P2 Jambangan** `geocoding.ts:613` dual-admin skip + `tool-pipeline.ts:187` prefix guard. Tanpa ini `kelurahan jambangan`→`Jambangan` dipotong LLM jadi kecamatan luas 4 kelurahan.
+- **P3-P6** sama #97 (cart hijack, isolasi, usia penalti `anak`, RAG 0.25). Kuota kalimat 5→3 via `sanitizer` + `guardrail-pipeline.ts:593` (bullet tidak exempt).
+- **Verifikasi:** build 0; D9 `locationKnown:true` + `ASKING_LOCATION_RE` → violation; geocode Jambangan precise true; full 2872/50.

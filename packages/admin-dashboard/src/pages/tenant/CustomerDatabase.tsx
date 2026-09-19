@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { CustomerLabels } from './CustomerLabels';
+import { CustomerMapTab } from '../../components/customer/CustomerMapTab';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -82,7 +83,10 @@ interface ChatMessage {
 export const CustomerDatabase: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeMainTab = (searchParams.get('tab') === 'labels' ? 'LABELS' : 'CUSTOMERS') as 'CUSTOMERS' | 'LABELS';
+  const rawTab = searchParams.get('tab') || 'customers';
+  const activeMainTab = (
+    rawTab === 'labels' ? 'LABELS' : rawTab === 'map' ? 'MAP' : 'CUSTOMERS'
+  ) as 'CUSTOMERS' | 'LABELS' | 'MAP';
   const cachedCustRes = getCachedApiResponse<any>('/api/admin/customers?page=1&pageSize=15&sortBy=created_at&sortOrder=desc');
   const initialCustomers = Array.isArray(cachedCustRes) ? cachedCustRes : (cachedCustRes?.data || []);
   const [loading, setLoading] = useState(initialCustomers.length === 0);
@@ -448,10 +452,18 @@ export const CustomerDatabase: React.FC = () => {
         >
           Kelola Label
         </button>
+        <button
+          onClick={() => setSearchParams({ tab: 'map' }, { replace: true })}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'MAP' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+        >
+          Sebaran Peta
+        </button>
       </div>
 
       {activeMainTab === 'LABELS' ? (
         <CustomerLabels />
+      ) : activeMainTab === 'MAP' ? (
+        <CustomerMapTab onSelectCustomer={(id) => handleOpenDetail({ id } as CustomerItem)} />
       ) : (
       <>
       {/* Header */}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
+import { TEMPLATES } from '../../src/config/persona';
 
 /**
  * Deterministic Output Normalizer: pemotong kalimat (Rule 1). Nada pra-lokasi
@@ -36,11 +37,13 @@ describe('sanitizer — sentence trimmer', () => {
     expect(OutputSanitizer.trimToMaxSentences(text, 3)).toBe(text);
   });
 
-  // Rule 1 — pemangkasan prosa multi-paragraf (sapaan) tanpa memotong senarai.
+  // Rule 1 — pemangkasan prosa multi-paragraf: hanya formulir/nota dikecualikan (bullet narasi tidak).
   it('hasStructuredContent: deteksi senarai bernomor & formulir', () => {
-    expect(OutputSanitizer.hasStructuredContent('Rincian:\n1. Pijat\n2. Ongkir')).toBe(true);
-    expect(OutputSanitizer.hasStructuredContent('Berikut:\n- Pijat\n- Sinar')).toBe(true);
+    expect(OutputSanitizer.hasStructuredContent('Rincian:\n1. Pijat\n2. Ongkir')).toBe(false);
+    expect(OutputSanitizer.hasStructuredContent('Berikut:\n- Pijat\n- Sinar')).toBe(false);
+    expect(OutputSanitizer.hasStructuredContent('Berikut:\n• Pijat\n• Sinar')).toBe(false);
     expect(OutputSanitizer.hasStructuredContent('Hari dan tanggal : senin\nNama Bunda : Ani')).toBe(true);
+    expect(OutputSanitizer.hasStructuredContent('Total Keseluruhan: Rp 100.000')).toBe(true);
     expect(OutputSanitizer.hasStructuredContent('Halo Bunda. Ini balasan prosa biasa.')).toBe(false);
   });
 
@@ -82,5 +85,16 @@ describe('sanitizer — sentence trimmer', () => {
   it('Turn-0 ≤2x "Bunda" tidak diubah', () => {
     const text = 'Halo Bunda! Perkenalkan, saya Bidan Yusi. Rumahnya di daerah mana ya Bunda?';
     expect(OutputSanitizer.limitVocativeQuotaForTurn(text, false)).toBe(text);
+  });
+
+  // Header kanonis SOP (multi-baris + Terima kasih) dipertahankan utuh saat
+  // LLM menggema sapaan Turn-0: pemantik domisili DILARANG terpotong trimmer.
+  it('header kanonis SOP tidak ikut kuota & pemantik domisili lolos', () => {
+    const header = TEMPLATES.greeting({ isIslamic: false });
+    const body = 'Kami merekomendasikan paket *Pijat Bayi Pulih Ceria* ya Bunda. Paket ini melegakan pernapasan. Rumahnya sudah di area jangkauan kami. Kabari bila sudah siap ya Bunda.';
+    const out = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(`${header}\n\n${body}`, 3);
+    expect(out).toContain('Terima kasih sudah menghubungi kami');
+    expect(out).toContain('Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊');
+    expect(out).toContain('Pulih Ceria');
   });
 });

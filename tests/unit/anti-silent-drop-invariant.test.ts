@@ -13,7 +13,11 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
  * Invariant: Bot TIDAK BOLEH PERNAH mengirim balasan kosong ('') atau mendiamkan customer
  * tanpa balasan (silent-drop / shouldSendReply = false saat ada pesan masuk), apa pun
  * yang terjadi di lapisan dalam (validator numerik, faktual, pronoun, age, visit-time,
- * sanitasi output, maupun uncaught exception).
+ * maupun sanitasi output).
+ *
+ * SATU-SATUNYA PENGECUALIAN (keputusan owner, Fase B — docs/KNOWN_ISSUES#853 &
+ * CHANGELOG#5705): **outage LLM total** → eskalasi sunyi TANPA apology, antrean CS
+ * didahulukan (diverifikasi di describe blok 4).
  */
 describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
   const dummySession: any = {
@@ -159,7 +163,7 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
   });
 
   describe('4. Runner Global Error Boundary (Uncaught Exceptions / Pipeline Crash)', () => {
-    it('Jika LLM outage total / runtime throw exception → reportTurnError mengirimkan balasan kendala teknis sopan', async () => {
+    it('LLM outage total → eskalasi sunyi: NOL balasan apology, tetap tercatat HUMAN_HANDLING', async () => {
       const sentToCustomer: string[] = [];
       const sm = new ConversationStateMachine({
         simulateHumanReply: async (params: any) => {
@@ -171,13 +175,14 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
       process.env.HUMANIZER_ENABLED = 'false';
       process.env.LLM_API_KEY = 'mock_key';
 
-      // Paksa GenerationStage melempar fatal error
+      // Paksa GenerationStage melempar fatal error (outage LLM total)
       vi.spyOn(GenerationStage, 'executeChatCompletion').mockRejectedValue(
         new Error('Fatal upstream 500 server error')
       );
 
       const phone = `62899${Date.now()}${Math.floor(Math.random() * 1000)}`;
       const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Crash Test', DEFAULT_TENANT_ID);
+      const escSpy = vi.spyOn(conversationService, 'escalateToHumanHandling');
       const result = await sm.processMessage({
         tenantId: DEFAULT_TENANT_ID,
         customer,
@@ -191,11 +196,15 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
         },
       });
 
-      expect(result.shouldSendReply).toBe(true);
-      expect(result.replyText).toMatch(/kendala teknis.*teruskan ke tim Bidan kami/i);
+      // Keputusan owner (Fase B): outage total → TANPA apology minta-coba-lagi,
+      // eskalasi sunyi ke human handling. Antrean CS didahulukan daripada skenario apology.
+      expect(result.shouldSendReply).toBe(false);
+      expect(result.replyText).toBeFalsy();
       expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-      expect(sentToCustomer.length).toBe(1);
-      expect(sentToCustomer[0]).toMatch(/kendala teknis/i);
+      expect(sentToCustomer.length).toBe(0);
+      expect(escSpy.mock.calls.length).toBeGreaterThan(0);
+      const updated = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+      expect(updated.is_human_handling).toBe(true);
     });
   });
 });

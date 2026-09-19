@@ -700,6 +700,47 @@ export class CartManager {
     return { oldName: victim.name, newName: offered.name, scope };
   }
 
+  /**
+   * Fondasi 3 (audit 983902) — Pediatric Taxonomy Adaptation: bila usia anak
+   * ≥24 bulan (kategori KIDS), item BABY di keranjang diselaraskan ke padanan
+   * KIDS via token overlap ≥2 non-generik ('lahap'+'juara'). Harga & kategori
+   * diambil dari katalog KIDS; item KIDS/MOMS/add-on tak tersentuh. Pure,
+   * tanpa mutasi input.
+   */
+  public static adaptCartToAudienceAge(
+    cartItems: CartItem[] | undefined,
+    ageMonths: number | null | undefined,
+    catalog: Array<{ name: string; category?: string | null; promoPrice?: number | null; originalPrice?: number | null; id?: string }>
+  ): CartItem[] {
+    if (!Array.isArray(cartItems)) return [];
+    if (ageMonths == null || ageMonths < 24) return cartItems.map((c) => ({ ...c }));
+    const significant = (name: string): string[] =>
+      (name || '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !GENERIC_CLINIC_TOKENS.has(w));
+    const kids = (catalog || []).filter((s) => (s?.category || '').toUpperCase() === 'KIDS');
+    return cartItems.map((c) => {
+      if ((c.category || '').toUpperCase() !== 'BABY') return { ...c };
+      const srcTokens = significant(c.name);
+      let best: (typeof kids)[number] | null = null;
+      let bestOverlap = 0;
+      for (const k of kids) {
+        const ktoks = significant(k.name);
+        const overlap = srcTokens.filter((t) => ktoks.includes(t)).length;
+        if (overlap >= 2 && (overlap > bestOverlap || (overlap === bestOverlap && (k.name || '').length > ((best?.name || '').length)))) {
+          best = k;
+          bestOverlap = overlap;
+        }
+      }
+      if (!best) return { ...c };
+      return {
+        ...c,
+        name: best.name,
+        category: 'KIDS',
+        price: typeof best.originalPrice === 'number' ? best.originalPrice : c.price,
+        promoPrice: typeof best.promoPrice === 'number' ? best.promoPrice : c.promoPrice,
+      };
+    });
+  }
+
   /** Total akumulasi: subtotal promo cart + ongkir promo (jika ada). */
   public static calcCartTotal(session: CustomerGoalSession): number {
     const subtotal = (session.cartItems || []).reduce(

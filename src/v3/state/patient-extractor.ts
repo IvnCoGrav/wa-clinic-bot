@@ -381,6 +381,32 @@ export class PatientProfileExtractor {
     return false;
   }
 
+  /**
+   * Parser suhu deterministik untuk kontraindikasi demam (data-driven threshold
+   * dari ClinicPolicy, fallback 37.8). Mendukung "38", "38°C", "38.5", "37,8".
+   */
+  public static parseFeverTemperature(text: string): number | null {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return null;
+    const hasTempSignal = lower.includes('suhu') || lower.includes('demam') || lower.includes('panas') || lower.includes('°c') || lower.includes('derajat');
+    if (!hasTempSignal) return null;
+    // Cari angka suhu: 35-42 dengan desimal opsional
+    const re = /(\d{2}(?:[.,]\d+)?)\s*(?:°c|° c|derajat|c)?/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(lower)) !== null) {
+      const raw = m[1].replace(',', '.');
+      const val = parseFloat(raw);
+      if (!Number.isFinite(val) || val < 35 || val > 42) continue;
+      // Pastikan konteks suhu: dekat kata suhu/demam/panas/°c/derajat dalam 20 char
+      const idx = m.index;
+      const window = lower.slice(Math.max(0, idx - 20), Math.min(lower.length, idx + 20));
+      if (window.includes('suhu') || window.includes('demam') || window.includes('panas') || window.includes('°c') || window.includes('derajat') || window.includes('c')) {
+        return val;
+      }
+    }
+    return null;
+  }
+
   public static syncChildrenProfiles(
     session: CustomerGoalSession,
     text: string

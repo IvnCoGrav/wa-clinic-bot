@@ -39,6 +39,30 @@ const POST_RESERVATION_ACK_IGNORABLES = new Set([
   'saya', 'aku',
 ]);
 
+/**
+ * Deteksi pertanyaan rekrutmen / lowongan kerja (profesional, 0 token):
+ * variasi natural "loker", "lowongan", "lamaran", "melamar", "rekrutmen",
+ * "recruitment", "oprec", "pekerjaan", "posisi kosong", "cv", "resume",
+ * "job *". Dipakai FastResponseGate untuk eskalasi senyap ke staf HR —
+ * bot diam total, tanpa LLM, tanpa janji.
+ */
+export function isRecruitmentInquiry(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  const tokens = lower.replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 0);
+  const has = (w: string) => lower.includes(w);
+  if (
+    has('loker') || has('lowongan') || has('lamaran') || has('melamar')
+    || has('rekrutmen') || has('recruitment') || has('oprec') || has('pekerjaan')
+  ) {
+    return true;
+  }
+  if (tokens.includes('cv') || tokens.includes('resume')) return true;
+  if (has('posisi kosong') || has('jabatan kosong')) return true;
+  if (tokens.some((t) => t.startsWith('job'))) return true;
+  return false;
+}
+
 export function isShortAcknowledgement(text: string): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower.trim()) return false;
@@ -103,6 +127,33 @@ export class FastResponseGate {
     } = args;
     let { session } = args;
     const emptyTokens = { prompt: 0, completion: 0, total: 0 };
+
+    // GATE DETERMINISTIK: rekrutmen/lowongan kerja (sesi 983902) — eskalasi
+    // senyap ke tim HR/staf via HUMAN_HANDLING, TANPA LLM (0 token), tanpa
+    // respon teks dan tanpa pemanggilan tool apa pun.
+    if (isRecruitmentInquiry(cleanIncomingText)) {
+      console.log(JSON.stringify({ event: 'RECRUITMENT_INQUIRY_ESCALATED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      return {
+        handled: true,
+        session,
+        output: {
+          replyText: '',
+          executedTools: [],
+          updatedSession: session,
+          shouldSendReply: false,
+          isEscalated: true,
+          escalationReason: 'recruitment_inquiry',
+          escalationNote: 'Pertanyaan rekrutmen/lowongan kerja — dialihkan ke tim staf',
+          retrievedChunks: [],
+          fewShotExemplars: args.fewShotExemplars,
+          systemPrompt: args.currentSystemPrompt,
+          reasoning: null,
+          tokens: emptyTokens,
+          costIdr: 0,
+          nextState: ConversationState.HUMAN_HANDLING,
+        },
+      };
+    }
 
     // GATE DETERMINISTIK: sapaan pembuka murni (Turn-0) langsung dibalas template
     // resmi tanpa LLM (0 token). Hanya bila asisten belum pernah membalas.

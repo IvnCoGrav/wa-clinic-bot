@@ -18,6 +18,7 @@ export interface QueuePayload {
 export class QueueService {
   private redisEnabled: boolean = false;
   private redisClient: Redis | null = null;
+  private redisInitPromise: Promise<boolean> | null = null;
   private bullQueues: Map<string, Queue> = new Map();
   private bullWorkers: Map<string, Worker> = new Map();
   private shardsCount: number = 5;
@@ -36,6 +37,21 @@ export class QueueService {
   constructor() {
     this.shardsCount = parseInt(process.env.QUEUE_SHARDS || '5', 10);
     this.initQueueSystem();
+  }
+
+  /**
+   * Gerbang fail-fast (FOUNDATIONAL_HARDENING_PLAN_2026-09-13 G2):
+   * bila QUEUE_REQUIRE_REDIS=true dan Redis tidak siap → throw, boot dibatalkan.
+   * Default (dev/test) false → jalur in-memory tetap berjalan.
+   */
+  public async ensureRedisOrThrow(): Promise<void> {
+    if (process.env.QUEUE_REQUIRE_REDIS !== 'true') {
+      return;
+    }
+    const ready = this.redisInitPromise ? await this.redisInitPromise : this.redisEnabled;
+    if (!ready) {
+      throw new Error('FATAL_QUEUE_REDIS_REQUIRED');
+    }
   }
 
   /**
@@ -75,17 +91,19 @@ export class QueueService {
         }
       });
 
-      this.redisClient.connect()
+      this.redisInitPromise = this.redisClient.connect()
         .then(() => {
           console.log(`\n⚡ [QUEUE] Successfully connected to Redis at ${host}:${port}. Initializing sharded BullMQ...`);
           this.redisEnabled = true;
           if (this.bullQueues.size === 0) {
             this.initBullMQShards();
           }
+          return true;
         })
         .catch((err) => {
           console.error(`\n🚨 [CRITICAL ALERT] Redis connection failed during startup: ${err.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
           this.redisEnabled = false;
+          return false;
         });
     } catch (e: any) {
       console.error(`\n🚨 [CRITICAL ALERT] Could not initialize Redis client: ${e.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);

@@ -7,7 +7,12 @@ vi.mock('axios');
 
 describe('V3 Agent Runner End-to-End Suite', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks TIDAK boleh dipakai (menghapus implementasi mock prisma dari
+    // tests/setup.ts → searchRelevantChunks tak lagi jatuh ke fallback in-memory).
+    // Sebaliknya, reset axios.post saja: membuang sisa queue mockResolvedValueOnce
+    // antar-test (mis. skenario yang short-circuit via DELIVERY_FAST_PATH hanya
+    // memakai 1 dari 2 mock) tanpa merusak mock global lain.
+    (axios.post as any).mockReset();
   });
 
   it('Skenario 1: Customer bertanya lokasi & ongkir (Tool calculate_delivery terpanggil otomatis)', async () => {

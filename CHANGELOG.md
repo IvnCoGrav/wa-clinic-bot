@@ -4,6 +4,230 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### Resolusi 14 Kegaalan Test Pre-Existing (Green Full Suite + Build) — 14 Fix (2026-09-19)
+
+- **P1 `llm-outage-silent`** `generation-stage.ts:295` — `reportTurnError` gagal menjalankan kontrak desainnya sendiri (`agent-runner.ts:339`: "TANPA balasan generik — eskalasi sunyi"). Dulu mengembalikan `shouldSendReply:true` + apology generik saat outage LLM. Kini `replyText:''` + `shouldSendReply:false` (Fase B/owner: eskalasi sunyi, queue CS didahulukan — `docs/KNOWN_ISSUES.md#853`). `anti-silent-drop-invariant.test.ts` blok 4 (test basi pengharap apology) direkonsiliasi ke kontrak sunyi: `isEscalated:true`, `nextState:HUMAN_HANDLING`, `sentToCustomer.length===0`.
+- **P2 `keyword-enrichment`** `keyword-enrichment.service.ts` — tambah sinonim `kabel olor` ke rule keyword persiapan (data-driven, bukan regex hafalan).
+- **P3 `ai-models-tenant`** `ai-models.config.ts` — registry default (`defaultDeepModel`, `AI_MODEL_HARVESTING`, `AI_MODEL_MEDICAL`, `AI_MODEL_SUMMARIZATION`, `AI_MODEL_PII`) di-sanitasi via `sanitizeModelForProvider` agar model non-kanonik provider (mis. `gpt-4o-mini` → `deepseek-v4-1-flash`) tidak bocor.
+- **P4 `admin-api-cache`** `admin-api-cache.test.ts` — test app-level di-beri timeout `30000` (cold-start `buildApp`, bukan hang).
+- **P5 `queue-durability`** `queue.service.ts` — tambah `redisInitPromise: Promise<boolean>|null` dari chain init + `ensureRedisOrThrow()` (throw `FATAL_QUEUE_REDIS_REQUIRED` saat `QUEUE_REQUIRE_REDIS==='true'` & Redis tak siap) selaras FOUNDATIONAL_HARDENING_PLAN G2.
+- **P6 `typing-transport`** `typing.service.ts` — param konstruktor ketiga `transportResolver?: (tenantId)=>Promise<MessageTransport|undefined>`; `simulateHumanReply` dispatch `sendSeen/startTyping/stopTyping/sendText` melalui transport tenant (back-compat fallback client).
+- **P7 `message-idempotency`** — test kini inject `setMessageRepository(new PostgresMessageRepository())` (beforeEach) + `resetMessageRepository` (afterEach) agar mock `prisma.message.findFirst` benar terpakai (seam PLAN 8 FASE 5c).
+- **P8 `llm-evaluator`+`self-learning` (akar bersama)** `llm-gateway.ts:39` — precedence key salah: `activeEndpoint.apiKey` (key asli `.env`) menang atas sentinel `LLM_API_KEY='mock'` → guard `startsWith('mock')` tak pernah trip → `axios.post` benar dipanggil (call+retry). Kini sentinel mock env menang atas registry bila tanpa override; klien yang "offline" tidak lagi memanggil LLM beneran.
+- **P9 `deterministic-tool-arg-gate`** `persona.ts` — `isNonMonetaryBerapa` kini cek token SEBELUM `berapa/brp` juga (bukan hanya sesudah): `'bayi usia berapa minimal boleh dipijat'` tidak lagi salah tangkap `ask_price`.
+- **P10 `cart-dedup-total`** `calculate-delivery.tool.ts` — recap grand total (`buildCartTotalRecap`) kini disuntik ke `out.message` (payload LLM) DAN `suggestedTemplateReply` di kedua cabang (URL-Maps & geocoding-teks), bukan hanya template; konsisten dengan `anti-premature-invoicing` (mode konsultasi tetap tanpa nota).
+- **Verifikasi:** `npm test` penuh **397 files / 2922 passed / 24 skipped / 0 failed**; `npm run build` exit 0.
+
+#### Resolusi Sabotase Validator Usia & Eksplisitasi Famili Terapi (Sesi 476427) — 2 Fase (2026-09-19)
+
+- **P1 Guardrail `guardrail-pipeline.ts:483` — Context-Aware Exemption:** `hasAgeQuestion` reprompt kini diperiksa `isAgeClarificationAuthorized = executedTools.some(t.name==='get_catalog_and_price' && result.needsAgeClarification===true)` (state-gated, bukan hafalan kalimat). Pertanyaan usia netral `berapa bulan atau berapa tahun` yang diwajibkan `CLINICAL_PROBE` multi-tier (Pulih Ceria BABY vs KIDS) tidak lagi disabotase. Non-klinis (jadwal/ongkir) tetap di-reprompt.
+- **P2 Tool `get-catalog.tool.ts:87,744,785,797` — Kontrak & Direktif:** Tambah `needsAgeClarification?:boolean` di `GetCatalogOutput`; `needsAgeClarification` deteksi `normalizeFam` (buang `bayi|kids|anak`, `famBase` BABY vs KIDS) — fix bug `base "pijat kids"` gagal match `Pijat Bayi Pulih Ceria`. Direktif `CLINICAL_PROBE` kini `Keluhan (kembung) dapat dibantu dengan terapi *Pijat Pulih Ceria*... SEBUTKAN *Pijat Pulih Ceria* + manfaat ringkas, lalu TANYAKAN USIA netral` (eksplisit famili, bukan "terapi khusus" generik). Return `needsAgeClarification` agar guardrail sinkron.
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; `v3-persona-rules` 15/15 hijau; Turn 1 `anak saya kembung treatment apa ya yang cocok` → `Pijat Pulih Ceria` + tanya usia netral (tidak buntu).
+
+#### Perbaikan Fondasional Peta Area Vektor — Grid-Snap Dissolve & UI Map Pengerasan (2026-09-19)
+
+- **Build script `scripts/build-surabaya-sidoarjo-svg.ts` ditulis ulang dengan algoritma grid-snap dissolve** (bukan SVG). Kompilasi ulang batas topologis bersih antara Surabaya & Sidoarjo dari dataset HDX/BPS-2020:
+  - Snap vertex ke grid `0.0002°` (~22 m) supaya sisi batas antar kelurahan **persis berimpit** (sharing edge antar ring naik ke 93%), lalu klasifikasikan tiap undirected cell-edge deterministik: 1 owner → batas kota/kabupaten; ≥2 owner satu kecamatan → dibuang (internal); beda kecamatan → batas kecamatan; beda kota → batas kota.
+  - Menyambung edge menjadi polyline hanya lewat node ber-degree 2 (berhenti di percabangan) → **157 line batas (38 regency + 119 district)** menggantikan 5.176 segment lama (−97%).
+  - Simplifikasi Douglas-Peucker border `0.00015°`, desa `0.0015°`; **output 462,5 KB < ambang 500 KB**; `geo-metadata.json` menyimpan bbox efektif + jumlah kecamatan.
+  - Perbaikan bug charting: struktur `[polygon][ring][point]` MultiPolygon (iterasi ring sebagai point), pengodean sel grid yang rusak utk latitude negatif (kunci string `cx:cy`), stitch menerobos cabang.
+  - **Output terverifikasi:** titik Gubeng (`112.7611,-7.2721`) tidak lagi masuk garis batas kota (sebelumnya memotong wilayah Utara, false positive yang menghilangkan porsi Surabaya).
+- **Pengerasan UI `packages/admin-dashboard/src/components/customer/CustomerMapTab.tsx`:**
+  - **Preload GeoJSON** sekali saat peta siap (mengisi ref terpisah dari mode), saat toggle Area Vektor layer langsung dirender dari data tersimpan — menghilangkan blank-flash & re-fetch berulang.
+  - **`pointer-events: none` pada semua feature border** (`regency_border`/`district_border`) ditegakkan di `onEachFeature` (bukan hanya `interactive:false` bergaya) → tooltip poligon kelurahan tidak lagi "karat" / flicker kala kursor melewati garis batas overlay pane 250.
+  - **Kontras mode Area Vektor:** latar kertas `#f1f5f9`, poligon kelurahan **putih `#ffffff` 95%** berbatas `#cbd5e1`, sorot hover biru langit `#e0f2fe`/`#0284c7` — poligon kini jelas terpisah dari garis kecamatan orange & kota hijau.
+  - **Panning longgar:** `maxBounds` diperluas ke `[[-7.90,112.10],[-6.75,113.15]]` dengan `maxBoundsViscosity: 0.3` — pinggir map tidak terasa "dikunci elastis" saat panning (batas zoom-out-min tetap `minZoom: 10`).
+  - **Fokus filter kota:** basecamp Sidoarjo hanya digabung ke `fitBounds` bila `!kotaFilter` atau filter = Sidoarjo — saat filter ke kota lain peta tidak tertarik mundur ke Sidoarjo.
+- **Regression gate:** `customer-map-points` 12 + `customer-map-utils` 19 = 31 hijau; build admin-dashboard & bot engine exit 0.
+
+#### Resolusi Komprehensif Sesi 607894/622098/284330/594329 — 8 Fase (Maternal, Atomic, Sanitizer, Usia) (2026-09-19)
+
+- **P1 Maternal + anti-KIDS lock** `router-tool-routing.layer.ts:20` inklusi keluhan Bunda (ASI seret, payudara bengkak/keras/nyeri, puting lecet, laktasi, nifas, pegal hamil) → `get_catalog_and_price category:MOMS`; larangan `category KIDS` sepihak bila usia null (lintas BABY/KIDS). `get-catalog.tool.ts:220` `category KIDS && age==null → undefined` (BABY tidak tereliminasi).
+- **P2 Atomic** `generation-stage.ts:511` pruning `parsedCalls>1` → prioritas `get_catalog_and_price > calculate_delivery > get_clinic_policy_faq` + `PARALLEL_TOOL_CALLS_PRUNED` + sinkron `toolCalls`.
+- **P3 Sanitizer** `sanitizer.ts:428` `, \u0000:` → `:` + `, :` cleanup (anti `, :`) + `sanitizer.ts:472` bullet `\n[-•*]|\d+[.)]` sebagai batas kalimat (9 kalimat → 3).
+- **P4 Usia** `treatment-catalog.service.ts:1354` penalti `anak` bila `age==null` + `get-catalog.tool.ts:708` fix `normalizeFam` (buang `bayi|kids|anak`) → `needsAgeClarification` true untuk Pulih/Sembelit multi-tier → tanya `berapa bulan atau berapa tahun`.
+- **P5-P8** tetap dari sesi sebelumnya: D9 amnesia, Jambangan dual-admin, cart hijack, isolasi GENERAL, demam `ClinicPolicy`, RAG `0.25`, ongkir state-aware.
+- **Verifikasi:** `npm run build` 0; sanitizer `, :`→`:` PASS, bullet 4→3 PASS, D9 amnesia `isValid:false`, Jambangan precise, full suite targeted 39 hijau.
+
+
+#### Penyempurnaan UX Peta — Pewarnaan Multi-Level Batas Wilayah, Eliminasi Auto Zoom-Out & Pembatasan Zoom Maksimal (2026-09-19)
+
+- **Pewarnaan Multi-Level Batas Wilayah (Sesuai Hirarki Detail):**
+  - Kota / Kabupaten (`regency_border`): Garis batas **Hijau Tegas** (`#008069`, tebal 3.2px, 95% opacity).
+  - Kecamatan (`district_border`): Garis batas **Orange** (`#f97316`, tebal 1.8px, 85% opacity).
+  - Kelurahan / Desa (`village`): Area poligon **Biru Pudar** (`fillColor: '#eff6ff'`, fillOpacity 50%, batas `#60a5fa`, tebal 0.6px, dash-line), dengan efek sorot kursor (*hover highlight*) biru langit (`#93c5fd` / `#2563eb`) yang menampilkan tooltip nama desa/kelurahan dan kecamatannya.
+  - Sesuai prinsip *"Semakin detail wilayahnya, semakin pudar warnanya"*. Dilengkapi indikator legenda visual di bawah peta saat mode Area Vektor aktif.
+- **Eliminasi Tuntas Bug UX Auto Zoom-Out:**
+  - `CustomerMapTab.tsx`: Membungkus filtering titik (`kotaOptions`, `cityFiltered`, `allowedStatuses`, `visiblePoints`, `metrics`) dengan `useMemo` agar pergantian mode peta tidak menghasilkan referensi array baru yang memicu siklus render ulang marker.
+  - Memasang gerbang `hasInitialFittedRef` sehingga `map.fitBounds()` **hanya dijalankan tepat 1 kali pada pemuatan awal** (atau saat filter kota diganti / tombol Refresh ditekan).
+  - Pengguna bebas berganti antara **"Peta Jalan"** dan **"Area Vektor"** tanpa peta tiba-tiba melompat zoom-out; posisi dan zoom pengguna 100% terjaga.
+- **Pembatasan Batas Zoom-Out Maksimal (Maksimal Terlihat Gresik Saja):**
+  - Inisialisasi peta Leaflet disetel dengan `minZoom: 10`, `maxZoom: 18`, dan `maxBounds: [[-7.70, 112.30], [-6.85, 113.00]]` (`maxBoundsViscosity: 0.85`).
+  - Mencegah peta di-zoom out hingga melihat seluruh Jawa Timur atau seluruh Indonesia; kanvas terkunci di area metropolitan Surabaya Raya (Gresik Utara - Surabaya - Sidoarjo Porong).
+
+#### Penyempurnaan Fitur Sebaran Pelanggan — Endpoint Toleran, Basecamp Tenant-Aware, KPI Spasial, Backfill Sentroid (2026-09-19)
+
+- **Fase 1 — Data integrity & endpoint backend (tanpa menyentuh pipeline AI):**
+  - `src/config/clinic-location.ts` (baru) — sumber lokasi basecamp tenant-aware dari
+    `Tenant.settings.clinicLocation` (pola `brand.ts`, tanpa migrasi). Fallback ke
+    `clinicConfig` env saat tenant tanpa override/DB offline.
+  - `src/utils/wilayah-normalizer.ts` (baru) — sanitasi teks wilayah dari data kotor
+    hasil scraping (`kecamatan = "Kota :"`, `kota = "No. Hp : 0878..."`), `isValidAreaName`.
+  - `customers.subroute.ts` — endpoint `map-points`:
+    - Filter wilayah default **toleran**: kota/kecamatan mengandung
+      surabaya/sidoarjo/gresik/sby/sda, ATAU `distance_km <= 35`, ATAU bounding box
+      Surabaya Raya.
+    - Titik **sentroid estimasi** (`is_estimated_centroid: true`) untuk pelanggan
+      `lat NULL` yang punya kelurahan/kecamatan valid → resolusi gazetteer lokal.
+      Data kotor dilewati. `?includeCentroids=false` untuk mematikan.
+    - Metadata `clinic` (lat/lng/nama/maxCoverageKm/rings) tenant-aware.
+  - **Bukan perbaikan pipeline AI:** audit log & DB live membuktikan jalur
+    `human-background-enrichment` sudah menyimpan koordinat (135 customer live punya
+    lat). V3 goal-tracker tidak menyimpan lat/lng namun bukan masalah.
+- **Fase 2 — Visual peta, Bug Fix "White Board" & Mode Area Vektor Murni:**
+  - Mengintegrasikan **Basemap CartoDB Positron TileLayer** (`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png`)
+    dengan kontras lembut, nama jalan, dan toponimi Indonesia jelas — menyelesaikan tuntas
+    bug kanvas putih kosong ("white board").
+  - Menambahkan deterministik `map.invalidateSize()` pasca-mount (150ms) dan sebelum `map.fitBounds()`
+    untuk memastikan kalkulasi dimensi kontainer Leaflet tidak `0x0`, mencegah proyeksi koordinat `NaN`.
+  - Menggunakan native `L.featureGroup()` untuk layer titik pelanggan agar circle marker langsung ter-render
+    tanpa tersembunyi di dalam div cluster yang belum ter-styling.
+  - **Peta Area Vektor Murni (Surabaya & Sidoarjo)**:
+    - Script `scripts/build-surabaya-sidoarjo-svg.ts` (baru) — mengompilasi dataset resmi BPS/HDX
+      49 kecamatan (31 Surabaya + 18 Sidoarjo, 507 kelurahan) ke SVG teroptimasi (`surabaya-sidoarjo-map.svg`, 287 KB),
+      GeoJSON (`surabaya-sidoarjo.geojson`, 523 KB), dan `geo-metadata.json` berbasis proyeksi Web Mercator presisi 100%.
+    - Menambahkan **Switcher Mode Peta** di toolbar dashboard: **[Peta Jalan]** (CartoDB) vs **[Area Vektor]** (hanya siluet bidang
+      batas kecamatan Surabaya & Sidoarjo tanpa jalan, rambu, atau distraksi visual, dengan tooltip interaktif).
+  - Marker basecamp klinik (label permanen) + 3 lingkaran radius jangkauan (5/15/max km)
+    dengan toggle "Tampilkan Radius".
+  - Pembeda marker: GPS presisi (solid) vs estimasi sentroid (garis putus-putus).
+  - Popup: badge status + penanda GPS Akurat/Estimasi Wilayah + jarak km.
+- **Fase 3 — KPI spasial & filter interaktif:**
+  - `customerMapUtils.ts`: `computeSpatialMetrics`, `filterPointsByStatus`, `statusOf`,
+    `normalizeCity` diperkuat (sby/sda, buang prefix administratif).
+  - 4 KPI card (total terpetakan, keterjangkauan %, rata-rata jarak, top wilayah)
+    + legenda menjadi tombol toggle filter status.
+- **Fase 4 — Backfill & dokumentasi:**
+  - `scripts/backfill-customer-centroids.ts` (baru) — backfill non-destruktif
+    (hanya `lat IS NULL`) dari gazetteer; `--dry-run`, `--tenant=`; cursor-based
+    pagination (tahan mutasi selama iterasi). Lokal: 63 customer ter-update.
+- **Test:** `customer-map-points` 12, `customer-map-utils` 19, `wilayah-normalizer` 5,
+  `clinic-location` 7 — seluruhnya hijau. Build bot & admin hijau.
+
+#### Gerbang Deterministik Balasan Lokasi Murni — Fast SOP Tanpa Call 2 (2026-09-19)
+
+- **Validasi plan (2 Fase DITOLAK, 1 dimodifikasi):** (a) exemption
+  `suggestedTemplateReply` di `buildLlmSafeToolPayload` DITOLAK — tidak perlu
+  (fast-path konsumsi RAW `executedTools` di memori; payload LLM tetap murni,
+  anti parrot-effect, test `tool-pipeline` pin deletion tetap hijau) dan berbahaya
+  (parrot-effect kembali di giliran campuran). (b) Klausul prompt "WAJIB persis /
+  DILARANG basecamp" DITOLAK (make-up; giliran campuran dijaga validator D8).
+  (c) Klaim "100% kata-demi-kata, hemat ~13.000 token" dikoreksi: TERBUKTI via
+  eksekusi bahwa sanitizer kuota vokatif menormalisasi bunda ekor template
+  ("saja bunda. Jadi bisa ya bunda" → "saja. Jadi bisa ya") — output ≈95%
+  template; angka token tak terverifikasi (`logs/llm-2026-09-19.jsonl` kosong).
+  (d) Kriteria "symptom score = 0" tidak ada di codebase — dipetakan ke sinyal
+  deterministik (`consult_symptom`/`ask_schedule`/`ask_duration`,
+  `hasFallInjurySignal`/`hasVaccineSignal`, sebutan nama katalog data-driven).
+- **Fixed:**
+  1. `src/v3/tools/calculate-delivery.tool.ts` — 4 cabang ambigu/gagal
+     (ambiguity kecamatan, `kecLevelName`, tanpa-koordinat, generik) kini membawa
+     `suggestedTemplateReply` (`askKelurahanAmbiguous`/`askKelurahanRetry`).
+     `message` tak berubah (jalur Call-2 fallback + information-hiding utuh).
+  2. `src/v3/agent/pipeline/delivery-fast-path.ts` (baru, pure) — gate
+     lokasi-murni: single `calculate_delivery` + template terisi + intent ⊆
+     {provide_location, ask_price} + tanpa sinyal medis + tanpa sebutan katalog.
+     Turn-0 prepend `firstContactGreetingHeader` (flag Islami via detector
+     eksisting `hasIslamicSalutation`, baru) agar SOP greeting tak hilang.
+  3. `src/v3/agent/agent-runner.ts` — Stage 3b: fast-path eligible →
+     `draftReply` template + `tel.traceExecution`; tetap mengalir ke Stage 5
+     (validator D8/numerik + sanitizer). Giliran campuran fail-open ke Call 2.
+- **Sengaja TIDAK diubah:** CTA ongkir tetap state-aware audit 337101; tidak ada
+  teks "DILARANG..." baru di prompt.
+- **Test (TDD):** `delivery-fast-path` 22/22 (13 varian gate + 2 enrich + 2
+  integrasi: pure = 1 axios call tanpa "basecamp"; compound = Call 2 jalan).
+  Regression 175/175 (18 file); `npm run build` 0. `cart-dedup-total` 1 gagal
+  pre-existing (verifikasi git stash sesi lalu).
+
+#### Restorasi Greeting SOP & Gerbang Deterministik Narasi Asal Basecamp D8 (2026-09-19)
+
+- **Validasi plan (ditolak sebagai tambal-sulam, direvisi fondasional):** plan usulan
+  mengembalikan `suggestedTemplateReply` ke payload LLM + menambah larangan teks
+  "DILARANG..." di prompt — DITOLAK (regresi arsitektur data-murni anti-parrot
+  2026-09-19 + Mandat Anti-Penyelesaian Case-by-Case). Klaim "b5b2f3cd mengubah CTA"
+  terbukti keliru (CTA state-aware sudah ada di 91ade27e). Frasa "dari basecamp kami
+  di Waru" tidak ada di template mana pun (murni karangan LLM dari grounding RAG
+  homebase); penyebutan "Bungurasih, Waru" adalah fakta geografis sah (lihat Known
+  Issues #94). `logs/llm-2026-09-19.jsonl` kosong — tanpa bukti log live.
+- **Fixed:**
+  1. `src/config/persona.ts` — `TEMPLATES.greeting()` kembali ke 4-blok SOP
+     (salam + "Terima kasih sudah menghubungi kami." + perkenalan homecare +
+     pemantik domisili; identitas via `getBrandIdentity()`). Template deterministik
+     Turn-0 dikecualikan kuota kalimat Rule 1 (mengatur generation); kuota vokatif
+     2x terjaga. `firstContactGreetingHeader` tetap pendek (prefix LLM, anti-duplikasi).
+  2. `src/v3/guardrails/factual-claim-validator.ts` — **D8_ORIGIN_NARRATION**:
+     gerbang kode deterministik berbasis kontrak tool (calculate_delivery sukses +
+     get_clinic_policy_faq TIDAK terpanggil → bingkai asal generik invalid).
+     Ditangani re-prompt kognitif + salvage kalimat yang sudah ada di
+     guardrail-pipeline (preseden D7), tanpa parrot-template & tanpa prompt DILARANG.
+  3. `src/v3/guardrails/sanitizer.ts` — `trimToMaxSentencesPreservingGreetingHeader`
+     mengenali header kanonis SOP multi-baris (+ varian Waalaikumsalam) agar pemantik
+     domisili tidak terpotong trimmer saat LLM menggema sapaan.
+- **Sengaja TIDAK diubah (deviasi tercatat):** default CTA ongkir tetap state-aware
+  audit 337101 (CTA "Rencana mau ambil perawatan..." + cabang treatment/tanggal);
+  verbatim SOP "Mau pilih treatment apa bunda ?" akan membunuh context-awareness dan
+  bertentangan dengan contoh prompt/few-shot yang mengajarkan CTA baru. Perlu
+  konfirmasi tim admin bila verbatim tetap diminta.
+- **Test:** D8 7/7 (4 parafrase adversarial + 2 eksempsi kontrak + 1 anti-false-positive
+  template SOP); greeting SOP; header kanonis; `v3-persona-rules` Test 1 diselaraskan
+  (batas template deterministik = 4). Targeted 93/93 + 66/67 hijau (`cart-dedup-total`
+  1 gagal TERBUKTI pre-existing via git stash). `npm run build` 0.
+
+#### Dashboard Peta Sebaran Pelanggan (Surabaya–Sidoarjo–Gresik) (2026-09-19)
+
+- **Audit perbaikan (post-review, 2026-09-19):**
+  - **Race condition marker tidak muncul (Kritis):** `loadLeaflet()` async lebih lambat
+    daripada effect penggambar marker → `mapRef` masih null saat marker digambar, dan tidak
+    ada re-trigger. Diperbaiki dengan state `mapReady` sebagai dependency + guard generation
+    yang tahan double-invoke StrictMode (map selalu di-remove dengan benar).
+  - **Sandbox test bocor ke peta:** endpoint `map-points` tidak mengecualikan
+    `is_sandbox_test` seperti endpoint list. Ditambahkan `is_sandbox_test: false`.
+  - **CSS Leaflet belum siap saat render:** CSS kini ditunggu (`waitForCss`) sebelum
+    inisialisasi peta, mencegah marker/zoom tampil tanpa styling.
+  - **Filter kota tidak menangkap varian penulisan:** logika filter & opsi dropdown
+    diekstrak ke `customerMapUtils.ts` (pure, teruji) dengan normalisasi kota kanonik
+    ("Kota Surabaya" / "Surabaya" → satu opsi "Surabaya").
+  - **Tombol Refresh menyajikan cache basi:** `fetchCustomerMapPoints` kini mendukung
+    `fresh` (via `refreshApi`) sehingga Refresh/retry benar-benar mengambil data baru.
+
+
+- **Backend:** Endpoint ringan `GET /api/admin/customers/map-points` (`customers.subroute.ts`) —
+  hanya mengembalikan kolom spasial (`lat/lng/kota/kecamatan/kelurahan/status/is_mql/is_out_of_coverage/distance_km`)
+  untuk pelanggan dengan koordinat valid (`lat/lng NOT NULL` dan dalam rentang sah).
+  - **Fokus wilayah layanan secara default:** hanya titik dengan kota mengandung "Surabaya",
+    "Sidoarjo", atau "Gresik" (toleran variasi penulisan: "Kota Surabaya", "Kabupaten Sidoarjo",
+    "Gresik Regency"). Gunakan `?scope=all` untuk menampilkan seluruh titik.
+  - Filter `?kota=` memakai pencocokan **contains case-insensitive** (bukan exact-match) agar
+    toleran terhadap variasi penulisan kota di DB. Tenant isolation (`DEFAULT_TENANT_ID`) dijaga.
+- **Frontend:**
+  - `leafletLoader.ts` (baru) — lazy-loader CDN Leaflet 1.9.4 + MarkerCluster 1.5.3 (idempotent, non-blocking,
+    dimuat hanya saat tab peta dibuka). **Tanpa dependency npm baru.**
+  - `CustomerMapTab.tsx` (baru) — peta geografis presisi berbasis koordinat, **tanpa basemap
+    jalan/bangunan** (latar abu solid ber-grid agar fokus ke sebaran titik), marker clustering,
+    warna marker data-driven (Aktif/MQL/status lain/di luar jangkauan), popup + tombol navigasi Google Maps,
+    filter kota dari data, auto-fit bounds, fallback ramah saat CDN gagal, `useUiFeedback` untuk error.
+    - **Detail pelanggan via tombol "Lihat Detail Pelanggan" di popup** (menggantikan dblclick yang
+      tidak jelas/mudah salah), dengan HTML escaping nama/telepon untuk mencegah injeksi.
+    - Toggle "Semua wilayah" + dropdown kota (filter di client, tanpa request ulang).
+    Hook `clinic-map-ready` disiapkan untuk render batas kecamatan (GeoJSON) di masa depan.
+  - `CustomerDatabase.tsx` — Tab ke-3 "Sebaran Peta" (bukan page baru) via `?tab=map`, deep-linkable.
+  - `api.ts` — `fetchCustomerMapPoints()` + tipe `MapPoint`.
+- **Test:** `tests/unit/customer-map-points.test.ts` — 8 skenario adversarial (koordinat invalid dibuang,
+  filter contains case-insensitive, tanpa filter kota, spasi kosong diabaikan, fokus 3 kota + variasi
+  penulisan, `scope=all`, DB error → 500, tanpa auth → 401).
+  `tests/unit/customer-map-utils.test.ts` — 11 test util murni (normalisasi kota, filter, warna marker, validasi koordinat).
+- **Limitasi:** Peta bergantung CDN unpkg + koneksi internet (lihat `docs/KNOWN_ISSUES.md`).
+
 #### Perampingan Rules Fondasional, Ongkir Lokasi Presisi & Remediasi Gramatikal Sanitizer (2026-09-19)
 
 - **Keputusan kebijakan (sesi 779408):** saat lokasi PRESISI terverifikasi, bot LANGSUNG

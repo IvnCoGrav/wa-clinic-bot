@@ -388,6 +388,7 @@ export class OutputSanitizer {
     const MODAL_BEFORE_RE = /(?:^|[\s(])(?:ingin|mau|bisa|perlu|dapat|sedang|sudah|akan|belum|harus|boleh|sempat)\s+$/i;
     const SUBORDINATE_BEFORE_RE = /(?:^|[\s(])(?:kalau|jika|apabila|bila|apakah|agar|supaya|saat|ketika)\s+$/i;
     let seen = 0;
+    let strippedCount = 0;
     return text.replace(pattern, (match, _g, offset: number, full: string) => {
       // 391501: proteksi subjek — cek posisi awal kalimat/klausa + verba.
       const before = full.slice(0, offset);
@@ -412,6 +413,19 @@ export class OutputSanitizer {
         seen += 1;
         return match;
       }
+      // Sesi 951450 (anti-mutilasi kalimat tanya): vokatif TERMINAL pertanyaan
+      // ("berapa bulan ya Bund?") adalah bagian integral klausa tanya — DILARANG
+      // dihapus walau melampaui kuota (kuota tetap dipakai, tapi teks utuh).
+      // Vokatif terminal kalimat PERNYATAAN ("dulu ya Bunda 😊") tetap dipangkas.
+      // HANYA dilestarikan bila BELUM ada vokatif yang dibuang di pesan ini — jika
+      // quota sudah memaksa penghapusan (overuse berantai, mis. "Halo Bunda! ...
+      // Bunda. ... Bunda?"), panggilan terminal ikut dibatasi agar kuota sapaan
+      // tegas tak bocor (Fase 5, sesi 951450 ∩ anti-overuse Rule 6).
+      const restAfter = full.slice(offset + match.length);
+      if (strippedCount === 0 && /^\s*[?؟][\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*$/u.test(restAfter)) {
+        seen += 1;
+        return match;
+      }
       // Cari karakter non-spasi terakhir sebelum match.
       let j = before.length - 1;
       while (j >= 0 && /[ \t]/.test(before[j])) j--;
@@ -426,8 +440,11 @@ export class OutputSanitizer {
       }
       seen += 1;
       if (seen <= quota) return match;
+      strippedCount += 1;
       return '\u0000'; // marker sementara, dibersihkan di bawah
-    }).replace(/\u0000\s*[,،]?\s*/g, ' ')
+    }).replace(/,\s*\u0000\s*:/g, ':')
+      .replace(/\u0000\s*[,،]?\s*/g, ' ')
+      .replace(/,\s*:/g, ':')
       .replace(/,\s*([!?.])/g, '$1')
       .replace(/[ \t]{2,}/g, ' ')
       .replace(/\s+([,.!?])/g, '$1')
@@ -474,6 +491,12 @@ export class OutputSanitizer {
     while ((em = emojiRe.exec(text)) !== null) {
       pushEnd(em.index + em[0].length - 1);
     }
+    // Bullet list naratif: setiap baris bullet dianggap batas kalimat
+    const bulletRe = /\n\s*(?:[-•*]|\d+[.)])\s+/g;
+    let bm: RegExpExecArray | null;
+    while ((bm = bulletRe.exec(text)) !== null) {
+      pushEnd(bm.index);
+    }
     ends.sort((a, b) => a - b);
     if (ends.length <= maxSentences) return text;
     return text.slice(0, ends[maxSentences - 1] + 1).trimEnd();
@@ -486,23 +509,26 @@ export class OutputSanitizer {
    */
   public static hasStructuredContent(text: string): boolean {
     if (!text) return false;
-    // Baris bernomor ("1. ") atau bullet ("- "/"• ") — senarai/daftar.
-    if (/(^|\n)\s*(?:\d+\.|[-•*])\s+\S/.test(text)) return true;
-    // Formulir reservasi (blok "Hari dan tanggal :", "Nama Bunda :").
+    // Hanya formulir reservasi dan rincian nota resmi yang dikecualikan
+    // dari trimmer — bullet • narasi biasa TIDAK mengecualikan (anti-kaset).
     if (/Nama Bunda\s*:|Hari dan tanggal\s*:/i.test(text)) return true;
+    if (/Total Keseluruhan\s*:|Subtotal\s*:/i.test(text)) return true;
     return false;
   }
 
   /**
    * Trimmer Rule 1 sadar-header: header sapaan Turn-0 yang di-prepend
-   * deterministik (`Halo X! ✨ Perkenalkan, saya Bidan Yusi dari ...`) TIDAK
-   * dihitung sebagai bagian kuota 3 kalimat balasan inti — jika dihitung,
-   * jawaban substantif (mis. rekomendasi treatment) ikut terpotong. Header
-   * dipertahankan utuh; sisa teks dipangkas ke `maxSentences`.
+   * deterministik (varian prefix pendek `Halo X! ✨ Perkenalkan, saya Bidan
+   * Yusi dari ...` maupun header kanonis SOP `Halo/Waalaikumsalam Bunda ✨ +
+   * Terima kasih ... + Perkenalkan ...`) TIDAK dihitung sebagai bagian kuota
+   * 3 kalimat balasan inti — jika dihitung, jawaban substantif (mis.
+   * rekomendasi treatment) atau justru pemantik domisili ikut terpotong.
+   * Header dipertahankan utuh; sisa teks dipangkas ke `maxSentences`.
    */
   public static trimToMaxSentencesPreservingGreetingHeader(text: string, maxSentences = 3): string {
     if (!text) return text;
-    const headerMatch = text.match(/^Halo\s+[^!?.\n]+!\s*✨\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i);
+    const headerMatch = text.match(/^Halo\s+[^!?.\n]+!\s*✨\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i)
+      ?? text.match(/^(?:Halo|Waalaikumsalam)\s+Bunda\s*✨\s*Terima kasih sudah menghubungi kami\.\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i);
     if (!headerMatch) return OutputSanitizer.trimToMaxSentences(text, maxSentences);
     const header = headerMatch[0];
     const rest = text.slice(header.length).trimStart();

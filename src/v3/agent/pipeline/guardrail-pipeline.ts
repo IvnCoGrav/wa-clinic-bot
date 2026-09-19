@@ -386,6 +386,13 @@ export class GuardrailPipeline {
         console.warn(JSON.stringify({ event: 'FACTUAL_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message || String(repromptErr), timestamp: new Date().toISOString() }));
       }
       if (!factRepromptOk) {
+        const hasD9 = factCheck.violations.some((v) => v.includes('D9_LOCATION_AMNESIA'));
+        if (hasD9) {
+          finalReply = `Baik Bunda, untuk ketersediaan jadwalnya kami bantu cekkan terlebih dahulu ya Bunda 😊 Nanti segera kami infokan ya bund 🤗`;
+          shouldSendReply = true;
+          emptyKnowledgeResult = false;
+          violationsDetected.push('D9_LOCATION_AMNESIA_FALLBACK: amnesia diganti konfirmasi jadwal deterministik');
+        } else {
         const onlyDomicile = factCheck.violations.length > 0
           && factCheck.violations.every((v) => v.startsWith('Domicile'));
         if (onlyDomicile) {
@@ -417,6 +424,7 @@ export class GuardrailPipeline {
             finalReply = `Mohon maaf ${greeting}, untuk pertanyaan ini kami teruskan langsung ke tim Bidan kami ya agar dapat dibantu lebih lanjut 🙏😊`;
             violationsDetected.push('SILENT_DROP_PREVENTED: balasan kosong diubah ke fallback eskalasi');
           }
+        }
         }
       }
     }
@@ -472,13 +480,16 @@ export class GuardrailPipeline {
       }
     }
 
-    // 7d. Validator usia (T0.2 — anti-mutilasi, sesi 552209): deteksi
-    // pertanyaan usia di balasan. Bila terdeteksi, re-prompt 1x untuk
-    // menghapus pertanyaan usia tanpa memotong kalimat. Gagal → kirim
-    // balasan asli + catat pelanggaran (bukan sunyi total).
+    // 7d. Validator usia (T0.2 — anti-mutilasi, sesi 552209 / 476427):
+    // Pertanyaan usia DILARANG jika menodong di luar konteks (jadwal/ongkir).
+    // TETAPI jika tool katalog menyatakan needsAgeClarification (multi-tier,
+    // usia belum diketahui), pertanyaan usia netral adalah SOP klinis DISETUJUI.
+    const isAgeClarificationAuthorized = executedTools.some(
+      (t) => t?.name === 'get_catalog_and_price' && (t as any)?.result?.needsAgeClarification === true
+    );
     const hasAgeQuestion = (text: string): boolean =>
       /usia\s+(si\s+kecil|anak|baby|balita|bunda)|berapa\s+(bulan|tahun|usia)/i.test(text);
-    if (hasAgeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
+    if (!isAgeClarificationAuthorized && hasAgeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
       violationsDetected.push('age_solicitation_detected');
       const ageRepromptStartedAt = Date.now();
       let ageRepromptOk = false;
@@ -577,11 +588,20 @@ export class GuardrailPipeline {
     finalReply = normalizeWhatsAppFormat(finalReply);
 
     // Sanitizer fallback HANYA boleh berjalan jika pesan BUKAN hasil eskalasi senyap.
+    // Recovery grounded: bila DSML tag terlucuti jadi "" tapi katalog ada, pakai top service (bukan canned buntu).
     if (!isEscalated && shouldSendReply && !OutputSanitizer.isValidReply(finalReply)) {
       console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
-      const { getBrandIdentity } = await import('../../../config/brand');
-      const brand = getBrandIdentity();
-      finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
+      const catalogTool = executedTools.find((t: any) => t.name === 'get_catalog_and_price' && (t as any).result?.treatments?.length > 0);
+      if (catalogTool && (catalogTool as any).result?.treatments?.[0]) {
+        const top: any = (catalogTool as any).result.treatments[0];
+        const isMoms = top.category === 'MOMS';
+        finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
+        console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, timestamp: new Date().toISOString() }));
+      } else {
+        const { getBrandIdentity } = await import('../../../config/brand');
+        const brand = getBrandIdentity();
+        finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
+      }
     }
 
     // Deterministic Output Normalizer (Rule 1) di gate akhir: trimmer
