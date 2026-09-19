@@ -4,7 +4,7 @@ import { X, MessageSquare, Send, Loader2, ExternalLink, Clock } from 'lucide-rea
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { MediaImage, ChatMediaData } from '../common/MediaImage';
-import { extractMedia } from '../../utils/mediaExtractor';
+import { extractMedia, resolveMessageDisplayText } from '../../utils/mediaExtractor';
 import {
   formatChatDateSeparatorWib,
   isDifferentDayWib,
@@ -298,7 +298,11 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
                             />
                           </div>
                         )}
-                        <p className="whitespace-pre-wrap break-words">{msg.content || ''}</p>
+                        {(() => {
+                          const displayText = resolveMessageDisplayText({ content: msg.content, media });
+                          if (!displayText) return null;
+                          return <p className="whitespace-pre-wrap break-words">{displayText}</p>;
+                        })()}
                       </div>
                     </div>
                   </React.Fragment>

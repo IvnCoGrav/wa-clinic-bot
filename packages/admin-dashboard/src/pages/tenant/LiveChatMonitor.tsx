@@ -74,6 +74,8 @@ import {
   extractDocument,
   extractContact,
   extractVideo,
+  extractImageCaption,
+  resolveMessageDisplayText,
   ChatLocationData,
   ChatAudioData,
   ChatDocumentData,
@@ -134,14 +136,6 @@ function renderHighlightedText(text: string, query: string) {
   } catch {
     return text;
   }
-}
-
-function extractImageCaption(content?: string | null): string | null {
-  if (!content || typeof content !== 'string') return null;
-  const m = content.trim().match(/^\[IMAGE:\s*([\s\S]*?)\]$/i);
-  if (m && m[1] && m[1].trim()) return m[1].trim();
-  if (content.startsWith('[IMAGE:')) return content.replace(/^\[IMAGE:\s*/i, '').replace(/\]$/, '').trim() || null;
-  return null;
 }
 
 function cleanSnippetText(s: string): string {
@@ -2595,7 +2589,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           return true;
         };
         const activeHold = reservations.find((r: any) => isHoldValidLocal(r)) || null;
-        const activeConfirmed = reservations.find((r: any) => r.status === 'confirmed') || null;
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const activeConfirmed = reservations.find((r: any) => {
+          if (!r || r.status !== 'confirmed' || !r.booking_date) return false;
+          const bd = new Date(r.booking_date).getTime();
+          return !isNaN(bd) && bd >= startOfToday.getTime();
+        }) || null;
         const activePending = reservations.find((r: any) => r.status === 'pending') || null;
         const hasActiveHold = Boolean(activeHold);
         const hasUpcomingBooking = Boolean(activeConfirmed);
@@ -2750,11 +2750,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   const activeConfirmedReservation = useMemo(() => {
     if (!selectedChat) return null;
+    const isUpcomingConfirmed = (r: any) => {
+      if (!r || r.status !== 'confirmed' || !r.booking_date) return false;
+      const bd = new Date(r.booking_date).getTime();
+      if (isNaN(bd)) return false;
+      // Jadwal aktif = hari ini atau ke depan (selaras endpoint active-reservations).
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      return bd >= startOfToday.getTime();
+    };
     if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => r.status === 'confirmed') || null;
+      return customerDetailData.reservations?.find((r: any) => isUpcomingConfirmed(r)) || null;
     }
     const fromChat = (selectedChat as any).activeConfirmedReservation;
-    if (fromChat) return fromChat;
+    if (fromChat && isUpcomingConfirmed(fromChat)) return fromChat;
     return null;
   }, [selectedChat, customerDetailData]);
 
@@ -2959,7 +2968,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       sender_name: user?.email || 'Admin',
       created_at: new Date().toISOString(),
       delivery_status: 'sent',
-      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.file.type } : undefined,
+      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.file.type, caption: text || undefined } : undefined,
       quoted_message: currentReplyingTo ? {
         id: currentReplyingTo.id,
         wa_message_id: currentReplyingTo.wa_message_id,
@@ -4533,7 +4542,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const docData: ChatDocumentData | null = extractDocument(msg);
                       const contactData: ChatContactData | null = extractContact(msg);
                       const videoData: ChatVideoData | null = extractVideo(msg);
-                      const hasMediaOnly = hasMedia && !audioData && !docData && !videoData && (!msg.content || /^\[(IMAGE|MEDIA)/.test(msg.content));
+                      const hasMediaOnly = hasMedia && !audioData && !docData && !videoData && !resolveMessageDisplayText({ content: msg.content, media: msg.media });
 
                       // Reaksi Pesan (WhatsApp Message Reactions)
                       const reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
@@ -4766,26 +4775,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   )}
 
                                   {/* 5. Image / Photo */}
-                                  {hasMedia && !audioData && !docData && !videoData && (
-                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                      <MediaImage
-                                        src={msg.media!.url || msg.media!.hdUrl || msg.media!.thumbUrl}
-                                        downloadSrc={msg.media!.hdUrl || msg.media!.url}
-                                        thumbUrl={msg.media!.thumbUrl}
-                                        caption={msg.media!.caption || extractImageCaption(msg.content) || undefined}
-                                      />
-                                      {(() => {
-                                        const cap = msg.media!.caption || extractImageCaption(msg.content);
-                                        const q = effectiveInChatQuery || searchQuery;
-                                        if (!cap || !q || !q.trim()) return null;
-                                        return (
-                                          <div className="mt-1 text-[11px] leading-snug break-words">
-                                            {renderHighlightedText(cap, q)}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  )}
+                                   {hasMedia && !audioData && !docData && !videoData && (
+                                     <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                       <MediaImage
+                                         src={msg.media!.url || msg.media!.hdUrl || msg.media!.thumbUrl}
+                                         downloadSrc={msg.media!.hdUrl || msg.media!.url}
+                                         thumbUrl={msg.media!.thumbUrl}
+                                         caption={msg.media!.caption || extractImageCaption(msg.content) || undefined}
+                                       />
+                                     </div>
+                                   )}
 
                                   {/* 6. Location (Pin GPS & Live Location) */}
                                   {locData && (
@@ -4820,26 +4819,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     </div>
                                   )}
 
-                                  {/* 7. Text Content (Anti-Hollow Bubble: selalu tampilkan teks jika tidak ada visual, atau jika teks bukan sekadar placeholder teknis) */}
+                                  {/* 7. Text Content (Anti-Hollow Bubble: teks dirender TEPAT 1x via resolver terpusat) */}
                                   {(() => {
                                     const hasVisual = (hasMedia && !audioData && !docData && !videoData) || !!locData || !!audioData || !!docData || !!videoData || !!contactData;
-                                    const isPurePlaceholder = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i.test((msg.content || '').trim());
-                                    if (hasVisual && isPurePlaceholder) {
-                                      return null;
-                                    }
-                                    if (!msg.content || !msg.content.trim()) {
-                                      if (!hasVisual) {
-                                        return (
-                                          <p className="font-sans italic text-[#667781] py-0.5 text-[11px]">
-                                            [Pesan tanpa teks]
-                                          </p>
-                                        );
-                                      }
-                                      return null;
+                                    const displayText = resolveMessageDisplayText({ content: msg.content, media: msg.media });
+                                    if (!displayText) {
+                                      if (hasVisual) return null;
+                                      return (
+                                        <p className="font-sans italic text-[#667781] py-0.5 text-[11px]">
+                                          [Pesan tanpa teks]
+                                        </p>
+                                      );
                                     }
                                     return (
                                       <p className="font-sans whitespace-pre-wrap select-text cursor-text">
-                                        {renderHighlightedText(msg.content, effectiveInChatQuery || searchQuery)}
+                                        {renderHighlightedText(displayText, effectiveInChatQuery || searchQuery)}
                                       </p>
                                     );
                                   })()}

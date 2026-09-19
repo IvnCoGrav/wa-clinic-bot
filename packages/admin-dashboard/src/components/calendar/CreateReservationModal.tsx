@@ -28,6 +28,7 @@ import {
   Receipt,
   Percent,
   BookmarkPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
 import { Reservation } from '../../types';
@@ -230,6 +231,8 @@ interface CreateReservationModalProps {
   existingReservations?: Reservation[];
   mode?: 'create' | 'edit';
   initialReservation?: Reservation | any;
+  /** Opsional: buka detail/edit reservasi eksisting dari warning jadwal aktif. */
+  onEditReservation?: (reservation: any) => void;
 }
 
 export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
@@ -243,6 +246,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   existingReservations = [],
   mode = 'create',
   initialReservation,
+  onEditReservation,
 }) => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
@@ -471,6 +475,29 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, []);
 
   const effectiveCustomerId = customerId || (initialCustomer as any)?.id || initialCustomerId || '';
+
+  // Peringatan Jadwal Aktif — cegah split-brain duplicate booking (customer sudah
+  // punya reservasi confirmed/hold hari ini atau ke depan). Hanya mode create.
+  const [activeReservations, setActiveReservations] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isOpen || mode === 'edit' || !effectiveCustomerId) {
+      setActiveReservations([]);
+      return;
+    }
+    let cancelled = false;
+    apiRequest(`/api/admin/customers/${effectiveCustomerId}/active-reservations`)
+      .then((res: any) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setActiveReservations(list);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveReservations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, effectiveCustomerId]);
   const draftKey = effectiveCustomerId ? `reservation_cust_${effectiveCustomerId}` : 'reservation_new';
   const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
     draftKey,
@@ -1656,6 +1683,50 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       <span>{selectedCustomerInfo.kelurahan}, {selectedCustomerInfo.kecamatan} ({selectedCustomerInfo.distance_km?.toFixed(1) || '0'} km)</span>
                     </p>
                   )}
+                </div>
+              </div>
+            )}
+            {/* Active Schedule Warning — anti split-brain duplicate booking */}
+            {mode !== 'edit' && activeReservations.length > 0 && (
+              <div className="mt-2 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-amber-950 dark:text-amber-200">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="text-amber-600 dark:text-amber-400 shrink-0" size={18} />
+                  <span>Peringatan: Customer ini memiliki jadwal treatment yang masih aktif!</span>
+                </div>
+                <ul className="mt-1.5 space-y-1">
+                  {activeReservations.slice(0, 3).map((item: any) => {
+                    let label = '—';
+                    try {
+                      label = new Date(item.booking_date).toLocaleString('id-ID', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+                    } catch {}
+                    return (
+                      <li key={item.id} className="text-xs text-amber-800 dark:text-amber-300">
+                        Jadwal: <b>{item.treatment_detail || 'Treatment'}</b> pada <b>{label}</b>{' '}
+                        (Status: {item.status})
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {onEditReservation && (
+                    <button
+                      type="button"
+                      onClick={() => onEditReservation(activeReservations[0])}
+                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer"
+                    >
+                      ✏️ Edit Reservasi Eksisting
+                    </button>
+                  )}
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    atau lanjutkan jika customer memesan sesi/anak tambahan.
+                  </span>
                 </div>
               </div>
             )}

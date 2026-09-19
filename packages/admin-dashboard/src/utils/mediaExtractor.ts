@@ -52,6 +52,45 @@ export interface ChatVideoData {
  * 6. Kontak vCard (extractContact)
  */
 
+const MEDIA_PLACEHOLDER_REGEX = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i;
+
+/**
+ * Ekstraksi caption gambar dari konten teks kanonis `[IMAGE: caption]` (WAHA/WA inbound).
+ * Mengembalikan `null` bila konten bukan caption gambar.
+ */
+export function extractImageCaption(content?: string | null): string | null {
+  if (!content || typeof content !== 'string') return null;
+  const trimmed = content.trim();
+  const m = trimmed.match(/^\[IMAGE:\s*([\s\S]*?)\]$/i);
+  if (m && m[1] && m[1].trim()) return m[1].trim();
+  if (trimmed.startsWith('[IMAGE:')) return trimmed.replace(/^\[IMAGE:\s*/i, '').replace(/\]$/, '').trim() || null;
+  return null;
+}
+
+/**
+ * resolveMessageDisplayText — otoritas tunggal teks tampilan gelembung chat.
+ *
+ * Mencegah duplikasi caption gambar 3x yang disebabkan tiga renderer independen
+ * (atribut alt MediaImage, caption inline MediaImage, dan konten teks bubble).
+ * Semua antarmuka chat (LiveChatMonitor, StaffToday, ChatHistoryModal) WAJIB
+ * memakai resolver ini agar caption dirender tepat satu kali oleh kontainer teks.
+ *
+ * Aturan resolusi (deterministik, berbasis state data — bukan hafalan kalimat):
+ * 1. `[IMAGE: caption]` → buang tag bracket teknis, tampilkan caption murni.
+ * 2. Placeholder murni (`[IMAGE]`, `[MEDIA]`, ...) → pakai `media.caption` bila ada.
+ * 3. Teks mentah yang identik dengan `media.caption` → tampil sekali (prioritas caption).
+ * 4. Tidak ada teks & tidak ada caption → `null` (jangan render paragraf kosong).
+ */
+export function resolveMessageDisplayText(msg: { content?: string | null; media?: ChatMediaData | null }): string | null {
+  const raw = (msg?.content || '').trim();
+  const caption = (msg?.media?.caption || '').trim();
+  const extracted = extractImageCaption(raw);
+  if (extracted) return extracted;
+  if (MEDIA_PLACEHOLDER_REGEX.test(raw)) return caption || null;
+  if (raw && caption && raw === caption) return caption;
+  return raw || caption || null;
+}
+
 export function extractMedia(msg: any): ChatMediaData | undefined {
   const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
   if (m && (m.url || m.hdUrl)) {

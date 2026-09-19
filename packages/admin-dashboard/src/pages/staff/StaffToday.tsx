@@ -52,6 +52,8 @@ import {
   extractMedia,
   extractLocation,
   extractAudio,
+  extractImageCaption,
+  resolveMessageDisplayText,
   ChatLocationData,
   ChatAudioData,
 } from '../../utils/mediaExtractor';
@@ -2471,21 +2473,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                           src={media.url || media.hdUrl || media.thumbUrl}
                                           downloadSrc={media.hdUrl || media.url}
                                           thumbUrl={media.thumbUrl}
-                                          caption={media.caption}
+                                          caption={media.caption || extractImageCaption(msg.content) || undefined}
                                         />
                                       </div>
                                     ) : null}
 
-                                    {/* Message Text Content (Anti-Hollow Bubble) */}
+                                    {/* Message Text Content (Anti-Hollow Bubble: teks dirender TEPAT 1x via resolver terpusat) */}
                                     {(() => {
                                       const hasVisual = isLocationMsg || isAudioMsg || !!media;
-                                      const isPurePlaceholder = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i.test((msg.content || '').trim());
-                                      if (hasVisual && isPurePlaceholder) return null;
-                                      if (!msg.content || !msg.content.trim()) {
-                                        if (!hasVisual) return <div className="text-[11px] italic text-[#667781]">[Pesan tanpa teks]</div>;
-                                        return null;
+                                      const displayText = resolveMessageDisplayText({ content: msg.content, media });
+                                      if (!displayText) {
+                                        if (hasVisual) return null;
+                                        return <div className="text-[11px] italic text-[#667781]">[Pesan tanpa teks]</div>;
                                       }
-                                      return <div className="whitespace-pre-wrap break-words select-text">{msg.content}</div>;
+                                      return <div className="whitespace-pre-wrap break-words select-text">{displayText}</div>;
                                     })()}
                                   </>
                                 )}

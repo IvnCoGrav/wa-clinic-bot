@@ -182,11 +182,6 @@ export const MediaImage: React.FC<{
             Gambar tidak tersedia
           </span>
         </div>
-        {caption && (
-          <span className="block mt-1 text-[11px] text-slate-700 dark:text-slate-300 font-normal break-words">
-            {caption}
-          </span>
-        )}
       </div>
     );
   }
@@ -203,7 +198,7 @@ export const MediaImage: React.FC<{
         )}
         <img
           src={currentImgSrc}
-          alt={caption || alt || 'Gambar'}
+          alt={alt || 'Foto'}
           loading="lazy"
           onLoad={() => setThumbnailLoading(false)}
           onError={() => {
@@ -218,12 +213,6 @@ export const MediaImage: React.FC<{
           title="Klik / tap untuk melihat foto"
           className="w-full max-w-[220px] sm:max-w-[260px] h-auto max-h-64 object-cover rounded-lg border border-black/10 transition-transform duration-200 hover:opacity-95 hover:scale-[1.01] cursor-pointer"
         />
-
-        {caption && (
-          <span className="block mt-1 text-[11px] text-slate-700 font-normal break-words">
-            {caption}
-          </span>
-        )}
       </div>
 
       {/* Full-Screen Lightbox Modal with Mobile Header & HD On-Demand rendered via React Portal directly to document.body */}
@@ -339,7 +328,7 @@ export const MediaImage: React.FC<{
             >
               <img
                 src={activeModalSrc}
-                alt={caption || alt || 'Gambar Foto'}
+                alt={alt || 'Foto'}
                 onClick={() => setIsZoomed(!isZoomed)}
                 className={`max-w-[96vw] sm:max-w-[90vw] max-h-[72vh] sm:max-h-[80vh] object-contain rounded-lg shadow-2xl transition-transform ${
                   isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'

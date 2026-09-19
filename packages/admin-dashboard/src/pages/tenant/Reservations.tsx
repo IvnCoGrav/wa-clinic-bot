@@ -1968,6 +1968,11 @@ export const Reservations: React.FC = () => {
         staffList={staffList}
         initialSlotTarget={quickSlotTarget}
         existingReservations={reservations}
+        onEditReservation={(res: any) => {
+          setShowCreateModal(false);
+          setQuickSlotTarget(null);
+          if (res?.id) setSelectedRes(res);
+        }}
       />
     </div>
   );
