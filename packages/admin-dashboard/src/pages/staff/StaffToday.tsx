@@ -811,11 +811,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       es.addEventListener('message.updated', (event) => {
         try {
           const payload = JSON.parse((event as MessageEvent).data);
-          const { messageId, content, isRevoked, isEdited, conversationId } = payload;
+          const { messageId, waMessageId, content, isRevoked, isEdited, conversationId } = payload;
+          const matchesUpdated = (m: any) => {
+            if (messageId && (m.id === messageId || (m as any).wa_message_id === messageId)) return true;
+            if (waMessageId && (m.id === waMessageId || (m as any).wa_message_id === waMessageId)) return true;
+            const shortA = messageId ? String(messageId).split('_').pop() : null;
+            if (shortA && (m as any).wa_message_id && String((m as any).wa_message_id).endsWith(`_${shortA}`)) return true;
+            return false;
+          };
           if (selectedTaskRef.current?.conversationId === conversationId) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === messageId || (m as any).wa_message_id === messageId
+                matchesUpdated(m)
                   ? { ...m, content: content ?? m.content, is_revoked: isRevoked ?? m.is_revoked, is_edited: isEdited ?? m.is_edited, payload_raw: { ...(m.payload_raw || {}), is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked, is_edited: isEdited ?? (m.payload_raw as any)?.is_edited } }
                   : m
               )
