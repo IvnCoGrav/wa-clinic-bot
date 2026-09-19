@@ -123,6 +123,33 @@ async function findOverlappingCustomerReservations(params: {
   return { exactConflicts, sameDayReservations: activeCandidates };
 }
 
+/**
+ * Hitung transaksi riwayat customer (kanonis patient-lifecycle: `confirmed` ATAU
+ * `completed`) untuk menentukan status new vs repeat order. `excludeId` dipakai
+ * pada jalur update agar reservasi yang sedang diedit tidak menghitung dirinya.
+ * Fail-safe: DB offline → dianggap new (false) agar operasi inti tak pernah gagal.
+ */
+async function computeIsRepeatOrder(params: {
+  tenantId: string;
+  customerId: string;
+  excludeId?: string;
+}): Promise<boolean> {
+  const { tenantId, customerId, excludeId } = params;
+  try {
+    const priorConfirmedCount = await prisma.reservation.count({
+      where: {
+        customer_id: customerId,
+        tenant_id: tenantId,
+        status: { in: ['confirmed', 'completed'] },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+    return priorConfirmedCount > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function findOverlappingStaffReservations(params: {
   tenantId: string;
   staffId: string;
@@ -253,6 +280,12 @@ export class ReservationCoreService {
            const duplicates = sameDayReservations.slice(1);
            const targetStatus = status || 'confirmed';
 
+           const isRepeatOrder = await computeIsRepeatOrder({
+             tenantId,
+             customerId,
+             excludeId: primary.id,
+           });
+
            const updated = await prisma.reservation.update({
              where: { id: primary.id },
              data: {
@@ -264,6 +297,7 @@ export class ReservationCoreService {
                assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
                raw_text: effectiveRawText,
                purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
+               is_repeat_order: isRepeatOrder,
              },
            });
 
@@ -329,6 +363,11 @@ export class ReservationCoreService {
         recentPending = null;
       }
       if (recentPending) {
+        const isRepeatOrder = await computeIsRepeatOrder({
+          tenantId,
+          customerId,
+          excludeId: (recentPending as any).id,
+        });
         reservation = await prisma.reservation.update({
           where: { id: (recentPending as any).id },
           data: {
@@ -338,6 +377,7 @@ export class ReservationCoreService {
             purchase_value: purchaseValue !== undefined ? purchaseValue : (recentPending as any).purchase_value,
             duration_minutes: duration ?? (recentPending as any).duration_minutes ?? null,
             assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : (recentPending as any).assigned_staff_id,
+            is_repeat_order: isRepeatOrder,
           },
         });
         isUpdate = true;
@@ -345,6 +385,7 @@ export class ReservationCoreService {
     }
 
     if (!reservation) {
+      const isRepeatOrder = await computeIsRepeatOrder({ tenantId, customerId });
       const createData: any = {
         tenant_id: tenantId,
         customer_id: customerId,
@@ -356,6 +397,7 @@ export class ReservationCoreService {
         raw_text: effectiveRawText,
         status,
         purchase_value: purchaseValue ?? null,
+        is_repeat_order: isRepeatOrder,
       };
       try {
         // Single-row create atomik secara inheren; $transaction interaktif

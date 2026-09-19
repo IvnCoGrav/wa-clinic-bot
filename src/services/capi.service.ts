@@ -755,6 +755,42 @@ export function extractValueByFormat(text: string, formatValueTemplate?: string)
 }
 
 /**
+ * Resolusi konteks New vs Repeat untuk event `Purchase` (standar Meta: event_name
+ * tetap `Purchase`; pembeda disematkan ke `custom_data` agar Value-Based Bidding
+ * & ROAS tidak terganggu). Basis: jumlah reservasi confirmed/completed MILIK
+ * customer DI LUAR reservasi yang sedang dikirim — bukan berdasarkan follow-up
+ * pending (semantik lama yang rapuh). Fail-safe DB offline → new (0).
+ *
+ * `order_number` = urutan transaksi ke-(priorCount + 1).
+ */
+async function resolveNewVsRepeatContext(params: {
+  customerId?: string | null;
+  tenantId?: string | null;
+  reservationId?: string | null;
+}): Promise<{ priorCount: number; isRepeat: boolean; orderNumber: number }> {
+  const { customerId, tenantId, reservationId } = params;
+  if (!customerId) return { priorCount: 0, isRepeat: false, orderNumber: 1 };
+  try {
+    const { prisma } = await import('../db/client');
+    const priorCount = await prisma.reservation.count({
+      where: {
+        customer_id: customerId,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
+        status: { in: ['confirmed', 'completed'] },
+        ...(reservationId ? { id: { not: reservationId } } : {}),
+      },
+    });
+    return {
+      priorCount,
+      isRepeat: priorCount > 0,
+      orderNumber: priorCount + 1,
+    };
+  } catch {
+    return { priorCount: 0, isRepeat: false, orderNumber: 1 };
+  }
+}
+
+/**
  * Kebijakan moderasi Purchase CAPI per tenant (auto_send_purchase_capi).
  * Default false = moderasi manual aktif (event ditahan ke queue admin review).
  * Tenant-aware: dibaca dari kolom tenant DB; fallback false bila DB offline.
@@ -1177,6 +1213,24 @@ export class CapiService {
       if (value !== undefined) {
         eventData.custom_data.value = Number(value);
         eventData.custom_data.currency = currency || 'IDR';
+      }
+
+      // Resolusi New vs Repeat HANYA untuk Purchase: standard event name dipertahankan,
+      // pembeda disematkan ke custom_data (advertiser dapat membuat Custom Conversion).
+      if (eventName === 'Purchase') {
+        const explicitRepeat = customData?.is_repeat_order;
+        const explicitOrderNumber = customData?.order_number;
+        const newVsRepeat = await resolveNewVsRepeatContext({
+          customerId: fullCustomer?.id || customer?.id,
+          tenantId,
+          reservationId,
+        });
+        const isRepeat = typeof explicitRepeat === 'boolean' ? explicitRepeat : newVsRepeat.isRepeat;
+        eventData.custom_data.is_repeat_order = isRepeat;
+        eventData.custom_data.customer_type = isRepeat ? 'repeat' : 'new';
+        eventData.custom_data.order_number =
+          typeof explicitOrderNumber === 'number' ? explicitOrderNumber : newVsRepeat.orderNumber;
+        eventData.custom_data.prior_orders_count = newVsRepeat.priorCount;
       }
 
       const payload = {

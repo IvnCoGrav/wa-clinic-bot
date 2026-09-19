@@ -34,6 +34,9 @@ interface QueueItem {
   purchase_review_status: string;
   value: number | null;
   distanceKm?: string | null;
+  is_repeat_order?: boolean;
+  order_number?: number;
+  customer_type?: 'new' | 'repeat';
   customer: {
     id?: string;
     name: string;
@@ -110,6 +113,27 @@ const attributionBadge = (isPaid: boolean) =>
 const utmText = (u: QueueItem['utm']) => {
   const parts = [u.campaign, u.source, u.medium].filter(Boolean);
   return parts.length ? parts.join(' / ') : '—';
+};
+
+const customerTypeBadge = (item: QueueItem) => {
+  if (item.eventType && item.eventType !== 'Purchase') return null;
+  const isRepeat = item.is_repeat_order === true || item.customer_type === 'repeat';
+  const orderNo = item.order_number && item.order_number > 0 ? item.order_number : isRepeat ? undefined : 1;
+  const label = isRepeat
+    ? `🔁 Repeat Order${orderNo ? ` (Order #${orderNo})` : ''}`
+    : `✨ Pasien Baru${orderNo ? ` (Order #${orderNo})` : ''}`;
+  return (
+    <span
+      className={
+        isRepeat
+          ? 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/40 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold whitespace-nowrap'
+          : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold whitespace-nowrap'
+      }
+      title={isRepeat ? 'Transaksi berulang (repeat customer)' : 'Transaksi pertama customer (new customer)'}
+    >
+      {label}
+    </span>
+  );
 };
 
 /**
@@ -311,6 +335,9 @@ const buildCapiJsonPayload = (item: QueueItem) => {
             value: item.value || 0,
             content_name: cleanTreatments.join(', ') || item.treatment_detail || 'Treatment',
             content_type: 'product',
+            is_repeat_order: item.is_repeat_order === true || item.customer_type === 'repeat',
+            customer_type: item.is_repeat_order === true || item.customer_type === 'repeat' ? 'repeat' : 'new',
+            ...(item.order_number && item.order_number > 0 ? { order_number: item.order_number } : {}),
             contents: cleanTreatments.map((t, idx) => ({
               id: `treatment_${idx + 1}`,
               item_name: t,
@@ -338,6 +365,7 @@ export const MetaCapiQueue: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCustomerType, setFilterCustomerType] = useState<'all' | 'new' | 'repeat'>('all');
   const [mode, setMode] = useState<'pending' | 'all'>('pending');
 
   // JSON Modal State
@@ -446,6 +474,13 @@ export const MetaCapiQueue: React.FC = () => {
     let list = items;
     if (mode === 'pending') list = list.filter((i) => i.purchase_review_status === 'pending');
     if (filterStatus !== 'all') list = list.filter((i) => i.purchase_review_status === filterStatus);
+    if (filterCustomerType !== 'all') {
+      list = list.filter((i) => {
+        if (i.eventType && i.eventType !== 'Purchase') return false;
+        const isRepeat = i.is_repeat_order === true || i.customer_type === 'repeat';
+        return filterCustomerType === 'repeat' ? isRepeat : !isRepeat;
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
@@ -457,7 +492,7 @@ export const MetaCapiQueue: React.FC = () => {
       );
     }
     return list;
-  }, [items, mode, filterStatus, searchQuery]);
+  }, [items, mode, filterStatus, filterCustomerType, searchQuery]);
 
   const handleApprove = async (item: QueueItem, customPayload?: any) => {
     const effectivePayload = customPayload || customPayloads[item.id];
@@ -657,6 +692,15 @@ export const MetaCapiQueue: React.FC = () => {
             />
           </div>
           <select
+            value={filterCustomerType}
+            onChange={(e) => setFilterCustomerType(e.target.value as 'all' | 'new' | 'repeat')}
+            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+          >
+            <option value="all">Semua Tipe Order</option>
+            <option value="new">✨ Pasien Baru</option>
+            <option value="repeat">🔁 Repeat Order</option>
+          </select>
+          <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
@@ -720,6 +764,7 @@ export const MetaCapiQueue: React.FC = () => {
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           {attributionBadge(item.attribution.isPaid)}
+                          {customerTypeBadge(item)}
                           {item.attribution.trackingCode && (
                             <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
                               {item.attribution.trackingCode}
@@ -899,6 +944,7 @@ export const MetaCapiQueue: React.FC = () => {
                   {/* Attribution & Distance Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                     {attributionBadge(item.attribution.isPaid)}
+                    {customerTypeBadge(item)}
                     {item.attribution.trackingCode && (
                       <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">
                         {item.attribution.trackingCode}
