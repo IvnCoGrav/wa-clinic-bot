@@ -2391,6 +2391,31 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return v;
       };
 
+      // Order number per customer (new vs repeat) — 1 query, bukan N+1.
+      // Basis kanonis: reservasi confirmed/completed (di luar cancelled/hold).
+      // Ordinal ditetapkan dari urutan created_at per customer (deterministik).
+      const customerIds = Array.from(new Set(visibleRows.map((r) => r.customer_id).filter(Boolean)));
+      const orderNumberByReservation = new Map<string, number>();
+      const totalConfirmedByCustomer = new Map<string, number>();
+      if (customerIds.length > 0) {
+        try {
+          const confirmedRows = await prisma.reservation.findMany({
+            where: {
+              tenant_id: DEFAULT_TENANT_ID,
+              customer_id: { in: customerIds },
+              status: { in: ['confirmed', 'completed'] },
+            },
+            select: { id: true, customer_id: true, created_at: true },
+            orderBy: [{ customer_id: 'asc' }, { created_at: 'asc' }],
+          });
+          for (const row of confirmedRows as any[]) {
+            const next = (totalConfirmedByCustomer.get(row.customer_id) ?? 0) + 1;
+            totalConfirmedByCustomer.set(row.customer_id, next);
+            orderNumberByReservation.set(row.id, next);
+          }
+        } catch {}
+      }
+
       const reservationData = await Promise.all(
         visibleRows.map(async (r) => {
           const occurredDate = r.purchase_occurred_at || r.created_at || new Date();
@@ -2398,6 +2423,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const ageMs = Math.max(0, now - occurredAt);
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+          const orderNumber = orderNumberByReservation.get(r.id) ?? 1;
+          const isRepeatOrder =
+            (r as any).is_repeat_order != null
+              ? Boolean((r as any).is_repeat_order)
+              : orderNumber > 1;
 
           // Sanitize treatment_detail on the fly (hapus part yang berisi placeholder teks template)
           let sanitizedTreatmentDetail = r.treatment_detail || '';
@@ -2462,6 +2492,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             purchase_event_sent_at: r.purchase_event_sent_at,
             purchase_review_status: r.purchase_review_status || 'pending',
             value: value ?? 0,
+            is_repeat_order: isRepeatOrder,
+            order_number: orderNumber,
+            customer_type: isRepeatOrder ? 'repeat' : 'new',
             distanceKm,
             customer: {
               id: r.customer?.id,
@@ -2503,6 +2536,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             action: { in: ['MQL_LEAD_EVENT_SENT', 'MQL_LEAD_EVENT_REJECTED'] },
           },
           select: { target_id: true, action: true, created_at: true },
+          orderBy: { created_at: 'desc' },
         });
         const sentMap = new Map<string, string>();
         for (const a of leadAuditLogs) {

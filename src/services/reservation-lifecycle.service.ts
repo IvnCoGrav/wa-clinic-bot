@@ -153,7 +153,7 @@ export class ReservationLifecycleService {
 
     // 3. Label lifecycle (Task 4) — hanya jika flag aktif
     if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && chatId) {
-      await this.applyLifecycleLabels({ customerId, tenantId, chatId });
+      await this.applyLifecycleLabels({ customerId, tenantId, chatId, reservationId });
     }
 
     // 4. Google Contacts auto-sync (best-effort, berjalan setelah nama dan anak diperbarui)
@@ -176,25 +176,47 @@ export class ReservationLifecycleService {
    *
    * Riwayat = `confirmed` ATAU `completed` (kanonis patient-lifecycle):
    * pasien yang reservasi sebelumnya sudah `completed` tetap 'Repeat Order'.
+   *
+   * Sumber otoritatif repeat: kolom `Reservation.is_repeat_order` yang dipersist
+   * oleh reservation-core (single source of truth). Fallback ke count DB hanya
+   * bila reservasi tak terbaca — mencegah double-count & drift semantik.
    */
-  private async applyLifecycleLabels(params: { customerId: string; tenantId: string; chatId: string }): Promise<void> {
-    const { customerId, tenantId } = params;
+  private async applyLifecycleLabels(params: { customerId: string; tenantId: string; chatId: string; reservationId?: string }): Promise<void> {
+    const { customerId, tenantId, reservationId } = params;
     // chatId dipertahankan di signature untuk kompatibilitas pemanggil
     // (reservation-core, webhook, script) — tidak dipakai: zero WAHA.
 
-    // Hitung reservasi confirmed/completed-sebelumnya milik customer (di luar reservasi barusan).
     let priorConfirmedCount = 0;
-    try {
-      priorConfirmedCount = await prisma.reservation.count({
-        where: {
-          customer_id: customerId,
-          tenant_id: tenantId,
-          status: { in: ['confirmed', 'completed'] },
-        },
-      });
-    } catch (err: any) {
-      // DB offline → default 0 (new customer path)
-      console.warn('[LIFECYCLE LABEL] Could not count prior confirmed reservations:', err.message);
+    let resolvedFromReservation = false;
+    if (reservationId) {
+      try {
+        const res = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          select: { is_repeat_order: true },
+        });
+        if (res && typeof res.is_repeat_order === 'boolean') {
+          priorConfirmedCount = res.is_repeat_order ? 1 : 0;
+          resolvedFromReservation = true;
+        }
+      } catch {
+        // fallback ke count di bawah
+      }
+    }
+
+    // Fallback (reservasi tak terbaca / non-core path seperti update status webhook).
+    if (!resolvedFromReservation) {
+      try {
+        priorConfirmedCount = await prisma.reservation.count({
+          where: {
+            customer_id: customerId,
+            tenant_id: tenantId,
+            status: { in: ['confirmed', 'completed'] },
+          },
+        });
+      } catch (err: any) {
+        // DB offline → default 0 (new customer path)
+        console.warn('[LIFECYCLE LABEL] Could not count prior confirmed reservations:', err.message);
+      }
     }
 
     const add: string[] =

@@ -248,6 +248,59 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/customers/:id/active-reservations
+   *
+   * Daftar jadwal AKTIF customer (status `confirmed` atau `hold`) yang belum
+   * selesai: booking_date hari ini atau ke depan. Dipakai modal Create Reservation
+   * & Live Chat untuk peringatan dini "customer sudah punya jadwal aktif" sehingga
+   * admin tidak membuat duplikat / split-brain booking.
+   *
+   * Definisi kanonis (selaras reservation-core ACTIVE_STATUSES): confirmed|hold,
+   * tanggal >= awal hari ini (WIB). Reservasi tanpa tanggal (null) diabaikan.
+   */
+  fastify.get(
+    '/api/admin/customers/:id/active-reservations',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const WIB_OFFSET_MS = 7 * 3600000;
+        const nowUtc = Date.now();
+        const wibNow = new Date(nowUtc + WIB_OFFSET_MS);
+        const startOfTodayWib = new Date(
+          Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), wibNow.getUTCDate(), 0, 0, 0, 0) - WIB_OFFSET_MS
+        );
+
+        const reservations = await prisma.reservation.findMany({
+          where: {
+            customer_id: id,
+            tenant_id: DEFAULT_TENANT_ID,
+            status: { in: ['confirmed', 'hold'] },
+            booking_date: { gte: startOfTodayWib },
+          },
+          orderBy: { booking_date: 'asc' },
+          select: {
+            id: true,
+            status: true,
+            treatment_detail: true,
+            treatment_category: true,
+            booking_date: true,
+            duration_minutes: true,
+            assigned_staff_id: true,
+            is_repeat_order: true,
+          },
+        });
+
+        return reply
+          .header('Cache-Control', 'no-store, no-cache, must-revalidate')
+          .status(200)
+          .send({ success: true, count: reservations.length, data: reservations });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * POST /api/admin/customers/:id/send-event
    * Manual trigger event Meta Pixel / CAPI untuk customer tertentu
    */
