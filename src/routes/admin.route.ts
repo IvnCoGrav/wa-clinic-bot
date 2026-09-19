@@ -321,6 +321,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     }
 
+    if (urlPath.includes('/admin/geo/') || urlPath.includes('/geo/')) {
+      const parts = urlPath.split(/\/admin\/geo\/|\/geo\//);
+      const filename = parts[parts.length - 1] || '';
+      try {
+        let filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/geo', filename);
+        try {
+          await fs.access(filePath);
+        } catch {
+          filePath = path.join(__dirname, '../../packages/admin-dashboard/public/geo', filename);
+          await fs.access(filePath);
+        }
+        const content = await fs.readFile(filePath);
+        if (filename.endsWith('.json') || filename.endsWith('.geojson')) {
+          reply.type('application/json');
+        } else if (filename.endsWith('.svg')) {
+          reply.type('image/svg+xml');
+        }
+        reply.header('Cache-Control', 'public, max-age=86400');
+        return reply.send(content);
+      } catch (err) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+    }
+
     // 2. If it is specifically requesting a static legacy html page, serve it from public/
     const htmlMatch = urlPath.match(/\/admin\/([a-z0-9-]+\.html)$/);
     if (htmlMatch) {

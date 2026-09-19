@@ -11,6 +11,7 @@
  * tetap berfungsi 100% tanpa perubahan (zero breaking changes).
  */
 import { CustomerGoalSession, GoalTracker } from '../../state/goal-tracker';
+import { PatientProfileExtractor } from '../../state/patient-extractor';
 import { V3ConversationSummarizer } from '../../state/conversation-summarizer';
 import { ConversationState } from '@prisma/client';
 import type { AgentRunnerOutput, V3RetrievedChunk } from '../agent-runner';
@@ -37,6 +38,7 @@ import {
 import {
   FastResponseGate,
   isShortAcknowledgement,
+  isRecruitmentInquiry,
   resolvePostReservationAck,
   POST_RESERVATION_CLOSING,
   POST_SCHEDULE_CHECK_CLOSING,
@@ -61,6 +63,7 @@ export {
   extractTimeOfDayHint,
   FastResponseGate,
   isShortAcknowledgement,
+  isRecruitmentInquiry,
   resolvePostReservationAck,
   POST_RESERVATION_CLOSING,
   POST_SCHEDULE_CHECK_CLOSING,
@@ -107,6 +110,26 @@ export class ContextGrounder {
   public static hasVaccineSignal = hasVaccineSignal;
   public static isSubstantiveForPreGrounding = isSubstantiveForPreGrounding;
   public static extractTimeOfDayHint = extractTimeOfDayHint;
+
+  /**
+   * Fondasi 3 (sesi 983902) — deteksi pertanyaan cakupan area/wilayah layanan
+   * secara deterministik: kata cakupan + penanda "mana", atau pemanggilan
+   * "dipanggil ke mana". Kata "area" tanpa pola ("ada area yang sakit")
+   * DILARANG false-positive. Jika aktif + lokasi belum dikenal, Call 1
+   * diarahkan ke get_clinic_policy_faq(homebase_and_coverage).
+   */
+  public static hasClinicAreaSignal(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower.trim()) return false;
+    const tokens = lower.replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 0);
+    const asksMana = tokens.some((t) => t === 'mana' || t === 'mananya' || t === 'manaa' || t === 'mna');
+    if (!asksMana) return false;
+    const hasCoverageNoun = ['area', 'wilayah', 'cakupan', 'jangkauan', 'cover']
+      .some((w) => lower.includes(w));
+    if (hasCoverageNoun) return true;
+    if (lower.includes('panggil')) return true;
+    return false;
+  }
 
   /**
    * Ringkasan konteks deterministik (0 token): apa yang SUDAH dibahas, FOKUS saat ini,
@@ -211,6 +234,29 @@ export class ContextGrounder {
         } catch (e) {}
       }
     }
+    // Kontraindikasi demam: suhu ≥ ambang (default 37.8°C, ClinicPolicy DB bila ada).
+    const feverTemp = PatientProfileExtractor.parseFeverTemperature(cleanIncomingText);
+    if (conversationId && feverTemp !== null) {
+      // Threshold dari ClinicPolicy bila tersedia, fallback 37.8
+      let feverThreshold = 37.8;
+      try {
+        const { prisma } = await import('../../../db/client');
+        const policy = await (prisma as any).clinicPolicy?.findFirst?.({ where: { tenant_id: tenantId, topic: 'fever_contraindication' } });
+        const summary = policy?.factual_summary || '';
+        const m = summary.match(/(\d{2}(?:[.,]\d)?)\s*°?C/);
+        if (m) {
+          const v = parseFloat(m[1].replace(',', '.'));
+          if (Number.isFinite(v) && v >= 37 && v <= 39) feverThreshold = v;
+        }
+      } catch {}
+      if (feverTemp >= feverThreshold) {
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, { feverContraindication: true } as any, tenantId);
+        } catch {}
+        (session as any).feverContraindication = true;
+      }
+    }
+
     // Rule 5 (Active User Commitment Gate, sticky latch): bila pesan customer
     // saat ini memuat verba komitmen booking eksplisit, kunci flag sesi agar
     // tetap terbaca pada turn-turn berikutnya (customer menjawab hari/jam di
@@ -400,7 +446,14 @@ export class ContextGrounder {
         const { knowledgeBaseService } = await import('../../../services/knowledge.service');
         // Audit 315036: limit 3 agar pertanyaan multi-topik ("cukur + pijat
         // terapi") tidak memotong artikel definisi terapi.
-        const preChunks = await knowledgeBaseService.searchRelevantChunks(cleanIncomingText, 3, tenantId);
+        let preChunks = await knowledgeBaseService.searchRelevantChunks(cleanIncomingText, 3, tenantId);
+        // Defense-in-depth: filter rank rendah yang lolos dari service (≥0.25)
+        if (preChunks && preChunks.length > 0) {
+          preChunks = (preChunks as any[]).filter((c: any) => {
+            const r = typeof c.rank === 'number' ? c.rank : typeof c.similarity === 'number' ? c.similarity : typeof c.score === 'number' ? c.score : 0.9;
+            return r >= 0.25;
+          });
+        }
         if (preChunks && preChunks.length > 0) {
           preGroundingBlock = `[PANDUAN & KNOWLEDGE BASE RESMI KLINIK - WAJIB DIPATUHI]\n`
             + `Berikut panduan resmi klinik yang RELEVAN dengan pertanyaan customer saat ini. Jadikan sebagai acuan utama jawaban (grounded), jangan mengarang di luar panduan ini:\n`

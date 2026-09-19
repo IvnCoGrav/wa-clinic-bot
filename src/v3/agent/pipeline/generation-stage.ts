@@ -338,13 +338,11 @@ export async function reportTurnError(
       errorMessage: safeErrorMessage,
     });
   } catch {}
-  const greeting = session?.genderGreeting || 'Bunda';
-  const fallbackReply = `Mohon maaf ${greeting}, sistem kami sedang mengalami kendala teknis sejenak. Pesan Bunda sudah kami teruskan ke tim Bidan kami ya agar segera dibantu 🙏😊`;
   return {
-    replyText: fallbackReply,
+    replyText: '',
     executedTools: [],
     updatedSession: session,
-    shouldSendReply: true,
+    shouldSendReply: false,
     isEscalated: true,
     retrievedChunks: turn.retrievedChunks,
     fewShotExemplars: turn.fewShotExemplars,
@@ -499,7 +497,7 @@ export class GenerationStage {
 
     const choice = firstData?.choices?.[0];
     const assistantMessage = choice?.message;
-    const toolCalls = assistantMessage?.tool_calls;
+    let toolCalls = assistantMessage?.tool_calls;
     const { reasoning: callReasoning, cleanContent } = extractReasoningAndCleanContent(assistantMessage);
     let reasoning = turn.reasoning;
     if (!reasoning && callReasoning) {
@@ -508,15 +506,40 @@ export class GenerationStage {
     }
 
     // Tracing Call 1 (Tool Routing): latensi bersih model + token/biaya per-call
-    const parsedCalls = Array.isArray(toolCalls)
+    let parsedCalls = Array.isArray(toolCalls)
       ? toolCalls.map((tc: any) => {
           let a: any = {};
           try {
             a = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {};
           } catch {}
-          return { name: tc.function?.name || 'unknown', args: a };
+          return { name: tc.function?.name || 'unknown', args: a, _raw: tc };
         })
-      : [];
+      : [] as any;
+    // Atomic Routing: 1 turn = 1 tool utama (mitigasi parallel spraying).
+    // Prioritas berpegang pada gate sistem (bukan hafalan pola): coverage la
+    // pembatas jangkauan (luar area → tolak) setara kunci keamanan bisnis,
+    // MAKA lebih diutamakan daripada quote harga/katalog bila sama-sama
+    // diminta router. Rujukan: dynamicToolChoice (baris 410) menetapkan
+    // calculate_delivery sebagai intent utama kala lokasi disebut.
+    let pruned = false;
+    if (parsedCalls.length > 1) {
+      const pick = (n: string) => parsedCalls.find((c: any) => c.name === n);
+      const primary = pick('calculate_delivery') || pick('get_catalog_and_price') || pick('get_clinic_policy_faq') || parsedCalls[0];
+      console.warn(JSON.stringify({ event: 'PARALLEL_TOOL_CALLS_PRUNED', pruned: parsedCalls.map((c: any) => c.name), kept: primary.name, timestamp: new Date().toISOString() }));
+      parsedCalls = [primary];
+      // Sinkronkan toolCalls mentah agar eksekusi hanya 1 (jangan reassign
+      // binding let/const_ — mutasi array langsung + perbarui assistantMessage).
+      if (Array.isArray(toolCalls)) {
+        const keptRaw = (primary as any)._raw;
+        const keptCalls = keptRaw ? [keptRaw] : toolCalls.slice(0, 1);
+        toolCalls.length = 0;
+        toolCalls.push(...keptCalls);
+        assistantMessage.tool_calls = toolCalls;
+      }
+      pruned = true;
+    }
+    // Hapus _raw helper sebelum tracing
+    parsedCalls = parsedCalls.map(({ _raw, ...rest }: any) => rest);
 
     {
       const firstDurationMs = Date.now() - firstStartedAt;
@@ -524,7 +547,7 @@ export class GenerationStage {
       await tel.recordCall({
         flowType: 'V3_ROUTING',
         reply: parsedCalls.length > 0
-          ? `[Memanggil Tool: ${parsedCalls.map((t) => t.name).join(', ')}]`
+          ? `[Memanggil Tool: ${parsedCalls.map((t: any) => t.name).join(', ')}]`
           : cleanContent,
         status: 'SUCCESS',
         durationMs: firstDurationMs,
@@ -542,7 +565,7 @@ export class GenerationStage {
 
     // Telemetri Shadow Evaluation (FASE 2, SHADOW MODE)
     try {
-      const calledToolNames = parsedCalls.map((t) => t.name);
+      const calledToolNames = parsedCalls.map((t: any) => t.name);
       const isSaveCalled = calledToolNames.includes('save_reservation');
       let classification: string;
       if (!maskingEval.isSaveReservationAllowed && isSaveCalled) {

@@ -1,10 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { messageService } from '../../src/services/message.service';
 import { prisma } from '../../src/db/client';
+import {
+  PostgresMessageRepository,
+  resetMessageRepository,
+  setMessageRepository,
+} from '../../src/repositories/message.repository';
 
 describe('Message Idempotency & Deduplication (Per-Tenant)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Jalur DB-Path asli (PLAN 8 FASE 5c): repository Postgres benar-benar
+    // memanggil prisma.message.findFirst — setup default (InMemory) tidak.
+    setMessageRepository(new PostgresMessageRepository());
+  });
+
+  afterEach(() => {
+    resetMessageRepository();
   });
 
   it('detects duplicate message for same tenant from DB', async () => {

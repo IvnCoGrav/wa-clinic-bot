@@ -38,8 +38,8 @@ export interface ChildState {
 /** Subjek layanan multi-audience (Moms & Baby Spa): ibu, bayi, anak, atau keduanya. */
 export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
 
-/** Kondisi klinis ibu: hamil, paska salin/nifas, atau relaksasi umum. */
-export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'GENERAL';
+/** Kondisi klinis ibu: hamil, paska salin/nifas, menyusui, atau relaksasi umum. */
+export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
 
 /** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
 export interface MomProfileState {
@@ -149,6 +149,8 @@ export interface CustomerGoalSession {
    * dieskalasi sunyi (anti loop minta-lengkapi selamanya).
    */
   formRetryCount?: number;
+  /** Kontraindikasi demam: true bila suhu ≥ ambang ClinicPolicy (default 37.8°C). */
+  feverContraindication?: boolean;
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */

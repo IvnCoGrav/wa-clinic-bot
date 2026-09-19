@@ -192,6 +192,18 @@ export class ToolExecutionPipeline {
         if (typeof fnArgs.locationText === 'string') {
           const { stripStaleRegionPrefix } = await import('../../tools/entity-concatenation-guard');
           fnArgs.locationText = stripStaleRegionPrefix(fnArgs.locationText, session.location);
+          // Integritas entitas: LLM memotong "kelurahan jambangan" → "Jambangan"
+          // padahal gazetteer butuh kata penjelas untuk bedakan kelurahan vs
+          // kecamatan luas (dual-admin Jambangan). Guard deterministik: bila
+          // teks asli mengandung "kelurahan"/"desa" tapi locationText tidak,
+          // kembalikan prefix administratif.
+          const lowerOriginal = (cleanIncomingText || '').toLowerCase();
+          const lowerLoc = (fnArgs.locationText || '').toLowerCase();
+          if (lowerOriginal.includes('kelurahan') && !lowerLoc.includes('kelurahan')) {
+            fnArgs.locationText = `kelurahan ${fnArgs.locationText}`.trim();
+          } else if (lowerOriginal.includes('desa') && !lowerLoc.includes('desa') && !lowerLoc.includes('kelurahan')) {
+            fnArgs.locationText = `desa ${fnArgs.locationText}`.trim();
+          }
         }
         // Ongkir hanya boleh nominal bila customer eksplisit menanyakan harga/ongkir.
         // Carry-over berbasis STATE (bukan pola kalimat): bila customer sudah pernah

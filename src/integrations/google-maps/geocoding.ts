@@ -611,8 +611,11 @@ export class GeocodingService {
       const sim = !isDirectMatch ? getStringSimilarity(cleanNorm, kecKey) : 1.0;
       const kecThreshold = kecKey.length <= 4 ? 0.85 : 0.75;
       if (isDirectMatch || sim >= kecThreshold) {
+        // Dual-admin: nama yang sama sebagai Kecamatan SEKALIGUS Kelurahan (mis. Jambangan)
+        // — bila cleanNorm persis nama kelurahan, jangan anggap kecamatan luas (jawab sebagai kelurahan presisi).
+        const isDualAdmin = isExactKelurahanName && cleanNorm === kecKey;
         // Jika cleanNorm persis nama kelurahan dan BUKAN persis nama kecamatan, jangan anggap sebagai kecamatan luas
-        if (cleanNorm !== kecKey && (isExactKelurahanName || hasAnyKelurahanInText)) {
+        if ((cleanNorm !== kecKey && (isExactKelurahanName || hasAnyKelurahanInText)) || isDualAdmin) {
           continue;
         }
         matchedKecSubdistricts = entries;

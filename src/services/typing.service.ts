@@ -1,4 +1,5 @@
 import { IWahaClient, wahaClient } from '../integrations/waha/client';
+import { MessageTransport } from '../integrations/whatsapp/transport';
 import { measure } from '../utils/timer';
 import { stageLog, isSimpleLogMode } from '../utils/stage-logger';
 import dotenv from 'dotenv';
@@ -25,10 +26,16 @@ export interface HumanReplyResult {
 export class TypingService {
   private client: IWahaClient;
   private speedFactor: number = 1;
+  private transportResolver?: (tenantId: string) => Promise<MessageTransport | undefined>;
 
-  constructor(client?: IWahaClient, speedFactor: number = 1) {
+  constructor(
+    client?: IWahaClient,
+    speedFactor: number = 1,
+    transportResolver?: (tenantId: string) => Promise<MessageTransport | undefined>
+  ) {
     this.client = client || wahaClient;
     this.speedFactor = speedFactor;
+    this.transportResolver = transportResolver;
   }
 
   public setSpeedFactor(factor: number): void {
@@ -344,6 +351,29 @@ export class TypingService {
     const { chatId, incomingMessageId, incomingText, replyText, shouldAbort, tenantId } = params;
     const effectiveTenantId = tenantId || 'default-tenant';
 
+    // Transport per-tenant (WAHA/WABA): bila resolver tersedia, resolved transport
+    // menggantikan client default untuk seluruh operasi send/typing pada turn ini.
+    let resolvedTransport: MessageTransport | undefined;
+    if (this.transportResolver) {
+      try {
+        resolvedTransport = await this.transportResolver(effectiveTenantId);
+      } catch {
+        resolvedTransport = undefined;
+      }
+    }
+    const doSendSeen = async (chat: string, msgId: string) => {
+      if (resolvedTransport) { await resolvedTransport.sendSeen(chat, msgId); }
+      else { await this.client.sendSeen(chat, msgId); }
+    };
+    const doStartTyping = async (chat: string) => {
+      if (resolvedTransport) { await resolvedTransport.startTyping(chat); }
+      else { await this.client.startTyping(chat); }
+    };
+    const doStopTyping = async (chat: string) => {
+      if (resolvedTransport) { await resolvedTransport.stopTyping(chat); }
+      else { await this.client.stopTyping(chat); }
+    };
+
     const { whatsappProviderService } = await import('./whatsapp-provider.service');
     const isCutOff = await whatsappProviderService.isOutboundCutOff(effectiveTenantId);
     if (isCutOff) {
@@ -376,7 +406,7 @@ export class TypingService {
 
       if (isEnabled) {
         if (incomingMessageId) {
-          await this.client.sendSeen(chatId, incomingMessageId).catch(() => {});
+          await doSendSeen(chatId, incomingMessageId).catch(() => {});
         }
 
         if (incomingText) {
@@ -398,7 +428,7 @@ export class TypingService {
         if (shouldAbort && (await shouldAbort())) {
           console.log(`[TYPING ABORT] Human takeover detected for ${chatId} before bubble ${i + 1}. Aborting reply.`);
           if (!typingStopped) {
-            this.client.stopTyping(chatId).catch(() => {});
+            doStopTyping(chatId).catch(() => {});
             typingStopped = true;
           }
           return { success: false, bubblesSent, error: 'ABORTED_BY_HUMAN_HANDLING' };
@@ -406,7 +436,7 @@ export class TypingService {
 
         if (isEnabled) {
           typingStopped = false; // Tandai status typing aktif sebelum startTyping
-          await this.client.startTyping(chatId);
+          await doStartTyping(chatId);
 
           const typingDelayMs = this.calculateTypingDelay(bubbleContent);
           const adjustedMs = Math.round(typingDelayMs / this.speedFactor);
@@ -419,7 +449,7 @@ export class TypingService {
           await measure(`TYPING_DELAY_BUBBLE_${i + 1}`, () => this.sleep(adjustedMs));
 
           // Stop typing secara non-blocking (fire-and-forget) agar tidak menunda pengiriman sendText
-          this.client.stopTyping(chatId).catch(() => {});
+          doStopTyping(chatId).catch(() => {});
           typingStopped = true; // Status typing di-stop secara normal
         }
 
@@ -427,7 +457,7 @@ export class TypingService {
         if (shouldAbort && (await shouldAbort())) {
           console.log(`[TYPING ABORT] Human takeover detected for ${chatId} right after typing delay of bubble ${i + 1}. Aborting sendText.`);
           if (!typingStopped) {
-            this.client.stopTyping(chatId).catch(() => {});
+            doStopTyping(chatId).catch(() => {});
             typingStopped = true;
           }
           return { success: false, bubblesSent, error: 'ABORTED_BY_HUMAN_HANDLING' };
@@ -436,9 +466,12 @@ export class TypingService {
         // Fondasional: pakai sendTextDetailed agar wa_message_id resmi tersimpan
         // untuk ACK delivered/read & reaksi emoji. Fallback ke sendText bila driver
         // belum mendukung detailed (kontrak IWahaClient opsional).
+        // Jalur resolved transport (WABA) hanya menyediakan sendText tanpa messageId.
         let sentSuccess = false;
         let sentMessageId: string | undefined = undefined;
-        if (typeof (this.client as any).sendTextDetailed === 'function') {
+        if (resolvedTransport) {
+          sentSuccess = await resolvedTransport.sendText(chatId, bubbleContent);
+        } else if (typeof (this.client as any).sendTextDetailed === 'function') {
           const detailed = await (this.client as any).sendTextDetailed(chatId, bubbleContent);
           sentSuccess = !!detailed?.success;
           sentMessageId = detailed?.messageId;
@@ -482,7 +515,7 @@ export class TypingService {
       // SAFETY NET: HANYA panggil stopTyping di blok finally jika typing belum di-stop (menghindari redundant call)!
       if (isEnabled) {
         if (!typingStopped) {
-          await this.client.stopTyping(chatId).catch((err) => {
+          await doStopTyping(chatId).catch((err) => {
             console.warn(`[HUMANIZER FINALLY WARN] stopTyping fallback error:`, err?.message);
           });
           typingStopped = true;

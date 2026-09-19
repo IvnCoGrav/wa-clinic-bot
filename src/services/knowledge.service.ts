@@ -198,6 +198,12 @@ export class KnowledgeBaseService {
         ORDER BY rank DESC
         LIMIT ${limit};
       `;
+      // Gate Step 1: filter rank rendah (≥0.25) agar noise 0.030 tidak lolos
+      if (rawResults && rawResults.length > 0) {
+        const gated = rawResults.filter((r: any) => typeof r.rank === 'number' && r.rank >= 0.25);
+        if (gated.length > 0) rawResults = gated;
+        else if (rawResults.every((r: any) => typeof r.rank === 'number' && r.rank < 0.25)) rawResults = [];
+      }
 
       // 2. Fallback ke OR-based tsquery jika pencarian ketat AND bernilai 0 — dengan Relevance Gate
       if ((!rawResults || rawResults.length === 0) && cleanQuery.length > 0) {
@@ -212,12 +218,14 @@ export class KnowledgeBaseService {
             ORDER BY rank DESC
             LIMIT ${limit * 2};
           `;
-          // Relevance Gate: pastikan minimal 1 token substantif benar-benar ada di title/content
+          // Relevance Gate: pastikan minimal 1 token substantif benar-benar ada di title/content + rank memadai
           if (orResults && orResults.length > 0) {
             const substantiveTokens = terms.map((t) => t.toLowerCase());
             const filtered = orResults.filter((r: any) => {
               const text = `${r.title} ${r.keywords || ''} ${r.content}`.toLowerCase();
-              return substantiveTokens.some((tok) => text.includes(tok));
+              const hasToken = substantiveTokens.some((tok) => text.includes(tok));
+              const rank = typeof r.rank === 'number' ? r.rank : 0;
+              return hasToken && rank >= 0.25;
             });
             rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
           } else {
@@ -251,7 +259,7 @@ export class KnowledgeBaseService {
               const text = `${r.title} ${r.keywords || ''} ${r.content}`.toLowerCase();
               const hasToken = substantiveTokens.some((tok) => text.includes(tok));
               const rank = typeof r.rank === 'number' ? r.rank : 0;
-              return hasToken && rank >= 0.025;
+              return hasToken && rank >= 0.25;
             });
             rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
           }
@@ -355,7 +363,7 @@ export class KnowledgeBaseService {
             const text = `${r.title} ${r.content}`.toLowerCase();
             const hasToken = substantiveTokens.some((tok) => text.includes(tok));
             const rank = typeof r.rank === 'number' ? r.rank : 0;
-            return hasToken && rank >= 0.025;
+            return hasToken && rank >= 0.25;
           });
           rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
         } else {

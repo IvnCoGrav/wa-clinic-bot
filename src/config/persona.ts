@@ -254,10 +254,13 @@ export const TEMPLATES = {
       return `Kami melayani treatment Moms & Baby homecare ke rumah. Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊`;
     }
     const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda' : 'Halo Bunda';
-    // Rule 1 (tepat 2 kalimat): salam + perkenalan + identitas homecare dalam
-    // satu kalimat (batas kalimat tidak dipecah tanda seru), lalu pemantik
-    // domisili. Marker "Perkenalkan, saya <bot>" dipertahankan.
-    return `${greetingWord} ✨, perkenalkan saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName} — layanan homecare treatment moms & baby langsung ke rumah.
+    // SOP resmi tim admin (template deterministik Turn-0, bukan prosa LLM —
+    // kuota kalimat Rule 1 mengatur generation, bukan template baku; kuota
+    // vokatif Turn-0 2x terjaga: "Bunda" sapaan + "Bunda" domisili).
+    // Identitas memakai getBrandIdentity() agar fallback tetap tenant-aware.
+    return `${greetingWord} ✨
+Terima kasih sudah menghubungi kami.
+Perkenalkan, saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName} — layanan homecare treatment moms & baby langsung ke rumah.
 Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊`;
   },
 

@@ -1,0 +1,11 @@
+{
+  "source": "HDX-BPS-2020 (JfrAziz/indonesia-district) + dissolve grid-snap 22m",
+  "totalDistricts": 49,
+  "bbox": {
+    "minLat": -7.5952,
+    "maxLat": -7.1758,
+    "minLng": 112.4417,
+    "maxLng": 112.8967
+  },
+  "generatedAt": "2026-09-19T10:25:53.435Z"
+}

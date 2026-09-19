@@ -95,6 +95,21 @@ const GENERIC_BOLD_WORDS = new Set([
 const TREATMENT_MARKER_RE =
   /pijat|spa|massage|terapi|paket|treatment|laktasi|moksa|oksitosin|cukur|mandi|moms|baby|bayi|vaksin|facial|totok/i;
 
+/**
+ * D8 — Narasi asal homebase/basecamp yang disisipkan ke balasan BUKAN
+ * tanya-lokasi (mis. info jarak/ongkir "dari basecamp kami di Waru").
+ * Pola linguistik generik (bingkai asal), bukan hafalan kalimat:
+ * "dari|pada + basecamp|homebase|klinik|kantor|tempat + kami|kita|klinik + di"
+ * atau "basecamp|homebase + kami|kita|klinik + berada|ada|berlokasi + di".
+ * Gate berbasis KONTRAK TOOL turn ini (bukan pola kalimat user): hanya aktif
+ * bila calculate_delivery sukses DAN get_clinic_policy_faq TIDAK terpanggil
+ * (jawaban asal klinik yang sah selalu lewat policy tool — lihat
+ * LOCATION_HIERARCHY_BLOCK langkah 2). Ditangani via kognisi re-prompt
+ * (preseden D7), BUKAN mutilasi regex tengah kalimat.
+ */
+const ORIGIN_NARRATION_RE =
+  /\b(dari|pada)\s+(basecamp|homebase|klinik|kantor|tempat)\s+(kami|kita|klinik)\s+di\b|\b(basecamp|homebase)\s+(kami|kita|klinik)\s+(berada|ada|berlokasi)\s+di\b/i;
+
 function significantTokens(s: string): string[] {
   return s
     .toLowerCase()
@@ -150,8 +165,12 @@ function mentionsVaccine(text: string): boolean {
 }
 
 /** Ekspresi keagamaan yang dilarang muncul tanpa pemicu dari customer. */
-const UNPROMPTED_RELIGIOUS_RE = /\b(alhamdulillah|bismillah|insya\s*allah|puji\s*tuhan)\b/i;
-const CUSTOMER_RELIGIOUS_TRIGGER_RE = /\b(assalamu|alhamdulillah|bismillah|insya\s*allah|puji\s*tuhan)\b/i;
+const UNPROMPTED_RELIGIOUS_RE = /\b(alhamdulillah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
+const CUSTOMER_RELIGIOUS_TRIGGER_RE = /\b(assalamu|alhamdulillah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
+
+/** Rekomendasi obat farmasi kimia di luar wewenang spa — wajib rujuk dokter. */
+const UNAUTHORIZED_MEDICATION_RE =
+  /\b(paracetamol|parasetamol|ibuprofen|antibiotik|amoxicillin|amoksisilin|sanmol|pamol|tempra|proris|bufect)\b/i;
 
 export function validateFactualClaims(
   replyText: string,
@@ -190,6 +209,24 @@ export function validateFactualClaims(
   const hasCustomerReligiousTrigger = !!opts?.customerInput && CUSTOMER_RELIGIOUS_TRIGGER_RE.test(opts.customerInput);
   if (!hasCustomerReligiousTrigger && UNPROMPTED_RELIGIOUS_RE.test(reply)) {
     violations.push('D7_UNPROMPTED_RELIGIOUS_PHRASE: Draf balasan memuat kata keagamaan sepihak tanpa dipicu customer. Jaga netralitas agama dan susun ulang kalimat secara profesional.');
+  }
+
+  // Obat farmasi kimia — spa DILARANG resep mandiri; wajib rujuk dokter.
+  // Dikecualikan bila balasan adalah rujukan medis / penolakan resep.
+  if (UNAUTHORIZED_MEDICATION_RE.test(reply) && !REFUSAL_FRAME_RE.test(reply) && !opts?.isRefusalOrEscalation) {
+    violations.push('Rekomendasi obat farmasi kimia (paracetamol/ibuprofen/antibiotik) di luar wewenang homecare spa. Arahkan konsultasi ke dokter bila perlu obat.');
+  }
+
+  // D8 — narasi asal basecamp/homebase pada info ongkir (gate kontrak tool):
+  // calculate_delivery sukses + policy tool TIDAK terpanggil + bingkai asal
+  // generik → invalid (re-prompt kognitif di guardrail-pipeline). Jawaban asal
+  // klinik yang sah (policy tool terpanggil) dan balasan tanpa delivery tool
+  // dibebaskan — tanpa mencocokkan kalimat user.
+  const deliverySucceeded = (executedTools || []).some(
+    (t) => t?.name === 'calculate_delivery' && (t?.result as any)?.success === true
+  );
+  if (deliverySucceeded && !toolCalled(executedTools, 'get_clinic_policy_faq') && ORIGIN_NARRATION_RE.test(reply)) {
+    violations.push('D8_ORIGIN_NARRATION: Draf balasan menyisipkan narasi asal ("dari basecamp/homebase/klinik kami di ...") padahal konteks turn ini adalah info jarak/ongkir dari calculate_delivery, bukan pertanyaan lokasi klinik. Tulis ulang HANYA dari data resmi tool (jarak km, ongkir promo, area jangkauan) tanpa menyebut asal/basecamp klinik.');
   }
 
   // D1 — nama layanan di-bold/dikutip wajib ada di katalog turn ini.
@@ -247,6 +284,15 @@ export function validateFactualClaims(
     !hasSopGrounding
   ) {
     violations.push('Anjuran klinis/SOP tanpa landasan artikel knowledge atau kebijakan klinik.');
+  }
+
+  // D9 — Anti-Amnesia Lokasi: bila lokasi SUDAH diketahui, DILARANG menanyakan domisili lagi.
+  if (opts?.locationKnown === true) {
+    const ASKING_LOCATION_RE =
+      /\b(rumah(?:nya)?\s+(?:bunda\s+)?di\s+(?:daerah|wilayah|kelurahan|kecamatan|mana)|daerah\s+mana\s+ya\s+bunda|lokasi(?:nya)?\s+di\s+mana|biar\s+sekalian\s+kami\s+pastikan\s+jangkauan|biar\s+sekalian\s+kami\s+bantu\s+cekkan\s+jangkauan)/i;
+    if (ASKING_LOCATION_RE.test(reply) && !HOMEBASE_EXEMPT_RE.test(reply)) {
+      violations.push('D9_LOCATION_AMNESIA: Lokasi sudah diketahui di sesi, DILARANG bertanya alamat/daerah lagi. Ganti dengan konfirmasi pengecekan jadwal atau tawaran perawatan.');
+    }
   }
 
   // D6 — anti-halu domisili (kasus simulator 725870): bila sesi belum memuat

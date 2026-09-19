@@ -108,7 +108,7 @@ const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || KE
 const defaultChatModel = sanitizeModelForProvider(rawChatModel);
 const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const defaultNluModel = sanitizeModelForProvider(rawNluModel);
-const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || KENARI_PRIMARY_MODEL;
+const defaultDeepModel = sanitizeModelForProvider(process.env.AI_MODEL_CHAT_DEEP || KENARI_PRIMARY_MODEL);
 
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
@@ -116,7 +116,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'HARVESTING',
       provider: process.env.AI_PROVIDER_HARVESTING || defaultProvider,
-      modelName: process.env.AI_MODEL_HARVESTING || defaultChatModel,
+      modelName: sanitizeModelForProvider(process.env.AI_MODEL_HARVESTING || defaultChatModel),
       description: 'Digunakan untuk mengekstrak Q&A dan data transaksi dari konsolidasi berkas histori chat.',
       maxTokens: 4096,
       temperature: 0.2,
@@ -149,7 +149,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'MEDICAL_CHECK',
       provider: process.env.AI_PROVIDER_MEDICAL || defaultProvider,
-      modelName: process.env.AI_MODEL_MEDICAL || defaultChatModel,
+      modelName: sanitizeModelForProvider(process.env.AI_MODEL_MEDICAL || defaultChatModel),
       description: 'Digunakan untuk memverifikasi dan mengevaluasi konteks medis.',
       maxTokens: 512,
       temperature: 0.1,
@@ -160,7 +160,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'SUMMARIZATION',
       provider: process.env.AI_PROVIDER_SUMMARIZATION || defaultProvider,
-      modelName: process.env.AI_MODEL_SUMMARIZATION || defaultChatModel,
+      modelName: sanitizeModelForProvider(process.env.AI_MODEL_SUMMARIZATION || defaultChatModel),
       description: 'Digunakan untuk merangkum riwayat percakapan panjang.',
       maxTokens: 1024,
       temperature: 0.3,
@@ -171,7 +171,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'PII_SCRUBBING',
       provider: process.env.AI_PROVIDER_PII || defaultProvider,
-      modelName: process.env.AI_MODEL_PII || defaultChatModel,
+      modelName: sanitizeModelForProvider(process.env.AI_MODEL_PII || defaultChatModel),
       description: 'Digunakan untuk membantu pembersihan nama dan data sensitif dari teks.',
       maxTokens: 512,
       temperature: 0.0,
