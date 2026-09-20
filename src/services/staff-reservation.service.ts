@@ -1097,6 +1097,11 @@ export class StaffReservationService {
       return { success: false, error: 'reservationId dan staffId wajib disertakan.' };
     }
 
+    const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
+    if (hasNewPhoto && (lat == null || lng == null)) {
+      return { success: false, error: 'Foto rumah wajib disertai titik GPS (lat & lng). Kunci GPS dulu sebelum menyimpan foto.' };
+    }
+
     try {
       const reservation = await prisma.reservation.findUnique({
         where: { id: reservationId },
@@ -1288,6 +1293,7 @@ export class StaffReservationService {
         tenantId,
       });
 
+      const coordsUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;
       return {
         success: true,
         data: {
@@ -1298,12 +1304,16 @@ export class StaffReservationService {
           estimatedMinutes: estimateTravelDurationMinutes(updatedCustomer.distance_km),
           housePhotoUrl,
           landmark: finalLandmark,
+          coordsUpdated,
           diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
           diffKm: diffFromOriginalKm != null ? Number(diffFromOriginalKm.toFixed(2)) : null,
-          message:
-            diffFromOriginalKm != null && diffFromOriginalKm > 1.0
-              ? `Titik GPS lapangan berselisih ${diffFromOriginalKm.toFixed(1)} km (> 1 km). Koordinat utama customer dipertahankan, koordinat lapangan dicatat pada panduan ancer-ancer.`
-              : 'Titik lokasi berhasil diperbarui.',
+          message: (() => {
+            if (diffFromOriginalKm != null && diffFromOriginalKm > 1.0) {
+              return `Titik GPS lapangan berselisih ${diffFromOriginalKm.toFixed(1)} km (> 1 km). Koordinat utama customer dipertahankan, koordinat lapangan dicatat pada panduan ancer-ancer.`;
+            }
+            if (coordsUpdated) return 'Titik lokasi berhasil diperbarui.';
+            return 'Catatan lokasi tersimpan (tanpa perubahan titik GPS).';
+          })(),
         },
       };
     } catch (err: any) {

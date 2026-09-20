@@ -1445,6 +1445,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Submit Location & House Photo Update (Optimistic UI - 0 Detik Loading)
   const handleSaveLocation = async () => {
     if (!updateLocationModalTask) return;
+    const hasPhoto = !!(locRawHousePhotoB64 || (locHousePhotoB64 && locHousePhotoB64.startsWith('data:image/')));
+    if (hasPhoto && !locCoords) {
+      toast('Kunci titik GPS dulu sebelum menyimpan foto rumah.', 'error');
+      return;
+    }
 
     // Konsolidasi konfirmasi: Timpa data & akurasi GPS dalam satu dialog terpadu
     const confirmWarnings: string[] = [];
@@ -1539,6 +1544,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         setTasks((prev) => prev.map(updateServerUrl));
         setUpcomingTasks((prev) => prev.map(updateServerUrl));
         setCompletedTasks((prev) => prev.map(updateServerUrl));
+      }
+      if (res && res.data?.coordsUpdated === false) {
+        toast('Catatan lokasi tersimpan (tanpa perubahan titik GPS) — foto tersimpan tapi koordinat tidak diperbarui.', 'error');
       }
     } catch (err: any) {
       console.warn('[STAFF] Background sync location error:', err?.message || err);

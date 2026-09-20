@@ -5,6 +5,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 1c. [Data] 3 customer foto rumah tanpa koordinat (legacy, guard baru mencegah)
+
+- **Status:** open-legacy, ditemukan 2026-05-14 via `preferences->>'house_photo_url' IS NOT NULL AND lat IS NULL`.
+- **Data:** Bunda Cynthia Buduran (`6287757017472`), Bunda Keke medokan ayu (`6289698946288`), Nurmaya Mulyorejo (`6285645586423`) — masing-masing punya `house_photo_url` (`/media/outbound/...`) tapi `lat/lng NULL`, `location_source='manual_staff'` (setelah backfill 2026-05-14). Foto berhasil di-watermark (`mediaService.overlayGpsBadge`) ke gambar, tapi `lat/lng` tidak tertulis ke `customers` karena jalur `staff-reservation.service.ts:1258` menjaga `lat != null` dan respons sukses menipu (`"Titik lokasi berhasil diperbarui."` tanpa `coordsUpdated`).
+- **Guard fondasional baru (2026-05-14, belum deploy live):** `staff-reservation.service.ts:1096-1102` blokir `housePhotoB64 + lat/lng null → 400`, `today.subroute.ts:451-460` & `customers.subroute.ts:949-957` guard sama, `StaffToday.tsx:1447` & `TodayTreatments.tsx:682` `hasPhoto && !locCoords → toast error` sebelum submit, respons tambah `coordsUpdated` + pesan cabang. Prompt tidak dipakai — gerbang deterministik.
+- **Tindak lanjut:** GPS tidak bisa diturunkan dari badge gambar — tugaskan bidan re-capture via alur baru (wajib kunci GPS). Monitor: `SELECT name, phone FROM customers WHERE preferences->>'house_photo_url' IS NOT NULL AND (lat IS NULL OR lng IS NULL);` harus 0 baris; jika >0, investigasi jalur baru yang lolos guard.
+
+---
+
 ## 0z. [Deploy] Duplikat follow_ups dihapus manual (bukan dinetralkan) oleh proses paralel
 
 - **Status:** resolved-observed, ditemukan 2026-09-20.
