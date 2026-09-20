@@ -227,10 +227,12 @@ export class GuardrailPipeline {
 
     // 7a. Validator numerik komposit.
     const numCheck = validateNumericFacts(finalReply, executedTools, { tenantId, session });
-    // Audit 854065 (celah bypass): validasi WAJIB aktif pula saat keranjang
-    // memiliki item walau turn ini tanpa tool call (tanya total langsung).
-    const hasActiveCart = (session?.cartItems || []).length > 0;
-    if (!numCheck.isValid && (executedTools.length > 0 || hasActiveCart)) {
+    // Audit R7 (ST6-CLM): validator numerik WAJIB aktif juga pada DIRECT REPLY
+    // tanpa tool/cart (sebelumnya di-gate `executedTools.length>0 || hasActiveCart`,
+    // sehingga harga non-katalog pada direct reply lolos tanpa koreksi).
+    // `validateNumericFacts` sudah return isValid lebih awal bila tidak ada token
+    // "Rp", sehingga gate ini hanya menyala saat balasan benar-benar menyebut nominal.
+    if (!numCheck.isValid) {
       console.warn(JSON.stringify({ event: 'NUMERIC_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: numCheck.violations, timestamp: new Date().toISOString() }));
       violationsDetected.push(...numCheck.violations);
       // Re-prompt bersih 1x, sesi 214956 (TANPA mutilasi regex tengah kalimat):
@@ -342,7 +344,16 @@ export class GuardrailPipeline {
       ContextGrounder.hasVaccineSignal(incomingText);
     // Plan regresi Fase 1 (Sesi 580976): teruskan pesan customer agar D6
     // mengenali kecamatan yang disebut customer sebagai grounding sah.
-    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation, customerInput: incomingText });
+    // Fixing D1 (sesi 767713): sertakan nama SELURUH katalog tenant (termasuk
+    // add-on seperti Sinar Moksa) agar add-on sah tak dituduh halusinasi.
+    let extraCatalogNames: string[] | undefined;
+    try {
+      const { treatmentCatalogService } = await import('../../../services/treatment-catalog.service');
+      extraCatalogNames = (treatmentCatalogService.getAllServices(true, tenantId) || [])
+        .map((s: any) => (typeof s?.name === 'string' ? s.name : ''))
+        .filter((n: string) => n.length > 0);
+    } catch { extraCatalogNames = undefined; }
+    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation, customerInput: incomingText, extraCatalogNames });
     if (!factCheck.isValid && shouldSendReply && !isEscalated && finalReply.trim()) {
       console.warn(JSON.stringify({ event: 'FACTUAL_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factCheck.violations, timestamp: new Date().toISOString() }));
       violationsDetected.push(...factCheck.violations);
@@ -364,7 +375,7 @@ export class GuardrailPipeline {
         const factRetryText = (factRetryData?.choices?.[0]?.message?.content || '').trim();
         if (factRetryText) {
           const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp, sanitizeOpts);
-          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown, customerInput: incomingText });
+          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown, customerInput: incomingText, extraCatalogNames });
           if (factRecheck.isValid) {
             finalReply = factCleaned;
             factRepromptOk = true;

@@ -1251,6 +1251,37 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
+        // CG-02 (pemicu 'closing'): admin menandai reservasi selesai → bersihkan
+        // sesi V3 episodik customer (cart, treatment, booking, komitmen) agar
+        // percakapan berikutnya dimulai dari episode bersih. Profil durable tetap.
+        try {
+          const activeConv = await prisma.conversation.findFirst({
+            where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || DEFAULT_TENANT_ID },
+            orderBy: { updated_at: 'desc' },
+            select: { id: true },
+          });
+          if (activeConv?.id) {
+            const { GoalTracker } = await import('../../v3/state/goal-tracker');
+            await GoalTracker.updateGoalSession(
+              activeConv.id,
+              {
+                cartItems: [],
+                selectedTreatment: undefined,
+                booking: undefined,
+                discussedTreatments: [],
+                priceDiscussed: undefined,
+                bookingCommitConfirmed: undefined,
+                lastCommitment: undefined,
+                ongkirStatus: undefined,
+                totalPrice: undefined,
+              } as any,
+              existing.tenant_id || DEFAULT_TENANT_ID
+            );
+          }
+        } catch (resetErr: any) {
+          console.warn('[Admin API] Gagal membersihkan sesi V3 pasca-complete:', resetErr?.message);
+        }
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -1944,6 +1975,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
 
         if (isHardDelete) {
+          // Audit P1-14: batalkan follow-up pengingat/review terkait SEBELUM
+          // reservasi dihapus (relasi onDelete:SetNull akan men-null-kan
+          // reservation_id sehingga tidak bisa lagi dicocokkan setelah delete).
+          try {
+            const { followUpService } = await import('../../services/follow-up.service');
+            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+          } catch (_) {}
+
           // Unlink child relation jika ada
           await prisma.child.updateMany({
             where: { reservation_id: id },
@@ -1972,6 +2011,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           where: { id },
           data: { status: 'cancelled' },
         });
+
+        // Audit P1-14: batalkan follow-up pengingat H-1 / review H+1 terkait
+        // reservasi yang dibatalkan (sebelumnya hanya membuat NO_PURCHASE baru).
+        try {
+          const { followUpService } = await import('../../services/follow-up.service');
+          await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+        } catch (_) {}
 
         await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
 

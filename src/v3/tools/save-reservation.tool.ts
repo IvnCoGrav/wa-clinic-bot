@@ -205,6 +205,11 @@ export const SAVE_RESERVATION_TOOL_SCHEMA = {
         address: {
           type: 'string',
           description: 'Alamat kunjungan homecare bila sudah diketahui (mis. "Jl Mawar no 12, Kedungkendo"). Opsional — alamat wilayah sesi sudah cukup; detail dilengkapi via form reservasi.'
+        },
+        commitment: {
+          type: 'string',
+          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
+          description: 'Penilaian SEMANTIK atas seluruh percakapan: EXPLORING (bertanya/menjelajah), CONSIDERING (menimbang/minat), COMMITTED (sudah memutuskan mengambil layanan). Berdasarkan makna & konteks.'
         }
       },
       required: ['treatmentName', 'bookingDate']
@@ -460,6 +465,9 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       purchaseValue,
       source: 'AGENT',
       status: isSameDay ? 'pending' : 'confirmed',
+      // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama
+      // (tenant+customer+tanggal+treatment). Mencegah baris reservasi ganda.
+      requestId: `${tenantId}:${customerId}:${parsedDate.toISOString().slice(0, 10)}:${treatmentDetail}`,
     });
 
     const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (${isSameDay ? 'menunggu cek jadwal hari ini' : 'terjadwal'}).`;

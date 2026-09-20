@@ -13,6 +13,10 @@ export interface HumanReplyParams {
   tenantId?: string;
   shouldAbort?: () => Promise<boolean> | boolean; // guard pembatalan real-time jika CS takeover
   singleBubble?: boolean; // Jika true: kirim sebagai 1 bubble utuh tanpa dipecah (misal follow-up/broadcast)
+  /** Stage 5 Fase 3: id turn durable (untuk outbound ledger per-bubble). */
+  turnId?: string;
+  /** Stage 5 Fase 3: provider asal (WAHA/WABA) untuk ledger. */
+  provider?: string;
 }
 
 export interface HumanReplyResult {
@@ -348,7 +352,7 @@ export class TypingService {
    * 4. SAFETY NET (try/finally): Hanya panggil stopTyping di blok finally jika typing belum di-stop (mencegah redundant calls)!
    */
   public async simulateHumanReply(params: HumanReplyParams): Promise<HumanReplyResult> {
-    const { chatId, incomingMessageId, incomingText, replyText, shouldAbort, tenantId } = params;
+    const { chatId, incomingMessageId, incomingText, replyText, shouldAbort, tenantId, turnId, provider } = params;
     const effectiveTenantId = tenantId || 'default-tenant';
 
     // Transport per-tenant (WAHA/WABA): bila resolver tersedia, resolved transport
@@ -467,6 +471,17 @@ export class TypingService {
         // untuk ACK delivered/read & reaksi emoji. Fallback ke sendText bila driver
         // belum mendukung detailed (kontrak IWahaClient opsional).
         // Jalur resolved transport (WABA) hanya menyediakan sendText tanpa messageId.
+        // Stage 5 Fase 3: catat attempt SENDING sebelum kirim (best-effort).
+        let outboundAttemptId: string | undefined;
+        if (turnId) {
+          try {
+            const { outboundLedger } = await import('./outbound-ledger.service');
+            outboundAttemptId = await outboundLedger.begin({
+              tenantId: effectiveTenantId, turnId, bubbleIndex: i, content: bubbleContent, provider,
+            });
+          } catch {}
+        }
+
         let sentSuccess = false;
         let sentMessageId: string | undefined = undefined;
         if (resolvedTransport) {
@@ -480,10 +495,24 @@ export class TypingService {
         }
 
         if (!sentSuccess) {
+          // Stage 5: tandai FAILED (best-effort) lalu lempar seperti semula.
+          if (outboundAttemptId) {
+            try {
+              const { outboundLedger } = await import('./outbound-ledger.service');
+              await outboundLedger.markFailed(outboundAttemptId, `sendText failed bubble ${i + 1}`);
+            } catch {}
+          }
           throw new Error(`WAHA sendText failed on bubble ${i + 1} of ${bubbles.length}`);
         }
         if (sentMessageId) {
           lastMessageId = sentMessageId;
+        }
+        // Stage 5: tandai SENT + provider message id.
+        if (outboundAttemptId) {
+          try {
+            const { outboundLedger } = await import('./outbound-ledger.service');
+            await outboundLedger.markSent(outboundAttemptId, sentMessageId);
+          } catch {}
         }
 
         const previewText = bubbleContent.slice(0, 45).replace(/\n/g, ' ');

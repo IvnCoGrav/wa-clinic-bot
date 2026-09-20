@@ -263,6 +263,11 @@ textarea,
   }
 }
 
+/* Moda Peta Jalan Customer Map: OSM plain grayscale (hanya jalan, tanpa warna), area Sby/Sda */
+.customer-map-osm-gray {
+  filter: grayscale(1) contrast(0.96) brightness(1.04);
+}
+
 /* WhatsApp Clean Panel Components */
 .glass-panel {
   background: #ffffff;

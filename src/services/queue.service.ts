@@ -1,10 +1,12 @@
-import { Queue, Worker, Job } from 'bullmq';
+﻿import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { stateMachine } from '../state-machine/machine';
 import { StateHandlerContext } from '../state-machine/types';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 import { hashPiiPhone } from '../utils/logger-sanitizer';
+import { contextStorage } from '../utils/context';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -13,6 +15,14 @@ export interface QueuePayload {
   customerId: string;
   phone?: string;
   incomingMessage: any;
+  /** Correlation ID request-level (dari webhook). Aditif â€” opsional agar caller lama tetap valid. */
+  correlationId?: string;
+  /** ID kanonis turn inbound: `${tenantId}:${provider}:${inboundMessageId}`. */
+  turnId?: string;
+  /** Provider asal pesan untuk affinity ingressâ†’egress. */
+  provider?: 'WAHA' | 'WABA';
+  /** ID pesan asli provider. */
+  inboundMessageId?: string;
 }
 
 export class QueueService {
@@ -41,8 +51,8 @@ export class QueueService {
 
   /**
    * Gerbang fail-fast (FOUNDATIONAL_HARDENING_PLAN_2026-09-13 G2):
-   * bila QUEUE_REQUIRE_REDIS=true dan Redis tidak siap → throw, boot dibatalkan.
-   * Default (dev/test) false → jalur in-memory tetap berjalan.
+   * bila QUEUE_REQUIRE_REDIS=true dan Redis tidak siap â†’ throw, boot dibatalkan.
+   * Default (dev/test) false â†’ jalur in-memory tetap berjalan.
    */
   public async ensureRedisOrThrow(): Promise<void> {
     if (process.env.QUEUE_REQUIRE_REDIS !== 'true') {
@@ -75,7 +85,7 @@ export class QueueService {
       // Event listener untuk memantau pemutusan koneksi di runtime (Production Alerting)
       this.redisClient.on('error', (err) => {
         if (this.redisEnabled) {
-          console.error(`\n🚨 [CRITICAL ALERT] Redis connection lost/error at runtime! Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately. Error: ${err.message}`);
+          console.error(`\nðŸš¨ [CRITICAL ALERT] Redis connection lost/error at runtime! Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately. Error: ${err.message}`);
           this.redisEnabled = false;
         }
       });
@@ -83,7 +93,7 @@ export class QueueService {
       // Event listener untuk pemulihan koneksi saat Redis kambuh / reconnect di background
       this.redisClient.on('ready', () => {
         if (!this.redisEnabled) {
-          console.log(`\n⚡ [QUEUE] Redis connection restored/ready at ${host}:${port}. Restoring BullMQ mode...`);
+          console.log(`\nâš¡ [QUEUE] Redis connection restored/ready at ${host}:${port}. Restoring BullMQ mode...`);
           this.redisEnabled = true;
           if (this.bullQueues.size === 0) {
             this.initBullMQShards();
@@ -93,7 +103,7 @@ export class QueueService {
 
       this.redisInitPromise = this.redisClient.connect()
         .then(() => {
-          console.log(`\n⚡ [QUEUE] Successfully connected to Redis at ${host}:${port}. Initializing sharded BullMQ...`);
+          console.log(`\nâš¡ [QUEUE] Successfully connected to Redis at ${host}:${port}. Initializing sharded BullMQ...`);
           this.redisEnabled = true;
           if (this.bullQueues.size === 0) {
             this.initBullMQShards();
@@ -101,12 +111,12 @@ export class QueueService {
           return true;
         })
         .catch((err) => {
-          console.error(`\n🚨 [CRITICAL ALERT] Redis connection failed during startup: ${err.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
+          console.error(`\nðŸš¨ [CRITICAL ALERT] Redis connection failed during startup: ${err.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
           this.redisEnabled = false;
           return false;
         });
     } catch (e: any) {
-      console.error(`\n🚨 [CRITICAL ALERT] Could not initialize Redis client: ${e.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
+      console.error(`\nðŸš¨ [CRITICAL ALERT] Could not initialize Redis client: ${e.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
       this.redisEnabled = false;
     }
   }
@@ -179,7 +189,36 @@ export class QueueService {
             }
 
             console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${hashPiiPhone(ctx.customer.phone)} (Tenant: ${ctx.tenantId})`);
-            await stateMachine.processMessage(ctx);
+            // Stage 5 Fase 2: claim atomik turn (RECEIVEDâ†’PROCESSING). Bila turn
+            // sudah diproses (RESPONSE_READY/DELIVERED), lewati agar retry tidak
+            // memproses ulang. Fail-open bila tracking tak tersedia.
+            try {
+              const { turnRepository } = await import('../repositories/turn.repository');
+              const claimable = await turnRepository.claimForProcessing({
+                tenantId: ctx.tenantId || DEFAULT_TENANT_ID, provider: job.data?.provider || 'WAHA', inboundMessageId: job.data?.inboundMessageId || '',
+              });
+              if (!claimable) {
+                console.log(`[QUEUE TURN SKIP] Turn ${job.data?.turnId} sudah diproses â€” lewati retry.`);
+                return;
+              }
+            } catch {}
+            await contextStorage.run(
+              {
+                correlationId: job.data?.correlationId,
+                turnId: job.data?.turnId,
+                provider: job.data?.provider,
+                inboundMessageId: job.data?.inboundMessageId,
+                phone: ctx.customer.phone,
+              },
+              async () => {
+                await stateMachine.processMessage(ctx);
+              }
+            );
+            // Stage 5 Fase 2: tandai turn selesai diproses (best-effort).
+            try {
+              const { turnRepository } = await import('../repositories/turn.repository');
+              await turnRepository.markStatus({ tenantId: ctx.tenantId || DEFAULT_TENANT_ID, provider: job.data?.provider || 'WAHA', inboundMessageId: job.data?.inboundMessageId || '', status: 'RESPONSE_READY' });
+            } catch {}
           } catch (err: any) {
             console.error(`[QUEUE BullMQ - Shard ${i}] Exception during processMessage for job ${job.id}:`, err.message);
             throw err; // Throw agar BullMQ mencatat attempt gagal dan menjalankan retry backoff
@@ -200,7 +239,7 @@ export class QueueService {
 
         // Jika sudah mencapai batas attempts (final failure), kirimkan critical alert
         if (job && job.attemptsMade >= (job.opts?.attempts || 1)) {
-          console.error(`🚨 [QUEUE BullMQ - Shard ${i}] Job ${job.id} PERMANENTLY FAILED after ${job.attemptsMade} attempts.`);
+          console.error(`ðŸš¨ [QUEUE BullMQ - Shard ${i}] Job ${job.id} PERMANENTLY FAILED after ${job.attemptsMade} attempts.`);
           try {
             const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
             await alertService.notifyAlert({
@@ -217,7 +256,7 @@ export class QueueService {
 
       this.bullWorkers.set(queueName, worker);
     }
-    console.log(`📌 [QUEUE] ${this.shardsCount} BullMQ shards initialized successfully.`);
+    console.log(`ðŸ“Œ [QUEUE] ${this.shardsCount} BullMQ shards initialized successfully.`);
   }
 
   /**
@@ -314,7 +353,33 @@ export class QueueService {
       }
 
       console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${ctx.customer.phone} (Tenant: ${ctx.tenantId}, Queue depth: ${queue.length})`);
-      await stateMachine.processMessage(ctx);
+      // Stage 5 Fase 2: claim atomik turn (fail-open).
+      try {
+        const { turnRepository } = await import('../repositories/turn.repository');
+        const claimable = await turnRepository.claimForProcessing({
+          tenantId: ctx.tenantId || DEFAULT_TENANT_ID, provider: payload?.provider || 'WAHA', inboundMessageId: payload?.inboundMessageId || '',
+        });
+        if (!claimable) {
+          console.log(`[QUEUE TURN SKIP] Turn ${payload?.turnId} sudah diproses â€” lewati.`);
+          return;
+        }
+      } catch {}
+      await contextStorage.run(
+        {
+          correlationId: payload?.correlationId,
+          turnId: payload?.turnId,
+          provider: payload?.provider,
+          inboundMessageId: payload?.inboundMessageId,
+          phone: ctx.customer.phone,
+        },
+        async () => {
+          await stateMachine.processMessage(ctx);
+        }
+      );
+      try {
+        const { turnRepository } = await import('../repositories/turn.repository');
+        await turnRepository.markStatus({ tenantId: ctx.tenantId || DEFAULT_TENANT_ID, provider: payload?.provider || 'WAHA', inboundMessageId: payload?.inboundMessageId || '', status: 'RESPONSE_READY' });
+      } catch {}
     } catch (e: any) {
       console.error(`[QUEUE Memory-Fallback ERROR] Failed processing message for ${phone}:`, e.message);
     } finally {
@@ -326,10 +391,10 @@ export class QueueService {
 
   /**
    * Re-fetch fresh customer & conversation dari DB (dengan fallback memory store) tepat
-   * sebelum memproses job — mencegah race condition / stale state saat pesan beruntun
+   * sebelum memproses job â€” mencegah race condition / stale state saat pesan beruntun
    * masuk dalam waktu singkat. Payload queue hanya membawa identifier; snapshot lama
    * TIDAK dipakai sebagai last resort karena justru melanggengkan bug.
-   * Mengembalikan null jika customer tidak bisa di-resolve → job di-skip + di-log.
+   * Mengembalikan null jika customer tidak bisa di-resolve â†’ job di-skip + di-log.
    */
   private async resolveFreshContext(payload: QueuePayload): Promise<StateHandlerContext | null> {
     const { tenantId, customerId, phone, incomingMessage } = payload;
@@ -356,7 +421,7 @@ export class QueueService {
       await this.redisClient.disconnect();
     }
     this.redisEnabled = false;
-    console.warn('⚠️ [QUEUE TEST] Redis connection has been forced offline.');
+    console.warn('âš ï¸ [QUEUE TEST] Redis connection has been forced offline.');
   }
 
   /**
@@ -380,7 +445,7 @@ export class QueueService {
       message: 'WAHA session disconnected or stopped. Outbound message queue PAUSED to prevent lost messages.',
     });
 
-    console.warn('⚠️ [QUEUE PAUSED] Message processing paused due to WAHA disconnection.');
+    console.warn('âš ï¸ [QUEUE PAUSED] Message processing paused due to WAHA disconnection.');
   }
 
   /**
@@ -403,7 +468,7 @@ export class QueueService {
       message: 'WAHA session reconnected. Resuming outbound message queue processing.',
     });
 
-    console.log('⚡ [QUEUE RESUMED] Message processing resumed after WAHA reconnection.');
+    console.log('âš¡ [QUEUE RESUMED] Message processing resumed after WAHA reconnection.');
   }
 
   public isQueuePaused(): boolean {

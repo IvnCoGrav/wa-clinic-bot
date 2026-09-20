@@ -52,7 +52,7 @@ enum AiOverride {
 model Customer {
   id                      String         @id @default(uuid())
   tenant_id               String         @default("default-tenant")
-  phone                   String         @unique
+  phone                   String
   name                    String?
   kelurahan               String?
   kecamatan               String?
@@ -113,6 +113,7 @@ model Customer {
   @@index([tenant_id, is_mql])
   @@index([tenant_id, is_sandbox_test, created_at])
   @@index([ltv_cache])
+  @@unique([tenant_id, phone])
   @@map("customers")
 }
 
@@ -151,6 +152,9 @@ model Conversation {
   last_discussed_treatment    String?
   last_discussed_treatment_at DateTime?
   last_message_at             DateTime           @default(now())
+  // Stage 4 (RC-02): state episodik V3 (cart, treatment terpilih, booking,
+  // komitmen, keluhan aktif) — per-CONVERSATION, bukan per-customer.
+  session_data                Json?
   last_customer_message_at    DateTime?
   is_pinned                   Boolean            @default(false)
   pinned_at                   DateTime?
@@ -266,6 +270,13 @@ model Reservation {
   duration_minutes         Int?
   raw_text                 String?
   status                   String            @default("confirmed")
+  // Stage 7 (R6): idempotency key per-tenant — cegah baris reservasi ganda
+  // dari retry webhook / concurrency. Null untuk jalur admin manual.
+  request_id               String?
+  // CG-05 (opsi flag): true bila reservasi berasal dari bot/agent dan slotnya
+  // BELUM diverifikasi staf (non-same-day). Admin memverifikasi via dashboard.
+  // TIDAK mengubah nilai `status` (hindari blast radius filter admin).
+  needs_staff_verification Boolean           @default(false)
   google_calendar_event_id String?
   purchase_event_sent_at   DateTime?
   purchase_occurred_at     DateTime?
@@ -291,6 +302,7 @@ model Reservation {
   @@index([customer_id, status])
   @@index([assigned_staff_id])
   @@index([series_id])
+  @@unique([tenant_id, request_id])
   @@map("reservations")
 }
 
@@ -488,6 +500,7 @@ model FollowUp {
   @@index([reservation_id])
   @@index([status, scheduled_at])
   @@index([tenant_id, customer_id, type, status])
+  @@unique([tenant_id, reservation_id, type, stage])
   @@map("follow_ups")
 }
 
@@ -904,3 +917,64 @@ model ClinicPolicy {
 
 
 
+
+// -----------------------------------------------------------------------------
+// Stage 5 (RC-04): Durable Turn Inbox/Outbox
+// -----------------------------------------------------------------------------
+
+enum InboundTurnStatus {
+  RECEIVED
+  QUEUED
+  PROCESSING
+  RESPONSE_READY
+  DELIVERED
+  FAILED
+  HANDOFF
+}
+
+enum OutboundAttemptStatus {
+  SENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
+/// Satu pesan masuk = satu turn durable. Idempoten per (tenant, provider, wa id).
+model InboundTurn {
+  id                 String            @id @default(uuid())
+  tenant_id          String            @default("default-tenant")
+  provider           String            @default("WAHA")
+  inbound_message_id String
+  customer_id        String?
+  conversation_id    String?
+  status             InboundTurnStatus @default(RECEIVED)
+  attempts           Int               @default(0)
+  last_error         String?
+  // Stage 5 Fase 5: payload minimal untuk replay bila Redis down / worker crash.
+  payload_json       Json?
+  created_at         DateTime          @default(now())
+  updated_at         DateTime          @updatedAt
+
+  @@unique([tenant_id, provider, inbound_message_id])
+  @@index([tenant_id, status])
+  @@index([status, created_at])
+  @@map("inbound_turns")
+}
+
+/// Ledger per-bubble outbound: SENDING ? SENT/FAILED/UNKNOWN.
+model OutboundAttempt {
+  id                  String                 @id @default(uuid())
+  tenant_id           String                 @default("default-tenant")
+  turn_id             String
+  bubble_index        Int
+  content_hash        String?
+  status              OutboundAttemptStatus  @default(SENDING)
+  provider_message_id String?
+  error               String?
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+
+  @@unique([turn_id, bubble_index])
+  @@index([tenant_id, status])
+  @@map("outbound_attempts")
+}

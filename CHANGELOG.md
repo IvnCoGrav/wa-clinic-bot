@@ -2,7 +2,318 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+#### Peta Sebaran — Warna Reservasi & Koreksi Backfill GPS (2026-09-20)
+
+- **Fixed — MQL yang sudah reservasi tampil biru (bukan hijau):** Akar multi-lapis:
+  (1) endpoint `GET /api/admin/customers/map-points` tidak menyertakan info reservasi;
+  (2) `markerColor`/`statusOf` menaruh `is_mql` (biru) di atas status aktif. Kini endpoint
+  mengirim `has_reservation` (reservasi non-`cancelled`/`rejected`) dan prioritas warna
+  deterministik menjadi: `out_of_coverage` → **sudah reservasi (hijau)** → MQL (biru) →
+  status lain (oranye) → aktif (hijau). Popup menampilkan label "Sudah Reservasi".
+- **Data ops — koreksi backfill:** Backfill centroid tadi mengisi 48 customer ber-reservasi;
+  ternyata 45 di antaranya hanya berbasis `kecamatan` (tanpa `kelurahan`). Sesuai kebijakan
+  presisi (kecamatan terlalu luas), **45 di-revert** (`lat/lng/distance_km/ongkir = NULL`);
+  hanya **3** yang punya `kelurahan` yang dipertahankan. Status akhir: 79/211 customer
+  ber-reservasi ber-GPS.
+- **Verifikasi:** `npx tsc --noEmit` bersih; `npx vitest run tests/unit/customer-map-*.test.ts`
+  **35 passed**; `packages/admin-dashboard` build exit 0 (chunk memuat `has_reservation`).
+
+#### Backfill GPS Customer Ber-Reservasi (Live, 2026-09-20)
+
+- **Data ops:** Dari 211 customer yang punya reservasi, 135 belum memiliki GPS (`lat`/`lng` NULL).
+  Backfill scoped dijalankan di server produksi (mode dry-run lalu tulis) menggunakan gazetteer
+  Sby/Sda via `getGazetteerCoordinates` + `deliveryService.calculateDelivery` — **48 customer**
+  berhasil diisi `lat/lng/distance_km/ongkir` (0 gagal; semua `isOutOfCoverage=false`).
+- **Sisa 87 belum bisa diisi** (butuh data sumber tambahan): 46 tanpa alamat sama sekali,
+  17 hanya kota level-kabupaten (`Surabaya`/`surabaya`), 1 Gresik (di luar gazetteer), 1 data kotor
+  (`No. Hp : ...`), sisanya area di luar cakupan gazetteer. Lihat `docs/KNOWN_ISSUES.md` 0c.
+- **Catatan:** ORS API terkena rate-limit saat batch, sehingga jarak jatuh ke fallback Haversine
+  (ongkir tetap terhitung dari tier tenant).
+
+#### Peta Sebaran — Basemap CARTO API Key & Fallback Esri (2026-09-20)
+
+- **Fixed — Watermark "API key required":** CARTO kini mewajibkan API key untuk semua basemap
+  raster; tile tanpa key disajikan dengan watermark. Basemap Peta Jalan (`CustomerMapTab.tsx`) kini
+  membaca `VITE_CARTO_API_KEY` dari `packages/admin-dashboard/.env` (gitignored) dan menambahkan
+  `?key=...` ke URL tile CARTO `light_nolabels`. Key di-declare di `src/vite-env.d.ts`.
+- **Added — Fallback otomatis tanpa key:** bila `VITE_CARTO_API_KEY` kosong, build beralih ke
+  **Esri World Light Gray Base** (gratis tanpa key, netral minim label) — peta tetap berfungsi di
+  lingkungan tanpa `.env`. Konfigurasi basemap terpusat pada konstanta `BASEMAP_URL`/`BASEMAP_ATTR`
+  yang dipakai ke dua call-site tile layer.
+- **Verifikasi:** aturan `?key=` di curl dicek → tile Sby (z12–15) mengembalikan PNG peta asli
+  (68–94KB, 200); tanpa key tile byte-identik 1884B (watermark). `packages/admin-dashboard` build
+  exit 0; server live (`localhost:3000`) menyajikan chunk baru berisi key.
+
+#### Portal Terapis (StaffToday) — Ergonomi Mobile & Bug Interaksi Notifikasi (2026-09-20)
+
+- **Fixed — Stale Closure Notifikasi Browser:** `notif.onclick` (handler notifikasi pesan masuk) menutup `tasks/upcomingTasks/completedTasks` dari `useEffect(..., [])` sehingga selalu membaca array kosong saat init → klik notifikasi tidak pernah menemukan task (`match === undefined`). Ditambahkan `allTasksRef` (`useRef`) yang di-refresh setiap render; handler kini memakai `allTasksRef.current.find(...)` sehingga notifikasi yang diklik kapan pun langsung membuka chat pasien yang benar.
+- **Fixed — VoiceNotePlayer senyap saat gagal:** `a.play().catch(() => {})` dan ketiadaan listener `error` menelan kegagalan audio diam-diam. Kini ada state `hasError`, listener `error` elemen `<audio>`, tombol Play membesar `w-8→w-10` (32→40px), berubah amber + tooltip "Audio gagal dimuat", dan pesan fallback teks.
+- **Changed — Touch Target 44px (Apple HIG):** tombol aksi kartu (Chat/Navigasi/Infokan OTW) `py-1.5 px-2` (~28px) → `min-h-[44px] py-2.5 px-3 rounded-xl font-bold`, ikon `12→15`, `gap-1.5→gap-2`. Chip balasan cepat `text-[11px] px-2.5 py-1` (~24px) → `min-h-[38px] px-3.5 py-2 text-xs font-semibold`.
+- **Changed — Navigasi Mobile ke Sticky Bottom Bar:** segmented tab mobile yang menempel di bawah header dipindah ke `<nav>` sticky di dasar layar (`sm:hidden`, thumb zone). Aktif = aksen `#d9fdd3` + ikon hijau `#008069` + badge jumlah; otomatis disembunyikan saat mode chat penuh agar kanvas percakapan 100% layar. List kartu diberi `pb-20 sm:pb-3` agar tidak tertutup bottom bar.
+- **Added — Indikator Offline Lapangan:** state `isOnline` (`navigator.onLine` + listener `online`/`offline`), banner amber `WifiOff` "Koneksi internet terputus...". Guard preventif pada `handleSendReply` (banner error) & `handleSendOtw` (toast) agar tidak memicu pengiriman gagal saat sinyal hilang.
+- **Changed — Ergonomi Modal Lokasi:** tombol GPS utama & tombol Buka Kamera/Pilih Galeri modal update lokasi dinaikkan ke `min-h-[46px]`.
+- **Verifikasi:** `packages/admin-dashboard` build 0 error; suite Vitest backend 2958 passed. **Catatan:** 1–4 file test backend (`waha-webhook`, `media.service`, `lead-greeting-preservation`, `v3-persona-rules`) bersifat flaky/pollution order-dependent — sudah terkonfirmasi gagal juga TANPA perubahan ini (lihat `docs/KNOWN_ISSUES.md`).
+
+
+#### Fixing D1 False-Positive "Sinar Moksa" & POV Violation (Sesi 767713) (2026-09-20)
+
+- **Akar (multi-layer):** `get_catalog_and_price` tak memasukkan add-on → validator faktual D1 (`factual-claim-validator`) hanya percaya `result.treatments` → **"Sinar Moksa" (add-on sah) dituduh halusinasi** → reprompt → AI menjawab "cek dulu ke tim kami" (melanggar POV first-person).
+- **Fase 1 `factual-claim-validator.ts`:** opsi `extraCatalogNames` (katalog tenant lengkap) melonggarkan pencocokan D1; **gate D1 tetap dari nama tool turn ini** (`turnNames`) agar tidak memicu pemeriksaan turn yang dulu tak diperiksa.
+- **Fase 2 `get-catalog.tool.ts`:** add-on relevan (Sinar Moksa) disertakan ke `result.treatments` (flag `isAddon`) **hanya saat `showPrices` + keluhan pernapasan**, menghormati information-hiding (tanpa harga saat tak ditanya) & anti-menu brosur (konsultasi tetap ≤2).
+- **Fase 3 `sanitizer.ts`:** `stripVagueTeamDeferral` deterministik membuang kalimat defleksi "cek ke tim" (mempertahankan kalimat jadwal yang sah), mempertahankan struktur baris agar sanitizer hilir tetap bekerja.
+- **Call-site `guardrail-pipeline.ts`:** resolve `extraCatalogNames` dari katalog tenant, diteruskan ke D1 + recheck.
+- **Test baru `tests/unit/v3/d1-addon-false-positive-fix.test.ts`**; test lama diselaraskan (matrix CM-01 filter add-on; matrix CM-08/CM-18 kontrak eskalasi).
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **411 files / 2963 passed / 0 failed**.
+- **Catatan:** ditemukan inkonsistensi ejaan katalog (`Rileksasi` vs `Relaksasi`) yang dulu tidak terlihat karena gate D1 hanya menyala bila turn memakai tool katalog.
+
+#### Stage 8 — Actual Model/Provider Labeling pada Fallback (2026-09-20)
+
+- **Akar (RC-08/R9):** fallback LLM mengembalikan data tanpa menandai model/provider yang benar-benar melayani → log audit selalu menyebut model primary (menyesatkan saat fallback).
+- **`generation-stage.ts`:** fungsi fallback circuit-breaker menandai `data.__actualModel`/`__actualProvider`; `TurnState.actualModelUsed` di-set dari respons; `recordCall` memakai `actualModelUsed || selectedModel` untuk `actualModel` & `modelUsed`.
+- **Verifikasi:** `tsc` 0; `build` 0; LLM/fallback/circuit-breaker tests 35/35; full suite **410 files / 2958 passed / 0 failed**.
+- **Catatan:** belum ada test khusus yang memaksa jalur fallback berhasil (butuh stub tier); labeling diverifikasi via type-check + suite existing.
+
+#### CG-09 — Redaksi PII JSONL + Retention 60 Hari (2026-09-20)
+
+- **`llm-execution-logger.ts`:** identitas PII di-redact HANYA pada berkas JSONL (at-rest) — `customerPhone` di-hash (`hashPiiPhone`), `customerName` di-mask (`maskCustomerName`, mis. "Bunda Sari" → "B*** S***"). **Buffer in-memory tetap mentah** agar UI admin bisa mengidentifikasi customer saat sesi berjalan (tidak persist). Teks chat tetap disimpan untuk debug (keputusan user).
+- **`log-buffer.ts`:** `MAX_LOG_RETENTION_DAYS` 7 → **60** (JSONL & app log).
+- **Test baru `tests/unit/cg09-pii-redaction.test.ts`.**
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **410 files / 2958 passed / 0 failed**.
+
+#### Stage 6-CLM / RC-07 — Entity-Bound Numeric Validation (2026-09-20)
+
+- **Akar (RC-07):** validator numerik mengotorisasi SELURUH harga katalog tenant → harga Treatment B mengesahkan nominal untuk Treatment A.
+- **`numeric-fact-validator.ts`:** harga layanan (PRIMARY/BUNDLE/SERVICE) katalog **tidak lagi** mengesahkan nominal standalone; hanya dipakai sebagai **fallback** bila turn tak punya sumber entity-bound (tool turn / cart). Harga **add-on** tetap sah dikutip kapan pun (set kecil). Sumber entity-bound: treatment dari tool turn ini + cart sesi + ongkir sesi + targetPrice + komposit.
+- **Test baru `tests/unit/entity-bound-numeric-validator.test.ts`:** harga entity-bound benar → VALID; harga layanan LAIN → INVALID; fallback tanpa entity-bound tetap sah.
+- **Test lama diselaraskan** (spesifikasi berubah): `multi-treatment-combo-validator` (add-on tetap sah).
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **409 files / 2956 passed / 0 failed**.
+
+#### Stage 5 Fase 5 — Degraded Replay + Retention (2026-09-20)
+
+- **Migrasi LOKAL:** `inbound_turns.payload_json JSONB` (migration `20260920000005_inbound_turn_payload`) — untuk replay.
+- **`turn.repository.ts`:** persist `payload`; `listReplayable` (RECEIVED/QUEUED/PROCESSING-macet), `markQueued`, `cleanupOlderThan(days)`.
+- **Webhook WAHA & WABA:** simpan payload minimal (customerId/phone/incomingMessage) saat persist turn.
+- **`turn-recovery.service.ts` (baru):** `replayPendingTurns` (enqueue ulang turn berpayload; tanpa payload → tandai FAILED agar tidak macet), `cleanupOldTurns(60)`.
+- **`app.ts`:** setelah boot (jeda 15s, non-blocking) → replay pending + retention.
+- **Test baru `tests/unit/turn-recovery.test.ts`.**
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **408 files / 2953 passed / 0 failed**.
+- **Stage 5 SELESAI (fase 1-5).**
+
+#### Stage 5 Fase 4 — Handoff Durable / Escalation Fail-Closed (2026-09-20)
+
+- **`src/v3/tools/escalate-human.tool.ts`:** DILARANG lapor sukses palsu. Conversation tidak ditemukan → `success:false, escalated:false`; DB error → `success:false, escalated:false` (bukan lagi `success:true`). Lookup sudah tenant-scoped.
+- **`machine.ts`:** saat `isEscalated`, tandai `InboundTurn` (dari ALS `turnId`) → status `HANDOFF` (best-effort).
+- **Test diselaraskan ke kontrak baru** (spesifikasi berubah, bukan pelonggaran): `v3-conversation-matrix.test.ts` CM-08 & CM-18 — invarian safety (tool dipanggil, `is_human_handling=true`, tanpa silent drop) TETAP diassert; `result.success` tidak lagi dipatok true saat harness DB offline.
+- **Test baru `tests/unit/escalate-human-fail-closed.test.ts`.**
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **407 files / 2951 passed / 0 failed**.
+- **Belum:** Fase 5 (degraded replay), retention ledger.
+
+#### Stage 5 Fase 3 — Outbound Ledger Per-Bubble (2026-09-20)
+
+- **`src/services/outbound-ledger.service.ts` (baru):** `begin` (SENDING + content_hash), `markSent` (+ provider message id), `markFailed`, `markUnknown`. Best-effort (DB offline tidak menggagalkan pengiriman).
+- **`typing.service.ts`:** `HumanReplyParams.turnId/provider` (opsional); instrumentasi loop bubble — SENDING sebelum kirim, SENT/FAILED setelah.
+- **`machine.ts`:** teruskan `turnId`/`provider` dari `contextStorage` ke `simulateHumanReply`.
+- **Test baru `tests/unit/outbound-ledger.test.ts`** (4 kasus).
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **406 files / 2949 passed / 0 failed**.
+- **Belum:** Fase 4 (handoff durable), Fase 5 (degraded replay), retention ledger.
+
+#### Stage 5 Fase 2 — Inbound Durable + Worker Claim (2026-09-20)
+
+- **`src/repositories/turn.repository.ts` (baru):** `persistInbound` (upsert RECEIVED, idempoten per tenant+provider+message id), `claimForProcessing` (atomik RECEIVED/QUEUED→PROCESSING; tolak bila sudah RESPONSE_READY/DELIVERED; **fail-open** bila tracking/DB tak tersedia), `markStatus`.
+- **`webhook.route.ts` (WAHA) & `waba-webhook.route.ts`:** persist `InboundTurn` (RECEIVED) **sebelum** `enqueueMessage` (best-effort).
+- **`queue.service.ts` (BullMQ + in-memory):** claim turn sebelum `processMessage`; turn yang sudah diproses dilewati (`QUEUE TURN SKIP`) → retry tidak memproses ulang; `markStatus RESPONSE_READY` setelah selesai. Import `DEFAULT_TENANT_ID`.
+- **`tests/setup.ts`:** mock global `inboundTurn` & `outboundAttempt`.
+- **Test baru `tests/unit/turn-repository-claim.test.ts`.**
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **405 files / 2945 passed / 0 failed**.
+- **Belum:** Fase 3 (outbound ledger per-bubble), Fase 4 (handoff durable), Fase 5 (degraded replay).
+
+#### Stage 5 Fase 1 — Schema `InboundTurn` + `OutboundAttempt` (2026-09-20)
+
+- **Migrasi LOKAL:** dua tabel baru (aditif) — `inbound_turns` (enum `InboundTurnStatus`: RECEIVED/QUEUED/PROCESSING/RESPONSE_READY/DELIVERED/FAILED/HANDOFF; `@@unique([tenant_id, provider, inbound_message_id])`) dan `outbound_attempts` (enum `OutboundAttemptStatus`: SENDING/SENT/FAILED/UNKNOWN; `@@unique([turn_id, bubble_index])`). Migration `20260920000004_durable_turn_inbox_outbox`.
+- **Keputusan CG-08:** Redis down → terima ke DB inbox lalu replay (opsi b). **CG-10:** timeout pasca-send → `UNKNOWN`, tanpa resend otomatis. Retention: 30–90 hari (diterapkan di fase berikutnya).
+- **Insiden kecil:** file migrasi awal terkena BOM dari PowerShell → `migrate deploy` gagal (`syntax error near \uFEFF`). Diatasi: hapus BOM + `migrate resolve --rolled-back` + deploy ulang. Tabel sudah terverifikasi (types kosong sebelum resolve, jadi aman).
+- **Verifikasi:** tabel `inbound_turns` & `outbound_attempts` ada; drift `-- This is an empty migration.`; client runtime mengenali `inboundTurn` (count=0); `tsc` 0.
+- **Belum:** Fase 2–5 (persist inbound sebelum ack, worker claim, outbound ledger, handoff durable, degraded mode).
+
+#### Stage 4 Fase C & D — Audit Pembaca Episodik + Status Selesai (2026-09-20)
+
+- **Fase C (audit read-only):** tidak ada kode non-V3 yang membaca field episodik (`cartItems`/`booking`/`selectedTreatment`/`lastCommitment`/`discussedTreatments`/`ongkirStatus`/`priceDiscussed`/`bookingCommitConfirmed`) dari `Customer.preferences`. Pembaca eksternal (capi, staff-reservation, human-enrichment, staff-notification, admin) hanya menyentuh field **durable** (alamat/nama). → **Fase C tidak diperlukan.**
+- **Fase D:** tercapai secara desain — `updateGoalSession` sudah **tidak** menulis field episodik ke `preferences` (hanya durable: nama/sapaan + mempertahankan field lama seperti `address`). Tidak ada mirror episodik yang tersisa.
+- **Stage 4 dinyatakan SELESAI (fungsional):** session episodik hidup di `Conversation.session_data`; `Customer.preferences` tinggal profil durable.
+
+#### Stage 4 Fase B — Backfill `Conversation.session_data` (2026-09-20)
+
+- **Script `scripts/backfill-conversation-session-data.ts`** (dry-run default; `--apply` untuk tulis). Idempoten: hanya mengisi conversation yang `session_data IS NULL` dan customer punya state sesi di `preferences`. **Tidak menghapus** `Customer.preferences` (pembaca durable tetap aman).
+- **Hasil lokal:** 11 conversation di-backfill (dari 6 customer dengan preferences episodik); preferences 542 customer tetap utuh. Dry-run ulang = 0 (idempoten).
+- **Verifikasi:** `tsc` 0; `build` 0; full suite 2942 passed / 2 flaky timeout (#101, lulus isolasi).
+
+#### Stage 4 Fase A (RC-02) — Session Episodik ke `Conversation.session_data` (2026-09-20)
+
+- **Migrasi LOKAL:** `conversations.session_data JSONB` (migration `20260920000003_conversation_session_data`).
+- **`goal-tracker.ts`:**
+  - `getGoalSession`: baca **Conversation.session_data** (utama); fallback `Customer.preferences` bila kosong (kompatibel mundur).
+  - `updateGoalSession`: tulis state lengkap ke **Conversation.session_data**; **mirror durable saja** ke `Customer.preferences` (nama, sapaan — TIDAK menyertakan field episodik cart/booking/komitmen) + kolom profil Customer (nama, kelurahan, kecamatan, kota, jarak, ongkir).
+- **Temuan penting:** pembaca non-V3 (`capi`, `staff-reservation`, `human-background-enrichment`, `staff-notification`, admin) hanya membaca field **durable** (`address`/`house_photo_url`/`landmark`) → **tidak perlu disentuh** (Fase C diperkecil).
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **404 files / 2942 passed / 0 failed** (rerun; 1st run 2 flaky timeout #101).
+- **Belum:** Fase B (backfill sesi aktif), Fase C (alihkan pembaca episodik), Fase D (hentikan dual-write). Session lama masih di `Customer.preferences` sampai dibackfill.
+
+#### CG-02 — Pemicu Reset Episode (14,1 Hari + Closing + `/reset`) (2026-09-20)
+
+- **Keputusan user:** tiga pemicu reset — (a) **admin klik "Selesai"**, (b) **14,1 hari** customer diam, (c) `/reset`.
+- **`src/state-machine/machine.ts`:** default `IDLE_TIMEOUT_MS` 24 jam → **1.218.240.000 ms (14,1 hari)**. `.env.example` diperbarui.
+- **`src/routes/admin/reservations.subroute.ts` (`/complete`):** setelah admin menandai reservasi `completed`, bersihkan sesi V3 episodik customer (cart, treatment, booking, diskusi, komitmen, ongkir, total) via `GoalTracker.updateGoalSession`; profil durable dipertahankan.
+- **Test:** `admin-complete-reset-session.test.ts` (baru); `idle-reset-clears-v3-session.test.ts` diselaraskan ke 15 hari.
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **404 files / 2942 passed / 0 failed**.
+- **Belum:** session pindah ke `Conversation.session_data` (Stage 4 penuh) — masih di `Customer.preferences`.
+
+#### CG-05 (Opsi Flag) — `needs_staff_verification` pada Reservation (2026-09-20)
+
+- **Keputusan user:** CG-05 via **flag**, BUKAN status baru (hindari blast radius 30+ pembaca `status`).
+- **Migrasi LOKAL:** `reservations.needs_staff_verification Boolean @default(false)` (migration `20260920000002_reservation_needs_staff_verification`).
+- **Kode `reservation-core.service.ts`:** `needs_staff_verification = (source !== 'ADMIN_PANEL' && status === 'confirmed')` — bot/agent non-same-day (slot belum diverifikasi) ditandai; same-day (`pending`) & admin manual tidak.
+- **`status` TIDAK diubah** (tetap `confirmed`/`pending` seperti sebelumnya).
+- **Test:** `reservation-idempotency-request-id.test.ts` +2 kasus flag → 4/4.
+- **Verifikasi:** `tsc` 0; `build` 0; full suite **403 files / 2941 passed / 0 failed**.
+
+#### Stage 8 (Parsial) — Flush LLM JSONL saat Shutdown (2026-09-20)
+
+- **Akar (audit observability):** antrean tulis `llm-*.jsonl` memakai timer `unref` yang bisa hilang saat proses keluar → berkas 0-byte meski ada aktivitas LLM.
+- **Perbaikan:**
+  - `src/utils/llm-execution-logger.ts` — fungsi publik baru `flushLlmExecutionLogs()` (bersihkan timer + flush sinkron).
+  - `src/lifecycle/shutdown.ts` — panggil `flushLlmExecutionLogs()` saat graceful shutdown (setelah `flushLlmAuditBuffer`).
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; lifecycle/logger tests 26/26; full suite **403 files / 2939 passed / 0 failed**.
+
+#### Stage 7 (R6) — Reservation Idempotency (`request_id`) + Follow-up Uniqueness (2026-09-20)
+
+- **Migrasi LOKAL (dev DB):** `reservations.request_id String?` + `@@unique([tenant_id, request_id])`; `follow_ups` `@@unique([tenant_id, reservation_id, type, stage])`. Migration `20260920000001_reservation_request_id_and_followup_unique`. Dibuat via `migrate diff` + `migrate deploy` (bypass shadow-DB). Drift verified. Prasyarat: 0 duplikat follow-up.
+- **Kode:**
+  - `reservation-core.service.ts` — `ReservationMutationParams.requestId?`; cek idempotensi awal (request_id ada → kembalikan existing, tidak create ganda); `request_id` disimpan pada create.
+  - `save-reservation.tool.ts` — generate `requestId` stabil: `${tenantId}:${customerId}:${tanggal}:${treatmentDetail}` (retry webhook sama → tidak ganda).
+- **TIDAK mengubah logika merge same-day** (patuh keputusan **CG-06 Opsi D**).
+- **Test baru `tests/unit/reservation-idempotency-request-id.test.ts`.**
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite **403 files / 2939 passed / 0 failed** (1 skipped).
+- **CATATAN:** migrasi PRODUKSI belum (kode belum live). Status `REQUESTED` (CG-05) belum diimplementasi — masih terbuka.
+
+#### Stage 4 (R2) — Idle Reset Menyelaraskan Sesi V3 Episodik (2026-09-20)
+
+- **Akar (R2):** idle reset (`machine.ts`) hanya mereset enum `Conversation` + pending location, TIDAK membersihkan session V3 (`Customer.preferences`: cart, treatment terpilih, booking, komitmen). V3 memuat ulang state lama → "amnesia palsu"/konteks nyangkut.
+- **Perbaikan `src/state-machine/machine.ts`:** saat idle reset, bersihkan field EPISODIK session V3 (`cartItems`, `selectedTreatment`, `booking`, `discussedTreatments`, `priceDiscussed`, `bookingCommitConfirmed`, `lastCommitment`, `ongkirStatus`, `totalPrice`) via `GoalTracker.updateGoalSession`. Profil durable (nama, sapaan, anak, lokasi terverifikasi) DIPERTAHANKAN.
+- **Catatan:** nilai `IDLE_TIMEOUT_MS` (default 24 jam) TIDAK diubah — nilai timeout adalah keputusan CG-02 (masih terbuka). Perbaikan ini murni menyelaraskan reset (bug konsistensi), bukan mengubah kebijakan kapan reset.
+- **Test baru `tests/integration/idle-reset-clears-v3-session.test.ts`.**
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite **402 files / 2937 passed / 0 failed** (1 skipped).
+
+#### Stage 2 (R1) — Tenant Identity Boundary: Migrasi Lokal + Kode Tenant-Scoped (2026-09-20)
+
+- **Migrasi lokal (dev DB):** `phone @unique` (global) → `@@unique([tenant_id, phone])`. Migration `prisma/migrations/20260920000000_tenant_identity_boundary`. Dibuat via `migrate diff` + `migrate deploy` (BYPASS `migrate dev` yang rusak oleh shadow-DB `FollowUpStatus`, sesuai AGENTS.md). Drift pasca-migrasi: empty. Backup lokal dibuat sebelum migrasi.
+- **Verifikasi constraint nyata:** phone sama di 2 tenant → OK; duplikat dalam 1 tenant → ditolak `P2002`.
+- **`src/repositories/customer.repository.ts`:** hapus `findByPhoneGlobal` (global lintas tenant); `updateManyByPhone` → `updateManyByPhoneTenant(phone, tenantId, patch)` (tenant-scoped).
+- **`src/services/customer.service.ts`:** buang fallback global; create atomic (catch `P2002` → reread dalam tenant); `setLabelFlags(phone, flags, tenantId=DEFAULT)` tenant-scoped.
+- **`src/services/backup.service.ts`:** `customer.upsert` pakai compound unique `tenant_id_phone`.
+- **Test diselaraskan ke kontrak baru (spec berubah, bukan dilonggarkan):** `customer-repository.test.ts` (isolasi tenant + update tenant-scoped); `label-ai-router.test.ts` TC29 (label TIDAK bocor antar-tenant).
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite 2935 passed / 1 flaky timeout (`waha-webhook`, lulus isolasi — pra-existing, lihat #101).
+- **CATATAN:** migrasi **produksi BELUM** dijalankan (butuh backup + rehearsal + persetujuan eksplisit). Rencana: `docs/plans/STAGE_2_MIGRATION_PLAN_TENANT_IDENTITY.md`.
+
+#### Audit P1-14 — Cancel/Delete Reservasi Membatalkan Follow-up (2026-09-20)
+
+- **Akar:** `DELETE /api/admin/reservation/:id` (soft-cancel & hard-delete) tidak memanggil `followUpService.onReservationCancelled`. Soft-cancel hanya membuat NO_PURCHASE baru; hard-delete `onDelete:SetNull` → follow-up pengingat H-1/review H+1 tetap aktif dan terkirim ke customer yang sudah membatalkan.
+- **Perbaikan `src/routes/admin/reservations.subroute.ts`:** panggil `followUpService.onReservationCancelled(id, tenantId)` pada kedua jalur (hard-delete dipanggil SEBELUM `reservation.delete` agar `reservation_id` masih cocok).
+- **Keputusan CG-06 = Opsi D (user):** merge same-day kontrak LAMA dipertahankan (walau treatment berbeda); multi-treatment ditangani admin manual. Perubahan R6 "merge hanya treatment sama" **DIBATALKAN**. Dicatat di ADR + KNOWN_ISSUES #102.
+- **Test baru `tests/unit/admin-reservation-cancel-followups.test.ts`.**
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite **401 files / 2936 passed / 0 failed** (1 skipped).
+
+#### Audit R7 (ST6-CLM) — Validasi Numerik Aktif pada Direct Reply Tanpa Tool (2026-09-20)
+
+- **Akar (audit R7/C2):** `guardrail-pipeline.ts` hanya menjalankan validator numerik bila `executedTools.length > 0 || hasActiveCart`. Direct reply Call 1 (tanpa tool/cart) yang menyebut nominal **lolos tanpa koreksi**.
+- **Perbaikan `src/v3/agent/pipeline/guardrail-pipeline.ts`:** gate dihapus — validator numerik kini berjalan setiap kali `!numCheck.isValid`. `validateNumericFacts` sudah return valid lebih awal bila tidak ada token "Rp", sehingga hanya menyala saat balasan benar-benar menyebut nominal. Sumber otorisasi tetap (katalog tenant + tool + session) → harga katalog valid tetap lolos; hanya nominal non-katalog yang dikoreksi.
+- **Verifikasi:** `npx tsc --noEmit` 0; test numerik & guardrail 39/39 hijau; full suite **400 files / 2935 passed / 0 failed** (1 skipped).
+
+#### Audit R4 — Cegah Balasan Ganda Saat Logging Outbound Gagal (2026-09-20)
+
+- **Akar (audit R4):** `machine.ts` melakukan `await messageService.logMessage()` AFTER `simulateHumanReply`. Jika DB gagal sesudah pesan terkirim, exception naik ke queue worker → BullMQ retry → **pesan terkirim ulang** ke customer.
+- **Perbaikan `src/state-machine/machine.ts`:** `logMessage` outbound dibungkus try/catch (best-effort). Kegagalan logging tidak lagi menggagalkan turn → mencegah retry yang mengirim ulang. Pesan tetap terkirim sekali.
+- **Test baru `tests/integration/outbound-log-failure-no-retry.test.ts`:** log OUTBOUND throw → `processMessage` tetap resolve; pesan terkirim tepat sekali.
+- **Verifikasi:** `npx tsc --noEmit` 0; test baru hijau.
+
+#### Pembersihan Suite — Isolasi LLM Dua Test Flaky (#101) (2026-09-20)
+
+- **Akar:** `live-chat-reply` & `robustness` menembak network LLM nyata (kredensial `.env` bocor ke test) → `[LLM MODEL FALLBACK] timeout of 15000ms` + retry → melewati `testTimeout`.
+- **Perbaikan:** isolasi seam LLM di kedua test (mock `callChatCompletionsWithFallback`; spy `GenerationStage.executeChatCompletion`). Tidak menurunkan validasi.
+- **Verifikasi:** full suite **399 files / 2934 passed / 0 failed** (1 skipped) — pertama kali 100% hijau. `docs/KNOWN_ISSUES.md` #101 → RESOLVED.
+
+#### Stage 6 (Revisi) ST6-3d — Perbaikan Bocor Konsultasi via Tawaran Asisten (2026-09-19)
+
+Ditemukan saat verifikasi sandbox LLM nyata (skenario S1): pada turn konsultasi lanjutan, **tawaran asisten** menyebut layanan → cart terisi walau verdict tersimpan EXPLORING.
+
+- **`src/v3/state/cart-manager.ts`** — gerbang `exploringLock` dihitung sekali dari SELURUH riwayat: bila `lastCommitment === 'EXPLORING'` DAN tidak ada pesan USER mana pun yang membawa sinyal komitmen/hari DAN `bookingCommitConfirmed !== true` → seluruh giliran (user MAUPUN asisten) DILARANG mengisi cart; penyebutan hanya ke `discussedTreatments`. Sebelumnya gerbang hanya berlaku untuk pesan user (`!isAssistant`) sehingga rekomendasi asisten lolos.
+- **Bukti uji sandbox (LLM nyata):** phone baru → "kak bapil pakai treatment apa" → "pijut pulih ceria itu aman ya" → "makasih": cart **KOSONG** sepanjang alur. Sebelumnya turn 2 terisi.
+- **Test:** `tests/integration/cart-commitment-cross-turn.test.ts` +2 kasus (tawaran asisten saat EXPLORING tidak mengisi cart; EXPLORING lalu komit eksplisit tetap terisi) → 8/8 hijau.
+- **Verifikasi:** `npx tsc --noEmit` 0. Full suite: 2 test **timeout** (`live-chat-reply`, `robustness`) — **terbukti pre-existing** (gagal juga di kode bersih via `git stash`), bukan regresi.
+
+#### Stage 6 (Revisi) ST6-3c — Test Integrasi Kontrak Komitmen Lintas-Turn (2026-09-19)
+
+- **`tests/integration/cart-commitment-cross-turn.test.ts` (baru)** — 6 test mengunci: verdict EXPLORING tersimpan → cart tidak terisi; EXPLORING + sinyal komitmen eksplisit → cart terisi; COMMITTED → cart terisi; tanpa verdict → perilaku `?` lama; `applyCommitmentVeto` EXPLORING mengosongkan, COMMITTED tidak mengubah.
+- **Verifikasi:** 6/6 hijau.
+
+#### Stage 6 (Revisi) ST6-3b — Verdict Komitmen Persisten Lintas-Turn (`lastCommitment`) (2026-09-19)
+
+Temuan dari uji sandbox nyata: veto satu-turn TIDAK cukup karena `prepareSession` menghitung ulang cart dari riwayat SETIAP turn (sebelum Call 1), dan verdict hanya ada di 2 tool.
+
+- **`src/v3/domain/types.ts`** — `CustomerGoalSession.lastCommitment?: CommitmentLevel` (persisten lintas turn).
+- **`src/v3/state/goal-tracker.ts`** — `getGoalSession` mengembalikan `lastCommitment` dari `preferences` (sebelumnya tidak dibaca → persist sia-sia).
+- **`src/v3/state/cart-manager.ts`** — `syncCartItems` gerbang baru `isExploringVerdict`: bila `lastCommitment === 'EXPLORING'` DAN pesan user tidak membawa sinyal komitmen/hari → item masuk `discussedTreatments`, DILARANG cart.
+- **`src/v3/agent/agent-runner.ts`** — verdict Call 1 dipersist ke `lastCommitment`; veto turn-ini tetap bila EXPLORING + cart terisi.
+- **Field `commitment` ditambahkan ke SEMUA 6 tool** (`get-catalog`, `calculate-delivery`, `search-knowledge-faq`, `clinic-faq`, `escalate-human`, `save-reservation`) + zod-nya — sebelumnya hanya 2 tool, sehingga verdict hilang saat Call 1 memilih tool lain (bukti log sandbox `commitment:null`).
+- **Bukti uji sandbox (LLM asli):** konsultasi "pijat oksitosin itu untuk ibu melahirkan ya" → cart KOSONG di turn itu & turn lanjutan; "kak bapil..."→"boleh bund" → cart terisi; "mau ambil pijat ceria buat adek" → cart terisi.
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite **398 files / 2926 passed / 0 failed** (1 skipped).
+
+#### Stage 6 (Revisi) ST6-4 — Verdict COMMITTED Me-latch Komitmen Booking (2026-09-19)
+
+- **`src/v3/agent/agent-runner.ts`** — setelah Call 1, bila `routing.commitment === 'COMMITTED'` dan `!session.bookingCommitConfirmed` → persist `bookingCommitConfirmed=true` (sticky). Menyatukan cart & tool-masker pada satu sumber penilaian semantik LLM, menggantikan ketergantungan pada daftar verba hafalan.
+- **Pengaman tidak berubah:** `save_reservation` tetap butuh treatment + lokasi + tanggal (masker PRASYARAT utuh).
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; suite cart/booking/masking/agent 48/48; full suite 2925 passed / 1 flaky (`robustness.test.ts`, lulus isolasi — pra-existing).
+
+#### Stage 6 (Revisi) ST6-3 — Verdict Komitmen Call 1 Menjadi Otoritas Cart (2026-09-19)
+
+- **Arah:** tanpa shadow/flag (belum deploy); langsung enforce. Verdict Call 1 memveto cart hasil heuristik.
+- **`src/v3/agent/pipeline/generation-stage.ts`** — `RoutingOutput` + `commitment`; verdict dihitung sekali, dicatat (`ROUTER_COMMITMENT_VERDICT`), dikembalikan.
+- **`src/v3/state/cart-manager.ts`** — method murni baru `applyCommitmentVeto(session, commitment)`: bila `EXPLORING`, `cartItems` dikosongkan & dipindah ke `discussedTreatments`; bila bukan EXPLORING/absen → tidak mengubah (jalur lama jadi cadangan).
+- **`src/v3/agent/agent-runner.ts`** — setelah Call 1, bila `routing.commitment === 'EXPLORING'` → terapkan veto.
+- **`tests/unit/v3/cart-declarative-consultation.test.ts`** — 2 kasus konsultasi MERAH → **HIJAU** (4/4).
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; suite cart/booking/masking 41/41; full suite 2925 passed / 1 flaky (`migration.test.ts`, lulus isolasi — pra-existing, bukan regresi).
+
+#### Stage 6 (Revisi) ST6-1 & ST6-2 — Kontrak Verdict Komitmen (Shadow) (2026-09-19)
+
+Arah disetujui user: keputusan "tanya vs beli" diserahkan ke Call 1 LLM (yang sudah membaca history), TANPA API call tambahan. ST6-1 & ST6-2 = fondasi + observasi shadow; belum mengubah keputusan cart.
+
+- **ST6-1 `src/v3/domain/types.ts`** — tipe baru `CommitmentLevel` (`EXPLORING|CONSIDERING|COMMITTED`) + `TurnInterpretation`.
+- **ST6-2 `src/v3/tools/get-catalog.tool.ts`, `calculate-delivery.tool.ts`** — field JSON `commitment` opsional (enum) ditambahkan ke 2 tool.
+- **ST6-2 `src/v3/tools/tool-schemas.ts`** — `commitment` opsional di zod (strip-safe).
+- **ST6-2 `src/v3/agent/prompt/phases/router-tool-routing.layer.ts`** — 1 blok instruksi penilaian komitmen semantik (contoh EXPLORING/CONSIDERING/COMMITTED).
+- **ST6-2 `src/v3/agent/pipeline/generation-stage.ts`** — shadow log `ROUTER_COMMITMENT_VERDICT` (belum dipakai keputusan).
+- **Test baru `tests/unit/v3/cart-declarative-consultation.test.ts`** — reproduksi 2 bug (konsultasi tanpa `?` masuk cart); **2 sengaja MERAH** (target perbaikan ST6-3), 2 komitmen sah hijau.
+- **Verifikasi:** `npx tsc --noEmit` 0; suite terkait 33/35 (2 merah = target ST6-3, bukan regresi).
+
+#### Micro-task Isolasi Tenant pada Tool Eskalasi (Audit V3, RC-01) (2026-09-19)
+
+- **`src/v3/tools/escalate-human.tool.ts:46`** — lookup conversation jalur eskalasi kini tenant-scoped: `findUnique({ where: { id } })` → `findFirst({ where: { id: conversationId, tenant_id: tenantId } })`. Mencegah conversation milik tenant lain ikut dieskalasi (cross-tenant leak RC-01). Kontrak output tidak berubah.
+- **Verifikasi:** `npx tsc --noEmit` 0; `tests/v3/agent-tools.test.ts`, `tests/unit/v3/tool-pipeline.test.ts`, `tests/unit/v3/escalation-hard-guards.test.ts`, `tests/unit/v3/structural-refusal-tagging.test.ts` → 30/30 hijau.
+
+#### Stage 1 — Correlation Spine + Real-DB Harness (Audit V3) (2026-09-19)
+
+Menyambung korelasi end-to-end
+
+- **MT-1.2 `utils/context.ts`** — `ContextData` diperluas aditif: `turnId?`, `provider?: 'WAHA'|'WABA'`, `inboundMessageId?`.
+- **MT-1.2 `queue.service.ts`** — `QueuePayload` diperluas aditif (`correlationId/turnId/provider/inboundMessageId` opsional); worker BullMQ & in-memory kini membungkus `stateMachine.processMessage` dengan `contextStorage.run(...)` agar correlation ID tidak hilang setelah boundary webhook.
+- **MT-1.2 `webhook.route.ts`** — `enqueueMessage` WAHA meneruskan `correlationId`, `turnId` (`{tenant}:WAHA:{waMessageId}`), `provider`, `inboundMessageId`.
+- **MT-1.2 `waba-webhook.route.ts`** — handler dibungkus `contextStorage.run`; `enqueueMessage` WABA meneruskan IDs (`{tenant}:WABA:{msg.messageId}`).
+- **MT-1.3 `llm-execution-logger.ts`** — `LlmExecutionRecord` aditif: `turnId?`, `tenantId?`, `conversationId?`, `actualProvider?`, `actualModel?`.
+- **MT-1.3 `agent-runner.ts` + `generation-stage.ts`** — `AgentRunnerInput`/`TurnState` memperoleh `turnId?`/`provider?`; `recordCall` mengisi field korelasi baru.
+- **MT-1.3 `machine.ts`** — meneruskan `turnId`/`provider` dari `contextStorage.getStore()` ke `V3AgentRunner`.
+- **MT-1.3 `shutdown.ts`** — graceful shutdown menambah `flushLlmAuditBuffer()`.
+- **MT-1.4 `vitest.db.config.ts` (baru) + `tests/db/v3-foundation.db.test.ts` (baru)** — harness PostgreSQL nyata terpisah (tanpa `tests/setup.ts`), guard anti-host-produksi, dan test constraint/transaksi/concurrency. Di-skip otomatis bila `TEST_DATABASE_URL` tidak di-set sehingga `npm test` tetap offline bersih.
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; full suite **397 files / 2922 passed / 24 skipped / 0 failed**; test DB ter-skip rapi tanpa URL (exit 0).
 
 #### Resolusi 14 Kegaalan Test Pre-Existing (Green Full Suite + Build) — 14 Fix (2026-09-19)
 
@@ -23,6 +334,31 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 - **P1 Guardrail `guardrail-pipeline.ts:483` — Context-Aware Exemption:** `hasAgeQuestion` reprompt kini diperiksa `isAgeClarificationAuthorized = executedTools.some(t.name==='get_catalog_and_price' && result.needsAgeClarification===true)` (state-gated, bukan hafalan kalimat). Pertanyaan usia netral `berapa bulan atau berapa tahun` yang diwajibkan `CLINICAL_PROBE` multi-tier (Pulih Ceria BABY vs KIDS) tidak lagi disabotase. Non-klinis (jadwal/ongkir) tetap di-reprompt.
 - **P2 Tool `get-catalog.tool.ts:87,744,785,797` — Kontrak & Direktif:** Tambah `needsAgeClarification?:boolean` di `GetCatalogOutput`; `needsAgeClarification` deteksi `normalizeFam` (buang `bayi|kids|anak`, `famBase` BABY vs KIDS) — fix bug `base "pijat kids"` gagal match `Pijat Bayi Pulih Ceria`. Direktif `CLINICAL_PROBE` kini `Keluhan (kembung) dapat dibantu dengan terapi *Pijat Pulih Ceria*... SEBUTKAN *Pijat Pulih Ceria* + manfaat ringkas, lalu TANYAKAN USIA netral` (eksplisit famili, bukan "terapi khusus" generik). Return `needsAgeClarification` agar guardrail sinkron.
 - **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; `v3-persona-rules` 15/15 hijau; Turn 1 `anak saya kembung treatment apa ya yang cocok` → `Pijat Pulih Ceria` + tanya usia netral (tidak buntu).
+
+#### Mode Peta Jalan OSM Plain Grayscale — Hanya Jalan, Tanpa Warna, Terbatas Sby/Sda (2026-09-20)
+
+- **`packages/admin-dashboard` — basemap Peta Jalan diganti** menjadi **CARTO `light_nolabels`**
+  (data OpenStreetMap, tanpa label nama jalan/POI) + CSS filter `grayscale(1) contrast(0.96) brightness(1.04)`
+  pada kelas `.customer-map-osm-gray` (`src/index.css`) — peta "sangat simple", hanya kerangka jalan
+  abu-abu, zero distraksi teks.
+- **Terbatas Surabaya & Sidoarjo:** TileLayer diberi `bounds: SURABAYA_RAYA_BOUNDS` — tiles hanya
+  dimuat di area Sby/Sda; di luar itu kontainer peta netral (sesuai permintaan "yang lain tidak perlu").
+- **Robust:** `minZoom 4`/`maxZoom 18`/`maxNativeZoom 20` mendukung zoom-out maksimal saat "Semua wilayah";
+  diterapkan konsisten di initial layer (`CustomerMapTab.tsx`) dan cabang streets pada mode effect.
+  (Evolusi basemap: CartoDB light_all → OSM standar grayscale → CARTO light_nolabels grayscale.)
+- **Verifikasi live:** chunk `CustomerDatabase-*` ter-serve berisi `light_nolabels` & `.customer-map-osm-gray`,
+  referensi `tile.openstreetmap.org` hilang.
+
+#### Pengerasan Lanjutan Peta Area Vektor — State Reaktif, Pointer-Transparent, Adaptive Bounds, ResizeObserver (2026-09-19)
+
+- **`packages/admin-dashboard/src/components/customer/CustomerMapTab.tsx`** — 6 temuan audit dibereskan secara fondasional:
+  - **Anti-race blank screen:** `boundaryGeoRef` (useRef) → `boundaryGeo` (`useState`) + `geoLoading`; efek mode peta kini reaktif terhadap `boundaryGeo` sehingga toggle "Area Vektor" saat GeoJSON masih dimuat tidak lagi menghasilkan kanvas kosong permanen; ditambah indikator "Memuat batas wilayah…".
+  - **Pemulihan hierarki warna:** poligon kelurahan dikembalikan ke **biru pudar** (`#eff6ff` / border `#93c5fd`, dash `2,3`), hover biru segar `#bae6fd`/`#0284c7`; legenda UI disinkronkan (Hijau Kota → Orange Kecamatan → Biru Pudar Kelurahan).
+  - **Tooltip anti-flicker:** garis batas kota/kecamatan kini `className: 'pointer-events-none'` pada style Leaflet (deklaratif, tahan re-render) — tidak pernah mencuri pointer di atas poligon kelurahan.
+  - **Adaptive camera bounds:** efek reaktif `showAllCities` → `setMinZoom(4)` + `setMaxBounds(null)` saat "Semua wilayah" aktif, kembali `minZoom 10` + `SURABAYA_RAYA_BOUNDS` saat nonaktif.
+  - **Layering radius:** lingkaran jangkauan klinik dipindah ke custom pane `radiusPane` (zIndex 280, di bawah overlayPane/marker) agar tidak menutupi marker pelanggan.
+  - **Responsivitas:** `ResizeObserver` pada kontainer peta memanggil `invalidateSize()` saat tab/resize berubah (cegah ubin abu-abu).
+- **Regression gate:** `customer-map-points` 12 + `customer-map-utils` 19 = 31 hijau; build admin-dashboard & bot engine exit 0.
 
 #### Perbaikan Fondasional Peta Area Vektor — Grid-Snap Dissolve & UI Map Pengerasan (2026-09-19)
 

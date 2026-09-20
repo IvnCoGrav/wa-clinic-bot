@@ -11,6 +11,7 @@ import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
+import { contextStorage } from '../utils/context';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -31,6 +32,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
   fastify.post('/api/webhook/waba', async (request: FastifyRequest, reply: FastifyReply) => {
     const correlationId = crypto.randomUUID();
+    return contextStorage.run({ correlationId }, async () => {
 
     let appSecret = process.env.WABA_APP_SECRET || '';
     if (!appSecret) {
@@ -370,16 +372,34 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       });
 
       if (!coalesceResult.handled) {
+        // Stage 5 Fase 2: persist turn inbound (RECEIVED) sebelum enqueue.
+        try {
+          const { turnRepository } = await import('../repositories/turn.repository');
+          await turnRepository.persistInbound({
+            tenantId,
+            provider: 'WABA',
+            inboundMessageId: msg.messageId,
+            customerId: customer.id,
+            conversationId: conversation.id,
+            payload: { tenantId, customerId: customer.id, phone: customer.phone, incomingMessage },
+          });
+        } catch {}
+
         await queueService.enqueueMessage({
           tenantId,
           customerId: customer.id,
           phone: customer.phone,
           incomingMessage,
+          correlationId,
+          turnId: `${tenantId}:WABA:${msg.messageId}`,
+          provider: 'WABA',
+          inboundMessageId: msg.messageId,
         });
       }
       processed++;
     }
 
     return reply.status(200).send({ status: 'PROCESSED', count: processed });
+    });
   });
 }

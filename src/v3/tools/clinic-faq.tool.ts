@@ -43,6 +43,11 @@ export const GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA = {
             'general_homecare_info'
           ],
           description: 'Topik kebijakan atau SOP yang ditanyakan customer: asal/lokasi klinik (homebase_and_coverage), kualifikasi bidan (therapist_qualification), pembayaran (payment_methods), ongkir multi anak (multi_child_transport), vaksin (post_vaccine_rules), operasional (operational_hours_and_booking).'
+        },
+        commitment: {
+          type: 'string',
+          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
+          description: 'Penilaian SEMANTIK atas seluruh percakapan: customer SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Berdasarkan makna & konteks, bukan ada/tidak tanda tanya.'
         }
       },
       required: ['topic']

@@ -49,6 +49,8 @@ export interface CatalogTreatmentDetail {
   promoPrice?: number;
   description: string;
   isRecommendedForSymptoms?: boolean;
+  /** Fixing D1 (sesi 767713): penanda layanan add-on (bukan paket utama). */
+  isAddon?: boolean;
 }
 
 /**
@@ -202,6 +204,11 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         targetPrice: {
           type: 'number',
           description: 'Nominal rupiah yang disebut customer (mis. "100rb" -> 100000, "60 ribu" -> 60000). WAJIB diisi bila customer menyebut angka nominal tanpa nama paket. Tool mencocokkan promoPrice/originalPrice katalog lintas kategori (MOMS/BABY/KIDS) dan mengembalikan klarifikasi paket mana yang sesuai nominal.'
+        },
+        commitment: {
+          type: 'string',
+          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
+          description: 'Penilaian SEMANTIK atas seluruh percakapan: apakah customer pada giliran ini SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Isi berdasarkan makna & konteks percakapan (bukan sekadar ada/tidak tanda tanya). Contoh EXPLORING: "bapil pakai treatment apa", "oksitosin itu untuk apa", "anaknya kembung bisa dipijat?". Contoh COMMITTED: "boleh bund", "mau ambil yang pulih ceria", "ambil deh pijat ceria buat adek". Contoh CONSIDERING: "yang ceria kayaknya cocok ya", "yang itu boleh juga sih".'
         }
       }
     }
@@ -601,6 +608,33 @@ export async function executeGetCatalog(
         ? ` Paket Combo ${topService.name} + Sinar Moksa total Promo ${formatRp(Number(topService.promoPrice ?? 0) + moksa.promoPrice)} (normal ${formatRp(Number(topService.originalPrice ?? 0) + moksa.originalPrice)}).`
         : '';
       recommendationReason = `Berdasarkan keluhan yang disampaikan (${effectiveSymptoms.join(', ')}), layanan yang paling sesuai adalah ${topService.name}${priceLine} ${topService.description}${comboLine}`;
+
+      // Fixing D1/Fase 2 (sesi 767713): sertakan add-on relevan ke
+      // formattedTreatments (flag isAddon) saat keluhan pernapasan DAN mode
+      // harga (showPrices) — agar grounding & validator faktual melihat add-on
+      // yang SAH tanpa melanggar anti-menu brosur (mode konsultasi tetap ≤2).
+      if (moksa && isRespiratory && showPrices && !formattedTreatments.some((t) => t.id === moksa.id)) {
+        const addonEntry: any = {
+          id: moksa.id,
+          name: moksa.name,
+          category: moksa.category,
+          durationMinutes: moksa.durationMinutes,
+          originalPrice: moksa.originalPrice,
+          promoPrice: moksa.promoPrice,
+          description: moksa.description,
+          isRecommendedForSymptoms: false,
+          isAddon: true,
+        };
+        // Hormati scoping yang sama (jangan bocorkan harga/durasi bila tak ditanya).
+        if (!showPrices) {
+          delete addonEntry.originalPrice;
+          delete addonEntry.promoPrice;
+        }
+        if (!showDuration) {
+          delete addonEntry.durationMinutes;
+        }
+        formattedTreatments.push(addonEntry);
+      }
     }
 
     // Phase 1 — Anti-brochure: format deskripsi percakapan mengalir (satu baris

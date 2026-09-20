@@ -153,7 +153,13 @@ export class GoalTracker {
         return mem ? { ...mem } : { ...DEFAULT_SESSION };
       }
 
-      const prefs: any = (conv.customer?.preferences as any) || {};
+      // Stage 4 (RC-02): sumber utama = Conversation.session_data (episodik).
+      // Fallback ke Customer.preferences hanya bila session_data belum terisi
+      // (kompatibilitas mundur selama transisi / conversation lama).
+      const convSession: any = (conv as any).session_data || null;
+      const prefs: any = convSession && typeof convSession === 'object'
+        ? convSession
+        : ((conv.customer?.preferences as any) || {});
 
       // Sapaan data-driven: HANYA dari preferensi eksplisit tersimpan.
       // DILARANG menebak gender dari nama (mis. "dwi" unisex) — default produk "Bunda".
@@ -190,6 +196,8 @@ export class GoalTracker {
         priceDiscussed: prefs.priceDiscussed === true ? true : undefined,
         bookingCommitConfirmed: prefs.bookingCommitConfirmed === true ? true : undefined,
         formRetryCount: typeof prefs.formRetryCount === 'number' ? prefs.formRetryCount : undefined,
+        lastCommitment: (prefs.lastCommitment === 'EXPLORING' || prefs.lastCommitment === 'CONSIDERING' || prefs.lastCommitment === 'COMMITTED')
+          ? prefs.lastCommitment : undefined,
       };
     } catch (err: any) {
       console.warn(JSON.stringify({ event: 'GOAL_TRACKER_GET_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));
@@ -230,26 +238,49 @@ export class GoalTracker {
       try {
         const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenant_id: tenantId } });
         if (conv?.customer_id) {
-          const updateData: any = {
-            preferences: merged,
-          };
-          if (merged.customerName) {
-            updateData.name = merged.customerName;
-          }
+          // Stage 4 (RC-02): tulis state episodik ke Conversation.session_data.
+          await prisma.conversation.updateMany({
+            where: { id: conversationId, tenant_id: tenantId },
+            data: { session_data: merged as any } as any,
+          });
+
+          // Mirror DURABLE saja ke Customer (agar pembaca lama tetap benar:
+          // alamat untuk CAPI/enrichment/staff, nama & kolom profil).
+          const customerData: any = {};
+          if (merged.customerName) customerData.name = merged.customerName;
           if (merged.location) {
-            if (merged.location.kelurahan) updateData.kelurahan = merged.location.kelurahan;
-            if (merged.location.kecamatan) updateData.kecamatan = merged.location.kecamatan;
-            if (merged.location.kota) updateData.kota = merged.location.kota;
-            if (merged.location.distanceKm != null) updateData.distance_km = merged.location.distanceKm;
+            if (merged.location.kelurahan) customerData.kelurahan = merged.location.kelurahan;
+            if (merged.location.kecamatan) customerData.kecamatan = merged.location.kecamatan;
+            if (merged.location.kota) customerData.kota = merged.location.kota;
+            if (merged.location.distanceKm != null) customerData.distance_km = merged.location.distanceKm;
             if (merged.location.ongkirPromo != null || merged.location.ongkirNormal != null) {
-              updateData.ongkir = merged.location.ongkirPromo || merged.location.ongkirNormal;
+              customerData.ongkir = merged.location.ongkirPromo || merged.location.ongkirNormal;
             }
-            if (merged.location.isOutOfCoverage != null) updateData.is_out_of_coverage = merged.location.isOutOfCoverage;
+            if (merged.location.isOutOfCoverage != null) customerData.is_out_of_coverage = merged.location.isOutOfCoverage;
           }
+
+          // Mirror preferences DURABLE saja (address/landmark/house_photo_url/
+          // genderGreeting/customerName) — TIDAK menyertakan field episodik
+          // (cartItems/booking/selectedTreatment) agar pembaca lama tidak
+          // melihat state basi; state episodik hidup di Conversation.
+          let prevPrefs: any = {};
+          try {
+            const cust = await prisma.customer.findFirst({
+              where: { id: conv.customer_id, tenant_id: tenantId },
+              select: { preferences: true },
+            });
+            prevPrefs = (cust?.preferences as any) || {};
+          } catch { /* DB offline → mulai dari kosong */ }
+          const durablePrefs: any = {
+            ...prevPrefs,
+            ...(merged.customerName ? { customerName: merged.customerName } : {}),
+            ...(merged.genderGreeting ? { genderGreeting: merged.genderGreeting } : {}),
+          };
+          customerData.preferences = durablePrefs;
 
           await prisma.customer.updateMany({
             where: { id: conv.customer_id, tenant_id: tenantId },
-            data: updateData
+            data: customerData
           });
         }
       } catch (err: any) {

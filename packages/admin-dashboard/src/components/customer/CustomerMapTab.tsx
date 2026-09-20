@@ -31,6 +31,19 @@ const SURABAYA_RAYA_BOUNDS: [[number, number], [number, number]] = [
 ];
 const RING_COLORS = ['#008069', '#2563eb', '#e11d48'];
 
+// Basemap Peta Jalan: CARTO light_nolabels (OSM data, tanpa label/POI) via API key dari .env,
+// filter grayscale — sangat simple, hanya jalan. Tanpa key, fallback otomatis ke
+// Esri World Light Gray Base (netral, minim label, gratis tanpa key).
+const CARTO_KEY: string = (import.meta.env.VITE_CARTO_API_KEY as string) || '';
+const BASEMAP_URL = CARTO_KEY
+  ? `https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`
+  : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+const BASEMAP_ATTR = CARTO_KEY
+  ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  : '&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, and the GIS User Community';
+const BASEMAP_MAX_NATIVE_ZOOM = CARTO_KEY ? 20 : 18;
+const BASEMAP_SUBDOMAINS: string | undefined = CARTO_KEY ? 'abcd' : undefined;
+
 function getGoogleMapsDirectionUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
@@ -173,16 +186,16 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         rp.style.zIndex = '280';
       }
 
-      // Basemap CartoDB Positron (Light, bersih, jalan/nama wilayah jelas)
-      const tileLayer = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        {
-          minZoom: 10,
-          maxZoom: 18,
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          subdomains: 'abcd',
-        }
-      );
+      // Basemap Peta Jalan (CARTO light_nolabels + grayscale, atau fallback Esri) — sangat simple, hanya jalan
+      const tileLayer = L.tileLayer(BASEMAP_URL, {
+        minZoom: 4,
+        maxZoom: 18,
+        maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
+        attribution: BASEMAP_ATTR,
+        subdomains: BASEMAP_SUBDOMAINS as any,
+        bounds: SURABAYA_RAYA_BOUNDS,
+        className: 'customer-map-osm-gray',
+      });
       tileLayer.addTo(map);
       tileLayerRef.current = tileLayer;
 
@@ -282,15 +295,15 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         } catch {}
       }
       if (!tileLayerRef.current) {
-        tileLayerRef.current = L.tileLayer(
-          'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-          {
-            minZoom: 10,
-            maxZoom: 18,
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            subdomains: 'abcd',
-          }
-        );
+        tileLayerRef.current = L.tileLayer(BASEMAP_URL, {
+          minZoom: 4,
+          maxZoom: 18,
+          maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
+          attribution: BASEMAP_ATTR,
+          subdomains: BASEMAP_SUBDOMAINS as any,
+          bounds: SURABAYA_RAYA_BOUNDS,
+          className: 'customer-map-osm-gray',
+        });
       }
       if (!map.hasLayer(tileLayerRef.current)) {
         tileLayerRef.current.addTo(map);
@@ -426,11 +439,13 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
       const statusLabel = p.is_out_of_coverage
         ? 'Di luar jangkauan'
-        : p.is_mql
-          ? 'MQL'
-          : p.status && p.status !== 'active'
-            ? 'Status lain'
-            : 'Aktif';
+        : p.has_reservation
+          ? 'Sudah Reservasi'
+          : p.is_mql
+            ? 'MQL'
+            : p.status && p.status !== 'active'
+              ? 'Status lain'
+              : 'Aktif';
       const accuracy = estimated ? '⚪ Estimasi Wilayah' : '📍 GPS Akurat';
       const distanceText =
         typeof p.distance_km === 'number'

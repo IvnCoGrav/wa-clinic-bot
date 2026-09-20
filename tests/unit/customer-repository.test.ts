@@ -73,26 +73,29 @@ describe('FASE 5a — customer repository', () => {
     expect(getCustomerRepository()).toBeInstanceOf(PostgresCustomerRepository);
   });
 
-  it('findByPhoneGlobal: lintas tenant (skema global-unique)', async () => {
+  it('isolasi tenant: phone sama di tenant berbeda TIDAK saling terlihat', async () => {
     const repo = new InMemoryCustomerRepository();
     await repo.create({ tenant_id: 'tenant-a', phone: '6281' });
     expect(await repo.findByPhone('6281', 'tenant-b')).toBeNull();
-    expect(await repo.findByPhoneGlobal('6281')).not.toBeNull();
+    expect(await repo.findByPhone('6281', 'tenant-a')).not.toBeNull();
   });
 
-  it('updateManyByPhone: phone-global, mengembalikan count', async () => {
+  it('updateManyByPhoneTenant: hanya tenant yang diminta yang ter-update', async () => {
     const repo = new InMemoryCustomerRepository();
     await repo.create({ tenant_id: 'tenant-a', phone: '6281' });
     await repo.create({ tenant_id: 'tenant-b', phone: '6281' });
-    const n = await repo.updateManyByPhone('6281', { is_hold_labeled: true });
-    expect(n).toBe(2);
+    const n = await repo.updateManyByPhoneTenant('6281', 'tenant-a', { is_hold_labeled: true });
+    expect(n).toBe(1);
     expect((await repo.findByPhone('6281', 'tenant-a'))?.is_hold_labeled).toBe(true);
-    expect((await repo.findByPhone('6281', 'tenant-b'))?.is_hold_labeled).toBe(true);
+    expect((await repo.findByPhone('6281', 'tenant-b'))?.is_hold_labeled).not.toBe(true);
   });
 
-  it('Postgres updateManyByPhone mendelegasikan ke prisma', async () => {
-    vi.mocked(prisma.customer.updateMany).mockResolvedValue({ count: 2 } as any);
+  it('Postgres updateManyByPhoneTenant mendelegasikan ke prisma dengan filter tenant', async () => {
+    const spy = vi.mocked(prisma.customer.updateMany).mockResolvedValue({ count: 1 } as any);
     const repo = new PostgresCustomerRepository();
-    expect(await repo.updateManyByPhone('6281', { is_hold_labeled: true })).toBe(2);
+    expect(await repo.updateManyByPhoneTenant('6281', 'tenant-a', { is_hold_labeled: true })).toBe(1);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { phone: '6281', tenant_id: 'tenant-a' } })
+    );
   });
 });

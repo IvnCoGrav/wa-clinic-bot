@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { hashPiiPhone } from './logger-sanitizer';
 
 export type LlmFlowType =
   | 'NLU_EXTRACTOR'
@@ -19,6 +20,14 @@ export interface LlmExecutionRecord {
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
+  /** ID kanonis satu turn inbound (aditif, opsional). */
+  turnId?: string;
+  tenantId?: string;
+  conversationId?: string;
+  /** Provider gateway aktual yang melayani call (WAHA bukan LLM; WABA tidak dipakai di sini). */
+  actualProvider?: string;
+  /** Model aktual yang benar-benar dipakai (bukan configured primary saat fallback). */
+  actualModel?: string;
   bubbleCorrelationId?: string;
   promptPayload?: any;
   reasoning: string | null;
@@ -60,6 +69,22 @@ export interface GroupedCustomerLlmLogs {
 
 const MAX_LLM_LOGS = 500;
 const llmExecutionBuffer: LlmExecutionRecord[] = [];
+
+/**
+ * CG-09 (RC-09): mask nama customer agar tidak tersimpan mentah di JSONL.
+ * Simpan hanya inisial + panjang (mis. "Bunda Sari" → "B*** S***").
+ */
+function maskCustomerName(name?: string): string {
+  if (!name) return '';
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length <= 1 ? w : `${w[0]}${'*'.repeat(Math.min(w.length - 1, 3))}`))
+    .join(' ');
+}
+
+/** Diekspor untuk testing (CG-09). */
+export { maskCustomerName };
 
 const LOGS_DIR = path.resolve(process.cwd(), 'logs');
 
@@ -123,6 +148,19 @@ async function flushLlmWriteQueue(): Promise<void> {
 }
 
 /**
+ * Stage 8 (audit): flush sinkron antrean tulis JSONL saat shutdown.
+ * Sebelumnya antrean memakai timer `unref` yang bisa hilang saat proses keluar
+ * → berkas `llm-*.jsonl` 0-byte walau ada aktivitas. Panggil dari graceful shutdown.
+ */
+export async function flushLlmExecutionLogs(): Promise<void> {
+  if (llmFlushTimer) {
+    clearTimeout(llmFlushTimer);
+    llmFlushTimer = null;
+  }
+  await flushLlmWriteQueue();
+}
+
+/**
  * Catat eksekusi proses LLM (baik auto-reply chatbot, NLU, AI Router, AI Verifier, maupun copilot).
  */
 export function recordLlmExecution(
@@ -135,6 +173,11 @@ export function recordLlmExecution(
     customerPhone: data.customerPhone,
     customerName: data.customerName,
     customerInput: data.customerInput || '',
+    turnId: data.turnId,
+    tenantId: data.tenantId,
+    conversationId: data.conversationId,
+    actualProvider: data.actualProvider,
+    actualModel: data.actualModel,
     bubbleCorrelationId: data.bubbleCorrelationId,
     promptPayload: data.promptPayload,
     reasoning: data.reasoning || null,
@@ -165,7 +208,15 @@ export function recordLlmExecution(
   // Queue to background JSONL persistent file
   if (process.env.NODE_ENV !== 'test') {
     try {
-      llmWriteQueue.push(JSON.stringify(entry));
+      // CG-09 (RC-09): redact identitas PII HANYA pada berkas JSONL (at-rest).
+      // Buffer in-memory tetap mentah agar UI admin bisa mengidentifikasi
+      // customer saat sesi berjalan (data tidak persist).
+      const persisted: LlmExecutionRecord = {
+        ...entry,
+        customerPhone: entry.customerPhone ? hashPiiPhone(entry.customerPhone) : entry.customerPhone,
+        customerName: entry.customerName ? maskCustomerName(entry.customerName) : entry.customerName,
+      };
+      llmWriteQueue.push(JSON.stringify(persisted));
       if (llmWriteQueue.length >= 10) {
         if (llmFlushTimer) {
           clearTimeout(llmFlushTimer);

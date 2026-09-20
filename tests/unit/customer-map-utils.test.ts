@@ -99,12 +99,25 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
   });
 
   describe('markerColor', () => {
-    it('prioritas: out-of-coverage > mql > status non-aktif > aktif', () => {
-      expect(markerColor({ lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true })).toBe('#94a3b8');
+    it('prioritas: out-of-coverage > sudah-reservasi > mql > status non-aktif > aktif', () => {
+      expect(markerColor({ lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true, has_reservation: true })).toBe('#94a3b8');
       expect(markerColor({ lat: 0, lng: 0, is_mql: true, status: 'blocked' })).toBe('#2563eb');
       expect(markerColor({ lat: 0, lng: 0, status: 'blocked' })).toBe('#f59e0b');
       expect(markerColor({ lat: 0, lng: 0, status: 'active' })).toBe('#008069');
       expect(markerColor({ lat: 0, lng: 0 })).toBe('#008069');
+    });
+
+    it('pelanggan MQL yang SUDAH reservasi tampil hijau (bukan biru)', () => {
+      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe('#008069');
+      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true, status: 'active' })).toBe('#008069');
+    });
+
+    it('pelanggan sudah reservasi namun status non-aktif tetap hijau (reservasi menang atas status)', () => {
+      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, status: 'blocked' })).toBe('#008069');
+    });
+
+    it('out-of-coverage tetap menang atas reservasi (perlu perhatian operasional)', () => {
+      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, is_out_of_coverage: true })).toBe('#94a3b8');
     });
   });
 
@@ -132,6 +145,10 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
       expect(statusOf(points[1])).toBe('mql');
       expect(statusOf(points[2])).toBe('other');
       expect(statusOf(points[3])).toBe('out_of_coverage');
+    });
+
+    it('MQL yang sudah reservasi dikategorikan "active" (legend tetap konsisten dengan warna hijau)', () => {
+      expect(statusOf({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe('active');
     });
 
     it('set kosong → seluruh titik dikembalikan (tidak menyembunyikan apa pun)', () => {

@@ -6,6 +6,7 @@ import { getLlmEndpointConfig } from '../../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { ContextGrounder, FastResponseGate } from './pipeline/context-grounder';
+import { CartManager } from '../state/cart-manager';
 import { ToolExecutionPipeline } from './pipeline/tool-pipeline';
 import { DeliveryFastPath } from './pipeline/delivery-fast-path';
 import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
@@ -43,6 +44,10 @@ export interface AgentRunnerInput {
   phone: string;
   chatId: string;
   bubbleCorrelationId?: string;
+  /** ID kanonis turn inbound (aditif, opsional). */
+  turnId?: string;
+  /** Provider asal pesan (aditif, opsional). */
+  provider?: 'WAHA' | 'WABA';
   incomingText: string;
   originalText?: string;
   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
@@ -191,6 +196,7 @@ export class V3AgentRunner {
     const turn: TurnState = {
       tenantId, phone, conversationId, incomingText,
       selectedModel, baseUrl, apiKey, turnStartedAt: Date.now(), correlationId,
+      turnId: input.turnId, provider: input.provider,
       totalTokens: { prompt: 0, completion: 0, total: 0 },
       currentSystemPrompt, messages, executedTools: [], retrievedChunks,
       fewShotExemplars, reasoning: null, perCallLogged: false,
@@ -212,6 +218,39 @@ export class V3AgentRunner {
 
       // Stage 2: Call 1 Tool Routing.
       const routing = await GenerationStage.routeTools(turn, tel, { cleanIncomingText, session, messages, grounding, conversationHistory });
+
+      // ST6 (RC-05): simpan verdict komitmen Call 1 secara persisten
+      // (lastCommitment) agar turn-turn berikutnya tidak mengisi ulang cart
+      // dari penyebutan layanan saat konsultasi. Sekaligus terapkan veto untuk
+      // turn INI (prepareSession sudah menulis cart ke DB sebelum Call 1).
+      if (routing.commitment) {
+        const vetoed = CartManager.applyCommitmentVeto(session, routing.commitment);
+        const needVetoPersist = routing.commitment === 'EXPLORING' && (session.cartItems || []).length > 0;
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            lastCommitment: routing.commitment,
+            ...(needVetoPersist
+              ? { cartItems: [], totalPrice: undefined, discussedTreatments: vetoed.discussedTreatments }
+              : {}),
+          }, tenantId);
+        } catch {
+          (session as any).lastCommitment = routing.commitment;
+          if (needVetoPersist) session = vetoed;
+        }
+      }
+
+      // ST6-4 (RC-05): verdict COMMITTED me-latch komitmen booking (sticky) —
+      // menyatukan cart & tool-masker pada SATU sumber (penilaian semantik LLM),
+      // menggantikan ketergantungan pada daftar verba hafalan. Pengaman tidak
+      // berubah: save_reservation tetap butuh treatment + lokasi + tanggal.
+      if (routing.commitment === 'COMMITTED' && !session.bookingCommitConfirmed) {
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: true }, tenantId);
+        } catch {
+          (session as any).bookingCommitConfirmed = true;
+        }
+      }
+
       let draftReply: string;
       let toolEmptyKnowledge = false;
       if (routing.toolCalls && (routing.toolCalls as any[]).length > 0) {

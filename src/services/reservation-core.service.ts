@@ -38,6 +38,12 @@ export interface ReservationMutationParams {
   force?: boolean;
   /** Status awal untuk jalur admin (default 'confirmed' / terjadwal). */
   status?: 'pending' | 'confirmed' | 'hold';
+  /**
+   * Stage 7 (R6): idempotency key per-tenant. Bila diisi dan sudah ada baris
+   * dengan request_id sama → kembalikan baris itu (isNew:false) tanpa membuat
+   * ganda. Dipakai jalur bot/webhook untuk retry-safe.
+   */
+  requestId?: string;
 }
 
 export interface ReservationResult {
@@ -205,6 +211,7 @@ export class ReservationCoreService {
       source,
       force = false,
       status = 'confirmed',
+      requestId,
     } = params;
 
     // Single Source of Truth: durasi NULL diresolve via katalog kanonis agar DB
@@ -227,6 +234,22 @@ export class ReservationCoreService {
     const effectiveRawText =
       rawText ||
       `[RESERVATION:${source}] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0, 10) : '-'} | ${customerName || '-'}`;
+
+    // Stage 7 (R6): idempotency — bila request_id sudah pernah tersimpan untuk
+    // tenant ini, kembalikan baris yang ada (retry webhook / concurrency aman).
+    if (requestId && requestId.trim().length > 0) {
+      try {
+        const existingByRequest = await prisma.reservation.findFirst({
+          where: { tenant_id: tenantId, request_id: requestId },
+        });
+        if (existingByRequest) {
+          console.log(`[RESERVATION CORE] Idempotent hit request_id=${requestId} → reservation ${existingByRequest.id}.`);
+          return { reservation: existingByRequest, isNew: false, isUpdate: false };
+        }
+      } catch {
+        // DB offline → lanjut ke jalur normal (fallback).
+      }
+    }
 
     // --- Validasi 1 & 2: hanya bermakna bila ada bookingDate ---
     if (bookingDate && !isNaN(bookingDate.getTime())) {
@@ -398,6 +421,10 @@ export class ReservationCoreService {
         status,
         purchase_value: purchaseValue ?? null,
         is_repeat_order: isRepeatOrder,
+        request_id: requestId && requestId.trim().length > 0 ? requestId : null,
+        // CG-05 (opsi flag): bot/agent non-same-day berstatus confirmed = slot
+        // belum diverifikasi staf → tandai agar admin memverifikasi.
+        needs_staff_verification: source !== 'ADMIN_PANEL' && status === 'confirmed',
       };
       try {
         // Single-row create atomik secara inheren; $transaction interaktif

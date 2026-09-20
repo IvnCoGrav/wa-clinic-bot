@@ -31,7 +31,14 @@ export const v3LlmCircuitBreaker = new CircuitBreaker(
           headers: fallbackHeaders,
           timeout: 20000,
         });
-        return fallbackResponse.data;
+        // Stage 8: tandai model/provider AKTUAL yang melayani (fallback), agar
+        // observability tidak salah mengaitkan dengan model primary.
+        const data = fallbackResponse.data;
+        if (data && typeof data === 'object') {
+          (data as any).__actualModel = tier.model;
+          (data as any).__actualProvider = tier.name;
+        }
+        return data;
       } catch (e: any) {
         lastErr = e;
       }
@@ -123,6 +130,12 @@ export interface TurnState {
   apiKey: string;
   turnStartedAt: number;
   correlationId: string;
+  /** ID kanonis turn inbound (aditif, opsional). */
+  turnId?: string;
+  /** Provider asal pesan (aditif, opsional). */
+  provider?: 'WAHA' | 'WABA';
+  /** Stage 8: model AKTUAL yang melayani (fallback bisa berbeda dari selected). */
+  actualModelUsed?: string;
   totalTokens: { prompt: number; completion: number; total: number };
   currentSystemPrompt: string;
   messages: any[];
@@ -212,6 +225,11 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
         flowType: params.flowType as any,
         customerPhone: turn.phone,
         customerInput: turn.incomingText,
+        turnId: turn.turnId,
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        actualProvider: turn.provider,
+        actualModel: turn.actualModelUsed || turn.selectedModel,
         bubbleCorrelationId: turn.correlationId,
         promptPayload: params.promptPayload || { model: turn.selectedModel, systemPrompt: turn.currentSystemPrompt, messageCount: turn.messages.length },
         reasoning: params.callReasoning !== undefined ? params.callReasoning : turn.reasoning,
@@ -221,7 +239,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
           executedTools: turn.executedTools.map((t) => t.name),
         },
         finalReply: params.reply,
-        modelUsed: turn.selectedModel,
+        modelUsed: turn.actualModelUsed || turn.selectedModel,
         durationMs: params.durationMs,
         status: params.status,
         errorMessage: params.errorMessage,
@@ -258,6 +276,8 @@ export interface RoutingOutput {
   assistantMessage: any;
   toolCalls: Array<{ id?: string; function?: { name?: string; arguments?: string | any } }>;
   reasoning: string | null;
+  /** ST6 (RC-05): verdict komitmen semantik dari Call 1 (opsional). */
+  commitment?: 'EXPLORING' | 'CONSIDERING' | 'COMMITTED' | null;
 }
 
 /** Persistensi INBOUND/OUTBOUND turn (dilewati bila skipDbLogging). */
@@ -492,6 +512,7 @@ export class GenerationStage {
     }).then(async (data) => {
       tel.addUsage((data as any)?.usage);
       await tel.auditUsage((data as any)?.usage, firstStartedAt);
+      if ((data as any)?.__actualModel) turn.actualModelUsed = (data as any).__actualModel;
       return data;
     });
 
@@ -563,10 +584,28 @@ export class GenerationStage {
       turn.perCallLogged = true;
     }
 
+    // ST6 (RC-05): verdict komitmen semantik dari Call 1 (dipakai log + veto cart).
+    const commitmentVerdict: 'EXPLORING' | 'CONSIDERING' | 'COMMITTED' | null =
+      (parsedCalls.find((t: any) => t?.args?.commitment) as any)?.args?.commitment || null;
+
     // Telemetri Shadow Evaluation (FASE 2, SHADOW MODE)
     try {
       const calledToolNames = parsedCalls.map((t: any) => t.name);
       const isSaveCalled = calledToolNames.includes('save_reservation');
+
+      // ST6 shadow (RC-05): catat verdict komitmen dari Call 1.
+      try {
+        const { maskPhoneNumber } = await import('../../../utils/pii-masker');
+        console.log(JSON.stringify({
+          event: 'ROUTER_COMMITMENT_VERDICT',
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          phone: maskPhoneNumber(turn.phone),
+          commitment: commitmentVerdict,
+          calledTools: calledToolNames,
+          timestamp: new Date().toISOString(),
+        }));
+      } catch {}
       let classification: string;
       if (!maskingEval.isSaveReservationAllowed && isSaveCalled) {
         classification = 'LLM_OVER_TRIGGER';
@@ -596,7 +635,7 @@ export class GenerationStage {
       }));
     } catch {}
 
-    return { assistantMessage, toolCalls, reasoning };
+    return { assistantMessage, toolCalls, reasoning, commitment: commitmentVerdict };
   }
 
   public static async generateReply(
@@ -679,6 +718,7 @@ export class GenerationStage {
     }).then(async (data) => {
       tel.addUsage((data as any)?.usage);
       await tel.auditUsage((data as any)?.usage, secondStartedAt);
+      if ((data as any)?.__actualModel) turn.actualModelUsed = (data as any).__actualModel;
       return data;
     });
 

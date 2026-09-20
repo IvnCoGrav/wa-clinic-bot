@@ -5,6 +5,23 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 0a. [Test] Flaky test backend akibat test pollution / order-dependent (belum terselesaikan)
+
+- **Status:** open, ditemukan 2026-09-20.
+- **Gejala:** `npm test` (full suite) kadang melaporkan 1–8 file gagal dengan jumlah yang
+  berubah tiap run, namun saat file yang sama dijalankan terisolasi (`npx vitest run <file>`)
+  hasilnya sering hijau. Contoh file yang pernah muncul: `tests/integration/waha-webhook.test.ts`,
+  `tests/unit/media.service.test.ts`, `tests/unit/lead-greeting-preservation.test.ts`,
+  `tests/unit/v3-persona-rules.test.ts`, `tests/unit/v3/tool-output-scoping.test.ts`.
+- **Bukti:** sudah diverifikasi SETELAH `git stash` perubahan frontend → file yang sama tetap
+  gagal pada run penuh, jadi **bukan** regresi dari perubahan kode terkini.
+- **Dugaan akar:** state global bersama (in-memory fallback store, `tests/setup.ts` mock, singleton
+  service) yang bocor antar-file ketika dijalankan paralel/satu proses.
+- **Rencana perbaikan:** audit singleton/global state di `tests/setup.ts`, pastikan reset per-file
+  (`beforeEach`), atau pisah test yang saling mencemari ke konfigurasi terpisah.
+
+---
+
 ## 0. [Dashboard] Peta Sebaran Pelanggan bergantung CDN unpkg + internet
 
 - **Status:** open (by design), sejak fitur peta sebaran (2026-09-19).
@@ -34,9 +51,22 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   batas (38 regency + 119 district)**, output `packages/admin-dashboard/public/geo/surabaya-sidoarjo.geojson`
   **462,5 KB**. Titik Gubeng dihilangkan dari garis batas kota (false positive lama). Tidak lagi
   bergantung SVG internal; `geo-metadata.json` menyimpan bbox efektif + jumlah kecamatan.
+- **Pengerasan UI (lanjutan):** `boundaryGeo` state reaktif (anti blank saat toggle cepat),
+  garis batas `pointer-events-none` (anti tooltip flicker), hierarki warna Hijau/Oranye/Biru-pudar
+  dipulihkan, adaptive minZoom/maxBounds saat "Semua wilayah", radius klinik di pane terpisah,
+  `ResizeObserver` pada kontainer peta.
 - **Sisa limitasi (non-blocking):** dataset HDX (JfrAziz/indonesia-district Jatim) **tidak mencakup
   Gresik** — toggle "Semua wilayah" tetap menunjukkan titik Gresik di basemap Peta Jalan, namun saat
   mode Area Vektor poligon Gresik tidak dirender (improve bila dataset Gresik tersedia).
+- **Catatan basemap (2026-09-20):** Peta Jalan kini **CARTO `light_nolabels`** (data OSM, tanpa
+  label/POI) + filter `grayscale(1)` — "sangat simple", hanya jalan, terbatas area Sby/Sda via
+  `bounds: SURABAYA_RAYA_BOUNDS`. Implikasi: saat "Semua wilayah" diaktifkan, tiles hanya dimuat di
+  Sby/Sda (luar area kontainer netral); pelanggan luar kota tetap tampil sebagai marker tanpa basemap detail.
+- **Basemap memerlukan CARTO API key (2026-09-20):** CARTO kini mengharuskan API key untuk semua
+  basemap raster — tanpa key, tile disajikan dengan watermark "API key required". Key disuntikkan
+  via `packages/admin-dashboard/.env` → `VITE_CARTO_API_KEY` (gitignored), di-inline ke bundle saat
+  build (`?key=...` pada URL tile). **Jangan commit key.** Bila key absen, build otomatis fallback ke
+  **Esri World Light Gray Base** (`server.arcgisonline.com`, gratis tanpa key, netral minim label).
 
 ---
 
@@ -2006,3 +2036,84 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **P2 Jambangan** `geocoding.ts:613` dual-admin skip + `tool-pipeline.ts:187` prefix guard. Tanpa ini `kelurahan jambangan`→`Jambangan` dipotong LLM jadi kecamatan luas 4 kelurahan.
 - **P3-P6** sama #97 (cart hijack, isolasi, usia penalti `anak`, RAG 0.25). Kuota kalimat 5→3 via `sanitizer` + `guardrail-pipeline.ts:593` (bullet tidak exempt).
 - **Verifikasi:** build 0; D9 `locationKnown:true` + `ASKING_LOCATION_RE` → violation; geocode Jambangan precise true; full 2872/50.
+
+---
+
+## 99. [Fitur Plan] Peringatan "treatment aktif" ke admin saat menambah treatment baru
+
+- **Status:** open (belum ada — catatan rencana ke depan, sejak 2026-09-19).
+- **Konteks:** Permintaan user: bila seorang customer sudah memiliki treatment/booking aktif berjalan, admin yang hendak menambahkan treatment baru untuk customer tersebut harus mendapat peringatan ("customer ini sedang punya treatment aktif").
+- **Fakta kode:** fitur ini **belum ada**. Audit menemukan sistem belum membedakan secara andal "treatment aktif/berjalan" vs "treatment lama yang sudah selesai" — akar yang sama dengan RC-02 (episodic state) dan RC-06 (reservation aggregate).
+- **Prasyarat:** bergantung pada pemisahan state percakapan per-episode (Stage 4) dan status reservation typed + lifecycle (Stage 7). Tanpa itu, "aktif" tidak dapat ditentukan secara deterministik.
+- **Rencana:** setelah Stage 7, tambahkan indikator "active appointment/treatment" pada data customer → tampilkan peringatan non-blocking di admin saat menambah treatment/booking baru (Drawer/Toast, `useUiFeedback`, bukan page baru — patuh Mandat Anti-Bloat).
+- **Limitasi saat ini:** admin harus memeriksa manual daftar reservasi customer.
+
+---
+
+## 100. [Keputusan Menunggu] Semantik reset episode percakapan (Stage 4)
+
+- **Status:** open (menunggu keputusan user, sejak 2026-09-19).
+- **Konteks:** Stage 4 memerlukan batas kapan konteks percakapan direset. Usulan user: reset saat closing/booking selesai, atau 14 hari setelah follow-up terakhir.
+- **Rekomendasi audit:** reset dipicu oleh (a) booking closing/selesai, ATAU (b) **14 hari sejak chat TERAKHIR CUSTOMER** (bukan follow-up terkirim), ATAU (c) `/reset`. Alasan: follow-up otomatis tidak boleh memperpanjang memori bot; jika dihitung dari follow-up, reset tidak akan pernah terjadi selama follow-up masih berjalan.
+- **Tambahan pengaman:** jika customer berganti topik di tengah episode, bot wajib klarifikasi (bukan mencampur konteks lama).
+- **Blocker:** keputusan final user diperlukan sebelum implementasi MT-4.4.
+
+---
+
+## 101. [Tests] Dua test timeout 5000ms flaky saat full-suite (`live-chat-reply`, `robustness`)
+
+- **Status:** open (pre-existing, diverifikasi 2026-09-20, bukan regresi Stage 6).
+- **Gejala:** `tests/integration/live-chat-reply.test.ts` ("suggest-reply menghasilkan draf saran AI") dan `tests/integration/robustness.test.ts` ("5-Minute Passive Confirmation Timeout") gagal `Test timed out in 5000ms` saat full-suite DAN saat isolasi.
+- **Bukti pre-existing:** dengan `git stash` (kode bersih tanpa perubahan Stage 6), kedua test TETAP gagal identik ? bukan regresi.
+- **Akar dugaan:** test memanggil jalur lambat (LLM/live-chat suggest) yang melampaui default `testTimeout: 5000`. Bukan assertion failure.
+- **Dampak:** full suite tidak pernah 100% hijau; menyulitkan deteksi regresi asli (sinyal bercampur flake).
+- **Rencana:** naikkan `testTimeout` test terkait atau mock seam AI-nya (tanpa menurunkan validasi assertion). Butuh penanganan terpisah.
+
+### 101 � RESOLVED (2026-09-20)
+
+- **Akar:** dua test menembak **network LLM nyata** (bukan lambat biasa). Kredensial provider dari `.env` (`KENARI_API_KEY`) tidak ter-blank oleh `LLM_API_KEY=''` di `tests/setup.ts`, sehingga `[LLM MODEL FALLBACK] Transient error (timeout of 15000ms exceeded)` ? retry ? melewati `testTimeout`.
+- **Perbaikan (isolasi seam, bukan menurunkan validasi):**
+  - `tests/integration/live-chat-reply.test.ts` � mock `callChatCompletionsWithFallback` mengembalikan respons canned.
+  - `tests/integration/robustness.test.ts` � spy `GenerationStage.executeChatCompletion` reject cepat (test hanya menguji invarian reset state).
+- **Verifikasi:** kedua test lulus tanpa menaikkan timeout; **full suite 399 files / 2934 passed / 0 failed** (1 skipped).
+
+---
+
+## 102. [Reservation / Konflik Kontrak] Merge same-day (dedup form) vs CG-06 (multi-treatment) � BUTUH KEPUTUSAN
+
+- **Status:** open (blocked, menunggu keputusan user; sejak 2026-09-20).
+- **Konteks:** Perbaikan R6 (audit) mencoba mengubah merge same-day agar **hanya** menggabungkan treatment SAMA (idempoten), sehingga treatment BERBEDA dibuat reservasi baru (sesuai CG-06).
+- **KONFLIK:** `tests/unit/same-day-reservation-collision.test.ts` (fix bug resubmission form, KNOWN_ISSUES #63) SECARA SENGAJA mengharapkan merge same-day **walau treatment berbeda** (Test 1: 'Pijat Rileksasi' existing vs 'Pijat Bayi Ceria Newborn [Total 60m]' masuk ? update, bukan create; Test 5 sama). Perubahan R6 mematahkan 5 test ini.
+- **Dua kontrak yang bertabrakan:**
+  1. *Dedup form* (existing): customer sama + hari kalender sama = 1 reservasi (cegah duplikat saat form disubmit ulang dengan string treatment sedikit beda).
+  2. *CG-06* (keputusan user): beda treatment pada hari sama = boleh menjadi reservasi terpisah.
+- **Keputusan yang dibutuhkan:** bagaimana membedakan "resubmit booking yang sama" vs "booking berbeda yang sah"? Opsi:
+  - (a) Berdasarkan **base nama treatment** (strip suffix `[Total Xm]`) ? sama = merge.
+  - (b) Berdasarkan **waktu/slot** (butuh `bookingTime` terstruktur � belum ada).
+  - (c) Berdasarkan **child/subject identity**.
+  - (d) Pertahankan kontrak lama (merge semua same-day); multi-treatment ditangani admin manual.
+- **Dampak bila salah:** merge salah ? booking sah tertimpa; dedup salah ? booking ganda.
+- **Tindakan saat ini:** perubahan R6 **DIBATALKAN** (revert) agar perilaku lama & test tetap utuh. R6 sesungguhnya butuh skema (`request_id`, `bookingTime` terstruktur) untuk resolusi deterministik.
+
+### 102 � RESOLVED (keputusan user: Opsi D, 2026-09-20)
+
+- **Keputusan:** pertahankan kontrak LAMA � merge same-day untuk customer sama (walau treatment berbeda); multi-treatment via bot ditangani **manual admin**.
+- **Konsekuensi:** perubahan R6 "merge hanya treatment sama" **DIBATALKAN** (revert). Tidak ada perubahan kode.
+- **Sisa risiko diterima:** booking same-day berbeda treatment via bot tetap digabung; admin memisahkan manual.
+
+### 101 � UPDATE (2026-09-20)
+
+- **Flakiness lebih luas dari 2 test:** selain `live-chat-reply` & `robustness`, `waha-webhook.test.ts` (dan sebelumnya `migration.test.ts`) juga kadang gagal `Test timed out in 5000ms` HANYA saat full-suite (lulus isolasi). Pola: test integrasi yang memuat `buildApp()` / pipeline berat melewati 5s di bawah beban paralel full-suite.
+- **Sifat:** load/environment flake, BUKAN bug logika (lulus isolasi, failure berpindah antar-file tiap run).
+- **Sisa tindakan (opsional):** naikkan `testTimeout` global atau per-file untuk integrasi berat, ATAU jalankan integrasi berat secara terpisah. Belum dikerjakan agar scope terkontrol.
+
+---
+
+## 103. [Tenant] CG-01 fail-closed provider resolver � DITUNDA (butuh desain)
+
+- **Status:** open / deferred (2026-09-20).
+- **Konteks:** CG-01 = identitas provider tak dikenal harus fail-closed/quarantine, bukan fallback diam-diam ke default tenant.
+- **Percobaan:** mengubah `waha-tenant.service.ts` mengembalikan `resolved|unknown|unavailable` + `webhook.route.ts` menolak `unknown` (drop) / `unavailable` (503). **DIBATALKAN (revert).**
+- **Kenapa ditunda:** resolusi tenant dilakukan di TITIK PALING AWAL `/webhook` (sebelum percabangan jenis event). Fail-closed di sana ikut men-drop event **ACK/label/typing** yang tidak butuh resolusi tenant (bukti: `typing-sync.test.ts` 2 gagal, `waha-webhook.test.ts` 7 gagal). Selain itu, true "quarantine" butuh tabel/schema baru.
+- **Prasyarat lanjutan:** (a) tabel quarantine, ATAU (b) penanganan fail-closed **per jenis event** (hanya `message` inbound, bukan ACK/label), (c) keputusan untuk kasus DB-outage (fallback vs retry).
+- **Dampak saat ini:** untuk 1 tenant, fail-open tidak menimbulkan masalah nyata. Risiko baru muncul saat multi-tenant.

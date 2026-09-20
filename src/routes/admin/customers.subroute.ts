@@ -102,6 +102,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             is_mql: true,
             is_out_of_coverage: true,
             distance_km: true,
+            reservations: {
+              where: { status: { notIn: ['cancelled', 'rejected'] } },
+              select: { id: true },
+              take: 1,
+            },
           },
           take: 5000,
         });
@@ -116,7 +121,12 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               c.lng >= -180 &&
               c.lng <= 180
           )
-          .map((c: any) => ({ ...c, is_estimated_centroid: false }));
+          .map((c: any) => ({
+            ...c,
+            has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
+            reservations: undefined,
+            is_estimated_centroid: false,
+          }));
 
         if (!showAll) {
           points = points.filter(isWithinServiceArea);
@@ -143,6 +153,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 is_mql: true,
                 is_out_of_coverage: true,
                 distance_km: true,
+                reservations: {
+                  where: { status: { notIn: ['cancelled', 'rejected'] } },
+                  select: { id: true },
+                  take: 1,
+                },
               },
               take: 5000,
             });
@@ -169,6 +184,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 kelurahan: c.kelurahan || gaz.kelurahan,
                 status: c.status,
                 is_mql: c.is_mql,
+                has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
                 is_out_of_coverage: c.is_out_of_coverage,
                 distance_km: c.distance_km,
                 is_estimated_centroid: true,
