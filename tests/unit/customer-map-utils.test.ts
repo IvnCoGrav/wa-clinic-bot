@@ -182,13 +182,14 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
       expect(v.fillOpacity).toBeLessThan(0.8);
     });
 
-    it('manual_staff → ungu solid pop-out (radius besar, border putih)', () => {
+    it('manual_staff → ungu solid (uniform radius 7, border putih)', () => {
       const v = locationVisual({ lat: 0, lng: 0, location_source: 'manual_staff' });
       expect(v.source).toBe('manual_staff');
       expect(v.borderColor).toBe('#ffffff');
-      expect(v.radius).toBe(9);
-      expect(v.radius).not.toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).radius);
+      expect(v.radius).toBe(7);
+      expect(v.radius).toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).radius);
       expect(v.fillOpacity).toBe(1);
+      expect(v.label).not.toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).label);
     });
 
     it('kompatibilitas data lama: location_source null → turunkan dari is_estimated_centroid', () => {

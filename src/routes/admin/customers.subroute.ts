@@ -111,6 +111,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             is_out_of_coverage: true,
             distance_km: true,
             location_source: true,
+            preferences: true,
             reservations: {
               where: { status: { notIn: ['cancelled', 'rejected'] } },
               select: { id: true },
@@ -140,12 +141,25 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             const isOutOfCoverage =
               c.is_out_of_coverage ??
               (typeof clinic?.maxCoverageKm === 'number' && dist != null ? dist > clinic.maxCoverageKm : false);
+            const prefs = (c.preferences as any) || {};
+            let effectiveSource = c.location_source;
+            if (!effectiveSource) {
+              if (prefs.location_updated_by_staff_name || prefs.location_updated_by_staff_id || prefs.field_gps_lat) {
+                effectiveSource = 'manual_staff';
+              } else if (prefs.source === 'geocoding' || prefs.location_source === 'geocoding') {
+                effectiveSource = 'estimated_area';
+              } else {
+                effectiveSource = 'gps_pin';
+              }
+            }
             return {
               ...c,
               distance_km: dist,
               is_out_of_coverage: isOutOfCoverage,
+              location_source: effectiveSource,
               has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
               reservations: undefined,
+              preferences: undefined,
               is_estimated_centroid: false,
             };
           });
