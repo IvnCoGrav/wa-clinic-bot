@@ -204,7 +204,7 @@ export class BroadcastQueueService {
         console.log(`[Broadcast Queue] Customer ${customerId} is blocked or lost. Cancelling follow-up.`);
         await prisma.followUp.update({
           where: { id: followUpId },
-          data: { status: 'CANCELLED' },
+          data: { status: 'CANCELLED', reservation_id: null },
         });
         return;
       }

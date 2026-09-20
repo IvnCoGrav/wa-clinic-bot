@@ -65,7 +65,7 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
     expect(updateSpy).not.toHaveBeenCalled();
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: 'Customer sudah memiliki reservasi' },
+        data: { status: 'CANCELLED', cancel_reason: 'Customer sudah memiliki reservasi', reservation_id: null },
       })
     );
   });
@@ -109,7 +109,7 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
     expect(updateManySpy).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: 'Customer minta tunda' },
+        data: { status: 'CANCELLED', cancel_reason: 'Customer minta tunda', reservation_id: null },
       })
     );
 
@@ -117,7 +117,7 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
     expect(updateManySpy).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.MANUAL_ADMIN },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.MANUAL_ADMIN, reservation_id: null },
       })
     );
 
@@ -126,7 +126,7 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
     expect(updateManySpy).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.MANUAL_ADMIN },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.MANUAL_ADMIN, reservation_id: null },
       })
     );
   });
@@ -138,14 +138,14 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
-        data: { status: 'CANCELLED', cancel_reason: 'Bersih-bersih antrian' },
+        data: { status: 'CANCELLED', cancel_reason: 'Bersih-bersih antrian', reservation_id: null },
       })
     );
 
     await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, 'QUEUED');
     expect(updateManySpy).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.BULK_ADMIN },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.BULK_ADMIN, reservation_id: null },
       })
     );
   });
@@ -159,7 +159,7 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
 
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null },
       })
     );
   });
@@ -170,9 +170,34 @@ describe('Follow-Up Inbound Sliding Window & Cancel Reason', () => {
 
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED, reservation_id: null },
       })
     );
+  });
+
+  it('10b. INVARIAN: setiap jalur cancel menetralkan reservation_id (jaga unique tenant+reservation+type+stage)', async () => {
+    // Skenario nyata: follow-up CANCELLED adalah jejak historis; bila reservation_id-nya
+    // dibiarkan, baris pengganti (saat reservasi sama membuat follow-up baru) akan menabrak
+    // @@unique([tenant_id, reservation_id, type, stage]) di produksi. Setiap cancel WAJIB
+    // mengeset reservation_id = null.
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 1 } as any);
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([{ id: 'f-1' }] as any);
+    vi.spyOn(prisma.customer, 'findFirst').mockResolvedValue({ id: 'cust-1' } as any);
+    vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValue({ id: 'res-1', status: 'confirmed' } as any);
+    vi.spyOn(prisma.reservation, 'update').mockResolvedValue({} as any);
+
+    await followUpService.cancelFollowUp('fu-any', DEFAULT_TENANT_ID, { reason: 'Uji invariant' });
+    await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, 'PENDING');
+    await followUpService.onReservationCancelled('res-any', DEFAULT_TENANT_ID);
+    await followUpService.onReservationCreated('cust-1', 'res-1', DEFAULT_TENANT_ID);
+
+    for (const call of [...updateManySpy.mock.calls, ...updateSpy.mock.calls]) {
+      const data = (call[0] as any)?.data;
+      if (data?.status === 'CANCELLED') {
+        expect(data.reservation_id).toBeNull();
+      }
+    }
   });
 
   it('11. worker menandai overdue >48 jam sebagai SKIPPED + alasan kadaluarsa', async () => {

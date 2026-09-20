@@ -95,7 +95,7 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: { in: ['f-1', 'f-2'] } },
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED }
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null }
       })
     );
 

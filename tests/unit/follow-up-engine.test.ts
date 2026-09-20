@@ -262,7 +262,10 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         tenant_id: DEFAULT_TENANT_ID,
         status: { in: ['PENDING', 'QUEUED'] },
       },
-      data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
+      // reservation_id dinetralkan ke null agar baris CANCELLED (jejak historis) tidak
+      // menabrak @@unique([tenant_id, reservation_id, type, stage]) saat reservasi
+      // yang sama membuat follow-up pengganti.
+      data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED, reservation_id: null },
     });
   });
 
