@@ -75,6 +75,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const boundaryLayerRef = useRef<any>(null);
   const hasInitialFittedRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onSelectCustomerRef = useRef(onSelectCustomer);
+  useEffect(() => {
+    onSelectCustomerRef.current = onSelectCustomer;
+  }, [onSelectCustomer]);
 
   const [boundaryGeo, setBoundaryGeo] = useState<any>(null);
   const [geoLoading, setGeoLoading] = useState<boolean>(false);
@@ -313,10 +317,6 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     const L = (window as any).L;
     if (!L) return;
 
-    // Kunci koordinat dan zoom aktif sebelum memanipulasi layer (mencegah auto zoom-out / snapping)
-    const currentCenter = map.getCenter();
-    const currentZoom = map.getZoom();
-
     if (mapMode === 'streets') {
       if (boundaryLayerRef.current && map.hasLayer(boundaryLayerRef.current)) {
         try {
@@ -398,7 +398,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                   `<b style="color:#0369a1">${escapeHtml(p.village || 'Kelurahan')}</b><br/>` +
                   `<span style="color:#64748b">Kec. ${escapeHtml(p.district || '')} · ${escapeHtml(p.regency || '')}</span>` +
                 `</div>`,
-                { sticky: true, direction: 'auto' }
+                { sticky: false, direction: 'auto', opacity: 0.95 }
               );
               layer.on({
                 mouseover: (e: any) => {
@@ -424,10 +424,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         boundaryLayerRef.current.addTo(map);
       }
     }
-    // Pertahankan posisi kamera persis di titik semula (mencegah auto zoom-out / snapping)
-    if (currentCenter && typeof currentZoom === 'number') {
-      map.setView(currentCenter, currentZoom, { animate: false });
-    }
+    // Leaflet mempertahankan viewport secara native via setOpacity — tidak perlu force setView.
   }, [mapReady, mapMode, boundaryGeo]);
 
   // Adaptive camera bounds: "Semua wilayah" membebaskan zoom-out (pelanggan luar kota), default terkunci Sby Raya
@@ -590,7 +587,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     );
     basecamp.addTo(group);
     if (typeof basecamp.bindTooltip === 'function') {
-      basecamp.bindTooltip(escapeHtml(clinic.name), { permanent: true, direction: 'right', offset: [10, 0] });
+      basecamp.bindTooltip(escapeHtml(clinic.name), {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -10],
+      });
     }
 
     group.addTo(map);
@@ -606,11 +607,16 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     const handlePopupClick = (e: MouseEvent) => {
       const target = (e.target as HTMLElement)?.closest?.('[data-customer-id]') as HTMLElement | null;
       const id = target?.getAttribute('data-customer-id');
-      if (id) onSelectCustomer?.(id);
+      if (id) {
+        onSelectCustomerRef.current?.(id);
+        try {
+          map.closePopup();
+        } catch {}
+      }
     };
     container.addEventListener('click', handlePopupClick);
     return () => container.removeEventListener('click', handlePopupClick);
-  }, [mapReady, onSelectCustomer]);
+  }, [mapReady]);
 
   return (
     <div className="space-y-4">
@@ -624,7 +630,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             Peta sebaran pelanggan interaktif dengan pilihan Peta Jalan dan Area Vektor (Surabaya & Sidoarjo). Klik titik lalu tekan "Lihat Detail Pelanggan".
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Switcher Mode Peta */}
           <div className="inline-flex rounded-xl bg-white border border-[#d1d7db] p-0.5 shadow-xs text-xs font-semibold">
             <button
@@ -744,7 +750,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               key={item.key}
               type="button"
               onClick={() => toggleStatus(item.key)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
+              className={`inline-chip no-touch-min flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
                 hidden ? 'opacity-40 line-through bg-[#f0f2f5] border-[#d1d7db]' : 'bg-white border-[#d1d7db]'
               }`}
               title={hidden ? `Tampilkan ${item.label}` : `Sembunyikan ${item.label}`}
@@ -820,7 +826,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             }}
           />
           {loading && (
-            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-[1001]">
               <RefreshCw className="animate-spin text-[#008069]" size={24} />
             </div>
           )}

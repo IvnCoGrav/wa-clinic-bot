@@ -173,8 +173,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               const kelurahan = isValidAreaName(c.kelurahan) ? c.kelurahan : null;
               const kecamatan = isValidAreaName(c.kecamatan) ? c.kecamatan : null;
               if (!kelurahan && !kecamatan) continue;
-              // Prioritas kelurahan (lebih presisi) lalu kecamatan.
-              const gaz = getGazetteerCoordinates(kelurahan || kecamatan || '');
+              // Prioritaskan pencocokan kombinasi kelurahan + kecamatan jika keduanya tersedia (desa kembar)
+              let gaz = null;
+              if (kelurahan && kecamatan) {
+                gaz = getGazetteerCoordinates(`${kelurahan} ${kecamatan}`);
+              }
+              if (!gaz) {
+                gaz = getGazetteerCoordinates(kelurahan || kecamatan || '');
+              }
               if (!gaz || !Number.isFinite(gaz.lat) || !Number.isFinite(gaz.lng)) continue;
               const dist = Math.round(haversineKm(clinic.lat, clinic.lng, gaz.lat, gaz.lng) * 10) / 10;
               const isOutOfCoverage = typeof clinic.maxCoverageKm === 'number' && dist > clinic.maxCoverageKm;
