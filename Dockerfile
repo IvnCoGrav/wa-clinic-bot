@@ -18,7 +18,11 @@ RUN npx prisma generate
 RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
 # Build Admin Dashboard SPA (base '/admin/', diserve bot di /admin/*)
+# VITE_CARTO_API_KEY disuntikkan sebagai build-arg (tidak disalin dari .env karena
+# .env di-.dockerignore). Kosong → dashboard otomatis pakai fallback Esri (tanpa key).
 WORKDIR /app/packages/admin-dashboard
+ARG VITE_CARTO_API_KEY=""
+ENV VITE_CARTO_API_KEY=$VITE_CARTO_API_KEY
 RUN npm ci --prefer-offline && npm run build
 WORKDIR /app
 

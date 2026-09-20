@@ -43,6 +43,8 @@ export interface MapPoint {
   distance_km?: number | null;
   /** True bila koordinat adalah sentroid estimasi wilayah (bukan GPS presisi). */
   is_estimated_centroid?: boolean;
+  /** Sumber koordinat: gps_pin | estimated_area | manual_staff (bisa null untuk data lama). */
+  location_source?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
 }
 
 /** Metadata basecamp klinik (tenant-aware) untuk marker & radius jangkauan. */

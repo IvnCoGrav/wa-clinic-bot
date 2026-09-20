@@ -1256,6 +1256,9 @@ export class StaffReservationService {
           ...(shouldUpdatePrimaryCoords && lng != null ? { lng } : {}),
           ...(shouldUpdatePrimaryCoords && distanceKm != null ? { distance_km: distanceKm } : {}),
           ...(shouldUpdatePrimaryCoords && newOngkir != null ? { ongkir: newOngkir } : {}),
+          ...(shouldUpdatePrimaryCoords && lat != null && lng != null
+            ? { location_source: 'manual_staff' as const }
+            : {}),
           preferences: updatedPrefs,
         },
       });

@@ -102,6 +102,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             is_mql: true,
             is_out_of_coverage: true,
             distance_km: true,
+            location_source: true,
             reservations: {
               where: { status: { notIn: ['cancelled', 'rejected'] } },
               select: { id: true },
@@ -153,6 +154,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 is_mql: true,
                 is_out_of_coverage: true,
                 distance_km: true,
+                location_source: true,
                 reservations: {
                   where: { status: { notIn: ['cancelled', 'rejected'] } },
                   select: { id: true },
@@ -187,6 +189,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
                 is_out_of_coverage: c.is_out_of_coverage,
                 distance_km: c.distance_km,
+                // Titik sentroid = estimasi wilayah (bukan GPS presisi) apa pun kolom aslinya.
+                location_source: 'estimated_area',
                 is_estimated_centroid: true,
               };
               if (showAll || isWithinServiceArea(centroidPoint)) {
@@ -1043,6 +1047,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               ...(shouldUpdatePrimaryCoords && lat !== undefined ? { lat } : {}),
               ...(shouldUpdatePrimaryCoords && lng !== undefined ? { lng } : {}),
               ...(shouldUpdatePrimaryCoords && distanceKm !== undefined ? { distance_km: distanceKm } : {}),
+              ...(shouldUpdatePrimaryCoords && lat !== undefined && lng !== undefined
+                ? { location_source: 'manual_staff' as const }
+                : {}),
               preferences: updatedPrefs,
             },
           });
@@ -1052,6 +1059,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             customer.lat = lat !== undefined ? lat : customer.lat;
             customer.lng = lng !== undefined ? lng : customer.lng;
             customer.distance_km = distanceKm;
+            if (lat !== undefined && lng !== undefined) customer.location_source = 'manual_staff';
           }
           customer.preferences = updatedPrefs;
           customer.updated_at = new Date();

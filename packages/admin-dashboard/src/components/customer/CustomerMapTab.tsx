@@ -12,6 +12,7 @@ import {
   filterPointsByCity,
   filterPointsByStatus,
   markerColor,
+  locationVisual,
   normalizeCity,
   SpatialStatus,
   uniqueCities,
@@ -422,14 +423,14 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
     visiblePoints.forEach((p) => {
       const color = markerColor(p);
-      const estimated = p.is_estimated_centroid === true;
+      const loc = locationVisual(p);
       const marker = L.circleMarker([p.lat, p.lng], {
-        radius: estimated ? 7 : 6,
-        color: estimated ? color : '#ffffff',
-        weight: estimated ? 2 : 1.5,
-        dashArray: estimated ? '4 3' : undefined,
+        radius: loc.radius,
+        color: loc.borderColor,
+        weight: loc.source === 'gps_pin' ? 1.5 : 2,
+        dashArray: loc.dashArray,
         fillColor: color,
-        fillOpacity: estimated ? 0.5 : 0.9,
+        fillOpacity: loc.fillOpacity,
       });
       const name = escapeHtml((p.name || 'Pelanggan').trim());
       const area = escapeHtml(
@@ -446,7 +447,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             : p.status && p.status !== 'active'
               ? 'Status lain'
               : 'Aktif';
-      const accuracy = estimated ? '⚪ Estimasi Wilayah' : '📍 GPS Akurat';
+      const accuracy = loc.label;
       const distanceText =
         typeof p.distance_km === 'number'
           ? `<div style="color:#667781">📏 Jarak: ${p.distance_km} km dari Basecamp</div>`
@@ -720,9 +721,23 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         <span className="flex items-center gap-1.5 px-2.5 py-1">
           <span
             className="w-2.5 h-2.5 rounded-full"
-            style={{ border: '2px dashed #008069', display: 'inline-block' }}
+            style={{ border: '2px solid #ffffff', background: '#008069', boxShadow: '0 0 0 1px #cbd5e1', display: 'inline-block' }}
           />
-          Estimasi wilayah
+          📍 GPS Akurat
+        </span>
+        <span className="flex items-center gap-1.5 px-2.5 py-1">
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ border: '2px dashed #64748b', display: 'inline-block' }}
+          />
+          ⚪ Estimasi Wilayah
+        </span>
+        <span className="flex items-center gap-1.5 px-2.5 py-1">
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ border: '2px solid #7c3aed', background: '#008069', display: 'inline-block' }}
+          />
+          🛠️ Diedit Bidan/Staf
         </span>
         {clinic && (
           <span className="flex items-center gap-1.5 px-2.5 py-1">

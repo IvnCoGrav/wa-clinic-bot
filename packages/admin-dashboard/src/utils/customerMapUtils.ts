@@ -16,6 +16,7 @@ export interface MapPointLike {
   is_out_of_coverage?: boolean;
   distance_km?: number | null;
   is_estimated_centroid?: boolean;
+  location_source?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
 }
 
 /**
@@ -106,6 +107,51 @@ export function isValidLatLng(lat: unknown, lng: unknown): boolean {
 
 /** Kategori status untuk legenda interaktif. */
 export type SpatialStatus = 'active' | 'mql' | 'other' | 'out_of_coverage';
+
+/** Kategori sumber koordinat lokasi (pembeda visual di peta). */
+export type LocationSourceKind = 'gps_pin' | 'estimated_area' | 'manual_staff';
+
+export interface LocationVisual {
+  source: LocationSourceKind;
+  /** Label ringkas untuk popup & legenda. */
+  label: string;
+  /** Warna outline marker. */
+  borderColor: string;
+  dashArray?: string;
+  fillOpacity: number;
+  radius: number;
+}
+
+const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'>> = {
+  // GPS asli (shareloc customer/bidan) — marker padat tegas.
+  gps_pin: { label: '📍 GPS Akurat', borderColor: '#ffffff', fillOpacity: 0.9, radius: 6 },
+  // Estimasi wilayah (gazetteer/geocoding) — outline putus-putus & fill transparan.
+  estimated_area: {
+    label: '⚪ Estimasi Wilayah',
+    borderColor: '#64748b',
+    dashArray: '4 3',
+    fillOpacity: 0.5,
+    radius: 7,
+  },
+  // Diedit manual oleh bidan/staf — outline ungu tegas, fill pekat.
+  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#7c3aed', fillOpacity: 0.9, radius: 7 },
+};
+
+/**
+ * Menentukan visual marker berdasarkan sumber koordinat.
+ * Kompatibilitas data lama: bila `location_source` null/kosong, turunkan dari
+ * `is_estimated_centroid` (sentroid → estimated_area, selain itu → gps_pin).
+ */
+export function locationVisual(point: MapPointLike): LocationVisual {
+  const raw = point.location_source;
+  const source: LocationSourceKind =
+    raw === 'gps_pin' || raw === 'estimated_area' || raw === 'manual_staff'
+      ? raw
+      : point.is_estimated_centroid
+        ? 'estimated_area'
+        : 'gps_pin';
+  return { source, ...LOCATION_VISUALS[source] };
+}
 
 /** Menentukan kategori status satu titik (satu kategori, prioritas tetap). */
 export function statusOf(point: MapPointLike): SpatialStatus {

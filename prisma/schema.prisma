@@ -49,6 +49,16 @@ enum AiOverride {
   FORCE_OFF
 }
 
+/// Sumber koordinat lokasi customer (untuk pembeda visual di peta sebaran).
+/// - gps_pin        : pin GPS asli (shareloc customer / bidan / link Google Maps)
+/// - estimated_area : estimasi wilayah (sentroid gazetteer / geocoding teks alamat)
+/// - manual_staff   : di-set/diedit manual oleh bidan/staf via dashboard
+enum LocationSource {
+  gps_pin
+  estimated_area
+  manual_staff
+}
+
 model Customer {
   id                      String         @id @default(uuid())
   tenant_id               String         @default("default-tenant")
@@ -62,6 +72,7 @@ model Customer {
   distance_km             Float?
   ongkir                  Int?
   is_out_of_coverage      Boolean        @default(false)
+  location_source         LocationSource?
   pending_kelurahan       String?
   pending_kecamatan       String?
   pending_kota            String?
