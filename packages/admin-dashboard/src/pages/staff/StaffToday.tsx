@@ -1642,8 +1642,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     return acc;
   }, {});
 
-  const totalRevenueCompleted = completedTasks.reduce((sum, t) => sum + (t.pricing?.totalFee || 0), 0);
-
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar */}
@@ -2922,7 +2920,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           /* ========================================================================= */
           <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Header / Summary Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
                 <div className="h-11 w-11 rounded-2xl bg-[#d9fdd3] text-[#008069] flex items-center justify-center flex-shrink-0 border border-[#00a884]/30">
                   <CheckCircle2 size={22} />
@@ -2931,18 +2929,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   <div className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Selesai</div>
                   <div className="text-lg font-extrabold text-[#111b21]">
                     {completedTasks.length} <span className="text-xs font-semibold text-[#667781]">Treatment</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
-                <div className="h-11 w-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0 border border-amber-200">
-                  <CreditCard size={22} />
-                </div>
-                <div>
-                  <div className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Nilai Treatment</div>
-                  <div className="text-lg font-extrabold text-[#111b21]">
-                    {formatRupiah(totalRevenueCompleted)}
                   </div>
                 </div>
               </div>
