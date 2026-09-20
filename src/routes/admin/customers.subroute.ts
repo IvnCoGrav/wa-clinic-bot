@@ -952,6 +952,13 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         }
 
+        const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
+        const targetLatPre = lat !== undefined ? lat : customer.lat;
+        const targetLngPre = lng !== undefined ? lng : customer.lng;
+        if (hasNewPhoto && (targetLatPre == null || targetLngPre == null)) {
+          return reply.status(400).send({ success: false, error: 'Foto rumah wajib disertai koordinat GPS. Isi titik GPS dulu sebelum menyimpan foto.' });
+        }
+
         let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
         let distanceKm = customer.distance_km;

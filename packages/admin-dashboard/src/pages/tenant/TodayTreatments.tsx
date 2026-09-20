@@ -679,6 +679,11 @@ export const TodayTreatments: React.FC = () => {
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locationTask) return;
+    const hasPhotoForGuard = !!(locRawHousePhotoB64 || (locHousePhotoB64 && locHousePhotoB64.startsWith('data:image/')));
+    if (hasPhotoForGuard && !locCoords) {
+      toast('Kunci titik GPS dulu sebelum menyimpan foto rumah.', 'error');
+      return;
+    }
 
     // Konfirmasi sebelum menimpa data lokasi/foto yang sudah ada sebelumnya
     if (hasSavedLocData) {
@@ -758,6 +763,9 @@ export const TodayTreatments: React.FC = () => {
               : t
           )
         );
+      }
+      if (res && res.data?.coordsUpdated === false) {
+        toast('Catatan lokasi tersimpan (tanpa perubahan titik GPS) — foto tersimpan tapi koordinat tidak diperbarui.', 'error');
       }
     } catch (err: any) {
       console.warn('[TODAY] Background sync location error:', err?.message || err);
