@@ -452,7 +452,7 @@ export class FollowUpService {
               type: 'NO_PURCHASE',
               status: { in: ['PENDING', 'QUEUED'] },
             },
-            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_HAS_RESERVATION },
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_HAS_RESERVATION, reservation_id: null },
           });
           cancelled = res?.count || 0;
         } catch (_) {}
@@ -534,7 +534,9 @@ export class FollowUpService {
             where: {
               id: { in: activeFollowUps.map(f => f.id) },
             },
-            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED },
+            // Neutralkan reservation_id: baris CANCELLED tidak lagi terkait reservasi
+            // aktif, menjaga invarian @@unique([tenant_id, reservation_id, type, stage]).
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null },
           });
         } catch (_) {}
         console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId}. Set is_repeat_order = true.`);
@@ -697,7 +699,10 @@ export class FollowUpService {
           tenant_id: tenantId,
           status: { in: ['PENDING', 'QUEUED'] },
         },
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
+        // Baris CANCELLED tetap tersimpan sebagai jejak historis, namun reservation_id
+        // dinetralkan agar tidak menabrak unique (tenant_id, reservation_id, type, stage)
+        // saat reservasi yang sama membuat follow-up pengganti.
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED, reservation_id: null },
       });
       console.log(`[FollowUp Service] Cancelled follow-ups for reservation ${reservationId}`);
     } catch (err: any) {
@@ -900,7 +905,7 @@ export class FollowUpService {
     const reason = (options.reason || '').trim() || CANCEL_REASON.MANUAL_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { id, tenant_id: tenantId },
-      data: { status: 'CANCELLED', cancel_reason: reason },
+      data: { status: 'CANCELLED', cancel_reason: reason, reservation_id: null },
     });
     return res.count > 0;
   }
@@ -917,7 +922,7 @@ export class FollowUpService {
     const reason = (options.reason || '').trim() || CANCEL_REASON.BULK_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { tenant_id: tenantId, status: status as any },
-      data: { status: 'CANCELLED', cancel_reason: reason },
+      data: { status: 'CANCELLED', cancel_reason: reason, reservation_id: null },
     });
     console.log(`[FollowUp Service] Bulk cancelled ${res.count} follow-ups with status ${status}.`);
     return res.count;
@@ -1313,7 +1318,7 @@ export class FollowUpService {
             console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is NO_PURCHASE but customer already has reservation (${res.id}, status: ${res.status}). Auto-cancelling.`);
             await prisma.followUp.update({
               where: { id: fu.id },
-              data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.HAS_ACTIVE_RESERVATION },
+              data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.HAS_ACTIVE_RESERVATION, reservation_id: null },
             });
             return false;
           }
