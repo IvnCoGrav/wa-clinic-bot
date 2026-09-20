@@ -188,6 +188,10 @@ describe('Robustness & Hardening Suite', () => {
       
       const clearSpy = vi.spyOn(customerService, 'clearPendingLocation').mockResolvedValue({} as any);
       const typingSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true, bubblesSent: 1 });
+      // Isolasi seam LLM: test ini menguji INVARIAN reset state, bukan output LLM.
+      // Tanpa mock, pipeline V3 menembak network LLM nyata (15s timeout + retry) → flaky.
+      const { GenerationStage } = await import('../../src/v3/agent/pipeline/generation-stage');
+      vi.spyOn(GenerationStage, 'executeChatCompletion').mockRejectedValue(new Error('LLM unavailable in test'));
 
       // Last interaction 6 minutes ago
       const lastMsgAt = new Date();

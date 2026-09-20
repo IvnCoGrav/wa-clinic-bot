@@ -9,6 +9,7 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
+import { contextStorage } from '../utils/context';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 export class ConversationStateMachine {
@@ -221,7 +222,10 @@ export class ConversationStateMachine {
     let activeConversation = autoRelease.updatedConversation;
 
     // --- IDLE TIMEOUT ---
-    const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS || '86400000', 10);
+    // CG-02 (2026-09-20): default 14,1 hari — selaras pola customer klinik yang
+    // bisa berhari-hari dari chat awal sampai closing. Sebelumnya 24 jam (terlalu
+    // pendek → customer yang balas setelah 2 hari kehilangan konteks).
+    const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS || '1218240000', 10);
     const CONFIRMATION_TIMEOUT_MS = parseInt(process.env.LOCATION_CONFIRMATION_TIMEOUT_MS || '300000', 10);
 
     const lastMsgTime = activeConversation.last_message_at ? new Date(activeConversation.last_message_at).getTime() : 0;
@@ -250,6 +254,33 @@ export class ConversationStateMachine {
       await conversationService.updateLastDiscussedTreatment(activeConversation.id, tenantId, null as any).catch(() => {});
       activeConversation.last_discussed_treatment = null;
       activeConversation.current_state = ConversationState.INITIAL;
+
+      // Stage 4 (R2): idle reset WAJIB menyelaraskan sesi V3 episodik — sebelumnya
+      // hanya enum conversation yang direset, sementara session V3 (cart, treatment
+      // terpilih, booking, komitmen) tetap terbaca ulang → "amnesia palsu"/konteks
+      // lama nyangkut. Bersihkan EPISODIK; pertahankan profil durable
+      // (nama, sapaan, anak, lokasi terverifikasi).
+      try {
+        const { GoalTracker } = await import('../v3/state/goal-tracker');
+        await GoalTracker.updateGoalSession(
+          activeConversation.id,
+          {
+            cartItems: [],
+            selectedTreatment: undefined,
+            booking: undefined,
+            discussedTreatments: [],
+            priceDiscussed: undefined,
+            bookingCommitConfirmed: undefined,
+            lastCommitment: undefined,
+            ongkirStatus: undefined,
+            totalPrice: undefined,
+          } as any,
+          tenantId
+        );
+        console.log(`[TIMEOUT RESET] Sesi V3 episodik dibersihkan untuk conversation ${activeConversation.id}.`);
+      } catch (resetErr: any) {
+        console.warn('[TIMEOUT RESET] Gagal membersihkan sesi V3 episodik:', resetErr?.message);
+      }
     }
 
     // 3. Cek Global Bot Deactivation
@@ -534,6 +565,8 @@ export class ConversationStateMachine {
       phone: customer.phone,
       chatId: `${customer.phone}@c.us`,
       bubbleCorrelationId,
+      turnId: contextStorage.getStore()?.turnId,
+      provider: contextStorage.getStore()?.provider,
       incomingText: effectiveInboundText,
       originalText: (incomingMessage as any).originalText || inboundContent,
       history: historyFormatted,
@@ -559,6 +592,20 @@ export class ConversationStateMachine {
         tenantId,
         escReason
       );
+
+      // Stage 5 Fase 4 (RC-04): tandai turn durable sebagai HANDOFF (best-effort).
+      try {
+        const store = contextStorage.getStore();
+        if (store?.turnId && store?.inboundMessageId) {
+          const { turnRepository } = await import('../repositories/turn.repository');
+          await turnRepository.markStatus({
+            tenantId,
+            provider: store.provider || 'WAHA',
+            inboundMessageId: store.inboundMessageId,
+            status: 'HANDOFF',
+          });
+        }
+      } catch {}
     }
 
     result = {
@@ -672,12 +719,16 @@ export class ConversationStateMachine {
 
       // --- STEP 2: SEND TEXT REPLY DENGAN SIMULASI MENGETIK ---
       const chatId = `${customer.phone}@c.us`;
+      const outboundTurnId = contextStorage.getStore()?.turnId;
+      const outboundProvider = contextStorage.getStore()?.provider;
       const resultHuman = await this.typingSvc.simulateHumanReply({
         chatId,
         incomingMessageId: incomingMessage.id,
         incomingText: incomingBody,
         replyText: result.replyText,
         tenantId,
+        turnId: outboundTurnId,
+        provider: outboundProvider,
         shouldAbort: async () => {
           try {
             const freshConv = await conversationService.getOrCreateConversation(customer.id, tenantId);
@@ -693,17 +744,25 @@ export class ConversationStateMachine {
       const outboundPayload: any = { ...(reason || {}) };
       if (v3Meta) outboundPayload.v3Execution = v3Meta;
       if (!resultHuman.success) outboundPayload.sendError = resultHuman.error || 'WAHA sendText failed';
-      await messageService.logMessage({
-        tenantId,
-        conversationId: activeConversation.id,
-        direction: Direction.OUTBOUND,
-        content: result.replyText,
-        waMessageId: (resultHuman as any).messageId,
-        payloadRaw: Object.keys(outboundPayload).length > 0 ? outboundPayload : undefined,
-        deliveryStatus: resultHuman.success ? 'sent' : 'failed',
-        metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
-        metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
-      });
+      // MT-R4.1 (audit R4): kegagalan LOGGING setelah pengiriman TIDAK BOLEH
+      // menggagalkan turn — jika dilempar ke queue worker, job akan retry dan
+      // MENGIRIM ULANG pesan yang sudah terkirim (balasan ganda ke customer).
+      // Pesan fisik sudah keluar; catat warning best-effort saja.
+      try {
+        await messageService.logMessage({
+          tenantId,
+          conversationId: activeConversation.id,
+          direction: Direction.OUTBOUND,
+          content: result.replyText,
+          waMessageId: (resultHuman as any).messageId,
+          payloadRaw: Object.keys(outboundPayload).length > 0 ? outboundPayload : undefined,
+          deliveryStatus: resultHuman.success ? 'sent' : 'failed',
+          metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
+          metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
+        });
+      } catch (logErr: any) {
+        console.error(`[OUTBOUND LOG ERROR] Gagal mencatat pesan outbound (tidak memicu retry): ${logErr?.message || logErr}`);
+      }
     }
 
     // --- LEARNING LOOP (Fase A): turn dengan grounding kosong tetap dibalas,

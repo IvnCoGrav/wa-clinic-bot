@@ -37,6 +37,8 @@ export interface MapPoint {
   kelurahan?: string | null;
   status: string;
   is_mql: boolean;
+  /** True bila pelanggan memiliki reservasi aktif (bukan cancelled/rejected). */
+  has_reservation?: boolean;
   is_out_of_coverage: boolean;
   distance_km?: number | null;
   /** True bila koordinat adalah sentroid estimasi wilayah (bukan GPS presisi). */

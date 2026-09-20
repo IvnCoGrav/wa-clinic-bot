@@ -221,6 +221,11 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
         asksDeliveryFee: {
           type: 'boolean',
           description: 'TRUE hanya bila customer eksplisit menanyakan ongkir/biaya/promo ("ada ongkir?", "berapa ongkirnya"). Bila ragu, isi false.'
+        },
+        commitment: {
+          type: 'string',
+          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
+          description: 'Penilaian SEMANTIK atas seluruh percakapan: apakah customer pada giliran ini SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Isi berdasarkan makna & konteks (bukan sekadar ada tanda tanya).'
         }
       },
       required: ['locationText']

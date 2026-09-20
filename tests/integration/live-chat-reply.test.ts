@@ -24,6 +24,16 @@ vi.mock('../../src/integrations/waha/client', async (importOriginal) => {
 });
 const { getChats: mockGetChats, getMessages: mockGetMessages, getPhoneNumberFromLid: mockPhoneFromLid } = wahaMocks;
 
+// Mock LLM transport: suggest-reply TIDAK boleh menembak network LLM nyata saat test offline
+// (kebocoran kredensial `.env` membuat request 15s-timeout + retry → flaky). Isolasi seam,
+// bukan menurunkan validasi: endpoint tetap harus menghasilkan draft.
+vi.mock('../../src/integrations/llm/model-fallback', () => ({
+  callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+    data: { choices: [{ message: { content: 'Draf saran balasan dari Bidan Yusi untuk test.' } }] },
+    usage: {},
+  }),
+}));
+
 const ADMIN_KEY = 'test_admin_key_livechat';
 
 describe('Live Chat Admin Endpoints (monitor & balas)', () => {

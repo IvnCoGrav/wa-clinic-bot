@@ -19,7 +19,7 @@ export interface LogEntry {
 }
 
 const MAX_ENTRIES = 500;
-const MAX_LOG_RETENTION_DAYS = 7;
+const MAX_LOG_RETENTION_DAYS = 60;
 const buffer: LogEntry[] = [];
 let nextId = 1;
 let installed = false;

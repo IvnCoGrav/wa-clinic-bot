@@ -82,6 +82,12 @@ export interface FactualValidationOptions {
    * sebagai fallback warisan bila tag tak tersedia.
    */
   isRefusalOrEscalation?: boolean;
+  /**
+   * Fixing D1 (sesi 767713): nama tambahan katalog tenant (termasuk add-on yang
+   * tidak muncul di result.treatments). Di-resolve di call-site (async) lalu
+   * diteruskan. Mencegah false-positive add-on sah ("Sinar Moksa").
+   */
+  extraCatalogNames?: string[];
 }
 
 /** Kata generik satu-kata yang boleh di-bold tanpa padanan katalog. */
@@ -127,6 +133,21 @@ function catalogNames(tools: ToolExec[]): string[] {
     }
   }
   return names;
+}
+
+/**
+ * Fixing D1 (sesi 767713): nama tambahan katalog tenant (termasuk add-on)
+ * yang di-resolve di call-site (async) dan diteruskan via opsi. Dipakai agar
+ * add-on sah (mis. "Sinar Moksa") TIDAK dituduh halusinasi hanya karena tak
+ * muncul di result.treatments turn ini.
+ */
+function mergedCatalogNames(tools: ToolExec[], extra?: string[]): string[] {
+  const set = new Set<string>(catalogNames(tools));
+  for (const n of extra || []) {
+    const v = String(n || '').trim().toLowerCase();
+    if (v) set.add(v);
+  }
+  return [...set];
 }
 
 function catalogDurations(tools: ToolExec[]): number[] {
@@ -230,8 +251,12 @@ export function validateFactualClaims(
   }
 
   // D1 — nama layanan di-bold/dikutip wajib ada di katalog turn ini.
-  const names = catalogNames(executedTools);
-  if (names.length > 0) {
+  // Gate tetap berdasarkan nama dari TOOL TURN INI (turnNames) agar D1 tidak
+  // mulai memeriksa turn yang dulu tak diperiksa. extraCatalogNames hanya
+  // MELONGGARKAN pencocokan (mis. add-on katalog) tanpa mengubah gate.
+  const turnNames = catalogNames(executedTools);
+  const names = mergedCatalogNames(executedTools, opts?.extraCatalogNames);
+  if (turnNames.length > 0) {
     const spans: string[] = [];
     const boldRe = /\*([^*]{2,60})\*/g;
     let m: RegExpExecArray | null;

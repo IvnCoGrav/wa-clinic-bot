@@ -150,13 +150,16 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
     expect(updated.is_hold_labeled).toBe(true);
   });
 
-  it('[TC 29] Multi-tenant label check → setLabelFlags untuk phone tertentu meng-update secara global', async () => {
+  it('[TC 29] Multi-tenant label check → setLabelFlags tenant-scoped (TIDAK bocor ke tenant lain)', async () => {
     const phone = `6287779${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Tenant A Cust', 'tenant-a');
-    await customerService.setLabelFlags(phone, { isHoldLabeled: true });
+    await customerService.setLabelFlags(phone, { isHoldLabeled: true }, 'tenant-a');
+
+    const custA = await customerService.getCustomerByPhone(phone, 'tenant-a');
+    expect(custA?.is_hold_labeled).toBe(true);
 
     const custB = await customerService.getOrCreateCustomer(phone, 'Tenant B Cust', 'tenant-b');
-    expect(custB.is_hold_labeled).toBe(true);
+    expect(custB.is_hold_labeled).toBe(false);
   });
 
   it('[TC 30] Flag is_admin_labeled dan is_hold_labeled bersamaan → IGNORED_ADMIN mendapat prioritas', async () => {

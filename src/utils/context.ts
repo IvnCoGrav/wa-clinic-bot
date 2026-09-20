@@ -3,6 +3,12 @@ import { AsyncLocalStorage } from 'async_hooks';
 export interface ContextData {
   correlationId?: string;
   phone?: string;
+  /** ID kanonis satu turn inbound: `${tenantId}:${provider}:${inboundMessageId}`. */
+  turnId?: string;
+  /** Provider asal pesan (WAHA | WABA) untuk affinity ingress→egress. */
+  provider?: 'WAHA' | 'WABA';
+  /** ID pesan asli dari provider (WAHA waMessageId / Meta messageId). */
+  inboundMessageId?: string;
 }
 
 export const contextStorage = new AsyncLocalStorage<ContextData>();

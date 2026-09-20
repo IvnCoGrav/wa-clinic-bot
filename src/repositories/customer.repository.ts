@@ -29,32 +29,20 @@ export interface CustomerCreateData {
 
 export interface CustomerRepository {
   findByPhone(phone: string, tenantId: string): Promise<any | null>;
-  /**
-   * Cari berdasarkan nomor saja lintas tenant.
-   * Diperlukan selama skema masih `phone @unique` global (SAAS_READINESS P1 #11):
-   * mencegah create duplikat yang pasti gagal unique-violation di produksi.
-   * Setelah migrasi ke `@@unique([tenant_id, phone])`, metode ini tidak dipakai lagi.
-   */
-  findByPhoneGlobal(phone: string): Promise<any | null>;
   findById(id: string, tenantId: string): Promise<any | null>;
   create(data: CustomerCreateData): Promise<any>;
   update(id: string, patch: Record<string, unknown>): Promise<any>;
   /**
-   * Update SEMUA record dengan nomor ini lintas tenant (semantik setLabelFlags:
-   * flag hold/admin bersifat phone-global). Mengembalikan jumlah terupdate.
+   * Update SEMUA record dalam SATU tenant dengan nomor ini (tenant-scoped).
+   * Semantik setLabelFlags kini per-tenant (skema: @@unique([tenant_id, phone])).
    */
-  updateManyByPhone(phone: string, patch: Record<string, unknown>): Promise<number>;
+  updateManyByPhoneTenant(phone: string, tenantId: string, patch: Record<string, unknown>): Promise<number>;
 }
 
 /** Adapter produksi: fail-closed — error DB dilempar, tanpa objek fiktif. */
 export class PostgresCustomerRepository implements CustomerRepository {
   async findByPhone(phone: string, tenantId: string): Promise<any | null> {
     const customer = await prisma.customer.findFirst({ where: { phone, tenant_id: tenantId } });
-    return customer ?? null;
-  }
-
-  async findByPhoneGlobal(phone: string): Promise<any | null> {
-    const customer = await prisma.customer.findFirst({ where: { phone } });
     return customer ?? null;
   }
 
@@ -83,8 +71,8 @@ export class PostgresCustomerRepository implements CustomerRepository {
     return await prisma.customer.update({ where: { id }, data: patch as any });
   }
 
-  async updateManyByPhone(phone: string, patch: Record<string, unknown>): Promise<number> {
-    const res = await prisma.customer.updateMany({ where: { phone }, data: patch as any });
+  async updateManyByPhoneTenant(phone: string, tenantId: string, patch: Record<string, unknown>): Promise<number> {
+    const res = await prisma.customer.updateMany({ where: { phone, tenant_id: tenantId }, data: patch as any });
     return res?.count ?? 0;
   }
 }
@@ -96,13 +84,6 @@ export class InMemoryCustomerRepository implements CustomerRepository {
   async findByPhone(phone: string, tenantId: string): Promise<any | null> {
     for (const c of this.store.values()) {
       if (c?.phone === phone && (!tenantId || c?.tenant_id === tenantId)) return c;
-    }
-    return null;
-  }
-
-  async findByPhoneGlobal(phone: string): Promise<any | null> {
-    for (const c of this.store.values()) {
-      if (c?.phone === phone) return c;
     }
     return null;
   }
@@ -141,10 +122,10 @@ export class InMemoryCustomerRepository implements CustomerRepository {
     return updated;
   }
 
-  async updateManyByPhone(phone: string, patch: Record<string, unknown>): Promise<number> {
+  async updateManyByPhoneTenant(phone: string, tenantId: string, patch: Record<string, unknown>): Promise<number> {
     let count = 0;
     for (const [id, c] of this.store.entries()) {
-      if (c?.phone === phone) {
+      if (c?.phone === phone && (!tenantId || c?.tenant_id === tenantId)) {
         this.store.set(id, { ...c, ...patch, updated_at: new Date() });
         count++;
       }

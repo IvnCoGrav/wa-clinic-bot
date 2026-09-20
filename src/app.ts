@@ -233,6 +233,15 @@ if (require.main === module) {
       WahaMonitorService.getInstance().start();
     }).catch(e => console.error('[MONITOR START ERROR]', e));
 
+    // Stage 5 Fase 5: recover turn durable yang belum selesai (Redis down / crash)
+    // + retention ledger. Non-blocking; beri jeda agar queue/Redis siap.
+    setTimeout(() => {
+      import('./services/turn-recovery.service').then(({ turnRecoveryService }) => {
+        void turnRecoveryService.replayPendingTurns().catch(() => {});
+        void turnRecoveryService.cleanupOldTurns(60).catch(() => {});
+      }).catch(() => {});
+    }, 15000);
+
     // Start label reconciliation cron (Task 7 / flag: ENABLE_LABEL_RECONCILIATION_CRON)
     if (process.env.ENABLE_LABEL_RECONCILIATION_CRON === 'true') {
       const intervalHours = parseInt(process.env.LABEL_RECONCILIATION_INTERVAL_HOURS || '4', 10);

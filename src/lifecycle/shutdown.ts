@@ -67,6 +67,22 @@ export async function gracefulShutdown(server: FastifyInstance, signal: string):
   }
 
   try {
+    const { flushLlmAuditBuffer } = await import('../utils/llm-audit-buffer');
+    await flushLlmAuditBuffer();
+    console.log('[SHUTDOWN] LLM audit buffer di-flush.');
+  } catch (e: any) {
+    console.error('[SHUTDOWN] flushLlmAuditBuffer() gagal:', e?.message);
+  }
+
+  try {
+    const { flushLlmExecutionLogs } = await import('../utils/llm-execution-logger');
+    await flushLlmExecutionLogs();
+    console.log('[SHUTDOWN] LLM execution log (JSONL) di-flush.');
+  } catch (e: any) {
+    console.error('[SHUTDOWN] flushLlmExecutionLogs() gagal:', e?.message);
+  }
+
+  try {
     await prisma.$disconnect();
     console.log('[SHUTDOWN] Prisma terputus.');
   } catch (e: any) {

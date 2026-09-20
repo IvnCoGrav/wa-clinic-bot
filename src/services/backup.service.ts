@@ -307,7 +307,12 @@ export class BackupService {
           for (const c of tables.customers) {
             try {
               await prisma.customer.upsert({
-                where: { phone: c.phone },
+                where: {
+                  tenant_id_phone: {
+                    tenant_id: c.tenant_id || tenantId,
+                    phone: c.phone,
+                  },
+                },
                 update: {
                   name: c.name,
                   kelurahan: c.kelurahan,

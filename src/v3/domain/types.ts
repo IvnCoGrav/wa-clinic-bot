@@ -151,10 +151,44 @@ export interface CustomerGoalSession {
   formRetryCount?: number;
   /** Kontraindikasi demam: true bila suhu ≥ ambang ClinicPolicy (default 37.8°C). */
   feverContraindication?: boolean;
+  /**
+   * ST6 (RC-05): verdict komitmen TERAKHIR dari Call 1 (persisten lintas turn).
+   * Dipakai `syncCartItems` turn berikutnya sebagai gerbang anti-bocor: selama
+   * verdict terakhir EXPLORING dan tidak ada sinyal komitmen baru, cart tidak
+   * diisi ulang dari riwayat konsultasi.
+   */
+  lastCommitment?: CommitmentLevel;
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */
 export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
+
+/**
+ * ST6 (Audit RC-05) — Tingkat komitmen customer pada satu giliran percakapan.
+ * Ditentukan oleh SEMANTIK percakapan (Call 1 LLM yang sudah membaca history),
+ * BUKAN oleh pencocokan string/tanda baca. Murni tipe — tanpa logika.
+ *
+ * - `EXPLORING`   : bertanya/bercerita/menjelajah (konsultasi). Cart DILARANG berubah.
+ * - `CONSIDERING` : minat/menimbang, belum memutuskan. Cart DILARANG berubah.
+ * - `COMMITTED`   : memutuskan mengambil layanan (komitmen aktif). Cart BOLEH berubah.
+ */
+export type CommitmentLevel = 'EXPLORING' | 'CONSIDERING' | 'COMMITTED';
+
+/**
+ * ST6 (Audit RC-05) — Interpretasi satu giliran percakapan dari Call 1.
+ * Menjadi kontrak data antara pemahaman LLM dan konsumen deterministik
+ * (CartManager, tool-masker). Guardrail deterministik tetap berlaku sebagai
+ * PAGAR STATE (mis. save_reservation butuh COMMITTED), bukan sebagai otak.
+ */
+export interface TurnInterpretation {
+  /** Tingkat komitmen pada giliran ini. */
+  commitment: CommitmentLevel;
+  /** ID layanan katalog yang benar-benar dirujuk/dipilih pada giliran ini (opsional). */
+  referencedServiceIds?: string[];
+  /** True bila customer meminta berbicara dengan manusia/admin (prioritas tertinggi). */
+  handoffRequested?: boolean;
+}
+
 
 /**
  * Kata generik domain klinik — DILARANG menjadi token tunggal unik penentu

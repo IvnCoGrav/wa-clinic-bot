@@ -6,6 +6,35 @@ export class OutputSanitizer {
   public static readonly CATALOG_MAX_CHARS = 1500;
 
   /**
+   * Fixing D1/Fase 3 (sesi 767713): hapus kalimat defleksi "cek ke tim" yang
+   * muncul saat AI ragu. HANYA kalimat yang SELURUHNYA berisi defleksi yang
+   * dibuang; kalimat dengan substansi (jawaban/manfaat/jadwal) dipertahankan.
+   * Deterministik, level kalimat (anti-mutilasi kata).
+   */
+  public static stripVagueTeamDeferral(text: string): string {
+    if (!text || typeof text !== 'string') return text;
+    // Frasa defleksi keraguan (bukan klaim jadwal normal).
+    const DEFERRAL = /(cek|konfirmasi|tanyakan|pastikan)\s+(dulu\s+)?(ke|kepada|sama|dengan)?\s*(tim|team|admin|rekan)\b|informasinya akan kami cek|akan kami cekkan ke tim|belum bisa kami pastikan|nanti kami cek dulu/i;
+    // Jangan sentuh kalimat yang memang soal JADWAL (itu sah: "kami cekkan ketersediaan jadwal").
+    const SCHEDULE = /jadwal|slot|ketersediaan|hari|tanggal|kedatangan/i;
+    // Pertahankan STRUKTUR baris (jangan gabung dengan spasi) agar sanitizer
+    // hilir yang bergantung pada pemisah paragraf tetap bekerja.
+    const lines = text.split('\n');
+    const keptLines = lines.map((line) => {
+      if (!line.trim()) return line;
+      const parts = line.split(/(?<=[.!?])\s+/);
+      const kept = parts.filter((s) => {
+        if (!DEFERRAL.test(s)) return true;
+        if (SCHEDULE.test(s)) return true;
+        return false;
+      });
+      return kept.join(' ').trim();
+    });
+    const out = keptLines.join('\n').replace(/[ \t]{2,}/g, ' ').trim();
+    return out.length > 0 ? out : text;
+  }
+
+  /**
    * Pembersih artefak placeholder sistem (audit 310995): buang salinan token
    * template bertanda kurung siku yang dipakai di PROMPT (bukan bahasa
    * customer), mis. "*Rp [Total]*", "[Harga]", "[OngkirPromo]", "[jarak]".
@@ -44,6 +73,11 @@ export class OutputSanitizer {
     if (!rawText || typeof rawText !== 'string') return '';
 
     let text = rawText;
+
+    // 0a. Fixing D1/Fase 3 (sesi 767713): buang kalimat "melempar ke tim" yang
+    // dihasilkan AI saat ragu (bukan konteks jadwal). Deterministik, level
+    // kalimat — hanya kalimat defleksi murni yang dibuang; kalimat valid tetap.
+    text = OutputSanitizer.stripVagueTeamDeferral(text);
 
     // 0. Anti-bocor placeholder sistem (audit 310995): LLM dilarang menyalin
     // token template bertanda kurung siku (mis. "*Rp [total]*", "[Harga]")

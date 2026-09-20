@@ -62,17 +62,18 @@ export class CustomerService {
 
   public async setLabelFlags(
     phone: string,
-    flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean }
+    flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean },
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<void> {
     const data: any = { labels_synced_at: new Date() };
     if (flags.isAdminLabeled !== undefined) data.is_admin_labeled = flags.isAdminLabeled;
     if (flags.isHoldLabeled !== undefined) data.is_hold_labeled = flags.isHoldLabeled;
 
-    // PLAN 8 FASE 5a: update phone-global via Repository (fail-closed di produksi).
+    // Tenant-scoped update via Repository (fail-closed di produksi).
     // Sinkronkan juga cache baca memoryCustomers karena kode yang belum termigrasi
     // masih membacanya langsung (akan hilang seluruhnya setelah Fase 5c).
     const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
-    await repo.updateManyByPhone(phone, data);
+    await repo.updateManyByPhoneTenant(phone, tenantId, data);
     const cust = memoryCustomers.get(phone);
     if (cust) {
       if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
@@ -100,17 +101,9 @@ export class CustomerService {
     let isNewlyCreated = false;
 
     if (!customer) {
-      // Skema saat ini: phone @unique GLOBAL. Bila nomor sudah ada di tenant lain,
-      // JANGAN create (pasti gagal unique-violation di produksi) — kembalikan record
-      // yang ada dengan peringatan. Dihapus setelah migrasi @@unique([tenant_id, phone]).
-      const globalExisting = await repo.findByPhoneGlobal(phone);
-      if (globalExisting) {
-        console.warn(
-          `[Customer Service] Nomor ${phone} sudah ada di tenant ${(globalExisting as any).tenant_id} ` +
-          `(diminta ${tenantId}) — memakai record existing (skema global-unique).`
-        );
-        customer = globalExisting;
-      } else {
+      // Skema: @@unique([tenant_id, phone]) — nomor boleh ada di tenant berbeda.
+      // Create atomic; bila race (P2002) → re-read dalam tenant (bukan global).
+      try {
         customer = await repo.create({
           tenant_id: tenantId,
           phone,
@@ -118,12 +111,19 @@ export class CustomerService {
           is_sandbox_test: isSandbox,
         });
         isNewlyCreated = true;
+      } catch (createErr: any) {
+        const code = createErr?.code || createErr?.cause?.code;
+        if (code === 'P2002') {
+          customer = await repo.findByPhone(phone, tenantId);
+          if (!customer) throw createErr;
+        } else {
+          throw createErr;
+        }
       }
 
       // skipFollowUpScheduling: true saat dipanggil dari migration service
       // agar legacy customer tidak mendapat follow-up NO_PURCHASE yang tidak relevan.
-      // HANYA untuk record yang benar-benar baru dibuat (bukan hasil fallback global).
-      if (isNewlyCreated && !options?.skipFollowUpScheduling && !isSandbox && !customer.is_admin_labeled && !hasBypassLabel(customer)) {
+      if (isNewlyCreated && customer && !options?.skipFollowUpScheduling && !isSandbox && !customer.is_admin_labeled && !hasBypassLabel(customer)) {
         try {
           const { followUpService } = await import('./follow-up.service');
           await followUpService.createNoPurchaseFollowUps(customer.id, tenantId);

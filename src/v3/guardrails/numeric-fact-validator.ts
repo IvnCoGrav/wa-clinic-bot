@@ -107,13 +107,15 @@ export function validateNumericFacts(
   }
 
   // Harga add-on & layanan DINAMIS dari katalog aktif (tenant-aware, tanpa hardcode).
-  // Menggantikan hardcode authorizedNumbers.add(10000) untuk Sinar Moksa.
+  // Stage 6-CLM (RC-07): harga katalog tenant TIDAK LAGI mengesahkan nominal
+  // standalone (cegah "harga Treatment A lolos pakai harga Treatment B").
+  // Ditampung terpisah (catalogNumbers) dan hanya dipakai sebagai FALLBACK bila
+  // turn ini tidak punya sumber entity-bound (mis. konsultasi harga tanpa tool).
+  const catalogNumbers = new Set<number>();
   try {
     const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
     const all = treatmentCatalogService.getAllServices(true, tenantId) || [];
     for (const s of all) {
-      if (typeof s.promoPrice === 'number') authorizedNumbers.add(s.promoPrice);
-      if (typeof s.originalPrice === 'number') authorizedNumbers.add(s.originalPrice);
       let isAddon = s.category === 'ADD_ON';
       try {
         if (typeof treatmentCatalogService.isAddonService === 'function') {
@@ -121,8 +123,18 @@ export function validateNumericFacts(
         }
       } catch (_) {}
       if (isAddon) {
+        // Harga add-on (mis. Sinar Moksa) adalah set kecil & sah dikutip kapan pun
+        // disebut — tetap diotorisasi standalone + untuk komposit.
         pushNum(addonPrices, s.promoPrice);
         pushNum(addonPrices, s.originalPrice);
+        if (typeof s.promoPrice === 'number') authorizedNumbers.add(s.promoPrice);
+        if (typeof s.originalPrice === 'number') authorizedNumbers.add(s.originalPrice);
+      } else {
+        // Harga layanan (PRIMARY/BUNDLE/SERVICE) TIDAK mengesahkan standalone
+        // lintas-entity; hanya dipakai sebagai fallback bila turn tak punya
+        // sumber entity-bound (Stage 6-CLM / RC-07).
+        if (typeof s.promoPrice === 'number') catalogNumbers.add(s.promoPrice);
+        if (typeof s.originalPrice === 'number') catalogNumbers.add(s.originalPrice);
       }
     }
   } catch (_) {
@@ -230,6 +242,17 @@ export function validateNumericFacts(
     }
   }
   const expectedSet = [...new Set(expectedTotals)];
+
+  // Stage 6-CLM (RC-07): entity-binding budget.
+  // Bila turn/session MEMILIKI sumber entity-bound (treatment dari tool turn ini,
+  // atau item keranjang sesi), maka harga standalone WAJIB berasal dari sumber itu
+  // — harga katalog tenant TIDAK mengesahkan (anti cross-entity price swap).
+  // Fallback catalog HANYA dipakai bila tidak ada sumber entity-bound sama sekali.
+  const hasEntityBoundPrices = servicePromo.length > 0 || serviceOriginal.length > 0
+    || (Array.isArray(sess?.cartItems) && sess!.cartItems!.length > 0);
+  if (!hasEntityBoundPrices) {
+    for (const n of catalogNumbers) authorizedNumbers.add(n);
+  }
 
   // Cek setiap angka di teks (ekstraksi numerik teknis; TANPA penggantian
   // string di tengah kalimat — pelanggaran hanya dilaporkan + re-prompt).

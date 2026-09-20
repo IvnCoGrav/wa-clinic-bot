@@ -360,6 +360,19 @@ export class CartManager {
       return !toks.some((t) => BLOCK.has(t));
     })();
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
+    // ST6 (RC-05): bila verdict komitmen TERAKHIR = EXPLORING dan TIDAK ADA
+    // pesan USER mana pun yang membawa sinyal komitmen/hari, seluruh giliran
+    // dianggap konsultasi — penyebutan layanan (user MAUPUN rekomendasi
+    // asisten) DILARANG mengisi cart (hanya ke discussedTreatments). Menutup
+    // kebocoran di mana tawaran asisten saat konsultasi tetap masuk cart.
+    const anyUserCommit = history.some((h) => {
+      if ((h?.role || '').toLowerCase() !== 'user') return false;
+      const c = (h?.content || '').toLowerCase();
+      return hasBookingCommitSignal(c) || DAY_EVIDENCE_WORDS.some((w) => c.includes(w));
+    });
+    const exploringLock = (session as CustomerGoalSession).lastCommitment === 'EXPLORING'
+      && !anyUserCommit
+      && (session as CustomerGoalSession).bookingCommitConfirmed !== true;
     for (let i = 0; i < history.length; i++) {
       const text = (history[i]?.content || '').toLowerCase();
       if (!text || CartManager.isDurationOnlyQuestion(text)) continue;
@@ -498,7 +511,10 @@ export class CartManager {
         || (session as CustomerGoalSession).bookingCommitConfirmed === true;
       const hasDayEvidence = DAY_EVIDENCE_WORDS.some((w) => text.includes(w));
       const isConsultativeQuestion = !isAssistant && text.includes('?') && !hasCommitSignal && !hasDayEvidence;
-      if (isConsultativeQuestion) {
+      // ST6 (RC-05): verdict komitmen terakhir (Call 1) = EXPLORING dan tidak
+      // ada sinyal komitmen user mana pun → perlakukan sebagai konsultasi.
+      const isExploringVerdict = exploringLock;
+      if (isConsultativeQuestion || isExploringVerdict) {
         for (const s of [...fullHits, ...cleanHits, ...fuzzyHits]) discussed.add(s.name);
         continue;
       }
@@ -748,5 +764,30 @@ export class CartManager {
     );
     const ongkir = session.location?.ongkirPromo ?? 0;
     return subtotal + ongkir;
+  }
+
+  /**
+   * ST6 (RC-05) — Veto komitmen: bila Call 1 menilai giliran ini EKSPLORASI
+   * (konsultasi), keranjang hasil heuristik lama dibatalkan dan item
+   * dipindahkan ke discussedTreatments. Verdict COMMITTED/CONSIDERING/absen
+   * TIDAK mengubah apa pun (jalur lama tetap berlaku sebagai cadangan).
+   *
+   * Murni (tanpa I/O) — hanya membaca verdict + memutasi session yang diberikan.
+   */
+  public static applyCommitmentVeto(
+    session: CustomerGoalSession,
+    commitment: 'EXPLORING' | 'CONSIDERING' | 'COMMITTED' | null | undefined
+  ): CustomerGoalSession {
+    if (commitment !== 'EXPLORING') return session;
+    const cart = session.cartItems || [];
+    if (cart.length === 0) return session;
+    const discussed = new Set([...(session.discussedTreatments || [])]);
+    for (const it of cart) discussed.add(it.name);
+    return {
+      ...session,
+      cartItems: [],
+      totalPrice: undefined,
+      discussedTreatments: [...discussed],
+    };
   }
 }

@@ -24,6 +24,11 @@ export class WahaTenantService {
   /**
    * Mencari tenant_id pemilik WAHA session tertentu.
    * Jika tidak ditemukan (atau DB offline), fallback ke DEFAULT_TENANT_ID.
+   *
+   * CATATAN (CG-01 / R1): fail-closed DITUNDA — mengubah ini menjadi tolak
+   * di titik awal ingress berdampak luas (ACK/label/typing ikut ter-drop) dan
+   * butuh infrastruktur quarantine + penanganan per jenis event. Lihat
+   * docs/KNOWN_ISSUES.md #103.
    */
   public async resolveTenantBySession(session: string | undefined | null): Promise<string> {
     if (!session || session.trim().length === 0) {

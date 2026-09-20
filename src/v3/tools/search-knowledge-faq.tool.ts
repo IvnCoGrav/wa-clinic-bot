@@ -38,6 +38,11 @@ export const SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA = {
         limit: {
           type: 'number',
           description: 'Jumlah chunk maksimal yang diambil (default 3, maksimal 5).'
+        },
+        commitment: {
+          type: 'string',
+          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
+          description: 'Penilaian SEMANTIK atas seluruh percakapan: customer SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Berdasarkan makna & konteks, bukan ada/tidak tanda tanya.'
         }
       },
       required: ['query']

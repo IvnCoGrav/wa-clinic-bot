@@ -114,6 +114,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Resolve tenant dari WAHA session id; hasilnya dipakai di SELURUH jalur
       // downstream menggantikan DEFAULT_TENANT_ID. Bila session tidak dikenal /
       // DB offline → fallback DEFAULT_TENANT_ID (perilaku single-tenant tidak berubah).
+      // CATATAN (CG-01 / R1): fail-closed DITUNDA — lihat docs/KNOWN_ISSUES.md #103.
       let resolvedTenantId = DEFAULT_TENANT_ID;
       try {
         const eventSession = (event as any)?.session as string | undefined;
@@ -1442,11 +1443,29 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       if (!coalesceResult.handled) {
+        // Stage 5 Fase 2: persist turn inbound (RECEIVED) SEBELUM enqueue —
+        // durable sebelum ack. Best-effort (DB offline tidak menggagalkan alur).
+        try {
+          const { turnRepository } = await import('../repositories/turn.repository');
+          await turnRepository.persistInbound({
+            tenantId: resolvedTenantId,
+            provider: 'WAHA',
+            inboundMessageId: waMessageId,
+            customerId: customer.id,
+            conversationId: conversation.id,
+            payload: { tenantId: resolvedTenantId, customerId: customer.id, phone: customer.phone, incomingMessage },
+          });
+        } catch {}
+
         await queueService.enqueueMessage({
           tenantId: resolvedTenantId,
           customerId: customer.id,
           phone: customer.phone,
           incomingMessage,
+          correlationId,
+          turnId: `${resolvedTenantId}:WAHA:${waMessageId}`,
+          provider: 'WAHA',
+          inboundMessageId: waMessageId,
         });
       }
 

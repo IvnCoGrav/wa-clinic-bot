@@ -12,6 +12,7 @@ export interface MapPointLike {
   kecamatan?: string | null;
   status?: string | null;
   is_mql?: boolean;
+  has_reservation?: boolean | null;
   is_out_of_coverage?: boolean;
   distance_km?: number | null;
   is_estimated_centroid?: boolean;
@@ -74,11 +75,16 @@ export function filterPointsByCity<T extends { kota?: string | null }>(
 
 /**
  * Warna marker berdasarkan prioritas status. Urutan prioritas:
- * 1. Di luar jangkauan (abu)  2. MQL (biru)
- * 3. Status non-aktif (oranye)  4. Aktif (hijau).
+ * 1. Di luar jangkauan (abu)
+ * 2. Sudah reservasi / purchased (hijau) — mengalahkan MQL: pelanggan yang
+ *    sudah booking tidak lagi dipandang "prospek" meski flag MQL masih menyala.
+ * 3. MQL (biru)
+ * 4. Status non-aktif (oranye)
+ * 5. Aktif (hijau).
  */
 export function markerColor(point: MapPointLike): string {
   if (point.is_out_of_coverage) return '#94a3b8';
+  if (point.has_reservation) return '#008069';
   if (point.is_mql) return '#2563eb';
   if (point.status && point.status !== 'active') return '#f59e0b';
   return '#008069';
@@ -104,6 +110,7 @@ export type SpatialStatus = 'active' | 'mql' | 'other' | 'out_of_coverage';
 /** Menentukan kategori status satu titik (satu kategori, prioritas tetap). */
 export function statusOf(point: MapPointLike): SpatialStatus {
   if (point.is_out_of_coverage) return 'out_of_coverage';
+  if (point.has_reservation) return 'active';
   if (point.is_mql) return 'mql';
   if (point.status && point.status !== 'active') return 'other';
   return 'active';
