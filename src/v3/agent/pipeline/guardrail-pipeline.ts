@@ -603,11 +603,23 @@ export class GuardrailPipeline {
     if (!isEscalated && shouldSendReply && !OutputSanitizer.isValidReply(finalReply)) {
       console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
       const catalogTool = executedTools.find((t: any) => t.name === 'get_catalog_and_price' && (t as any).result?.treatments?.length > 0);
+      const deliveryTool = executedTools.find((t: any) => t.name === 'calculate_delivery' && (t as any).result?.suggestedTemplateReply);
       if (catalogTool && (catalogTool as any).result?.treatments?.[0]) {
         const top: any = (catalogTool as any).result.treatments[0];
         const isMoms = top.category === 'MOMS';
         finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
         console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, timestamp: new Date().toISOString() }));
+      } else if (deliveryTool && (deliveryTool as any).result?.suggestedTemplateReply) {
+        // Grounded delivery recovery (sesi 648324): saat draf kosong akibat DSML
+        // yang terlucuti tetapi data delivery resmi tersedia, gunakan template
+        // resmi delivery — bukan kaleng buntu generik.
+        let deliveryReply = String((deliveryTool as any).result.suggestedTemplateReply);
+        const candName = (deliveryTool as any).args?.candidateTreatmentName;
+        if (candName && typeof candName === 'string' && candName.trim()) {
+          deliveryReply = `Untuk ${candName.trim()} — ${deliveryReply}`;
+        }
+        finalReply = deliveryReply;
+        console.warn(JSON.stringify({ event: 'DELIVERY_RECOVERY_APPLIED', timestamp: new Date().toISOString() }));
       } else {
         const { getBrandIdentity } = await import('../../../config/brand');
         const brand = getBrandIdentity();

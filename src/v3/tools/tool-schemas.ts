@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const CalculateDeliveryArgsSchema = z.object({
   locationText: z.string().min(1, 'locationText tidak boleh kosong'),
   streetDetail: z.string().optional(),
+  candidateTreatmentName: z.string().optional(),
   asksDeliveryFee: z.boolean().optional().default(false),
   /** ST6 shadow: verdict komitmen semantik dari Call 1 (belum dipakai keputusan). */
   commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),

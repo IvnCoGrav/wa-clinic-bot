@@ -218,6 +218,10 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
           type: 'string',
           description: 'Detail nomor rumah atau RT/RW jika ada.'
         },
+        candidateTreatmentName: {
+          type: 'string',
+          description: 'Nama perawatan yang disebut customer pada pesan saat ini, bila ada; kosongkan bila tidak disebut.'
+        },
         asksDeliveryFee: {
           type: 'boolean',
           description: 'TRUE hanya bila customer eksplisit menanyakan ongkir/biaya/promo ("ada ongkir?", "berapa ongkirnya"). Bila ragu, isi false.'
