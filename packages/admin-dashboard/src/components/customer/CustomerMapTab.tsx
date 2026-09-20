@@ -52,8 +52,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const basecampLayerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null);
-  const boundaryGeoRef = useRef<any>(null);
   const hasInitialFittedRef = useRef(false);
+
+  const [boundaryGeo, setBoundaryGeo] = useState<any>(null);
+  const [geoLoading, setGeoLoading] = useState<boolean>(false);
 
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [clinic, setClinic] = useState<ClinicMapMeta | null>(null);
@@ -166,6 +168,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         bp.style.zIndex = '250';
       }
 
+      if (!map.getPane('radiusPane')) {
+        const rp = map.createPane('radiusPane');
+        rp.style.zIndex = '280';
+      }
+
       // Basemap CartoDB Positron (Light, bersih, jalan/nama wilayah jelas)
       const tileLayer = L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
@@ -218,11 +225,29 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     };
   }, []);
 
+  // Responsivitas kontainer: invalidateSize saat tab/resize berubah (cegah ubin abu-abu)
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container || !mapReady) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current) {
+        try {
+          mapRef.current.invalidateSize();
+        } catch {}
+      }
+    });
+    ro.observe(container);
+    return () => {
+      ro.disconnect();
+    };
+  }, [mapReady]);
+
   // Preload GeoJSON boundary sekali saat peta siap (mode bebas), mencegah blank flash saat toggle Area Vektor
   useEffect(() => {
     if (!mapReady) return;
     let cancelled = false;
     const loadGeo = async () => {
+      setGeoLoading(true);
       try {
         let res = await fetch('/admin/geo/surabaya-sidoarjo.geojson');
         if (!res.ok) {
@@ -230,9 +255,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const geoData = await res.json();
-        if (!cancelled) boundaryGeoRef.current = geoData;
+        if (!cancelled) setBoundaryGeo(geoData);
       } catch (e) {
         console.error('Gagal memuat boundary geojson:', e);
+      } finally {
+        if (!cancelled) setGeoLoading(false);
       }
     };
     loadGeo();
@@ -277,9 +304,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       }
 
       if (!boundaryLayerRef.current) {
-        const geoData = boundaryGeoRef.current;
-        if (!geoData) return;
-        const bLayer = L.geoJSON(geoData, {
+        if (!boundaryGeo) return; // Menunggu data tiba secara reaktif
+        const bLayer = L.geoJSON(boundaryGeo, {
           pane: 'boundaryPane',
           style: (feature: any) => {
             const level = feature?.properties?.level;
@@ -291,6 +317,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 opacity: 0.95,
                 fill: false,
                 interactive: false,
+                className: 'pointer-events-none',
               };
             }
             if (level === 'district_border') {
@@ -301,30 +328,25 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 opacity: 0.85,
                 fill: false,
                 interactive: false,
+                className: 'pointer-events-none',
               };
             }
-            // Kelurahan / Desa: poligon putih tegas di atas kertas abu muda
+            // Kelurahan / Desa: poligon biru pudar lembut (hierarki warna: hijau → orange → biru pudar)
             return {
-              fillColor: '#ffffff',
-              fillOpacity: 0.95,
-              color: '#cbd5e1',
-              weight: 0.9,
+              fillColor: '#eff6ff',
+              fillOpacity: 0.65,
+              color: '#93c5fd',
+              weight: 0.8,
               opacity: 0.9,
-              dashArray: undefined,
+              dashArray: '2, 3',
               interactive: true,
             };
           },
           onEachFeature: (feature: any, layer: any) => {
             const p = feature?.properties;
-            // Border garis (regency/district): NON-interaktif mutlak — jangan pernah
-            // menangkap pointer di atas tooltip poligon kelurahan (antisipasi flicker lagi).
+            // Border garis (regency/district): pointer-events-none via className (style callback),
+            // tidak pernah menangkap pointer di atas tooltip poligon kelurahan.
             if (p && p.level !== 'village') {
-              if (layer && typeof layer.getElement === 'function') {
-                layer.on('add', () => {
-                  const el = layer.getElement();
-                  if (el) el.style.pointerEvents = 'none';
-                });
-              }
               return;
             }
             if (p && p.level === 'village') {
@@ -338,10 +360,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               layer.on({
                 mouseover: (e: any) => {
                   e.target.setStyle({
-                    fillColor: '#e0f2fe',
-                    fillOpacity: 0.95,
+                    fillColor: '#bae6fd',
+                    fillOpacity: 0.85,
                     color: '#0284c7',
-                    weight: 1.6,
+                    weight: 1.5,
                     opacity: 1,
                     dashArray: undefined,
                   });
@@ -359,7 +381,22 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         boundaryLayerRef.current.addTo(map);
       }
     }
-  }, [mapReady, mapMode]);
+  }, [mapReady, mapMode, boundaryGeo]);
+
+  // Adaptive camera bounds: "Semua wilayah" membebaskan zoom-out (pelanggan luar kota), default terkunci Sby Raya
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    try {
+      if (showAllCities) {
+        map.setMinZoom(4);
+        map.setMaxBounds(null);
+      } else {
+        map.setMinZoom(10);
+        map.setMaxBounds(SURABAYA_RAYA_BOUNDS);
+      }
+    } catch {}
+  }, [mapReady, showAllCities]);
 
   // Render Titik Pelanggan
   useEffect(() => {
@@ -472,6 +509,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
     rings.forEach((km, i) => {
       L.circle([clinic.lat, clinic.lng], {
+        pane: 'radiusPane',
         radius: km * 1000,
         color: RING_COLORS[i % RING_COLORS.length],
         weight: 1.5,
@@ -689,8 +727,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               Kecamatan (Orange)
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-xs bg-white border border-[#cbd5e1] inline-block" />
-              Kelurahan (Putih)
+              <span className="w-2.5 h-2.5 rounded-xs bg-[#eff6ff] border border-[#93c5fd] inline-block" />
+              Kelurahan (Biru pudar)
             </span>
           </div>
         )}
@@ -718,6 +756,14 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           {loading && (
             <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
               <RefreshCw className="animate-spin text-[#008069]" size={24} />
+            </div>
+          )}
+          {!loading && mapMode === 'area' && geoLoading && (
+            <div className="absolute inset-0 bg-white/40 flex items-center justify-center z-10 pointer-events-none">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white shadow-sm border border-[#e9edef]">
+                <RefreshCw className="animate-spin text-[#008069]" size={14} />
+                <span className="text-xs font-semibold text-[#54656f]">Memuat batas wilayah…</span>
+              </div>
             </div>
           )}
           {!loading && visiblePoints.length === 0 && !error && (
