@@ -2,7 +2,14 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
+
+#### 2026-09-20 — Mixed-Intent & Anti-DSML Leakage (Sesi 648324) — Fase 1-3
+
+- **Fase 1 (observability):** `src/v3/agent/pipeline/generation-stage.ts` — log intersepsi `CALL2_DSML_LEAKAGE_INTERCEPTED` bila Call 2 memuntahkan tag `<｜｜DSML｜｜` murni (tanpa ubah balasan).
+- **Fase 2 (kontrak tool):** `src/v3/tools/tool-schemas.ts` & `calculate-delivery.tool.ts` — tambah `candidateTreatmentName` (opsional) ke `CalculateDeliveryArgsSchema`/JSON; `src/v3/tools/tool-registry.ts` — pemetaan `candidateTreatmentName: args.candidateTreatmentName ?? ctx.selectedTreatment`; `router-tool-routing.layer.ts` — 1 kalimat netral agar router mengisi field bila pesan menyebut perawatan.
+- **Fase 3 (recovery):** `src/v3/agent/pipeline/guardrail-pipeline.ts` — cabang `DELIVERY_RECOVERY_APPLIED`: bila draf kosong/tak valid dan `calculate_delivery` ada `suggestedTemplateReply`, pakai template resmi delivery (plus echo `candidateTreatmentName` bila ada), bukan kaleng buntu.
+- **Verifikasi:** `npx tsc --noEmit` 0; `npm run build` 0; `v3-persona-rules` 15/15, `v3` 117 files 687 passed; full rencana. Fase 4 replay manual via `npm run chat`.
 
 #### 2026-05-14 — Guard foto rumah wajib GPS + respons jujur (belum deploy live)
 

@@ -47,7 +47,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         streetDetail: args.streetDetail,
         asksDeliveryFee: args.asksDeliveryFee,
         tenantId: ctx.tenantId,
-        candidateTreatmentName: ctx.selectedTreatment,
+        candidateTreatmentName: args.candidateTreatmentName ?? ctx.selectedTreatment,
         cartSnapshot: ctx.cartSnapshot,
         preferredDate: ctx.preferredDateSnapshot,
         priceDiscussed: ctx.priceDiscussedSnapshot,

@@ -725,6 +725,24 @@ export class GenerationStage {
     const secondMessage = secondData?.choices?.[0]?.message;
     const { reasoning: secondCallReasoning, cleanContent: cleanSecondContent } = extractReasoningAndCleanContent(secondMessage);
     let finalReply = cleanSecondContent;
+
+    // Fase 1 (observability, sesi 648324): deteksi kebocoran tag tool-call DSML di Call 2.
+    // Call 2 adalah tahap sintesis bahasa alami akhir — tidak boleh memanggil tool.
+    // Jika output mentah mengandung tag DSML tetapi hasil bersih kosong, catat
+    // sebagai event observability tanpa mengubah balasan (perilaku tidak diubah).
+    try {
+      const rawSecondContent = typeof (secondMessage as any)?.content === 'string' ? (secondMessage as any).content : '';
+      const isPureDsmlLeak = /<｜｜DSML｜｜/i.test(rawSecondContent) && !cleanSecondContent.trim();
+      if (isPureDsmlLeak) {
+        console.warn(JSON.stringify({
+          event: 'CALL2_DSML_LEAKAGE_INTERCEPTED',
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          rawContent: rawSecondContent.slice(0, 150),
+          timestamp: new Date().toISOString(),
+        }));
+      }
+    } catch {}
     if (!turn.reasoning && secondCallReasoning) {
       turn.reasoning = secondCallReasoning;
     }
