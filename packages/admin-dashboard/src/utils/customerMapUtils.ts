@@ -56,7 +56,10 @@ export function uniqueCities(points: Array<{ kota?: string | null }>): string[] 
   const set = new Set<string>();
   for (const p of points) {
     const c = normalizeCity(p.kota);
-    if (c) set.add(c);
+    // Buang entri yang merupakan nama jalan (Jl./Jalan/RT/RW), angka acak, atau teks terlalu panjang
+    if (c && !/^(jl\.?|jalan|rt|rw|\d+)/i.test(c) && c.length <= 30) {
+      set.add(c);
+    }
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
