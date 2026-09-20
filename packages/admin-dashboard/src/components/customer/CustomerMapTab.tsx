@@ -470,8 +470,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       const isManualStaff = loc.source === 'manual_staff';
       const fillColor = isManualStaff ? '#7c3aed' : markerColor(p);
       const strokeColor = isManualStaff ? '#ffffff' : loc.borderColor;
-      const strokeWidth = isManualStaff ? 2.5 : (loc.source === 'gps_pin' ? 1.5 : 2);
-      const radius = isManualStaff ? 9 : loc.radius;
+      const strokeWidth = 2;
+      const radius = loc.radius;
       const marker = L.circleMarker([p.renderLat, p.renderLng], {
         radius,
         color: strokeColor,
