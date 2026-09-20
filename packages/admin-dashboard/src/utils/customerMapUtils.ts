@@ -128,19 +128,17 @@ export interface LocationVisual {
   radius: number;
 }
 
+export const UNIFORM_MARKER_RADIUS = 7;
 const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'>> = {
-  // GPS asli (shareloc customer/bidan) — marker padat tegas.
-  gps_pin: { label: '📍 GPS Akurat', borderColor: '#ffffff', fillOpacity: 0.9, radius: 6 },
-  // Estimasi wilayah (gazetteer/geocoding) — outline putus-putus & fill transparan.
+  gps_pin: { label: '📍 GPS Akurat', borderColor: '#ffffff', fillOpacity: 0.9, radius: UNIFORM_MARKER_RADIUS },
   estimated_area: {
     label: '⚪ Estimasi Wilayah',
     borderColor: '#64748b',
     dashArray: '4 3',
     fillOpacity: 0.5,
-    radius: 7,
+    radius: UNIFORM_MARKER_RADIUS,
   },
-  // Diedit manual oleh bidan/staf — ungu solid pop-out dengan ring putih tebal.
-  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#ffffff', fillOpacity: 1, radius: 9 },
+  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#ffffff', fillOpacity: 1, radius: UNIFORM_MARKER_RADIUS },
 };
 
 /**

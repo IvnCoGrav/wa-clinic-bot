@@ -106,6 +106,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   };
 
   const [mapReady, setMapReady] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(DEFAULT_ZOOM);
 
   const kotaOptions = useMemo(() => uniqueCities(points), [points]);
   const cityFiltered = useMemo(
@@ -199,14 +200,18 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       const map = L.map(mapContainerRef.current, {
         center: DEFAULT_CENTER,
         zoom: DEFAULT_ZOOM,
-        minZoom: 10,
+        minZoom: 8,
         maxZoom: 18,
-        maxBounds: SURABAYA_RAYA_BOUNDS,
-        maxBoundsViscosity: 0.3,
-        zoomControl: true,
+        maxBounds: REGIONAL_MAX_BOUNDS,
+        maxBoundsViscosity: 1.0,
+        zoomControl: false,
         attributionControl: false,
-        scrollWheelZoom: false,
+        scrollWheelZoom: true,
       });
+      map.on('zoomend', () => {
+        try { setCurrentZoom(map.getZoom()); } catch {}
+      });
+      setCurrentZoom(map.getZoom());
 
       if (!map.getPane('boundaryPane')) {
         const bp = map.createPane('boundaryPane');
@@ -439,12 +444,12 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     if (!mapReady || !map) return;
     try {
       if (showAllCities) {
-        // Zoom 9 memperlihatkan bentang Gresik utara s/d Malang/Mojokerto
-        map.setMinZoom(9);
+        // Zoom 8 memperlihatkan gambaran makro Jawa Timur
+        map.setMinZoom(8);
         map.setMaxBounds(REGIONAL_MAX_BOUNDS);
       } else {
-        // Zoom 10 mengunci fokus pada Surabaya Raya & Gresik
-        map.setMinZoom(10);
+        // Zoom 8 mengunci fokus lapang Surabaya Raya & Gresik (UX web)
+        map.setMinZoom(8);
         map.setMaxBounds(SURABAYA_RAYA_BOUNDS);
       }
     } catch {}
@@ -841,11 +846,65 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           <div
             ref={mapContainerRef}
             style={{
-              height: '540px',
+              height: '580px',
               width: '100%',
+              minHeight: '580px',
               background: mapMode === 'area' ? '#f1f5f9' : '#eef1f4',
             }}
           />
+          {/* Floating Quick Controls */}
+          <div className="absolute bottom-3 right-3 z-[400] flex flex-col items-end gap-1.5">
+            <div className="flex flex-col bg-white rounded-xl shadow-md border border-[#e9edef] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  const m = mapRef.current;
+                  if (!m || !clinic) return;
+                  try { m.flyTo([clinic.lat, clinic.lng], 13, { duration: 0.6 }); } catch {}
+                }}
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] hover:bg-[#f0f2f5] border-b border-[#e9edef] flex items-center gap-1.5"
+                title="Fokus ke Basecamp Klinik"
+              >
+                <span>🎯</span> Fokus Basecamp
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const m = mapRef.current; const c = clusterRef.current;
+                  if (!m || !c) return;
+                  try {
+                    const b = c.getBounds();
+                    if (b && b.isValid && b.isValid()) m.fitBounds(b, { padding: [40, 40], maxZoom: 14 });
+                  } catch {}
+                }}
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] hover:bg-[#f0f2f5] flex items-center gap-1.5"
+                title="Pas-kan semua titik terlihat"
+              >
+                <span>🗺️</span> Pas-kan Semua
+              </button>
+            </div>
+            <div className="flex bg-white rounded-xl shadow-md border border-[#e9edef] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { try { mapRef.current?.zoomIn(); } catch {} }}
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] hover:bg-[#f0f2f5] border-r border-[#e9edef]"
+                title="Zoom in"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={() => { try { mapRef.current?.zoomOut(); } catch {} }}
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] hover:bg-[#f0f2f5]"
+                title="Zoom out"
+              >
+                −
+              </button>
+            </div>
+            <div className="px-2 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] border border-[#e9edef] shadow-sm">
+              Zoom {currentZoom}x
+            </div>
+          </div>
           {loading && (
             <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-[1001]">
               <RefreshCw className="animate-spin text-[#008069]" size={24} />
