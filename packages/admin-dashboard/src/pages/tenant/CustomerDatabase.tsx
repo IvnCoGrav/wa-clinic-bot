@@ -1090,7 +1090,7 @@ export const CustomerDatabase: React.FC = () => {
       {/* Modal 3: Complete Customer Details Modal */}
       {activeDetailCustomer && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+          className="fixed inset-0 z-[1050] bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
           onClick={() => setActiveDetailCustomer(null)}
         >
           <div

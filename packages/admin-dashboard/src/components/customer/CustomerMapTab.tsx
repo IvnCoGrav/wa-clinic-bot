@@ -94,6 +94,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const [mapMode, setMapMode] = useState<'streets' | 'area'>('streets');
   const [leafletFailed, setLeafletFailed] = useState(false);
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<SpatialStatus>>(new Set());
+  const [onlyStaffFilter, setOnlyStaffFilter] = useState(false);
 
   const toggleStatus = (status: SpatialStatus) => {
     setHiddenStatuses((prev) => {
@@ -120,10 +121,13 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       ),
     [hiddenStatuses]
   );
-  const visiblePoints = useMemo(
-    () => filterPointsByStatus(cityFiltered, allowedStatuses),
-    [cityFiltered, allowedStatuses]
-  );
+  const visiblePoints = useMemo(() => {
+    let pts = filterPointsByStatus(cityFiltered, allowedStatuses);
+    if (onlyStaffFilter) {
+      pts = pts.filter((p) => p.location_source === 'manual_staff');
+    }
+    return pts;
+  }, [cityFiltered, allowedStatuses, onlyStaffFilter]);
   const metrics = useMemo(
     () => computeSpatialMetrics(visiblePoints),
     [visiblePoints]
@@ -457,14 +461,18 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
     const dispersedPoints = disperseOverlappingPoints(visiblePoints);
     dispersedPoints.forEach((p) => {
-      const color = markerColor(p);
       const loc = locationVisual(p);
+      const isManualStaff = loc.source === 'manual_staff';
+      const fillColor = isManualStaff ? '#7c3aed' : markerColor(p);
+      const strokeColor = isManualStaff ? '#ffffff' : loc.borderColor;
+      const strokeWidth = isManualStaff ? 2.5 : (loc.source === 'gps_pin' ? 1.5 : 2);
+      const radius = isManualStaff ? 9 : loc.radius;
       const marker = L.circleMarker([p.renderLat, p.renderLng], {
-        radius: loc.radius,
-        color: loc.borderColor,
-        weight: loc.source === 'gps_pin' ? 1.5 : 2,
+        radius,
+        color: strokeColor,
+        weight: strokeWidth,
         dashArray: loc.dashArray,
-        fillColor: color,
+        fillColor,
         fillOpacity: loc.fillOpacity,
       });
       const name = escapeHtml((p.name || 'Pelanggan').trim());
@@ -483,6 +491,9 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         typeof p.distance_km === 'number'
           ? `<div style="color:#667781">📏 Jarak: ${p.distance_km} km dari Basecamp</div>`
           : '';
+      const staffBadge = isManualStaff
+        ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:6px;background:#f3e8ff;color:#7c3aed;font-weight:700">🛠️ Diedit Bidan/Staf</div>`
+        : '';
 
       const detailBtn =
         onSelectCustomer && p.id
@@ -497,7 +508,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           <div style="font-weight:700;color:#111b21;margin-bottom:2px">${name}</div>
           <div style="color:#667781">${area}</div>
           <div style="color:#667781">${phone}</div>
-          <div style="display:inline-block;margin-top:4px;padding:1px 6px;border-radius:6px;background:#f0f2f5;color:${color};font-weight:600">${statusLabel}</div>
+          <div style="display:inline-block;margin-top:4px;padding:1px 6px;border-radius:6px;background:#f0f2f5;color:${fillColor};font-weight:600">${statusLabel}</div>
+          ${staffBadge}
           <div style="color:#667781;margin-top:2px">${accuracy}</div>
           ${distanceText}
           <a href="${getGoogleMapsDirectionUrl(p.lat, p.lng)}" target="_blank" rel="noopener noreferrer"
@@ -776,13 +788,20 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           />
           ⚪ Estimasi Wilayah
         </span>
-        <span className="flex items-center gap-1.5 px-2.5 py-1">
+        <button
+          type="button"
+          onClick={() => setOnlyStaffFilter((prev) => !prev)}
+          className={`inline-chip no-touch-min flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
+            onlyStaffFilter ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white border-[#d1d7db] text-[#54656f]'
+          }`}
+          title={onlyStaffFilter ? 'Tampilkan semua titik' : 'Hanya titik diedit staf'}
+        >
           <span
             className="w-2.5 h-2.5 rounded-full"
-            style={{ border: '2px solid #7c3aed', background: '#008069', display: 'inline-block' }}
+            style={{ background: '#7c3aed', border: '1px solid #ffffff', display: 'inline-block' }}
           />
-          🛠️ Diedit Bidan/Staf
-        </span>
+          🛠️ {onlyStaffFilter ? 'Menampilkan Hanya Diedit Staf' : 'Diedit Bidan/Staf'}
+        </button>
         {clinic && (
           <span className="flex items-center gap-1.5 px-2.5 py-1">
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#e11d48', display: 'inline-block' }} />
