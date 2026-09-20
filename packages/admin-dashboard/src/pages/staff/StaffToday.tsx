@@ -46,6 +46,7 @@ import {
   AlertCircle,
   Play,
   Volume2,
+  WifiOff,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import {
@@ -165,13 +166,12 @@ function extractQuotedMessage(msg: ChatMessage): NonNullable<ChatMessage['quoted
 }
 
 // VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
-
-// VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
 const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [hasError, setHasError] = useState(false);
   const fmt = (s: number) => {
     if (!isFinite(s) || isNaN(s)) return '0:00';
     const m = Math.floor(s / 60);
@@ -181,22 +181,26 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
+    setHasError(false);
     const onTime = () => setCurrent(a.currentTime);
     const onMeta = () => setDuration(a.duration);
     const onEnd = () => setPlaying(false);
+    const onError = () => { setHasError(true); setPlaying(false); };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onMeta);
     a.addEventListener('ended', onEnd);
+    a.addEventListener('error', onError);
     return () => {
       a.removeEventListener('timeupdate', onTime);
       a.removeEventListener('loadedmetadata', onMeta);
       a.removeEventListener('ended', onEnd);
+      a.removeEventListener('error', onError);
     };
   }, [src]);
   const toggle = () => {
     const a = audioRef.current;
     if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => setHasError(true)); }
   };
   const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
@@ -205,16 +209,35 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
   };
   return (
     <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
-      <button type="button" onClick={toggle} className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition">
-        {playing ? <span className="w-2.5 h-2.5 bg-white rounded-sm" /> : <Play size={14} className="ml-0.5 fill-white" />}
+      <button
+        type="button"
+        onClick={toggle}
+        title={hasError ? 'Audio gagal dimuat' : playing ? 'Jeda' : 'Putar rekaman'}
+        className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition ${
+          hasError ? 'bg-amber-500' : 'bg-[#008069]'
+        }`}
+      >
+        {hasError ? (
+          <AlertTriangle size={16} />
+        ) : playing ? (
+          <span className="w-3 h-3 bg-white rounded-sm" />
+        ) : (
+          <Play size={16} className="ml-0.5 fill-white" />
+        )}
       </button>
       <div className="flex-1 min-w-0">
-        <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
-        <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
-          <span>{fmt(current)}</span><span>{fmt(duration)}</span>
-        </div>
+        {hasError ? (
+          <div className="text-[11px] font-semibold text-amber-700">Audio gagal dimuat. Coba minta ulang.</div>
+        ) : (
+          <>
+            <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
+            <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
+              <span>{fmt(current)}</span><span>{fmt(duration)}</span>
+            </div>
+          </>
+        )}
       </div>
-      <Volume2 size={14} className="text-[#008069] shrink-0" />
+      <Volume2 size={14} className={hasError ? 'text-amber-500 shrink-0' : 'text-[#008069] shrink-0'} />
       <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
     </div>
   );
@@ -271,6 +294,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [sendingOtwId, setSendingOtwId] = useState<string | null>(null);
@@ -329,6 +353,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
+  const allTasksRef = useRef<StaffTask[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -337,6 +362,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   selectedTaskRef.current = selectedTask;
+  allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
 
   const handleReplyTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setReplyText(e.target.value);
@@ -388,6 +414,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Tandai boot progress: halaman portal staff sudah tampil
   useEffect(() => {
     emitBootPhase('mount');
+  }, []);
+
+  // Indikator ketahanan jaringan (offline di lapangan)
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
   }, []);
 
   // Format booking time
@@ -764,8 +802,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             });
             notif.onclick = () => {
               window.focus();
-              const allTasks = [...tasks, ...upcomingTasks, ...completedTasks];
-              const match = allTasks.find((t) => t.conversationId === convId);
+              const match = allTasksRef.current.find((t) => t.conversationId === convId);
               if (match) {
                 handleOpenChat(match);
               }
@@ -922,6 +959,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     const textToSend = replyText.trim();
     if ((!textToSend && !image) || !selectedTask?.conversationId || sending) return;
 
+    if (!isOnline) {
+      setErrorMessage('Koneksi internet terputus. Pesan tidak terkirim, coba lagi setelah sinyal kembali.');
+      return;
+    }
+
     const signature = `~ ${staff?.name || 'Bidan Terapis'}`;
     const hasText = !!textToSend;
     const optimisticContent = hasText
@@ -1000,6 +1042,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
     if (!task.conversationId) {
       toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
+      return;
+    }
+
+    if (!isOnline) {
+      toast('Koneksi internet terputus. Tidak dapat mengirim info OTW saat ini.', 'error');
       return;
     }
 
@@ -1739,69 +1786,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         </div>
       </header>
 
-      {/* Mobile Navigation Segment Tab Bar (Always visible on mobile when not inside full-screen chat) */}
-      {!(mobileView === 'chat' && activeTab === 'today') && (
-        <nav aria-label="Mobile Navigation" className="sm:hidden px-3 py-2 bg-white border-b border-[#e9edef] flex items-center justify-between gap-1.5 shadow-xs z-20 shrink-0">
-          <button
-            type="button"
-            onClick={() => handleTabChange('today')}
-            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
-              activeTab === 'today'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-            }`}
-          >
-            <Calendar size={13} />
-            <span>Hari Ini</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === 'today' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
-              }`}
-            >
-              {activeTodayTasks.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('upcoming')}
-            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
-              activeTab === 'upcoming'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-            }`}
-          >
-            <Clock size={13} />
-            <span>Mendatang</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === 'upcoming' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
-              }`}
-            >
-              {upcomingTasks.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('completed')}
-            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
-              activeTab === 'completed'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-            }`}
-          >
-            <CheckCircle2 size={13} />
-            <span>Selesai</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === 'completed' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
-              }`}
-            >
-              {combinedCompletedTasks.length}
-            </span>
-          </button>
-        </nav>
+      {/* Offline connectivity banner (lapangan / sinyal seluler hilang) */}
+      {!isOnline && (
+        <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-amber-900 text-xs flex items-center gap-2 z-20 shrink-0">
+          <WifiOff size={15} className="flex-shrink-0 text-amber-600" />
+          <span className="font-semibold">Koneksi internet terputus. Menunggu sinyal seluler...</span>
+        </div>
       )}
 
       {/* Error notification banner */}
@@ -1905,7 +1895,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </div>
 
               {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
-              <div className="flex-1 overflow-y-auto p-3 bg-[#f0f2f5] space-y-3">
+              <div className="flex-1 overflow-y-auto p-3 pb-20 sm:pb-3 bg-[#f0f2f5] space-y-3">
                 {loading ? (
                   <div className="flex flex-col justify-center items-center h-48 space-y-3 text-[#667781]">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
@@ -2124,17 +2114,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         </div>
 
                         {/* Quick Action Buttons: Chat, Navigasi, Infokan OTW */}
-                        <div className="grid grid-cols-3 gap-1.5 pt-2 mt-1">
+                        <div className="grid grid-cols-3 gap-2 pt-2 mt-1">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenChat(task);
                             }}
-                            className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
                             title="Buka Ruang Percakapan WhatsApp Pasien"
                           >
-                            <MessageSquare size={12} className="text-[#008069]" />
+                            <MessageSquare size={15} className="text-[#008069]" />
                             <span>Chat</span>
                           </button>
 
@@ -2144,14 +2134,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg transition-all active:scale-95 shadow-xs"
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs"
                               title="Buka Peta Navigasi Google Maps"
                             >
-                              <Navigation size={12} />
+                              <Navigation size={15} />
                               <span>Navigasi</span>
                             </a>
                           ) : (
-                            <div className="text-[10px] text-[#667781] flex items-center justify-center bg-[#f0f2f5] py-1.5 rounded-lg border border-[#e9edef]">
+                            <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
                               Tanpa Peta
                             </div>
                           )}
@@ -2160,7 +2150,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             type="button"
                             disabled={isSendingOtw || !isOtwAllowed(task)}
                             onClick={(e) => handleSendOtw(task, e)}
-                            className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                             title={
                               isOtwAllowed(task)
                                 ? 'Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi'
@@ -2168,10 +2158,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             }
                           >
                             {isSendingOtw ? (
-                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
                             ) : (
                               <>
-                                <Navigation2 size={12} />
+                                <Navigation2 size={15} />
                                 <span>Infokan OTW</span>
                               </>
                             )}
@@ -2595,7 +2585,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               }, 0);
                             }
                           }}
-                          className="text-[11px] font-medium bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 px-2.5 py-1 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0"
+                          className="text-xs font-semibold bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 min-h-[38px] px-3.5 py-2 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center"
                         >
                           {chip.label}
                         </button>
@@ -2697,7 +2687,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           /* ========================================================================= */
           /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT, 1 PAGE) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Search Bar */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
@@ -2930,7 +2920,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           /* ========================================================================= */
           /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI, 1 PAGE) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
@@ -4055,7 +4045,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     type="button"
                     onClick={handleGetCurrentGps}
                     disabled={locGettingGps}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
+                    className="w-full min-h-[46px] py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
                   >
                     {locGettingGps ? (
                       <>
@@ -4195,7 +4185,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => locHouseCameraInputRef.current?.click()}
                         disabled={locProcessingPhoto}
-                        className="py-3 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 text-[#008069] text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 text-[#008069] text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
                       >
                         <Camera size={18} className="text-[#008069]" />
                         <span>📸 Buka Kamera</span>
@@ -4206,7 +4196,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => locHouseGalleryInputRef.current?.click()}
                         disabled={locProcessingPhoto}
-                        className="py-3 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border-2 border-dashed border-slate-300 text-slate-700 text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border-2 border-dashed border-slate-300 text-slate-700 text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
                       >
                         <ImageIcon size={18} className="text-[#54656f]" />
                         <span>🖼️ Pilih Galeri</span>
@@ -4482,6 +4472,73 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* STICKY BOTTOM NAVIGATION BAR (Thumb-Zone Ergonomics, Mobile Only) */}
+      {/* ========================================================================= */}
+      {!(mobileView === 'chat' && activeTab === 'today') && (
+        <nav
+          aria-label="Navigasi Utama Bawah"
+          className="sm:hidden sticky bottom-0 z-30 bg-white border-t border-[#e9edef] shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-stretch justify-around gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0"
+        >
+          <button
+            type="button"
+            onClick={() => handleTabChange('today')}
+            aria-current={activeTab === 'today' ? 'page' : undefined}
+            className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
+              activeTab === 'today' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+            }`}
+          >
+            <Calendar size={20} />
+            <span className="text-[11px] font-bold leading-none">Hari Ini</span>
+            {activeTodayTasks.length > 0 && (
+              <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+              }`}>
+                {activeTodayTasks.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('upcoming')}
+            aria-current={activeTab === 'upcoming' ? 'page' : undefined}
+            className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
+              activeTab === 'upcoming' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+            }`}
+          >
+            <Clock size={20} />
+            <span className="text-[11px] font-bold leading-none">Mendatang</span>
+            {upcomingTasks.length > 0 && (
+              <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+              }`}>
+                {upcomingTasks.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('completed')}
+            aria-current={activeTab === 'completed' ? 'page' : undefined}
+            className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
+              activeTab === 'completed' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+            }`}
+          >
+            <CheckCircle2 size={20} />
+            <span className="text-[11px] font-bold leading-none">Selesai</span>
+            {combinedCompletedTasks.length > 0 && (
+              <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+              }`}>
+                {combinedCompletedTasks.length}
+              </span>
+            )}
+          </button>
+        </nav>
       )}
     </div>
   );
