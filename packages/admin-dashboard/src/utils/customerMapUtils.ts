@@ -29,7 +29,10 @@ export interface MapPointLike {
 export function normalizeCity(raw?: string | null): string {
   let value = String(raw ?? '').trim();
   if (!value) return '';
-
+  // Buang jika teks merupakan nomor telepon atau label kontak
+  if (/(?:no\.?\s*hp|telp|wa)\s*[:\-]?/i.test(value) || value.replace(/\D/g, '').length >= 6) {
+    return '';
+  }
   // Bersihkan sisa label teknis & nomor telepon yang menempel pada nama kota.
   value = value
     .replace(/^(kota|kabupaten|kab\.?)\s*[:\-]?\s*/i, '')
@@ -56,8 +59,13 @@ export function uniqueCities(points: Array<{ kota?: string | null }>): string[] 
   const set = new Set<string>();
   for (const p of points) {
     const c = normalizeCity(p.kota);
-    // Buang entri yang merupakan nama jalan (Jl./Jalan/RT/RW), angka acak, atau teks terlalu panjang
-    if (c && !/^(jl\.?|jalan|rt|rw|\d+)/i.test(c) && c.length <= 30) {
+    if (
+      c &&
+      !/^(no\.?\s*hp|telp|wa|jl\.?|jalan|rt|rw|\d+)/i.test(c) &&
+      !/\d{5,}/.test(c) &&
+      c.length >= 3 &&
+      c.length <= 30
+    ) {
       set.add(c);
     }
   }
@@ -80,18 +88,13 @@ export function filterPointsByCity<T extends { kota?: string | null }>(
 /**
  * Warna marker berdasarkan prioritas status. Urutan prioritas:
  * 1. Di luar jangkauan (abu)
- * 2. Sudah reservasi / purchased (hijau) — mengalahkan MQL: pelanggan yang
- *    sudah booking tidak lagi dipandang "prospek" meski flag MQL masih menyala.
+ * 2. Sudah reservasi (hijau) — mengalahkan MQL
  * 3. MQL (biru)
- * 4. Status non-aktif (oranye)
- * 5. Aktif (hijau).
  */
 export function markerColor(point: MapPointLike): string {
   if (point.is_out_of_coverage) return '#94a3b8';
   if (point.has_reservation) return '#008069';
-  if (point.is_mql) return '#2563eb';
-  if (point.status && point.status !== 'active') return '#f59e0b';
-  return '#008069';
+  return '#2563eb';
 }
 
 /** Validasi rentang koordinat (lat -90..90, lng -180..180). */
@@ -108,8 +111,8 @@ export function isValidLatLng(lat: unknown, lng: unknown): boolean {
   );
 }
 
-/** Kategori status untuk legenda interaktif. */
-export type SpatialStatus = 'active' | 'mql' | 'other' | 'out_of_coverage';
+/** Kategori status untuk legenda interaktif (hanya MQL & reservasi). */
+export type SpatialStatus = 'reserved' | 'mql' | 'out_of_coverage';
 
 /** Kategori sumber koordinat lokasi (pembeda visual di peta). */
 export type LocationSourceKind = 'gps_pin' | 'estimated_area' | 'manual_staff';
@@ -159,10 +162,8 @@ export function locationVisual(point: MapPointLike): LocationVisual {
 /** Menentukan kategori status satu titik (satu kategori, prioritas tetap). */
 export function statusOf(point: MapPointLike): SpatialStatus {
   if (point.is_out_of_coverage) return 'out_of_coverage';
-  if (point.has_reservation) return 'active';
-  if (point.is_mql) return 'mql';
-  if (point.status && point.status !== 'active') return 'other';
-  return 'active';
+  if (point.has_reservation) return 'reserved';
+  return 'mql';
 }
 
 /**

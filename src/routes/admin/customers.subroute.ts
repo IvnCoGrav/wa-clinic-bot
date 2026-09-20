@@ -82,12 +82,19 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         const showAll = request.query?.scope === 'all';
         const includeCentroids = request.query?.includeCentroids !== 'false';
 
+        const qualifiedFilter = {
+          OR: [
+            { is_mql: true },
+            { reservations: { some: { status: { notIn: ['cancelled', 'rejected'] } } } },
+          ],
+        };
         const coordsRows = await prisma.customer.findMany({
           where: {
             tenant_id: DEFAULT_TENANT_ID,
             is_sandbox_test: false,
             lat: { not: null },
             lng: { not: null },
+            ...qualifiedFilter,
             ...(kota ? { kota: { contains: kota, mode: 'insensitive' } } : {}),
           },
           select: {
@@ -142,6 +149,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 tenant_id: DEFAULT_TENANT_ID,
                 is_sandbox_test: false,
                 lat: null,
+                ...qualifiedFilter,
                 ...(kota ? { kota: { contains: kota, mode: 'insensitive' } } : {}),
               },
               select: {

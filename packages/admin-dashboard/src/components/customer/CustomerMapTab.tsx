@@ -113,7 +113,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const allowedStatuses = useMemo(
     () =>
       new Set<SpatialStatus>(
-        (['active', 'mql', 'other', 'out_of_coverage'] as SpatialStatus[]).filter(
+        (['reserved', 'mql', 'out_of_coverage'] as SpatialStatus[]).filter(
           (s) => !hiddenStatuses.has(s)
         )
       ),
@@ -474,11 +474,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         ? 'Di luar jangkauan'
         : p.has_reservation
           ? 'Sudah Reservasi'
-          : p.is_mql
-            ? 'MQL'
-            : p.status && p.status !== 'active'
-              ? 'Status lain'
-              : 'Aktif';
+          : 'MQL';
       const accuracy = loc.label;
       const distanceText =
         typeof p.distance_km === 'number'
@@ -739,9 +735,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667781]">
         {([
-          { key: 'active' as SpatialStatus, label: 'Aktif', color: '#008069' },
-          { key: 'mql' as SpatialStatus, label: 'MQL', color: '#2563eb' },
-          { key: 'other' as SpatialStatus, label: 'Status lain', color: '#f59e0b' },
+          { key: 'reserved' as SpatialStatus, label: 'Sudah Reservasi', color: '#008069' },
+          { key: 'mql' as SpatialStatus, label: 'MQL (Tertarik)', color: '#2563eb' },
           { key: 'out_of_coverage' as SpatialStatus, label: 'Di luar jangkauan', color: '#94a3b8' },
         ]).map((item) => {
           const hidden = hiddenStatuses.has(item.key);
