@@ -1175,14 +1175,17 @@ export class StaffReservationService {
             { lat, lng }
           );
 
-          if (diffFromOriginalKm > 1.0) {
-            // Selisih > 1km: JANGAN ubah koordinat utama (Customer.lat & Customer.lng)
-            // Simpan koordinat revisi di catatan ancer-ancer / patokan & preferences
+          const isPreviousCoordEstimated =
+            (customer as any).location_source === 'estimated_area' ||
+            (customer.preferences as any)?.location_source === 'geocoding' ||
+            !(customer as any).share_location_sent;
+          if (diffFromOriginalKm > 1.0 && !isPreviousCoordEstimated) {
+            // Selisih > 1km & koordinat lama presisi: JANGAN ubah koordinat utama
             shouldUpdatePrimaryCoords = false;
             const gpsTag = `[📍 GPS Lapangan: ${lat.toFixed(6)}, ${lng.toFixed(6)} (+${diffFromOriginalKm.toFixed(1)}km)]`;
             finalLandmark = baseLandmark ? `${baseLandmark} ${gpsTag}` : gpsTag;
           } else {
-            // Selisih <= 1km: Koreksi presisi posisi pagar/rumah
+            // Estimasi lama atau selisih <=1km: perbarui koordinat utama dengan GPS presisi
             shouldUpdatePrimaryCoords = true;
           }
         } else {
