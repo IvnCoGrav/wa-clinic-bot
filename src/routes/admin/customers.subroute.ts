@@ -50,7 +50,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
    *   valid → di-resolve ke koordinat gazetteer, ditandai `is_estimated_centroid`.
    * - `clinic` memuat lokasi basecamp tenant-aware (getClinicLocationAsync).
    */
-  const SURABAYA_RAYA_BBOX = { minLat: -7.65, maxLat: -7.05, minLng: 112.45, maxLng: 113.05 };
+  // Southwest (Porong/Krian/Mojokerto) ke Northeast (Gresik Utara/Ujungpangkah/Panceng)
+  const SURABAYA_RAYA_BBOX = { minLat: -7.90, maxLat: -6.75, minLng: 112.10, maxLng: 113.15 };
   const AREA_KEYWORDS = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda'];
 
   const isWithinServiceArea = (c: any): boolean => {
@@ -165,7 +166,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             });
 
             const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
-            const { getGazetteerCoordinates } = await import('../../utils/gazetteer');
+            const { getGazetteerCoordinates, haversineKm } = await import('../../utils/gazetteer');
             const { isValidAreaName } = await import('../../utils/wilayah-normalizer');
 
             for (const c of nullRows) {
@@ -175,6 +176,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               // Prioritas kelurahan (lebih presisi) lalu kecamatan.
               const gaz = getGazetteerCoordinates(kelurahan || kecamatan || '');
               if (!gaz || !Number.isFinite(gaz.lat) || !Number.isFinite(gaz.lng)) continue;
+              const dist = Math.round(haversineKm(clinic.lat, clinic.lng, gaz.lat, gaz.lng) * 10) / 10;
+              const isOutOfCoverage = typeof clinic.maxCoverageKm === 'number' && dist > clinic.maxCoverageKm;
               const centroidPoint: any = {
                 id: c.id,
                 name: c.name,
@@ -187,8 +190,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 status: c.status,
                 is_mql: c.is_mql,
                 has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
-                is_out_of_coverage: c.is_out_of_coverage,
-                distance_km: c.distance_km,
+                is_out_of_coverage: isOutOfCoverage,
+                distance_km: dist,
                 // Titik sentroid = estimasi wilayah (bukan GPS presisi) apa pun kolom aslinya.
                 location_source: 'estimated_area',
                 is_estimated_centroid: true,

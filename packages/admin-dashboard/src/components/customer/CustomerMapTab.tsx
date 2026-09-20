@@ -30,6 +30,11 @@ const SURABAYA_RAYA_BOUNDS: [[number, number], [number, number]] = [
   [-7.90, 112.10],
   [-6.75, 113.15],
 ];
+// Batas regional maksimal untuk mode 'Semua wilayah': Jawa Timur & sekitarnya (tidak pernah sampai se-Indonesia)
+const REGIONAL_MAX_BOUNDS: [[number, number], [number, number]] = [
+  [-8.50, 111.00],
+  [-6.50, 114.50],
+];
 const RING_COLORS = ['#008069', '#2563eb', '#e11d48'];
 
 // Basemap Peta Jalan: CARTO light_nolabels (OSM data, tanpa label/POI) via API key dari .env,
@@ -42,7 +47,9 @@ const BASEMAP_URL = CARTO_KEY
 const BASEMAP_ATTR = CARTO_KEY
   ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   : '&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, and the GIS User Community';
-const BASEMAP_MAX_NATIVE_ZOOM = CARTO_KEY ? 20 : 18;
+// Esri World Light Gray Base di Indonesia hanya memiliki tile sampai zoom 16.
+// Set maxNativeZoom: 16 agar Leaflet melakukan stretching di zoom 17-18 tanpa me-request tile 404.
+const BASEMAP_MAX_NATIVE_ZOOM = CARTO_KEY ? 20 : 16;
 const BASEMAP_SUBDOMAINS: string | undefined = CARTO_KEY ? 'abcd' : undefined;
 
 function getGoogleMapsDirectionUrl(lat: number, lng: number): string {
@@ -67,6 +74,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const tileLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null);
   const hasInitialFittedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [boundaryGeo, setBoundaryGeo] = useState<any>(null);
   const [geoLoading, setGeoLoading] = useState<boolean>(false);
@@ -118,6 +126,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
   const loadPoints = useCallback(
     async (allCities: boolean, fresh = false) => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const ac = new AbortController();
+      abortControllerRef.current = ac;
       setLoading(true);
       setError(null);
       try {
@@ -126,17 +139,19 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           allCities ? 'all' : undefined,
           { fresh }
         );
+        if (ac.signal.aborted) return;
         setPoints(res.points || []);
         setClinic(res.clinic || null);
         if (fresh) {
           hasInitialFittedRef.current = false;
         }
       } catch (err: any) {
+        if (ac.signal.aborted) return;
         const msg = err?.message || 'Gagal memuat titik sebaran pelanggan.';
         setError(msg);
         toast(msg, 'error');
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) setLoading(false);
       }
     },
     [toast]
@@ -156,6 +171,12 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       } catch {
         if (!disposed) setLeafletFailed(true);
         return;
+      }
+
+      if (mapContainerRef.current) {
+        if ((mapContainerRef.current as any)._leaflet_id) {
+          delete (mapContainerRef.current as any)._leaflet_id;
+        }
       }
 
       if (disposed || !mapContainerRef.current || mapRef.current) return;
@@ -194,7 +215,6 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
         attribution: BASEMAP_ATTR,
         subdomains: BASEMAP_SUBDOMAINS as any,
-        bounds: SURABAYA_RAYA_BOUNDS,
         className: 'customer-map-osm-gray',
       });
       tileLayer.addTo(map);
@@ -235,6 +255,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         clusterRef.current = null;
         tileLayerRef.current = null;
         boundaryLayerRef.current = null;
+        basecampLayerRef.current = null;
+      }
+      if (mapContainerRef.current) {
+        delete (mapContainerRef.current as any)._leaflet_id;
       }
     };
   }, []);
@@ -289,6 +313,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     const L = (window as any).L;
     if (!L) return;
 
+    // Kunci koordinat dan zoom aktif sebelum memanipulasi layer (mencegah auto zoom-out / snapping)
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+
     if (mapMode === 'streets') {
       if (boundaryLayerRef.current && map.hasLayer(boundaryLayerRef.current)) {
         try {
@@ -302,19 +330,20 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
           attribution: BASEMAP_ATTR,
           subdomains: BASEMAP_SUBDOMAINS as any,
-          bounds: SURABAYA_RAYA_BOUNDS,
           className: 'customer-map-osm-gray',
         });
       }
-      if (!map.hasLayer(tileLayerRef.current)) {
+      if (tileLayerRef.current) {
+        tileLayerRef.current.setOpacity(1);
+      }
+      if (tileLayerRef.current && !map.hasLayer(tileLayerRef.current)) {
         tileLayerRef.current.addTo(map);
       }
     } else {
       // Area Vektor Mode (Batas wilayah bergradasi: Hijau Kota, Orange Kecamatan, Biru pudar Kelurahan)
-      if (tileLayerRef.current && map.hasLayer(tileLayerRef.current)) {
-        try {
-          map.removeLayer(tileLayerRef.current);
-        } catch {}
+      // Redam tile jalan menjadi 0 tanpa membuang cache DOM-nya (zero-flash)
+      if (tileLayerRef.current) {
+        tileLayerRef.current.setOpacity(0);
       }
 
       if (!boundaryLayerRef.current) {
@@ -395,6 +424,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         boundaryLayerRef.current.addTo(map);
       }
     }
+    // Pertahankan posisi kamera persis di titik semula (mencegah auto zoom-out / snapping)
+    if (currentCenter && typeof currentZoom === 'number') {
+      map.setView(currentCenter, currentZoom, { animate: false });
+    }
   }, [mapReady, mapMode, boundaryGeo]);
 
   // Adaptive camera bounds: "Semua wilayah" membebaskan zoom-out (pelanggan luar kota), default terkunci Sby Raya
@@ -403,9 +436,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     if (!mapReady || !map) return;
     try {
       if (showAllCities) {
-        map.setMinZoom(4);
-        map.setMaxBounds(null);
+        // Zoom 9 memperlihatkan bentang Gresik utara s/d Malang/Mojokerto
+        map.setMinZoom(9);
+        map.setMaxBounds(REGIONAL_MAX_BOUNDS);
       } else {
+        // Zoom 10 mengunci fokus pada Surabaya Raya & Gresik
         map.setMinZoom(10);
         map.setMaxBounds(SURABAYA_RAYA_BOUNDS);
       }
@@ -501,6 +536,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         }
       } else if (clinic) {
         map.setView([clinic.lat, clinic.lng], DEFAULT_ZOOM);
+        hasInitialFittedRef.current = true;
       }
     }
   }, [mapReady, visiblePoints, onSelectCustomer, clinic, kotaFilter]);
