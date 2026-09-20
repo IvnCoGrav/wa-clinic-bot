@@ -50,7 +50,7 @@ describe('GET /api/admin/customers/map-points — sebaran peta (adversarial)', (
 
   it('1. Mengembalikan titik valid dan membuang koordinat invalid / di luar rentang', async () => {
     mockQueries([
-      { id: 'c1', name: 'Valid', phone: '6281', lat: -7.35, lng: 112.75, kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'X', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 3.2 },
+      { id: 'c1', name: 'Valid', phone: '6281', lat: -7.35, lng: 112.75, kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'X', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 3.2, reservations: [{ id: 'r1' }] },
       { id: 'c2', name: 'LatNull', phone: '6282', lat: null, lng: 112.75, kota: 'Sidoarjo', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
       { id: 'c3', name: 'LngOutOfRange', phone: '6283', lat: -7.3, lng: 999, kota: 'Gresik', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
       { id: 'c4', name: 'LatOutOfRange', phone: '6284', lat: 200, lng: 112.7, kota: 'Gresik', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
@@ -86,13 +86,13 @@ describe('GET /api/admin/customers/map-points — sebaran peta (adversarial)', (
 
   it('4. Default fokus 3 kota + variasi penulisan + toleransi "sby"/radius/bbox', async () => {
     mockQueries([
-      { id: 'v1', name: 'Sby', phone: '1', lat: -7.3, lng: 112.7, kota: 'Kota Surabaya', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
-      { id: 'v2', name: 'Sda', phone: '2', lat: -7.4, lng: 112.7, kota: 'Kabupaten Sidoarjo', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
-      { id: 'v3', name: 'Gsk', phone: '3', lat: -7.1, lng: 112.6, kota: 'Gresik Regency', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
-      { id: 'v4', name: 'SbySingkat', phone: '4', lat: -7.3, lng: 112.7, kota: 'sby', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
+      { id: 'v1', name: 'Sby', phone: '1', lat: -7.3, lng: 112.7, kota: 'Kota Surabaya', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r1' }] },
+      { id: 'v2', name: 'Sda', phone: '2', lat: -7.4, lng: 112.7, kota: 'Kabupaten Sidoarjo', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r2' }] },
+      { id: 'v3', name: 'Gsk', phone: '3', lat: -7.1, lng: 112.6, kota: 'Gresik Regency', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r3' }] },
+      { id: 'v4', name: 'SbySingkat', phone: '4', lat: -7.3, lng: 112.7, kota: 'sby', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r4' }] },
       { id: 'v5', name: 'Jakarta', phone: '5', lat: -6.2, lng: 106.8, kota: 'Jakarta Selatan', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
-      { id: 'v6', name: 'RadiusOnly', phone: '6', lat: -7.9, lng: 112.9, kota: 'Mojokerto', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 20 },
-      { id: 'v7', name: 'KosongKota', phone: '7', lat: -7.3, lng: 112.7, kota: null, kecamatan: null, kelurahan: null, status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
+      { id: 'v6', name: 'RadiusOnly', phone: '6', lat: -7.9, lng: 112.9, kota: 'Mojokerto', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 20, reservations: [{ id: 'r6' }] },
+      { id: 'v7', name: 'KosongKota', phone: '7', lat: -7.3, lng: 112.7, kota: null, kecamatan: null, kelurahan: null, status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null, reservations: [{ id: 'r7' }] },
     ]);
 
     const res = await getMap();
@@ -105,8 +105,8 @@ describe('GET /api/admin/customers/map-points — sebaran peta (adversarial)', (
 
   it('5. ?scope=all menampilkan seluruh titik tanpa batas wilayah', async () => {
     mockQueries([
-      { id: 'v1', name: 'Sby', phone: '1', lat: -7.3, lng: 112.7, kota: 'Kota Surabaya', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
-      { id: 'v5', name: 'Jakarta', phone: '5', lat: -6.2, lng: 106.8, kota: 'Jakarta Selatan', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1 },
+      { id: 'v1', name: 'Sby', phone: '1', lat: -7.3, lng: 112.7, kota: 'Kota Surabaya', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r1' }] },
+      { id: 'v5', name: 'Jakarta', phone: '5', lat: -6.2, lng: 106.8, kota: 'Jakarta Selatan', kecamatan: '-', kelurahan: '-', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 1, reservations: [{ id: 'r5' }] },
     ]);
     const res = await getMap('?scope=all');
     const body = JSON.parse(res.body);
@@ -117,7 +117,7 @@ describe('GET /api/admin/customers/map-points — sebaran peta (adversarial)', (
     mockQueries(
       [],
       [
-        { id: 's1', name: 'Sentroid', phone: '99', kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'Darmo', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null },
+        { id: 's1', name: 'Sentroid', phone: '99', kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'Darmo', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: null, reservations: [{ id: 'r1' }] },
       ]
     );
     const res = await getMap();
@@ -184,5 +184,18 @@ describe('GET /api/admin/customers/map-points — sebaran peta (adversarial)', (
     const app = buildApp();
     const res = await app.inject({ method: 'GET', url: '/api/admin/customers/map-points' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('13. Opsi 1: Aktif murni tanpa reservasi & tanpa MQL tidak ditampilkan', async () => {
+    mockQueries([
+      { id: 'aktifMurni', name: 'AktifMurni', phone: '1', lat: -7.3, lng: 112.7, kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'X', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 2, reservations: [] },
+      { id: 'sudahTreatment', name: 'SudahTreatment', phone: '2', lat: -7.3, lng: 112.7, kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'X', status: 'active', is_mql: false, is_out_of_coverage: false, distance_km: 2, reservations: [{ id: 'r1' }] },
+      { id: 'mqlTanpaTreatment', name: 'Mql', phone: '3', lat: -7.3, lng: 112.7, kota: 'Surabaya', kecamatan: 'Wonokromo', kelurahan: 'X', status: 'active', is_mql: true, is_out_of_coverage: false, distance_km: 2, reservations: [] },
+    ]);
+    const res = await getMap();
+    const body = JSON.parse(res.body);
+    const ids = body.points.map((p: any) => p.id).sort();
+    expect(ids).toEqual(['mqlTanpaTreatment', 'sudahTreatment']);
+    expect(ids).not.toContain('aktifMurni');
   });
 });

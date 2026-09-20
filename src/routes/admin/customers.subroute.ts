@@ -212,6 +212,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Opsi 1: peta hanya untuk sebaran customer yang sudah treatment (has_reservation) + MQL (toggleable)
+        // Aktif murni tanpa reservasi & tanpa MQL tidak ditampilkan sama sekali.
+        points = points.filter((p: any) => p.has_reservation || p.is_mql === true);
+
         const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
         return reply
           .header('Cache-Control', 'private, max-age=15, stale-while-revalidate=60')
