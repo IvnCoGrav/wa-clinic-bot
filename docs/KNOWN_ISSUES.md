@@ -5,6 +5,42 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 0z. [Deploy] Duplikat follow_ups dihapus manual (bukan dinetralkan) oleh proses paralel
+
+- **Status:** resolved-observed, ditemukan 2026-09-20.
+- **Gejala:** saat migrasi `20260920000001` (unique tenant+reservation+type+stage) dijalankan
+  di live, 2 grup duplikat (`c101bf1c`: REMINDER_H1 stage1 & REVIEW_H1_BABY stage1, masing
+  CANCELLED + PENDING) menabrak unique index. Solusi fondasional yang disepakati: netralkan
+  `reservation_id = NULL` pada baris CANCELLED duplikat via UPDATE di migration + semua jalur
+  cancel menyetel `reservation_id: null`.
+- **Yang terjadi di live:** deployment diselesaikan lebih dulu oleh proses/editor paralel yang
+  **menghapus 2 baris CANCELLED duplikat secara manual** sebelum migrate deploy, sehingga
+  index unik terpasang tanpa UPDATE netralisasi. Efek bersih sama pada constraint (0 duplikat,
+  NULL dianggap unik), TAPI jejak historis 2 baris follow-up hilang (bukan dipertahankan).
+  Checksum migration di `_prisma_migrations` (`a50a4397…`) ≠ file fix saat ini (`d8d77ff…`),
+  walau `prisma migrate status` tetap melaporkan up-to-date (normalisasi checksum Prisma).
+- **Dampak:** minimal — hanya 2 baris jejak historis; tidak ada baris aktif yang hilang
+  (total follow_ups live 979→977; CANCELLED 359→357). Risk replay hanya bila restore backup
+  `backup_pre_v3_20260920_183008.sql`.
+- **Rencana:** tidak ada aksi korektif. Catat untuk future: bila ada duplikat lagi, gunakan
+  UPDATE netralisasi (sudah jadi bagian code cancel path), bukan DELETE.
+
+---
+
+## 0y. [Drift] 2 tabel backup maintenance tidak terwakili di schema.prisma
+
+- **Status:** open (benign), ditemukan 2026-09-20.
+- **Gejala:** drift gate (`prisma migrate diff --from-url … --to-schema-datamodel`) melaporkan
+  `DROP TABLE few_shot_exemplars_backup_20260907` dan `DROP TABLE knowledge_chunks_backup_20260910`.
+  Keduanya hasil operasi backup maintenance (2026-09-07 & 2026-09-10) yang tersisa di DB live
+  tapi tidak ada di `prisma/schema.prisma`.
+- **Dampak:** benign — Prisma tidak mengaksesnya; hanya mengotori output drift gate.
+- **Opsi perbaikan:** hapus di live bila tidak lagi dibutuhkan, atau modelkan via `@@ignore`.
+- **Rencana:** dibiarkan; tidak menghalangi deploy. Status absolut skema tetap sinkron (hanya
+  kelebihan tabel non-schema).
+
+---
+
 ## 0a. [Test] Flaky test backend akibat test pollution / order-dependent (belum terselesaikan)
 
 - **Status:** open, ditemukan 2026-09-20.

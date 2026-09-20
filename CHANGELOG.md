@@ -4,6 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### V3 Audit Remediation & Consent Frontier — Deploy Lengkap (2026-09-20)
+
+- **Pushed & deployed (live):** `7e5aada2` (V3 audit remediation — durable turns, tenant
+  identity, session state, peta), `089e32a2` (sumber lokasi first-class + warna reservasi),
+  `88665d8` (12 temuan map — bbox, jarak sentroid, zoom, tile, lifecycle).
+- **Fixed — follow-up unik (blocker produksi):** migrasi `20260920000001` menambahkan
+  `@@unique(tenant_id, reservation_id, type, stage)`; DB live memiliki 2 grup duplikat
+  (CANCELLED + PENDING untuk reservasi yang sama). Solusi fondasional: setiap jalur cancel
+  (`cancelFollowUp`, `bulkCancelFollowUps`, `onReservationCreated/Cancelled`, worker
+  overdue, optout, broadcast) menetralkan `reservation_id = NULL` (baris TETAP tersimpan
+  sebagai jejak historis; PostgreSQL menganggap NULL unik) — tidak menghapus data.
+  + Test invariant baru `10b` memverifikasi seluruh jalur cancel.
+- **Deploy note:** proses paralel (editor lain) menyelesaikan full deploy lebih dulu —
+  index unik sudah terpasang, duplikat = 0 (2 baris CANCELLED duplikat dihapus manual,
+  bukan dinetralkan), app container sudah di-recreate. Verifikasi akhir hari ini:
+  `migrate status` = up to date (70), dashboard 200 + bundle sesuai, WAHA Up 5 weeks (tidak
+  terganggu). Drift gate hanya melaporkan 2 tabel backup maintenance (tidak di schema).
+- **Verifikasi:** suite 2972 passed (1 flaky timeout `follow-up-inbound-hook`, lulus
+  isolasi / sudah tercatat di KNOWN_ISSUES 0a); build exit 0.
+
 #### Peta Sebaran — Sumber Lokasi First-Class (GPS / Estimasi / Edit Bidan) (2026-09-20)
 
 - **Added — enum `LocationSource` + kolom `customers.location_source`** (`gps_pin` | `estimated_area` |
