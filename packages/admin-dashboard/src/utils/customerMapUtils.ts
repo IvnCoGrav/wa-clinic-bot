@@ -200,8 +200,12 @@ export function computeSpatialMetrics(points: MapPointLike[]): SpatialMetrics {
   const kecamatanCount = new Map<string, number>();
 
   for (const p of points) {
-    if (p.is_estimated_centroid) estimatedCount++;
-    else preciseCount++;
+    const visual = locationVisual(p);
+    if (visual.source === 'estimated_area') {
+      estimatedCount++;
+    } else {
+      preciseCount++;
+    }
 
     if (p.is_out_of_coverage) outOfCoverageCount++;
     else inCoverageCount++;
