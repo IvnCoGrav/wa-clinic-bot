@@ -100,12 +100,12 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
   });
 
   describe('markerColor', () => {
-    it('prioritas: out-of-coverage > sudah-reservasi > mql > status non-aktif > aktif', () => {
+    it('prioritas: out-of-coverage > sudah-reservasi > mql', () => {
       expect(markerColor({ lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true, has_reservation: true })).toBe('#94a3b8');
       expect(markerColor({ lat: 0, lng: 0, is_mql: true, status: 'blocked' })).toBe('#2563eb');
-      expect(markerColor({ lat: 0, lng: 0, status: 'blocked' })).toBe('#f59e0b');
-      expect(markerColor({ lat: 0, lng: 0, status: 'active' })).toBe('#008069');
-      expect(markerColor({ lat: 0, lng: 0 })).toBe('#008069');
+      expect(markerColor({ lat: 0, lng: 0, status: 'blocked' })).toBe('#2563eb');
+      expect(markerColor({ lat: 0, lng: 0, status: 'active' })).toBe('#2563eb');
+      expect(markerColor({ lat: 0, lng: 0 })).toBe('#2563eb');
     });
 
     it('pelanggan MQL yang SUDAH reservasi tampil hijau (bukan biru)', () => {
@@ -135,21 +135,21 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
 
   describe('statusOf & filterPointsByStatus (legenda interaktif)', () => {
     const points = [
-      { lat: 0, lng: 0, status: 'active' },
-      { lat: 0, lng: 0, is_mql: true, status: 'active' },
-      { lat: 0, lng: 0, status: 'blocked' },
+      { lat: 0, lng: 0, has_reservation: true },
+      { lat: 0, lng: 0, is_mql: true, has_reservation: false },
+      { lat: 0, lng: 0, status: 'blocked', has_reservation: false },
       { lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true },
     ];
 
     it('statusOf menetapkan kategori dengan prioritas tetap', () => {
-      expect(statusOf(points[0])).toBe('active');
+      expect(statusOf(points[0])).toBe('reserved');
       expect(statusOf(points[1])).toBe('mql');
-      expect(statusOf(points[2])).toBe('other');
+      expect(statusOf(points[2])).toBe('mql');
       expect(statusOf(points[3])).toBe('out_of_coverage');
     });
 
-    it('MQL yang sudah reservasi dikategorikan "active" (legend tetap konsisten dengan warna hijau)', () => {
-      expect(statusOf({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe('active');
+    it('MQL yang sudah reservasi dikategorikan "reserved" (legend tetap konsisten dengan warna hijau)', () => {
+      expect(statusOf({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe('reserved');
     });
 
     it('set kosong → seluruh titik dikembalikan (tidak menyembunyikan apa pun)', () => {
@@ -157,10 +157,10 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
     });
 
     it('menyembunyikan kategori terpilih', () => {
-      const allowed = new Set<SpatialStatus>(['active', 'other', 'out_of_coverage']);
+      const allowed = new Set<SpatialStatus>(['reserved', 'out_of_coverage']);
       const res = filterPointsByStatus(points, allowed);
-      expect(res).toHaveLength(3);
-      // Titik MQL (indeks 1) tersembunyi; titik out_of_coverage (indeks 3) tetap tampil.
+      expect(res).toHaveLength(2);
+      // Titik MQL (indeks 1,2) tersembunyi; reserved + out_of_coverage tetap tampil.
       expect(res.some((p) => statusOf(p) === 'mql')).toBe(false);
       expect(res.filter((p) => statusOf(p) === 'out_of_coverage')).toHaveLength(1);
     });
