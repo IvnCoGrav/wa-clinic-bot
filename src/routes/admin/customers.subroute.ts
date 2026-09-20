@@ -120,6 +120,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           take: 5000,
         });
 
+        const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
+        const { haversineKm } = await import('../../utils/gazetteer');
         let points: any[] = coordsRows
           .filter(
             (c: any) =>
@@ -130,12 +132,23 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               c.lng >= -180 &&
               c.lng <= 180
           )
-          .map((c: any) => ({
-            ...c,
-            has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
-            reservations: undefined,
-            is_estimated_centroid: false,
-          }));
+          .map((c: any) => {
+            let dist = typeof c.distance_km === 'number' ? c.distance_km : null;
+            if (dist == null && clinic && typeof clinic.lat === 'number' && typeof clinic.lng === 'number') {
+              dist = Math.round(haversineKm(clinic.lat, clinic.lng, c.lat, c.lng) * 10) / 10;
+            }
+            const isOutOfCoverage =
+              c.is_out_of_coverage ??
+              (typeof clinic?.maxCoverageKm === 'number' && dist != null ? dist > clinic.maxCoverageKm : false);
+            return {
+              ...c,
+              distance_km: dist,
+              is_out_of_coverage: isOutOfCoverage,
+              has_reservation: Array.isArray(c.reservations) && c.reservations.length > 0,
+              reservations: undefined,
+              is_estimated_centroid: false,
+            };
+          });
 
         if (!showAll) {
           points = points.filter(isWithinServiceArea);
@@ -224,7 +237,6 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         // Aktif murni tanpa reservasi & tanpa MQL tidak ditampilkan sama sekali.
         points = points.filter((p: any) => p.has_reservation || p.is_mql === true);
 
-        const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
         return reply
           .header('Cache-Control', 'private, max-age=15, stale-while-revalidate=60')
           .status(200)

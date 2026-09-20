@@ -662,6 +662,9 @@ export class CustomerService {
     if (data.zipcode !== undefined) updateData.zipcode = data.zipcode;
     if (data.lat !== undefined) updateData.lat = CustomerService.toNumberOrNull(data.lat);
     if (data.lng !== undefined) updateData.lng = CustomerService.toNumberOrNull(data.lng);
+    if (data.lat != null && data.lng != null) {
+      updateData.location_source = LocationSource.manual_staff;
+    }
 
     if (data.phone !== undefined && data.phone.trim()) {
       let normalizedPhone = data.phone.replace(/\D/g, '');

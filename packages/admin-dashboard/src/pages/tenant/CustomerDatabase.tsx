@@ -460,12 +460,13 @@ export const CustomerDatabase: React.FC = () => {
         </button>
       </div>
 
-      {activeMainTab === 'LABELS' ? (
-        <CustomerLabels />
-      ) : activeMainTab === 'MAP' ? (
+      {/* Tab Content */}
+      {activeMainTab === 'LABELS' && <CustomerLabels />}
+      {activeMainTab === 'MAP' && (
         <CustomerMapTab onSelectCustomer={(id) => handleOpenDetail({ id } as CustomerItem)} />
-      ) : (
-      <>
+      )}
+      {activeMainTab === 'CUSTOMERS' && (
+        <>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -973,7 +974,10 @@ export const CustomerDatabase: React.FC = () => {
           />
         )}
       </div>
+      </>
+      )}
 
+      {/* Global Modals (tersedia untuk semua tab: CUSTOMERS, LABELS, & MAP) */}
       {/* Modal 1: Chat History Modal (terpusat — Anti-Bloat) */}
       <ChatHistoryModal
         isOpen={!!activeHistoryCustomer}
@@ -1559,8 +1563,6 @@ export const CustomerDatabase: React.FC = () => {
           onHousePhotoView={(url) => window.open(url, '_blank')}
           onOpenChatHistory={(id, name, phone) => handleOpenHistory({ id, name: name || null, phone: phone || '' } as CustomerItem, 10000)}
         />
-      )}
-      </>
       )}
   </div>
 );

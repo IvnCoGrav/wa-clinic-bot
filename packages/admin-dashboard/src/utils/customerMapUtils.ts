@@ -159,6 +159,24 @@ export function locationVisual(point: MapPointLike): LocationVisual {
   return { source, ...LOCATION_VISUALS[source] };
 }
 
+export function normalizeDistrictName(raw?: string | null): string {
+  let val = String(raw ?? '').trim();
+  if (!val) return '';
+  val = val
+    .replace(/^(kecamatan|kec\.?|kota\s*:?|kabupaten|kab\.?)\s*[:\-]?\s*/i, '')
+    .replace(/^[:\-–—,.\s]+/, '')
+    .replace(/[\s,.:\-–—]+$/, '')
+    .trim();
+  if (!val || val.length < 3 || val.length > 30 || /\d{4,}/.test(val) || /^no\.?\s*hp/i.test(val)) {
+    return '';
+  }
+  return val
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 /** Menentukan kategori status satu titik (satu kategori, prioritas tetap). */
 export function statusOf(point: MapPointLike): SpatialStatus {
   if (point.is_out_of_coverage) return 'out_of_coverage';
@@ -219,7 +237,7 @@ export function computeSpatialMetrics(points: MapPointLike[]): SpatialMetrics {
       distanceCount++;
     }
 
-    const kec = String(p.kecamatan ?? '').trim();
+    const kec = normalizeDistrictName(p.kecamatan);
     if (kec) kecamatanCount.set(kec, (kecamatanCount.get(kec) || 0) + 1);
   }
 
@@ -238,4 +256,39 @@ export function computeSpatialMetrics(points: MapPointLike[]): SpatialMetrics {
     averageDistanceKm: distanceCount > 0 ? Math.round((distanceSum / distanceCount) * 10) / 10 : null,
     topKecamatan,
   };
+}
+
+export interface RenderMapPoint extends MapPointLike {
+  renderLat: number;
+  renderLng: number;
+}
+
+/**
+ * Mendispersikan titik-titik yang memiliki koordinat persis sama ke dalam
+ * pola lingkaran mikro (~15-25 meter). Koordinat asli (lat, lng) tetap
+ * dipertahankan untuk navigasi dan kalkulasi jarak.
+ */
+export function disperseOverlappingPoints<T extends MapPointLike>(
+  points: T[]
+): Array<T & { renderLat: number; renderLng: number }> {
+  const coordGroups = new Map<string, Array<T & { renderLat: number; renderLng: number }>>();
+  const result = points.map((p) => {
+    const item = { ...p, renderLat: p.lat, renderLng: p.lng } as T & { renderLat: number; renderLng: number };
+    const key = `${p.lat.toFixed(4)}_${p.lng.toFixed(4)}`;
+    if (!coordGroups.has(key)) coordGroups.set(key, []);
+    coordGroups.get(key)!.push(item);
+    return item;
+  });
+  for (const group of coordGroups.values()) {
+    if (group.length <= 1) continue;
+    const count = group.length;
+    for (let i = 0; i < count; i++) {
+      if (i === 0) continue;
+      const angle = (2 * Math.PI * (i - 1)) / (count - 1);
+      const radius = 0.00022;
+      group[i].renderLat += radius * Math.cos(angle);
+      group[i].renderLng += (radius / Math.cos((group[i].lat * Math.PI) / 180)) * Math.sin(angle);
+    }
+  }
+  return result;
 }

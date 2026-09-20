@@ -9,6 +9,7 @@ import {
 import { loadLeaflet } from '../../utils/leafletLoader';
 import {
   computeSpatialMetrics,
+  disperseOverlappingPoints,
   filterPointsByCity,
   filterPointsByStatus,
   markerColor,
@@ -200,6 +201,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         maxBoundsViscosity: 0.3,
         zoomControl: true,
         attributionControl: false,
+        scrollWheelZoom: false,
       });
 
       if (!map.getPane('boundaryPane')) {
@@ -453,10 +455,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     const L = (window as any).L;
     cluster.clearLayers();
 
-    visiblePoints.forEach((p) => {
+    const dispersedPoints = disperseOverlappingPoints(visiblePoints);
+    dispersedPoints.forEach((p) => {
       const color = markerColor(p);
       const loc = locationVisual(p);
-      const marker = L.circleMarker([p.lat, p.lng], {
+      const marker = L.circleMarker([p.renderLat, p.renderLng], {
         radius: loc.radius,
         color: loc.borderColor,
         weight: loc.source === 'gps_pin' ? 1.5 : 2,
@@ -513,8 +516,12 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           map.invalidateSize();
           const bounds = cluster.getBounds();
           if (bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
-            if (clinic && typeof clinic.lat === 'number' && typeof clinic.lng === 'number'
-              && (!kotaFilter || normalizeCity(kotaFilter) === 'sidoarjo')) {
+            if (
+              clinic &&
+              typeof clinic.lat === 'number' &&
+              typeof clinic.lng === 'number' &&
+              (!kotaFilter || normalizeCity(kotaFilter).toLowerCase() === 'sidoarjo')
+            ) {
               bounds.extend([clinic.lat, clinic.lng]);
             }
             map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
@@ -626,7 +633,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             Peta sebaran pelanggan interaktif dengan pilihan Peta Jalan dan Area Vektor (Surabaya & Sidoarjo). Klik titik lalu tekan "Lihat Detail Pelanggan".
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Switcher Mode Peta */}
           <div className="inline-flex rounded-xl bg-white border border-[#d1d7db] p-0.5 shadow-xs text-xs font-semibold">
             <button
