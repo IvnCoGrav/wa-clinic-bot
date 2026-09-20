@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Peta Sebaran — Sumber Lokasi First-Class (GPS / Estimasi / Edit Bidan) (2026-09-20)
+
+- **Added — enum `LocationSource` + kolom `customers.location_source`** (`gps_pin` | `estimated_area` |
+  `manual_staff`, nullable untuk data lama): migrasi `20260920000006_customer_location_source`.
+  Sumber koordinat kini first-class & queryable (bukan lagi tersebar di JSON `preferences`).
+- **Changed — penandaan sumber otomatis di jalur tulis:** `customerService.updateCustomerLocation`
+  menurunkan sumber deterministik (`isNativePin`→`gps_pin`, koordinat dari teks/gazetteer→
+  `estimated_area`, eksplisit dapat override) dan **tidak mengubah sumber lama** saat GPS presisi
+  dipertahankan (GPS priority guard). Jalur edit manual (PUT `/api/admin/customers/:id/location`
+  dan `staffReservationService.updateCustomerLocation`) menandai `manual_staff`; alur refresh-location
+  memetakan `bidan_shareloc`/`customer_shareloc`→`gps_pin`, `geocoding`→`estimated_area`.
+- **Changed — pembeda visual di peta:** `locationVisual()` (pure, teruji) → GPS outline putih,
+  estimasi wilayah outline putus-putus abu + fill transparan, edit bidan outline ungu `#7c3aed`;
+  popup & legenda menampilkan 3 kategori sumber. Endpoint `map-points` mengirim `location_source`
+  (titik sentroid selalu `estimated_area`). Kompatibel data lama (`location_source` null → turun
+  dari `is_estimated_centroid`).
+- **Verifikasi:** `tsc --noEmit` bersih; `vitest` unit peta **40 passed**; build bot & dashboard exit 0.
+
 #### Peta Sebaran — Warna Reservasi & Koreksi Backfill GPS (2026-09-20)
 
 - **Fixed — MQL yang sudah reservasi tampil biru (bukan hijau):** Akar multi-lapis:

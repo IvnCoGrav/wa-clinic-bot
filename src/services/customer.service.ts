@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { Customer } from '@prisma/client';
+import { Customer, LocationSource } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
@@ -159,6 +159,7 @@ export class CustomerService {
       isOutOfCoverage?: boolean;
       zipcode?: string;
       isNativePin?: boolean;
+      locationSource?: LocationSource;
     },
     tenantId: string
   ): Promise<any> {
@@ -195,6 +196,19 @@ export class CustomerService {
           ? data.ongkir
           : existing.ongkir;
 
+      // Sumber lokasi: eksplisit bila diberikan; selain itu diturunkan deterministik
+      // (pin GPS asli → gps_pin, koordinat hasil teks/gazetteer → estimated_area).
+      // Saat koordinat presisi dipertahankan (preserveExactGps), sumber lama TIDAK diubah.
+      const effectiveSource: LocationSource | undefined = preserveExactGps
+        ? (existing.location_source as LocationSource | null) ?? undefined
+        : data.locationSource
+          ? data.locationSource
+          : data.isNativePin
+            ? LocationSource.gps_pin
+            : data.lat !== undefined || data.lng !== undefined
+              ? LocationSource.estimated_area
+              : undefined;
+
       const updated = await prisma.customer.update({
         where: { id: customerId },
         data: {
@@ -207,6 +221,7 @@ export class CustomerService {
           ongkir: effectiveOngkir,
           is_out_of_coverage: data.isOutOfCoverage ?? false,
           zipcode: data.zipcode ?? existing.zipcode,
+          ...(effectiveSource !== undefined ? { location_source: effectiveSource } : {}),
         },
       });
 
@@ -229,6 +244,15 @@ export class CustomerService {
           const effLng = preserveGps ? cust.lng : (data.lng !== undefined ? (CustomerService.toNumberOrNull(data.lng) ?? cust.lng) : cust.lng);
           const effDist = preserveGps ? cust.distance_km : (data.distanceKm !== undefined ? data.distanceKm : cust.distance_km);
           const effOngkir = preserveGps ? cust.ongkir : (data.ongkir !== undefined ? data.ongkir : cust.ongkir);
+          const effSource = preserveGps
+            ? cust.location_source
+            : data.locationSource
+              ? data.locationSource
+              : data.isNativePin
+                ? LocationSource.gps_pin
+                : (data.lat !== undefined || data.lng !== undefined)
+                  ? LocationSource.estimated_area
+                  : cust.location_source;
           Object.assign(cust, {
             kelurahan: data.kelurahan ?? cust.kelurahan,
             kecamatan: data.kecamatan ?? cust.kecamatan,
@@ -239,6 +263,7 @@ export class CustomerService {
             ongkir: effOngkir,
             is_out_of_coverage: data.isOutOfCoverage ?? cust.is_out_of_coverage,
             zipcode: data.zipcode !== undefined ? data.zipcode : cust.zipcode,
+            ...(effSource !== undefined ? { location_source: effSource } : {}),
             updated_at: new Date(),
           });
           if (data.isNativePin) cust.share_location_sent = true;
@@ -1667,6 +1692,12 @@ export class CustomerService {
             ongkir: delivery.ongkir,
             is_out_of_coverage: delivery.isOutOfCoverage,
             share_location_sent: chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc' ? true : customer.share_location_sent,
+            location_source:
+              chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
+                ? LocationSource.gps_pin
+                : chosen.source === 'geocoding'
+                  ? LocationSource.estimated_area
+                  : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
             kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
             kecamatan: resolvedAdmin.kecamatan || customer.kecamatan,
             kota: resolvedAdmin.kota || customer.kota,
@@ -1711,6 +1742,12 @@ export class CustomerService {
             updated_at: new Date(),
           });
           if (chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc') mem.share_location_sent = true;
+          mem.location_source =
+            chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
+              ? LocationSource.gps_pin
+              : chosen.source === 'geocoding'
+                ? LocationSource.estimated_area
+                : mem.location_source ?? LocationSource.estimated_area;
         }
       }
 

@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Build-time var untuk Admin Dashboard (Vite inline). Sumber: .env server.
+      args:
+        VITE_CARTO_API_KEY: ${VITE_CARTO_API_KEY:-}
     expose:
       - "3000"
     volumes:

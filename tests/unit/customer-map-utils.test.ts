@@ -8,6 +8,7 @@ import {
   statusOf,
   filterPointsByStatus,
   computeSpatialMetrics,
+  locationVisual,
   SpatialStatus,
 } from '../../packages/admin-dashboard/src/utils/customerMapUtils';
 
@@ -165,8 +166,42 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
     });
   });
 
-  describe('computeSpatialMetrics (KPI spasial)', () => {
-    it('menghitung total, presisi/estimasi, coverage %, rata-rata jarak, top kecamatan', () => {
+  describe('locationVisual (pembeda sumber lokasi)', () => {
+    it('gps_pin → marker padat, outline putih', () => {
+      const v = locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' });
+      expect(v.source).toBe('gps_pin');
+      expect(v.borderColor).toBe('#ffffff');
+      expect(v.dashArray).toBeUndefined();
+      expect(v.fillOpacity).toBeGreaterThan(0.8);
+    });
+
+    it('estimated_area → outline putus-putus & fill transparan', () => {
+      const v = locationVisual({ lat: 0, lng: 0, location_source: 'estimated_area' });
+      expect(v.source).toBe('estimated_area');
+      expect(v.dashArray).toBeTruthy();
+      expect(v.fillOpacity).toBeLessThan(0.8);
+    });
+
+    it('manual_staff → outline ungu tegas, beda dari GPS', () => {
+      const v = locationVisual({ lat: 0, lng: 0, location_source: 'manual_staff' });
+      expect(v.source).toBe('manual_staff');
+      expect(v.borderColor).toBe('#7c3aed');
+      expect(v.borderColor).not.toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).borderColor);
+    });
+
+    it('kompatibilitas data lama: location_source null → turunkan dari is_estimated_centroid', () => {
+      expect(locationVisual({ lat: 0, lng: 0, is_estimated_centroid: true }).source).toBe('estimated_area');
+      expect(locationVisual({ lat: 0, lng: 0, is_estimated_centroid: false }).source).toBe('gps_pin');
+      expect(locationVisual({ lat: 0, lng: 0 }).source).toBe('gps_pin');
+    });
+
+    it('nilai location_source tak dikenal → fallback aman (tidak crash)', () => {
+      const v = locationVisual({ lat: 0, lng: 0, location_source: 'bogus' as any });
+      expect(['gps_pin', 'estimated_area', 'manual_staff']).toContain(v.source);
+    });
+  });
+
+  describe('computeSpatialMetrics (KPI spasial)', () => {    it('menghitung total, presisi/estimasi, coverage %, rata-rata jarak, top kecamatan', () => {
       const m = computeSpatialMetrics([
         { lat: 0, lng: 0, kecamatan: 'Waru', distance_km: 4, is_out_of_coverage: false },
         { lat: 0, lng: 0, kecamatan: 'Waru', distance_km: 6, is_out_of_coverage: false },
