@@ -193,7 +193,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             for (const c of nullRows) {
               const kelurahan = isValidAreaName(c.kelurahan) ? c.kelurahan : null;
               const kecamatan = isValidAreaName(c.kecamatan) ? c.kecamatan : null;
-              if (!kelurahan && !kecamatan) continue;
+              if (!kelurahan) {
+                // Hanya kelurahan spesifik yang boleh jadi sentroid — kecamatan saja tidak dimasukkan
+                continue;
+              }
               // Prioritaskan pencocokan kombinasi kelurahan + kecamatan jika keduanya tersedia (desa kembar)
               let gaz = null;
               if (kelurahan && kecamatan) {
@@ -1005,12 +1008,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               { lat, lng }
             );
 
-            if (diffFromOriginalKm > 1.0) {
-              shouldUpdatePrimaryCoords = false;
+            // Admin CS otoritas tertinggi: selalu simpan koordinat primer (hapus limit 1km)
+            shouldUpdatePrimaryCoords = true;
+            if (diffFromOriginalKm != null && diffFromOriginalKm > 1.0) {
               const gpsTag = `[📍 GPS Lapangan: ${lat.toFixed(6)}, ${lng.toFixed(6)} (+${diffFromOriginalKm.toFixed(1)}km)]`;
               finalLandmark = baseLandmark ? `${baseLandmark} ${gpsTag}` : gpsTag;
-            } else {
-              shouldUpdatePrimaryCoords = true;
             }
           } else {
             shouldUpdatePrimaryCoords = true;

@@ -139,8 +139,8 @@ const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'
     fillOpacity: 0.5,
     radius: 7,
   },
-  // Diedit manual oleh bidan/staf — outline ungu tegas, fill pekat.
-  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#7c3aed', fillOpacity: 0.9, radius: 7 },
+  // Diedit manual oleh bidan/staf — ungu solid pop-out dengan ring putih tebal.
+  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#ffffff', fillOpacity: 1, radius: 9 },
 };
 
 /**
