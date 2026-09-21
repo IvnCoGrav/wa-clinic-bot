@@ -7,14 +7,44 @@ import { OutputSanitizer } from '../../../src/v3/guardrails/sanitizer';
  * Sanitizer WAJIB membersihkan tag mesin ini tanpa mutilasi kalimat customer.
  */
 describe('Sanitizer — kebocoran tag DSML/XML native (DeepSeek)', () => {
-  it('membersihkan blok DSML lengkap beserta isinya', () => {
-    // Lead-in non-sapaan agar tak tersentuh guard sapaan Turn-0 yang ortogonal.
-    const dirty = 'Baik Bunda 😊<｜｜DSML｜｜calls><｜｜DSML｜｜call><name>get_catalog</name></｜｜DSML｜｜call></｜｜DSML｜｜calls> Kami bantu cek ya.';
-    const out = OutputSanitizer.cleanOutboundReply(dirty, 'pijat bayi apa?', true);
+  // POLA RIIL produksi (log llm-2026-09-21.jsonl, sesi 89-turn): tag DSML
+  // dibungkus KARAKTER KONTROL C1 U+009C/U+009D (terlihat sebagai mojibake),
+  // dengan '<' pembuka dan '/' penutup DI ANTARA control chars — BUKAN pipe.
+  // Regex lama `<｜｜DSML｜｜` tidak pernah match pola ini.
+  const O = (inner: string) => `<\u009C\u009C${inner}\u009C\u009D>`;
+  const realDsmlBlock = [
+    O('DSML') + ' calls',
+    O('DSML') + ' invoke name="get_catalog_and_price"',
+    O('DSML') + ' parameter name="symptoms" string="true">oksitosin massage ibu menyusui' + O('/DSML') + ' parameter',
+    O('/DSML') + ' invoke',
+    O('/DSML') + ' calls',
+  ].join('\n');
+
+  it('membersihkan POLA RIIL DSML control-char dari log produksi', () => {
+    const dirty = `Baik Bunda 😊${realDsmlBlock}`;
+    const out = OutputSanitizer.cleanOutboundReply(dirty, 'oksitosin tiap hari?', true);
     expect(out).not.toContain('DSML');
-    expect(out).not.toContain('get_catalog');
+    expect(out).not.toContain('get_catalog_and_price');
+    expect(out).not.toContain('invoke');
     expect(out).toContain('Baik Bunda');
-    expect(out).toContain('Kami bantu cek ya');
+  });
+
+  it('membersihkan blok DSML pola pipe fullwidth tunggal & dobel', () => {
+    // Kontrak trim-from-first: teks SEBELUM artefak dipertahankan; teks
+    // SETELAH artefak TIDAK dijamin (draf korup) — recovery grounded di
+    // guardrail-pipeline yang mengisi ulang bila draf jadi kosong.
+    const single = 'Baik Bunda 😊<｜DSML｜calls><｜DSML｜invoke name="get_catalog"></｜DSML｜invoke></｜DSML｜calls> Kami bantu cek ya.';
+    const outSingle = OutputSanitizer.cleanOutboundReply(single, 'pijat bayi apa?', true);
+    expect(outSingle).not.toContain('DSML');
+    expect(outSingle).not.toContain('get_catalog');
+    expect(outSingle).toContain('Baik Bunda');
+
+    const double = 'Baik Bunda 😊<｜｜DSML｜｜calls><｜｜DSML｜｜call><name>get_catalog</name></｜｜DSML｜｜call></｜｜DSML｜｜calls> Kami bantu cek ya.';
+    const outDouble = OutputSanitizer.cleanOutboundReply(double, 'pijat bayi apa?', true);
+    expect(outDouble).not.toContain('DSML');
+    expect(outDouble).not.toContain('get_catalog');
+    expect(outDouble).not.toContain('<name>');
+    expect(outDouble).toContain('Baik Bunda');
   });
 
   it('membersihkan <result> dan <tool_call> XML', () => {

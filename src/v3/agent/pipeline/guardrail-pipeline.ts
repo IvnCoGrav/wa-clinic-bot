@@ -500,12 +500,58 @@ export class GuardrailPipeline {
     );
     const hasAgeQuestion = (text: string): boolean =>
       /usia\s+(si\s+kecil|anak|baby|balita|bunda)|berapa\s+(bulan|tahun|usia)/i.test(text);
+    // Lapis kode DETERMINISTIK (sesi 783810 — anti-tambal-sulam: kontrol gaya
+    // berkuota HANYA diizinkan lewat gerbang kode, bukan kepatuhan prompt).
+    // Tanpa otorisasi klinis, menodong usia NOMINAL ("usia si kecil 3 bulan")
+    // dikeluarkan dengan menggugurkan bilangan+satuan, KONTEKS kalimat lestari.
+    // Dasar pola: kata 'usia' lalu bilangan lalu satuan; kalimat bertanda
+    // '?'/berdaftar mode/satuan tanggung → gagal aman (tanpa strip).
+    const NOMINAL_AGE_RE =
+      /\busia\s+[^\n.?!]*?\b(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/gi;
+    const NOMINAL_AGE_MODES = ['bulan', 'hari', 'minggu', 'tahun'] as const;
+    const stripNominalAges = (text: string): string => {
+      if (!text) return text;
+      if (isAgeClarificationAuthorized) return text;
+      const anyMode = NOMINAL_AGE_MODES.some(
+        (m) => new RegExp(`(?:^|[^a-z0-9])${m}(?:[^a-z0-9]|$)`).test(text.toLowerCase())
+      );
+      if (!anyMode) return text;
+      let updated = text;
+      let hits = 0;
+      updated = updated.replace(NOMINAL_AGE_RE, (m) => { hits++; return m; });
+      if (hits === 0) return text;
+      updated = text.replace(NOMINAL_AGE_RE, (span) => {
+        const num = /(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/i.exec(span);
+        if (!num) return span;
+        const at = span.search(num[0]);
+        return span.slice(0, at).trimEnd();
+      });
+      const normal = updated.replace(/\s{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
+      if (!normal) return text;
+      // Sisa satuan/tahun → perbaikan mencurigakan (bukan sekedar strip) →
+      // anti-mutilasi: pulihkan teks asli daripada memotong tengah kalimat.
+      if (/\btahun\b|\bbulan\b/.test(normal)) return text;
+      return normal;
+    };
+    if (!isEscalated && shouldSendReply && finalReply.trim()) {
+      const strippedReply = stripNominalAges(finalReply);
+      if (strippedReply !== finalReply) {
+        finalReply = strippedReply;
+        violationsDetected.push('nominal_age_solicitation_stripped');
+        console.warn(JSON.stringify({ event: 'NOMINAL_AGE_SOLICITATION_STRIPPED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+        await input.recordCall({
+          reply: finalReply, status: 'SUCCESS', durationMs: 0,
+          promptPayload: { model: selectedModel, correction: 'nominal_age_strip' },
+          callReasoning: 'Strip deterministik nominal usia (otorisasi klinis tak ada)', callSequence: 3,
+        });
+      }
+    }
     if (!isAgeClarificationAuthorized && hasAgeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
       violationsDetected.push('age_solicitation_detected');
       const ageRepromptStartedAt = Date.now();
       let ageRepromptOk = false;
       try {
-        const ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. Jika informasi usia diperlukan untuk rekomendasi, sampaikan bahwa tim kami akan menanyakan saat koordinasi jadwal. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        const ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. DILARANG memotong atau mutilasi kalimat di tengah.`;
         const ageRetryData = await input.executeChat({
           payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, ageCorrectionNote), temperature: 0.3 },
           tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
@@ -574,6 +620,74 @@ export class GuardrailPipeline {
       }
     }
 
+    // 7f. Validator anti-solicitation SHARE LOCATION (Sesi 662917 / Issue #77,
+    // Aturan Emas 21): DILARANG mengajak customer mengirim share location —
+    // cukup tanya nama kelurahan/desa/perumahan/patokan. Template persona telah
+    // dibersihkan (Fase 1), TAPI riwayat terhapusnya status menjadi bukti celah
+    // gaya tetap bisa bocor via generasi Call 2 — kendali kuota WAJIB gerbang
+    // kode deterministik, bukan patuh prompt semata (anti-makeup).
+    // State-gated: SENGGAJA di-bypass di jalur pasca-booking (machine.ts legacy,
+    // isHumanHandling + isEscalated=true → guard di bawah tidak terpenuhi).
+    // Pola netral: kata 'kirim*' berdekatan dengan share-location/shareloc/
+    // sharelock (dua arah). Negasi penjaga ("tanpa menanyakan ... share
+    // location") di jendela konteks → bukan solicitation (eksklusi defensif).
+    const hasShareLocationSolicitation = (text: string): boolean => {
+      const lower = (text || '').toLowerCase();
+      if (!lower) return false;
+      const patterns: RegExp[] = [
+        /\bkirim\w*\s+[^\n.!?]{0,50}?\b(share\s*location|shareloc|sharelock)\b/i,
+        /\b(share\s*location|shareloc|sharelock)\b[^\n.!?]{0,40}?\bkirim\w*\b/i,
+      ];
+      for (const re of patterns) {
+        let m: RegExpExecArray | null;
+        re.lastIndex = 0;
+        while ((m = re.exec(lower)) !== null) {
+          const around = lower.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60);
+          if (/dilarang menanyakan|tanpa menanyakan|tanpa meminta|jangan menanyakan|jangan meminta|tidak meminta/i.test(around)) {
+            re.lastIndex = m.index + 1;
+            continue;
+          }
+          return true;
+        }
+      }
+      return false;
+    };
+    if (hasShareLocationSolicitation(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
+      violationsDetected.push('shareloc_solicitation_detected');
+      const locRepromptStartedAt = Date.now();
+      let locRepromptOk = false;
+      try {
+        const locCorrectionNote = `KOREKSI LOKASI — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS anjuran/permintaan customer untuk mengirim share location (shareloc). Aturan klinik (Aturan Emas 21): DILARANG menodong alamat/shareloc. Cukup tanyakan nama kelurahan, desa, perumahan, atau patokan terdekat secara ramah. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        const locRetryData = await input.executeChat({
+          payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, locCorrectionNote), temperature: 0.3 },
+          tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
+        });
+        repromptCount++;
+        const locRetryText = (locRetryData?.choices?.[0]?.message?.content || '').trim();
+        if (locRetryText) {
+          const locCleaned = OutputSanitizer.cleanOutboundReply(locRetryText, incomingText, isFollowUp, sanitizeOpts);
+          if (!hasShareLocationSolicitation(locCleaned)) {
+            finalReply = locCleaned;
+            locRepromptOk = true;
+            console.log(JSON.stringify({ event: 'SHARELOC_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+            await input.recordCall({
+              reply: finalReply, status: 'SUCCESS', durationMs: Date.now() - locRepromptStartedAt,
+              promptPayload: { model: selectedModel, correction: 'shareloc_solicitation' },
+              callReasoning: 'Hapus anjuran share location dari balasan', callSequence: 3,
+            });
+          }
+        }
+      } catch (repromptErr: any) {
+        console.warn(JSON.stringify({ event: 'SHARELOC_SOLICITATION_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message, timestamp: new Date().toISOString() }));
+      }
+      if (!locRepromptOk) {
+        // Anti-mutilasi: kirim balasan asli (pelanggaran gaya, bukan
+        // halusinasi), catat untuk kurasi prompt — DILARANG memotong kalimat.
+        violationsDetected.push('shareloc_solicitation_unresolved');
+        console.warn(JSON.stringify({ event: 'SHARELOC_SOLICITATION_UNRESOLVED_KEEP_ORIGINAL', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      }
+    }
+
     // Safety-net deterministik same-day (sesi 462651): bila turn ini
     // mencatat reservasi HARI INI tetapi balasan tidak menurunkan
     // ekspektasi (tanpa indikasi penuh), sisipkan disclaimer resmi.
@@ -604,11 +718,25 @@ export class GuardrailPipeline {
       console.warn(JSON.stringify({ event: 'V3_AGENT_SANITIZER_REJECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), reply: finalReply.slice(0, 100), timestamp: new Date().toISOString() }));
       const catalogTool = executedTools.find((t: any) => t.name === 'get_catalog_and_price' && (t as any).result?.treatments?.length > 0);
       const deliveryTool = executedTools.find((t: any) => t.name === 'calculate_delivery' && (t as any).result?.suggestedTemplateReply);
+      // Plan Fase 4.2 (sesi 89-turn): recovery berbasis KONTEKS SESI — bila
+      // customer sedang membahas treatment tertentu (selectedTreatment atau
+      // riwayat cart), pulihkan dengan ringkasan katalog layanan itu, bukan
+      // template kaleng buntu.
+      const discussedName: string | undefined =
+        session.selectedTreatment
+        || (Array.isArray(session.cartItems) && session.cartItems.length > 0 ? session.cartItems[session.cartItems.length - 1]?.name : undefined)
+        || undefined;
+      const discussedService = discussedName
+        ? (await import('../../../services/treatment-catalog.service')).treatmentCatalogService.searchCatalogItems(discussedName)[0]
+        : undefined;
       if (catalogTool && (catalogTool as any).result?.treatments?.[0]) {
         const top: any = (catalogTool as any).result.treatments[0];
         const isMoms = top.category === 'MOMS';
         finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
         console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, timestamp: new Date().toISOString() }));
+      } else if (discussedService) {
+        finalReply = `Untuk *${discussedService.name}* ya Bunda 😊\n\n${discussedService.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
+        console.warn(JSON.stringify({ event: 'DISCUSSED_SERVICE_RECOVERY_APPLIED', service: discussedService.name, timestamp: new Date().toISOString() }));
       } else if (deliveryTool && (deliveryTool as any).result?.suggestedTemplateReply) {
         // Grounded delivery recovery (sesi 648324): saat draf kosong akibat DSML
         // yang terlucuti tetapi data delivery resmi tersedia, gunakan template

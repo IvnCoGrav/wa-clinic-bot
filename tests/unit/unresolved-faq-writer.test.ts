@@ -68,7 +68,7 @@ describe('Unresolved FAQ writer — grounding kosong masuk antrean belajar', () 
     vi.restoreAllMocks();
   });
 
-  it('grounding kosong → balasan TERKIRIM + reason unresolved_faq', async () => {
+  it('grounding kosong → balasan TERKIRIM + review_flagged (bot TIDAK di-mute)', async () => {
     const { phone, customer } = await freshConversation('Bunda Siti');
     const escSpy = vi.spyOn(conversationService, 'escalateToHumanHandling');
     vi.spyOn(V3AgentRunner, 'processMessage').mockResolvedValue(baseV3({
@@ -86,11 +86,12 @@ describe('Unresolved FAQ writer — grounding kosong masuk antrean belajar', () 
     // Balasan tetap keluar (tidak menahan jawaban dari customer).
     expect(result.shouldSendReply).toBe(true);
     expect(sentToCustomer.length).toBe(1);
-    // Namun dicatat untuk kurasi admin.
-    const reasons = escSpy.mock.calls.map((c) => c[4]);
-    expect(reasons).toContain('unresolved_faq');
+    // Plan Fase 3 (sesi 89-turn): antrean kurasi BUKAN eskalasi CS — bot tetap aktif.
+    // Penandaan murni data: review_flagged=true, is_human_handling TETAP false.
+    expect(escSpy).not.toHaveBeenCalled();
     const updated = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-    expect(updated.is_human_handling).toBe(true);
+    expect(updated.is_human_handling).toBe(false);
+    expect(updated.review_flagged).toBe(true);
     expect(updated.escalation_reason).toBe('unresolved_faq');
   });
 

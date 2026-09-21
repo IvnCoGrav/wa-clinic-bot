@@ -574,9 +574,17 @@ export class ConversationStateMachine {
       preExtractedIntents,
     });
 
+    // Plan anti-silent-drop (sesi 89-turn, mati suri schedule-check): flag
+    // is_human_handling TIDAK BOLEH di-set SEBELUM balasan penutup terkirim —
+    // shouldAbort() membaca flag ini dan akan membatalkan pengiriman
+    // (ABORTED_BY_HUMAN_HANDLING), membuat customer menerima diam total.
+    // Flag di-set DEFENSIF di bawah (setelah STEP 2); di sini hanya persiapan.
+    let pendingEscalation: {
+      phone: string;
+      note: string;
+      reason: string;
+    } | null = null;
     if (v3Result.isEscalated) {
-      activeConversation.is_human_handling = true;
-      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
       // Reason presisi untuk learning loop: eskalasi LLM non-medis dicatat
       // sebagai 'unresolved_faq' agar masuk antrean kurasi admin (/unanswered).
       const escTool = (v3Result.executedTools || []).find((t: any) => t?.name === 'escalate_to_human');
@@ -585,13 +593,12 @@ export class ConversationStateMachine {
       // (mis. 'pending_reservation_check'); fallback ke pemetaan lama.
       const escReason = (v3Result as any).escalationReason
         || (escSeverity === 'CRITICAL_MEDICAL' ? 'medical_concern' : 'unresolved_faq');
-      await conversationService.escalateToHumanHandling(
-        activeConversation,
-        customer.phone,
-        (v3Result as any).escalationNote || 'Eskalasi otomatis oleh V3 Agent',
-        tenantId,
-        escReason
-      );
+      pendingEscalation = {
+        phone: customer.phone,
+        note: (v3Result as any).escalationNote || 'Eskalasi otomatis oleh V3 Agent',
+        reason: escReason,
+      };
+      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
 
       // Stage 5 Fase 4 (RC-04): tandai turn durable sebagai HANDOFF (best-effort).
       try {
@@ -627,7 +634,9 @@ export class ConversationStateMachine {
     };
 
     // 4. Update Conversation State jika berubah
-    if (result.nextState !== activeConversation.current_state) {
+    // (is_human_handling SAJA tidak di-update di sini — ditunda sampai setelah
+    //  pengiriman, lihat pendingEscalation di bawah.)
+    if (result.nextState !== activeConversation.current_state && result.nextState !== ConversationState.HUMAN_HANDLING) {
       await conversationService.updateConversationState(
         activeConversation.id,
         {
@@ -765,22 +774,35 @@ export class ConversationStateMachine {
       }
     }
 
+    // --- 6b. PENETAPAN FLAG HUMAN_HANDLING (SETELAH pengiriman) ---
+    // Plan anti-silent-drop: flag baru aktif SETELAH balasan (termasuk closing
+    // schedule-check) terkirim, sehingga shouldAbort() tidak membatalkannya.
+    if (pendingEscalation) {
+      activeConversation.is_human_handling = true;
+      try {
+        await conversationService.escalateToHumanHandling(
+          activeConversation,
+          pendingEscalation.phone,
+          pendingEscalation.note,
+          tenantId,
+          pendingEscalation.reason
+        );
+      } catch (escErr: any) {
+        console.warn(`[ESCALATION DEFERRED ERROR] Gagal mencatat eskalasi: ${escErr?.message || escErr}`);
+      }
+    }
+
     // --- LEARNING LOOP (Fase A): turn dengan grounding kosong tetap dibalas,
     // tapi dicatat 'unresolved_faq' agar admin mengkurasi via /unanswered.
     // Dilakukan SETELAH pengiriman agar balasan tidak tertahan.
+    // Plan Fase 3 (sesi 89-turn, mati suri 68 turn): DILARANG memutasi
+    // is_human_handling di sini — antrean kurasi admin BUKAN eskalasi CS.
+    // Penandaan murni data (review_flagged) agar dashboard kurasi menampilkan
+    // turn ini, sementara bot TETAP AKTIF menjawab giliran berikutnya.
     if ((v3Result as any).unresolvedFaq && !v3Result.isEscalated) {
       try {
-        activeConversation.is_human_handling = true;
-        activeConversation.current_state = ConversationState.HUMAN_HANDLING;
-        await conversationService.escalateToHumanHandling(
-          activeConversation,
-          customer.phone,
-          'Jawaban tanpa grounding knowledge (perlu kurasi admin)',
-          tenantId,
-          'unresolved_faq'
-        );
-        result.nextState = ConversationState.HUMAN_HANDLING;
-        (result as any).isHumanHandling = true;
+        const { getConversationRepository } = await import('../repositories/conversation.repository');
+        await getConversationRepository().flagForReview(activeConversation.id, 'unresolved_faq', tenantId);
       } catch {}
     }
 

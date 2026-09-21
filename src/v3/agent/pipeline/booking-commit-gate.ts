@@ -7,7 +7,7 @@
  * (utils, bukan tool) + tipe sesi — tanpa siklus impor.
  */
 import type { CustomerGoalSession } from '../../state/goal-tracker';
-import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal } from '../../../utils/date-confirmation';
+import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText } from '../../../utils/date-confirmation';
 
 /**
  * Audit sesi 614425 (commit booking deterministik): true bila customer sudah
@@ -63,7 +63,8 @@ export function isBookingCommitReady(
  */
 export function detectAgreedTreatment(
   history: Array<{ role: string; content: string }>,
-  catalogNames: string[]
+  catalogNames: string[],
+  session?: { bookingCommitConfirmed?: boolean }
 ): string | null {
   if (!history || history.length === 0 || !catalogNames || catalogNames.length === 0) return null;
   const names = [...catalogNames]
@@ -76,6 +77,11 @@ export function detectAgreedTreatment(
     if (history[i]?.role !== 'user') continue;
     const text = (history[i]?.content || '').toLowerCase();
     if (!text) continue;
+    // Sesi 783810: pertanyaan konsultatif murni (bertanda '?' tanpa verba
+    // komitmen/jejak hari/tanpa commit sticky sesi) BUKAN persetujuan paket —
+    // penyebutan nama layanan di pertanyaan eksplorasi DILARANG men-seed
+    // session.selectedTreatment.
+    if (isConsultativeUserText(text, session)) continue;
     for (const name of names) {
       if (text.includes(name.toLowerCase())) return name;
     }

@@ -1,0 +1,489 @@
+{
+  "generated_at": "2026-09-21T04:05:05.458Z",
+  "tenant_id": "default-tenant",
+  "db_hash": "f974e9544bd06db4",
+  "sources": [
+    "delivery_tiers",
+    "clinic_services",
+    "clinic_policies"
+  ],
+  "pricing_tiers": [
+    {
+      "maxDist": 5,
+      "fee": 0,
+      "promoDiscount": 0
+    },
+    {
+      "maxDist": 7,
+      "fee": 15000,
+      "promoDiscount": 10000
+    },
+    {
+      "maxDist": 10,
+      "fee": 15000,
+      "promoDiscount": 5000
+    },
+    {
+      "maxDist": 15,
+      "fee": 25000,
+      "promoDiscount": 10000
+    },
+    {
+      "maxDist": 20,
+      "fee": 25000,
+      "promoDiscount": 5000
+    },
+    {
+      "maxDist": 25,
+      "fee": 35000,
+      "promoDiscount": 10000
+    },
+    {
+      "maxDist": 30,
+      "fee": 35000,
+      "promoDiscount": 5000
+    }
+  ],
+  "services": [
+    {
+      "service_id": "baby-mandi",
+      "name": "Memandikan Bayi",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 24,
+      "age_label": "0 - 24 Bulan",
+      "duration_minutes": 25,
+      "promo_price": 30000
+    },
+    {
+      "service_id": "kids-massage-ceria",
+      "name": "Pijat Kids Ceria",
+      "category": "KIDS",
+      "min_age_months": 24,
+      "max_age_months": 96,
+      "age_label": "2 - 8 Tahun",
+      "duration_minutes": 40,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "baby-cukur",
+      "name": "Cukur Rambut Bayi",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "0 - 12 Bulan",
+      "duration_minutes": 15,
+      "promo_price": 25000
+    },
+    {
+      "service_id": "baby-tindik",
+      "name": "Tindik Telinga Bayi",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "0 - 12 Bulan",
+      "duration_minutes": 15,
+      "promo_price": 50000
+    },
+    {
+      "service_id": "baby-massage-ceria-newborn",
+      "name": "Pijat Bayi Ceria Newborn",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 6,
+      "age_label": "0 - 6 Bulan",
+      "duration_minutes": 40,
+      "promo_price": 60000
+    },
+    {
+      "service_id": "baby-massage-ceria",
+      "name": "Pijat Bayi Ceria (Rileksasi)",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 24,
+      "age_label": "7 - 24 Bulan",
+      "duration_minutes": 40,
+      "promo_price": 70000
+    },
+    {
+      "service_id": "baby-massage-pulih-ceria",
+      "name": "Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 24,
+      "age_label": "7 - 24 Bulan",
+      "duration_minutes": 40,
+      "promo_price": 75000
+    },
+    {
+      "service_id": "baby-massage-lahap-juara",
+      "name": "Pijat Lahap Juara (< 2 thn)",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 24,
+      "age_label": "0 - 24 Bulan",
+      "duration_minutes": 40,
+      "promo_price": 75000
+    },
+    {
+      "service_id": "baby-massage-lahap-juara-gt2",
+      "name": "Pijat Lahap Juara (> 2 thn)",
+      "category": "KIDS",
+      "min_age_months": 24,
+      "max_age_months": 96,
+      "age_label": "> 2 Tahun",
+      "duration_minutes": 40,
+      "promo_price": 80000
+    },
+    {
+      "service_id": "kids-massage-2-4th",
+      "name": "Pijat Kids Ceria (2 - 4 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 24,
+      "max_age_months": 48,
+      "age_label": "2 - 4 Tahun",
+      "duration_minutes": 45,
+      "promo_price": 75000
+    },
+    {
+      "service_id": "kids-massage-4-6th",
+      "name": "Pijat Kids Ceria (4 - 6 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 48,
+      "max_age_months": 72,
+      "age_label": "4 - 6 Tahun",
+      "duration_minutes": 50,
+      "promo_price": 80000
+    },
+    {
+      "service_id": "kids-massage-6-8th",
+      "name": "Pijat Kids Ceria (6 - 8 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 72,
+      "max_age_months": 96,
+      "age_label": "6 - 8 Tahun",
+      "duration_minutes": 50,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "kids-pulih-2-4th",
+      "name": "Pijat Kids Pulih Ceria (2 - 4 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 24,
+      "max_age_months": 48,
+      "age_label": "2 - 4 Tahun",
+      "duration_minutes": 45,
+      "promo_price": 85000
+    },
+    {
+      "service_id": "kids-pulih-4-6th",
+      "name": "Pijat Kids Pulih Ceria (4 - 6 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 48,
+      "max_age_months": 72,
+      "age_label": "4 - 6 Tahun",
+      "duration_minutes": 50,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "kids-pulih-6-8th",
+      "name": "Pijat Kids Pulih Ceria (6 - 8 Tahun)",
+      "category": "KIDS",
+      "min_age_months": 72,
+      "max_age_months": 96,
+      "age_label": "6 - 8 Tahun",
+      "duration_minutes": 50,
+      "promo_price": 100000
+    },
+    {
+      "service_id": "moms-prenatal-massage",
+      "name": "Pijat Ibu Hamil / Prenatal Gentle Massage",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Trimester 2 & 3 (Min. 14 Minggu)",
+      "duration_minutes": 60,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "moms-postpartum-massage",
+      "name": "Pijat Ibu Pasca Melahirkan / Postpartum Massage",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Pasca Melahirkan (Normal/SC)",
+      "duration_minutes": 60,
+      "promo_price": 100000
+    },
+    {
+      "service_id": "moms-paket-laktasi",
+      "name": "Pijat Laktasi / Breast Care Massage",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Menyusui",
+      "duration_minutes": 40,
+      "promo_price": 85000
+    },
+    {
+      "service_id": "moms-oksitosin",
+      "name": "Pijat Oksitosin",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Menyusui",
+      "duration_minutes": 40,
+      "promo_price": 75000
+    },
+    {
+      "service_id": "moms-oksitosin-fullbody",
+      "name": "Oksitosin Massage Fullbody",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Menyusui",
+      "duration_minutes": 60,
+      "promo_price": 105000
+    },
+    {
+      "service_id": "moms-induksi-massage",
+      "name": "Induksi Massage",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil Aterm (37+ Minggu)",
+      "duration_minutes": 40,
+      "promo_price": 50000
+    },
+    {
+      "service_id": "moms-induksi-fullbody",
+      "name": "Induksi Massage Fullbody",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil Aterm (37+ Minggu)",
+      "duration_minutes": 60,
+      "promo_price": 105000
+    },
+    {
+      "service_id": "moms-perineum-massage",
+      "name": "Pijat Perineum (Perineal Massage)",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil (Min. 34-36 Minggu)",
+      "duration_minutes": 30,
+      "promo_price": 50000
+    },
+    {
+      "service_id": "moms-prenatal-yoga",
+      "name": "Prenatal Gentle Yoga",
+      "category": "MOMS",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Trimester 2 & 3 (Min. 14 Minggu)",
+      "duration_minutes": 30,
+      "promo_price": 50000
+    },
+    {
+      "service_id": "baby-paket-selapan",
+      "name": "Paket Selapan (Cukur + Pijat Ceria)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "Bayi 0 - 12 Bulan",
+      "duration_minutes": 55,
+      "promo_price": 80000
+    },
+    {
+      "service_id": "baby-paket-selapan-full",
+      "name": "Paket Selapan Full (Cukur + Ceria + Mandi)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "Bayi 0 - 12 Bulan",
+      "duration_minutes": 80,
+      "promo_price": 100000
+    },
+    {
+      "service_id": "baby-paket-selapan-terapi",
+      "name": "Paket Selapan Terapi (Cukur + Terapi Bapil)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "Bayi 0 - 12 Bulan",
+      "duration_minutes": 55,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "baby-cukur-pijat-terapi",
+      "name": "Cukur + Pijat Terapi",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "Bayi 0 - 12 Bulan",
+      "duration_minutes": 55,
+      "promo_price": 90000
+    },
+    {
+      "service_id": "baby-paket-selapan-terapi-full",
+      "name": "Paket Selapan Terapi Full (Cukur + Terapi + Mandi)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": 12,
+      "age_label": "Bayi 0 - 12 Bulan",
+      "duration_minutes": 80,
+      "promo_price": 110000
+    },
+    {
+      "service_id": "bundle-laktasi-oksitosin",
+      "name": "Paket Laktasi Booster (Breast + Oksitosin)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Menyusui",
+      "duration_minutes": 80,
+      "promo_price": 140000
+    },
+    {
+      "service_id": "bundle-mom-baby-ceria",
+      "name": "Paket Mom & Baby Ceria Duo",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "1 Ibu + 1 Bayi",
+      "duration_minutes": 100,
+      "promo_price": 140000
+    },
+    {
+      "service_id": "moms-laktasi-oksitosin-full",
+      "name": "Breast + Oksitosin Fullbody Massage",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Menyusui",
+      "duration_minutes": 100,
+      "promo_price": 155000
+    },
+    {
+      "service_id": "bundle-perineum-yoga",
+      "name": "Paket Pra Kelahiran (Perineum + Yoga)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil (Min. 34-36 Minggu)",
+      "duration_minutes": 60,
+      "promo_price": 85000
+    },
+    {
+      "service_id": "bundle-perineum-breast",
+      "name": "Paket Pra Kelahiran (Perineum + Breast)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil (Min. 36 Minggu)",
+      "duration_minutes": 70,
+      "promo_price": 85000
+    },
+    {
+      "service_id": "bundle-yoga-breast",
+      "name": "Paket Pra Kelahiran (Yoga + Breast)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil (Min. 36 Minggu)",
+      "duration_minutes": 70,
+      "promo_price": 85000
+    },
+    {
+      "service_id": "bundle-pra-kelahiran-lengkap",
+      "name": "Paket Pra Kelahiran Lengkap (Perineum + Yoga + Breast)",
+      "category": "BUNDLE",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Ibu Hamil (Min. 36 Minggu)",
+      "duration_minutes": 100,
+      "promo_price": 150000
+    },
+    {
+      "service_id": "add-on-sinar-moksa",
+      "name": "Sinar Moksa (Infrared / Moxa)",
+      "category": "ADD_ON",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Bayi & Anak",
+      "duration_minutes": 15,
+      "promo_price": 15000
+    },
+    {
+      "service_id": "add-on-nebulizer",
+      "name": "Nebulizer (Uap Tanpa Obat)",
+      "category": "ADD_ON",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Bayi & Anak",
+      "duration_minutes": 20,
+      "promo_price": 35000
+    },
+    {
+      "service_id": "add-on-nebulizer-obat",
+      "name": "Nebulizer + Obat",
+      "category": "ADD_ON",
+      "min_age_months": 0,
+      "max_age_months": null,
+      "age_label": "Bayi & Anak",
+      "duration_minutes": 20,
+      "promo_price": 50000
+    },
+    {
+      "service_id": "NewBorn",
+      "name": "Newborn Treatment (14 Sesi Kunjungan)",
+      "category": "BABY",
+      "min_age_months": 0,
+      "max_age_months": 6,
+      "age_label": "0 - 6 Bulan",
+      "duration_minutes": 120,
+      "promo_price": 500000
+    },
+    {
+      "service_id": "custom-kids-spa",
+      "name": "Custom Kids Bubble Spa",
+      "category": "KIDS",
+      "min_age_months": 12,
+      "max_age_months": 48,
+      "age_label": "1 - 4 Tahun",
+      "duration_minutes": 60,
+      "promo_price": 130000
+    }
+  ],
+  "clinic_policies": [
+    {
+      "topic": "general_homecare_info",
+      "factual_summary": "Kala Moms and Baby Spa melayani perawatan ibu dan bayi langsung di rumah Bunda (Homecare treatment). Seluruh peralatan, matras, aromaterapi, dan minyak khusus disiapkan oleh Bidan kami."
+    },
+    {
+      "topic": "homebase_and_coverage",
+      "factual_summary": "Homebase klinik kami berlokasi di Waru, Sidoarjo (dekat perbatasan Surabaya). Layanan resmi kami adalah Homecare (Bidan yang berkunjung langsung ke rumah Bunda) dengan area jangkauan seluruh Surabaya dan Sidoarjo (maksimal 30 km dari homebase)."
+    },
+    {
+      "topic": "multi_child_transport",
+      "factual_summary": "Biaya transport/ongkir dihitung per satu kali kedatangan (per alamat rumah). Jika Bunda memesan untuk 2 anak, 3 anak, atau Bunda + si kecil dalam 1 kunjungan, ongkir tetap dihitung 1 KALI SAJA."
+    },
+    {
+      "topic": "operational_hours_and_booking",
+      "factual_summary": "Layanan homecare buka setiap hari (Senin - Minggu) pukul 08.00 - 17.00 WIB. Pemilihan slot jam kunjungan dikoordinasikan oleh tim Bidan kami berdasarkan ketersediaan rute bidan yang bertugas."
+    },
+    {
+      "topic": "payment_methods",
+      "factual_summary": "Metode pembayaran tersedia via Transfer Bank (BCA, Mandiri, BRI), QRIS Universal, atau Cash langsung ke Bidan setelah treatment selesai. Nomor rekening resmi BCA a.n Kala Moms and Baby Spa akan diinfokan Admin saat konfirmasi jadwal."
+    },
+    {
+      "topic": "post_vaccine_rules",
+      "factual_summary": "Si kecil sebaiknya dipijat minimal 3 hari setelah imunisasi/vaksinasi, dengan syarat si kecil sudah dalam kondisi sehat dan tidak sedang demam/hangat."
+    },
+    {
+      "topic": "therapist_qualification",
+      "factual_summary": "Seluruh tenaga terapis di Kala Moms & Baby Spa adalah Bidan profesional lulusan D3/D4/Profesi Kebidanan yang memiliki STR (Surat Tanda Registrasi) aktif, terlatih khusus baby & mom treatment, dan menerapkan protokol higienis ketat."
+    }
+  ]
+}

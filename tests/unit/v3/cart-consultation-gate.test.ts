@@ -24,6 +24,7 @@ describe('Cart consultation gate (Fase 3)', () => {
   const OKSITOSIN_NAME = all.find((s) => s.id === 'moms-laktasi-oksitosin-full')?.name
     ?? 'Breast + Oksitosin Fullbody Massage';
   const PULIH_NAME = 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
+  const CERIA_NAME = 'Pijat Bayi Ceria (Rileksasi)';
 
   it('tanya khasiat oksitosin → cart kosong, tercatat di discussedTreatments', () => {
     const session: any = { cartItems: [], children: [] };
@@ -76,5 +77,40 @@ describe('Cart consultation gate (Fase 3)', () => {
     const cart = GoalTracker.syncCartItems(session, history, catalog);
     expect(cart.length).toBe(1);
     expect(cart[0].name).toContain('Pijat Bayi Ceria');
+  });
+
+  it('perbandingan bertanda tanya + tawaran multi-opsi asisten + "sabtu bisa ?" → TIDAK ada paket terkunci (perbandingan ≠ konfirmasi)', () => {
+    const session: any = { cartItems: [], children: [] };
+    const history = [
+      { role: 'user', content: 'kalau yang pulih ceria itu ?' },
+      { role: 'assistant', content: `Bunda, kami ada dua pilihan: ${PULIH_NAME} untuk bapil/kembung, atau ${CERIA_NAME} untuk pijat relaksasi sehat.` },
+      { role: 'user', content: 'sabtu bisa ?' },
+    ];
+    const cart = GoalTracker.syncCartItems(session, history, catalog);
+    // Pertanyaan eksplorasi Turn 5 BUKAN pemilihan paket → gerbang 834128
+    // harus menolak seluruh item yang tidak pernah benar-benar dipilih user.
+    expect(cart.length).toBe(0);
+    expect(session.discussedTreatments || []).toContain(PULIH_NAME);
+  });
+
+  it('hari tanpa komitmen pasca tawaran tunggal TIDAK mengunci cart ("sabtu bisa ?")', () => {
+    const session: any = { cartItems: [], children: [] };
+    const history = [
+      { role: 'assistant', content: `Kami sarankan ${CERIA_NAME} ya Bunda` },
+      { role: 'user', content: 'sabtu bisa ?' },
+    ];
+    const cart = GoalTracker.syncCartItems(session, history, catalog);
+    expect(cart.length).toBe(0);
+    expect(session.discussedTreatments || []).toContain(CERIA_NAME);
+  });
+
+  it('afirmasi berverba komitmen bertanda tanya tegas ("Ambil yang pulih ceria ya??") tetap mengunci paket', () => {
+    const session: any = { cartItems: [], children: [] };
+    const history = [
+      { role: 'user', content: `Ambil yang pulih ceria ya??` },
+    ];
+    const cart = GoalTracker.syncCartItems(session, history, catalog);
+    expect(cart.length).toBe(1);
+    expect(cart[0].name).toContain('Pulih Ceria');
   });
 });

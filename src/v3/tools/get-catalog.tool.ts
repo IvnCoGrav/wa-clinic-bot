@@ -795,17 +795,22 @@ export async function executeGetCatalog(
       closingIntent = 'STATEMENT_ONLY_DURATION';
     } else if (priceClarification) {
       closingIntent = 'PRICE_SUBJECT_CLARIFY';
+    } else if (needsAgeClarification) {
+      // Sesi 783810: klarifikasi usia multi-tier DILETAKKAN DI ATAS
+      // ASK_SCHEDULE/ASK_DOMICILE — usia menentukan paket yang tepat (Bayi vs
+      // Anak), domisili/jadwal menyusul setelah tier pasti. Tanpa prioritas
+      // ini, keluhan multi-tier (Bapil/Pulih/Sembelit) tanpa usia yang dikenal
+      // selalu jatuh ke tanya domisili/jadwal dan mengunci tier default —
+      // akar bocornya label ageTier "Newborn" menjadi sebutan nama layanan.
+      closingIntent = 'CLINICAL_PROBE';
     } else if (hasKnownSymptoms) {
       // Inti perbaikan 234800: gejala dikenal + lokasi BELUM diketahui →
       // tanya domisili, BUKAN todong jadwal. Klasik save-reservation masking
       // sudah menutup booking; ini menutup ajakan jadwal di teks.
       closingIntent = locationKnown ? 'ASK_SCHEDULE' : 'ASK_DOMICILE';
-    } else if (needsAgeClarification) {
-      // Refinement CLINICAL_PROBE (SUBORDINAT terhadap hierarki di atas —
-      // durasi/domisili/jadwal menang atas klarifikasi tier, sesi 951450):
-      // usia multi-tier belum dikenal → tanya bulan/tahun netral.
-      closingIntent = 'CLINICAL_PROBE';
     } else {
+      // Refinement CLINICAL_PROBE (SUBORDINAT terhadap hierarki di atas):
+      // tidak ada gejala/usia unknown non-multi-tier → pemantik klinis umum.
       closingIntent = 'CLINICAL_PROBE';
     }
     const closingDirectives: Record<CatalogClosingIntent, string> = {

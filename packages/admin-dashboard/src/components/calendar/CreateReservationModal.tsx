@@ -35,7 +35,13 @@ import { Reservation } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
 import { useFormDraft } from '../../hooks/useFormDraft';
-import { calculateHaversineKm as calculateHaversine } from '../../utils/geoUtils';
+import { calculateHaversineKm as calculateHaversine, checkTravelTimeSufficiency, estimateTravelMinutesKm } from '../../utils/geoUtils';
+import { 
+  parseTreatmentsFromDetail, 
+  DEFAULT_CLINIC_SERVICES_FALLBACK, 
+  isAddonService, 
+  SelectedTreatmentItem 
+} from '../../utils/treatmentParser';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -45,166 +51,10 @@ const CLINIC_COORDS = {
   name: 'Kala Moms and Baby Spa (Klinik)',
 };
 
-export function isAddonService(t: { name: string; category?: string; serviceType?: string; isAddon?: boolean }): boolean {
-  if (t.isAddon === true || t.category === 'ADD_ON' || t.serviceType === 'ADD_ON') {
-    return true;
-  }
-  if (t.isAddon === false || (t.category && t.category !== 'ADD_ON')) {
-    return false;
-  }
-  const name = (t.name || '').toLowerCase();
-  return (
-    name.includes('(add-on)') ||
-    name.includes('(addon)') ||
-    name.includes('[addon]') ||
-    name.startsWith('add-on') ||
-    name.startsWith('addon') ||
-    name.includes('moksa') ||
-    name.includes('moxa') ||
-    name.includes('nebulizer')
-  );
-}
-
 function formatMinutesToTime(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60) % 24;
+const h = Math.floor(totalMinutes / 60) % 24;
   const m = totalMinutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-export const DEFAULT_CLINIC_SERVICES_FALLBACK: ClinicServiceItem[] = [
-  { id: 'baby-massage-ceria', name: 'Pijat Bayi Ceria (Rileksasi)', category: 'BABY', durationMinutes: 40, originalPrice: 80000, promoPrice: 60000, description: 'Pijat relaksasi bayi', isActive: true },
-  { id: 'baby-massage-pulih-ceria', name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)', category: 'BABY', durationMinutes: 40, originalPrice: 90000, promoPrice: 70000, description: 'Pijat terapi bapil', isActive: true },
-  { id: 'baby-massage-lahap-juara', name: 'Pijat Lahap Juara (Nafsu Makan)', category: 'BABY', durationMinutes: 40, originalPrice: 95000, promoPrice: 75000, description: 'Pijat nafsu makan', isActive: true },
-  { id: 'baby-cukur', name: 'Cukur Rambut Bayi', category: 'BABY', durationMinutes: 15, originalPrice: 30000, promoPrice: 25000, description: 'Cukur rambut bayi', isActive: true },
-  { id: 'baby-tindik', name: 'Tindik Telinga Bayi', category: 'BABY', durationMinutes: 15, originalPrice: 70000, promoPrice: 50000, description: 'Tindik telinga bayi', isActive: true },
-  { id: 'baby-paket-selapan', name: 'Paket Selapan (Cukur + Pijat Ceria)', category: 'BUNDLE', durationMinutes: 55, originalPrice: 85000, promoPrice: 80000, description: 'Paket selapan', isActive: true },
-  { id: 'baby-cukur-pijat-terapi', name: 'Cukur + Pijat Terapi', category: 'BUNDLE', durationMinutes: 55, originalPrice: 95000, promoPrice: 85000, description: 'Cukur + Pijat Terapi', isActive: true },
-  { id: 'moms-prenatal-massage', name: 'Prenatal Massage (Pijat Hamil)', category: 'MOMS', durationMinutes: 60, originalPrice: 125000, promoPrice: 100000, description: 'Pijat hamil', isActive: true },
-  { id: 'moms-prenatal-yoga', name: 'Prenatal Yoga', category: 'MOMS', durationMinutes: 45, originalPrice: 70000, promoPrice: 50000, description: 'Yoga hamil', isActive: true },
-  { id: 'moms-laktasi-oksitosin', name: 'Paket Laktasi (Breast + Oksitosin)', category: 'MOMS', durationMinutes: 75, originalPrice: 100000, promoPrice: 80000, description: 'Paket laktasi', isActive: true },
-  { id: 'moms-laktasi-breast', name: 'Paket Laktasi (Breast Massage)', category: 'MOMS', durationMinutes: 40, originalPrice: 70000, promoPrice: 50000, description: 'Breast massage', isActive: true },
-  { id: 'moms-oksitosin-fullbody', name: 'Oksitosin Massage Fullbody', category: 'MOMS', durationMinutes: 60, originalPrice: 130000, promoPrice: 105000, description: 'Oksitosin fullbody', isActive: true },
-  { id: 'moms-oksitosin-non-fullbody', name: 'Oksitosin Massage Non-Fullbody', category: 'MOMS', durationMinutes: 40, originalPrice: 70000, promoPrice: 50000, description: 'Oksitosin non-fullbody', isActive: true },
-  { id: 'moms-perineum', name: 'Perineum Massage', category: 'MOMS', durationMinutes: 30, originalPrice: 60000, promoPrice: 45000, description: 'Perineum massage', isActive: true },
-  { id: 'moms-laktasi-oksitosin-full', name: 'Breast + Oksitoksin Fullbody Massage', category: 'MOMS', durationMinutes: 75, originalPrice: 200000, promoPrice: 155000, description: 'Breast + Oksitosin Fullbody', isActive: true },
-  { id: 'moms-bundle-pra-kelahiran', name: 'Paket Pra Kelahiran Lengkap (Perineum + Yoga + Breast)', category: 'MOMS', durationMinutes: 105, originalPrice: 185000, promoPrice: 135000, description: 'Paket pra kelahiran lengkap', isActive: true },
-  { id: 'kids-massage-2-4', name: 'Pijat Kids Ceria (Usia 2-4 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 90000, promoPrice: 70000, description: 'Pijat kids 2-4 tahun', isActive: true },
-  { id: 'kids-massage-4-6', name: 'Pijat Kids Ceria (Usia >4-6 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 100000, promoPrice: 80000, description: 'Pijat kids 4-6 tahun', isActive: true },
-  { id: 'kids-massage-6-8', name: 'Pijat Kids Ceria (Usia >6-8 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 110000, promoPrice: 90000, description: 'Pijat kids 6-8 tahun', isActive: true },
-  { id: 'addon-moksa', name: 'Sinar Moksa (Add-on)', category: 'ADD_ON', durationMinutes: 15, originalPrice: 15000, promoPrice: 10000, isAddon: true, description: 'Sinar moksa', isActive: true },
-  { id: 'addon-nebulizer', name: 'Nebulizer (Terapi Uap Add-on)', category: 'ADD_ON', durationMinutes: 20, originalPrice: 50000, promoPrice: 35000, isAddon: true, description: 'Nebulizer add-on', isActive: true },
-  { id: 'addon-nebulizer-obat', name: 'Nebulizer + Obat (Terapi Uap Lengkap)', category: 'ADD_ON', durationMinutes: 20, originalPrice: 85000, promoPrice: 65000, isAddon: true, description: 'Nebulizer lengkap', isActive: true },
-  { id: 'baby-newborn-treatment', name: 'Newborn Treatment', category: 'BABY', durationMinutes: 120, originalPrice: 700000, promoPrice: 500000, description: 'Newborn treatment', isActive: true },
-];
-
-export function parseTreatmentsFromDetail(
-  detail: string | null | undefined,
-  catalog: ClinicServiceItem[] = [],
-  initialPurchaseValue?: number | null,
-  babiesForChildMatch?: Array<{ name: string }> | null
-): SelectedTreatmentItem[] {
-  if (!detail) return [];
-  const effectiveCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_CLINIC_SERVICES_FALLBACK;
-  const cleanSummary = detail
-    .replace(/\[\s*Total\s+.*?\]/gi, '')
-    .trim();
-  
-  const parts = cleanSummary.split(/\s*[\+,]\s*/).map((p) => p.trim()).filter(Boolean);
-  const items: SelectedTreatmentItem[] = [];
-
-  for (let i = 0; i < parts.length; i++) {
-    const p = parts[i];
-    const durationMatch = p.match(/\[\s*(\d+)\s*m.*?\s*\]/i);
-    // Fondasional: jangan default 60 sebelum cocok katalog — biarkan undefined
-    // agar durasi resmi katalog (atau add-on 15m) yang menang di bawah.
-    const explicitDuration = durationMatch ? parseInt(durationMatch[1], 10) : undefined;
-    
-    // Ekstrak nama anak dari kurung sebelum dibersihkan (misal "Pijat Bayi (Nadira)")
-    const childNameInParenMatch = p.match(/\(\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)\s*$/);
-    const childNameInParen = childNameInParenMatch ? childNameInParenMatch[1].trim() : null;
-
-     // Bersihkan tag durasi kurung siku [..] dan nama anak opsional (Anak #1 / Nama), tapi pertahankan nama medis (Rileksasi/Terapi)
-     let cleanName = p.replace(/\[.*?\]/g, '').trim();
-     cleanName = cleanName.replace(/\(\s*(?:Anak\s*#?\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)$/i, '').trim();
-
-     if (!cleanName) continue;
-
-      // Auto-Clean Dummy Hold Card: skip [HOLD] Slot Ditawarkan placeholder
-      if (/^\[?hold\]?\s*slot\s*ditawarkan|slot\s*ditawarkan/i.test(cleanName)) {
-        continue;
-      }
-
-    // Normalisasi buang token (add-on) agar "Sinar Moksa" cocok ke "Sinar Moksa (Add-on)".
-    const normKey = (s: string) =>
-      s.toLowerCase().replace(/\(add-?on\)|\[add-?on\]/g, '').replace(/[^a-z0-9]/g, '').replace(/addon/g, '');
-    const normTarget = normKey(cleanName);
-
-    const findHierarchical = (cat: ClinicServiceItem[]) => {
-      // Tingkat 1: exact
-      let m = cat.find((s) => normKey(s.name) === normTarget);
-      if (m) return m;
-      // Tingkat 2: non-bundle yang termuat di target (prioritas layanan tunggal)
-      m = cat.find((s) => {
-        if ((s.category as any) === 'BUNDLE') return false;
-        const normS = normKey(s.name);
-        return normTarget.includes(normS);
-      });
-      if (m) return m;
-      // Tingkat 3: fallback umum (termasuk bundle jika tidak ada yang cocok)
-      m = cat.find((s) => {
-        const normS = normKey(s.name);
-        return normTarget.includes(normS);
-      });
-      return m;
-    };
-
-    let matchedService = findHierarchical(effectiveCatalog);
-    if (!matchedService) {
-      matchedService = findHierarchical(DEFAULT_CLINIC_SERVICES_FALLBACK);
-    }
-
-    let price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
-    
-    // Jika hanya 1 treatment dan ada initialPurchaseValue dari DB (> 0), prioritaskan purchase_value asli!
-    if (parts.length === 1 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0) {
-      price = initialPurchaseValue;
-    } else if (price === 0 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0 && i === 0) {
-      price = initialPurchaseValue;
-    }
-
-    const category = matchedService ? matchedService.category : 'BABY';
-    const isAddon = matchedService ? (matchedService.isAddon || isAddonService(matchedService)) : isAddonService({ name: cleanName });
-
-    let assignedChildIndex = 0;
-    if (childNameInParen && babiesForChildMatch && babiesForChildMatch.length > 0) {
-      const idx = babiesForChildMatch.findIndex((b) => b.name.trim().toLowerCase() === childNameInParen.toLowerCase());
-      if (idx >= 0) assignedChildIndex = idx;
-    }
-
-    items.push({
-      instanceId: `edit-treatment-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
-      serviceId: matchedService?.id || `custom-${i + 1}`,
-      name: matchedService?.name || cleanName,
-      category: (category as any) || 'BABY',
-      durationMinutes: explicitDuration ?? matchedService?.durationMinutes ?? (isAddon ? 15 : 60),
-      price: price || 0,
-      isAddon: isAddon,
-      assignedChildIndex,
-    });
-  }
-
-  return items;
-}
-
-export interface SelectedTreatmentItem {
-  instanceId: string;
-  serviceId: string;
-  name: string;
-  category: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | 'ADD_ON';
-  durationMinutes: number;
-  price: number;
-  isAddon?: boolean;
-  assignedChildIndex?: number; // 0 for Child #1, 1 for Child #2, -1 for Moms/General
 }
 
 export interface SlotRecommendation {
@@ -1008,7 +858,18 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     const bufferMinutes = 20;
     const selectedEndMin = selectedStartMin + dur + bufferMinutes;
 
-    const staffCollisions: Array<{ id: string; customerName: string; time: string; duration: number; treatment: string; staffName: string }> = [];
+    const staffCollisions: Array<{ 
+      id: string; 
+      customerName: string; 
+      time: string; 
+      duration: number; 
+      treatment: string; 
+      staffName: string;
+      collisionType?: 'OVERLAP' | 'INSUFFICIENT_TRAVEL_TIME';
+      requiredMinutes?: number;
+      availableMinutes?: number;
+      distanceKm?: number;
+    }> = [];
     const customerCollisions: Array<{ id: string; time: string; treatment: string }> = [];
 
     for (const r of bookedReservationsForDate) {
@@ -1037,7 +898,70 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           duration: rDur,
           treatment: r.treatment_detail || 'Treatment',
           staffName: staffObj?.name || 'Bidan Terpilih',
+          collisionType: 'OVERLAP',
         });
+      }
+
+      // Travel time collision check (only for same staff, non-overlapping bookings)
+      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && !isOverlap) {
+        const rCust = r.customer as any;
+        const selectedCust = selectedCustomerInfo;
+        
+        // Check gap from previous booking end to selected start
+        if (rEndMin <= selectedStartMin) {
+          const timeGapMinutes = selectedStartMin - rEndMin;
+          const travelCheck = checkTravelTimeSufficiency(
+            rCust?.lat,
+            rCust?.lng,
+            selectedCust?.lat,
+            selectedCust?.lng,
+            timeGapMinutes
+          );
+          if (travelCheck && !travelCheck.sufficient) {
+            const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+            staffCollisions.push({
+              id: r.id,
+              customerName: rCust?.name || 'Pasien Sebelumnya',
+              time: timeStr,
+              duration: rDur,
+              treatment: r.treatment_detail || 'Treatment',
+              staffName: staffObj?.name || 'Bidan Terpilih',
+              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
+              requiredMinutes: travelCheck.requiredMinutes,
+              availableMinutes: travelCheck.availableMinutes,
+              distanceKm: travelCheck.distanceKm,
+            });
+          }
+        }
+        
+        // Check gap from selected end to next booking start
+        if (selectedEndMin <= rStartMin) {
+          const timeGapMinutes = rStartMin - selectedEndMin;
+          const travelCheck = checkTravelTimeSufficiency(
+            selectedCust?.lat,
+            selectedCust?.lng,
+            rCust?.lat,
+            rCust?.lng,
+            timeGapMinutes
+          );
+          if (travelCheck && !travelCheck.sufficient) {
+            const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+            staffCollisions.push({
+              id: r.id,
+              customerName: rCust?.name || 'Pasien Berikutnya',
+              time: timeStr,
+              duration: rDur,
+              treatment: r.treatment_detail || 'Treatment',
+              staffName: staffObj?.name || 'Bidan Terpilih',
+              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
+              requiredMinutes: travelCheck.requiredMinutes,
+              availableMinutes: travelCheck.availableMinutes,
+              distanceKm: travelCheck.distanceKm,
+            });
+          }
+        }
       }
 
       const rCustId = r.customer_id || (r.customer as any)?.id;
@@ -1052,7 +976,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
 
     return { staffCollisions, customerCollisions };
-  }, [bookingDate, bookingTime, totalScheduledDurationMinutes, assignedStaffId, bookedReservationsForDate, mode, (initialReservation as any)?.id, customerId, effectiveStaffList]);
+  }, [bookingDate, bookingTime, totalScheduledDurationMinutes, assignedStaffId, bookedReservationsForDate, mode, (initialReservation as any)?.id, customerId, effectiveStaffList, selectedCustomerInfo]);
 
   // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
   const handleGenerateRecommendations = () => {
@@ -2124,7 +2048,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
             </div>
 
-            {/* Real-time Overlap Warning Banner */}
+            {/* Real-time Overlap & Travel Time Warning Banner */}
             {realtimeCollisions.staffCollisions.length > 0 && (
               <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
                 <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
@@ -2133,13 +2057,20 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <ul className="space-y-1 text-[11px]">
                   {realtimeCollisions.staffCollisions.map((b) => (
                     <li key={b.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate">• Pasien <strong>Ny. {b.customerName}</strong> ({b.treatment})</span>
+                      <span className="truncate">
+                        • Pasien <strong>Ny. {b.customerName}</strong> ({b.treatment})
+                        {b.collisionType === 'INSUFFICIENT_TRAVEL_TIME' && (
+                          <span className="ml-1.5 px-1.5 py-0.5 text-[9px] bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded font-bold">
+                            WAKTU TEMPIH TIDAK CUKUP ({b.distanceKm?.toFixed(1)}km → butuh ~{b.requiredMinutes}m, tersedia {b.availableMinutes}m)
+                          </span>
+                        )}
+                      </span>
                       <span className="font-mono font-bold shrink-0">{b.time} WIB ({b.duration}m)</span>
                     </li>
                   ))}
                 </ul>
                 <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                  Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m). Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
+                  Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m) atau waktu tempuh tidak mencukupi. Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
                 </p>
               </div>
             )}

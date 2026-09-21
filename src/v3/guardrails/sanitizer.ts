@@ -93,10 +93,30 @@ export class OutputSanitizer {
     // OpenAI-compatible kadang memuntahkan format tool XML ke properti teks
     // `content`. Pembersihan teknis mesin non-semantik — tak menyentuh kata
     // bahasa alami customer (mis. kata "result" tanpa kurung siku lolos).
-    text = text.replace(/<｜｜DSML｜｜[\s\S]*?<\/｜｜DSML｜｜\s*(?:calls)?>/gi, '');
+    //
+    // Plan Fase 4 revisi (sesi 89-turn, log llm-2026-09-21): pola riil model
+    // adalah `<\u009C\u009CDSML\u009C\u009D ...` — pembungkus tag = KARAKTER
+    // KONTROL C1 (U+009C/U+009D) atau pipe fullwidth (｜), slash penutup DI
+    // ANTARA wrapper chars. Regex lama `<｜｜DSML｜｜` tidak pernah match.
+    //
+    // KONTRAK (trim-from-first, KHUSUS DSML): Draf Call 2 yang memuat artefak
+    // native tool-call DSML dianggap DRAF KORUP — seluruh konten dari artefak
+    // DSML pertama sampai akhir dibuang; hanya teks natural SEBELUM artefak
+    // yang dipertahankan. Sisa yang jadi kosong dipulihkan recovery grounded
+    // di guardrail-pipeline (CATALOG/DELIVERY_RECOVERY). Teks SETELAH artefak
+    // TIDAK dijamin — sanitizer tak bisa membedakan kalimat natural vs
+    // fragmen mesin (anti-hasil-parsial-menyesatkan).
+    //
+    // <result>/<tool_call> berperilaku LAIN: tag XML berpasangan rapi →
+    // hapus TAG-nya saja (pasangan), teks di sekitarnya tetap sah.
+    const DSML_RE = /<[^\w\s]{0,4}\/?[^\w\s]{0,4}DSML[^\w\s]{0,4}/i;
+    const dsmlMatch = text.match(DSML_RE);
+    if (dsmlMatch && dsmlMatch.index != null) {
+      text = text.slice(0, dsmlMatch.index);
+    }
     text = text.replace(/<result>[\s\S]*?<\/result>/gi, '');
     text = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '');
-    text = text.replace(/<\/?(?:calls|invoke|parameter)[^>]*>/gi, '');
+    text = text.replace(/<\/?(?:calls|invoke|parameter|name|args)[^>]*>/gi, '');
 
     // 2. Hapus blok kode markdown jika model membungkus balasan dengan ```
     text = text.replace(/^```(?:markdown|text)?\s*/i, '').replace(/\s*```$/i, '');

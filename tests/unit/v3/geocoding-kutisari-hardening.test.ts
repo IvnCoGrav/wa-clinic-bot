@@ -50,4 +50,24 @@ describe('Geocoding Kutisari Hardening (local-first)', () => {
     expect(out.message).not.toMatch(/tawarkan[^.]*share location/i);
     expect(out.message).toMatch(/tanpa menanyakan/i);
   });
+
+  it('SESI 662917: "Wonokromo" ambigu kecamatan -> suggestedTemplateReply TANPA anjuran share location', async () => {
+    const out = await executeCalculateDelivery({ locationText: 'Wonokromo' });
+    expect(out.success).toBe(false);
+    expect(out.suggestedTemplateReply).toBeTruthy();
+    // Replay Turn-3 sesi 662917 di level tool: balasan customer-facing
+    // (suggestedTemplateReply → DeliveryFastPath verbatim) WAJIB bebas
+    // solicitation shareloc — bukan hanya message internal untuk LLM.
+    expect(out.suggestedTemplateReply).toMatch(/kelurahan|desa|mana ya/i);
+    expect(out.suggestedTemplateReply).not.toMatch(/share\s*loc(?:ation|k)?|sharelock/i);
+    expect(out.suggestedTemplateReply).not.toMatch(/Atau jika berkenan/i);
+  });
+
+  it('suggestedTemplateReply semua hasil tool bebas solicitation shareloc (kecamatan tanpa koordinat)', async () => {
+    const out = await executeCalculateDelivery({ locationText: 'Sedati' });
+    if (out.suggestedTemplateReply) {
+      expect(out.suggestedTemplateReply).not.toMatch(/share\s*loc(?:ation|k)?|sharelock/i);
+      expect(out.suggestedTemplateReply).not.toMatch(/Atau jika berkenan/i);
+    }
+  });
 });

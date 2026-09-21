@@ -269,17 +269,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         where.treatment_category = categoryParam;
       }
 
-      // Search query (customer name, phone, treatment detail, address, raw text)
+      // Search query (customer name, phone, treatment detail, kelurahan, kecamatan, kota, raw text)
       if (searchParam) {
         where.AND = [
           ...(where.AND || []),
           {
             OR: [
               { treatment_detail: { contains: searchParam, mode: 'insensitive' } },
-              { address: { contains: searchParam, mode: 'insensitive' } },
               { raw_text: { contains: searchParam, mode: 'insensitive' } },
               { customer: { name: { contains: searchParam, mode: 'insensitive' } } },
               { customer: { phone: { contains: searchParam } } },
+              { customer: { kelurahan: { contains: searchParam, mode: 'insensitive' } } },
+              { customer: { kecamatan: { contains: searchParam, mode: 'insensitive' } } },
+              { customer: { kota: { contains: searchParam, mode: 'insensitive' } } },
             ],
           },
         ];
@@ -523,10 +525,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             const q = searchParam.toLowerCase();
             data = data.filter((r) =>
               (r.treatment_detail || '').toLowerCase().includes(q) ||
-              (r.address || '').toLowerCase().includes(q) ||
               (r.raw_text || '').toLowerCase().includes(q) ||
               (r.customer?.name || '').toLowerCase().includes(q) ||
-              (r.customer?.phone || '').includes(q)
+              (r.customer?.phone || '').includes(q) ||
+              (r.customer?.kelurahan || '').toLowerCase().includes(q) ||
+              (r.customer?.kecamatan || '').toLowerCase().includes(q) ||
+              (r.customer?.kota || '').toLowerCase().includes(q)
             );
           }
           if (startDateParam && endDateParam) {

@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { calculateLlmCost, deriveProvider, isDeepSeekPeakHour } from '../../src/utils/cost-calculator';
+import {
+  calculateLlmCost,
+  deriveProvider,
+  isDeepSeekPeakHour,
+  getModelPricing,
+} from '../../src/utils/cost-calculator';
 
-describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Hours', () => {
+describe('Cost Calculator Unit Tests — Provider-Aware & Live Pricing (2026-09)', () => {
   it('should calculate accurate cost for primary model qwen3.7-flash-2026-07-15', () => {
     // 10,000 prompt tokens (8,000 cached, 2,000 miss), 1,000 completion tokens
     // Miss: 2k * ($0.03/1000 * 18000) = 2 * 540 = 1080 / 1000 * 2 = Rp 1.08
@@ -13,6 +18,7 @@ describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Ho
     expect(result.promptCostIdr).toBe(1.944);
     expect(result.completionCostIdr).toBe(2.34);
     expect(result.totalCostIdr).toBe(4.284);
+    expect(result.pricingSource).toBe('verified');
   });
 
   it('should calculate accurate flat cost for minimax-m2.7-highspeed', () => {
@@ -52,30 +58,47 @@ describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Ho
     expect(isDeepSeekPeakHour(earlyMorningDate)).toBe(false);
   });
 
-  it('should calculate accurate cost for deepseek-v4-flash during Peak Hours ($0.44/1M in, $1.32/1M out)', () => {
+  it('should calculate accurate cost for deepseek-v4-flash during Peak Hours ($0.44/1M in, $1.32/1M out) via DeepSeek Direct', () => {
     // 1,006 prompt tokens (0 cached), 1,500 completion tokens at 10:19 AM WIB (03:19 UTC)
     // Peak Miss: 1.006k * ($0.44/1000 * 18000) = 1.006 * 7920 = Rp 7.96752
     // Peak Output: 1.5k * ($1.32/1000 * 18000) = 1.5 * 23760 = Rp 35.64
     const peakDate = new Date('2026-08-24T03:19:00Z');
-    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, peakDate);
-    expect(result.provider).toBe('DeepSeek');
+    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, { timestamp: peakDate, baseUrl: 'https://api.deepseek.com' });
+    expect(result.provider).toBe('DeepSeek Direct');
     expect(result.isPeak).toBe(true);
     expect(result.promptCostIdr).toBe(7.9675);
     expect(result.completionCostIdr).toBe(35.64);
     expect(result.totalCostIdr).toBe(43.6075);
+    expect(result.pricingSource).toBe('verified');
   });
 
-  it('should calculate accurate cost for deepseek-v4-flash during Off-Peak Hours ($0.22/1M in, $0.66/1M out)', () => {
+  it('should calculate accurate cost for deepseek-v4-flash during Off-Peak Hours ($0.22/1M in, $0.66/1M out) via DeepSeek Direct', () => {
     // 1,006 prompt tokens (0 cached), 1,500 completion tokens at 23:00 WIB (16:00 UTC)
     // Off-Peak Miss: 1.006k * ($0.22/1000 * 18000) = 1.006 * 3960 = Rp 3.98376
     // Off-Peak Output: 1.5k * ($0.66/1000 * 18000) = 1.5 * 11880 = Rp 17.82
     const offPeakDate = new Date('2026-08-24T16:00:00Z');
-    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, offPeakDate);
-    expect(result.provider).toBe('DeepSeek');
+    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, { timestamp: offPeakDate, baseUrl: 'https://api.deepseek.com' });
+    expect(result.provider).toBe('DeepSeek Direct');
     expect(result.isPeak).toBe(false);
     expect(result.promptCostIdr).toBe(3.9838);
     expect(result.completionCostIdr).toBe(17.82);
     expect(result.totalCostIdr).toBe(21.8038);
+    expect(result.pricingSource).toBe('verified');
+  });
+
+  it('should calculate updated DeepSeek Direct rate for deepseek-flash (V4.1-Flash $0.15/$0.60 off-peak)', () => {
+    // 10,000 prompt (8,000 cached, 2,000 miss), 1,000 completion, off-peak
+    // Miss: 2k * ($0.15/1000 * 18000) = 2 * 2700/1000 = Rp 5.40
+    // Hit: 8k * ($0.003/1000 * 18000) = 8 * 54/1000 = Rp 0.432
+    // Output: 1k * ($0.60/1000 * 18000) = Rp 10.80
+    const offPeakDate = new Date('2026-08-24T16:00:00Z');
+    const result = calculateLlmCost('deepseek-flash', 10000, 1000, 8000, { timestamp: offPeakDate, baseUrl: 'https://api.deepseek.com' });
+    expect(result.provider).toBe('DeepSeek Direct');
+    expect(result.promptCostIdr).toBe(5.832);
+    expect(result.completionCostIdr).toBe(10.8);
+    expect(result.totalCostIdr).toBe(16.632);
+    expect(result.isPeak).toBe(false);
+    expect(result.pricingSource).toBe('verified');
   });
 
   it('should calculate accurate cost for fallback model gpt-5-nano', () => {
@@ -90,10 +113,11 @@ describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Ho
     expect(result.totalCostIdr).toBe(4.86);
   });
 
-  it('should calculate accurate cost for deepseek-chat (DeepSeek Direct)', () => {
-    const result = calculateLlmCost('deepseek-chat', 10000, 1000, 8000);
+  it('should calculate accurate cost for deepseek-chat (DeepSeek Direct alias legacy)', () => {
+    const result = calculateLlmCost('deepseek-chat', 10000, 1000, 8000, { baseUrl: 'https://api.deepseek.com' });
     expect(result.provider).toBe('DeepSeek Direct');
     expect(result.totalCostIdr).toBeGreaterThan(0);
+    expect(result.pricingSource).toBe('verified');
   });
 
   it('should calculate accurate cost for embedding models with 0 completion cost', () => {
@@ -119,22 +143,53 @@ describe('Cost Calculator Unit Tests — Updated 2026 Provider Pricing & Peak Ho
     expect(deriveProvider('https://kenari.id')).toBe('Kenari');
   });
 
-  it('should calculate accurate cost for Kenari deepseek-v4-1-flash', () => {
+  it('should calculate LIVE Kenari cost for deepseek-v4-1-flash (Rp2.750 in / Rp65 hit / Rp5.500 out per 1M, FLAT)', () => {
     // 10,000 prompt tokens (8,000 cached, 2,000 miss), 1,000 completion tokens
-    // Miss: 2k * 0.15 = Rp 0.30
-    // Hit: 8k * 0.004 = Rp 0.032
-    // Output: 1k * 0.30 = Rp 0.30
-    const result = calculateLlmCost('deepseek-v4-1-flash', 10000, 1000, 8000);
+    // Miss: 2k * 2.75 = Rp 5.50
+    // Hit: 8k * 0.065 = Rp 0.52
+    // Output: 1k * 5.50 = Rp 5.50
+    const result = calculateLlmCost('deepseek-v4-1-flash', 10000, 1000, 8000, { baseUrl: 'https://kenari.id/v1' });
     expect(result.provider).toBe('Kenari');
-    expect(result.promptCostIdr).toBe(0.332);
-    expect(result.completionCostIdr).toBe(0.30);
-    expect(result.totalCostIdr).toBe(0.632);
+    expect(result.promptCostIdr).toBe(6.02);
+    expect(result.completionCostIdr).toBe(5.5);
+    expect(result.totalCostIdr).toBe(11.52);
+    expect(result.isPeak).toBe(false);
+    expect(result.pricingSource).toBe('verified');
+  });
+
+  it('should apply LIVE Kenari flat price during DeepSeek Peak Hours (tidak kena peak)', () => {
+    const peakDate = new Date('2026-08-24T03:19:00Z');
+    const result = calculateLlmCost('deepseek-v4-1-flash', 1006, 1500, 0, { timestamp: peakDate, baseUrl: 'https://kenari.id/v1' });
+    expect(result.provider).toBe('Kenari');
+    expect(result.isPeak).toBe(false);
+    expect(result.totalCostIdr).toBeGreaterThan(0);
+  });
+
+  it('should mark SumoPod-hosted deepseek-v4-flash as fallback-unverified (tarif SumoPod tidak dipublikasikan)', () => {
+    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
+    expect(result.provider).toBe('SumoPod');
+    expect(result.pricingSource).toBe('fallback-unverified');
+  });
+
+  it('should mark unknown netra model as fallback-unverified instead of silent DEFAULT', () => {
+    const result = calculateLlmCost('deepseek-v4-flash-0731:netra', 100, 50, 0);
+    expect(result.pricingSource).toBe('fallback-unverified');
+  });
+
+  it('getModelPricing exposes pricingSource + provider-aware lookup', () => {
+    const kenari = getModelPricing('deepseek-v4-1-flash', { baseUrl: 'https://kenari.id/v1' });
+    expect(kenari.provider).toBe('Kenari');
+    expect(kenari.pricingSource).toBe('verified');
+
+    const sumopod = getModelPricing('deepseek-v4-flash', { baseUrl: 'https://ai.sumopod.com/v1' });
+    expect(sumopod.provider).toBe('SumoPod');
+    expect(sumopod.pricingSource).toBe('fallback-unverified');
   });
 
   it('should calculate zero cost for Kenari free model step-3-7-flash:free', () => {
-    const result = calculateLlmCost('step-3-7-flash:free', 10000, 1000);
+    const result = calculateLlmCost('step-3-7-flash:free', 10000, 1000, 0, { baseUrl: 'https://kenari.id/v1' });
     expect(result.provider).toBe('Kenari');
     expect(result.totalCostIdr).toBe(0);
+    expect(result.pricingSource).toBe('verified');
   });
 });
-
