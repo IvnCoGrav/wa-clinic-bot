@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-21 — Resolusi Total Deadlock Antrean Follow-Up & Penjadwalan Ulang 141 Record (`follow-up.service.ts`)
+
+- **Latar Belakang & Gejala:**
+  - Pengguna melaporkan bahwa beberapa hari terakhir tidak ada pesan follow-up yang terkirim.
+  - Audit database & log mesin produksi membuktikan pengiriman pesan memang terhenti total sejak 16 September 2026 jam 13:56 WIB (setelah berhasil mengirim 47 pesan pada 14–16 Sept).
+- **Akar Masalah Sistemik (Head-of-Line Blocking Deadlock):**
+  - Akumulasi 46 record pengingat H-1 dan review H+1 (`REMINDER_H1`, `REVIEW_H1_BABY`, `REVIEW_H1_MOMS`) berstatus `PENDING` dengan waktu lampau di database.
+  - Sesuai kebijakan klinik, tipe ini di-postpone (skip) oleh worker. Namun pada container produksi yang lama, query database `take: 20` teratas mengambil record tanpa memfilter tipe postponed.
+  - Pada 16 September siang, jumlah record postponed mencapai batas jenuh 20 record sehingga memenuhi seluruh batch antrean. Setiap 15 menit, worker men-skip ke-20 record tersebut (`processed: 0`), memblokir 141 antrean sah (`QUEUED`) di belakangnya.
+- **Tindakan Perbaikan Fondasional yang Telah Selesai Dieksekusi:**
+  1. **Pembersihan Record Postponed Kadaluarsa**: Memutasi 46 record reminder/review `PENDING` yang jadwalnya lewat menjadi `CANCELLED` sesuai kebijakan.
+  2. **Penjadwalan Ulang (*Rescheduling*) 141 Antrean Tertahan**:
+     - Menjadwalkan ulang seluruh 141 antrean `QUEUED` (8 repeat order `NEXT_TREATMENT` dan 133 prospek `NO_PURCHASE`) ke rentang **22 September s/d 03 Oktober 2026** pada jam operasional kerja (09:00–16:30 WIB).
+     - Seluruh hari mematuhi kuota ketat **maksimal 25 pesan/hari** dan memprioritaskan repeat order `NEXT_TREATMENT` pada Selasa pagi (10 pesan) dan Rabu pagi (1 pesan).
+  3. **Deployment Kode Anti-Deadlock ke Live Server**:
+     - Mengunggah dan men-deploy kode `src/services/follow-up.service.ts` terbaru ke container `app` di server via rebuild & force-recreate container `app`.
+     - Query worker kini memiliki gerbang filter permanen `type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] }` dan auto-cancel untuk `PENDING` expired.
+     - **Keamanan Terjamin**: Container WAHA WhatsApp tidak disentuh (uptime 5 weeks, 0 session drop, tanpa scan QR ulang).
+- **Verifikasi**:
+  - Sisa antrean overdue: **0 record**.
+  - Distribusi harian 22 Sept s/d 03 Okt: Seluruhnya <= 25 pesan/hari.
+  - Container `wa-clinic-bot-app-1` aktif dan sehat (`Up`, koneksi Redis, BullMQ 5 shards, webhook provider sinkron).
+
 #### 2026-09-21 — Kontrak Konsultasi vs Transaksi + Prioritas Usia Multi-Tier (Sesi 783810)
 
 - **Akar masalah (audit multi-lapis antar-seam):** (1) `userConfirmedNames` di `cart-manager` memfilter fuzzy hanya dengan `isDurationOnlyQuestion` — pertanyaan eksplorasi consultative ("kalau yang pulih ceria itu ?") lolos fuzzy -> multi-offer asisten + "sabtu bisa ?" mengunci `Pijat Bayi Pulih Ceria` yang TIDAK pernah dipilih (ghost cart); (2) predikat konsultatif INLINE (`'?' && !commit && !day`) terduplikasi lintas seam → drift; (3) `detectAgreedTreatment` me-seed `selectedTreatment` dari penyebutan nama penuh DALAM pertanyaan bertanda `?`; (4) hierarki `closingIntent` menaruh `hasKnownSymptoms` DI ATAS `needsAgeClarification` → keluhan multi-tier tanpa usia lompat ke ASK_SCHEDULE/ASK_DOMICILE tanpa tanya usia → tier default terkunci + LLM menyebut label tier (mis. "Newborn") sebagai nama layanan (nama itu tidak ada di katalog).
