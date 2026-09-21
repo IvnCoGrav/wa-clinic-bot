@@ -317,7 +317,8 @@ export class ContextGrounder {
         const { treatmentCatalogService } = await import('../../../services/treatment-catalog.service');
         const agreed = detectAgreedTreatment(
           conversationHistory,
-          treatmentCatalogService.getAllServices(true, tenantId).map((s) => s.name)
+          treatmentCatalogService.getAllServices(true, tenantId).map((s) => s.name),
+          session
         );
         if (agreed) {
           session = await GoalTracker.updateGoalSession(conversationId, {

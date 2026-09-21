@@ -202,7 +202,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const calcCostFor = async (prompt: number, completion: number, cachedPrompt = 0): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.selectedModel, prompt, completion, cachedPrompt).totalCostIdr || 0;
+      return calculateLlmCost(turn.selectedModel, prompt, completion, cachedPrompt, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -210,7 +210,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const finishCost = async (): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, 0).totalCostIdr || 0;
+      return calculateLlmCost(turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, 0, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -680,6 +680,12 @@ export class GenerationStage {
       phaseDirective,
       preGroundingBlock,
     ].filter(Boolean);
+    // Plan Fase 4 (sesi 89-turn, DSML bleeding): lapis SEKUNDER setelah
+    // sanitizer diperbaiki — deklarasi peran Call 2 sebagai penghasil bahasa
+    // natural murni. Gerbang utama tetap sanitizer (kode), bukan kepatuhan ini.
+    fullSystemPromptParts.push(
+      '[PERAN GENERASI JAWABAN (CALL 2)]: Tugas Anda HANYA menyusun balasan percakapan ramah dalam bahasa Indonesia untuk Bunda berdasarkan data resmi tool di atas. Seluruh pemanggilan data/tool SUDAH SELESAI di tahap sebelumnya — DILARANG memanggil fungsi, mengeluarkan sintaks tool, XML, atau tag khusus model apa pun dalam balasan.'
+    );
     if (saveReservationSuccess && (saveReservationSuccess as any).result?.isSameDay === true) {
       fullSystemPromptParts.push(
         `[MANDAT SAME-DAY BOOKING — WAJIB DIPATUHI (sesi 462651)]: Customer meminta jadwal HARI INI. Balasan WAJIB memuat kalimat disclaimer resmi dari tool: "${SAME_DAY_DISCLAIMER}". DILARANG membuang atau memperhalus kalimat kemungkinan jadwal penuh — ekspektasi customer WAJIB diturunkan.`

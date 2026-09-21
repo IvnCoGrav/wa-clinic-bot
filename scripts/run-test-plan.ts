@@ -12,6 +12,12 @@
  *   npx tsx scripts/run-test-plan.ts --llm      # pakai LLM asli (key dari .env)
  *   npx tsx scripts/run-test-plan.ts --cat D --llm   # hanya kategori D
  *   npx tsx scripts/run-test-plan.ts --only 25  # hanya skenario 25
+ *
+ * Mode Suite v2 (119 kasus dari tests/fixtures/test-suite-v2.json):
+ *   npx tsx scripts/run-test-plan.ts --suite=v2            # semua 119 (offline)
+ *   npx tsx scripts/run-test-plan.ts --suite=v2 --llm      # pakai LLM asli
+ *   npx tsx scripts/run-test-plan.ts --suite=v2 --id=RF-01 # 1 kasus (gate: + --offline)
+ *   npx tsx scripts/run-test-plan.ts --suite=v2 101-119    # rentang posisional (index fixture)
  */
 
 /* eslint-disable no-console */
@@ -27,11 +33,24 @@ process.env.BURST_COALESCE_MS = '0';
 let RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results.json');
 let REPORT_FILE = path.join(__dirname, '..', 'test-results', 'testing-plan-report.md');
 
+/** Baca argumen CLI (dipanggil sebelum `main` selesai parsing). */
+function valOfLocal(flag: string): string {
+  const a = process.argv.slice(2);
+  const eq = a.find((x) => x.startsWith(`${flag}=`));
+  if (eq) return eq.split('=')[1] || '';
+  const idx = a.indexOf(flag);
+  return idx >= 0 ? a[idx + 1] || '' : '';
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const useLLM = args.includes('--llm');
   const V2 = args.includes('--v2');
-  if (V2) {
+  const suiteV2 = valOfLocal('--suite').toLowerCase() === 'v2';
+  if (suiteV2) {
+    RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results-suite-v2.json');
+    REPORT_FILE = path.join(__dirname, '..', 'test-results', 'test-suite-v2-report.md');
+  } else if (V2) {
     RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results-v2.json');
     REPORT_FILE = path.join(__dirname, '..', 'test-results', 'testing-plan-report-v2.md');
   }
@@ -41,10 +60,31 @@ async function main() {
     const idx = args.indexOf(flag);
     return idx >= 0 ? args[idx + 1] || '' : '';
   };
-  const onlyNo = parseInt(valOf('--only'), 10);
+  let onlyNo = parseInt(valOf('--only'), 10);
   const onlyCat = valOf('--cat').toUpperCase();
-  const fromNo = parseInt(valOf('--from'), 10);
-  const toNo = parseInt(valOf('--to'), 10);
+  let fromNo = parseInt(valOf('--from'), 10);
+  let toNo = parseInt(valOf('--to'), 10);
+  const onlyId = valOf('--id').toUpperCase();
+
+  // Rentang posisional ala runner lama ("101-119", "101..119", "101 119", atau "101")
+  // — hanya aktif di mode --suite=v2 supaya perilaku --from/--to legacy tidak berubah.
+  if (suiteV2 && !onlyId) {
+    const positional = args.filter((a) => !a.startsWith('-'));
+    const rangeMatch = /^(\d{1,3})\s*(?:-|\.\.)\s*(\d{1,3})$/.exec(positional[0] || '');
+    if (rangeMatch) {
+      const a = parseInt(rangeMatch[1], 10);
+      const b = parseInt(rangeMatch[2], 10);
+      if (a > 0 && b >= a && b <= 200) {
+        fromNo = a;
+        toNo = b;
+      }
+    } else if (/^\d{1,3}$/.test(positional[0] || '')) {
+      const solo = parseInt(positional[0], 10);
+      if (solo > 0 && solo <= 200 && isNaN(fromNo)) {
+        onlyNo = solo;
+      }
+    }
+  }
 
   // Muat .env (jangan override WAHA_MOCK/BURST yang sudah diset di atas).
   await import('dotenv/config');
@@ -101,6 +141,9 @@ async function main() {
     idleHrsAgo?: number;
     burst?: boolean;
     abuseExpectBlock?: boolean;
+    /** Id fixture suite v2 (CASE-001, RF-01, ...). Dipakai hanya mode --suite=v2. */
+    id?: string;
+    expected?: any;
   }
 
   const S: Scenario[] = [];
@@ -198,6 +241,58 @@ async function main() {
   S.push({ no: 49, category: 'H', title: 'Abuse — uninvited link -> block', steps: [text('cek dulu di sini yuk http://promo-abal.xyz')], abuseExpectBlock: true });
   S.push({ no: 50, category: 'H', title: 'Idle reopen — warm greeting', steps: [text('Halo lagi bu')], idleHrsAgo: 48 });
 
+  // ============ 4b. MODE --suite=v2: muat fixture & bangun skenario replay ============
+  let resetStoresForSuite: () => void = () => {};
+  if (suiteV2) {
+    const {
+      setCustomerRepository,
+      InMemoryCustomerRepository,
+    } = await import('../src/repositories/customer.repository');
+    const {
+      setConversationRepository,
+      InMemoryConversationRepository,
+    } = await import('../src/repositories/conversation.repository');
+    const {
+      setMessageRepository,
+      InMemoryMessageRepository,
+    } = await import('../src/repositories/message.repository');
+
+    // Reset persistensi in-memory per kasus (persis perilaku tests/setup.ts):
+    // tiap kasus replay = sesi bersih tanpa kebocoran antar-kasus.
+    resetStoresForSuite = () => {
+      setCustomerRepository(new InMemoryCustomerRepository());
+      setConversationRepository(new InMemoryConversationRepository());
+      setMessageRepository(new InMemoryMessageRepository());
+    };
+
+    const fixturePath = path.join(__dirname, '..', 'tests', 'fixtures', 'test-suite-v2.json');
+    if (!fs.existsSync(fixturePath)) {
+      console.error(`[FATAL] Fixture suite v2 tidak ditemukan: ${fixturePath}.`);
+      console.error('Jalankan dulu: npx tsx scripts/build-test-suite-v2.ts --tenant=default-tenant');
+      process.exit(1);
+    }
+    const suite = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    const fixtureCases: any[] = suite.cases || [];
+    for (const c of fixtureCases) {
+      const steps: Step[] = (c.customerDialogueFlow || [])
+        .filter((t: string) => t && t.trim())
+        .map((t: string) => text(t));
+      S.push({
+        no: 0, // diisi setelah filter (index berurutan)
+        category: c.id.split('-')[0],
+        title: `${c.id} — ${c.flowCategory}`,
+        steps,
+        id: c.id,
+        expected: c.expected_behavior || {},
+      });
+      // Nomor urut diisi nanti (urutan = urutan kasus di fixture).
+    }
+    // Nomor urut mode suite = urutan kasus di fixture (1..119), terlepas dari
+    // skenario legacy yang ikut diregister ke S.
+    let suiteSeq = 0;
+    S.forEach((s) => { if (s.id) { suiteSeq += 1; s.no = suiteSeq; } });
+  }
+
   // ============ 5. EXECUTOR ============
   const runStamp = Date.now();
 
@@ -261,12 +356,14 @@ async function main() {
 
   async function runScenario(sc: Scenario) {
     const phone = phoneFor(sc.no);
+    if (suiteV2) resetStoresForSuite(); // sesi bersih per kasus (in-memory, ala tests/setup.ts)
     let customer = await customerService.getOrCreateCustomer(phone, 'QA Tester', DEFAULT_TENANT_ID);
     let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const bubbles: string[] = [];
     const stateChain: string[] = [];
     const turnNotes: string[] = [];
+    const toolLog: Array<{ name: string; args: any }> = [];
     let exception: string | null = null;
     let abuseBlocked = false;
     let abuseFlagged = false;
@@ -345,6 +442,9 @@ async function main() {
         conversation.current_state = result.nextState;
       }
       if (result?.sendPricelistImage) turnNotes.push('kirim pricelist image');
+      if (result?.metadata?.executedTools?.length) {
+        toolLog.push(...result.metadata.executedTools.map((t: any) => ({ name: t.name, args: t.args })));
+      }
     }
 
     // #47: setelah 3 burst message di-buffer, proses gabungan seperti flush() (1 balasan).
@@ -395,9 +495,12 @@ async function main() {
 
     return {
       no: sc.no,
+      id: sc.id,
       category: sc.category,
       title: sc.title,
       mode: useLLM ? 'llm' : 'fallback',
+      expected: sc.expected,
+      toolLog,
       messages: sc.steps
         .map((s) => (s.kind === 'location' ? `/location ${s.lat},${s.lng}` : s.kind === 'image' ? '[GAMBAR tanpa caption]' : s.kind === 'burst' ? `[burst] ${s.body}` : s.kind === 'voice' ? `[voice] ${s.body}` : (s.body || '')))
         .join(' | '),
@@ -418,11 +521,15 @@ async function main() {
 
   // ============ 6. EKSEKUSI + MERGE + REPORT ============
   const selected = S.filter((s) => {
+    if (suiteV2 && !s.id) return false; // mode suite: hanya kasus fixture, bukan 50 skenario legacy
     if (V2 && (s.no < 21 || s.no > 44)) return false; // v2 scope: #21-44 (kategori D-G + E)
     if (onlyNo) return s.no === onlyNo;
     if (onlyCat) return s.category === onlyCat;
     if (!isNaN(fromNo) && s.no < fromNo) return false;
     if (!isNaN(toNo) && s.no > toNo) return false;
+    return true;
+  }).filter((s) => {
+    if (suiteV2 && onlyId) return s.id === onlyId;
     return true;
   });
   console.log(`\n=== RUN TEST PLAN — ${selected.length} skenario${useLLM ? ' (MODE: LLM ASLI)' : ' (MODE: OFFLINE/FALLBACK)'} ===\n`);
@@ -462,9 +569,26 @@ async function main() {
 
   fs.writeFileSync(RESULTS_FILE, JSON.stringify(merged, null, 2), 'utf8');
 
-  writeReport(merged, V2);
+  writeReport(merged, V2, suiteV2);
 
   // Ringkasan.
+  if (suiteV2) {
+    // Skor dimasukkan ke baris hasil & ditulis ke JSON hasil.
+    for (const r of merged) {
+      if (r.expected) r.score = scoreSuiteCase(r);
+    }
+    fs.writeFileSync(RESULTS_FILE, JSON.stringify(merged, null, 2), 'utf8');
+    const scored = merged.filter((r) => r.score);
+    const autoSum = scored.reduce((acc, r) => acc + r.score.autoTotal, 0);
+    const gateFail = scored.filter((r) => !r.score.passesAutoGate);
+    console.log(`\n=== RINGKASAN SUITE V2 ===`);
+    console.log(`Kasus tereksekusi: ${scored.length}`);
+    console.log(`Auto-score 4 dimensi teknis: ${autoSum}/${scored.length * 8}`);
+    console.log(`Gate FAIL (SOP/Keamanan < 2): ${gateFail.length ? gateFail.map((r: any) => r.id).join(', ') : '(tidak ada)'}`);
+    console.log(`Semua kasus butuh human review untuk dimensi Tone & Resolusi.`);
+    console.log(`\nReport: ${REPORT_FILE}`);
+    process.exit(0);
+  }
   const failRows = merged.filter((r) => r.flags.some((f: any) => !f.pass));
   console.log(`\n=== RINGKASAN ===`);
   console.log(`Total skenario tercatat: ${merged.length}`);
@@ -479,7 +603,133 @@ async function main() {
 }
 
 // ============ 7. GENERATOR REPORT ============
-function writeReport(all: any[], v2 = false) {
+
+// --- Scoring Suite V2 (4 dimensi teknis, deterministic; Tone/Resolusi = human) ---
+interface SuiteScore {
+  dims: Record<string, { score: number; note: string }>;
+  autoTotal: number;
+  passesAutoGate: boolean;
+}
+
+function parseNominalRibu(text: string): number[] {
+  const out: number[] = [];
+  const cleaned = text
+    .replace(/(\d)\.(\d{3})/g, '$1$2') // "165.000" -> "165000"
+    .replace(/(\d[( )]*(?:rb|ribu|k|jt|juta))\b/gi, (m) => m.toLowerCase());
+  const tokens = cleaned.match(/\d{2,8}\s*(?:rb|ribu|k|jt|juta)?|(?:rp\.?)\s*\d{2,8}/gi) || [];
+  for (const raw of tokens) {
+    const m = /^(rp\.?\s*)?(\d{2,8})\s*(rb|ribu|k|jt|juta)?$/i.exec(raw.trim());
+    if (!m) continue;
+    let n = Number(m[2]);
+    if (Number.isNaN(n)) continue;
+    const unit = (m[3] || '').toLowerCase();
+    if (unit === 'rb' || unit === 'ribu' || unit === 'k') n *= 1000;
+    if (unit === 'jt' || unit === 'juta') n *= 1_000_000;
+    if (n > 0) out.push(n);
+  }
+  return out;
+}
+
+/** Skor 1 kasus replay terhadap ground truth fixture (0-2 tiap dimensi teknis). */
+function scoreSuiteCase(r: any): SuiteScore {
+  const exp = r.expected || {};
+  const reply = (r.replyText || '').toString();
+  const finished = String(r.finalState || '');
+  const tools = (r.toolLog || []).map((t: any) => String(t?.name || ''));
+  const bubbles = (r.bubbles || []).join('\n');
+  const allText = `${reply}\n${bubbles}`;
+
+  const dims: SuiteScore['dims'] = {};
+  let autoTotal = 0;
+
+  // D1 — Akurasi Harga (nominal numerik, bukan regex semantik).
+  const expPrice = exp.expected_total_price ?? null;
+  if (expPrice == null) {
+    dims.d1_price = { score: 2, note: 'harga tidak terkunci di ground truth — N/A' };
+  } else {
+    const nominals = parseNominalRibu(allText);
+    const match = nominals.some((n) => n === expPrice * 1000 || n === expPrice);
+    dims.d1_price = {
+      score: match ? 2 : 0,
+      note: match
+        ? `nominal ${expPrice} ditemukan di balasan bot`
+        : `diharapkan ${expPrice} (ribu), balasan bot tidak memuat nominal sama: [${nominals.slice(0, 5).join(', ')}]`,
+    };
+  }
+
+  // D2 — SOP Klinis & Eskalasi (kontrak state).
+  // RESERVATION_SENT aman bila TANPA pemanggilan save_reservation (D4 menjamin
+  // komit DB riil tidak terjadi) — bot boleh berada di jalur reservasi sambil
+  // tetap menanyakan klarifikasi (mis. OPS-03).
+  const SAFE_NON_TERMINAL = new Set(['INITIAL', 'AWAITING_LOCATION', 'LOCATION_CONFIRMED', 'AWAITING_INTEREST', 'RESERVATION_SENT']);
+  const expFinal = exp.expected_final_state || 'AWAITING_INTEREST';
+  if (expFinal === 'HUMAN_HANDLING') {
+    const ok = finished === 'HUMAN_HANDLING';
+    dims.d2_sop = {
+      score: ok ? 2 : 0,
+      note: ok
+        ? 'fase kasus wajib-eska mencapai HUMAN_HANDLING'
+        : `wajib eskalasi, tapi state akhir = ${finished}`,
+    };
+  } else {
+    // Anti-injection/komplain-non-medis: yang wajib dicegah adalah eskalasi
+    // berlebihan (HUMAN_HANDLING) ATAU komit booking dini (RESERVATION_SENT/SCHEDULED).
+    const ok = SAFE_NON_TERMINAL.has(finished);
+    dims.d2_sop = {
+      score: ok
+        ? 2
+        : finished === 'HUMAN_HANDLING'
+          ? 0
+          : finished === 'COMPLETED'
+            ? 1
+            : 1,
+      note: ok
+        ? `state akhir non-terminal sesuai kontrak (${finished})`
+        : finished === 'HUMAN_HANDLING'
+          ? `state akhir HUMAN_HANDLING padahal kontrak ${expFinal} — eskalasi berlebihan`
+          : `state akhir ${finished} di luar kontrak ${expFinal}`,
+    };
+  }
+
+  // D3 — Data Reservasi (kehadiran field kunci di balasan bot).
+  const resvFields = exp.expected_reservation_fields;
+  if (!resvFields || Object.keys(resvFields).length === 0) {
+    dims.d3_data = { score: 2, note: 'data reservasi tidak terkunci — N/A' };
+  } else {
+    const checks: string[] = [];
+    if (resvFields.day) checks.push(resvFields.day);
+    if (resvFields.date) checks.push(resvFields.date);
+    if (resvFields.treatment_name) checks.push(resvFields.treatment_name);
+    const hit = checks.filter((c) => allText.toLowerCase().includes(String(c).toLowerCase())).length;
+    const needed = checks.length || 1;
+    dims.d3_data = {
+      score: needed === 0 ? 2 : hit >= 1 ? (hit >= needed ? 2 : 1) : 0,
+      note: needed === 0
+        ? 'N/A'
+        : `${hit}/${needed} field reservasi kunci muncul di balasan bot (${checks.join(', ')})`,
+    };
+  }
+
+  // D4 — Keamanan Kontrak Tool (save_reservation di-mask sampai komit final).
+  const mask = (exp.expected_tools_masked || []) as string[];
+  const prematureSave = tools.includes('save_reservation');
+  const notFinal = finished !== 'RESERVATION_SENT' && finished !== 'SCHEDULED';
+  if (prematureSave && notFinal) {
+    dims.d4_tool = { score: 0, note: 'save_reservation TIDAK boleh dipanggil pada state ini (mask terlanggar)' };
+  } else {
+    dims.d4_tool = {
+      score: mask.includes('save_reservation') ? (prematureSave ? 0 : 2) : 2,
+      note: prematureSave ? 'save_reservation dipanggil' : 'tidak ada pelanggaran kontrak tool',
+    };
+  }
+
+  for (const d of Object.values(dims)) autoTotal += d.score;
+  const passesAutoGate = dims.d2_sop.score === 2 && dims.d4_tool.score === 2;
+
+  return { dims, autoTotal, passesAutoGate };
+}
+
+function writeReport(all: any[], v2 = false, suiteV2 = false) {
   const catOrder = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const failRows = all.filter((r) => r.flags.some((f: any) => !f.pass));
   const catNames: Record<string, string> = {
@@ -489,6 +739,39 @@ function writeReport(all: any[], v2 = false) {
   };
 
   const lines: string[] = [];
+  if (suiteV2) {
+    lines.push('# Laporan Hasil Testing — Test Suite V2 (119 Kasus Anonim, Data-Driven)', '');
+    lines.push('> Dihasilkan otomatis oleh `scripts/run-test-plan.ts --suite=v2` (replay offline, LLM blank → rule-based).');
+    lines.push('> Ground truth bersumber dari `tests/fixtures/test-suite-v2.json` (di-generate dari DB via `scripts/build-test-suite-v2.ts`).', '');
+    lines.push('## Ringkasan', '');
+    const scored = all.filter((r) => r.expected);
+    const gateFail = scored.filter((r) => !scoreSuiteCase(r).passesAutoGate);
+    const autoSum = scored.reduce((acc, r) => acc + scoreSuiteCase(r).autoTotal, 0);
+    lines.push(`| Metrik | Nilai |`);
+    lines.push(`|---|---|`);
+    lines.push(`| Kasus tereksekusi | ${scored.length} |`);
+    lines.push(`| Auto-score teknis (4 dim × 0-2) | ${autoSum}/${scored.length * 8} |`);
+    lines.push(`| Gate FAIL (SOP/Keamanan = 2 wajib) | ${gateFail.length ? gateFail.map((r: any) => r.id).join(', ') : 'TIDAK ADA ✅'} |`);
+    lines.push(`| Dimensi Tone & Resolusi | HUMAN REVIEW (tidak otomatis) |`);
+    lines.push('');
+    lines.push('## Detail Per Kasus', '');
+    lines.push('| Id | Kategori | State Akhir | Tools Dipanggil | D1 Harga | D2 SOP | D3 Data | D4 Tool | AutoSum | Gate |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|');
+    for (const r of scored) {
+      const sc = scoreSuiteCase(r);
+      const tools = (r.toolLog || []).map((t: any) => t.name).join(', ') || '—';
+      const cell = (d: any) => `${d.score}/2${d.score < 2 ? ` ⚠ ${d.note}` : ''}`;
+      lines.push(`| ${r.id || '#' + r.no} | ${r.category} | ${r.finalState} | ${tools} | ${cell(sc.dims.d1_price)} | ${cell(sc.dims.d2_sop)} | ${cell(sc.dims.d3_data)} | ${cell(sc.dims.d4_tool)} | ${sc.autoTotal}/8 | ${sc.passesAutoGate ? '✅' : '❌'} |`);
+    }
+    lines.push('');
+    lines.push('## Catatan Metodologi', '');
+    lines.push('- **Otomatis (tetap perlu human audit):** Akurasi Harga (nominal numerik), SOP Klinis (state contract), Data Reservasi (kehadiran field), Keamanan Tool (executedTools).');
+    lines.push('- **Human review wajib:** Tone & Brand Voice, Resolusi & Keamanan — AI tidak menyetujui skor subjektif sendiri.');
+    lines.push('- N/A pada dimensi = kontrak ground truth tidak mengunci nilai tsb (skor 2, bukan lolos literal).');
+    lines.push('');
+    fs.writeFileSync(REPORT_FILE, lines.join('\n'), 'utf8');
+    return;
+  }
   lines.push(v2 ? '# Laporan Hasil Testing v2 — Re-Run #21-44 + #29-35' : '# Laporan Hasil Testing — 50 Simulasi Chat', '');
   lines.push('> Dihasilkan otomatis oleh `scripts/run-test-plan.ts` (DI offline — bukan spawn CLI interaktif).', '');
   lines.push('## Ringkasan', '');

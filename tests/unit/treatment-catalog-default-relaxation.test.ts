@@ -85,4 +85,60 @@ describe('TreatmentCatalog — getDefaultRelaxationService age-aware (391501)', 
     // Jangan sampai kosong
     expect(prompt.length).toBeGreaterThan(20);
   });
+
+  // Plan Fase 2.3 (sesi 89-turn, misrouting maternal): kategori MOMS WAJIB
+  // direkomendasikan paket ibu (MOMS/BOTH), BUKAN paket bayi.
+  describe('MOMS routing (plan sesi 89-turn)', () => {
+    const tId = 'test-moms-89turn';
+    beforeAll(() => {
+      const mk = (over: Partial<ClinicServiceItem>): ClinicServiceItem => ({
+        id: over.id!,
+        name: over.name!,
+        category: over.category as any,
+        ageTier: over.ageTier!,
+        durationMinutes: 60,
+        originalPrice: 90000,
+        promoPrice: 75000,
+        description: 'test',
+        isActive: true,
+      });
+      treatmentCatalogService.upsertService(mk({
+        id: 'test-baby-ceria-moms',
+        name: 'Pijat Bayi Ceria Newborn',
+        category: 'BABY',
+        ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+      }), tId);
+      treatmentCatalogService.upsertService(mk({
+        id: 'test-moms-relaks',
+        name: 'Pijat Relaksasi Ibu (Women Relaxation Massage)',
+        category: 'MOMS',
+        ageTier: { minAgeMonths: 0, maxAgeMonths: 0, label: 'Ibu' },
+      }), tId);
+      treatmentCatalogService.upsertService(mk({
+        id: 'test-moms-oksitosin',
+        name: 'Pijat Oksitosin',
+        category: 'MOMS',
+        ageTier: { minAgeMonths: 0, maxAgeMonths: 0, label: 'Ibu' },
+      }), tId);
+    });
+
+    it('MOMS → paket ibu, DILARANG jatuh ke paket bayi', () => {
+      const s = treatmentCatalogService.getDefaultRelaxationService('MOMS', null, tId);
+      expect(s).toBeDefined();
+      expect(s?.category).not.toBe('BABY');
+      expect(s?.category === 'MOMS' || s?.category === 'BOTH').toBe(true);
+    });
+
+    it('goal-tracker pregrounding: sesi ibu tanpa keluhan → header "Ibu Sehat Relaksasi", bukan header bayi', async () => {
+      const { GoalTracker } = await import('../../src/v3/state/goal-tracker');
+      const session: any = {
+        genderGreeting: 'Bunda' as const,
+        targetAudience: 'MOMS' as const,
+        momProfile: { complaints: [] },
+      };
+      const prompt = GoalTracker.formatGoalSessionForPrompt(session);
+      expect(prompt).toMatch(/Ibu Sehat Relaksasi/);
+      expect(prompt).not.toMatch(/Bayi Sehat Tanpa Keluhan/);
+    });
+  });
 });

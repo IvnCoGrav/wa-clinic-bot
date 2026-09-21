@@ -47,19 +47,30 @@ describe('get_catalog_and_price — closingIntent data contract', () => {
     expect(out.message).not.toMatch(/konfirmasi jadwal|hari kunjungan|hari apa/i);
   });
 
-  it('lokasi belum diketahui → ASK_DOMICILE, DILARANG todong hari', async () => {
-    const out = await expectIntent({ symptoms: ['batuk', 'pilek'] }, undefined, 'ASK_DOMICILE');
+  it('lokasi belum diketahui + usia single-tier (sudah diketahui 3 bln) → ASK_DOMICILE, DILARANG todong hari', async () => {
+    const out = await expectIntent(
+      { symptoms: ['batuk', 'pilek'], childAgeMonths: 3 },
+      undefined,
+      'ASK_DOMICILE'
+    );
     expect(out.message).toMatch(/domisili|daerah|kecamatan/i);
     expect(out.message).not.toMatch(/konfirmasi jadwal|hari kunjungan|hari apa/i);
   });
 
-  it('lokasi sudah diketahui (kelurahan) → ASK_SCHEDULE', async () => {
+  it('lokasi sudah diketahui (kelurahan) + usia single-tier → ASK_SCHEDULE', async () => {
     const out = await expectIntent(
-      { symptoms: ['batuk', 'pilek'] },
+      { symptoms: ['batuk', 'pilek'], childAgeMonths: 3 },
       { kelurahan: 'Kutisari', ongkirStatus: 'OK' },
       'ASK_SCHEDULE'
     );
     expect(out.message).toMatch(/hari/i);
+  });
+
+  it('SESI 783810: keluhan multi-tier TANPA usia → CLINICAL_PROBE usia (di atas tanya domisili/jadwal)', async () => {
+    const out = await expectIntent({ symptoms: ['batuk', 'pilek'] }, undefined, 'CLINICAL_PROBE');
+    // Usia adalah penentu paket (Bayi vs Anak); domisili/jadwal menyusul.
+    expect(out.message).toMatch(/usia|umur|berbulan-bulan|bertahun-tahun/i);
+    expect(out.closingSymptoms).toContain('batuk');
   });
 
   it('nominal cocok tanpa gejala → PRICE_SUBJECT_CLARIFY (nominal dari katalog runtime)', async () => {

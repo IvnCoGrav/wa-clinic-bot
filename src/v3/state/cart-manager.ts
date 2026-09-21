@@ -18,7 +18,7 @@ import { resolveServiceAudience } from '../../services/treatment-catalog.service
 import type { ServiceAudience } from '../../services/treatment-catalog.service';
 // Plan regresi Fase 3: sinyal komitmen & hari dari SATU sumber kebenaran
 // (utils murni, tanpa I/O → anti-cycle). Tanpa daftar kata baru.
-import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal } from '../../utils/date-confirmation';
+import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText } from '../../utils/date-confirmation';
 
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
 // Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
@@ -332,6 +332,12 @@ export class CartManager {
       if ((history[u]?.role || '').toLowerCase() !== 'user') continue;
       const uText = (history[u]?.content || '').toLowerCase();
       if (!uText || CartManager.isDurationOnlyQuestion(uText)) continue;
+      // Sesi 783810: pertanyaan konsultatif murni (bertanda '?' tanpa verba
+      // komitmen/jejak hari/tanpa commit sticky sesi) DILARANG menjadi
+      // "konfirmasi user" — konsultasi eksplorasi ("kalau yang pulih ceria
+      // itu ?") BUKAN pemilihan paket, dan tidak boleh melegitimasi tawaran
+      // asisten untuk mengunci keranjang.
+      if (isConsultativeUserText(uText, session)) continue;
       for (const s of services) {
         if (matchedFormOf(uText, s) !== null || fuzzyMatches(uText, s.name)) {
           userConfirmedNames.add(s.name.toLowerCase());
@@ -503,14 +509,13 @@ export class CartManager {
       // komitmen satu-sumber-kebenaran, bukti hari, atau komitmen sticky
       // sesi). Cermin fail-closed tanda-tanya di booking-commit-gate —
       // level tanda baca + state, bukan daftar hafalan kata khasiat.
+      // Sesi 783810: predikat di-extract ke isConsultativeUserText (date-
+      // confirmation) agar seam userConfirmedNames & gerbang ini satu sumber.
       // Contoh: "Breast massage ini bisa untuk memperbanyak asi?" → dicatat
       // ke discussedTreatments, DILARANG masuk cartItems (anti tagihan
       // siluman Rp 155.000).
       const rawMsg = history[i]?.content || '';
-      const hasCommitSignal = hasBookingCommitSignal(rawMsg)
-        || (session as CustomerGoalSession).bookingCommitConfirmed === true;
-      const hasDayEvidence = DAY_EVIDENCE_WORDS.some((w) => text.includes(w));
-      const isConsultativeQuestion = !isAssistant && text.includes('?') && !hasCommitSignal && !hasDayEvidence;
+      const isConsultativeQuestion = !isAssistant && isConsultativeUserText(rawMsg, session);
       // ST6 (RC-05): verdict komitmen terakhir (Call 1) = EXPLORING dan tidak
       // ada sinyal komitmen user mana pun → perlakukan sebagai konsultasi.
       const isExploringVerdict = exploringLock;

@@ -70,6 +70,27 @@ export function hasBookingCommitSignal(text: string | undefined): boolean {
 }
 
 /**
+ * Pertanyaan KONSULTATIF murni (Sesi 783810, satu sumber kebenaran bersama):
+ * true bila pesan USER bertanda '?' TANPA verba komitmen, TANPA jejak
+ * hari/waktu, dan TANPA komitmen booking sticky sesi. Level tanda baca +
+ * state (bukan daftar frasa hafalan) — cermin fail-closed pertanyaan slot
+ * di day-gate. Dipakai SELURUH seam kontrak transaksi (userConfirmedNames,
+ * cart sync, detectAgreedTreatment) agar konsultasi eksplorasi DILARANG
+ * mengunci layanan ke cart/selectedTreatment.
+ */
+export function isConsultativeUserText(
+  text: string | undefined,
+  session?: { bookingCommitConfirmed?: boolean }
+): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.includes('?')) return false;
+  if (hasBookingCommitSignal(lower)) return false;
+  if (DAY_EVIDENCE_WORDS.some((w) => lower.includes(w))) return false;
+  if (session?.bookingCommitConfirmed === true) return false;
+  return true;
+}
+
+/**
  * Audit 833178 — Day Evidence Gate (pure function, testable): pastikan
  * hari/tanggal pada bookingDate memiliki jejak di pesan user. Kembalikan null
  * bila terbukti disebut; pesan penolakan (tanpa tulis DB!) bila tidak.

@@ -4,6 +4,39 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-21 — Kontrak Konsultasi vs Transaksi + Prioritas Usia Multi-Tier (Sesi 783810)
+
+- **Akar masalah (audit multi-lapis antar-seam):** (1) `userConfirmedNames` di `cart-manager` memfilter fuzzy hanya dengan `isDurationOnlyQuestion` — pertanyaan eksplorasi consultative ("kalau yang pulih ceria itu ?") lolos fuzzy -> multi-offer asisten + "sabtu bisa ?" mengunci `Pijat Bayi Pulih Ceria` yang TIDAK pernah dipilih (ghost cart); (2) predikat konsultatif INLINE (`'?' && !commit && !day`) terduplikasi lintas seam → drift; (3) `detectAgreedTreatment` me-seed `selectedTreatment` dari penyebutan nama penuh DALAM pertanyaan bertanda `?`; (4) hierarki `closingIntent` menaruh `hasKnownSymptoms` DI ATAS `needsAgeClarification` → keluhan multi-tier tanpa usia lompat ke ASK_SCHEDULE/ASK_DOMICILE tanpa tanya usia → tier default terkunci + LLM menyebut label tier (mis. "Newborn") sebagai nama layanan (nama itu tidak ada di katalog).
+- **Fix fondasional (4 fase, gerbang kode deterministik — tanpa tambahan prompt/DILARANG):**
+  - **Fase A** `src/utils/date-confirmation.ts`: predikat bersama `isConsultativeUserText(text, session?)` (`'?'` + tanpa sinyal komitmen + tanpa jejak hari + tanpa commit sticky sesi). Dipakai `cart-manager` (loop `userConfirmedNames` skip + main gate predikat inline diganti) dan `booking-commit-gate.detectAgreedTreatment` (param optional `session`; skip konsultatif; argumen diteruskan di `context-grounder`).
+  - **Fase B** `src/v3/tools/get-catalog.tool.ts`: cabang `needsAgeClarification` → `CLINICAL_PROBE` dinaikkan DI ATAS `hasKnownSymptoms` — usia menentukan tier (Bayi vs Anak); domisili/jadwal menyusul.
+  - **Fase C** `src/v3/agent/pipeline/guardrail-pipeline.ts`: klausul "tim menanyakan saat koordinasi jadwal" pada nota koreksi usia DIHAPUS; tambah lapis deterministik `stripNominalAges` — tanpa otorisasi `needsAgeClarification`, klausa nominal usia (`usia si kecil 3 bulan`) di-strip angka+satuan tanpa mutilasi tengah kalimat; sisa satuan → fail-safe teks asli.
+- **Verifikasi (TDD merah→hijau):** `cart-consultation-gate` 8/8 (ghost multi-offer → cart kosong; "Ambil yang pulih ceria ya??" tetap mengunci), `simulator-100rb-replay` 6/6 (nama penuh+`?` → null), `get-catalog-closing-intent` kontrak baru multi-tier→CLINICAL_PROBE, `guardrail-no-mutilation` strip deterministik vs authorized pass-through; regression full `tests/unit/v3` 101 files / 547 passed + matrix CM-22 diperbarui fixture usia; `npm run build` bersih.
+- **Tech debt ditunda:** bullet `SAVE_RESERVATION_FULL` (`router-tool-routing.layer.ts:11`) vs Rule 5 tool-masker — `docs/KNOWN_ISSUES.md#106`.
+
+#### 2026-09-21 — Cost Estimator Provider-Aware + Tarif Live (SUMOPOD Unverified)
+
+- **Akar masalah (5 lapisan):** `calculateLlmCost` di-key hanya nama model → `deriveProvider` cuma label audit;
+  caller (`generation-stage.ts`, `llm-audit-buffer.ts`) punya `baseUrl` tapi tidak meneruskannya; hardcode Kenari
+  basi ~18× lebih murah dari live (`/v1/models` publik); tarif DeepSeek Direct usang & model tak dikenal
+  (mis. `:netra`) jatuh senyap ke `DEFAULT_PRICING`.
+- **Fix fondasional (`src/utils/cost-calculator.ts`):** resolver provider-aware — `baseUrl` request OTORITATIF atas
+  nama model; tabel `DEEPSEEK_DIRECT_PRICING` (tarif resmi Sept 2026 peak/off-peak — `deepseek-flash` $0.15/$0.60,
+  `deepseek-v4-flash` $0.22/$0.66, `deepseek-chat`/`deepseek-reasoner` = alias v4-flash),
+  `KENARI_PRICING` dari `src/config/kenari-pricing.snapshot.json` (di-sync `scripts/sync-pricing.ts`, flat tanpa
+  peak, `:free` = 0), SumoPod TANPA tabel → ditarif `fallback-unverified` (tarif tidak dipublikasikan; 401/404/403
+  saat verifikasi). Tambah `pricingSource: 'verified'|'fallback-unverified'` + `isPeak`.
+- **BaseUrl diteruskan di 4 call site:** `generation-stage.ts:205,213` (`{ baseUrl: turn.baseUrl }`);
+  `llm-audit-buffer.ts:43,142` (tambah field `baseUrl` + `calledAt` agar peak dari waktu panggilan asli,
+  bukan waktu flush).
+- **Kenari live (Rp/1M, flat):** `deepseek-v4-1-flash` = `deepseek-v4-flash` 2.750/65/5.500, `deepseek-v4-pro`
+  10.000/100/20.000, `qwen3-8-flash` 3.000/300/7.500, `qwen3-7-plus` 6.700/1.300/26.000, `minimax-m2-7`
+  6.300/1.200/25.000, `step-3-7-flash` 4.200/840/24.000 (`:free` batal non-moneter).
+- **Breaking pada data historis:** `llm_audit_logs.cost_idr` lama dari tarif basi; nilai baru melonjak ~18× di
+  jalur Kenari — TIDAK di-back-migrate (lihat `docs/KNOWN_ISSUES.md#105`).
+- **Verifikasi:** `tests/unit/cost-calculator.test.ts` 17/17 (TDD red→green: baseline 12 → 17), 
+  `tests/unit/llm-execution-tracing-deepseek.test.ts` tetap hijau; `npx tsc --noEmit`/`npm run build` 0.
+
 #### 2026-09-20 — Mixed-Intent & Anti-DSML Leakage (Sesi 648324) — Fase 1-3
 
 - **Fase 1 (observability):** `src/v3/agent/pipeline/generation-stage.ts` — log intersepsi `CALL2_DSML_LEAKAGE_INTERCEPTED` bila Call 2 memuntahkan tag `<｜｜DSML｜｜` murni (tanpa ubah balasan).
@@ -6493,3 +6526,14 @@ Menyambung korelasi end-to-end
 - CLI Chat Simulator untuk testing lokal tanpa koneksi WhatsApp.
 - Struktur folder: `src/routes/`, `src/services/`, `src/integrations/`, `tests/unit/`.
 - `.env.example` dengan semua variable yang diperlukan.
+
+#### Perbaikan Sistemik Sesi 89-Turn: State Persistence, Anti-Silent Handoff & Maternal Routing (2026-09-21)
+
+- **DB**: 
+px prisma db push menyinkronkan kolom \session_data\ (episodik V3) ke PostgreSQL lokal; Prisma Client di-generate ulang penuh (atasi EPERM DLL lock dengan menghentikan dev server). Verifikasi: \scripts/verify-session-data.ts\.
+- **GoalTracker**: blok try persistensi dipecah (episodik vs durable) — kegagalan tulis session_data tidak lagi menggugurkan mirror Customer (akar amnesia lokasi lintas-turn); \getGoalSession\ kini resilient memory fallback.
+- **Maternal routing**: \getDefaultRelaxationService('MOMS')\ memfilter MOMS/BOTH (bukan lagi paket bayi); pregrounding sesi ibu memakai header \"Ibu Sehat Relaksasi\".
+- **Learning loop**: grounding kosong kini HANYA menandai \eview_flagged\ (repository seam \lagForReview\) — bot tetap aktif; antrean kurasi tidak lagi memicu CS takeover permanen (akar mati suri 68 turn).
+- **Sanitizer DSML**: perbaikan regex yang rusak (dobel-pipe, tak pernah match) → trim-from-first dengan dukungan control-char C1 & pipe fullwidth; \<result>/<tool_call>\ tetap pasangan-tag.
+- **Handoff anti-silent-drop**: flag \is_human_handling\ kini di-set SETELAH balasan closing terkirim (sebelumnya membatalkan pengiriman via shouldAbort → customer menerima diam total).
+- **Verifikasi**: build 0; suite 2978 passed / 1 failed (pre-existing); re-run Kasus #1: amnesia 0, DSML 0, closing schedule-check TERKIRIM, latch silent pasca-closing bekerja.

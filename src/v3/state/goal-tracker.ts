@@ -157,9 +157,33 @@ export class GoalTracker {
       // Fallback ke Customer.preferences hanya bila session_data belum terisi
       // (kompatibilitas mundur selama transisi / conversation lama).
       const convSession: any = (conv as any).session_data || null;
-      const prefs: any = convSession && typeof convSession === 'object'
+      let prefs: any = convSession && typeof convSession === 'object'
         ? convSession
         : ((conv.customer?.preferences as any) || {});
+
+      // Plan Fase 2.2 (sesi 89-turn): RESILIENT MEMORY FALLBACK — bila record
+      // DB ada tapi session_data & preferences kosong padahal cache memori
+      // memuat data substantif (lokasi/profil), pakai memori daripada me-reset
+      // brutal ke DEFAULT_SESSION (anti-amnesia saat glitch/migrasi DB).
+      const hasSubstantivePrefs = Boolean(
+        prefs.location || prefs.targetAudience || prefs.momProfile ||
+        prefs.childProfile || (Array.isArray(prefs.cartItems) && prefs.cartItems.length > 0) ||
+        prefs.selectedTreatmentName || prefs.selectedTreatment
+      );
+      if (!hasSubstantivePrefs) {
+        const mem = memorySessions.get(memoryKey(conversationId, tenantId));
+        const hasSubstantiveMem = Boolean(
+          mem && (
+            mem.location || mem.targetAudience || mem.momProfile ||
+            mem.childProfile || (Array.isArray(mem.cartItems) && mem.cartItems.length > 0) ||
+            mem.selectedTreatment
+          )
+        );
+        if (hasSubstantiveMem) {
+          console.warn(JSON.stringify({ event: 'GOAL_TRACKER_MEMORY_FALLBACK', tenantId, conversationId, timestamp: new Date().toISOString() }));
+          prefs = { ...mem, ...prefs };
+        }
+      }
 
       // Sapaan data-driven: HANYA dari preferensi eksplisit tersimpan.
       // DILARANG menebak gender dari nama (mis. "dwi" unisex) — default produk "Bunda".
@@ -238,11 +262,19 @@ export class GoalTracker {
       try {
         const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenant_id: tenantId } });
         if (conv?.customer_id) {
-          // Stage 4 (RC-02): tulis state episodik ke Conversation.session_data.
-          await prisma.conversation.updateMany({
-            where: { id: conversationId, tenant_id: tenantId },
-            data: { session_data: merged as any } as any,
-          });
+          // Stage 4 (RC-02) + Plan #1 (sesi 89-turn): persistensi EPISODIK dan
+          // DURABLE diisolasi dalam blok try masing-masing. Sebelumnya satu blok
+          // try raksasa membuat kegagalan tulis session_data (mis. kolom belum
+          // di-migrate) MENGGUGURKAN mirror durable ke tabel Customer — akar
+          // amnesia lokasi lintas-turn.
+          try {
+            await prisma.conversation.updateMany({
+              where: { id: conversationId, tenant_id: tenantId },
+              data: { session_data: merged as any } as any,
+            });
+          } catch (episodicErr: any) {
+            console.warn(JSON.stringify({ event: 'GOAL_TRACKER_EPISODIC_WRITE_ERROR', tenantId, conversationId, error: episodicErr.message, timestamp: new Date().toISOString() }));
+          }
 
           // Mirror DURABLE saja ke Customer (agar pembaca lama tetap benar:
           // alamat untuk CAPI/enrichment/staff, nama & kolom profil).
@@ -348,13 +380,23 @@ export class GoalTracker {
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
-      // Bayi sehat tanpa keluhan → paket relaksasi default dari katalog (age-aware 391501 Fase 2)
+      // Paket relaksasi default dari katalog (age-aware 391501 Fase 2).
+      // Plan Fase 2.3 (sesi 89-turn): MATERNAL CONTEXT-AWARE — sesi ibu
+      // (targetAudience MOMS/BOTH atau momProfile aktif) WAJIB direkomendasikan
+      // paket ibu (MOMS/BOTH), BUKAN paket bayi. Label header ikut menyesuaikan.
       try {
+        const isMomDefault = isMomSubject;
         const childAge = (session.childProfile as any)?.ageMonths ?? (session.children as any)?.[0]?.ageMonths ?? null;
-        const categoryHint: any = session.targetAudience === 'MOMS' ? 'MOMS' : session.targetAudience === 'KIDS' ? 'KIDS' : 'BABY';
-        const def = treatmentCatalogService.getDefaultRelaxationService(categoryHint, childAge as number | null);
+        const categoryHint: any = isMomDefault
+          ? (session.targetAudience === 'BOTH' ? 'BOTH' : 'MOMS')
+          : session.targetAudience === 'KIDS' ? 'KIDS' : 'BABY';
+        const def = treatmentCatalogService.getDefaultRelaxationService(categoryHint, isMomDefault ? null : childAge as number | null);
         if (def) {
-          pregroundedRecommendation = `• Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan): *${def.name}* — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk bayi sehat; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]\n  [MANDAT: DILARANG memuntahkan harga/promo jika customer belum bertanya harga/biaya!]`;
+          const headerLabel = isMomDefault
+            ? 'Rekomendasi Paket Dasar (Ibu Sehat Relaksasi)'
+            : 'Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan)';
+          const targetLabel = isMomDefault ? 'Bunda' : 'bayi sehat';
+          pregroundedRecommendation = `• ${headerLabel}: *${def.name}* — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk ${targetLabel}; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]\n  [MANDAT: DILARANG memuntahkan harga/promo jika customer belum bertanya harga/biaya!]`;
         }
       } catch (_) {}
     }

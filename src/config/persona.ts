@@ -276,9 +276,7 @@ Kalau boleh tahu rumahnya di daerah mana ya Bunda? 😊`;
     return variations[Math.floor(Math.random() * variations.length)]();
   },
 
-  askKelurahanDetail: () => `Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻
-
-Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻`,
+  askKelurahanDetail: () => `Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻`,
 
   greetingWithLocation: (params: { kelurahan: string; kecamatan: string; skipGreeting?: boolean }) => {
     if (params.skipGreeting) {
@@ -299,11 +297,11 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     `Mohon dikonfirmasi dulu ya Bunda 😊 — untuk lokasinya di Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan} sudah benar atau mau pakai alamat lain ya bund?`,
 
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
-    `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
+    `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗`,
 
   askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; cityName?: string; isCity?: boolean; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
     if (!params.isCity && params.kecamatanName) {
-      return `Untuk area Kecamatan ${params.kecamatanName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+      return `Untuk area Kecamatan ${params.kecamatanName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊`;
     }
 
     const rawName = params.cityName || params.kecamatanName || params.kelurahanName || 'tersebut';
@@ -312,10 +310,10 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
     if (isCity) {
       const displayCity = lower.includes('sidoarjo') ? 'Sidoarjo' : lower.includes('surabaya') ? 'Surabaya' : rawName;
-      return `Di ${displayCity} kelurahan atau kecamatan mana ya Bunda? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+      return `Di ${displayCity} kelurahan atau kecamatan mana ya Bunda? Biar kami bantu cekkan ongkir presisinya 😊`;
     }
 
-    return `Untuk area Kecamatan ${rawName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+    return `Untuk area Kecamatan ${rawName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊`;
   },
 
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
@@ -349,7 +347,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
       if (params.promoPrice === 0) {
         return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya, Bunda ☺️\n\n${ctaQuestion}`;
       }
-      return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
+      return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa berikan promo ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja ya Bunda ☺️\n\n${ctaQuestion}`;
     }
 
     let ctaQuestion = 'Rencana mau ambil perawatan apa untuk si kecil atau Bunda? 🤗';
@@ -368,7 +366,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     if (params.promoPrice === 0) {
       return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya, Bunda ☺️\n\n${ctaQuestion}`;
     }
-    return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
+    return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir *Rp ${params.normalPrice.toLocaleString("id-ID")}* tetapi karna bulan ini ada promo, kami bisa berikan promo ongkir menjadi *Rp ${params.promoPrice.toLocaleString("id-ID")}* saja ya Bunda ☺️\n\n${ctaQuestion}`;
   },
 
   locationComparison: (params: {
@@ -466,7 +464,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     if (params?.kelurahan && params?.ongkir !== undefined) {
       return `Iya betul Bunda, harga treatment kami belum termasuk ongkir ya Bunda. Untuk ke area Bunda di *${params.kelurahan}*, ongkirnya Rp ${params.ongkir.toLocaleString('id-ID')} ya Bunda 😊\n\nApakah mau langsung kami bantu jadwalkan perawatannya Bunda? 🤗`;
     }
-    return `Iya betul Bunda, harga treatment kami belum termasuk biaya transport/ongkir ya Bunda. Biaya ongkir dihitung sesuai jarak dari klinik kami di Waru. Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan ongkir presisinya? 😊`;
+    return `Iya betul Bunda, harga treatment kami belum termasuk biaya transport/ongkir ya Bunda. Biaya ongkir dihitung sesuai jarak dari klinik kami di Waru. Boleh diinfokan detail kelurahan, desa, perumahan, atau patokan terdekatnya agar kami bantu cekkan ongkir presisinya? 😊`;
   },
 
   paymentMethodPolicy: () =>
@@ -476,7 +474,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     `Seluruh terapis ${getBrandIdentity().businessName} adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk baby massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional Bunda.`,
 
   coverageAreaPolicy: () =>
-    `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan jangkauan dan ongkir presisinya ya Bunda 😊`,
+    `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan, desa, perumahan, atau patokan terdekatnya agar kami bantu cekkan jangkauan dan ongkir presisinya ya Bunda 😊`,
 
   clinicOriginPolicy: () =>
     `Homebase kami ada di Waru, Sidoarjo ya Bunda. Kami menyediakan layanan Homecare (Bidan kami yang datang ke rumah Bunda) untuk seluruh wilayah Surabaya & Sidoarjo 😊`,

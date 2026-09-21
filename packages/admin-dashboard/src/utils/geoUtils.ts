@@ -87,6 +87,40 @@ export function calculateHaversineKm(lat1: number, lng1: number, lat2: number, l
 }
 
 /**
+ * Estimasi waktu tempuh bidan (motor) berdasarkan jarak garis lurus (Haversine).
+ * Kalibrasi seragam dengan rekomendasi slot (CreateReservationModal) dan backend:
+ * 2.05 menit/km + 3 menit buffer, minimum 5 menit.
+ */
+export function estimateTravelMinutesKm(distanceKm: number): number {
+  return Math.max(5, Math.round(distanceKm * 2.05 + 3));
+}
+
+/**
+ * Cek apakah gap waktu antar kunjungan cukup untuk waktu tempuh.
+ * Mengembalikan null jika koordinat tidak lengkap (tidak bisa hitung).
+ * Mengembalikan object { sufficient: boolean, requiredMinutes: number, availableMinutes: number, distanceKm: number } jika bisa dihitung.
+ */
+export function checkTravelTimeSufficiency(
+  fromLat: number | null | undefined,
+  fromLng: number | null | undefined,
+  toLat: number | null | undefined,
+  toLng: number | null | undefined,
+  availableGapMinutes: number
+): { sufficient: boolean; requiredMinutes: number; availableMinutes: number; distanceKm: number } | null {
+  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+    return null;
+  }
+  const distanceKm = calculateHaversineKm(fromLat, fromLng, toLat, toLng);
+  const requiredMinutes = estimateTravelMinutesKm(distanceKm);
+  return {
+    sufficient: availableGapMinutes >= requiredMinutes,
+    requiredMinutes,
+    availableMinutes: availableGapMinutes,
+    distanceKm,
+  };
+}
+
+/**
  * Menghasilkan URL navigasi Google Maps yang selalu valid dengan fallback berjenjang.
  */
 export function getGoogleMapsDirectionUrl(

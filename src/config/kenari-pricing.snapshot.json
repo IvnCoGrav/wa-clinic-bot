@@ -1,0 +1,48 @@
+﻿{
+    "models":  {
+                   "qwen3-8-flash":  {
+                                         "cacheHitPer1M":  300,
+                                         "inputPer1M":  3000,
+                                         "outputPer1M":  7500
+                                     },
+                   "deepseek-v4-flash":  {
+                                             "cacheHitPer1M":  65,
+                                             "inputPer1M":  2750,
+                                             "outputPer1M":  5500
+                                         },
+                   "step-3-7-flash:free":  {
+                                               "cacheHitPer1M":  0,
+                                               "inputPer1M":  0,
+                                               "outputPer1M":  0
+                                           },
+                   "minimax-m2-7":  {
+                                        "cacheHitPer1M":  1200,
+                                        "inputPer1M":  6300,
+                                        "outputPer1M":  25000
+                                    },
+                   "qwen3-7-plus":  {
+                                        "cacheHitPer1M":  1300,
+                                        "inputPer1M":  6700,
+                                        "outputPer1M":  26000
+                                    },
+                   "step-3-7-flash":  {
+                                          "cacheHitPer1M":  840,
+                                          "inputPer1M":  4200,
+                                          "outputPer1M":  24000
+                                      },
+                   "deepseek-v4-1-flash":  {
+                                               "cacheHitPer1M":  65,
+                                               "inputPer1M":  2750,
+                                               "outputPer1M":  5500
+                                           },
+                   "deepseek-v4-pro":  {
+                                           "cacheHitPer1M":  100,
+                                           "inputPer1M":  10000,
+                                           "outputPer1M":  20000
+                                       }
+               },
+    "fetchedAt":  "2026-09-21T13:24:14.1360835+07:00",
+    "source":  "https://kenari.id/v1/models (publik, tanpa API key)",
+    "unit":  "IDR per 1M token (micro_idr/1e6)",
+    "note":  "model free=true =\u003e tarif 0 (moneter)"
+}

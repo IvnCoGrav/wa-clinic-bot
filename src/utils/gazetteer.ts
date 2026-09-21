@@ -1,6 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { resolveArteryCorridor } from '../config/landmarks';
+import {
+  normalizeToponymAbbreviations,
+  extractCityScope,
+  getCanonicalCities,
+} from './toponym-normalizer';
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -24,6 +29,7 @@ let cachedGazetteerAreas: Map<string, string> | null = null;
 let cachedPrefixIndex: Map<string, string[]> | null = null;
 let cachedKecamatanNames: string[] | null = null;
 let cachedKecamatanEntries: Array<{ lower: string; orig: string }> | null = null;
+let cachedCanonicalCities: string[] = [];
 
 // For O(1) coordinate lookups
 let coordByKelLower = new Map<string, { lat: number; lng: number; row: GazetteerRow }>();
@@ -101,6 +107,9 @@ function ensureInit(): void {
   }
   cachedGazetteerAreas = areaMap;
 
+  // Kanonis kota (data-driven) — dipakai extractCityScope di setiap query.
+  cachedCanonicalCities = getCanonicalCities(rawDataCache || []);
+
   // Build kecamatan names / entries
   cachedKecamatanNames = Array.from(seenKec.values());
   cachedKecamatanEntries = Array.from(seenKec.entries()).map(([lower, orig]) => ({ lower, orig }));
@@ -166,6 +175,12 @@ export function getGazetteerAreas(): Map<string, string> {
   return cachedGazetteerAreas!;
 }
 
+/** Nama kota kanonis unik dari dataset (cache sekali boot) — untuk city scope. */
+export function getGazetteerCanonicalCities(): string[] {
+  ensureInit();
+  return [...cachedCanonicalCities];
+}
+
 /**
  * Prefix auto-index: untuk kelurahan 2 kata (misal "Manukan Kulon"),
  * index kata pertamanya ("manukan") → daftar kelurahan lengkap yang berbagi prefix sama.
@@ -222,14 +237,15 @@ export function getGazetteerKecamatanEntries(): Array<{ lower: string; orig: str
 export function getGazetteerCoordinates(query: string): { lat: number; lng: number; kelurahan: string; kecamatan: string; kota: string; zipcode: string } | null {
   ensureInit();
   if (!query) return null;
-  const qLower = query.toLowerCase();
-  const qNorm = qLower.replace(/\s+/g, ' ').trim();
+  const qNorm = normalizeToponymAbbreviations(query).replace(/\s+/g, ' ').trim();
+  const cityScope = extractCityScope(qNorm, getGazetteerCanonicalCities());
+  if (!qNorm) return null;
 
   // Koridor arteri (Plan 6 FASE 3, Issue #21): nama jalan populer tanpa "Jl."
   // langsung terpetakan ke kelurahan induk — tanpa menodong customer.
   // Koordinat tetap dari dataset (single source); rantai fallback:
   // kelurahan koridor → kecamatan koridor → logika eksisting di bawah.
-  const corridor = resolveArteryCorridor(query);
+  const corridor = resolveArteryCorridor(qNorm);
   if (corridor) {
     const kelHit = coordByKelLower.get(corridor.kelurahan.toLowerCase());
     if (kelHit) {
@@ -241,33 +257,22 @@ export function getGazetteerCoordinates(query: string): { lat: number; lng: numb
     }
   }
 
-  // Fast exact map lookups (O(1))
+  // Fast exact map lookups (O(1)) — city-aware: bila query menyebut kota dan
+  // exact-hit bertentangan kota, biarkan ranked scan menentukannya (jangan return).
   const exactKel = coordByKelLower.get(qNorm);
   if (exactKel) {
-    return { lat: exactKel.lat, lng: exactKel.lng, kelurahan: exactKel.row.Kelurahan_Desa, kecamatan: exactKel.row.Kecamatan, kota: exactKel.row.Kabupaten_Kota, zipcode: exactKel.row.Kode_Pos };
+    if (!cityScope || exactKel.row.Kabupaten_Kota === cityScope) {
+      return { lat: exactKel.lat, lng: exactKel.lng, kelurahan: exactKel.row.Kelurahan_Desa, kecamatan: exactKel.row.Kecamatan, kota: exactKel.row.Kabupaten_Kota, zipcode: exactKel.row.Kode_Pos };
+    }
   }
   const exactKec = coordByKecLower.get(qNorm);
   if (exactKec) {
-    return { lat: exactKec.lat, lng: exactKec.lng, kelurahan: exactKec.row.Kelurahan_Desa, kecamatan: exactKec.row.Kecamatan, kota: exactKec.row.Kabupaten_Kota, zipcode: exactKec.row.Kode_Pos };
-  }
-  // Substring scan: kelurahan first (longest first)
-  for (const row of sortedByKelLengthDesc) {
-    const kelLower = (row.Kelurahan_Desa || '').toLowerCase().trim();
-    if (!kelLower || kelLower.length < 3) continue;
-    if (qLower.includes(kelLower)) {
-      const coord = parseKoordinat(row.Koordinat);
-      if (coord) return { lat: coord.lat, lng: coord.lng, kelurahan: row.Kelurahan_Desa, kecamatan: row.Kecamatan, kota: row.Kabupaten_Kota, zipcode: row.Kode_Pos };
+    if (!cityScope || exactKec.row.Kabupaten_Kota === cityScope) {
+      return { lat: exactKec.lat, lng: exactKec.lng, kelurahan: exactKec.row.Kelurahan_Desa, kecamatan: exactKec.row.Kecamatan, kota: exactKec.row.Kabupaten_Kota, zipcode: exactKec.row.Kode_Pos };
     }
   }
-  for (const row of sortedByKecLengthDesc) {
-    const kecLower = (row.Kecamatan || '').toLowerCase().trim();
-    if (!kecLower || kecLower.length < 3) continue;
-    if (qLower.includes(kecLower)) {
-      const coord = parseKoordinat(row.Koordinat);
-      if (coord) return { lat: coord.lat, lng: coord.lng, kelurahan: row.Kelurahan_Desa, kecamatan: row.Kecamatan, kota: row.Kabupaten_Kota, zipcode: row.Kode_Pos };
-    }
-  }
-  return null;
+
+  return rankedGazetteerScan(qNorm, cityScope);
 }
 
 /**
@@ -277,6 +282,96 @@ export function getGazetteerCoordinates(query: string): { lat: number; lng: numb
 export function getGazetteerZipcode(query: string): string | null {
   const hit = getGazetteerCoordinates(query);
   return hit ? hit.zipcode : null;
+}
+
+// ---------------------------------------------------------------------------
+// Ranked phrase-hit scan (Fondasional: city scope + anti-subtoken hijack)
+// ---------------------------------------------------------------------------
+interface PhraseCandidate {
+  row: GazetteerRow;
+  level: 'kelurahan' | 'kecamatan';
+  phrase: string;
+  start: number;
+  end: number;
+}
+
+function boundedMatchIndex(qNorm: string, phrase: string): { start: number; end: number } | null {
+  const re = new RegExp(`\\b${escapeRegex(phrase)}\\b`);
+  const m = re.exec(qNorm);
+  if (!m) return null;
+  return { start: m.index, end: m.index + phrase.length };
+}
+
+function wordCount(s: string): number {
+  return s.split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Pencocokan frase berbatas kata (word boundary) + partisi scope kota +
+ * anti-subtoken hijack generik + ranking deterministik.
+ * - Anti-subtoken hijack: tolak kelurahan 1 kata yang span-nya tertutup penuh
+ *   oleh frasa kandidat lebih panjang (misal "kupang" ⊂ frasa majemuk) —
+ *   generik, tanpa daftar token.
+ * - City scope: bila query menyebut kota, entri kota lain DIDISKUALIFIKASI.
+ * - Ranking: jumlah kata desc → kecamatan-cocok-yang-disebut desc → panjang
+ *   frase desc → kelurahan > kecamatan.
+ */
+function rankedGazetteerScan(
+  qNorm: string,
+  cityScope: string | null
+): { lat: number; lng: number; kelurahan: string; kecamatan: string; kota: string; zipcode: string } | null {
+  const rows = rawDataCache || [];
+  const candidates: PhraseCandidate[] = [];
+
+  for (const row of rows) {
+    const kec = (row.Kecamatan || '').toLowerCase().trim();
+    if (kec && kec.length >= 3) {
+      const km = boundedMatchIndex(qNorm, kec);
+      if (km) candidates.push({ row, level: 'kecamatan', phrase: kec, start: km.start, end: km.end });
+    }
+    const kel = (row.Kelurahan_Desa || '').toLowerCase().trim();
+    if (kel && kel.length >= 3 && kel !== kec && !['surabaya', 'sidoarjo', 'gresik', 'desa', 'kota', 'kabupaten'].includes(kel)) {
+      const km = boundedMatchIndex(qNorm, kel);
+      if (km) candidates.push({ row, level: 'kelurahan', phrase: kel, start: km.start, end: km.end });
+    }
+  }
+  if (candidates.length === 0) return null;
+
+  // Coverage guard (generic): tolak kelurahan 1 kata yang tertutup frasa lebih panjang.
+  const kept = candidates.filter((c) => {
+    if (c.level !== 'kelurahan' || c.phrase.includes(' ')) return true;
+    return !candidates.some((o) => o.phrase.length > c.phrase.length && o.start <= c.start && o.end >= c.end);
+  });
+  if (kept.length === 0) return null;
+
+  // Partisi scope kota.
+  const scoped = cityScope ? kept.filter((c) => c.row.Kabupaten_Kota === cityScope) : kept;
+  if (cityScope && scoped.length === 0) return null;
+
+  const kecMentioned = (c: PhraseCandidate): boolean =>
+    !!c.row.Kecamatan && boundedMatchIndex(qNorm, c.row.Kecamatan.toLowerCase().trim()) != null;
+
+  const best = scoped.reduce<PhraseCandidate | null>((bestSoFar, c) => {
+    if (!bestSoFar) return c;
+    const a = [wordCount(c.phrase), c.level === 'kelurahan' ? 1 : 0, kecMentioned(c) ? 1 : 0, c.phrase.length];
+    const b = [wordCount(bestSoFar.phrase), bestSoFar.level === 'kelurahan' ? 1 : 0, kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.phrase.length];
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return a[i] > b[i] ? c : bestSoFar;
+    }
+    return bestSoFar;
+  }, null);
+  if (!best) return null;
+
+  const coord = parseKoordinat(best.row.Koordinat || '');
+  if (!coord) return null;
+  return {
+    lat: coord.lat,
+    lng: coord.lng,
+    kelurahan: best.row.Kelurahan_Desa,
+    kecamatan: best.row.Kecamatan,
+    kota: best.row.Kabupaten_Kota,
+    zipcode: best.row.Kode_Pos,
+  };
 }
 
 /** Hasil pencocokan spasial terbalik terdekat (reverse geocoding lokal). */

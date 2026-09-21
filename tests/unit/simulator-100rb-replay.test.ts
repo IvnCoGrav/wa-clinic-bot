@@ -56,4 +56,26 @@ describe('Simulator 973126 replay: nominal + durasi tanpa nama paket', () => {
     );
     expect(summary).toContain('durasi waktu pelaksanaan');
   });
+
+  it('detectAgreedTreatment mengabaikan pertanyaan konsultatif nama penuh (nama + ?)', () => {
+    const names = catalogNames();
+    const agreed = names.find((n) => n.includes('Pulih Ceria')) || names[0];
+    const history = [
+      { role: 'user', content: `${agreed} itu nanti perawatannya beda apa sama yang lain ya ?` },
+    ];
+    // Pertanyaan eksplorasi BUKAN persetujuan paket → DILARANG seed selectedTreatment.
+    expect(ContextGrounder.detectAgreedTreatment(history, names)).toBeNull();
+  });
+
+  it('detectAgreedTreatment menangkap nama penuh TANPA tanda tanya (deklaratif), TANPA seed dari pertanyaan bertanda tanya', () => {
+    const names = catalogNames();
+    const agreed = names.find((n) => n.includes('Pulih Ceria')) || names[0];
+    // Campuran: satu pesan konsultatif bertanda tanya + satu pesan deklaratif.
+    const history = [
+      { role: 'user', content: `${agreed} itu buat apa ya ?` },
+      { role: 'user', content: `Oke ambil ${agreed} ya` },
+    ];
+    // Scan dari terbaru: deklaratif "ambil" → persetujuan sah.
+    expect(ContextGrounder.detectAgreedTreatment(history, names)).toBe(agreed);
+  });
 });

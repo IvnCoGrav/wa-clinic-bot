@@ -5,7 +5,8 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
-import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict } from '../../utils/gazetteer';
+import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict, getGazetteerCanonicalCities } from '../../utils/gazetteer';
+import { normalizeToponymAbbreviations, extractCityScope } from '../../utils/toponym-normalizer';
 dotenv.config();
 
 interface AddressComponent {
@@ -516,7 +517,9 @@ export class GeocodingService {
    * Geocode Mock Local Database Fallback untuk testing tanpa API key.
    */
   private async mockGeocodeText(locationText: string): Promise<ResolvedLocation> {
-    const lower = locationText.toLowerCase().trim();
+    // Normalisasi toponimi (gn→gunung, gg→gang, jl→jalan, dst) + scope kota.
+    const lower = normalizeToponymAbbreviations(locationText).toLowerCase().trim();
+    const cityScope = extractCityScope(lower, getGazetteerCanonicalCities());
     let kecamatanOnlyFallback: ResolvedLocation | null = null;
 
     // 0. Cek Landmark / Apartemen / Mall Populer terlebih dahulu
@@ -679,6 +682,10 @@ export class GeocodingService {
     try {
       const data = getGazetteerData();
       if (data.length > 0) {
+        // Partisi scope kota: bila query menyebut kota, hanya entri kota tsb
+        // yang boleh menang (anti-hijack lintas kota, misal "Surabaya, Kupang…").
+        const scopeData = cityScope ? data.filter((d: any) => d.Kabupaten_Kota === cityScope) : data;
+        const searchData = cityScope && scopeData.length > 0 ? scopeData : data;
         
         // --- PRIORITAS: PREFIX COLLOQUIAL INDEX (Lapis 1) ---
         // Customer bilang "Manukan" → match Manukan Kulon/Wetan via prefix index
@@ -691,7 +698,7 @@ export class GeocodingService {
             try {
               const prefixKelurahanList = resolvePrefixMatches(wordsOnly);
               if (prefixKelurahanList && prefixKelurahanList.length > 0) {
-                const prefixEntries = data.filter((d: any) => prefixKelurahanList.includes(d.Kelurahan_Desa));
+                const prefixEntries = searchData.filter((d: any) => prefixKelurahanList.includes(d.Kelurahan_Desa));
                 if (prefixEntries.length === 1) {
                   const match = prefixEntries[0];
                   const coords = match.Koordinat.split(',');
@@ -744,14 +751,14 @@ export class GeocodingService {
         }
 
         // --- PRIORITAS: N-GRAM GAZEETTEER MATCH ---
-        const bestMatch = this.findBestGazetteerMatch(cleanText || lower, data);
+        const bestMatch = this.findBestGazetteerMatch(cleanText || lower, searchData);
         if (bestMatch) {
           const { item, score, level, matchedSpan } = bestMatch;
           
           if (level === 'kecamatan') {
             const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
             if (!hasExplicitKelurahan) {
-              const subdistrictsInKec = data.filter((d: any) => d.Kecamatan.toLowerCase() === item.Kecamatan.toLowerCase());
+              const subdistrictsInKec = searchData.filter((d: any) => d.Kecamatan.toLowerCase() === item.Kecamatan.toLowerCase());
               if (!kecamatanOnlyFallback || !kecamatanOnlyFallback.ambiguityResults) {
                 kecamatanOnlyFallback = {
                   isPrecise: false,
@@ -767,12 +774,12 @@ export class GeocodingService {
             
             // Check if this kelurahan name is also a broad kecamatan name in Sidoarjo/Surabaya
             const matchedKelNorm = matchedKelurahanLower.replace(/\s+/g, '');
-            const kecNames = new Set<string>(data.map((d: any) => String(d.Kecamatan || '').toLowerCase()));
+            const kecNames = new Set<string>(searchData.map((d: any) => String(d.Kecamatan || '').toLowerCase()));
             const isAlsoKecamatanName = Array.from(kecNames).some(k => k === matchedKelurahanLower || k.replace(/\s+/g, '') === matchedKelNorm);
             const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel ') || lower.includes('kelurahan ') || lower.includes('ds ');
 
             if (isAlsoKecamatanName && !hasExplicitKelurahan) {
-              const subdistrictsInKec = data.filter((d: any) =>
+              const subdistrictsInKec = searchData.filter((d: any) =>
                 d.Kecamatan.toLowerCase() === matchedKelurahanLower ||
                 d.Kecamatan.toLowerCase().replace(/\s+/g, '') === matchedKelNorm
               );
@@ -785,7 +792,7 @@ export class GeocodingService {
               }
             }
 
-            const exactMatches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === matchedKelurahanLower);
+            const exactMatches = searchData.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === matchedKelurahanLower);
             
             if (exactMatches.length > 0) {
               // Check if user input explicitly mentions one of the kecamatans to resolve ambiguity
@@ -807,6 +814,33 @@ export class GeocodingService {
                   lng,
                   formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
                   zipcode: match.Kode_Pos,
+                  matchedSpan,
+                };
+              } else if (cityScope) {
+                // Scope kota eksplisit → resolusi otoritatif dalam kota tsb.
+                const matchesWithKota = exactMatches.filter((m: any) => m.Kabupaten_Kota === cityScope);
+                if (matchesWithKota.length === 1) {
+                  const match = matchesWithKota[0];
+                  const coords = match.Koordinat.split(',');
+                  const lat = parseFloat(coords[0].trim());
+                  const lng = parseFloat(coords[1].trim());
+                  const isExact = score === 1.0;
+                  return {
+                    isPrecise: isExact,
+                    isFuzzyMatch: !isExact,
+                    kelurahan: match.Kelurahan_Desa,
+                    kecamatan: match.Kecamatan,
+                    kota: match.Kabupaten_Kota,
+                    lat,
+                    lng,
+                    formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+                    zipcode: match.Kode_Pos,
+                    matchedSpan,
+                  };
+                }
+                return {
+                  isPrecise: false,
+                  ambiguityResults: exactMatches,
                   matchedSpan,
                 };
               } else if (exactMatches.length === 1) {
@@ -839,7 +873,7 @@ export class GeocodingService {
         }
 
         // Cek jika input customer sama dengan nama Kecamatan luas
-        const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
+        const kecNames = new Set(searchData.map((d: any) => d.Kecamatan.toLowerCase()));
         const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
         if (kecNames.has(cleanText) && !hasExplicitKelurahan) {
           return {
@@ -849,7 +883,7 @@ export class GeocodingService {
         }
 
         // --- ATURAN PRESEDEN 1: EXACT MATCH ---
-        const exactMatches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === cleanText);
+        const exactMatches = searchData.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === cleanText);
         if (exactMatches.length > 0) {
           if (exactMatches.length === 1) {
             const match = exactMatches[0];
@@ -875,7 +909,7 @@ export class GeocodingService {
         }
 
         // --- ATURAN PRESEDEN 2: FUZZY MATCH (Sorensen-Dice >= 0.80) ---
-        const fuzzyCandidates = data.map((d: any) => {
+        const fuzzyCandidates = searchData.map((d: any) => {
           const kelName = d.Kelurahan_Desa.toLowerCase();
           const similarity = getStringSimilarity(cleanText, kelName);
           return { item: d, similarity };
@@ -918,7 +952,7 @@ export class GeocodingService {
         }
 
         // --- ATURAN PRESEDEN 3: SUBSTRING MATCH / SCORING LAMA ---
-        const candidates = data.map((d: any) => {
+        const candidates = searchData.map((d: any) => {
           const kelName = d.Kelurahan_Desa.toLowerCase();
           const kecName = d.Kecamatan.toLowerCase();
           const kotaName = d.Kabupaten_Kota.toLowerCase();
@@ -979,7 +1013,7 @@ export class GeocodingService {
     }
 
     // 3. LLM Fallback: coba resolve via LLM jika gazetteer gagal
-    const llmResult = await this.llmResolveLocation(locationText);
+    const llmResult = await this.llmResolveLocation(locationText, cityScope);
     if (llmResult) {
       return llmResult;
     }
@@ -1025,7 +1059,7 @@ export class GeocodingService {
    * LLM Fallback: Resolve lokasi teks yang tidak ter-deteksi oleh gazetteer.
    * Menggunakan LLM untuk identifikasi kelurahan/kecamatan/kota, lalu cross-check ke gazetteer.
    */
-  private async llmResolveLocation(locationText: string): Promise<ResolvedLocation | null> {
+  private async llmResolveLocation(locationText: string, cityScope?: string | null): Promise<ResolvedLocation | null> {
     const apiKey = process.env.LLM_API_KEY || '';
     const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
     let model = process.env.AI_MODEL_NLU || '';
@@ -1100,6 +1134,13 @@ ATURAN:
 
 PENTING: Anda WAJIB mengakhiri jawaban dengan blok JSON final berikut (boleh berisi null),
 walaupun Anda melakukan reasoning internal terlebih dahulu — JSON final harus lengkap.
+
+KONTEKS LOKASI SAAT INI:
+${
+  cityScope
+    ? `Customer EKSPLISIT menyebut kota: "${cityScope}". Nama kelurahan/kecamatan yang Anda hasilkan WAJIB berasal dari kota tersebut — jangan pernah mengarahkan ke kota lain bila kota jelas disebut.`
+    : 'Customer TIDAK menyebut kota secara eksplisit. Berikan tebakan terbaik secara lokal (Sidoarjo/Surabaya).'
+}
 
 OUTPUT JSON:
 {
@@ -1224,6 +1265,15 @@ OUTPUT JSON:
           const dKel = d.Kelurahan_Desa.toLowerCase().trim();
           return dKel === kelLower || dKel.replace(/\s+/g, '') === kelNorm;
         });
+
+        // Kota eksplisit dari LLM = otoritas pemutus sebelum fallback kecamatan.
+        if (kota) {
+          const kotaLower = kota.toLowerCase();
+          const kotaMatches = matches.filter((m: any) => (m.Kabupaten_Kota || '').toLowerCase() === kotaLower);
+          if (kotaMatches.length > 0) {
+            matches.splice(0, matches.length, ...kotaMatches);
+          }
+        }
 
         if (matches.length === 1) {
           const match = matches[0];

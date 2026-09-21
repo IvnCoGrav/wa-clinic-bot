@@ -39,8 +39,9 @@ describe('AiModelConfigService — tenant-aware registry', () => {
     const cSum = c.find((x) => x.task === 'SUMMARIZATION')!;
     const defSum = def.find((x) => x.task === 'SUMMARIZATION')!;
     expect(cSum.modelName).toBe('qwen3.7-flash-2026-07-15');
-    // Default tenant tetap memakai default registry (model kanonik Kenari).
-    expect(defSum.modelName).toBe('deepseek-v4-1-flash');
+    // Default tenant memakai default registry (dari env, di-sanitize per-provider
+    // aktif — OPENAI_BASE_URL sumopod → deepseek-v4-flash).
+    expect(defSum.modelName).toBe('deepseek-v4-flash');
   });
 
   it('globalBotActive per-tenant: disable tenant A tidak memengaruhi tenant B', () => {

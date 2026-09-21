@@ -1432,11 +1432,14 @@ export class TreatmentCatalogService {
       resolvedTenantId = tenantId;
     }
     let pool = this.getAllServices(true, resolvedTenantId).filter((s) => s.isActive);
-    if (category && category !== 'BABY' && category !== 'KIDS' && category !== 'BOTH') {
-      pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
+    // Plan Fase 2.3 (sesi 89-turn): kategori MOMS WAJIB difilter ke layanan ibu
+    // (MOMS/BOTH) — sebelumnya jatuh ke cabang default yang memfilter BABY/BOTH,
+    // menyebabkan sesi konsultasi ibu direkomendasikan "Pijat Bayi Ceria Newborn".
+    if (category === 'MOMS') {
+      pool = pool.filter((s) => s.category === 'MOMS' || s.category === 'BOTH');
     } else if (category === 'KIDS') {
       pool = pool.filter((s) => s.category === 'KIDS' || s.category === 'BOTH');
-    } else {
+    } else if (category === 'BABY' || category === 'BOTH') {
       pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
     }
     // 391501: saring usia data-driven bila tersedia
@@ -1450,8 +1453,11 @@ export class TreatmentCatalogService {
       });
       if (filtered.length > 0) pool = filtered;
     }
-    return pool.find((s) => s.name.toLowerCase().includes('ceria') && !s.name.toLowerCase().includes('pulih'))
-      || pool.find((s) => s.category === 'BABY')
+    // Heuristik nama (data-driven dari pool yang sudah terfilter kategori):
+    // "relaks" untuk ibu, "ceria" non-terapi untuk bayi; fallback aman = pool[0]
+    // (pool sudah benar kategorinya — TIDAK ADA lagi fallback memaksa BABY).
+    return pool.find((s) => s.name.toLowerCase().includes('relaks') && !s.name.toLowerCase().includes('pulih'))
+      || pool.find((s) => s.name.toLowerCase().includes('ceria') && !s.name.toLowerCase().includes('pulih'))
       || pool[0];
   }
 

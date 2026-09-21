@@ -1005,8 +1005,11 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     const ctx = await buildScenario('Matrix CM-22');
 
     activeTurn = 1;
-    const r1 = await runTurn(ctx, 'Anak saya batuk pilek');
-    // Gejala dikenal + lokasi kosong → ASK_DOMICILE (bukan todong jadwal).
+    const r1 = await runTurn(ctx, 'Anak saya (3 bulan) batuk pilek');
+    // Gejala dikenal + usia sudah pasti (single-tier) + lokasi kosong →
+    // ASK_DOMICILE (bukan todong jadwal). Usia multi-tier tanpa kepastian
+    // justru memicu CLINICAL_PROBE usia lebih dulu (sesi 783810), sehingga
+    // alur domisili-dulu tetap sah ketika tier sudah ditentukan.
     expect(callsFor(id, 1, 'get_catalog_and_price')).toHaveLength(1);
     const cat1 = execFor(id, 1, 'get_catalog_and_price');
     expect(cat1).toHaveLength(1);

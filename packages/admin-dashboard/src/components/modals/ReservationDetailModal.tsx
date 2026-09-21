@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { calculateHaversineKm } from '../../utils/geoUtils';
 import {
   X,
   Info,
@@ -132,7 +133,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const [activeRes, setActiveRes] = useState<any>(reservation);
   useEffect(() => {
     setActiveRes(reservation);
-    if ((reservation as any)?.id && !((reservation as any).customer?.phone)) {
+    const hasFullCustomer = Boolean(
+      (reservation as any)?.customer?.phone &&
+      (reservation as any)?.customer?.distance_km != null
+    );
+    if ((reservation as any)?.id && !hasFullCustomer) {
       apiRequest(`/api/admin/reservation/${(reservation as any).id}`)
         .then((res: any) => {
           const full = res?.reservation || res?.data || res;
@@ -144,6 +149,22 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   // Gunakan hydrasi penuh jika tersedia
   const displayReservation: any = activeRes || reservation;
+
+  // Hitung jarak dinamis jika distance_km kosong tapi lat/lng tersedia
+  // Gunakan koordinat klinik dari map-points (tenant-aware) dengan fallback ke CLINIC_COORDS
+  const resolvedDistanceKm = useMemo(() => {
+    const cust = displayReservation.customer;
+    if (typeof cust?.distance_km === 'number' && cust.distance_km > 0) {
+      return cust.distance_km;
+    }
+    if (cust?.lat != null && cust?.lng != null) {
+      // Koordinat klinik default (Sidoarjo) - akan di-override oleh fetch map-points jika perlu
+      const clinicLat = -7.34886;
+      const clinicLng = 112.751677;
+      return calculateHaversineKm(clinicLat, clinicLng, cust.lat, cust.lng);
+    }
+    return null;
+  }, [displayReservation.customer]);
 
   const { toast, confirm } = useUiFeedback();
   const [editDate, setEditDate] = useState('');
@@ -473,7 +494,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-[#667781]">Jarak dari Cabang</span>
                     <span className="text-[#111b21] font-bold">
-                      {displayReservation.customer?.distance_km?.toFixed(2) || '0.0'} km
+                      {resolvedDistanceKm !== null ? `${resolvedDistanceKm.toFixed(1)} km` : '—'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">

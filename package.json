@@ -17,6 +17,8 @@
     "test:cases": "tsx scripts/run-real-conversation-tests.ts",
     "test:clean": "tsx scripts/clean-qa-tests.ts",
     "test:real-replay": "tsx scripts/replay-real-customer-cases.ts",
+    "test:suite": "tsx scripts/run-test-plan.ts --suite=v2",
+    "test:suite:llm": "tsx scripts/run-test-plan.ts --suite=v2 --llm",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

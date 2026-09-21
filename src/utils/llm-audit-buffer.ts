@@ -8,6 +8,10 @@ export interface LlmAuditLogPayload {
   conversation_id?: string | null;
   /** Provider aktual (dari baseUrl request): 'SumoPod', 'DeepSeek Direct', dst. */
   provider?: string;
+  /** Base URL aktual request — dipakai menentukan tarif provider (dan peak) di cost calculator. */
+  baseUrl?: string | null;
+  /** Waktu panggilan LLM sebenarnya — agar peak-hour DeepSeek di-resolve dari waktu panggilan, bukan waktu flush. */
+  calledAt?: Date;
   model_name: string;
   task_type: string; // NLU_ROUTING, CHAT_REPLY, dst
   prompt_tokens: number;
@@ -36,7 +40,14 @@ export function recordLlmUsage(payload: LlmAuditLogPayload): void {
     const promptTokens = payload.prompt_tokens || 0;
     const completionTokens = payload.completion_tokens || 0;
     const cachedTokens = payload.cached_prompt_tokens || 0;
-    const { totalCostIdr } = calculateLlmCost(payload.model_name, promptTokens, completionTokens, cachedTokens);
+    const { totalCostIdr } = calculateLlmCost(
+      payload.model_name,
+      promptTokens,
+      completionTokens,
+      cachedTokens,
+      payload.calledAt || undefined,
+      payload.baseUrl
+    );
 
     // Shadow Logging ke console (hanya saat mode debug/verbose)
     if (!isSimpleLogMode()) {
@@ -96,6 +107,8 @@ export function auditLlmCall(params: {
       customer_phone: params.customer_phone,
       conversation_id: params.conversation_id ?? null,
       provider: deriveProvider(params.baseUrl),
+      baseUrl: params.baseUrl,
+      calledAt: new Date(params.startedAt),
       model_name: params.model_name,
       task_type: params.task_type,
       prompt_tokens: params.usage?.prompt_tokens || 0,
@@ -130,7 +143,9 @@ export async function flushLlmAuditBuffer(): Promise<void> {
         item.model_name,
         item.prompt_tokens,
         item.completion_tokens,
-        item.cached_prompt_tokens || 0
+        item.cached_prompt_tokens || 0,
+        item.calledAt || undefined,
+        item.baseUrl
       );
       return {
         tenant_id: item.tenant_id || DEFAULT_TENANT_ID,

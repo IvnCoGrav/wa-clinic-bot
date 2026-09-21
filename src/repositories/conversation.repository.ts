@@ -28,6 +28,12 @@ export interface ConversationRepository {
   getOrCreate(customerId: string, tenantId: string): Promise<any>;
   findById(id: string, tenantId: string): Promise<any | null>;
   updateState(id: string, patch: ConversationStatePatch, tenantId: string): Promise<any>;
+  /**
+   * Plan Fase 3 (sesi 89-turn): penandaan antrean kurasi admin (review_flagged)
+   * TANPA mengubah flag operasional is_human_handling. Berbeda dengan escalate —
+   * kurasi FAQ bukan pengalihan CS; bot tetap aktif menjawab.
+   */
+  flagForReview(id: string, reason: string, tenantId: string): Promise<any>;
 }
 
 export class PostgresConversationRepository implements ConversationRepository {
@@ -77,6 +83,18 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
     return await prisma.conversation.update({ where: { id }, data });
   }
+
+  async flagForReview(id: string, reason: string, tenantId: string): Promise<any> {
+    const existing = await prisma.conversation.findUnique({ where: { id } });
+    if (!existing) throw new Error(`Conversation ${id} not found`);
+    if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
+      throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
+    }
+    return await prisma.conversation.update({
+      where: { id },
+      data: { review_flagged: true, escalation_reason: reason },
+    });
+  }
 }
 
 export class InMemoryConversationRepository implements ConversationRepository {
@@ -96,6 +114,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
       is_human_handling: false,
       human_handling_since: null,
       consecutive_unknown_count: 0,
+      review_flagged: false,
       last_message_at: new Date(),
       is_pinned: false,
       pinned_at: null,
@@ -136,6 +155,17 @@ export class InMemoryConversationRepository implements ConversationRepository {
 
   clear(): void {
     this.store.clear();
+  }
+
+  async flagForReview(id: string, reason: string, _tenantId: string): Promise<any> {
+    const existing = this.store.get(id);
+    if (!existing) throw new Error(`Conversation ${id} not found`);
+    if (_tenantId && existing.tenant_id && existing.tenant_id !== _tenantId) {
+      throw new Error(`Conversation ${id} bukan milik tenant ${_tenantId}`);
+    }
+    const data = { ...existing, review_flagged: true, escalation_reason: reason, updated_at: new Date() };
+    this.store.set(id, data);
+    return data;
   }
 
   /**

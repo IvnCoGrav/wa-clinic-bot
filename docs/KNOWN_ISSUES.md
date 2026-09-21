@@ -5,6 +5,72 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 105. [Cost Estimator] Tarif LLM bersumber nama model, bukan provider request; Kenari basi ~18x + SumoPod tanpa tarif — RESOLVED 2026-09-21
+
+- **Status:** resolved (estimator sudah provider-aware; data Kenari live via snapshot), sisa = data historis.
+- **Akar masalah (sebelum fix):**
+  1. `calculateLlmCost(model, prompt, completion, cached, date)` di `src/utils/cost-calculator.ts` hanya
+     di-key nama model; provider aktual dipisah ke `deriveProvider` untuk label audit
+     (`llm-audit-buffer.ts:98`), tidak dipakai untuk tarif.
+  2. Caller punya `baseUrl` (mis. `generation-stage.ts:195` `turn.baseUrl`) tapi tidak meneruskannya ke
+     `calculateLlmCost` (`:205,213`; `llm-audit-buffer.ts:39,129-134`) — jadi model yang sama bisa
+     dihitung tarif DeepSeek padahal dilayani Kenari/SumoPod.
+  3. Hardcode Kenari di kode (~Rp150/4/300 per 1M) ~18× lebih murah dari harga live
+     (`GET https://kenari.id/v1/models` holistic: `deepseek-v4-1-flash` Rp2.750/65/5.500, `deepseek-v4-pro`
+     Rp10.000/100/20.000, `step-3-7-flash` Rp4.200/840/24.000 — unit `micro_idr_per_1m_tokens`, flat tanpa peak).
+  4. Tarif DeepSeek Direct belum di-verifikasi ulang; model tak dikenal (mis. `deepseek-v4-flash-0731:netra`
+     SumoPod) jatuh ke `DEFAULT_PRICING` ($0.03/$0.12) SENYAP tanpa penanda.
+- **Fix fondasional:** `cost-calculator.ts` kini resolver provider-aware (baseUrl OTORITATIF atas nama model),
+  tabel per-provider (`DEEPSEEK_DIRECT_PRICING` peak/off-peak resmi Sept 2026, `KENARI_PRICING` dari snapshot
+  JSON `src/config/kenari-pricing.snapshot.json` yang di-sync `scripts/sync-pricing.ts`, SumoPod TANPA tabel →
+  seluruh panggilan di-`fallback-unverified`), tambah field `pricingSource: 'verified'|'fallback-unverified'` +
+  `isPeak`, dan baseUrl diteruskan di 4 call site (`generation-stage.ts:205,213`; `llm-audit-buffer.ts:43,142`),
+  plus `calledAt` agar peak di-resolve dari waktu panggilan asli bukan waktu flush. DeepSeek-chat/reasoner jadi
+  alias v4-flash ($0.22/$0.66; sebelumnya $0.14/$0.28 & $0.55/$2.19 — SEKARANG RESMI).
+- **Data historis:** `llm_audit_logs.cost_idr` Lama dihitung pakai tarif Kenari basi/senyap; nilai baru akan
+  melonjak ~18× untuk jalur Kenari dan berubah untuk DeepSeek. TIDAK di-back-migrate — kartografi biaya yang
+  harap diinterpretasikan ulang saja (tidak menimpa riwayat audit).
+- **Tech debt sisa:**
+  1. Tarif SumoPod tidak bisa divalidasi (endpoint pricing 401/404/403) — seluruh model SumoPod tercatat
+     `pricingSource: 'fallback-unverified'` DENGAN sengaja (bukan bug); bila SumoPod kelak memublikasikan tarif,
+     tambahkan tabel `SUMOPOD_PRICING` + delete `SUMOPOD_PROVIDER` fallback.
+  2. Snapshot Kenari di-commit manual via script — belum ada scheduler live-fetch; tanggal di `fetchedAt`.
+  3. `isDeepSeekPeakHour` mempertahankan jendela 00:30–12:30 UTC (legacy) vs jendela resmi DeepSeek 01–04 &
+     06–10 UTC; beda hanya margin 2 jendela — unlock & sejajarkan bila perlu audit biaya ketat.
+- **Test pengaman:** `tests/unit/cost-calculator.test.ts` (17 kasus, termasuk peak/off-peak, Kenari live,
+  SumoPod fallback-unverified, free model, embeddings), `tests/unit/llm-execution-tracing-deepseek.test.ts`.
+
+---
+
+## 0x. [Geocoding] Presisi lokasi masih level kelurahan/kecamatan; scope kota & alias kota belum tenant-aware
+
+- **Status:** open (tech debt, sengaja ditunda dari rencana F0–F4 spatial hardening).
+- **Akar masalah:** dataset gazetteer (`surabaya_sidoarjo_subdistricts.json`, 573 baris) hanya memuat
+  centroid kelurahan/kecamatan — tidak ada geometri jalan/alamat pelanggan. Jadi presisi maksimum
+  hasil `geocodeText`/`getGazetteerCoordinates` adalah kelurahan bersangkutan (jarak titik rumah ke
+  centroid bisa ±2–3 km), dan pemetaan nama jalan populer ke kelurahan induk masih lewat
+  `ARTERY_CORRIDORS` statis (16 koridor, hardcode TS di `src/config/landmarks.ts`).
+- **Keputusan fondasional yang TAKE CARE:** partisi scope kota (`extractCityScope`) + ranked
+  phrase-hit berbatas kata + coverage guard generik di `src/utils/gazetteer.ts`,
+  `src/utils/toponym-normalizer.ts`; bukan menambah koridor ke-17 hardcode per kasus (solusi
+  kosmetik ditolak).
+- **Tech debt yang dicatat:**
+  1. **Alias toponimi** (`sby`→surabaya, `sda`→sidoarjo, dll) masih lapis linguistik hardcode di
+     `toponym-normalizer.ts` (`TOWN_ALIASES`) — belum tenant-aware. Migrasi ideal: tabel DB
+     (misal `ClinicPolicy`/`TenantPromptConfig`) berisi alias per tenant.
+  2. `ARTERY_CORRIDORS` (16 koridor) + `resolveArteryCorridor` masih hardcode TS. Migrasi ideal:
+     tabel DB (nama jalan → kelurahan induk + prioritas) sehingga admin bisa tambah tanpa deploy.
+     Test `artery-corridor-gazetteer.test.ts` mengunci panjang 16 — jangan diubah tanpa migrasi DB.
+  3. Dataset gazetteer belum tenant-aware (single global untuk semua tenant). Bila multi-tenant
+     aktif penuh, scope kota/kabupaten HARUS jadi per-tenant.
+- **Tindak lanjut:** (1) tambah kolom jenis geometri + jalur alamat di dataset bila perlu presisi
+  jalan; (2) migrasi `TOWN_ALIASES` & `ARTERY_CORRIDORS` ke DB; (3) penanda tenant pada scope spasial.
+- **Test pengaman:** `tests/unit/spatial-scoping.test.ts`, `tests/unit/toponym-normalizer.test.ts`,
+  `tests/unit/geocoding.test.ts`, `tests/unit/local-first-geocoding.test.ts`,
+  `tests/unit/artery-corridor-gazetteer.test.ts` (wajib hijau saat migrasi DB).
+
+---
+
 ## 1c. [Data] 3 customer foto rumah tanpa koordinat (legacy, guard baru mencegah)
 
 - **Status:** open-legacy, ditemukan 2026-05-14 via `preferences->>'house_photo_url' IS NOT NULL AND lat IS NULL`.
@@ -64,6 +130,39 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   service) yang bocor antar-file ketika dijalankan paralel/satu proses.
 - **Rencana perbaikan:** audit singleton/global state di `tests/setup.ts`, pastikan reset per-file
   (`beforeEach`), atau pisah test yang saling mencemari ke konfigurasi terpisah.
+
+---
+
+## 0k. [Test/Infra] Suite V2 — drift snapshot referensi & limitasi skoring auto (open)
+
+- **Status:** open (by design), dibuat 2026-09-21 bersama `scripts/build-test-suite-v2.ts`.
+- **Gejala/desain:** `tests/fixtures/reference-rules.json` adalah **snapshot** ground truth
+  (delivery_tiers, clinic_services, clinic_policies) dengan `generated_at` + `db_hash`. Otoritas
+  harga/SOP tetap tabel DB; snapshot hanya memastikan re-run deterministik dan memungkinkan
+  deteksi drift saat admin mengubah katalog/policy/DeliveryTier.
+- **Limitasi (disengaja):**
+  1. Build menuntut DB live (failure-loud) — tidak bisa dipakai bila Postgres offline.
+  2. Skoring **4 dimensi teknis otomatis** (Harga, SOP state-contract, Data Reservasi, Tool Masking)
+     menangani kontrak state/tool secara deterministik; **Tone & Resolusi WAJIB human review**
+     dan tidak pernah disetujui otomatis.
+  3. D2 memakai set state aman ({INITIAL, AWAITING_LOCATION, LOCATION_CONFIRMED,
+     AWAITING_INTEREST, RESERVATION_SENT}) untuk kasus non-eskalasi; kasus booking panjang (CASE-003, CASE-037,
+     CASE-082 saat replay fallback offline) berakhir HUMAN_HANDLING → auto gate FAIL. Ini
+     **divergensi engine fallback rule-based** vs LLM live, bukan bug scorer — butuh human audit
+     &/atau re-run `--llm` untuk memutuskan apakah eskalasi tsb wajar (unresolved_faq).
+  4. `expected_total_price` hanya terkunci bila 1 layanan + 1 nominal cocok katalog; selainnya N/A.
+  5. Tanggal `date_mismatch_flag`/deteksi aritmetika dibatasi kalender 2026 & pola "± + ± (bukan|kan) ±".
+  6. Anonimisasi PII: nomor/email/alamat-no disunting; **nama Bunda/bayi di dalam teks alur tetap
+     verbatim** (keputusan plan) — jangan distribusikan fixture tanpa review nama.
+  7. Replay fallback offline **tidak sepenuhnya deterministik**: eskalasi kasus medis panjang
+     (RF-06/RF-07) kadang terlewat (state berujung `RESERVATION_SENT`/`INITIAL` daripada
+     `HUMAN_HANDLING`), dan muncul noise `"Record to update not found"` dari `prisma.conversation.update`
+     di `machine.ts` saat id konversi in-memory tidak ada di DB real (await-versus-write race,
+     non-fatal). Untuk menilai kasus medis, andalkan gate golden-corpus (61 test, green) & re-run `--llm`;
+     auto-gate suite pada kasus tsb = sinyal perlu human audit, bukan keputusan final.
+- **Rencana:** jalankan builder ulang saat katalog/policy berubah (db_hash berubah); dokumentasikan
+  drift via diff `reference-rules.json`. Full 119 kasus di mode fallback butuh waktu lama (~1 jam+)
+  — gunakan `--id`/`--from`/`--to` per batch.
 
 ---
 
@@ -2162,3 +2261,36 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Kenapa ditunda:** resolusi tenant dilakukan di TITIK PALING AWAL `/webhook` (sebelum percabangan jenis event). Fail-closed di sana ikut men-drop event **ACK/label/typing** yang tidak butuh resolusi tenant (bukti: `typing-sync.test.ts` 2 gagal, `waha-webhook.test.ts` 7 gagal). Selain itu, true "quarantine" butuh tabel/schema baru.
 - **Prasyarat lanjutan:** (a) tabel quarantine, ATAU (b) penanganan fail-closed **per jenis event** (hanya `message` inbound, bukan ACK/label), (c) keputusan untuk kasus DB-outage (fallback vs retry).
 - **Dampak saat ini:** untuk 1 tenant, fail-open tidak menimbulkan masalah nyata. Risiko baru muncul saat multi-tenant.
+
+---
+
+## 104. [Plan Validasi] State Persistence, Anti-Silent Handoff & Maternal Routing (2026-09-21)
+
+- **Status:** RESOLVED (schema + state machine + sanitizer + maternal routing + handoff anti-silent-drop).
+- **Latar:** Laporan Kasus #1 (Bunda Inggrid, 89 turn) — amnesia lokasi 8x, mati suri 68 turn, misrouting maternal, DSML bleeding.
+- **Verifikasi plan (kode+log+DB):** RC-1 session_data tidak ada di DB fisik — TERBUKTI (HAS session_data: false); RC-2 learning loop men-set is_human_handling — TERBUKTI (machine.ts:773); RC-3 getDefaultRelaxationService filter BABY untuk MOMS — TERBUKTI; RC-4 DSML — TERBUKTI + akar lebih dalam: regex sanitizer <｜｜DSML｜｜ tidak pernah match pola riil model <\u009C\u009CDSML\u009C\u009D ... (control chars, slash penutup di antara wrapper).
+- **Perbaikan fondasional:**
+  1. 
+px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) → session_data writable (script scripts/verify-session-data.ts).
+  2. goal-tracker.updateGoalSession: blok try raksasa dipecah — kegagalan episodik (session_data) TIDAK lagi menggugurkan mirror durable Customer (akar amnesia). getGoalSession: resilient memory fallback saat DB kosong padahal memori substantif.
+  3. Maternal routing: getDefaultRelaxationService('MOMS') → filter MOMS/BOTH (bukan BABY); header pregrounding "Ibu Sehat Relaksasi" untuk sesi ibu.
+  4. Learning loop: lagForReview via repository seam (review_flagged=true, bot TETAP AKTIF) — kurasi ≠ eskalasi CS.
+  5. Sanitizer DSML: trim-from-first-DSML (draf korup), pipe tunggal/ganda + control chars C1; <result>/<tool_call> tetap tag-pair removal.
+  6. **Handoff anti-silent-drop (temuan baru):** flag is_human_handling SEBELUMNYA di-set sebelum balasan closing schedule-check terkirim → shouldAbort() membatalkan kirim (ABORTED_BY_HUMAN_HANDLING) → customer diam total. Kini flag di-set DEFENSIF SETELAH STEP 2 kirim (pendingEscalation). Verifikasi: Turn 16 "Baik" → closing TERKIRIM (bukan silent).
+- **Test:** unresolved-faq-writer direvisi ke kontrak baru (review_flagged, bot aktif); tambahan test MOMS routing + header ibu; suite akhir **2978 passed / 1 failed** (staff-auth GPS landmark — pre-existing WIP lain, bukan blast radius sesi ini).
+- **Catatan:** silent setelah closing (Turn 17+) = latch handoffClosingSent DISENGAJA (Plan 7 anti-loop), bukan bug.
+- **Tech debt sisa:** (a) tanya kondisi ibu masih bisa muncul berulang dalam konteks penawaran (Call 2 LLM judgment, bukan amnesia); (b) check-test-customer.ts tidak relevan sebagai acceptance session_data — diganti scripts/verify-session-data.ts.
+
+## 106. [Fix Sesi 783810] Kontrak Konsultasi vs Transaksi + Prioritas Usia Multi-Tier (2026-09-21)
+
+- **Status:** RESOLVED (gerbang kode deterministik; TDD merah-hijau per fase).
+- **Latar:** Ghost cart — pertanyaan eksplorasi consultative ("kalau yang pulih ceria itu ?") memicu fuzzy userConfirmedNames telah di-core; multi-offer asisten + "sabtu bisa ?" mengunci `Pijat Bayi Pulih Ceria` yang TIDAK pernah dipilih customer. + Ambiguous-age glitch: LLM menyebut label tier `Newborn` sebagai nama layanan (nama "Pijat Bayi Ceria Newborn" TIDAK ada di katalog riil).
+- **Akar masalah lintas lapisan:** (1) seam userConfirmedNames (cart-manager) memfilter fuzzy cuma dengan isDurationOnlyQuestion, tanpa gate konsultatif; (2) main gate konsultatif inline (text.includes('?') && !commit && !day) terduplikasi di seam lain → drift; (3) detectAgreedTreatment me-seed selectedTreatment dari penyebutan nama penuh DALAM pertanyaan bertanda '?'; (4) hierarki closingIntent menaruh hasKnownSymptoms di atas needsAgeClarification → keluhan multi-tier tanpa usia lompat ke ASK_SCHEDULE/ASK_DOMICILE tanpa tanya usia → tier default terkunci + guardrail usia menendang pertanyaan yang justru klinis.
+- **Perbaikan fondasional (4 fase):**
+  1. **Fase A — predikat bersama** `isConsultativeUserText(text, session?)` di `src/utils/date-confirmation.ts`: `'?'` ∧ `!hasBookingCommitSignal` ∧ tanpa `DAY_EVIDENCE_WORDS` ∧ `session.bookingCommitConfirmed !== true`. Dipakai di: loop `userConfirmedNames` (skip), main gate cart (inline predicate diganti), `detectAgreedTreatment` (param optional `session`, skip konsultatif). Anti-drift: satu sumber kebenaran semua seam.
+  2. **Fase B — prioritas usia multi-tier:** cabang `needsAgeClarification` → `CLINICAL_PROBE` dinaikkan DI ATAS `hasKnownSymptoms` di `get-catalog.tool.ts`. Usia menentukan tier (Bayi vs Anak); domisili/jadwal menyusul. Kontrak test closing-intent diperbarui (fixture diberi `childAgeMonths` agar tetap menguji ASK_DOMICILE/ASK_SCHEDULE saat tier sudah pasti) + test baru multi-tier→CLINICAL_PROBE.
+  3. **Fase C — strip deterministik usia NOMINAL:** klausul "sampaikan tim menanyakan saat koordinasi jadwal" dihapus; lapis kode `stripNominalAges` (angka+satuan di bawah kata `usia`, tanpa otorisasi `needsAgeClarification`) menggugurkan nominal w/O mutilasi — sisa-sisa unit/satuan → fail-safe kembalikan teks asli.
+  4. **Fase D — dokumen ini.**
+- **Kontrak test:** cart multi-turn ghost → cart kosong; "Ambil yang pulih ceria ya??" tetap mengunci; "sabtu bisa ?" tunggal-offer tetap tidak mengunci; detectAgreedTreatment nama penuh+? → null; authorized needsAgeClarification → angka usia DIPERTAHANKAN.
+- **Tech debt ditunda (MEMBUTUHKAN KEPUTUSAN):** bullet `SAVE_RESERVATION_FULL` di `src/v3/agent/prompt/phases/router-tool-routing.layer.ts:11` ("hari sabtu bisa" → langsung kunci reservasi) KONTRADIKSI dengan Rule 5 tool-masker (`hasCommitment` butuh sinyal; `BOOKING_COMMIT_PENDING` saat hanya hari disebut) & doktrin `'?'`-fail-closed — bullet TIDAK diubah di sesi ini; pelanggaran potensial: slicing llmTools hooks (tool-masker/booking-tool-gate/atc-analysis) mungkin mendorong LLM memanggil save saat masih tentatif. Verifikasi & perbaiki di sesi lanjutan.
+- **Regresi di luar scope (catat tahu):** hafalan gejala 2-kata (mis. `batuk pilek` via `normalizeFam`) masih bisa salah-target katalog saat keluhan berisi kata generik — kandidat presisi `SymptomBridge` (bukan sesi ini).
