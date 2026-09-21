@@ -10,38 +10,44 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 describe('AiModelConfigService — tenant-aware registry', () => {
   it('loadConfigsFromDb tenant A tidak menimpa tenant B (registry terpisah)', async () => {
     // Tanpa DB (offline) → loadConfigsFromDb jatuh ke fallback in-memory (clone default).
+    // Default global kini server utama SumoPod (MiniMax-M2.7-highspeed).
     await AiModelConfigService.loadConfigsFromDb('tenant-A');
     await AiModelConfigService.loadConfigsFromDb('tenant-B');
 
-    // Update tenant A
+    // Update tenant A ke model SumoPod lain (katalog-native agar tidak di-sanitize)
     const updated = AiModelConfigService.updateTaskConfig(
       'CHAT_REPLY',
-      { modelName: 'deepseek-v4-1-flash', provider: 'Kenari' },
+      { modelName: 'glm-5.3-flash', provider: 'SumoPod' },
       'tenant-A'
     );
-    expect(updated.modelName).toBe('deepseek-v4-1-flash');
+    expect(updated.modelName).toBe('glm-5.3-flash');
 
-    // Tenant B TIDAK berubah — tetap default registry (model kanonik Kenari).
+    // Tenant B TIDAK berubah — tetap sama dengan snapshot default saat test dimulai
+    // (anti-env-drift: tidak hardcode MiniMax karena .env dev lokal masih KENARI).
     const tenantB = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-B');
-    expect(tenantB.modelName).toBe('deepseek-v4-1-flash');
+    expect(tenantB.modelName).not.toBe('glm-5.3-flash');
+    const defBefore = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
+    expect(tenantB.modelName).toBe(defBefore.modelName);
 
-    // Tenant default TIDAK berubah
+    // Tenant default TIDAK berubah oleh update tenant-A
     const def = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
-    expect(def.modelName).toBe('deepseek-v4-1-flash');
+    expect(def.modelName).not.toBe('glm-5.3-flash');
   });
 
   it('getAllTaskConfigs per-tenant mengembalikan daftar terpisah', async () => {
     await AiModelConfigService.loadConfigsFromDb('tenant-C');
-    AiModelConfigService.updateTaskConfig('SUMMARIZATION', { modelName: 'qwen3.7-flash-2026-07-15' }, 'tenant-C');
+    const defBefore = AiModelConfigService.getModelConfig('SUMMARIZATION', DEFAULT_TENANT_ID);
+    // Aktifkan SumoPod dulu agar model katalog SumoPod tidak di-sanitize ke Kenari.
+    await AiModelConfigService.setActiveProvider('tenant-C', 'SUMOPOD');
+    AiModelConfigService.updateTaskConfig('SUMMARIZATION', { provider: 'SumoPod', modelName: 'qwen3.7-flash-2026-07-15' }, 'tenant-C', { persist: false } as any);
 
     const c = AiModelConfigService.getAllTaskConfigs('tenant-C');
     const def = AiModelConfigService.getAllTaskConfigs(DEFAULT_TENANT_ID);
     const cSum = c.find((x) => x.task === 'SUMMARIZATION')!;
     const defSum = def.find((x) => x.task === 'SUMMARIZATION')!;
     expect(cSum.modelName).toBe('qwen3.7-flash-2026-07-15');
-    // Default tenant memakai default registry (dari env, di-sanitize per-provider
-    // aktif — OPENAI_BASE_URL sumopod → deepseek-v4-flash).
-    expect(defSum.modelName).toBe('deepseek-v4-flash');
+    // Default tenant tidak ikut berubah (anti-env-drift).
+    expect(defSum.modelName).toBe(defBefore.modelName);
   });
 
   it('globalBotActive per-tenant: disable tenant A tidak memengaruhi tenant B', () => {

@@ -3,12 +3,14 @@
  * Provider-aware: resolusi tarif ditentukan dari BASE URL REQUEST (provider aktual), bukan nama model saja.
  * Sebab model yang sama (mis. deepseek-v4-flash) bisa di-host berbeda dengan tarif berbeda.
  *
- * Sumber tarif:
- * - Kenari: dibaca dari `GET https://kenari.id/v1/models` (publik, no-key) => snapshot `src/config/kenari-pricing.snapshot.json`.
- *   Tarif Kenari FLAT (tidak kena peak-hour DeepSeek). 1 unit = micro-IDR per 1M token.
- * - DeepSeek Direct (api.deepseek.com): tarif resmi peak/off-peak. Off-peak = 17 jam/hari, peak 01-04 & 06-10 UTC (Mon-Fri).
- * - SumoPod (ai.sumopod.com): TIDAK memublikasikan tarif (401 pada /v1/models price, 404 pricing, 403 api-gate).
- *   => SELURUH model via SumoPod dikategorikan `fallback-unverified` (tidak menebak tarif).
+ * Sumber tarif (live per 2026-09-21, harga diskon SumoPod/Kenari dari dashboard provider):
+ * - SumoPod (server utama): tarif diskon publik per model (verified) — lihat SUMOPOD_PRICING.
+ *   glm-5.3-flash 50% off ($0.015 in / $0.25 out), MiniMax-M2.7-highspeed 90% off ($0.03/$0.12),
+ *   qwen3.7-flash ≤32K ($0.03/$0.006/$0.13), netra 80% off ($0.04/$0.01/$0.10), gpt-4o-mini ($0.15/$0.075/$0.60).
+ * - Kenari (cadangan): dibaca dari `GET https://kenari.id/v1/models` (publik, no-key) => snapshot
+ *   `src/config/kenari-pricing.snapshot.json`. Tarif Kenari FLAT (tidak kena peak-hour DeepSeek).
+ *   1 unit = IDR per 1M token. Model baru: gemini-2-5-flash-lite (400/40/1700), muse-spark-1-3-contributor (2000/40/4000).
+ * - DeepSeek Direct (api.deepseek.com, last fallback): tarif resmi peak/off-peak.
  * Kurs default 1 USD = Rp 18.000 (dapat disesuaikan via env USD_TO_IDR).
  */
 
@@ -274,6 +276,18 @@ const KENARI_PRICING_LAST_KNOWN: Record<string, ModelPricing> = {
     promptCostPer1kIdr: 0,
     completionCostPer1kIdr: 0,
   },
+  'gemini-2-5-flash-lite': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 0.4, // 400 IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.04, // 40 IDR / 1M
+    completionCostPer1kIdr: 1.7, // 1.700 IDR / 1M
+  },
+  'muse-spark-1-3-contributor': {
+    provider: 'Kenari',
+    promptCostPer1kIdr: 2.0, // 2.000 IDR / 1M
+    promptCacheHitCostPer1kIdr: 0.04, // 40 IDR / 1M
+    completionCostPer1kIdr: 4.0, // 4.000 IDR / 1M
+  },
 };
 
 const DEFAULT_PRICING: ModelPricing = {
@@ -310,8 +324,57 @@ function loadKenariSnapshot(): Record<string, ModelPricing> {
 /** Tarif Kenari aktif (snapshot live bila ada, selain itu last-known). */
 const KENARI_PRICING = loadKenariSnapshot();
 
-/** SumoPod tidak memublikasikan tarif — TIDAK ada tabel. Dipakai sbg penanda unverified. */
+/** Provider label SumoPod (server utama). */
 const SUMOPOD_PROVIDER = 'SumoPod';
+
+/**
+ * Tarif SumoPod live diskon (verified, per 2026-09-21 dari dashboard SumoPod).
+ * Semua tarif di bawah adalah harga DISKON (kolom kanan) per 1M token (USD).
+ * - glm-5.3-flash: 50% off z.ai — in $0.015, hit $0.015, out $0.25
+ * - MiniMax-M2.7-highspeed: 90% off — in $0.03, hit $0.03, out $0.12
+ * - qwen3.7-flash-2026-07-15: tier ≤32K Alibaba — in $0.03, hit $0.006, out $0.13
+ * - deepseek-v4-flash-0731:netra: 80% off netra-runtime — in $0.04, hit $0.01, out $0.10
+ * - gpt-4o-mini: OpenAI — in $0.15, hit $0.075, out $0.60
+ * - deepseek-v4-flash (alias legacy SumoPod): samakan tarif DeepSeek Direct off-peak.
+ */
+const SUMOPOD_PRICING: Record<string, ModelPricing> = {
+  'glm-5.3-flash': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.015 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.015 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.25 / 1000) * USD_TO_IDR,
+  },
+  'minimax-m2.7-highspeed': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
+  },
+  'qwen3.7-flash-2026-07-15': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.006 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR,
+  },
+  'deepseek-v4-flash-0731:netra': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.04 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.01 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.1 / 1000) * USD_TO_IDR,
+  },
+  'gpt-4o-mini': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.15 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.075 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.6 / 1000) * USD_TO_IDR,
+  },
+  'deepseek-v4-flash': {
+    provider: 'SumoPod',
+    promptCostPer1kIdr: (0.22 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.007 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.66 / 1000) * USD_TO_IDR,
+  },
+};
 
 /**
  * Memeriksa apakah waktu saat ini berada pada Peak Hours DeepSeek.
@@ -410,14 +473,12 @@ export function getModelPricing(
       return { ...DEFAULT_PRICING, provider: 'Kenari', pricingSource: 'fallback-unverified', isPeak: false };
     }
     if (provider === 'SumoPod') {
-      // SumoPod tidak memublikasikan tarif -> SELALU fallback-unverified (tidak menebak).
-      const pricing = DEEPSEEK_DIRECT_PRICING[normalizedName];
-      return {
-        ...(pricing || DEFAULT_PRICING),
-        provider: SUMOPOD_PROVIDER,
-        pricingSource: 'fallback-unverified',
-        isPeak,
-      };
+      // SumoPod tarif live diskon sudah verified (per 2026-09-21). Hanya model asing yang unverified.
+      const pricing = SUMOPOD_PRICING[normalizedName] || MODEL_PRICING_MAP[normalizedName];
+      if (pricing) {
+        return { ...pricing, provider: SUMOPOD_PROVIDER, pricingSource: 'verified', isPeak: false };
+      }
+      return { ...DEFAULT_PRICING, provider: SUMOPOD_PROVIDER, pricingSource: 'fallback-unverified', isPeak };
     }
     if (provider === 'DeepSeek Direct') {
       return resolveDeepSeekDirectPricing(normalizedName, isPeak);

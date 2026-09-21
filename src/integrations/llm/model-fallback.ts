@@ -1,17 +1,17 @@
 import axios from 'axios';
-import { KENARI_PRIMARY_MODEL, SUMOPOD_SECONDARY_MODEL, DEEPSEEK_DIRECT_MODEL } from '../../config/ai-models.config';
+import { SUMOPOD_PRIMARY_MODEL, KENARI_PRIMARY_MODEL, DEEPSEEK_DIRECT_MODEL } from '../../config/ai-models.config';
 
 /**
- * Arsitektur fallback 3-TIER (plan standardisasi model 2026-09-19):
- *   Tier 1 (primary)   : Kenari        -> deepseek-v4-1-flash  (baseUrl + apiKey dari call)
- *   Tier 2 (secondary) : SumoPod       -> deepseek-v4-flash    (SUMOPOD_* / OPENAI_BASE_URL + LLM_API_KEY)
- *   Tier 3 (last)      : DeepSeek Direct -> deepseek-flash     (LLM_FALLBACK_BASE_URL + LLM_FALLBACK_API_KEY)
+ * Arsitektur fallback 3-TIER (katalog live 2026-09-21):
+ *   Tier 1 (primary/utama) : SumoPod  -> MiniMax-M2.7-highspeed (baseUrl + apiKey dari call)
+ *   Tier 2 (secondary)      : Kenari   -> deepseek-v4-1-flash   (KENARI_* + LLM_API_KEY)
+ *   Tier 3 (last)           : DeepSeek Direct (api.deepseek.com) -> deepseek-chat
+ *                             (LLM_FALLBACK_BASE_URL + LLM_FALLBACK_API_KEY)
  *
- * DEFAULT_FALLBACK_CHAIN kini HANYA berisi model kanonik Tier 1 (satu model, tanpa chain
- * internal Kenari sesuai keputusan desain). Env AI_MODEL_FALLBACK_CHAIN masih bisa
+ * DEFAULT_FALLBACK_CHAIN berisi model Tier 1. Env AI_MODEL_FALLBACK_CHAIN masih bisa
  * meng-override bila ingin chain internal tambahan.
  */
-export const DEFAULT_FALLBACK_CHAIN = [KENARI_PRIMARY_MODEL];
+export const DEFAULT_FALLBACK_CHAIN = [SUMOPOD_PRIMARY_MODEL];
 
 /** Definisi sebuah tier provider untuk fallback lintas-provider. */
 export interface ProviderTier {
@@ -28,20 +28,19 @@ export interface ProviderTier {
 export function resolveFallbackTiers(): ProviderTier[] {
   const tiers: ProviderTier[] = [];
 
-  // Tier 2 — SumoPod. Terima SUMOPOD_* eksplisit, atau fallback ke OPENAI_BASE_URL + LLM_API_KEY
-  // (setup historis di mana SumoPod adalah satu-satunya endpoint).
-  const sumopodBase = (process.env.SUMOPOD_BASE_URL || process.env.OPENAI_BASE_URL || '').replace(/\/+$/, '');
-  const sumopodKey = process.env.SUMOPOD_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
-  if (sumopodBase && sumopodKey && sumopodBase.toLowerCase().includes('sumopod')) {
+  // Tier 2 — Kenari (cadangan). Aktif bila KENARI_BASE_URL + key tersedia.
+  const kenariBase = (process.env.KENARI_BASE_URL || '').replace(/\/+$/, '');
+  const kenariKey = process.env.KENARI_API_KEY || '';
+  if (kenariBase && kenariKey) {
     tiers.push({
-      name: 'SumoPod',
-      baseUrl: sumopodBase,
-      apiKey: sumopodKey,
-      model: process.env.SUMOPOD_DEFAULT_MODEL || SUMOPOD_SECONDARY_MODEL,
+      name: 'Kenari',
+      baseUrl: kenariBase,
+      apiKey: kenariKey,
+      model: process.env.KENARI_DEFAULT_MODEL || KENARI_PRIMARY_MODEL,
     });
   }
 
-  // Tier 3 — DeepSeek Direct (external last resort).
+  // Tier 3 — DeepSeek Direct API langsung (last fallback, external last resort).
   const directBase = (process.env.LLM_FALLBACK_BASE_URL || '').replace(/\/+$/, '');
   const directKey = process.env.LLM_FALLBACK_API_KEY || '';
   if (directBase && directKey) {

@@ -165,15 +165,48 @@ describe('Cost Calculator Unit Tests — Provider-Aware & Live Pricing (2026-09)
     expect(result.totalCostIdr).toBeGreaterThan(0);
   });
 
-  it('should mark SumoPod-hosted deepseek-v4-flash as fallback-unverified (tarif SumoPod tidak dipublikasikan)', () => {
-    const result = calculateLlmCost('deepseek-v4-flash', 1006, 1500, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
+  it('should calculate LIVE SumoPod diskon untuk MiniMax-M2.7-highspeed (verified, 90% off)', () => {
+    // 284 prompt (0 cached), 150 completion — in $0.03/1M, out $0.12/1M
+    const result = calculateLlmCost('MiniMax-M2.7-highspeed', 284, 150, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
     expect(result.provider).toBe('SumoPod');
-    expect(result.pricingSource).toBe('fallback-unverified');
+    expect(result.pricingSource).toBe('verified');
+    expect(result.promptCostIdr).toBe(0.1534);
+    expect(result.completionCostIdr).toBe(0.324);
   });
 
-  it('should mark unknown netra model as fallback-unverified instead of silent DEFAULT', () => {
-    const result = calculateLlmCost('deepseek-v4-flash-0731:netra', 100, 50, 0);
-    expect(result.pricingSource).toBe('fallback-unverified');
+  it('should calculate LIVE SumoPod diskon untuk glm-5.3-flash 50% off (verified)', () => {
+    // 1k prompt, 1k completion — in $0.015/1M => 0.27 IDR, out $0.25/1M => 4.5 IDR
+    const result = calculateLlmCost('glm-5.3-flash', 1000, 1000, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
+    expect(result.provider).toBe('SumoPod');
+    expect(result.pricingSource).toBe('verified');
+    expect(result.promptCostIdr).toBe(0.27);
+    expect(result.completionCostIdr).toBe(4.5);
+  });
+
+  it('should calculate LIVE SumoPod diskon untuk netra 80% off (verified, bukan silent DEFAULT)', () => {
+    const result = calculateLlmCost('deepseek-v4-flash-0731:netra', 1000, 1000, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
+    expect(result.provider).toBe('SumoPod');
+    expect(result.pricingSource).toBe('verified');
+    // in $0.04/1M => 0.72 IDR, out $0.10/1M => 1.8 IDR
+    expect(result.promptCostIdr).toBe(0.72);
+    expect(result.completionCostIdr).toBe(1.8);
+  });
+
+  it('should calculate LIVE Kenari untuk gemini-2-5-flash-lite (400/40/1700 flat)', () => {
+    const result = calculateLlmCost('gemini-2-5-flash-lite', 10000, 1000, 8000, { baseUrl: 'https://kenari.id/v1' });
+    expect(result.provider).toBe('Kenari');
+    expect(result.pricingSource).toBe('verified');
+    // Miss 2k*0.4=0.8, Hit 8k*0.04=0.32 => 1.12 ; Out 1k*1.7=1.7
+    expect(result.promptCostIdr).toBe(1.12);
+    expect(result.completionCostIdr).toBe(1.7);
+  });
+
+  it('should calculate LIVE Kenari untuk muse-spark-1-3-contributor (2000/40/4000 flat)', () => {
+    const result = calculateLlmCost('muse-spark-1-3-contributor', 10000, 1000, 0, { baseUrl: 'https://kenari.id/v1' });
+    expect(result.provider).toBe('Kenari');
+    expect(result.pricingSource).toBe('verified');
+    expect(result.promptCostIdr).toBe(20);
+    expect(result.completionCostIdr).toBe(4);
   });
 
   it('getModelPricing exposes pricingSource + provider-aware lookup', () => {
@@ -183,7 +216,7 @@ describe('Cost Calculator Unit Tests — Provider-Aware & Live Pricing (2026-09)
 
     const sumopod = getModelPricing('deepseek-v4-flash', { baseUrl: 'https://ai.sumopod.com/v1' });
     expect(sumopod.provider).toBe('SumoPod');
-    expect(sumopod.pricingSource).toBe('fallback-unverified');
+    expect(sumopod.pricingSource).toBe('verified');
   });
 
   it('should calculate zero cost for Kenari free model step-3-7-flash:free', () => {

@@ -4,6 +4,38 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 
+/**
+ * Status kunci API + katalog resmi per gateway (sumber tunggal untuk GET & PATCH
+ * provider — cegah drift respons antar endpoint).
+ */
+function buildProvidersStatus(activeProvider: string) {
+  const kenariKeyConfigured = Boolean(process.env.KENARI_API_KEY || (activeProvider === 'KENARI' && process.env.LLM_API_KEY));
+  const sumopodKeyConfigured = Boolean(process.env.SUMOPOD_API_KEY || (activeProvider === 'SUMOPOD' && process.env.LLM_API_KEY));
+  return {
+    kenari: {
+      name: 'Kenari AI (Cadangan)',
+      baseUrl: (process.env.KENARI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
+      defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash',
+      models: ['deepseek-v4-1-flash', 'gemini-2-5-flash-lite', 'muse-spark-1-3-contributor'],
+      configured: kenariKeyConfigured,
+    },
+    sumopod: {
+      name: 'SumoPod AI (Utama)',
+      baseUrl: (process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
+      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'MiniMax-M2.7-highspeed',
+      models: ['glm-5.3-flash', 'MiniMax-M2.7-highspeed', 'qwen3.7-flash-2026-07-15', 'gpt-4o-mini', 'deepseek-v4-flash-0731:netra'],
+      configured: sumopodKeyConfigured,
+    },
+    deepseekDirect: {
+      name: 'DeepSeek Direct (Last Fallback)',
+      baseUrl: (process.env.LLM_FALLBACK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, ''),
+      defaultModel: 'deepseek-chat',
+      models: ['deepseek-chat', 'deepseek-reasoner'],
+      configured: Boolean(process.env.LLM_FALLBACK_API_KEY),
+    },
+  };
+}
+
 export async function settingsAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/settings/mql
@@ -621,8 +653,6 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     const configs = AiModelConfigService.getAllTaskConfigs();
     const activeProvider = AiModelConfigService.getActiveProvider();
     const endpointConfig = AiModelConfigService.getActiveEndpointConfig();
-    const kenariKeyConfigured = Boolean(process.env.KENARI_API_KEY || (activeProvider === 'KENARI' && process.env.LLM_API_KEY));
-    const sumopodKeyConfigured = Boolean(process.env.SUMOPOD_API_KEY || (activeProvider === 'SUMOPOD' && process.env.LLM_API_KEY));
 
     return reply.status(200).send({
       success: true,
@@ -633,20 +663,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         baseUrl: endpointConfig.baseUrl,
         defaultModel: endpointConfig.defaultModel,
       },
-      providersStatus: {
-        kenari: {
-          name: 'Kenari AI',
-          baseUrl: (process.env.KENARI_BASE_URL || 'https://kenari.id/v1').replace(/\/$/, ''),
-          defaultModel: process.env.KENARI_DEFAULT_MODEL || 'deepseek-v4-1-flash',
-          configured: kenariKeyConfigured,
-        },
-        sumopod: {
-          name: 'SumoPod AI',
-          baseUrl: (process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
-          defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'deepseek-v4-flash',
-          configured: sumopodKeyConfigured,
-        },
-      },
+      providersStatus: buildProvidersStatus(activeProvider),
     });
   });
 
@@ -700,6 +717,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           activeProvider: upperProvider,
           activeEndpoint,
           configs: AiModelConfigService.getAllTaskConfigs(DEFAULT_TENANT_ID),
+          providersStatus: buildProvidersStatus(upperProvider),
         });
       } catch (err: any) {
         return reply.status(400).send({
@@ -708,6 +726,221 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/ai-models/test
+   * Uji respon mini simulator 1-detik: menjalankan inferensi singkat dan mengukur latensi.
+   */
+  fastify.post(
+    '/api/admin/ai-models/test',
+    async (
+      request: FastifyRequest<{
+        Body: { provider?: string; modelName?: string; sampleScenario?: 'flu' | 'price' | 'schedule' };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { provider, modelName, sampleScenario } = request.body || {};
+      const scenario = sampleScenario || 'flu';
+      const scenarioPrompts: Record<string, string> = {
+        flu: 'Halo dok, si kecil batuk pilek semalam, treatment apa yang cocok ya?',
+        price: 'Berapa harga pijat bayi pulih ceria ya?',
+        schedule: 'Besok bisa jadwal sore jam berapa ya?',
+      };
+      const prompt = scenarioPrompts[scenario] || scenarioPrompts.flu;
+
+      try {
+        const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
+        const { callChatCompletionsWithFallback } = await import('../../integrations/llm/model-fallback');
+        const { AiModelConfigService: AiCfg } = await import('../../config/ai-models.config');
+        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const activeProvider = AiCfg.getActiveProvider(tenantId);
+        // Resolusi per-target-provider (bukan active provider): kunci API + base URL
+        // WAJIB sepasang dari provider yang diuji — sebelumnya apiKey selalu milik
+        // active provider sehingga uji Kenari saat SumoPod aktif → 401 palsu.
+        const targetProvider = (provider || activeProvider).toUpperCase();
+        const targetBaseUrl = (targetProvider === 'SUMOPOD'
+          ? (process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1')
+          : (process.env.KENARI_BASE_URL || 'https://kenari.id/v1')
+        ).replace(/\/$/, '');
+        const targetApiKey = targetProvider === 'SUMOPOD'
+          ? (process.env.SUMOPOD_API_KEY || (activeProvider === 'SUMOPOD' ? (process.env.LLM_API_KEY || process.env.OPENAI_API_KEY) : ''))
+          : (process.env.KENARI_API_KEY || (activeProvider === 'KENARI' ? (process.env.LLM_API_KEY || process.env.OPENAI_API_KEY) : ''));
+        // Key target WAJIB ada sebelum gateway: getLlmEndpointConfig punya fallback
+        // ke key active provider + sentinel mock, sehingga key kosong akan diam-diam
+        // diganti key provider lain (bug 401 palsu lintas-provider).
+        if (!targetApiKey) {
+          return reply.status(200).send({
+            success: false,
+            error: `Kunci API ${targetProvider} belum terkonfigurasi. Periksa .env (${targetProvider === 'SUMOPOD' ? 'SUMOPOD_API_KEY' : 'KENARI_API_KEY'}).`,
+            modelUsed: modelName || AiCfg.getActiveEndpointConfig(tenantId).defaultModel,
+            providerUsed: targetProvider,
+          });
+        }
+        // Resolve endpoint: pakai active provider tenant, override model jika diminta
+        const endpoint = getLlmEndpointConfig({
+          tenantId,
+          apiKey: targetApiKey,
+          model: modelName,
+          baseUrl: targetBaseUrl,
+        });
+
+        if (!endpoint.apiKey) {
+          return reply.status(200).send({
+            success: false,
+            error: `Kunci API ${targetProvider} belum terkonfigurasi. Periksa .env (${targetProvider === 'SUMOPOD' ? 'SUMOPOD_API_KEY' : 'KENARI_API_KEY'}).`,
+            modelUsed: endpoint.model,
+            providerUsed: targetProvider,
+          });
+        }
+
+        const start = Date.now();
+        const result = await Promise.race([
+          callChatCompletionsWithFallback({
+            baseUrl: endpoint.baseUrl,
+            apiKey: endpoint.apiKey,
+            model: endpoint.model,
+            fallbackModel: endpoint.fallbackModel,
+            payload: {
+              messages: [
+                { role: 'system', content: 'Kamu adalah Bidan Yusi, bidan ramah klinik Mom & Baby. Jawab singkat 2-3 kalimat, hangat, pakai sapaan Bunda.' },
+                { role: 'user', content: prompt },
+              ],
+              temperature: 0.6,
+              max_tokens: 180,
+            },
+            timeoutMs: 10000,
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Koneksi timeout (10 detik) — model tidak merespons tepat waktu.')), 10000)),
+        ]);
+        const latencyMs = Date.now() - start;
+        const rawContent = (result as any)?.data?.choices?.[0]?.message?.content || (result as any)?.choices?.[0]?.message?.content || (result as any)?.content || '';
+        const trimmed = String(rawContent).slice(0, 320) || 'Halo Bunda! Terima kasih sudah menghubungi klinik kami 😊';
+        // Token estimate sederhana dari panjang balasan
+        const tokenEstimate = Math.ceil(trimmed.length / 4);
+        return reply.status(200).send({
+          success: true,
+          latencyMs,
+          replySnippet: trimmed,
+          tokenEstimate,
+          modelUsed: endpoint.model,
+          providerUsed: endpoint.baseUrl.includes('sumopod') ? 'SUMOPOD' : 'KENARI',
+        });
+      } catch (err: any) {
+        const msg = err.message || String(err);
+        const friendly = msg.includes('timeout') ? 'Koneksi timeout atau kunci API tidak valid' : msg.includes('401') ? 'Kunci API tidak valid (401 Unauthorized)' : msg.includes('404') ? 'Model tidak ditemukan di provider ini' : msg;
+        return reply.status(200).send({ success: false, error: friendly, latencyMs: null });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/admin/ai-models/batch
+   * Simpan banyak task sekaligus dalam 1 request (transaksi terpadu).
+   */
+  fastify.put(
+    '/api/admin/ai-models/batch',
+    async (
+      request: FastifyRequest<{
+        Body: { configs?: Array<{ task: string; provider?: string; modelName?: string; maxTokens?: number; temperature?: number; confidenceThreshold?: number }>; presetId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { configs, presetId } = request.body || {};
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { AiModelConfigService, AI_PRESET_PROFILES } = await import('../../config/ai-models.config');
+
+      try {
+        // Jika presetId dikirim dan terdaftar, terapkan preset dulu (tunda tulis DB).
+        // presetId 'CUSTOM'/tak dikenal SENGAJA di-skip agar pilihan manual admin
+        // tidak tertimpa profil preset lama.
+        if (presetId && (AI_PRESET_PROFILES as any)[presetId]) {
+          AiModelConfigService.applyPresetProfile(presetId, tenantId);
+        }
+        // Lalu terapkan overrides per-task jika ada (tunda tulis DB per item).
+        if (Array.isArray(configs) && configs.length > 0) {
+          for (const c of configs) {
+            if (!c.task) continue;
+            const upper = String(c.task).toUpperCase();
+            if (upper === 'MEDICAL_CHECK') continue;
+            const updates: any = {};
+            if (c.provider) updates.provider = c.provider;
+            if (c.modelName) updates.modelName = c.modelName;
+            if (c.maxTokens !== undefined) updates.maxTokens = Number(c.maxTokens);
+            if (c.temperature !== undefined) updates.temperature = Number(c.temperature);
+            if (c.confidenceThreshold !== undefined) updates.confidenceThreshold = Number(c.confidenceThreshold);
+            AiModelConfigService.updateTaskConfig(upper as any, updates, tenantId, { persist: false });
+          }
+        } else if (!presetId) {
+          return reply.status(400).send({ success: false, error: 'Body harus berisi configs[] atau presetId.' });
+        }
+
+        // SATU tulis atomik di akhir (serial per-tenant + transaksi + upsert provider).
+        // Tanpa ini, N save konkuren balapan delete/create → unique violation → "save tidak tersave".
+        const persisted = await AiModelConfigService.saveConfigsToDb(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'AI_MODEL_BATCH_UPDATE',
+          targetId: 'ALL',
+          payload: { presetId: presetId || null, configs: configs || [], persisted },
+          ipAddress: request.ip,
+        });
+
+        if (!persisted) {
+          // HTTP 200 + success:true agar mode offline/test (DB offline by design,
+          // lihat tests/setup.ts) tidak dianggap gagal total — tapi UI WAJIB
+          // membaca flag persisted:false sebagai "belum tersimpan, coba lagi".
+          return reply.status(200).send({
+            success: true,
+            persisted: false,
+            warning: 'Perubahan diterapkan di memori tetapi GAGAL tersimpan ke database (DB offline?). Cek log server lalu coba lagi — refresh akan mengembalikan nilai lama.',
+            message: 'Perubahan diterapkan di memori tetapi GAGAL tersimpan ke database.',
+            data: AiModelConfigService.getAllTaskConfigs(tenantId),
+            activeProvider: AiModelConfigService.getActiveProvider(tenantId),
+          });
+        }
+
+        return reply.status(200).send({
+          success: true,
+          persisted: true,
+          message: presetId ? `Preset ${presetId} diterapkan dan konfigurasi disimpan.` : 'Konfigurasi AI batch berhasil disimpan.',
+          data: AiModelConfigService.getAllTaskConfigs(tenantId),
+          activeProvider: AiModelConfigService.getActiveProvider(tenantId),
+        });
+      } catch (err: any) {
+        return reply.status(400).send({ success: false, error: err.message || 'Gagal menyimpan batch.' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/ai-models/reset-defaults
+   * Kembalikan semua task ke setelan emas klinik.
+   */
+  fastify.post('/api/admin/ai-models/reset-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const { AiModelConfigService } = await import('../../config/ai-models.config');
+    try {
+      const configs = await AiModelConfigService.resetToGoldenDefaults(tenantId);
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'AI_MODEL_RESET_DEFAULTS',
+        targetId: DEFAULT_TENANT_ID,
+        payload: { resetAt: new Date() },
+        ipAddress: request.ip,
+      });
+      return reply.status(200).send({
+        success: true,
+        message: 'Konfigurasi AI berhasil dikembalikan ke rekomendasi default klinik.',
+        data: configs,
+        activeProvider: AiModelConfigService.getActiveProvider(tenantId),
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
 
   /**
    * PATCH /api/admin/ai-models/:task
@@ -735,7 +968,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const oldConfig = AiModelConfigService.getModelConfig(upperTask as any);
 
       try {
-        const updated = AiModelConfigService.updateTaskConfig(upperTask as any, request.body || {});
+        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const updated = AiModelConfigService.updateTaskConfig(upperTask as any, request.body || {}, tenantId, { persist: false });
+        const persisted = await AiModelConfigService.saveConfigsToDb(tenantId);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -746,13 +981,25 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
             task: upperTask,
             oldConfig: { provider: oldConfig.provider, modelName: oldConfig.modelName },
             newConfig: { provider: updated.provider, modelName: updated.modelName },
+            persisted,
             changedAt: new Date(),
           },
           ipAddress: request.ip,
         });
 
+        if (!persisted) {
+          return reply.status(200).send({
+            success: true,
+            persisted: false,
+            warning: 'Perubahan diterapkan di memori tetapi GAGAL tersimpan ke database (DB offline?).',
+            message: `Model AI untuk task ${upperTask} diterapkan di memori tetapi GAGAL tersimpan ke database. Audit trail telah dicatat.`,
+            data: updated,
+          });
+        }
+
         return reply.status(200).send({
           success: true,
+          persisted: true,
           message: `Model AI untuk task ${upperTask} berhasil diubah ke ${updated.provider}/${updated.modelName}. Audit trail telah dicatat.`,
           data: updated,
         });

@@ -5,9 +5,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 105. [Cost Estimator] Tarif LLM bersumber nama model, bukan provider request; Kenari basi ~18x + SumoPod tanpa tarif — RESOLVED 2026-09-21
+## 105. [Cost Estimator] Tarif LLM provider-aware; SumoPod verified diskon + Kenari 2 model baru — RESOLVED 2026-09-21 (revisi katalog live)
 
-- **Status:** resolved (estimator sudah provider-aware; data Kenari live via snapshot), sisa = data historis.
+- **Status:** resolved (estimator provider-aware; SumoPod verified diskon live 2026-09-21; Kenari +2 model baru), sisa = data historis + env dev lokal masih KENARI.
 - **Akar masalah (sebelum fix):**
   1. `calculateLlmCost(model, prompt, completion, cached, date)` di `src/utils/cost-calculator.ts` hanya
      di-key nama model; provider aktual dipisah ke `deriveProvider` untuk label audit
@@ -30,15 +30,44 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Data historis:** `llm_audit_logs.cost_idr` Lama dihitung pakai tarif Kenari basi/senyap; nilai baru akan
   melonjak ~18× untuk jalur Kenari dan berubah untuk DeepSeek. TIDAK di-back-migrate — kartografi biaya yang
   harap diinterpretasikan ulang saja (tidak menimpa riwayat audit).
+- **Revisi katalog live 2026-09-21 (server utama = SumoPod):**
+  - SumoPod (utama, 5 model): `glm-5.3-flash` 50% off ($0.015/$0.25), `MiniMax-M2.7-highspeed` 90% off
+    ($0.03/$0.12), `qwen3.7-flash-2026-07-15` tier ≤32K ($0.03/$0.006/$0.13), `deepseek-v4-flash-0731:netra`
+    80% off ($0.04/$0.01/$0.10), `gpt-4o-mini` ($0.15/$0.075/$0.60) → tabel `SUMOPOD_PRICING` verified.
+  - Kenari (cadangan, 3 model): `deepseek-v4-1-flash` (2750/65/5500), `gemini-2-5-flash-lite` (400/40/1700),
+    `muse-spark-1-3-contributor` (2000/40/4000) → `KENARI_PRICING` + snapshot JSON.
+  - DeepSeek Direct (last fallback API langsung): `deepseek-chat`/`deepseek-reasoner` (peak/off-peak resmi).
+  - Tier fallback dibalik: Tier1 SumoPod → Tier2 Kenari → Tier3 DeepSeek Direct (`model-fallback.ts`,
+    `DEFAULT_FALLBACK_CHAIN=[MiniMax-M2.7-highspeed]`). Preset 1-klik ikut pindah ke SumoPod
+    (Kilat=MiniMax, Mendalam=netra, Disiplin=qwen3.7); failover = Kenari.
 - **Tech debt sisa:**
-  1. Tarif SumoPod tidak bisa divalidasi (endpoint pricing 401/404/403) — seluruh model SumoPod tercatat
-     `pricingSource: 'fallback-unverified'` DENGAN sengaja (bukan bug); bila SumoPod kelak memublikasikan tarif,
-     tambahkan tabel `SUMOPOD_PRICING` + delete `SUMOPOD_PROVIDER` fallback.
+  1. `.env` dev lokal masih `ACTIVE_LLM_PROVIDER=KENARI` + `OPENAI_BASE_URL=kenari.id` — default registry
+     env-driven sehingga test isolasi tenant dibuat anti-env-drift (assert isolasi, bukan hardcode MiniMax);
+     `resetToGoldenDefaults` dipaksa deterministik ke preset emas agar lolos di env apapun.
   2. Snapshot Kenari di-commit manual via script — belum ada scheduler live-fetch; tanggal di `fetchedAt`.
   3. `isDeepSeekPeakHour` mempertahankan jendela 00:30–12:30 UTC (legacy) vs jendela resmi DeepSeek 01–04 &
      06–10 UTC; beda hanya margin 2 jendela — unlock & sejajarkan bila perlu audit biaya ketat.
-- **Test pengaman:** `tests/unit/cost-calculator.test.ts` (17 kasus, termasuk peak/off-peak, Kenari live,
-  SumoPod fallback-unverified, free model, embeddings), `tests/unit/llm-execution-tracing-deepseek.test.ts`.
+- **Test pengaman:** `tests/unit/cost-calculator.test.ts` (20 kasus: +glm/netra/gemini-lite/muse-spark verified),
+  `tests/unit/model-fallback-chain.test.ts` (16: Tier1 SumoPod→Kenari→Direct), `tests/unit/ai-model-settings.test.ts`
+  (9), `tests/unit/ai-models-tenant.test.ts` (4 isolasi anti-env-drift).
+- **Audit 15 temuan Pusat Kendali AI (2026-09-21, FIXED staged):** state desync preset palsu,
+  kartu failover kosong saat Kenari, silent data loss hot-switch, inkoherensi UX switch-vs-preset,
+  401 palsu simulator lintas-provider, baseUrl tanpa fallback, stale simulator, dropdown provider tanpa
+  OpenAI, label Tier terbalik, threshold hilang, input typo, golden-vs-preset inkonsisten, providersStatus
+  tak reaktif, glitch dark mode — seluruhnya diperbaiki per staged plan (backend hardening, state sync +
+  Mode Kustom, advanced lock NLU + datalist, polish). Deviasi terjustifikasi: `FAST_ECONOMICAL.deepModel`
+  ikut diselaraskan ke netra (plan hanya memberkati sisi reset) agar klik preset ≡ reset.
+  Temuan test-regresi saat implementasi: sanitasi global per active-endpoint merusak task OpenAI NLU —
+  diperbaiki via `baseUrlForProviderLabel` per-task.
+- **Bug "save tidak tersave" (2026-09-21, FIXED fondasional):** `updateTaskConfig` fire-and-forget
+  `saveConfigsToDb` per item → batch (3 preset + ~7 configs) memicu ~10 `deleteMany+createMany` konkuren yang
+  interleaved → `Unique constraint (tenant_id,task)` → DB gagal diam-diam, HTTP tetap success, restart me-revert.
+  Ditambah `ACTIVE_LLM_PROVIDER` tidak ikut persist di batch (save mengecualikannya) → ganti server revert.
+  Fix: antrean serial per-tenant + transaksi atomik (`$transaction` delete+create+upsert provider),
+  `updateTaskConfig(..., { persist:false })` untuk batch/preset/reset + SATU `await saveConfigsToDb()` di akhir,
+  `PATCH /:task` ikut awaited, respons membawa `persisted:true/false` (+warning, HTTP 200 agar offline-test
+  tetap hijau), UI menahan dirty + toast error bila `persisted===false`, `getAllTaskConfigs` kembalikan nilai
+  EFEKTIF tersanitasi agar UI = runtime.
 
 ---
 
