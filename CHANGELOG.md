@@ -4,6 +4,96 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-21 — Katalog Live SumoPod Utama / Kenari Cadangan / DeepSeek Direct + Tarif Diskon Verified
+
+- **Koreksi arsitektur (server utama = SumoPod):** Tier dibalik — Tier1 SumoPod (5 model resmi),
+  Tier2 Kenari cadangan (3 model), Tier3 DeepSeek Direct API langsung (`deepseek-chat`).
+- **Katalog resmi:**
+  - SumoPod: `glm-5.3-flash`, `MiniMax-M2.7-highspeed` (primary), `qwen3.7-flash-2026-07-15`,
+    `gpt-4o-mini`, `deepseek-v4-flash-0731:netra` (+ alias `deepseek-v4-flash`).
+  - Kenari: `deepseek-v4-1-flash`, `gemini-2-5-flash-lite`, `muse-spark-1-3-contributor`.
+  - DeepSeek Direct: `deepseek-chat`, `deepseek-reasoner`, `deepseek-flash`, `deepseek-v4-flash`.
+- **Kenapa 3 kinerja bot:** (1) Kilat & Hemat = 95% chat harian butuh cepat+murah (MiniMax 90% off
+  $0.03/$0.12); (2) Mendalam = keluhan multi-gejala butuh penalaran DeepSeek netra 80% off;
+  (3) Disiplin Qwen = kasus rawan format butuh model paling tertib (qwen3.7 ≤32K $0.03/$0.006/$0.13).
+  Failover Kenari bukan kinerja harian — gerbang infra bila SumoPod down.
+- **Tarif verified:** `SUMOPOD_PRICING` (glm 50% off $0.015/$0.25, MiniMax 90% off, qwen3.7 tier ≤32K,
+  netra 80% off $0.04/$0.01/$0.10, gpt-4o-mini $0.15/$0.075/$0.60); Kenari +`gemini-2-5-flash-lite`
+  (400/40/1700) +`muse-spark-1-3-contributor` (2000/40/4000) + snapshot JSON.
+- **Perubahan kode:** `ai-models.config.ts` (katalog Set + sanitize case-insensitive + default SUMOPOD +
+  preset SumoPod + reset deterministik emas), `model-fallback.ts` (Tier1 SumoPod→Tier2 Kenari→Tier3 Direct),
+  `cost-calculator.ts` (SumoPod verified, bukan fallback-unverified), `settings.subroute.ts`
+  (`providersStatus` + `deepseekDirect` + daftar models), `AiModelSettingsPanel.tsx` (label Utama SumoPod,
+  preset MiniMax/netra/qwen3.7, dropdown katalog live), `sync-pricing.ts` (track 2 model Kenari baru).
+- **Verifikasi:** `npm run build` ✅, dashboard build ✅, 49 test hijau
+  (`cost-calculator` 20, `model-fallback-chain` 16, `ai-models-tenant` 4, `ai-model-settings` 9).
+
+#### 2026-09-21 — Perbaikan Pusat Kendali Model AI: Proteksi Hot-Switch, Mode Kustom, Simulator Per-Provider (15 Temuan Audit)
+
+- **User Review (dipenuhi):** (1) Hot-switch server memunculkan konfirmasi deterministik bila ada
+  editan belum disimpan (`dirty`), mencegah silent data loss; (2) Profiling kustom — hero/advanced di luar
+  3 profil standar otomatis jadi Mode Kustom (Manual), preset tidak lagi tercentang hijau palsu, batch
+  `presetId: 'CUSTOM'` tidak menimpa pilihan manual.
+- **Stage 1 — Backend & service:** simulator uji memakai pasangan key+baseURL per-target-provider
+  (perbaikan 401 palsu lintas-provider + guard key kosong mutlak sebelum fallback gateway);
+  `buildProvidersStatus()` sumber tunggal untuk GET & PATCH provider (status key reaktif);
+  batch menerima `confidenceThreshold` + skip preset tak terdaftar; `FAST_ECONOMICAL.deepModel` = netra
+  agar klik preset ≡ reset emas; sanitasi per-task via `baseUrlForProviderLabel` (task OpenAI NLU tidak
+  lagi terkonversi ke gateway saat server cadangan aktif — temuan dari test regresi baru).
+- **Stage 2 — State sync:** `derivePresetFromConfigs` ketat + `'CUSTOM'`; kartu Mode Darurat Kenari
+  (🛟) saat cadangan aktif; hero/advanced onChange menghitung ulang preset + membuang hasil simulator
+  lama; konfirmasi hot-switch + `providersStatus` reaktif dari respons PATCH.
+- **Stage 3 — Advanced:** opsi provider SumoPod (Utama)/Kenari (Cadangan)/OpenAI (NLU)/DeepSeek + label
+  benar; `INTENT_CLASSIFICATION` terkunci (badge 🔒 + dropdown disabled); slider confidenceThreshold +
+  payload save; `<datalist>` sugesti katalog resmi anti-typo.
+- **Stage 4 — Polish:** dark-mode border amber + shadow simpan; `setTestResult(null)` di preset,
+  switch, hero/advanced, dan reset.
+- **Stage 5 — Verifikasi:** 4 test baru (`simulator key per-target`, `target tanpa key jujur`,
+  `batch CUSTOM + threshold`, `PATCH providersStatus`); `npm run build` ✅; dashboard build ✅;
+  53 test hijau (settings 13, tenant 4, cost 20, fallback 16).
+
+#### 2026-09-21 — Fix Fondasional "Save AI Model Tidak Tersave" (Race Persist + Provider Revert)
+
+- **Gejala:** klik `💾 Simpan Semua Perubahan` toast sukses, tapi refresh/kembali nilai lama; ganti
+  Server Utama/Cadangan ikut revert setelah restart.
+- **Akar (2 lapis):** (1) `updateTaskConfig` fire-and-forget `saveConfigsToDb` per item → batch ~10
+  `deleteMany+createMany` konkuren interleaved → `Unique constraint (tenant_id,task)` → gagal diam-diam
+  (terbukti di log test); (2) `saveConfigsToDb` mengecualikan `ACTIVE_LLM_PROVIDER` dari delete tapi tidak
+  pernah upsert di jalur batch → baris provider basi → restart revert; plus `getAllTaskConfigs` mentah vs
+  `getModelConfig` tersanitasi → UI ≠ runtime untuk model lintas-katalog.
+- **Fix:** antrean serial per-tenant (`saveQueue` promise-chain) + `$transaction` atomik
+  (delete+create+upsert provider); `updateTaskConfig(..., { persist:false })` untuk preset/batch/reset +
+  satu `await saveConfigsToDb()`; `PATCH /:task` ikut awaited; respons `persisted:true/false` (+warning,
+  HTTP 200 agar suite offline tetap hijau); UI menahan dirty + toast error bila `persisted===false`;
+  `getAllTaskConfigs` kembalikan nilai efektif tersanitasi.
+- **Verifikasi:** `npm run build` ✅, dashboard build ✅, 49 test hijau (batch offline `persisted:false`
+  tetap success:true sesuai kontrak offline).
+
+#### 2026-09-21 — Redesign Total Konfigurasi Model AI Per-Tugas (User-Centric, Zero-Anxiety, 1-Click Operations)
+
+- **Latar Belakang & Keluhan Pengguna:**
+  - Panel "Konfigurasi Model AI Per-Tugas" sebelumnya menampilkan 7 kotak teknis membingungkan per task (Provider dropdown 7 opsi fiktif: OpenAI/Anthropic/Groq tanpa API key aktif, input model manual, temperature slider, maxTokens) — rawan salah pilih dan membebani pemilik klinik/tim admin non-teknis.
+  - Tidak ada cara menguji model sebelum menyimpan ke pasien WhatsApp; setiap task harus disimpan satu-per-satu (7 klik) tanpa batch.
+- **Arsitektur Baru (4 Stage Fondasional):**
+  - **Stage 1 — Backend Batch/Test/Reset API (`src/routes/admin/settings.subroute.ts`):**
+    - `POST /api/admin/ai-models/test` — inferensi mini via `llm-gateway` + `callChatCompletionsWithFallback` dengan timeout 10s, mengukur `latencyMs`, mengembalikan `replySnippet` + `tokenEstimate` + `modelUsed`/`providerUsed`; mengembalikan pesan ramah bila API key kosong/timeout.
+    - `PUT /api/admin/ai-models/batch` — transaksi terpadu: menerima `presetId` (1-klik) + `configs[]` untuk `CHAT_REPLY`/`CHAT_REPLY_DEEP`/`SUMMARIZATION` dkk.; validasi tetap via `updateTaskConfig` (MEDICAL_CHECK terkunci); audit `AI_MODEL_BATCH_UPDATE`.
+    - `POST /api/admin/ai-models/reset-defaults` — `resetToGoldenDefaults()` + audit `AI_MODEL_RESET_DEFAULTS`; batch endpoints ditempatkan SEBELUM `PATCH /:task` agar tidak tertabrak param route.
+  - **Stage 2 — Engine Preset Registry (`src/config/ai-models.config.ts`):**
+    - Konstanta `AI_PRESET_PROFILES` (4 preset): `FAST_ECONOMICAL` (deepseek-v4-1-flash/KENARI, ~1.1s, paling hemat), `DEEP_REASONING` (deepseek-v4-pro/KENARI, ~2.4s), `DISCIPLINED_QWEN` (qwen3-8-flash/KENARI, ~1.3s), `FAILOVER_SUMOPOD` (deepseek-v4-flash/SUMOPOD, cadangan).
+    - Metode `applyPresetProfile(presetId, tenantId)` — tenant-aware (hanya ubah registry tenant target + sinkron `activeLlmProvider`), mengupdate `CHAT_REPLY`/`CHAT_REPLY_DEEP`/`SUMMARIZATION` sekaligus; `resetToGoldenDefaults(tenantId)` — kloning `defaultTaskModelRegistry`, reset provider ke `KENARI`, persist `tenant_ai_config` + `ACTIVE_LLM_PROVIDER`.
+  - **Stage 3 & 4 — Frontend Redesign (`packages/admin-dashboard/src/components/settings/AiModelSettingsPanel.tsx`):**
+    - Header & Status Bar Real-Time: kartu gateway Kenari vs SumoPod dengan indikator 🟢 `Kunci API Terhubung` + `Latensi P50: 1.1s • Auto-Failover Siaga`; provider fiktif dihapus (hanya 2 gateway resmi).
+    - 3 Kartu Preset Visual Besar (radio-card): badge kecepatan/gaya bahasa/biaya, klik memperbarui model hero lokal tanpa seting manual; dirty state oranye bila belum disimpan.
+    - Hero Card Bidan Yusi: menyorot model aktif merespons chat pasien, dropdown hanya model valid per provider aktif (`KENARI_MODELS`/`SUMOPOD_MODELS`).
+    - Mini Simulator 1-Detik: tombol skenario `[🤧 Tanya Bapil]`/`[💰 Tanya Harga]`/`[📅 Tanya Jadwal]` → animasi pulse "Menghubungi model AI..." → preview balasan + badge latensi/token; error ramah bila timeout/API key salah.
+    - Accordion Teknis Lanjutan (default tertutup): hanya Kenari/SumoPod di dropdown provider, input model/temperature/maxTokens per task.
+    - Footer Terpadu: `⏪ Kembalikan ke Rekomendasi Default` (via `useUiFeedback` confirm, `danger:true`) + `💾 Simpan Semua Perubahan` tunggal; teks ketenangan "✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart".
+    - Paritas Dark Mode AMOLED (`dark:bg-[#111b21]`, `dark:border-[#222e35]`, `dark:text-white`) + Mobile Ergonomics (`min-h-[48px]`, layout 1 kolom vertikal).
+- **Verifikasi:**
+  - `npm run build` ✅ (fix `payload` shape + `useUiFeedback` `danger`); `npm --prefix packages/admin-dashboard run build` ✅.
+  - `tests/unit/ai-model-settings.test.ts` 9/9: `GET /api/admin/ai-models` (config + provider status), `POST /test` (latensi ms + replySnippet untuk 3 skenario), `PUT /batch` (multi-task + presetId `DEEP_REASONING`), `PUT /batch` menolak body kosong, `POST /reset-defaults` (golden defaults), `applyPresetProfile` tenant-isolation, `resetToGoldenDefaults` tenant-specific.
+
 #### 2026-09-21 — Resolusi Total Deadlock Antrean Follow-Up & Penjadwalan Ulang 141 Record (`follow-up.service.ts`)
 
 - **Latar Belakang & Gejala:**

@@ -12,9 +12,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** Model yang dipakai aplikasi (katalog kenari) — hanya subset relevan. */
+/** Model yang dipakai aplikasi (katalog Kenari cadangan) — hanya 3 model resmi + legacy snapshot. */
 const TRACKED_MODELS = [
   'deepseek-v4-1-flash',
+  'gemini-2-5-flash-lite',
+  'muse-spark-1-3-contributor',
   'deepseek-v4-flash',
   'deepseek-v4-pro',
   'qwen3-8-flash',

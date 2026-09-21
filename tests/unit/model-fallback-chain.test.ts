@@ -3,9 +3,9 @@ import axios from 'axios';
 import { callChatCompletionsWithFallback, getFallbackChain, resolveFallbackTiers } from '../../src/integrations/llm/model-fallback';
 
 // ============================================================================
-// Fallback LLM 3-TIER (plan standardisasi 2026-09-19):
-//   Tier 1 Kenari (deepseek-v4-1-flash) → Tier 2 SumoPod (deepseek-v4-flash)
-//   → Tier 3 DeepSeek Direct (deepseek-flash) → throw (breaker/regex).
+// Fallback LLM 3-TIER (katalog live 2026-09-21):
+//   Tier 1 SumoPod utama (MiniMax-M2.7-highspeed) → Tier 2 Kenari cadangan
+//   (deepseek-v4-1-flash) → Tier 3 DeepSeek Direct API langsung (deepseek-chat).
 // Chain internal dalam provider yang sama tetap didukung via AI_MODEL_FALLBACK_CHAIN.
 // ============================================================================
 
@@ -14,6 +14,9 @@ const CLEANUP_ENV = [
   'LLM_FALLBACK_BASE_URL',
   'LLM_FALLBACK_API_KEY',
   'AI_MODEL_FALLBACK',
+  'KENARI_BASE_URL',
+  'KENARI_API_KEY',
+  'KENARI_DEFAULT_MODEL',
   'SUMOPOD_BASE_URL',
   'SUMOPOD_API_KEY',
   'SUMOPOD_DEFAULT_MODEL',
@@ -32,11 +35,11 @@ function setupChainEnv() {
   process.env.AI_MODEL_FALLBACK_CHAIN = 'deepseek-v4-flash,qwen3.7-flash-2026-07-15';
   process.env.LLM_FALLBACK_BASE_URL = 'https://api.deepseek.com';
   process.env.LLM_FALLBACK_API_KEY = 'sk-external-test';
-  process.env.AI_MODEL_FALLBACK = 'deepseek-v4-flash';
-  // Tier 2 SumoPod aktif (baseUrl mengandung 'sumopod').
-  process.env.SUMOPOD_BASE_URL = 'https://ai.sumopod.com/v1';
-  process.env.SUMOPOD_API_KEY = 'sk-sumopod-tier2';
-  process.env.SUMOPOD_DEFAULT_MODEL = 'deepseek-v4-flash';
+  process.env.AI_MODEL_FALLBACK = 'deepseek-chat';
+  // Tier 2 Kenari cadangan aktif.
+  process.env.KENARI_BASE_URL = 'https://kenari.id/v1';
+  process.env.KENARI_API_KEY = 'sk-kenari-tier2';
+  process.env.KENARI_DEFAULT_MODEL = 'deepseek-v4-1-flash';
   delete process.env.OPENAI_BASE_URL;
 }
 
@@ -48,30 +51,29 @@ describe('getFallbackChain', () => {
     expect(getFallbackChain()).toEqual(['deepseek-v4-flash', 'qwen3.7-flash-2026-07-15']);
   });
 
-  it('env kosong → DEFAULT_FALLBACK_CHAIN = model primer Kenari (tanpa chain internal)', () => {
-    expect(getFallbackChain()).toEqual(['deepseek-v4-1-flash']);
+  it('env kosong → DEFAULT_FALLBACK_CHAIN = model primer SumoPod utama', () => {
+    expect(getFallbackChain()).toEqual(['MiniMax-M2.7-highspeed']);
   });
 });
 
 describe('resolveFallbackTiers — resolusi tier provider dari env', () => {
   afterEach(cleanup);
 
-  it('SumoPod + DeepSeek Direct terkonfigurasi → 2 tier berurutan', () => {
-    process.env.SUMOPOD_BASE_URL = 'https://ai.sumopod.com/v1';
-    process.env.SUMOPOD_API_KEY = 'sk-sumopod';
-    process.env.SUMOPOD_DEFAULT_MODEL = 'deepseek-v4-flash';
+  it('Kenari + DeepSeek Direct terkonfigurasi → 2 tier berurutan', () => {
+    process.env.KENARI_BASE_URL = 'https://kenari.id/v1';
+    process.env.KENARI_API_KEY = 'sk-kenari';
+    process.env.KENARI_DEFAULT_MODEL = 'deepseek-v4-1-flash';
     process.env.LLM_FALLBACK_BASE_URL = 'https://api.deepseek.com';
     process.env.LLM_FALLBACK_API_KEY = 'sk-direct';
-    process.env.AI_MODEL_FALLBACK = 'deepseek-flash';
+    process.env.AI_MODEL_FALLBACK = 'deepseek-chat';
 
     const tiers = resolveFallbackTiers();
-    expect(tiers.map((t) => t.name)).toEqual(['SumoPod', 'DeepSeek Direct']);
-    expect(tiers[0].model).toBe('deepseek-v4-flash');
-    expect(tiers[1].model).toBe('deepseek-flash');
+    expect(tiers.map((t) => t.name)).toEqual(['Kenari', 'DeepSeek Direct']);
+    expect(tiers[0].model).toBe('deepseek-v4-1-flash');
+    expect(tiers[1].model).toBe('deepseek-chat');
   });
 
   it('tanpa kredensial → tidak ada tier (guard skip, cegah 400)', () => {
-    // OPENAI_BASE_URL juga tidak mengandung 'sumopod' → Tier 2 skip.
     process.env.OPENAI_BASE_URL = 'https://kenari.id/v1';
     expect(resolveFallbackTiers()).toEqual([]);
   });
@@ -186,12 +188,12 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
     expect(postSpy).toHaveBeenCalledTimes(5);
   });
 
-  it('seluruh rantai SumoPod gagal → penyelamat terakhir DeepSeek EKSTERNAL (baseUrl+key beda)', async () => {
+  it('seluruh rantai SumoPod gagal → Tier Kenari gagal → penyelamat terakhir DeepSeek Direct API langsung', async () => {
     setupChainEnv();
     const postSpy = vi.spyOn(axios, 'post');
-    // primary: 3× (1 + 2 retry) + deepseek: 1× + qwen: 1× = 5 gagal → external sukses.
-    for (let i = 0; i < 5; i++) postSpy.mockRejectedValueOnce(new Error('timeout'));
-    postSpy.mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+    // primary: 3× (1 + 2 retry) + chain deepseek: 1× + chain qwen: 1× + Tier Kenari: 1× = 6 gagal → Direct sukses.
+    for (let i = 0; i < 6; i++) postSpy.mockRejectedValueOnce(new Error('timeout'));
+    postSpy.mockResolvedValueOnce(okPayload('deepseek-chat'));
 
     const res = await callChatCompletionsWithFallback({
       baseUrl: 'https://ai.sumopod.com/v1',
@@ -203,10 +205,10 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       payload: { messages: [] },
     });
 
-    expect(res.model).toBe('deepseek-v4-flash');
+    expect(res.model).toBe('deepseek-chat');
     expect(res.baseUrl).toBe('https://api.deepseek.com');
-    expect(postSpy).toHaveBeenCalledTimes(6);
-    const externalCall = postSpy.mock.calls[5];
+    expect(postSpy).toHaveBeenCalledTimes(7);
+    const externalCall = postSpy.mock.calls[6];
     expect(String(externalCall[0])).toBe('https://api.deepseek.com/chat/completions');
     expect((externalCall[2] as any).headers.Authorization).toBe('Bearer sk-external-test');
   });
@@ -225,17 +227,19 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
         payload: { messages: [] },
       })
     ).rejects.toThrow('timeout');
-    expect(axios.post).toHaveBeenCalledTimes(6);
+    // 3 primary + 2 chain + 1 Kenari + 1 Direct = 7
+    expect(axios.post).toHaveBeenCalledTimes(7);
   });
 
-  it('transientRetry maxRetries=0 → chain 4-lapis legacy tanpa retry transient', async () => {
+  it('transientRetry maxRetries=0 → chain + Tier Kenari gagal → Direct sukses', async () => {
     setupChainEnv();
     const postSpy = vi.spyOn(axios, 'post');
     postSpy
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+      .mockRejectedValueOnce(new Error('timeout')) // primary
+      .mockRejectedValueOnce(new Error('timeout')) // chain deepseek
+      .mockRejectedValueOnce(new Error('timeout')) // chain qwen
+      .mockRejectedValueOnce(new Error('timeout')) // Tier Kenari
+      .mockResolvedValueOnce(okPayload('deepseek-chat')); // Tier Direct
 
     const res = await callChatCompletionsWithFallback({
       baseUrl: 'https://ai.sumopod.com/v1',
@@ -247,9 +251,9 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       payload: { messages: [] },
     });
 
-    expect(res.model).toBe('deepseek-v4-flash');
+    expect(res.model).toBe('deepseek-chat');
     expect(res.baseUrl).toBe('https://api.deepseek.com');
-    expect(postSpy).toHaveBeenCalledTimes(4);
+    expect(postSpy).toHaveBeenCalledTimes(5);
   });
 
   it('provider menolak response_format → retry sekali TANPA response_format (bukan gagal total)', async () => {
@@ -305,22 +309,22 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
 });
 
 // ============================================================================
-// Skenario 3-TIER sesungguhnya: primary KENARI gagal → Tier 2 SumoPod sukses.
+// Skenario 3-TIER sesungguhnya: primary SUMOPOD gagal → Tier 2 Kenari sukses.
 // ============================================================================
-describe('callChatCompletionsWithFallback — fallback 3-tier (Kenari → SumoPod → DeepSeek Direct)', () => {
+describe('callChatCompletionsWithFallback — fallback 3-tier (SumoPod → Kenari → DeepSeek Direct)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     cleanup();
   });
 
-  it('Kenari primary gagal → Tier 2 SumoPod (deepseek-v4-flash) sukses', async () => {
+  it('SumoPod primary gagal → Tier 2 Kenari (deepseek-v4-1-flash) sukses', async () => {
     // Tanpa chain internal (default hanya primer), tanpa Tier 3 agar fokus Tier 2.
     delete process.env.AI_MODEL_FALLBACK_CHAIN;
     delete process.env.LLM_FALLBACK_BASE_URL;
     delete process.env.LLM_FALLBACK_API_KEY;
-    process.env.SUMOPOD_BASE_URL = 'https://ai.sumopod.com/v1';
-    process.env.SUMOPOD_API_KEY = 'sk-sumopod-tier2';
-    process.env.SUMOPOD_DEFAULT_MODEL = 'deepseek-v4-flash';
+    process.env.KENARI_BASE_URL = 'https://kenari.id/v1';
+    process.env.KENARI_API_KEY = 'sk-kenari-tier2';
+    process.env.KENARI_DEFAULT_MODEL = 'deepseek-v4-1-flash';
     delete process.env.OPENAI_BASE_URL;
 
     const postSpy = vi.spyOn(axios, 'post');
@@ -328,54 +332,54 @@ describe('callChatCompletionsWithFallback — fallback 3-tier (Kenari → SumoPo
       .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
       .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
       .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
-      .mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+      .mockResolvedValueOnce(okPayload('deepseek-v4-1-flash'));
 
     const res = await callChatCompletionsWithFallback({
-      baseUrl: 'https://kenari.id/v1',
-      apiKey: 'kn-main',
-      model: 'deepseek-v4-1-flash',
-      fallbackModel: 'deepseek-flash',
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sp-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-chat',
       timeoutMs: 12000,
       transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
     expect(res.usedFallback).toBe(true);
-    expect(res.model).toBe('deepseek-v4-flash');
-    expect(res.baseUrl).toBe('https://ai.sumopod.com/v1');
-    // primary: 1 + 2 retry = 3, Tier 2 SumoPod = 1
+    expect(res.model).toBe('deepseek-v4-1-flash');
+    expect(res.baseUrl).toBe('https://kenari.id/v1');
+    // primary: 1 + 2 retry = 3, Tier 2 Kenari = 1
     expect(postSpy).toHaveBeenCalledTimes(4);
     const tier2Call = postSpy.mock.calls[3];
-    expect(String(tier2Call[0])).toBe('https://ai.sumopod.com/v1/chat/completions');
-    expect((tier2Call[2] as any).headers.Authorization).toBe('Bearer sk-sumopod-tier2');
+    expect(String(tier2Call[0])).toBe('https://kenari.id/v1/chat/completions');
+    expect((tier2Call[2] as any).headers.Authorization).toBe('Bearer sk-kenari-tier2');
   });
 
-  it('Kenari + SumoPod gagal → Tier 3 DeepSeek Direct (deepseek-flash) sukses', async () => {
+  it('SumoPod + Kenari gagal → Tier 3 DeepSeek Direct API langsung (deepseek-chat) sukses', async () => {
     delete process.env.AI_MODEL_FALLBACK_CHAIN;
-    process.env.SUMOPOD_BASE_URL = 'https://ai.sumopod.com/v1';
-    process.env.SUMOPOD_API_KEY = 'sk-sumopod-tier2';
-    process.env.SUMOPOD_DEFAULT_MODEL = 'deepseek-v4-flash';
+    process.env.KENARI_BASE_URL = 'https://kenari.id/v1';
+    process.env.KENARI_API_KEY = 'sk-kenari-tier2';
+    process.env.KENARI_DEFAULT_MODEL = 'deepseek-v4-1-flash';
     process.env.LLM_FALLBACK_BASE_URL = 'https://api.deepseek.com';
     process.env.LLM_FALLBACK_API_KEY = 'sk-direct-tier3';
-    process.env.AI_MODEL_FALLBACK = 'deepseek-flash';
+    process.env.AI_MODEL_FALLBACK = 'deepseek-chat';
     delete process.env.OPENAI_BASE_URL;
 
     const postSpy = vi.spyOn(axios, 'post');
     // primary: 3× + Tier2: 1× gagal → Tier3 sukses.
     for (let i = 0; i < 4; i++) postSpy.mockRejectedValueOnce(new Error('timeout'));
-    postSpy.mockResolvedValueOnce(okPayload('deepseek-flash'));
+    postSpy.mockResolvedValueOnce(okPayload('deepseek-chat'));
 
     const res = await callChatCompletionsWithFallback({
-      baseUrl: 'https://kenari.id/v1',
-      apiKey: 'kn-main',
-      model: 'deepseek-v4-1-flash',
-      fallbackModel: 'deepseek-flash',
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sp-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-chat',
       timeoutMs: 12000,
       transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
-    expect(res.model).toBe('deepseek-flash');
+    expect(res.model).toBe('deepseek-chat');
     expect(res.baseUrl).toBe('https://api.deepseek.com');
     expect(postSpy).toHaveBeenCalledTimes(5);
     const tier3Call = postSpy.mock.calls[4];
