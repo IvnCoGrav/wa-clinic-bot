@@ -1019,7 +1019,8 @@ export class FollowUpService {
     const overdueFollowUps = await prisma.followUp.findMany({
       where: {
         tenant_id: tenantId,
-        status: 'PENDING',
+        type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
+        status: { in: ['PENDING', 'QUEUED'] },
         scheduled_at: { lt: baseCutoff },
       },
       orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
@@ -1095,11 +1096,29 @@ export class FollowUpService {
 
     try {
       const now = new Date();
-      const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      // Kebijakan Pengguna: Follow-up yang masih PENDING dan belum disetujui / dijadwalkan oleh admin,
+      // jika waktu jadwalnya sudah terlewat (scheduled_at < NOW()), otomatis dibatalkan (CANCELLED).
+      try {
+        const expiredPending = await prisma.followUp.updateMany({
+          where: {
+            tenant_id: tenantId,
+            status: 'PENDING',
+            scheduled_at: { lt: now },
+          },
+          data: { status: 'CANCELLED' },
+        });
+        if (expiredPending?.count && expiredPending.count > 0) {
+          console.log(`[FollowUp Worker] Auto-cancelled ${expiredPending.count} expired PENDING follow-ups (schedule passed without admin approval).`);
+        }
+      } catch (pendingCancelErr: any) {
+        console.warn('[FollowUp Worker] Failed to auto-cancel expired PENDING follow-ups:', pendingCancelErr.message);
+      }
 
       const rawDueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
+          type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
           status: { in: targetStatuses as any },
           scheduled_at: { lte: now },
           customer: {
@@ -1176,16 +1195,6 @@ export class FollowUpService {
         // Kebijakan Klinik: Follow-up Reminder H-1 dan Review H+1 di-postpone (ditunda pengirimannya sementara)
         if (fu.type === 'REMINDER_H1' || fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.type}) for ${fu.customer?.phone} is POSTPONED by clinic policy. Skipping automatic send.`);
-          continue;
-        }
-
-        // Anti-blast overdue protection: jika jadwal sudah terlewat lebih dari 48 jam, tandai SKIPPED
-        if (fu.scheduled_at < fortyEightHoursAgo) {
-          console.warn(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is overdue (>48h). Marked as SKIPPED to prevent spam blast.`);
-          await prisma.followUp.update({
-            where: { id: fu.id },
-            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.OVERDUE_48H },
-          });
           continue;
         }
 
