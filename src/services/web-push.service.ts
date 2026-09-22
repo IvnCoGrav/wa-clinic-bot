@@ -286,6 +286,104 @@ export class WebPushService {
   }
 
   /**
+   * Mengirim Push Notification ke perangkat staff / terapis tertentu berdasarkan staffId.
+   */
+  public async sendPushToStaff(
+    staffId: string,
+    tenantId: string,
+    payload: WebPushPayload
+  ): Promise<{ sent: number; failed: number }> {
+    if (!this.vapidKeys) {
+      this.initVapid();
+    }
+
+    let subscriptions: StoredSubscription[] = [];
+    try {
+      const list = await prisma.pushSubscription.findMany({
+        where: {
+          tenant_id: tenantId,
+          user_type: 'STAFF',
+          user_id: staffId,
+        },
+      });
+      if (list && list.length > 0) {
+        subscriptions = list;
+      }
+    } catch {
+      // DB offline fallback ke memory
+    }
+
+    if (subscriptions.length === 0) {
+      for (const sub of this.memorySubscriptions.values()) {
+        if (
+          sub.tenant_id === tenantId &&
+          sub.user_type === 'STAFF' &&
+          sub.user_id === staffId
+        ) {
+          subscriptions.push(sub);
+        }
+      }
+    }
+
+    if (subscriptions.length === 0) {
+      console.log(`[WEB PUSH] No active push subscriptions found for staff '${staffId}' in tenant '${tenantId}'`);
+      return { sent: 0, failed: 0 };
+    }
+
+    console.log(
+      `[WEB PUSH] Dispatching notification to ${subscriptions.length} device(s) for staff '${staffId}': "${payload.title}" - "${payload.body}"`
+    );
+
+    let sent = 0;
+    let failed = 0;
+
+    const stringifiedPayload = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      url: payload.url || '/admin/#staff-today',
+      tag: payload.tag || `staff_task_${staffId}`,
+      icon: payload.icon || '/admin/favicon.ico',
+      badge: payload.badge || '/admin/favicon.ico',
+      image: payload.image,
+      data: payload.data || {},
+    });
+
+    await Promise.all(
+      subscriptions.map(async (sub) => {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
+          },
+        };
+
+        try {
+          const ttlSeconds = parseInt(process.env.WEB_PUSH_TTL_SECONDS || '1800', 10);
+          const ttl = Number.isNaN(ttlSeconds) || ttlSeconds <= 0 ? 1800 : ttlSeconds;
+
+          await webpush.sendNotification(pushSubscription, stringifiedPayload, {
+            TTL: ttl,
+            urgency: 'high',
+          });
+          sent++;
+        } catch (err: any) {
+          failed++;
+          const status = err.statusCode || err.status;
+          if (status === 410 || status === 404) {
+            console.log(`[WEB PUSH] Pruning dead staff subscription (${status}):`, sub.endpoint);
+            void this.removeSubscription(sub.endpoint);
+          } else {
+            console.warn('[WEB PUSH] Send staff notification error:', err.message);
+          }
+        }
+      })
+    );
+
+    return { sent, failed };
+  }
+
+  /**
    * Mengirim notifikasi percobaan ke satu endpoint spesifik.
    */
   public async sendTestPush(endpoint: string): Promise<boolean> {

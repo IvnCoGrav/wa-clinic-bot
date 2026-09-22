@@ -45,13 +45,17 @@ export async function pushSubroutes(fastify: FastifyInstance) {
         }
 
         const userAgent = request.headers['user-agent'] || undefined;
+        const tenantId = (request as any).staffTenantId || (request as any).staffSession?.staff?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
+        const resolvedUserId = userId || (request as any).staffId || undefined;
+        const resolvedUserType = userType || ((request as any).staffId ? 'STAFF' : 'ADMIN');
+
         const saved = await webPushService.saveSubscription({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
-          userType: userType || 'ADMIN',
-          userId: userId || undefined,
+          userType: resolvedUserType,
+          userId: resolvedUserId,
           userAgent,
         });
 

@@ -1,5 +1,5 @@
 // Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'kala-admin-v10';
+const CACHE_NAME = 'kala-admin-v11';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',
@@ -112,7 +112,7 @@ self.addEventListener('push', (event) => {
       ...data.data,
     },
     actions: [
-      { action: 'open', title: 'Buka Chat' }
+      { action: 'open', title: (data.tag && data.tag.startsWith('staff_task')) ? 'Buka Tugas' : 'Buka Chat' }
     ]
   };
 

@@ -105,6 +105,13 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
       id: 'staff-unpaired',
       name: 'Bidan Siti',
       telegram_chat_id: null,
+      tenant_id: 'default-tenant',
+    } as any);
+
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      id: 'res-102',
+      treatment_detail: 'Pijat Laktasi',
+      customer: { name: 'Bunda Siti', phone: '6281987654321' },
     } as any);
 
     const result = await staffNotificationService.sendReservationAssignmentNotification('res-102', 'staff-unpaired');
@@ -112,5 +119,49 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
     expect(result.sent).toBe(false);
     expect(result.reason).toContain('belum menghubungkan');
     expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it('sendReservationAssignmentNotification: should still dispatch in-system SSE and WebPush even if Telegram is unlinked', async () => {
+    const { getLiveChatHub } = await import('../../src/services/live-chat-hub.service');
+    const { webPushService } = await import('../../src/services/web-push.service');
+    const publishSpy = vi.spyOn(getLiveChatHub(), 'publish');
+    const pushSpy = vi.spyOn(webPushService, 'sendPushToStaff').mockResolvedValue({ sent: 1, failed: 0 });
+
+    vi.mocked(prisma.staff.findUnique).mockResolvedValue({
+      id: 'staff-pwa-only',
+      name: 'Bidan Dewi',
+      telegram_chat_id: null,
+      tenant_id: 'default-tenant',
+    } as any);
+
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      id: 'res-pwa-1',
+      treatment_detail: 'Baby Bath & Massage',
+      booking_date: new Date(),
+      customer: { name: 'Bunda Dewi', phone: '6281987654321' },
+    } as any);
+
+    await staffNotificationService.sendReservationAssignmentNotification('res-pwa-1', 'staff-pwa-only');
+
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'staff.task_assigned',
+        tenantId: 'default-tenant',
+        payload: expect.objectContaining({
+          staffId: 'staff-pwa-only',
+          reservationId: 'res-pwa-1',
+          patientName: 'Bunda Dewi',
+        }),
+      })
+    );
+
+    expect(pushSpy).toHaveBeenCalledWith(
+      'staff-pwa-only',
+      'default-tenant',
+      expect.objectContaining({
+        title: expect.stringContaining('Tugas Kunjungan Baru'),
+        url: '/admin/#staff-today',
+      })
+    );
   });
 });
