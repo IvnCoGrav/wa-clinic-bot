@@ -274,6 +274,14 @@ if (require.main === module) {
       }).catch(e => console.error('[MESSAGE RETENTION START ERROR]', e));
     }
 
+    // Staff session housekeeping — hapus sesi kedaluarsa tiap 24 jam (ringan, tanpa gate)
+    trackInterval(() => {
+      import('./services/staff-auth.service').then(({ StaffAuthService }) => {
+        StaffAuthService.cleanExpiredSessions().catch(() => {});
+      }).catch(() => {});
+    }, 24 * 60 * 60 * 1000);
+    console.log('🧹 Staff session cleanup cron registered (every 24h)');
+
     // Start LLM-as-Judge AI quality evaluation cron (interval 6 jam default)
     if (process.env.ENABLE_AI_EVAL_CRON === 'true') {
       const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);

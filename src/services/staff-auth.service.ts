@@ -112,4 +112,21 @@ export class StaffAuthService {
       return false;
     }
   }
+
+  /**
+   * Housekeeping: hapus sesi yang sudah kadaluarsa (expires_at < now).
+   * Dipanggil via cron harian atau manual; best-effort, tidak melempar.
+   */
+  static async cleanExpiredSessions(): Promise<number> {
+    try {
+      const res = await prisma.staffSession.deleteMany({
+        where: { expires_at: { lt: new Date() } },
+      });
+      if (res.count > 0) console.log(`[STAFF AUTH] Cleaned ${res.count} expired staff sessions`);
+      return res.count;
+    } catch (err: any) {
+      console.error('[STAFF AUTH] Error cleaning expired sessions:', err.message);
+      return 0;
+    }
+  }
 }

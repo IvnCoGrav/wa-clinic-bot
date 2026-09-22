@@ -138,7 +138,7 @@ interface ChatMessage {
 }
 
 // extractMedia terpusat di utils/mediaExtractor.ts (single source of truth).
-import { playIncomingMessageSound } from '../../services/notificationSound';
+import { playIncomingMessageSound, initAudioUnlock, showSafeNotification } from '../../services/notificationSound';
 
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
@@ -354,6 +354,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const allTasksRef = useRef<StaffTask[]>([]);
+  const knownTaskIdsRef = useRef<Set<string> | null>(null);
+  const prevScopeRef = useRef<string>(scopeFilter);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -461,16 +463,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Request browser notification permission and load gateway capability once
+  // Request browser notification permission, unlock audio chime, and load gateway capability
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
+    const cleanupAudio = initAudioUnlock();
     apiRequest('/api/staff/gateway-capability')
       .then((res) => {
         if (res?.success && res.data) setGatewayCapability(res.data);
       })
       .catch(() => {});
+    return cleanupAudio;
   }, []);
 
   // Fetch today tasks, upcoming schedule, and completed tasks
@@ -478,6 +482,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     async (isPolling = false, currentScope?: 'mine' | 'all') => {
       if (!isPolling) setLoading(true);
       const scopeToUse = currentScope || scopeFilter;
+      if (prevScopeRef.current !== scopeToUse) {
+        knownTaskIdsRef.current = null;
+        prevScopeRef.current = scopeToUse;
+      }
       try {
         const [todayRes, upcomingRes, completedRes] = await Promise.all([
           apiRequest(`/api/staff/today-tasks?scope=${scopeToUse}`),
@@ -502,6 +510,42 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (completedRes?.success && Array.isArray(completedRes.data)) {
           setCompletedTasks(completedRes.data);
         }
+
+        // Deteksi tugas baru (today + upcoming) untuk alert real-time — hanya saat polling berikutnya, bukan load awal
+        try {
+          const todayList: StaffTask[] = todayRes.success && Array.isArray(todayRes.data) ? todayRes.data : [];
+          const upcomingList: StaffTask[] = upcomingRes.success && Array.isArray(upcomingRes.data) ? upcomingRes.data : [];
+          const combined: StaffTask[] = [...todayList, ...upcomingList];
+          if (knownTaskIdsRef.current !== null && combined.length > 0) {
+            const prevIds = knownTaskIdsRef.current;
+            const newAssignedTasks = combined.filter((t: StaffTask) => !prevIds.has(t.reservationId));
+            if (newAssignedTasks.length > 0) {
+              try { playIncomingMessageSound(true); } catch (_) {}
+              const first = newAssignedTasks[0];
+              const timeLabel = formatTime(first.bookingDate);
+              const extra = newAssignedTasks.length > 1 ? ' +' + (newAssignedTasks.length - 1) + ' lainnya' : '';
+              toast(`Tugas Baru Ditugaskan: ${first.customerName || 'Bunda'} (${timeLabel})${extra}`, 'success');
+              try {
+                if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+                  showSafeNotification('Tugas Baru Ditugaskan!', {
+                    body: `${first.customerName || 'Bunda'} - ${first.treatmentDetail || 'Treatment'} pukul ${timeLabel}`,
+                    icon: '/admin/pwa-192x192.png',
+                    tag: `new_task_${first.reservationId}`,
+                  }, () => {
+                    try { window.focus(); } catch (_) {}
+                    const match = combined.find((t) => t.reservationId === first.reservationId) || first;
+                    setSelectedTask(match as StaffTask);
+                  });
+                }
+              } catch (_) {}
+            }
+          }
+          if (todayRes.success && upcomingRes.success) {
+            const todayList2: StaffTask[] = Array.isArray(todayRes.data) ? todayRes.data : [];
+            const upcomingList2: StaffTask[] = Array.isArray(upcomingRes.data) ? upcomingRes.data : [];
+            knownTaskIdsRef.current = new Set([...todayList2, ...upcomingList2].map((t: StaffTask) => t.reservationId));
+          }
+        } catch (_) {}
       } catch (err: any) {
         if (!isPolling) setErrorMessage(err.message || 'Gagal memuat jadwal tugas.');
       } finally {
@@ -527,11 +571,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   }, [isSupervisor]);
 
-  // Auto-poll tasks every 20s — pause when tab hidden
+  // Auto-poll tasks every 20s — tetap jalan di background (best-effort) agar toast/OS notif tugas baru tetap terkirim
   useEffect(() => {
     fetchTasks();
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       fetchTasks(true);
     }, 20000);
     const onVisible = () => {
@@ -787,28 +830,31 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
           const isSandbox = Boolean(payload.isSandboxTest || payload.is_sandbox_test || payload.isSandbox);
 
-          // Play notification tone only on new incoming inbound message (bukan pesan riwayat / historical & bukan sandbox)
-          if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
-            playIncomingMessageSound();
-          }
+          try {
+            if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
+              playIncomingMessageSound();
+            }
+          } catch (_) {}
 
-          // Native browser notification (hanya untuk pesan live masuk dari customer asli)
-          if ('Notification' in window && Notification.permission === 'granted' && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
-            const sender = msg.sender_name || 'Pelanggan';
-            const notif = new Notification(`Pesan Baru dari ${sender}`, {
-              body: msg.content || 'Mengirim media/gambar',
-              icon: '/admin/pwa-192x192.png',
-              tag: `staff_chat_${convId}`,
-            });
-            notif.onclick = () => {
-              window.focus();
-              const match = allTasksRef.current.find((t) => t.conversationId === convId);
-              if (match) {
-                handleOpenChat(match);
-              }
-              try { notif.close(); } catch (_) {}
-            };
-          }
+          try {
+            const isChatVisible = selectedTaskRef.current?.conversationId === convId && typeof document !== 'undefined' && document.visibilityState === 'visible';
+            if (!isChatVisible && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
+              const sender = msg.sender_name || 'Pelanggan';
+              showSafeNotification(
+                `Pesan Baru dari ${sender}`,
+                {
+                  body: msg.content || 'Mengirim media/gambar',
+                  icon: '/admin/pwa-192x192.png',
+                  tag: `staff_chat_${convId}`,
+                },
+                () => {
+                  try { window.focus(); } catch (_) {}
+                  const match = allTasksRef.current.find((t) => t.conversationId === convId);
+                  if (match) handleOpenChat(match);
+                }
+              );
+            }
+          } catch (_) {}
 
           // Append/reconcile message if matches currently open conversation (Maksimal 10 bubble)
           if (selectedTaskRef.current?.conversationId === convId) {
