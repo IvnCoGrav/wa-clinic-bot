@@ -4,7 +4,7 @@ import { callChatCompletionsWithFallback, getFallbackChain, resolveFallbackTiers
 
 // ============================================================================
 // Fallback LLM 3-TIER (katalog live 2026-09-21):
-//   Tier 1 SumoPod utama (MiniMax-M2.7-highspeed) → Tier 2 Kenari cadangan
+//   Tier 1 SumoPod utama (glm-5.3-flash) → Tier 2 Kenari cadangan
 //   (deepseek-v4-1-flash) → Tier 3 DeepSeek Direct API langsung (deepseek-chat).
 // Chain internal dalam provider yang sama tetap didukung via AI_MODEL_FALLBACK_CHAIN.
 // ============================================================================
@@ -52,7 +52,7 @@ describe('getFallbackChain', () => {
   });
 
   it('env kosong → DEFAULT_FALLBACK_CHAIN = model primer SumoPod utama', () => {
-    expect(getFallbackChain()).toEqual(['MiniMax-M2.7-highspeed']);
+    expect(getFallbackChain()).toEqual(['glm-5.3-flash']);
   });
 });
 
@@ -337,7 +337,7 @@ describe('callChatCompletionsWithFallback — fallback 3-tier (SumoPod → Kenar
     const res = await callChatCompletionsWithFallback({
       baseUrl: 'https://ai.sumopod.com/v1',
       apiKey: 'sp-main',
-      model: 'MiniMax-M2.7-highspeed',
+      model: 'glm-5.3-flash',
       fallbackModel: 'deepseek-chat',
       timeoutMs: 12000,
       transientRetry: { maxRetries: 2 },
@@ -372,7 +372,7 @@ describe('callChatCompletionsWithFallback — fallback 3-tier (SumoPod → Kenar
     const res = await callChatCompletionsWithFallback({
       baseUrl: 'https://ai.sumopod.com/v1',
       apiKey: 'sp-main',
-      model: 'MiniMax-M2.7-highspeed',
+      model: 'glm-5.3-flash',
       fallbackModel: 'deepseek-chat',
       timeoutMs: 12000,
       transientRetry: { maxRetries: 2 },
@@ -385,5 +385,87 @@ describe('callChatCompletionsWithFallback — fallback 3-tier (SumoPod → Kenar
     const tier3Call = postSpy.mock.calls[4];
     expect(String(tier3Call[0])).toBe('https://api.deepseek.com/chat/completions');
     expect((tier3Call[2] as any).headers.Authorization).toBe('Bearer sk-direct-tier3');
+  });
+});
+
+// ============================================================================
+// Injeksi reasoning_effort GLM (hemat reasoning tak terlihat; terukur live 2026-09-22:
+// prompt router realistis: default 21 dtk/232 chunk vs low 4,7 dtk/11 chunk, output identik).
+// ============================================================================
+describe('callChatCompletionsWithFallback — injeksi reasoning_effort GLM via SumoPod', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+    delete process.env.LLM_REASONING_EFFORT;
+  });
+
+  it('model glm via SumoPod otomatis disisipi reasoning_effort=low (default kode)', async () => {
+    delete process.env.LLM_REASONING_EFFORT; // hermetik: uji default kode, bukan .env lokal
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload('glm-ok'));
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'glm-5.3-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+    expect(res.usedFallback).toBe(false);
+    const sentBody = postSpy.mock.calls[0][1] as any;
+    expect(sentBody.model).toBe('glm-5.3-flash');
+    expect(sentBody.reasoning_effort).toBe('low');
+  });
+
+  it('env LLM_REASONING_EFFORT meng-override default (mis. high untuk deep consult)', async () => {
+    process.env.LLM_REASONING_EFFORT = 'high';
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload('glm-ok'));
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'glm-5.3-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+    expect((postSpy.mock.calls[0][1] as any).reasoning_effort).toBe('high');
+  });
+
+  it('reasoning_effort eksplisit dari pemanggil dihormati (tidak ditimpa injeksi)', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload('glm-ok'));
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'glm-5.3-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 12000,
+      payload: { messages: [], reasoning_effort: 'max' },
+    });
+    expect((postSpy.mock.calls[0][1] as any).reasoning_effort).toBe('max');
+  });
+
+  it('model non-GLM tidak disisipi reasoning_effort', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload('ds-ok'));
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'deepseek-v4-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+    expect((postSpy.mock.calls[0][1] as any).reasoning_effort).toBeUndefined();
+  });
+
+  it('model glm via NON-SumoPod tidak disisipi (param belum terverifikasi di provider lain)', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload('glm-ok'));
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://kenari.id/v1',
+      apiKey: 'kn-main',
+      model: 'glm-5-3-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+    expect((postSpy.mock.calls[0][1] as any).reasoning_effort).toBeUndefined();
   });
 });

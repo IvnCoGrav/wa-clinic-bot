@@ -5,7 +5,7 @@
  *
  * Sumber tarif (live per 2026-09-21, harga diskon SumoPod/Kenari dari dashboard provider):
  * - SumoPod (server utama): tarif diskon publik per model (verified) — lihat SUMOPOD_PRICING.
- *   glm-5.3-flash 50% off ($0.015 in / $0.25 out), MiniMax-M2.7-highspeed 90% off ($0.03/$0.12),
+ *   glm-5.3-flash LIST ($0.15 in / $0.03 hit / $0.50 out; promo 50% berakhir 2026-09-09), MiniMax-M2.7-highspeed 90% off ($0.03/$0.12),
  *   qwen3.7-flash ≤32K ($0.03/$0.006/$0.13), netra 80% off ($0.04/$0.01/$0.10), gpt-4o-mini ($0.15/$0.075/$0.60).
  * - Kenari (cadangan): dibaca dari `GET https://kenari.id/v1/models` (publik, no-key) => snapshot
  *   `src/config/kenari-pricing.snapshot.json`. Tarif Kenari FLAT (tidak kena peak-hour DeepSeek).
@@ -330,7 +330,8 @@ const SUMOPOD_PROVIDER = 'SumoPod';
 /**
  * Tarif SumoPod live diskon (verified, per 2026-09-21 dari dashboard SumoPod).
  * Semua tarif di bawah adalah harga DISKON (kolom kanan) per 1M token (USD).
- * - glm-5.3-flash: 50% off z.ai — in $0.015, hit $0.015, out $0.25
+ * - glm-5.3-flash: tarif LIST z.ai — in $0.15, hit $0.03, out $0.50
+ *   (promo 50% $0.075/$0.015/$0.25 BERAKHIR 2026-09-09; jangan pakai angka promo)
  * - MiniMax-M2.7-highspeed: 90% off — in $0.03, hit $0.03, out $0.12
  * - qwen3.7-flash-2026-07-15: tier ≤32K Alibaba — in $0.03, hit $0.006, out $0.13
  * - deepseek-v4-flash-0731:netra: 80% off netra-runtime — in $0.04, hit $0.01, out $0.10
@@ -340,9 +341,9 @@ const SUMOPOD_PROVIDER = 'SumoPod';
 const SUMOPOD_PRICING: Record<string, ModelPricing> = {
   'glm-5.3-flash': {
     provider: 'SumoPod',
-    promptCostPer1kIdr: (0.015 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.015 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.25 / 1000) * USD_TO_IDR,
+    promptCostPer1kIdr: (0.15 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.5 / 1000) * USD_TO_IDR,
   },
   'minimax-m2.7-highspeed': {
     provider: 'SumoPod',

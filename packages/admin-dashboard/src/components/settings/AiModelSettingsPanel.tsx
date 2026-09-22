@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Save, RefreshCw, Sparkles, Check, ChevronDown, ChevronUp, Beaker, RotateCcw, Zap } from 'lucide-react';
+import { Bot, Save, RefreshCw, Sparkles, Check, ChevronDown, ChevronUp, Beaker, RotateCcw, Zap, Compass, MessageSquare } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -15,21 +15,22 @@ export interface AiTaskModelConfig {
 
 // === Preset 1-Klik (diselaraskan dengan AI_PRESET_PROFILES backend) ===
 // Server utama = SumoPod. KENAPA 3 KINERJA:
-//  1) Kilat & Hemat  = 95% chat harian butuh cepat+murah (MiniMax 90% off).
+//  1) Kilat & Hemat  = 95% chat harian butuh cepat+murah (glm-5.3-flash 50% off).
 //  2) Mendalam       = keluhan multi-gejala butuh penalaran DeepSeek netra.
 //  3) Disiplin Qwen  = kasus rawan format butuh model paling tertib aturan.
+// MiniMax-M2.7-highspeed tetap dikatalog SumoPod sebagai alternatif manual (backward-compat).
 const PRESET_CARDS = [
   {
     id: 'FAST_ECONOMICAL',
     title: 'Mode Kilat & Hemat (Default Rekomendasi Klinik)',
     star: true,
-    model: 'MiniMax-M2.7-highspeed (SumoPod Utama)',
-    modelKey: 'MiniMax-M2.7-highspeed',
+    model: 'glm-5.3-flash (SumoPod Utama)',
+    modelKey: 'glm-5.3-flash',
     deepKey: 'deepseek-v4-flash-0731:netra',
     provider: 'SUMOPOD' as const,
     speed: 'Super Kilat (~1.1s)',
     charm: 'Bidan Ramah & Luwes',
-    cost: 'Paling Ekonomis 90% off',
+    cost: 'Paling Hemat 50% off',
     note: 'Cocok untuk 95% operasional harian',
     icon: '⚡',
   },
@@ -120,8 +121,8 @@ export const AiModelSettingsPanel: React.FC = () => {
   const [testingScenario, setTestingScenario] = useState<TestScenario | null>(null);
   const [testResult, setTestResult] = useState<null | { success: boolean; latencyMs?: number; replySnippet?: string; error?: string; tokenEstimate?: number; modelUsed?: string; providerUsed?: string }>(null);
 
-  // Pencocokan preset ketat: model di luar 3 profil standar (mis. glm-5.3-flash,
-  // gpt-4o-mini) = 'CUSTOM', bukan dipaksa FAST_ECONOMICAL.
+  // Pencocokan preset: glm-5.3-flash = FAST_ECONOMICAL (emas), MiniMax tetap valid backward-compat.
+  // gpt-4o-mini di luar 3 profil standar = CUSTOM, bukan dipaksa FAST.
   const derivePresetFromConfigs = (cfgs: AiTaskModelConfig[], provider: string): string => {
     const chat = cfgs.find((c) => c.task === 'CHAT_REPLY');
     if (!chat) return 'FAST_ECONOMICAL';
@@ -130,7 +131,7 @@ export const AiModelSettingsPanel: React.FC = () => {
     if (provider === 'KENARI') {
       return m === 'deepseek-v4-1-flash' ? 'FAILOVER_SUMOPOD' : 'CUSTOM';
     }
-    if (m === 'minimax-m2.7-highspeed') return 'FAST_ECONOMICAL';
+    if (m === 'glm-5.3-flash' || m === 'minimax-m2.7-highspeed') return 'FAST_ECONOMICAL';
     if (m.includes('netra') || m === 'deepseek-v4-flash') return 'DEEP_REASONING';
     if (m.includes('qwen3.7') || m === 'qwen3-8-flash') return 'DISCIPLINED_QWEN';
     return 'CUSTOM';
@@ -163,45 +164,25 @@ export const AiModelSettingsPanel: React.FC = () => {
 
   const markDirty = () => setDirty(true);
 
-  const handleSwitchProvider = async (target: 'KENARI' | 'SUMOPOD') => {
-    if (target === activeProvider || switchingProvider) return;
-    // Proteksi anti-data-loss: beralih server membatalkan editan yang belum disimpan.
-    if (dirty) {
-      const ok = await confirm({
-        title: 'Perubahan Belum Disimpan!',
-        message: `Anda memiliki perubahan konfigurasi yang belum disimpan. Beralih ke Server ${target === 'SUMOPOD' ? 'Utama (SumoPod)' : 'Cadangan (Kenari)'} sekarang akan membatalkan perubahan tersebut. Lanjutkan?`,
-        confirmText: 'Beralih & Batalkan Perubahan',
-        cancelText: 'Kembali',
-        danger: true,
-      });
-      if (!ok) return;
-    }
-    setSwitchingProvider(true);
-    try {
-      const res = await apiRequest('/api/admin/ai-models/provider', {
-        method: 'PATCH',
-        body: JSON.stringify({ provider: target }),
-      });
-      if (res.success) {
-        setActiveProvider(target);
-        if (res.providersStatus) setProvidersStatus(res.providersStatus);
-        if (Array.isArray(res.configs)) {
-          const filtered = res.configs.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK');
-          setConfigs(filtered);
-          setSelectedPreset(derivePresetFromConfigs(filtered, target));
-          setInitialSnapshot(JSON.stringify({ configs: filtered, provider: target }));
+  const handleSwitchProvider = (target: 'KENARI' | 'SUMOPOD') => {
+    if (target === activeProvider) return;
+    // Staged unify: tidak langsung PATCH — perubahan provider ditampung bersama preset/configs
+    // dan baru persist saat Simpan Semua. Satu model simpan, anti split-interaction.
+    const providerLabel = target === 'SUMOPOD' ? 'SumoPod' : 'Kenari';
+    const stagedModel = target === 'SUMOPOD' ? 'glm-5.3-flash' : 'deepseek-v4-1-flash';
+    setActiveProvider(target);
+    setConfigs((prev) => {
+      const next = prev.map((c) => {
+        if (c.task === 'CHAT_REPLY' || c.task === 'CHAT_REPLY_DEEP' || c.task === 'SUMMARIZATION' || c.task === 'INTENT_CLASSIFICATION') {
+          return { ...c, provider: providerLabel, modelName: stagedModel };
         }
-        setTestResult(null);
-        setDirty(false);
-        toast(res.message || `Provider LLM berhasil diubah ke ${target}!`, 'success');
-      } else {
-        toast(res.error || 'Gagal mengubah provider AI', 'error');
-      }
-    } catch (err: any) {
-      toast('Gagal mengubah provider: ' + (err.message || err), 'error');
-    } finally {
-      setSwitchingProvider(false);
-    }
+        return c;
+      });
+      setSelectedPreset(derivePresetFromConfigs(next, target));
+      return next;
+    });
+    setDirty(true);
+    setTestResult(null);
   };
 
   const handleSelectPreset = (presetId: string) => {
@@ -209,16 +190,18 @@ export const AiModelSettingsPanel: React.FC = () => {
     const isFailover = presetId === 'FAILOVER_SUMOPOD';
     setSelectedPreset(presetId);
     setTestResult(null);
-    // Apply preset lokal: update CHAT_REPLY, CHAT_REPLY_DEEP, SUMMARIZATION tanpa save ke server dulu
+    // Apply preset lokal: update CHAT_REPLY, CHAT_REPLY_DEEP, SUMMARIZATION, INTENT_CLASSIFICATION
     // Utama = SumoPod, Failover (id FAILOVER_SUMOPOD) = Kenari cadangan.
     const providerLabel = isFailover ? 'Kenari' : 'SumoPod';
-    const modelKey = preset?.modelKey || 'MiniMax-M2.7-highspeed';
+    const modelKey = preset?.modelKey || 'glm-5.3-flash';
     const deepKey = (preset as any)?.deepKey || preset?.modelKey || modelKey;
+    const routerModel = isFailover ? 'deepseek-v4-1-flash' : 'glm-5.3-flash';
     setConfigs((prev) =>
       prev.map((c) => {
         if (c.task === 'CHAT_REPLY') return { ...c, provider: providerLabel, modelName: modelKey };
         if (c.task === 'CHAT_REPLY_DEEP') return { ...c, provider: providerLabel, modelName: deepKey };
         if (c.task === 'SUMMARIZATION') return { ...c, provider: providerLabel, modelName: modelKey };
+        if (c.task === 'INTENT_CLASSIFICATION') return { ...c, provider: providerLabel, modelName: routerModel };
         return c;
       })
     );
@@ -249,6 +232,7 @@ export const AiModelSettingsPanel: React.FC = () => {
     try {
       const payload = {
         presetId: selectedPreset,
+        activeProvider,
         configs: configs.map((c) => ({
           task: c.task,
           provider: c.provider,
@@ -263,15 +247,16 @@ export const AiModelSettingsPanel: React.FC = () => {
         body: JSON.stringify(payload),
       });
       if (res.success) {
-        const filtered = Array.isArray(res.data) ? res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : configs;
-        if (filtered.length) setConfigs(filtered);
-        if (res.activeProvider) setActiveProvider(res.activeProvider);
-        // persisted:false = DB gagal tulis (mis. DB down) — JANGAN anggap tersimpan.
+        // persisted:false = DB gagal tulis (mis. DB down) — JANGAN timpa edit lokal, biarkan admin coba lagi.
         if (res.persisted === false) {
           setDirty(true);
           toast(res.warning || res.message || 'GAGAL tersimpan ke database — perubahan hanya di memori. Coba lagi.', 'error');
         } else {
-          setInitialSnapshot(JSON.stringify({ configs: filtered, provider: res.activeProvider || activeProvider }));
+          const filtered = Array.isArray(res.data) ? res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : configs;
+          if (filtered.length) setConfigs(filtered);
+          if (res.activeProvider) setActiveProvider(res.activeProvider);
+          const snapConfigs = Array.isArray(res.data) ? (res.data as AiTaskModelConfig[]).filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : configs;
+          setInitialSnapshot(JSON.stringify({ configs: snapConfigs, provider: res.activeProvider || activeProvider }));
           setDirty(false);
           toast(res.message || 'Konfigurasi AI berhasil disimpan! ✨', 'success');
         }
@@ -301,9 +286,10 @@ export const AiModelSettingsPanel: React.FC = () => {
         const filtered = Array.isArray(res.data) ? res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : [];
         setConfigs(filtered);
         setTestResult(null);
-        setActiveProvider(res.activeProvider || 'SUMOPOD');
-        setSelectedPreset('FAST_ECONOMICAL');
-        setInitialSnapshot(JSON.stringify({ configs: filtered, provider: res.activeProvider || 'SUMOPOD' }));
+        const prov = res.activeProvider || 'SUMOPOD';
+        setActiveProvider(prov);
+        setSelectedPreset(derivePresetFromConfigs(filtered, prov));
+        setInitialSnapshot(JSON.stringify({ configs: filtered, provider: prov }));
         setDirty(false);
         setTestResult(null);
         toast(res.message || 'Berhasil dikembalikan ke default!', 'success');
@@ -343,11 +329,9 @@ export const AiModelSettingsPanel: React.FC = () => {
     }
   };
 
-  const heroChat = configs.find((c) => c.task === 'CHAT_REPLY');
-  const heroModels = activeProvider === 'SUMOPOD' ? SUMOPOD_MODELS : KENARI_MODELS;
-
   return (
     <div className="bg-white dark:bg-[#111b21] rounded-xl border border-[#e9edef] dark:border-[#222e35] p-0 shadow-sm overflow-hidden">
+      <style>{`@keyframes slideUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes fadeInScale{from{transform:scale(0.97);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e9edef] dark:border-[#222e35]">
         <div className="flex items-center gap-3">
@@ -383,12 +367,11 @@ export const AiModelSettingsPanel: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
-            disabled={switchingProvider}
             onClick={() => handleSwitchProvider('SUMOPOD')}
-            className={`p-3.5 rounded-xl border text-left transition-all min-h-[48px] flex flex-col justify-between ${
+            className={`p-3.5 rounded-xl border text-left transition-colors duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] flex flex-col justify-between ${
               activeProvider === 'SUMOPOD'
                 ? 'border-[#00a884] bg-emerald-50/70 dark:bg-[#1a2a24] shadow-xs ring-1 ring-[#00a884]'
-                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] hover:border-slate-400 opacity-90 hover:opacity-100'
+                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-slate-400 opacity-90 [@media(hover:hover)]:hover:opacity-100'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-1">
@@ -414,12 +397,11 @@ export const AiModelSettingsPanel: React.FC = () => {
           </button>
           <button
             type="button"
-            disabled={switchingProvider}
             onClick={() => handleSwitchProvider('KENARI')}
-            className={`p-3.5 rounded-xl border text-left transition-all min-h-[48px] flex flex-col justify-between ${
+            className={`p-3.5 rounded-xl border text-left transition-colors duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] flex flex-col justify-between ${
               activeProvider === 'KENARI'
                 ? 'border-[#00a884] bg-emerald-50/70 dark:bg-[#1a2a24] shadow-xs ring-1 ring-[#00a884]'
-                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] hover:border-slate-400 opacity-90 hover:opacity-100'
+                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-slate-400 opacity-90 [@media(hover:hover)]:hover:opacity-100'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-1">
@@ -456,7 +438,7 @@ export const AiModelSettingsPanel: React.FC = () => {
           {/* Section 1: Pilih Mode Kerja Bot (1-Click Presets) */}
           <div className="px-4 sm:px-6 py-5">
             <h3 className="text-sm font-bold text-[#111b21] dark:text-white flex items-center gap-2 mb-3">
-              <Zap size={16} className="text-amber-500" /> PILIH MODE KERJA BOT (1-CLICK PRESETS)
+              <Zap size={16} className="text-amber-500" /> Mode Kerja Bot (Preset 1-Klik)
             </h3>
             <div className="grid grid-cols-1 gap-3">
               {PRESET_CARDS.map((preset) => {
@@ -466,10 +448,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                     key={preset.id}
                     type="button"
                     onClick={() => handleSelectPreset(preset.id)}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all min-h-[48px] ${
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
                       isSelected
                         ? 'border-[#00a884] bg-emerald-50/50 dark:bg-[#1a2a24] ring-1 ring-[#00a884]'
-                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] hover:border-emerald-200 dark:hover:border-[#00a884]/50'
+                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-[#00a884]/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -509,10 +491,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                     key={preset.id}
                     type="button"
                     onClick={() => handleSelectPreset(preset.id)}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all min-h-[48px] ${
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
                       isSelected
                         ? 'border-[#00a884] bg-emerald-50/50 dark:bg-[#1a2a24] ring-1 ring-[#00a884]'
-                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] hover:border-emerald-200 dark:hover:border-[#00a884]/50'
+                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-[#00a884]/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -557,41 +539,140 @@ export const AiModelSettingsPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* Hero Card: Model Balasan Chat Utama */}
-          {heroChat && (
-            <div className="px-4 sm:px-6 pb-4">
-              <div className="p-4 rounded-xl border border-[#00a884]/30 bg-gradient-to-br from-emerald-50 to-white dark:from-[#1a2a24] dark:to-[#111b21] dark:border-[#00a884]/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#00a884] text-white">💬 Hero</span>
-                  <span className="text-xs font-bold text-[#111b21] dark:text-white">Model Balasan WhatsApp Bidan Yusi</span>
-                  <span className="ml-auto text-[10px] text-[#667781] dark:text-[#8696a0]">Aktif merespons chat pasien</span>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                  <div className="flex-1">
-                    <div className="text-sm font-mono font-bold text-[#111b21] dark:text-white">{heroChat.modelName}</div>
-                    <div className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Provider: <strong className="text-[#111b21] dark:text-white">{heroChat.provider}</strong> • Temp: {heroChat.temperature} • MaxTokens: {heroChat.maxTokens}</div>
-                  </div>
-                  <select
-                    value={heroChat.modelName}
-                    onChange={(e) => handleChangeAdvanced('CHAT_REPLY', 'modelName', e.target.value)}
-                    className="w-full sm:w-56 bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2.5 text-xs font-mono text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[48px]"
-                  >
-                    {heroModels.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+          {/* Section: Dual-Model Pipeline (Call 1 Router & Call 2 Persona Generator) */}
+          <div className="px-4 sm:px-6 py-5 border-t border-[#e9edef] dark:border-[#222e35] bg-gradient-to-b from-[#f8fafc]/50 to-white dark:from-[#0a1014]/50 dark:to-[#111b21]">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚡🔀</span>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111b21] dark:text-white">Arsitektur Dual-Model Pipeline (V3 Agent)</h3>
+                  <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+                    Pemisahan model untuk Call 1 (routing cepat & hemat) dan Call 2 (persona Bidan Yusi yang ramah).
+                  </p>
                 </div>
               </div>
             </div>
-          )}
 
-          {/* Mini Simulator */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Card Call 1: Router */}
+              {(() => {
+                const routerConfig = configs.find((c) => c.task === 'INTENT_CLASSIFICATION');
+                const defaultRouterModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'glm-5.3-flash';
+                const currentModel = routerConfig?.modelName || defaultRouterModel;
+                const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
+                return (
+                  <div className="p-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] shadow-xs flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
+                          <Compass size={14} className="text-sky-500" /> Call 1: Tool Routing & Slot Extractor
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-[#0f2a33] text-sky-800 dark:text-sky-300">
+                          🎰 Extractor
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3 leading-relaxed">
+                        Mengevaluasi pemanggilan tool (ongkir, katalog, SOP) secara atomik. Mode thinking dinonaktifkan agar latensi kilat (~1.2s) dan hemat token.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-emerald-300 font-medium">
+                          ⚡ Latensi Kilat (~1.2s)
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#202c33] text-slate-700 dark:text-slate-300 font-medium">
+                          🔒 Thinking Mode: Nonaktif
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-[#2a2414] text-amber-700 dark:text-amber-300 font-medium">
+                          💰 Paling Hemat Token
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">
+                        Model Call 1 (Router & Extractor):
+                      </label>
+                      <select
+                        value={currentModel}
+                        onChange={(e) => handleChangeAdvanced('INTENT_CLASSIFICATION', 'modelName', e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-xs font-mono text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                      >
+                        {modelsList.map((m) => (
+                          <option key={`router-${m}`} value={m}>
+                            {m} {m === 'glm-5.3-flash' ? '⚡ (Rekomendasi Utama Kilat)' : ''}
+                          </option>
+                        ))}
+                        {currentModel && !modelsList.includes(currentModel) && (
+                          <option value={currentModel}>{currentModel} (Kustom)</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Card Call 2: Persona Generator */}
+              {(() => {
+                const chatConfig = configs.find((c) => c.task === 'CHAT_REPLY');
+                const defaultChatModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'gpt-4o-mini';
+                const currentModel = chatConfig?.modelName || defaultChatModel;
+                const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
+                return (
+                  <div className="p-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] shadow-xs flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
+                          <MessageSquare size={14} className="text-[#00a884]" /> Call 2: Balasan Persona Bidan Yusi
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-emerald-300">
+                          💬 Generator
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3 leading-relaxed">
+                        Menyusun balasan akhir yang hangat, ramah, dan empatis untuk Bunda berdasarkan fakta tool yang telah diambil.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-emerald-300 font-medium">
+                          🩺 Persona Bidan Yusi
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#0f2a33] text-blue-700 dark:text-blue-300 font-medium">
+                          🛡️ Guardrails Aktif
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-[#241a2f] text-purple-700 dark:text-purple-300 font-medium">
+                          ✨ Bahasa Alami
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">
+                        Model Call 2 (Persona Generator):
+                      </label>
+                      <select
+                        value={currentModel}
+                        onChange={(e) => handleChangeAdvanced('CHAT_REPLY', 'modelName', e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-xs font-mono text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                      >
+                        {modelsList.map((m) => (
+                          <option key={`generator-${m}`} value={m}>
+                            {m} {m === 'gpt-4o-mini' ? '💬 (Persona Alami Empatis)' : m === 'glm-5.3-flash' ? '⚡ (Kilat & Hemat)' : ''}
+                          </option>
+                        ))}
+                        {currentModel && !modelsList.includes(currentModel) && (
+                          <option value={currentModel}>{currentModel} (Kustom)</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Mini Simulator — smoke-test konektivitas (bukan uji klinis RAG penuh) */}
           <div className="px-4 sm:px-6 py-4 border-t border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#0a1014]">
             <div className="flex items-center gap-2 mb-3">
               <Beaker size={16} className="text-[#00a884]" />
-              <h3 className="text-xs font-bold text-[#111b21] dark:text-white tracking-wide">🧪 UJI RESPON MODEL SEBELUM MENYIMPAN (MINI SIMULATOR 1 DETIK)</h3>
+              <h3 className="text-xs font-bold text-[#111b21] dark:text-white tracking-wide">🧪 Uji Konektivitas Model (Smoke-Test 1 Detik — tanpa RAG/katalog)</h3>
             </div>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3">Uji skenario pasien — lihat balasan & latensi nyata sebelum menyentuh chat WhatsApp asli:</p>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3">Smoke-test konektivitas SumoPod/Kenari: tanpa data RAG klinik/katalog/tarif. “Tanya Harga” bisa berhalusinasi — bukan indikasi bot rusak. Latensi nyata ~1–2s.</p>
             <div className="flex flex-wrap gap-2 mb-3">
               {(['flu','price','schedule'] as TestScenario[]).map((sc) => {
                 const labels: Record<TestScenario,string> = { flu: '🤧 Tanya Bapil', price: '💰 Tanya Harga', schedule: '📅 Tanya Jadwal' };
@@ -602,10 +683,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                     type="button"
                     disabled={!!testingScenario}
                     onClick={() => handleTestScenario(sc)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all min-h-[48px] min-w-[48px] ${
+                    className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] min-w-[48px] ${
                       isTesting
                         ? 'bg-amber-50 dark:bg-[#2a2414] border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-amber-300'
-                        : 'bg-white dark:bg-[#1f2c34] border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-white hover:border-[#00a884] hover:bg-emerald-50 dark:hover:bg-[#1a2a24]'
+                        : 'bg-white dark:bg-[#1f2c34] border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-white [@media(hover:hover)]:hover:border-[#00a884] [@media(hover:hover)]:hover:bg-emerald-50 [@media(hover:hover)]:dark:hover:bg-[#1a2a24]'
                     }`}
                   >
                     {isTesting ? <span className="inline-flex items-center gap-1"><RefreshCw size={12} className="animate-spin" /> Menghubungi model AI...</span> : labels[sc]}
@@ -620,7 +701,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               </div>
             )}
             {testResult && !testingScenario && (
-              <div className={`p-3 rounded-xl border text-xs ${testResult.success ? 'bg-emerald-50 dark:bg-[#14261f] border-emerald-200 dark:border-emerald-900/40 text-[#111b21] dark:text-white' : 'bg-red-50 dark:bg-[#2a1414] border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`}>
+              <div className={`p-3 rounded-xl border text-xs transition-all duration-200 ease-out ${testResult.success ? 'bg-emerald-50 dark:bg-[#14261f] border-emerald-200 dark:border-emerald-900/40 text-[#111b21] dark:text-white' : 'bg-red-50 dark:bg-[#2a1414] border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`} style={{ animation: 'fadeInScale 200ms ease-out' }}>
                 {testResult.success ? (
                   <>
                     <div className="font-semibold flex items-center gap-1 mb-1">✅ Model Berfungsi Normal {testResult.latencyMs !== undefined && <span className="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-[#0a1014] border text-[11px] font-mono">Latensi: {(testResult.latencyMs!/1000).toFixed(2)} detik • Token: {testResult.tokenEstimate ?? '-'} • {testResult.modelUsed} ({testResult.providerUsed})</span>}</div>
@@ -666,16 +747,16 @@ export const AiModelSettingsPanel: React.FC = () => {
                 {configs.map((cfg) => {
                   const meta = TASK_LABELS[cfg.task] || { label: cfg.task, badge: cfg.task };
                   const isChatHero = cfg.task === 'CHAT_REPLY';
-                  // Proteksi Call 1 NLU: INTENT_CLASSIFICATION terkunci ke OpenAI gpt-4o-mini
-                  // demi P50 1.8s — provider tidak boleh diganti dari UI.
-                  const isNluLocked = cfg.task === 'INTENT_CLASSIFICATION';
+                  const isNlu = cfg.task === 'INTENT_CLASSIFICATION';
+                  const nluOffRec = isNlu && cfg.provider !== 'SumoPod';
                   return (
                     <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-[#00a884]/30 bg-emerald-50/30 dark:bg-[#1a2a24]/50' : 'border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#1f2c34]'} transition-all`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-xs font-bold text-[#111b21] dark:text-white">{meta.label}</span>
                         <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-emerald-300">{meta.badge}</span>
                         {isChatHero && <span className="text-[10px] text-[#00a884] font-semibold">— Hero (disinkron preset)</span>}
-                        {isNluLocked && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-[#2a2414] text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">🔒 Terkunci ke OpenAI gpt-4o-mini demi P50 1.8s</span>}
+                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-[#0f2a33] text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
+                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-[#2a2414] text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
                       </div>
                       <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mb-2">{cfg.description}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
@@ -683,14 +764,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                           <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">Provider AI</label>
                           <select
                             value={cfg.provider}
-                            disabled={isNluLocked}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'provider', e.target.value)}
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px] disabled:opacity-60"
+                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px] text-base sm:text-xs"
                           >
                             <option value="SumoPod">SumoPod (Server Utama Klinik)</option>
                             <option value="Kenari">Kenari (Server Cadangan)</option>
-                            <option value="OpenAI">OpenAI (Server NLU)</option>
-                            <option value="DeepSeek">DeepSeek (Direct Fallback)</option>
+                            {isNlu && <option value="OpenAI">OpenAI (NLU)</option>}
+                            {isNlu && <option value="DeepSeek">DeepSeek (Direct Fallback)</option>}
                           </select>
                         </div>
                         <div>
@@ -701,7 +781,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                             list="ai-model-suggestions"
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'modelName', e.target.value)}
                             placeholder="Pilih dari katalog resmi"
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white font-mono text-xs focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white font-mono text-base sm:text-xs focus:outline-none focus:border-[#00a884] min-h-[44px]"
                           />
                         </div>
                         <div>
@@ -713,7 +793,8 @@ export const AiModelSettingsPanel: React.FC = () => {
                             step="0.05"
                             value={cfg.temperature}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'temperature', parseFloat(e.target.value))}
-                            className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2"
+                            className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2 touch-manipulation"
+                            style={{ touchAction: 'manipulation' } as any}
                           />
                         </div>
                         <div>
@@ -722,7 +803,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                             type="number"
                             value={cfg.maxTokens}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'maxTokens', parseInt(e.target.value, 10) || 512)}
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px] text-base sm:text-xs"
                           />
                         </div>
                         {cfg.confidenceThreshold !== undefined && (
@@ -737,7 +818,8 @@ export const AiModelSettingsPanel: React.FC = () => {
                               step="0.05"
                               value={cfg.confidenceThreshold}
                               onChange={(e) => handleChangeAdvanced(cfg.task, 'confidenceThreshold', parseFloat(e.target.value))}
-                              className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2"
+                              className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2 touch-manipulation"
+                              style={{ touchAction: 'manipulation' } as any}
                             />
                           </div>
                         )}
@@ -749,8 +831,33 @@ export const AiModelSettingsPanel: React.FC = () => {
             )}
           </div>
 
-          {/* Footer Actions */}
-          <div className="px-4 sm:px-6 py-4 border-t border-[#e9edef] dark:border-[#222e35] bg-white dark:bg-[#111b21] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Sticky Floating Save Bar — anti lupa simpan (dirty) */}
+          {dirty && !loading && (
+            <div className="fixed bottom-0 inset-x-0 z-40 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 pointer-events-none">
+              <div className="mx-auto max-w-3xl bg-white dark:bg-[#1f2c34] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-xl shadow-black/10 dark:shadow-none px-4 py-3 flex items-center gap-3 pointer-events-auto transition-all duration-200 ease-out" style={{ animation: 'slideUp 200ms cubic-bezier(0.23, 1, 0.32, 1)' }}>
+                <span className="flex-1 text-xs font-semibold text-[#111b21] dark:text-white flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Ada perubahan belum disimpan</span>
+                <button
+                  type="button"
+                  onClick={fetchConfigs}
+                  disabled={savingAll}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#111b21] text-[#111b21] dark:text-white touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAll}
+                  disabled={savingAll}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#00a884] hover:bg-[#008f6f] text-white shadow-sm touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  {savingAll ? <><RefreshCw size={14} className="animate-spin" /> Menyimpan...</> : <><Save size={14} /> Simpan</>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Footer Actions (fallback desktop) */}
+          <div className="px-4 sm:px-6 py-4 border-t border-[#e9edef] dark:border-[#222e35] bg-white dark:bg-[#111b21] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-6 sm:pb-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -766,7 +873,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                 type="button"
                 onClick={handleSaveAll}
                 disabled={savingAll || resetting || !dirty}
-                className={`inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-xl text-xs font-bold shadow-sm dark:shadow-none transition-all min-h-[48px] ${
+                className={`inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-xl text-xs font-bold shadow-sm dark:shadow-none transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
                   dirty ? 'bg-[#00a884] hover:bg-[#008f6f] text-white shadow-emerald-200 dark:shadow-none' : 'bg-slate-200 dark:bg-[#2a3942] text-[#667781] dark:text-[#8696a0] cursor-not-allowed'
                 } disabled:opacity-60`}
               >

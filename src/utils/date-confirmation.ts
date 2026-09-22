@@ -61,8 +61,14 @@ const BOOKING_COMMIT_SINGLE_TOKENS = [
 export function hasBookingCommitSignal(text: string | undefined): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower) return false;
-  // Frasa multi-kata via includes (distinctive, tak ambigu).
-  if (lower.includes('mau yang itu') || lower.includes('boleh yang itu')) return true;
+  // Frasa multi-kata via includes (distinctive, tak ambigu, mencakup variasi partikel percakapan alami).
+  if (
+    lower.includes('mau yang itu') || lower.includes('boleh yang itu')
+    || lower.includes('mau deh yang itu') || lower.includes('boleh deh yang itu')
+    || lower.includes('mau dong yang itu') || lower.includes('boleh dong yang itu')
+    || lower.includes('mau aja yang itu') || lower.includes('boleh aja yang itu')
+    || lower.includes('yang itu aja') || lower.includes('yang itu deh')
+  ) return true;
   // Kata tunggal via token-exact agar "fix" tak cocok di "prefix".
   const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
   const tokSet = new Set(toks);

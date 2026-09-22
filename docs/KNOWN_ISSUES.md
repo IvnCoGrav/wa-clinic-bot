@@ -5,6 +5,18 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 109. [Funnel Pacing] Premature Scheduling & Pushy Closing Transition pada Customer Eksplorasi — PENDING (Plan 11)
+
+- **Status:** open (planned, documented), dicatat 2026-09-22.
+- **Konteks:** Pada pengujian sandbox (terutama model proaktif seperti MiniMax-M2.7), saat customer baru menginfokan usia si kecil (*"usia 6 bulan bund"*), bot merespon dengan desakan imperatif (*"Ayo segera tangani ya Bund"*) dan langsung menodong hari jadwal (*"Rencana mau kami bantu jadwalkan di hari apa ya Bund?"*).
+- **Akar masalah:**
+  1. Pelanggaran *Information Hiding*: `buildHierarchyFull` dan `buildNegativeConstraintsBlock` selalu menyertakan `SCHEDULING_HIERARCHY_BLOCK` dan `SCHEDULE_NEG_CONSTRAINTS_TAIL` di setiap turn Call 2, meskipun customer masih berada di fase `CONSULTATION` (`session.cartItems.length === 0` dan `lastCommitment === 'EXPLORING'`).
+  2. `src/v3/agent/pipeline/generation-stage.ts:666` tidak pernah mengoper `phaseInjection: { focus: derivePhaseFocus(session), slim: true }`, sehingga `composeSystemPrompt` selalu jatuh ke mode default yang memuat seluruh instruksi penjadwalan.
+  3. Contoh pemicu di `scheduling.phase.ts:55` (*"Rencana mau kami bantu jadwalkan di hari apa..."*) dijiplak oleh model.
+- **Rencana fix:** Tertuang lengkap di `docs/plans/PLAN_11_ANTI_MEMBURU_BURU_PACING_AND_STATE_GATED_FUNNEL.md` (State-Gated Information Hiding, Wiring Phase Injection, Deterministic Funnel Output Normalizer, dan Adversarial Unit Tests).
+
+---
+
 ## 108. [Model Config] NLU Migration ke Netra — Risiko Latensi & JSON Parsing
 
 - **Status:** open (known risk, monitored), dicatat 2026-09-22.
@@ -2368,3 +2380,46 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
 - **Kontrak test:** cart multi-turn ghost → cart kosong; "Ambil yang pulih ceria ya??" tetap mengunci; "sabtu bisa ?" tunggal-offer tetap tidak mengunci; detectAgreedTreatment nama penuh+? → null; authorized needsAgeClarification → angka usia DIPERTAHANKAN.
 - **Tech debt ditunda (MEMBUTUHKAN KEPUTUSAN):** bullet `SAVE_RESERVATION_FULL` di `src/v3/agent/prompt/phases/router-tool-routing.layer.ts:11` ("hari sabtu bisa" → langsung kunci reservasi) KONTRADIKSI dengan Rule 5 tool-masker (`hasCommitment` butuh sinyal; `BOOKING_COMMIT_PENDING` saat hanya hari disebut) & doktrin `'?'`-fail-closed — bullet TIDAK diubah di sesi ini; pelanggaran potensial: slicing llmTools hooks (tool-masker/booking-tool-gate/atc-analysis) mungkin mendorong LLM memanggil save saat masih tentatif. Verifikasi & perbaiki di sesi lanjutan.
 - **Regresi di luar scope (catat tahu):** hafalan gejala 2-kata (mis. `batuk pilek` via `normalizeFam`) masih bisa salah-target katalog saat keluhan berisi kata generik — kandidat presisi `SymptomBridge` (bukan sesi ini).
+
+---
+
+## 107. [Tarif] Diskon SumoPod MiniMax/netra/qwen belum diverifikasi independen (2026-09-22)
+
+- **Status:** open (butuh cek dashboard `ai.sumopod.com` yang butuh login).
+- **Latar:** tarif GLM di `SUMOPOD_PRICING` (`cost-calculator.ts`) memakai harga promo 50%
+  ($0.015/$0.25) yang terbukti kedaluwarsa 2026-09-09 — DIPERBAIKI sesi ini ke LIST
+  ($0.15/$0.03/$0.50, 3 sumber independen). Tarif MiniMax ($0.03/$0.12), netra
+  ($0.04/$0.01/$0.10), qwen3.7 ($0.03/$0.006/$0.13) bersumber dashboard provider sesi lalu.
+- **Konflik terdeteksi:** snapshot katalog publik pihak-3 (auto-generated dari katalog live
+  SumoPod, tapi dinyatakan bisa lag) mencatat MiniMax-M2.7-highspeed 90% off $0.01/$0.30 —
+  berbeda dari kode ($0.03/$0.12). Netra tidak ada di snapshot itu sama sekali.
+- **Dampak:** estimasi biaya `llm_audit_logs` untuk MiniMax/netra/qwen bisa meleset
+  sampai dashboard di-cek ulang. GLM kini akurat (list rate).
+- **Aksi:** cek ulang keempat tarif di dashboard SumoPod saat ada akses; sinkronkan
+  `SUMOPOD_PRICING` + test `cost-calculator` bila berubah.
+
+## 108. [Keputusan Menunggu] Eskalasi cascade murah→superior atas ketidakyakinan (2026-09-22)
+
+- **Status:** open (MEMBUTUHKAN KEPUTUSAN user sebelum diimplementasi).
+- **Latar:** pertanyaan owner — apakah LLM yang tidak yakin bisa memanggil LLM superior?
+  Skema ini valid (cascade routing ala FrugalGPT) dan BELUM terimplementasi di sistem.
+- **Verifikasi kode:** yang ada saat ini — (a) `FastResponseGate` (gate 0-token deterministik,
+  bukan cascade); (b) fallback 3-tier berbasis ERROR, bukan ketidakyakinan, dan jatuh ke
+  tier murah; (c) slot `CHAT_REPLY_DEEP` (netra) + `AI_VERIFIER` terdaftar di registry tapi
+  NOL pemanggil runtime di `src/`; (d) `confidenceThreshold` tersimpan di DB tapi tidak ada
+  kode yang membacanya (confidence NLU hanya numpang di log).
+- **Catatan jujur:** confidence self-report LLM tidak terkalibrasi (run identik: 0.9 vs 0.85).
+  Pemicu eskalasi yang sehat = verdict verifier / ambiguitas multi-intent / entity kosong /
+  tool-call gagal, bukan angka confidence mentah.
+- **Prasyarat bila disetujui:** satu fungsi wiring (verifier menolak/sinyal ambigu → ulang via
+  `CHAT_REPLY_DEEP` + `reasoning_effort` high/max) + plumbing effort per task di gateway.
+
+## 109. [Tech Debt] confidenceThreshold + CHAT_REPLY_DEEP + AI_VERIFIER belum dikabel runtime (2026-09-22)
+
+- **Status:** open (dampak saat ini: tidak ada — fitur opsional yang dorman).
+- **Bukti:** grep `src/`: `getModelConfig('CHAT_REPLY_DEEP'|'AI_VERIFIER')` = 0 pemanggil;
+  `confidenceThreshold` hanya dibaca admin API (alias `confidence_threshold` DB), tidak ada
+  cabang runtime yang memakainya.
+- **Risiko:** admin dapat mengubah threshold/verifier/deep model di dashboard tanpa efek
+  apa pun (ekspektasi palsu). Pertimbangkan: sembunyikan dari UI sampai diimplementasi
+  (lihat #108), atau implementasikan wiring-nya.

@@ -19,6 +19,8 @@ describe('V3 LLM CircuitBreaker fail-fast', () => {
     delete process.env.SUMOPOD_BASE_URL;
     delete process.env.SUMOPOD_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.KENARI_BASE_URL;
+    delete process.env.KENARI_API_KEY;
   });
 
   it('fail-fast aktif setelah 3 gagal beruntun, panggilan ke-4 langsung fallback <50ms', async () => {

@@ -63,6 +63,24 @@ export function isRecruitmentInquiry(text: string): boolean {
   return false;
 }
 
+/**
+ * Deteksi apakah pesan adalah foto/media murni (tanpa caption bermakna).
+ * Menangani '[IMAGE]', '[IMAGE:]', '[IMAGE: IMG_...jpg]' (nama file kamera).
+ */
+export function isPureImageMessage(text: string): boolean {
+  const trimmed = (text || '').trim();
+  if (trimmed === '[IMAGE]' || trimmed === '[IMAGE:]') return true;
+  const match = trimmed.match(/^\[IMAGE:\s*([^\]]+)\]$/i);
+  if (match) {
+    const caption = match[1].trim();
+    if (!caption) return true;
+    if (/^(IMG[-_]|PHOTO[-_]|WP[-_]|PXL[-_]|\d{8}[-_]|\w+\.(jpe?g|png|webp|heic))/i.test(caption)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isShortAcknowledgement(text: string): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower.trim()) return false;
@@ -151,6 +169,47 @@ export class FastResponseGate {
           tokens: emptyTokens,
           costIdr: 0,
           nextState: ConversationState.HUMAN_HANDLING,
+        },
+      };
+    }
+
+    // GATE DETERMINISTIK: foto/media murni tanpa caption bermakna (inbound image)
+    if (isPureImageMessage(cleanIncomingText)) {
+      const staticPhotoReply = 'Terima kasih fotonya ya Bunda \u{1F3E0}\u2728 Sudah kami terima dan simpan untuk panduan tim Bidan kami saat kunjungan nanti. Ada yang ingin Bunda tanyakan atau konsultasikan lagi? \u{1F917}';
+      if (conversationId && !skipDbLogging) {
+        try {
+          const { messageService } = await import('../../../services/message.service');
+          const { Direction } = await import('@prisma/client');
+          await messageService.logMessage({
+            tenantId,
+            conversationId,
+            direction: Direction.INBOUND,
+            content: originalText || incomingText,
+          });
+          await messageService.logMessage({
+            tenantId,
+            conversationId,
+            direction: Direction.OUTBOUND,
+            content: staticPhotoReply,
+          });
+        } catch (e) {}
+      }
+      return {
+        handled: true,
+        session,
+        output: {
+          replyText: staticPhotoReply,
+          executedTools: [],
+          updatedSession: session,
+          shouldSendReply: true,
+          isEscalated: false,
+          retrievedChunks: [],
+          fewShotExemplars: args.fewShotExemplars,
+          systemPrompt: args.currentSystemPrompt,
+          reasoning: null,
+          tokens: emptyTokens,
+          costIdr: 0,
+          nextState: deriveConversationState(session, extractFastIntents(cleanIncomingText)),
         },
       };
     }

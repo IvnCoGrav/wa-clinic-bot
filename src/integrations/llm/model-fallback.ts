@@ -3,7 +3,7 @@ import { SUMOPOD_PRIMARY_MODEL, KENARI_PRIMARY_MODEL, DEEPSEEK_DIRECT_MODEL } fr
 
 /**
  * Arsitektur fallback 3-TIER (katalog live 2026-09-21):
- *   Tier 1 (primary/utama) : SumoPod  -> MiniMax-M2.7-highspeed (baseUrl + apiKey dari call)
+ *   Tier 1 (primary/utama) : SumoPod  -> glm-5.3-flash (baseUrl + apiKey dari call)
  *   Tier 2 (secondary)      : Kenari   -> deepseek-v4-1-flash   (KENARI_* + LLM_API_KEY)
  *   Tier 3 (last)           : DeepSeek Direct (api.deepseek.com) -> deepseek-chat
  *                             (LLM_FALLBACK_BASE_URL + LLM_FALLBACK_API_KEY)
@@ -68,8 +68,8 @@ export function getFallbackModel(): string {
 }
 
 /**
- * Rantai fallback DALAM provider yang sama (mis. tambahan model Kenari), dipisah koma.
- * Default kini hanya model primer Kenari (tanpa chain internal). Env dapat meng-override.
+ * Rantai fallback DALAM provider yang sama (mis. tambahan model SumoPod), dipisah koma.
+ * Default kini hanya model primer SumoPod (tanpa chain internal). Env dapat meng-override.
  */
 export function getFallbackChain(): string[] {
   const envChain = (process.env.AI_MODEL_FALLBACK_CHAIN || '')
@@ -140,6 +140,21 @@ export async function callChatCompletionsWithFallback(
     const effectivePayload: any = { ...(payloadOverride ?? call.payload), model };
     if (model.toLowerCase().includes('luna') || model.toLowerCase().includes('o1') || model.toLowerCase().includes('o3')) {
       delete effectivePayload.temperature;
+    }
+    // GLM thinking selalu-on (default max): tanpa reasoning_effort, ±240 token output
+    // habis untuk mikir tak terlihat sebelum jawaban mulai (terukur live 2026-09-22:
+    // default 21 dtk/232 chunk vs low 4,7 dtk/11 chunk, output identik).
+    // Injeksi satu titik di sini (bukan di prompt): hanya model glm-* via SumoPod
+    // (satu-satunya kombinasi yang terverifikasi mendukung param ini) dan HANYA bila
+    // pemanggil tidak men-set reasoning_effort eksplisit. Default via env
+    // LLM_REASONING_EFFORT (default kode: 'low'); deep consult/harvesting dapat
+    // meng-override ke 'high'/'max' lewat payload.
+    if (
+      /glm/i.test(model) &&
+      finalBaseUrl.toLowerCase().includes('sumopod') &&
+      !('reasoning_effort' in effectivePayload)
+    ) {
+      effectivePayload.reasoning_effort = process.env.LLM_REASONING_EFFORT || 'low';
     }
     const resp = await axios.post(
       `${finalBaseUrl}/chat/completions`,
@@ -230,7 +245,7 @@ export async function callChatCompletionsWithFallback(
       }
     }
 
-    // 2) Fallback LINTAS-PROVIDER berjenjang (Tier 2 SumoPod -> Tier 3 DeepSeek Direct).
+    // 2) Fallback LINTAS-PROVIDER berjenjang (Tier 2 Kenari -> Tier 3 DeepSeek Direct).
     //    Tier yang baseUrl-nya sama dengan primary di-skip (sudah dicoba di atas).
     const tiers = resolveFallbackTiers();
     for (const tier of tiers) {

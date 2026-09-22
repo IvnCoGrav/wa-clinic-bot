@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-22 — Penyelesaian Migrasi SumoPod+GLM: Switch .env, Injeksi reasoning_effort, Koreksi Tarif Promo Kedaluwarsa
+
+- **Runtime switch (bagian yang hilang):** `.env` `ACTIVE_LLM_PROVIDER=KENARI` → `SUMOPOD`,
+  seluruh `AI_PROVIDER_*` → `SumoPod`, `AI_MODEL_*`/`OPENAI_MODEL`/`SUMOPOD_DEFAULT_MODEL`/
+  `AI_MODEL_FALLBACK_CHAIN` → `glm-5.3-flash`, `AI_MODEL_FALLBACK` → `deepseek-chat`,
+  plus `LLM_REASONING_EFFORT="low"` (baru). Tanpa ini baseUrl Kenari + model GLM = 400
+  (DB adalah sumber kebenaran, tapi endpoint aktif dibaca dari env). `.env.example` diselaraskan.
+- **Injeksi `reasoning_effort` GLM (satu titik, level kode — bukan prompt):** `attempt()` di
+  `model-fallback.ts` menyisipkan `reasoning_effort` (default `LLM_REASONING_EFFORT`/`low`)
+  hanya untuk model `glm-*` via SumoPod (satu-satunya kombinasi terverifikasi live),
+  dihormati bila pemanggil men-set eksplisit. Terukur live: prompt router realistis
+  default 21 dtk/232 chunk reasoning vs low 4,7 dtk/11 chunk, output JSON identik.
+- **Koreksi tarif STALE (fakta, bukan tebakan):** `SUMOPOD_PRICING` glm memakai harga promo
+  50% ($0.015/$0.25) yang BERAKHIR 2026-09-09 — diganti tarif LIST ($0.15 in / $0.03 hit /
+  $0.50 out, terverifikasi 3 sumber independen). Estimasi biaya GLM sebelumnya underreport ±10x input.
+- **Test:** 5 ekspektasi basi diperbaiki (MiniMax-era → glm), 5 test injeksi baru;
+  67/67 hijau (`ai-models-tenant`, `model-fallback-chain` 21, `provider-model-alignment`,
+  `cost-calculator`, `ai-model-settings`).
+- **DB:** skrip idempoten baru `scripts/migrate-model-config-to-sumopod-glm.ts` (+guard
+  produksi, `--dry-run`); diterapkan di localhost: 4 baris → golden
+  (HARVESTING/PII/SUMMARIZATION/INTENT → netra), 5 sudah sesuai; verifikasi akhir 9/9 golden.
+- **Jujur dicatat:** tarif diskon SumoPod MiniMax/netra/qwen di kode bersumber dashboard
+  provider sesi lalu — snapshot katalog publik pihak-3 konflik untuk MiniMax
+  ($0.01/$0.30 vs kode $0.03/$0.12) → butuh re-verifikasi dashboard (KNOWN_ISSUES #107).
+
 #### 2026-09-21 — Katalog Live SumoPod Utama / Kenari Cadangan / DeepSeek Direct + Tarif Diskon Verified
 
 - **Koreksi arsitektur (server utama = SumoPod):** Tier dibalik — Tier1 SumoPod (5 model resmi),

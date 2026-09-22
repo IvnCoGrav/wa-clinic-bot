@@ -126,15 +126,20 @@ export class V3AgentRunner {
       };
     }
 
-    // 2. Endpoint & model LLM.
-    const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
-    const endpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
-    // endpointConfig.model sudah di-sanitize terhadap baseUrl provider aktif
-    // (mis. model OpenAI-only di-remap saat endpoint Kenari) — pakai itu agar
-    // model & endpoint selalu konsisten, hindari 400 `no price for model`.
-    const selectedModel = forceModel || endpointConfig.model || modelConfig?.modelName || 'gpt-4o-mini';
-    const baseUrl = endpointConfig.baseUrl;
-    const apiKey = endpointConfig.apiKey;
+    // 2. Endpoint & model LLM (Dual-Model Pipeline).
+    // Call 1 (Router): INTENT_CLASSIFICATION (mis. glm-5.3-flash, hemat & cepat ~1.2s tanpa thinking)
+    // Call 2 (Generator): CHAT_REPLY (mis. gpt-4o-mini, persona ramah & natural)
+    const routerModelConfig = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION', tenantId);
+    const routerEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION' });
+    const routerModel = forceModel || routerEndpointConfig.model || routerModelConfig?.modelName || 'glm-5.3-flash';
+
+    const generatorModelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
+    const generatorEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+    const generatorModel = forceModel || generatorEndpointConfig.model || generatorModelConfig?.modelName || 'gpt-4o-mini';
+
+    const selectedModel = generatorModel;
+    const baseUrl = generatorEndpointConfig.baseUrl || routerEndpointConfig.baseUrl;
+    const apiKey = generatorEndpointConfig.apiKey || routerEndpointConfig.apiKey;
 
     // 3. Penyiapan session + riwayat (Stage 1a).
     const prepared = await ContextGrounder.prepareSession({ session, conversationId, tenantId, incomingText, history });
@@ -195,7 +200,7 @@ export class V3AgentRunner {
       (input as any).bubbleCorrelationId || (chatId ? `${phone}_${Date.now()}` : `bubble_${Date.now()}`);
     const turn: TurnState = {
       tenantId, phone, conversationId, incomingText,
-      selectedModel, baseUrl, apiKey, turnStartedAt: Date.now(), correlationId,
+      selectedModel, routerModel, generatorModel, baseUrl, apiKey, turnStartedAt: Date.now(), correlationId,
       turnId: input.turnId, provider: input.provider,
       totalTokens: { prompt: 0, completion: 0, total: 0 },
       currentSystemPrompt, messages, executedTools: [], retrievedChunks,

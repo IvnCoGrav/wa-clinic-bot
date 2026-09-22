@@ -110,4 +110,23 @@ describe('NLU — Semantik Interogatif "berapa"', () => {
   it('"saya di sedati" -> TIDAK ask_price (pure lokasi, tanpa berapa)', () => {
     expect(extractFastIntents('saya di sedati')).not.toContain('ask_price');
   });
+
+  it('"jam berapa bisa datang?" -> ask_schedule, TIDAK ask_duration, TIDAK ask_price', () => {
+    const intents = extractFastIntents('jam berapa bisa datang?');
+    expect(intents).toContain('ask_schedule');
+    expect(intents).not.toContain('ask_duration');
+    expect(intents).not.toContain('ask_price');
+  });
+
+  it('"pijatnya berapa jam ya?" -> ask_duration, TIDAK ask_price', () => {
+    const intents = extractFastIntents('pijatnya berapa jam ya?');
+    expect(intents).toContain('ask_duration');
+    expect(intents).not.toContain('ask_price');
+  });
+
+  it('"brp jam perawatannya?" -> ask_duration, TIDAK ask_price', () => {
+    const intents = extractFastIntents('brp jam perawatannya?');
+    expect(intents).toContain('ask_duration');
+    expect(intents).not.toContain('ask_price');
+  });
 });

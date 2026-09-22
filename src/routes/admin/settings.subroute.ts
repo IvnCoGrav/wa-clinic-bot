@@ -22,7 +22,7 @@ function buildProvidersStatus(activeProvider: string) {
     sumopod: {
       name: 'SumoPod AI (Utama)',
       baseUrl: (process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1').replace(/\/$/, ''),
-      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'MiniMax-M2.7-highspeed',
+      defaultModel: process.env.SUMOPOD_DEFAULT_MODEL || 'glm-5.3-flash',
       models: ['glm-5.3-flash', 'MiniMax-M2.7-highspeed', 'qwen3.7-flash-2026-07-15', 'gpt-4o-mini', 'deepseek-v4-flash-0731:netra'],
       configured: sumopodKeyConfigured,
     },
@@ -841,11 +841,11 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/ai-models/batch',
     async (
       request: FastifyRequest<{
-        Body: { configs?: Array<{ task: string; provider?: string; modelName?: string; maxTokens?: number; temperature?: number; confidenceThreshold?: number }>; presetId?: string };
+        Body: { configs?: Array<{ task: string; provider?: string; modelName?: string; maxTokens?: number; temperature?: number; confidenceThreshold?: number }>; presetId?: string; activeProvider?: string };
       }>,
       reply: FastifyReply
     ) => {
-      const { configs, presetId } = request.body || {};
+      const { configs, presetId, activeProvider: bodyActiveProvider } = request.body || {};
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { AiModelConfigService, AI_PRESET_PROFILES } = await import('../../config/ai-models.config');
 
@@ -872,6 +872,26 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           }
         } else if (!presetId) {
           return reply.status(400).send({ success: false, error: 'Body harus berisi configs[] atau presetId.' });
+        }
+
+        // Sinkronisasi activeProvider staged dari UI: jika client mengirim provider eksplisit
+        // (hasil klik tombol Server Utama/Cadangan yang kini staged, bukan PATCH instan),
+        // set map sebelum save agar ACTIVE_LLM_PROVIDER ter-persist bersama batch.
+        // Fallback infer dari CHAT_REPLY provider bila bodyActiveProvider tidak ada.
+        if (bodyActiveProvider && ['KENARI', 'SUMOPOD'].includes(String(bodyActiveProvider).toUpperCase())) {
+          AiModelConfigService.activeLlmProvider.set(tenantId, String(bodyActiveProvider).toUpperCase() as 'KENARI' | 'SUMOPOD');
+        } else if (Array.isArray(configs) && configs.length > 0) {
+          const chatCfg = configs.find((c: any) => String(c.task).toUpperCase() === 'CHAT_REPLY' && c.provider);
+          if (chatCfg && chatCfg.provider) {
+            const p = String(chatCfg.provider).toUpperCase();
+            if (p === 'KENARI' || p === 'SUMOPOD') {
+              AiModelConfigService.activeLlmProvider.set(tenantId, p as 'KENARI' | 'SUMOPOD');
+            } else if (p.includes('KENARI')) {
+              AiModelConfigService.activeLlmProvider.set(tenantId, 'KENARI');
+            } else if (p.includes('SUMOPOD')) {
+              AiModelConfigService.activeLlmProvider.set(tenantId, 'SUMOPOD');
+            }
+          }
         }
 
         // SATU tulis atomik di akhir (serial per-tenant + transaksi + upsert provider).
