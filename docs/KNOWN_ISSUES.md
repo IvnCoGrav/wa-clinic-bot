@@ -2423,3 +2423,18 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
 - **Risiko:** admin dapat mengubah threshold/verifier/deep model di dashboard tanpa efek
   apa pun (ekspektasi palsu). Pertimbangkan: sembunyikan dari UI sampai diimplementasi
   (lihat #108), atau implementasikan wiring-nya.
+
+## 110. [Tech Debt] Balasan foto hardcode + daftar frasa booking hafalan (2026-09-22)
+
+- **Status:** open (diterima sadar saat push 2026-09-22; dampak saat ini: rendah).
+- **(a) Template hardcode:** `src/v3/agent/pipeline/fast-response-gate.ts`
+  (`isPureImageMessage` → `staticPhotoReply` "Terima kasih fotonya ya Bunda...") menanam
+  template balasan customer-facing di runtime TS — melanggar Mandat Non-Hardcode (template
+  WAJIB dari DB agar admin bisa ubah tanpa deploy).
+- **(b) Hafalan frasa:** `hasBookingCommitSignal` di `src/utils/date-confirmation.ts`
+  diperluas dengan varian partikel (`mau/deh/dong/aja yang itu`...) — mendekati verbatim
+  matching yang dilarang Mandat Anti-Overfitting; solusi fondasional = sinyal komitmen
+  semantik dari LLM/router, bukan daftar includes.
+- **Aksi:** (a) pindahkan balasan foto ke `TenantPromptConfig`/katalog template DB;
+  (b) ganti daftar frasa dengan klasifikasi intent komitmen semantik. Kerjakan sebelum
+  pola yang sama ditiru di gate lain.
