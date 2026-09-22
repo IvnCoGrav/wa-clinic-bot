@@ -118,6 +118,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         identity = staffSession.staff.name;
         (request as any).staffRole = staffSession.staff.role;
         (request as any).staffId = staffSession.staff.id;
+        (request as any).staffSession = staffSession;
+        (request as any).staffTenantId = staffSession.staff.tenant_id;
       }
     }
 

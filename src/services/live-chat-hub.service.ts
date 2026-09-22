@@ -4,7 +4,15 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
 
-export type LiveChatHubEventType = 'conversation.updated' | 'message.created' | 'message.updated' | 'message.status_updated' | 'sync.progress' | 'bot.cutoff_changed';
+export type LiveChatHubEventType =
+  | 'conversation.updated'
+  | 'message.created'
+  | 'message.updated'
+  | 'message.status_updated'
+  | 'sync.progress'
+  | 'bot.cutoff_changed'
+  | 'staff.task_assigned'
+  | 'staff.task_cancelled';
 
 /**
  * Event real-time yang dipublikasikan ke Live Chat Panel admin.

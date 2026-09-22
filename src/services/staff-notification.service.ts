@@ -3,6 +3,9 @@ import { telegramService } from './telegram.service';
 import { calculateHaversineDistance } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { webPushService } from './web-push.service';
+import { getLiveChatHub } from './live-chat-hub.service';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -82,8 +85,8 @@ export class StaffNotificationService {
         select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
       });
 
-      if (!staff || !staff.telegram_chat_id) {
-        return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi' };
+      if (!staff) {
+        return { sent: false, reason: 'Staff tidak ditemukan' };
       }
 
       const reservation = await prisma.reservation.findUnique({
@@ -104,10 +107,12 @@ export class StaffNotificationService {
 
       const cust = reservation.customer;
 
-      // Jangan kirim notifikasi penugasan Telegram jika reservasi berasal dari testing / sandbox
+      // Jangan kirim notifikasi penugasan jika reservasi berasal dari testing / sandbox
       if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
         return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
       }
+
+      const tenantId = staff.tenant_id || DEFAULT_TENANT_ID;
 
       const allChildren = reservation.children?.length ? reservation.children : cust?.children || [];
 
@@ -179,8 +184,47 @@ export class StaffNotificationService {
       const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
       const portalUrl = `${baseUrl}/#staff-today`;
 
-      // 9. Susun Pesan Telegram Markdown
-      const messageText = `🔔 *TUGAS RESERVASI BARU DITUGASKAN!*
+      // 9. Real-time In-System SSE Broadcast (LiveChatHub)
+      try {
+        getLiveChatHub().publish({
+          type: 'staff.task_assigned',
+          tenantId,
+          payload: {
+            staffId: staff.id,
+            staffName: staff.name,
+            reservationId: reservation.id,
+            patientName: cust?.name || 'Bunda',
+            treatmentDetail: reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare',
+            bookingDate: reservation.booking_date,
+            address: addressText,
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn(`[StaffNotificationService] SSE task_assigned broadcast error:`, hubErr.message);
+      }
+
+      // 10. Real-time In-System Web Push PWA (Service Worker)
+      try {
+        await webPushService.sendPushToStaff(staff.id, tenantId, {
+          title: 'Tugas Kunjungan Baru 💆‍♀️',
+          body: `${reservation.treatment_detail || 'Treatment'} untuk ${cust?.name || 'Bunda'} (${dateStr} - ${timeStr} WIB)`,
+          url: '/admin/#staff-today',
+          tag: `staff_task_${reservation.id}`,
+          icon: '/admin/icon-192.png',
+          badge: '/admin/favicon.ico',
+          data: {
+            reservationId: reservation.id,
+            staffId: staff.id,
+            url: '/admin/#staff-today',
+          },
+        });
+      } catch (pushErr: any) {
+        console.warn(`[StaffNotificationService] Web Push task_assigned error:`, pushErr.message);
+      }
+
+      // 11. Optional External Telegram Notification
+      if (staff.telegram_chat_id) {
+        const messageText = `🔔 *TUGAS RESERVASI BARU DITUGASKAN!*
 Halo *${staff.name}*, Anda memiliki jadwal kunjungan pasien baru:
 
 👤 *Pasien:* ${cust?.name || 'Bunda'}
@@ -198,13 +242,20 @@ ${notes ? `📝 *Catatan Pasien:* _${notes}_\n` : ''}
 
 _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
 
-      const res = await telegramService.sendMessage({
-        chatId: staff.telegram_chat_id,
-        text: messageText,
-        parseMode: 'Markdown',
-      });
+        try {
+          const res = await telegramService.sendMessage({
+            chatId: staff.telegram_chat_id,
+            text: messageText,
+            parseMode: 'Markdown',
+          });
+          return { sent: res.ok, reason: res.description };
+        } catch (tgErr: any) {
+          console.warn(`[StaffNotificationService] Telegram assignment notification error:`, tgErr.message);
+          return { sent: false, reason: tgErr.message };
+        }
+      }
 
-      return { sent: res.ok, reason: res.description };
+      return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi (notifikasi in-system PWA & SSE berhasil dikirim)' };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to notify staff ${staffId}:`, err.message);
       return { sent: false, reason: err.message };
@@ -229,8 +280,8 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         where: { id: staffId },
         select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
       });
-      if (!staff || !staff.telegram_chat_id) {
-        return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi' };
+      if (!staff) {
+        return { sent: false, reason: 'Staff tidak ditemukan' };
       }
       const reservation = await prisma.reservation.findUnique({
         where: { id: reservationId },
@@ -241,26 +292,72 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
         return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
       }
-      const addressParts: string[] = [];
-      if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
-      if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
-      if (cust?.kota) addressParts.push(this.escapeMarkdown(cust.kota));
-      const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
-      const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-      const dateStr = bookingDate
-        ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
-        : 'Tanggal belum ditentukan';
-      const timeStr = bookingDate
-        ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-        : '-';
+
+      const tenantId = staff.tenant_id || DEFAULT_TENANT_ID;
       const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
       const custName = this.escapeMarkdown(cust?.name || 'Bunda');
-      const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-      const portalUrl = `${baseUrl}/#staff-today`;
-      const reasonLine = reason ? `Alasan: _${this.escapeMarkdown(reason)}_\n` : '';
-      const messageText = `JADWAL KUNJUNGAN DIBATALKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dibatalkan:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\nAlamat: ${addressText}\n${reasonLine}\nCatatan: Anda tidak perlu menuju ke lokasi pasien untuk jadwal ini.\n\n[Buka Portal Terapis](${portalUrl})`;
-      const res = await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
-      return { sent: res.ok, reason: res.description };
+
+      // 1. In-System Realtime SSE Broadcast
+      try {
+        getLiveChatHub().publish({
+          type: 'staff.task_cancelled',
+          tenantId,
+          payload: {
+            staffId: staff.id,
+            reservationId: reservation.id,
+            reason: reason || 'Reservasi dibatalkan',
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn(`[StaffNotificationService] SSE task_cancelled broadcast error:`, hubErr.message);
+      }
+
+      // 2. In-System Web Push PWA
+      try {
+        await webPushService.sendPushToStaff(staff.id, tenantId, {
+          title: 'Jadwal Kunjungan Dibatalkan ❌',
+          body: `Jadwal ${custName} (${treatmentDetail}) dibatalkan.${reason ? ' Alasan: ' + reason : ''}`,
+          url: '/admin/#staff-today',
+          tag: `staff_task_cancel_${reservation.id}`,
+          icon: '/admin/icon-192.png',
+          badge: '/admin/favicon.ico',
+          data: {
+            reservationId: reservation.id,
+            staffId: staff.id,
+            url: '/admin/#staff-today',
+          },
+        });
+      } catch (pushErr: any) {
+        console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
+      }
+
+      // 3. Optional External Telegram
+      if (staff.telegram_chat_id) {
+        const addressParts: string[] = [];
+        if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
+        if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
+        if (cust?.kota) addressParts.push(this.escapeMarkdown(cust.kota));
+        const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
+        const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
+        const dateStr = bookingDate
+          ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
+          : 'Tanggal belum ditentukan';
+        const timeStr = bookingDate
+          ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+          : '-';
+        const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
+        const portalUrl = `${baseUrl}/#staff-today`;
+        const reasonLine = reason ? `Alasan: _${this.escapeMarkdown(reason)}_\n` : '';
+        const messageText = `JADWAL KUNJUNGAN DIBATALKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dibatalkan:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\nAlamat: ${addressText}\n${reasonLine}\nCatatan: Anda tidak perlu menuju ke lokasi pasien untuk jadwal ini.\n\n[Buka Portal Terapis](${portalUrl})`;
+
+        try {
+          await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
+        } catch (tgErr: any) {
+          console.warn(`[StaffNotificationService] Telegram cancel notification error:`, tgErr.message);
+        }
+      }
+
+      return { sent: true };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to send cancelled notification to staff ${staffId}:`, err.message);
       return { sent: false, reason: err.message };
@@ -276,10 +373,10 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       if (!oldStaffId || !reservationId) return { sent: false, reason: 'oldStaffId/reservationId kosong' };
       const staff = await prisma.staff.findUnique({
         where: { id: oldStaffId },
-        select: { id: true, name: true, telegram_chat_id: true },
+        select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
       });
-      if (!staff || !staff.telegram_chat_id) {
-        return { sent: false, reason: 'Staff lama belum menghubungkan Telegram' };
+      if (!staff) {
+        return { sent: false, reason: 'Staff lama tidak ditemukan' };
       }
       const reservation = await prisma.reservation.findUnique({
         where: { id: reservationId },
@@ -290,21 +387,62 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
         return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
       }
-      const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-      const dateStr = bookingDate
-        ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
-        : 'Tanggal belum ditentukan';
-      const timeStr = bookingDate
-        ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-        : '-';
+
+      const tenantId = staff.tenant_id || DEFAULT_TENANT_ID;
       const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
       const custName = this.escapeMarkdown(cust?.name || 'Bunda');
-      const newStaffLabel = newStaffName ? ` ke *${this.escapeMarkdown(newStaffName)}*` : ' ke rekan terapis lain';
-      const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-      const portalUrl = `${baseUrl}/#staff-today`;
-      const messageText = `JADWAL DIALIHKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dialihkan${newStaffLabel} oleh supervisor:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\n\nAnda tidak perlu menuju ke lokasi untuk jadwal ini. Terima kasih.\n\n[Buka Portal Terapis](${portalUrl})`;
-      const res = await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
-      return { sent: res.ok, reason: res.description };
+
+      // 1. In-System Realtime SSE Broadcast (task_cancelled for old staff so their list refreshes)
+      try {
+        getLiveChatHub().publish({
+          type: 'staff.task_cancelled',
+          tenantId,
+          payload: {
+            staffId: oldStaffId,
+            reservationId: reservation.id,
+            reason: newStaffName ? `Dialihkan ke ${newStaffName}` : 'Dialihkan ke staf lain',
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn(`[StaffNotificationService] SSE task_cancelled broadcast error:`, hubErr.message);
+      }
+
+      // 2. In-System Web Push PWA
+      try {
+        await webPushService.sendPushToStaff(oldStaffId, tenantId, {
+          title: 'Jadwal Dialihkan 🔄',
+          body: `Jadwal kunjungan ${custName} telah dialihkan${newStaffName ? ' ke ' + newStaffName : ''}.`,
+          url: '/admin/#staff-today',
+          tag: `staff_task_reassign_${reservation.id}`,
+          icon: '/admin/icon-192.png',
+          badge: '/admin/favicon.ico',
+        });
+      } catch (pushErr: any) {
+        console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
+      }
+
+      // 3. Optional External Telegram
+      if (staff.telegram_chat_id) {
+        const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
+        const dateStr = bookingDate
+          ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
+          : 'Tanggal belum ditentukan';
+        const timeStr = bookingDate
+          ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+          : '-';
+        const newStaffLabel = newStaffName ? ` ke *${this.escapeMarkdown(newStaffName)}*` : ' ke rekan terapis lain';
+        const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
+        const portalUrl = `${baseUrl}/#staff-today`;
+        const messageText = `JADWAL DIALIHKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dialihkan${newStaffLabel} oleh supervisor:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\n\nAnda tidak perlu menuju ke lokasi untuk jadwal ini. Terima kasih.\n\n[Buka Portal Terapis](${portalUrl})`;
+
+        try {
+          await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
+        } catch (tgErr: any) {
+          console.warn(`[StaffNotificationService] Telegram unassigned notification error:`, tgErr.message);
+        }
+      }
+
+      return { sent: true };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to send unassigned notification to staff ${oldStaffId}:`, err.message);
       return { sent: false, reason: err.message };

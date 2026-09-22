@@ -637,6 +637,16 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     const sendEvent = async (event: any) => {
       if (closed) return;
       try {
+        // Event penugasan & pembatalan reservasi staff internal
+        if (event.type === 'staff.task_assigned' || event.type === 'staff.task_cancelled') {
+          if (!isSupervisor && event.payload?.staffId && event.payload.staffId !== staffId) {
+            return;
+          }
+          const data = JSON.stringify(event.payload || {});
+          reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+          return;
+        }
+
         const conversationId =
           event.payload?.conversationId ||
           event.payload?.conversation_id ||

@@ -139,6 +139,7 @@ interface ChatMessage {
 
 // extractMedia terpusat di utils/mediaExtractor.ts (single source of truth).
 import { playIncomingMessageSound, initAudioUnlock, showSafeNotification } from '../../services/notificationSound';
+import { subscribeToPushNotifications } from '../../services/pushNotification';
 
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
@@ -362,6 +363,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentStaffRef = useRef(currentStaff);
+  const isSupervisorRef = useRef(isSupervisor);
+  const fetchTasksRef = useRef<((isPolling?: boolean, currentScope?: 'mine' | 'all') => Promise<void>) | null>(null);
+
+  currentStaffRef.current = currentStaff;
+  isSupervisorRef.current = isSupervisor;
 
   selectedTaskRef.current = selectedTask;
   allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
@@ -477,6 +484,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     return cleanupAudio;
   }, []);
 
+  // Daftarkan PWA Web Push Subscription untuk Staff / Terapis
+  useEffect(() => {
+    if (currentStaff?.id) {
+      subscribeToPushNotifications('STAFF', currentStaff.id).catch((err) => {
+        console.warn('[StaffToday] Web Push auto-subscribe failed:', err);
+      });
+    }
+  }, [currentStaff?.id]);
+
   // Fetch today tasks, upcoming schedule, and completed tasks
   const fetchTasks = useCallback(
     async (isPolling = false, currentScope?: 'mine' | 'all') => {
@@ -557,6 +573,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     },
     [scopeFilter]
   );
+
+  fetchTasksRef.current = fetchTasks;
 
   // Load team members for supervisor delegation dropdown
   useEffect(() => {
@@ -929,6 +947,58 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             )
           );
         } catch {}
+      });
+
+      // Listen to new task assigned event (Real-time in-system notification)
+      es.addEventListener('staff.task_assigned', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const staffId = currentStaffRef.current?.id;
+          const isSpv = isSupervisorRef.current;
+          if (!isSpv && payload.staffId && payload.staffId !== staffId) return;
+
+          playIncomingMessageSound(true);
+          const patient = payload.patientName || 'Bunda';
+          const treatment = payload.treatmentDetail || 'Treatment';
+          toast(`Tugas Baru: ${treatment} untuk ${patient}`, 'success');
+
+          showSafeNotification('Tugas Kunjungan Baru 💆‍♀️', {
+            body: `${treatment} untuk ${patient}`,
+            icon: '/admin/pwa-192x192.png',
+            tag: `staff_task_${payload.reservationId || Date.now()}`,
+          }, () => {
+            try { window.focus(); } catch (_) {}
+          });
+
+          if (fetchTasksRef.current) fetchTasksRef.current(true);
+        } catch (e) {
+          console.warn('[SSE] staff.task_assigned error:', e);
+        }
+      });
+
+      // Listen to task cancelled / reassigned event
+      es.addEventListener('staff.task_cancelled', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const staffId = currentStaffRef.current?.id;
+          const isSpv = isSupervisorRef.current;
+          if (!isSpv && payload.staffId && payload.staffId !== staffId) return;
+
+          const reason = payload.reason || 'Jadwal kunjungan telah dibatalkan atau dialihkan.';
+          toast(`Jadwal Kunjungan Dibatalkan / Dialihkan: ${reason}`, 'info');
+
+          showSafeNotification('Jadwal Kunjungan Dibatalkan ❌', {
+            body: reason,
+            icon: '/admin/pwa-192x192.png',
+            tag: `staff_task_cancel_${payload.reservationId || Date.now()}`,
+          }, () => {
+            try { window.focus(); } catch (_) {}
+          });
+
+          if (fetchTasksRef.current) fetchTasksRef.current(true);
+        } catch (e) {
+          console.warn('[SSE] staff.task_cancelled error:', e);
+        }
       });
 
       es.onerror = () => {
