@@ -512,6 +512,12 @@ export class GuardrailPipeline {
     const stripNominalAges = (text: string): string => {
       if (!text) return text;
       if (isAgeClarificationAuthorized) return text;
+      // PLAN 12 Fase 4 — state-gated: bila usia sudah tercatat di sesi, JANGAN mutilasi afirmasi katalog
+      const hasChildAgeKnown = Boolean(
+        (session as any)?.childProfile?.ageMonths != null ||
+        (Array.isArray((session as any)?.children) && (session as any).children.length > 0 && (session as any).children.some((c: any) => c?.ageMonths != null))
+      );
+      if (hasChildAgeKnown) return text;
       const anyMode = NOMINAL_AGE_MODES.some(
         (m) => new RegExp(`(?:^|[^a-z0-9])${m}(?:[^a-z0-9]|$)`).test(text.toLowerCase())
       );

@@ -21,7 +21,7 @@ import {
 } from '../../utils/date-confirmation';
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
-import { getOutsideCities } from '../../config/coverage';
+import { getOutsideCities, getCoverageCities } from '../../config/coverage';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -83,6 +83,13 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
   try {
     const outside = getOutsideCities() || [];
     for (const c of outside) {
+      const name = String(c || '').toLowerCase();
+      if (name.length >= 3 && lower.includes(name)) return true;
+    }
+  } catch {}
+  try {
+    const coverage = getCoverageCities() || [];
+    for (const c of coverage) {
       const name = String(c || '').toLowerCase();
       if (name.length >= 3 && lower.includes(name)) return true;
     }

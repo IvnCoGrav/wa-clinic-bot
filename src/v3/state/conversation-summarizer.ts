@@ -1,5 +1,6 @@
 import { CustomerGoalSession } from './goal-tracker';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
+import { getCoverageCities } from '../../config/coverage';
 import type { ExtractedEntities } from '../../types/nlu';
 
 export interface V3SummaryOptions {
@@ -182,7 +183,19 @@ export class V3ConversationSummarizer {
     };
 
     const userAnsweredLocation = askedLocationRecently && !locationResolved && isLikelyLocationAnswer(customerInput);
-    if (askedLocationRecently && !locationResolved && !userAnsweredLocation) {
+    // PLAN 12 Fase 3 — cek bukti lokasi/ongkir terpisah (hanya untuk cool-off, bukan untuk ringkasan fokus)
+    const hasOngkirOrCoverageEvidence = (() => {
+      const lower = (customerInput || '').toLowerCase();
+      if (lower.includes('ongkir') || lower.includes('ongkos kirim') || lower.includes('jarak') || lower.includes('transport')) return true;
+      try {
+        for (const c of getCoverageCities() || []) {
+          const name = String(c || '').toLowerCase();
+          if (name.length >= 3 && lower.split(/[^a-z0-9]+/).includes(name)) return true;
+        }
+      } catch {}
+      return false;
+    })();
+    if (askedLocationRecently && !locationResolved && !userAnsweredLocation && !hasOngkirOrCoverageEvidence) {
       janganDiulang.push('Menanyakan alamat/kelurahan rumah Bunda lagi (karena baru saja ditanyakan dan Bunda sedang fokus berkonsultasi). Berikan jawaban empatik tanpa menodong alamat!');
     }
     const recentAssistantMsgs = history.filter((h) => h.role === 'assistant').slice(-2);
