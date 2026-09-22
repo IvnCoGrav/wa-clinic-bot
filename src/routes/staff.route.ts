@@ -5,6 +5,11 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { staffAuthRoutes } from './staff/auth.subroute';
 import { staffTodayRoutes } from './staff/today.subroute';
 
+export function isStaffSupervisorRole(role?: string | null): boolean {
+  const r = String(role || '').toLowerCase();
+  return r === 'spv_cs' || r === 'super_admin' || r === 'tenant_admin' || r === 'admin_cs' || r === 'admin';
+}
+
 export async function staffRoutes(fastify: FastifyInstance) {
   // Middleware otentikasi independen khusus rute staff
   fastify.addHook('preHandler', async (request, reply) => {
@@ -38,6 +43,7 @@ export async function staffRoutes(fastify: FastifyInstance) {
           },
           createdAt: adminSession.createdAt,
           expiresAt: adminSession.expiresAt,
+          isAdminImpersonation: true,
         } as any;
       }
     }

@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-22 — Hardening Backend Terapis & Staf Lapangan (IDOR, Kalender WIB, LTV, N+1)
+
+- **Fase 1 — Keamanan IDOR OTW:** helper tunggal `isStaffSupervisorRole()` (`staff.route.ts:3`) — 5-role konsisten (spv_cs/super_admin/tenant_admin/admin_cs/admin), `POST /api/staff/reservations/:id/otw` hard guard `assigned_staff_id` (fail-closed bila null) + `tenant_id` cross-tenant 404 + status `completed/cancelled/rejected` (case-insensitive) + jendela 2-jam (fail-closed bila `booking_date` null, supervisor bypass), `POST /api/staff/conversations/:id/reply` tambah `replyToMessageId` menerus ke `liveChatService.sendAdminReply`, `staff.route.ts` flag `isAdminImpersonation` → `today-tasks` default `scope='all'` hanya bila impersonasi & scope tak disebut.
+- **Fase 2 — Kalender WIB:** `getWibDateRange` (`staff-reservation.service.ts:101`) ganti `targetDay+=1` → `setUTCDate(+1)` (2026-03-31→04-01, bukan 03-32), `getUpcomingSchedule`/`getCompletedTasks` reuse `getWibDateRange` (bukan `setHours` lokal) agar Docker UTC+WIB konsisten.
+- **Fase 3 — LTV & Follow-Up:** `recordPayment` (`:905`) panggil `customerService.recalculateCustomerLtv` (idempoten `ltv_cache`) + `followUpService.createReservationFollowUps` (dedup PENDING/QUEUED + guard SENT), `assertConversationOwnedByStaffToday` (`:950`) OR-window 30-hari upcoming + 48-jam recent (hari-ini + upcoming + recent) dengan `assigned_staff_id` tetap terkunci.
+- **Fase 4 — Performa & Memory:** `getTodayTasks` hapus `reservations` N+1 select, tambah `ltv_cache: true`, `customerStats.ltv = ltv_cache>0 ? ltv_cache : pricing.totalFee` (hindari `??` yang lolos 0) + `totalTreatments:1` (tanpa loop reduce), `staff/auth.subroute.ts:8` interval 10-menit `staffLoginAttemptsMap` cleanup `.unref()`.
+- **Verifikasi:** `npm run build` ✅, `tool-schemas` 6/6 + `guardrail-pipeline` 3/3 hijau, `isStaffSupervisorRole` terpusat, `getWibDateRange('tomorrow')` pada 31→1 valid, OTW 403 bila terapis lain, chat tab Selesai 48h terbuka.
+
 #### 2026-09-22 — Resilient Tool Schema & Location Routing (PLAN 12 — 4 Akar Forensik)
 
 - **Fase 1 — Defensive Zod Preprocess:** `stringArrayPreprocess` di `tool-schemas.ts:3` (`split /[,;\n]+/`) + `z.preprocess` pada `symptoms` & `additionalTreatments`; GLM `glm-5.3-flash` yang mengirim `symptoms:"anak baru jatuh, susah makan"` kini 100% kebal (validasi sukses → `["anak baru jatuh","susah makan"]`). Test `tool-schemas.test.ts` 6/6 hijau (koma/titik-koma/baris baru).
