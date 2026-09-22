@@ -389,8 +389,11 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
         const totalCompletionTokens = stats._sum.completion_tokens ?? 0;
         const totalCostIdr = stats._sum.cost_idr ?? 0;
 
+        // Alias baca: normalisasi label legacy tanpa migrasi DB (fondasional, bukan rename writer)
+        const normalizeTaskType = (t: string) => (t === 'SLOT_EXTRACTOR' ? 'NLU_EXTRACTOR' : t);
         const formattedRecent = recent.map((item) => ({
           ...item,
+          task_type: normalizeTaskType((item as any).task_type),
           // Provider asli dari DB (deriveProvider baseUrl aktual: SumoPod / DeepSeek Direct),
           // bukan ditimpa mapping nama model — supaya dashboard jujur soal jalur request.
         }));
@@ -521,14 +524,15 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/debug/llm-logs',
     async (
-      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string } }>,
+      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string; tenant?: string } }>,
       reply: FastifyReply
     ) => {
       try {
         const { getLlmExecutionLogs } = await import('../../utils/llm-execution-logger');
         const limit = Math.max(1, Math.min(300, parseInt(request.query?.limit || '100', 10) || 100));
         const flow = request.query?.flow || 'all';
-        const logs = getLlmExecutionLogs(limit, flow);
+        const tenant = (request.query?.tenant || '').trim() || undefined;
+        const logs = getLlmExecutionLogs(limit, flow, tenant);
         return reply.status(200).send({ success: true, data: logs });
       } catch (err: any) {
         return reply.status(500).send({ success: false, message: err?.message });
@@ -546,14 +550,15 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/debug/llm-grouped-logs',
     async (
-      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string; customerPhone?: string } }>,
+      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string; customerPhone?: string; tenant?: string } }>,
       reply: FastifyReply
     ) => {
       try {
         const { getGroupedLlmExecutionLogs } = await import('../../utils/llm-execution-logger');
         const limit = Math.max(1, Math.min(500, parseInt(request.query?.limit || '200', 10) || 200));
         const flow = request.query?.flow || 'all';
-        const groupedLogs = getGroupedLlmExecutionLogs(limit, flow);
+        const tenant = (request.query?.tenant || '').trim() || undefined;
+        const groupedLogs = getGroupedLlmExecutionLogs(limit, flow, tenant);
         const phoneFilter = (request.query?.customerPhone || '').trim();
         const filtered = phoneFilter
           ? groupedLogs.filter((g) => g.customerPhone.includes(phoneFilter))

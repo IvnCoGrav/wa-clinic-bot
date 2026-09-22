@@ -61,6 +61,41 @@ const formatRupiah = (val: number) => {
   return 'Rp ' + val.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 };
 
+/**
+ * Parser feedback LLM-as-Judge data-driven (tanpa hardcode 5 kunci dimensi).
+ * Format produsen: `[dimensi {<JSON>}[ gagal: a,b| semua dimensi lulus]] <feedback_text>`
+ * - Ekstrak JSON dalam string secara dinamis via pencarian bracket (bukan regex hafalan)
+ * - Ambang lulus default score >=4 (aproksimasi persona-rubric; ambang eksak ada di backend)
+ * - Degradasi anggun: bila parse gagal → kembalikan raw sebagai text tanpa badge
+ */
+export function parseJudgeFeedback(feedback: string | null): { dims: Array<{ key: string; score: number; pass: boolean }>; text: string; raw: string } {
+  const raw = feedback || '';
+  if (!raw) return { dims: [], text: '', raw };
+  const start = raw.indexOf('{');
+  const end = raw.indexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    return { dims: [], text: raw, raw };
+  }
+  const jsonStr = raw.slice(start, end + 1);
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return { dims: [], text: raw, raw };
+  }
+  const dims: Array<{ key: string; score: number; pass: boolean }> = [];
+  for (const [k, v] of Object.entries(parsed)) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    // Aproksimasi ambang: >=4 lulus (backend persona-rubric: warmth/format 3, golden/grounding/pronoun 4)
+    dims.push({ key: k, score: n, pass: n >= 4 });
+  }
+  // Teks bersih setelah "]"
+  const bracketClose = raw.indexOf(']', end);
+  const text = bracketClose !== -1 ? raw.slice(bracketClose + 1).trim() : raw.slice(end + 1).trim();
+  return { dims, text: text || raw, raw };
+}
+
 export const AiEvaluations: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'usage' | 'quality'>('usage');
   const [days, setDays] = useState(7);
@@ -108,9 +143,10 @@ export const AiEvaluations: React.FC = () => {
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                className={`min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-bold transition touch-manipulation ${
                   days === d ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
+                style={{ touchAction: 'manipulation' }}
               >
                 {d} Hari
               </button>
@@ -118,7 +154,8 @@ export const AiEvaluations: React.FC = () => {
           </div>
           <button
             onClick={loadData}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 min-h-[40px] bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs touch-manipulation"
+            style={{ touchAction: 'manipulation' }}
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
             <span>Refresh</span>
@@ -215,7 +252,7 @@ export const AiEvaluations: React.FC = () => {
                 Belum ada log transaksi AI tercatat dalam {days} hari terakhir.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[11px] uppercase tracking-wider text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
@@ -276,6 +313,34 @@ export const AiEvaluations: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="block sm:hidden divide-y divide-[#e9edef]">
+                {auditSummary.recent.map((log) => (
+                  <div key={log.id} className="p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[10px] font-mono font-bold">
+                        {log.task_type}
+                      </span>
+                      <span className="text-[10px] text-[#667781]">{new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                    <div className="text-xs font-mono text-[#111b21]">
+                      <span className="text-[10px] text-[#667781] font-sans font-semibold">{getModelProvider(log)} — </span>
+                      {log.model_name}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-[#667781]">{log.customer_phone}</span>
+                      <span className="font-bold text-[#008069]">{formatRupiah(log.cost_idr)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#54656f]">
+                      {log.cached_prompt_tokens && log.cached_prompt_tokens > 0 ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                      )}
+                      <span>{log.prompt_tokens} in / {log.completion_tokens} out</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -356,7 +421,31 @@ export const AiEvaluations: React.FC = () => {
                           {e.customer_phone && <p className="text-[10px] text-[#8696a0] mt-0.5">{e.customer_phone}</p>}
                         </td>
                         <td className="px-4 py-2.5 max-w-sm">
-                          {e.feedback && <p className="text-[#54656f] line-clamp-3">{e.feedback}</p>}
+                          {(() => {
+                            const parsed = parseJudgeFeedback(e.feedback);
+                            return (
+                              <>
+                                {parsed.dims.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mb-1.5">
+                                    {parsed.dims.map((d) => (
+                                      <span
+                                        key={d.key}
+                                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${d.pass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}
+                                        title={`${d.key}: ${d.score}`}
+                                      >
+                                        {d.key}:{d.score}{d.pass ? '✓' : '✗'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {parsed.text ? (
+                                  <p className="text-[#54656f] line-clamp-3">{parsed.text}</p>
+                                ) : e.feedback ? (
+                                  <p className="text-[#54656f] line-clamp-3">{e.feedback}</p>
+                                ) : null}
+                              </>
+                            );
+                          })()}
                           {e.ai_reasoning && (
                             <p className="text-[10px] text-[#8696a0] mt-0.5 italic line-clamp-2">
                               reasoning: {e.ai_reasoning}

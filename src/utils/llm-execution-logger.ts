@@ -298,8 +298,12 @@ export async function rehydrateLlmBuffer(): Promise<void> {
 /**
  * Ambil riwayat log eksekusi LLM flat (daftar urut waktu).
  */
-export function getLlmExecutionLogs(limit = 100, flowFilter?: string): LlmExecutionRecord[] {
+export function getLlmExecutionLogs(limit = 100, flowFilter?: string, tenantId?: string): LlmExecutionRecord[] {
   let logs = llmExecutionBuffer;
+  if (tenantId && tenantId.trim()) {
+    const t = tenantId.trim();
+    logs = logs.filter((l) => l.tenantId === t);
+  }
   if (flowFilter && flowFilter !== 'all') {
     if (flowFilter === 'V3_GENERATION') {
       // Direct Reply: DeepSeek menjawab langsung tanpa tool di Call 1.
@@ -310,6 +314,8 @@ export function getLlmExecutionLogs(limit = 100, flowFilter?: string): LlmExecut
           l.flowType === 'V3_GENERATION' ||
           (l.flowType === 'V3_ROUTING' && (!l.toolsCalled || l.toolsCalled.length === 0) && !!l.finalReply)
       );
+    } else if (flowFilter === 'NLU_EXTRACTOR') {
+      logs = logs.filter((l) => l.flowType === 'NLU_EXTRACTOR' || l.flowType === 'SLOT_EXTRACTOR');
     } else {
       logs = logs.filter((l) => l.flowType === flowFilter);
     }
@@ -332,8 +338,8 @@ export function normalizeCustomerInput(input: string): string {
  * Level 2: Bubble Chat / Input Masuk Pasien
  * Level 3: Daftar Panggilan AI (Slot Extractor, Generator / Fast FAQ) untuk bubble tersebut
  */
-export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): GroupedCustomerLlmLogs[] {
-  const rawLogs = getLlmExecutionLogs(limit, flowFilter);
+export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string, tenantId?: string): GroupedCustomerLlmLogs[] {
+  const rawLogs = getLlmExecutionLogs(limit, flowFilter, tenantId);
 
   // Group by customer phone
   const phoneMap = new Map<string, LlmExecutionRecord[]>();
@@ -382,20 +388,20 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
       if (hasExactId && correlationMap.has(log.bubbleCorrelationId!)) {
         targetBubble = correlationMap.get(log.bubbleCorrelationId!)!;
       } else {
-        // Fallback: check most recent bubble for heuristic merge
-        // (dipakai bila tanpa ID eksak ATAU ID generik JID @c.us)
-        const lastBubble = bubbles[0] || null; // bubbles is unshifted, so bubbles[0] is latest
-        if (lastBubble) {
-          const isTimeClose = Math.abs(logTime - new Date(lastBubble.timestamp).getTime()) < 35000;
+        // Fallback: cari di SELURUH bubbles dalam window 35 dtk (tahan out-of-order)
+        // Window TETAP 35000 ms — hanya ketahanan urutan tiba yang diperbaiki
+        for (const candidate of bubbles) {
+          const isTimeClose = Math.abs(logTime - new Date(candidate.timestamp).getTime()) < 35000;
+          if (!isTimeClose) continue;
           const isInputMatching =
-            cleanInput === lastBubble.customerInput ||
+            cleanInput === candidate.customerInput ||
             !cleanInput ||
-            !lastBubble.customerInput ||
-            cleanInput.includes(lastBubble.customerInput) ||
-            lastBubble.customerInput.includes(cleanInput);
-
+            !candidate.customerInput ||
+            cleanInput.includes(candidate.customerInput) ||
+            candidate.customerInput.includes(cleanInput);
           if (!hasExactId && isTimeClose && isInputMatching) {
-            targetBubble = lastBubble;
+            targetBubble = candidate;
+            break;
           }
         }
       }

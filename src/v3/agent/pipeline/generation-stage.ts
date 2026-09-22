@@ -350,9 +350,13 @@ export async function reportTurnError(
     const { recordLlmExecution } = await import('../../../utils/llm-execution-logger');
     recordLlmExecution({
       flowType: 'V3_AGENT' as any,
+      tenantId: turn.tenantId,
+      conversationId: turn.conversationId,
       customerPhone: turn.phone,
       customerInput: incomingText,
       bubbleCorrelationId: bubbleCorrelationId || `${turn.phone}_${Date.now()}`,
+      actualProvider: turn.provider,
+      actualModel: turn.actualModelUsed || turn.selectedModel,
       promptPayload: { model: turn.selectedModel, baseUrl: turn.baseUrl, messages: turn.messages.slice(-2) },
       reasoning: turn.reasoning,
       finalReply: '',

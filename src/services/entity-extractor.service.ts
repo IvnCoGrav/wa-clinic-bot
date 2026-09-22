@@ -688,6 +688,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
           const nluCompletion = Number(nluUsage?.completion_tokens) || undefined;
           recordLlmExecution({
             flowType: 'NLU_EXTRACTOR',
+            tenantId,
             customerPhone: context?.customerPhone || 'unknown',
             customerInput: text,
             bubbleCorrelationId,
