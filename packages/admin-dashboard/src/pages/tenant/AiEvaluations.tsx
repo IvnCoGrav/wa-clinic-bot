@@ -252,6 +252,7 @@ export const AiEvaluations: React.FC = () => {
                 Belum ada log transaksi AI tercatat dalam {days} hari terakhir.
               </div>
             ) : (
+              <>
               <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -342,6 +343,7 @@ export const AiEvaluations: React.FC = () => {
                   </div>
                 ))}
               </div>
+              </>
             )}
           </div>
         </div>
