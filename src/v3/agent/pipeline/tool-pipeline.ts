@@ -214,20 +214,11 @@ export class ToolExecutionPipeline {
         fnArgs.asksDeliveryFee = priceIntent.asksPrice || carryOver;
       }
       if (fnName === 'get_catalog_and_price') {
-        // Mode konsultasi: tanpa pertanyaan harga eksplisit → harga disembunyikan.
-        // Efek samping: state-reducer hanya men-set `priceDiscussed` bila arg ini
-        // true, sehingga sinyal `inquirePrice` liar dari LLM tak lagi membuka
-        // mode transaksional (gate gabungan deterministik + tool signal).
         fnArgs.inquirePrice = priceIntent.asksPrice;
-        // Anti-halusinasi nominal: `targetPrice` (pemicu showPrices) HANYA sah
-        // bila customer benar-benar menyebut nominal angka. LLM sempat mengisi
-        // targetPrice:60000 pada pesan "1 jam" → membuka seluruh harga katalog.
         if (!priceIntent.mentionsNominal) {
           delete fnArgs.targetPrice;
         }
-        // Catatan: `asksDuration` TIDAK dipaksa di sini — durasi sering berupa
-        // jawaban lintas-turn ("1 jam") yang wajar; kebocoran utamanya adalah
-        // harga via targetPrice, yang sudah ditutup di atas.
+        fnArgs.asksDuration = priceIntent.asksDuration;
       }
 
       // Pengayaan deterministik: bila LLM memanggil save_reservation tanpa

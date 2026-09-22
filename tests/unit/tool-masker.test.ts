@@ -204,6 +204,25 @@ describe('Tool Masker Engine (Fase 2)', () => {
       );
     });
 
+    it('komitmen anaphoric untuk layanan non-pijat (Tindik/Memandikan/Cukur) → kandidat sah dari DB', () => {
+      const history = [
+        { role: 'user', content: 'Mau tindik telinga anak' },
+        { role: 'assistant', content: 'Untuk tindik telinga si kecil ada *Tindik Telinga Bayi* ya Bunda.' },
+      ];
+      // Cari nama layanan yang cocok di katalog
+      const res = resolveCandidateTreatment(emptySession, 'Boleh deh yang itu besok ya', history);
+      expect(res).toBe('Tindik Telinga Bayi');
+    });
+
+    it('komitmen anaphoric saat asisten tidak memakai format bold (fallback substring) → kandidat sah', () => {
+      const history = [
+        { role: 'user', content: 'Bisa cukur gundul bayi baru lahir?' },
+        { role: 'assistant', content: 'Tentu Bunda, kami ada layanan Cukur Rambut Bayi yang steril dan aman.' },
+      ];
+      const res = resolveCandidateTreatment(emptySession, 'Iya mau yang itu aja lusa', history);
+      expect(res).toBe('Cukur Rambut Bayi');
+    });
+
     it('tanpa sinyal komitmen → undefined walau asisten menyebut paket (anti 973126-bypass)', () => {
       const history = [
         { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },

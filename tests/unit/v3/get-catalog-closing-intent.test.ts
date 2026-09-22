@@ -83,6 +83,15 @@ describe('get_catalog_and_price — closingIntent data contract', () => {
     expect(out.message).toMatch(/Bunda atau si kecil/i);
   });
 
+  it('nominal tidak cocok di katalog (budget borongan 975k) → PRICE_SUBJECT_CLARIFY tanpa membocorkan harga satuan', async () => {
+    const out = await expectIntent({ targetPrice: 975000 } as any, undefined, 'PRICE_SUBJECT_CLARIFY');
+    expect(out.message).toMatch(/975\.000/);
+    expect(out.message).toMatch(/tidak ditemukan/i);
+    expect(out.message).toMatch(/Bunda atau si kecil/i);
+    // Pastikan showPrices dimatikan sehingga tidak ada harga satuan promo/normal yang tercetak di summaryList
+    expect(out.message).not.toMatch(/Promo Rp/i);
+  });
+
   it('tanpa gejala & tanpa nominal → CLINICAL_PROBE generik', async () => {
     const out = await expectIntent({ childAgeMonths: 6 }, undefined, 'CLINICAL_PROBE');
     expect(out.message).toMatch(/keluhan|relaksasi/i);

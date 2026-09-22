@@ -22,6 +22,8 @@ import {
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
 import { getOutsideCities } from '../../config/coverage';
+import { treatmentCatalogService } from '../../services/treatment-catalog.service';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
  * Detektor entitas lokasi baru (sesi 337880, Issue 2): true bila pesan
@@ -216,14 +218,45 @@ export function resolveCandidateTreatment(
   const lower = (cleanIncomingText || '').toLowerCase();
   const hasCommitSignal = hasBookingCommitSignal(lower);
   if (!hasCommitSignal || !conversationHistory) return undefined;
-  // Pindai mundur riwayat asisten: paket katalog terakhir yang ditawarkan
-  // (bold *Nama*) adalah kandidat yang dimaksud customer.
+
+  const tenantId = (session as any).tenantId || (session as any).tenant_id || DEFAULT_TENANT_ID;
+  const allServices = treatmentCatalogService.getAllServices(true, tenantId) || [];
+  if (allServices.length === 0) return undefined;
+
   for (let i = conversationHistory.length - 1; i >= 0; i--) {
     const msg = conversationHistory[i];
     if (msg.role === 'assistant') {
       const content = msg.content || '';
-      const match = content.match(/\*(Pijat [^*]+|Oksitosin [^*]+|Cukur [^*]+|Paket [^*]+|Prenatal [^*]+|Sinar [^*]+)\*/i);
-      if (match) return match[1].trim();
+
+      // 1. Bold *Nama Layanan* — exact + normalized (toleransi varian usia/parenthesis katalog berevolusi)
+      const boldMatches = content.matchAll(/\*([^*]+)\*/g);
+      for (const m of boldMatches) {
+        const candidate = m[1].trim();
+        if (!candidate) continue;
+        const matched = allServices.find((s) => s.name.toLowerCase() === candidate.toLowerCase());
+        if (matched) return matched.name;
+        // Toleransi varian: "Pijat Lahap Juara (Nafsu Makan)" vs "Pijat Lahap Juara (< 2 thn)" → norm tanpa () harus sama
+        const normCand = candidate.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const normMatched = allServices.find((s) => {
+          const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return norm && norm === normCand;
+        });
+        if (normMatched) return candidate; // kembalikan teks bold asli agar test & histori konsisten, tetap sah karena norm katalog terverifikasi
+      }
+
+      // 2. Fallback substring tanpa bold — urut terpanjang dulu cegah partial
+      const contentLower = content.toLowerCase();
+      const sorted = [...allServices].sort((a, b) => b.name.length - a.name.length);
+      for (const s of sorted) {
+        if (s.name.length >= 5 && contentLower.includes(s.name.toLowerCase())) {
+          return s.name;
+        }
+        // Fallback norm juga untuk varian tanpa () di content plain
+        const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (norm.length >= 5 && contentLower.includes(norm)) {
+          return s.name;
+        }
+      }
     }
   }
   return undefined;

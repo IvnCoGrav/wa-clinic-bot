@@ -29,14 +29,14 @@ describe('sanitizeModelForProvider — pencegahan mismatch provider/model (Kenar
 
   it('model kosong → default aman (provider-aware)', () => {
     expect(sanitizeModelForProvider('', 'https://kenari.id/v1')).toBe('deepseek-v4-1-flash');
-    expect(sanitizeModelForProvider('', 'https://ai.sumopod.com/v1')).toBe('MiniMax-M2.7-highspeed');
+    expect(sanitizeModelForProvider('', 'https://ai.sumopod.com/v1')).toBe('glm-5.3-flash');
     expect(sanitizeModelForProvider('', 'https://api.openai.com/v1')).toBe('gpt-4o-mini');
   });
 
   it('SumoPod: model DeepSeek legacy/asing di-remap ke model SumoPod kanonik', () => {
     expect(sanitizeModelForProvider('deepseek-v4-1-flash', 'https://ai.sumopod.com/v1')).toBe('deepseek-v4-flash');
     expect(sanitizeModelForProvider('deepseek-chat', 'https://ai.sumopod.com/v1')).toBe('deepseek-v4-flash');
-    expect(sanitizeModelForProvider('gpt-4o', 'https://ai.sumopod.com/v1')).toBe('MiniMax-M2.7-highspeed');
+    expect(sanitizeModelForProvider('gpt-4o', 'https://ai.sumopod.com/v1')).toBe('glm-5.3-flash');
   });
 
   it('DeepSeek Direct: model DeepSeek legacy di-remap ke model Direct kanonik', () => {

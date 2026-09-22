@@ -252,7 +252,8 @@ export async function executeGetCatalog(
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
   // Menyebut nominal ("100rb") = bertanya harga → paksa showPrices true.
   const hasTargetPrice = typeof targetPrice === 'number' && Number.isFinite(targetPrice) && targetPrice > 0;
-  const showPrices = inquirePrice === true || hasTargetPrice;
+  let showPrices = inquirePrice === true || hasTargetPrice;
+  let hasUnmatchedTargetPrice = false;
   // Aturan emas 3 (sesi 834128): durasi menit HANYA mengalir bila customer
   // eksplisit menanyakannya (asksDuration === true) — cermin showPrices.
   const showDuration = asksDuration === true;
@@ -295,6 +296,7 @@ export async function executeGetCatalog(
     // jadikan pool utama agar Prenatal 100rb tidak terfilter keluar.
     if (hasTargetPrice && !specificTreatmentName?.trim() && (symptoms || []).length === 0) {
       const priceHits = treatmentCatalogService.findServicesByPrice(Number(targetPrice), 0, tenantId);
+      const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
       if (priceHits.length > 0) {
         const hitIds = new Set(priceHits.map((s) => s.id));
         // Pool utama = yang cocok nominal; sisakan 1 pembanding lintas-audiens
@@ -305,7 +307,6 @@ export async function executeGetCatalog(
           && !treatmentCatalogService.isAddonService(s)
         );
         filtered = comparator ? [...priceHits, comparator] : [...priceHits];
-        const fmtRp = (n: number): string => `Rp ${Number(n).toLocaleString('id-ID')}`;
         // Prioritaskan diversitas kategori agar klarifikasi lintas audiens (Ibu vs Bayi vs Anak)
         // tidak terpotong oleh dominasi satu kategori saat nominal cocok dengan banyak layanan.
         const diverseHits: ClinicServiceItem[] = [];
@@ -329,6 +330,10 @@ export async function executeGetCatalog(
           + (comparator
             ? ` Pembanding: ${comparator.name} ${fmtRp(comparator.promoPrice)} promo${showDuration ? ` (${comparator.durationMinutes} mnt)` : ''} — tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`
             : ` Tanyakan subjek pasien (Bunda/si kecil) bila belum jelas.`);
+      } else {
+        hasUnmatchedTargetPrice = true;
+        showPrices = false;
+        priceClarification = `Nominal ${fmtRp(Number(targetPrice))} tidak ditemukan di katalog layanan satuan kami (layanan satuan berkisar antara Rp 30.000 hingga Rp 155.000 per sesi). Sampaikan secara ramah bahwa kami belum menyediakan paket borongan/bundling di nominal tersebut, dan tanyakan kebutuhan perawatan untuk Bunda atau si kecil.`;
       }
     }
 
@@ -818,7 +823,9 @@ export async function executeGetCatalog(
       STATEMENT_ONLY_DURATION: `Customer menanyakan DURASI. Sampaikan durasi resmi paket di atas secara ramah, lalu TUTUP DENGAN PERNYATAAN RAMAH TANPA PERTANYAAN — DILARANG menodong hari/jadwal kunjungan.`,
       ASK_DOMICILE: `Lokasi/domisili customer BELUM DIKETAHUI. Jelaskan rekomendasi perawatan di atas secara hangat (maksimal 2-3 kalimat), lalu TANYAKAN DOMISILI/KECAMATAN RUMAH BUNDA. DILARANG menodong hari/jadwal kunjungan sebelum lokasi diketahui.`,
       ASK_SCHEDULE: `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi preferensi hari kunjungan.`,
-      PRICE_SUBJECT_CLARIFY: `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`,
+      PRICE_SUBJECT_CLARIFY: hasUnmatchedTargetPrice
+        ? `Nominal yang ditanyakan customer tidak ada di katalog layanan satuan kami. Wajib kutip Klarifikasi Nominal di atas secara ramah, lalu tanyakan kebutuhan perawatan atau keluhan untuk Bunda atau si kecil.`
+        : `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`,
       // Plan regresi Fase 5.1: hardcoded "si kecil batuk/pilek" dicabut.
       // CLINICAL_PROBE audience-aware: konteks ibu → skrining Bunda
       // (hamil/nifas/menyusui/relaksasi), DILARANG bawa batuk/pilek bayi.

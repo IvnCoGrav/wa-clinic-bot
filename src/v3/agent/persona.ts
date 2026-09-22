@@ -31,7 +31,7 @@ export function extractFastIntents(text: string): string[] {
   // "berapa/brp" yang didampingi kata biaya/harga dalam pesan yang sama.
   // Catatan mandat regex: 'rp' dicek via token kata utuh (split spasi), bukan /\brp\b/.
   // Kata "cukur" saja BUKAN sinyal harga — lihat cost-words di bawah.
-  const asksDuration = hasAnyWord(['menit', 'durasi', 'berapa lama', 'brp lama', 'brp menit', 'lama pijat', 'lama perawatan']);
+  const asksDuration = hasAnyWord(['menit', 'durasi', 'berapa lama', 'brp lama', 'brp menit', 'lama pijat', 'lama perawatan', 'berapa jam', 'brp jam']);
   const stripEdge = (t: string): string => {
     let s = t;
     while (s.length > 0) {

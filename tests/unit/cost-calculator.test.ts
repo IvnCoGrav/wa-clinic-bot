@@ -174,13 +174,13 @@ describe('Cost Calculator Unit Tests — Provider-Aware & Live Pricing (2026-09)
     expect(result.completionCostIdr).toBe(0.324);
   });
 
-  it('should calculate LIVE SumoPod diskon untuk glm-5.3-flash 50% off (verified)', () => {
-    // 1k prompt, 1k completion — in $0.015/1M => 0.27 IDR, out $0.25/1M => 4.5 IDR
+  it('should calculate LIVE SumoPod untuk glm-5.3-flash tarif LIST (verified; promo 50% berakhir 2026-09-09)', () => {
+    // 1k prompt, 1k completion — in $0.15/1M => 2.7 IDR, out $0.50/1M => 9.0 IDR
     const result = calculateLlmCost('glm-5.3-flash', 1000, 1000, 0, { baseUrl: 'https://ai.sumopod.com/v1' });
     expect(result.provider).toBe('SumoPod');
     expect(result.pricingSource).toBe('verified');
-    expect(result.promptCostIdr).toBe(0.27);
-    expect(result.completionCostIdr).toBe(4.5);
+    expect(result.promptCostIdr).toBe(2.7);
+    expect(result.completionCostIdr).toBe(9.0);
   });
 
   it('should calculate LIVE SumoPod diskon untuk netra 80% off (verified, bukan silent DEFAULT)', () => {

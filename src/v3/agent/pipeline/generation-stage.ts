@@ -126,6 +126,10 @@ export interface TurnState {
   conversationId: string;
   incomingText: string;
   selectedModel: string;
+  /** Model untuk Call 1 Tool Routing (INTENT_CLASSIFICATION, mis. glm-5.3-flash). */
+  routerModel?: string;
+  /** Model untuk Call 2 Persona Generator (CHAT_REPLY, mis. gpt-4o-mini). */
+  generatorModel?: string;
   baseUrl: string;
   apiKey: string;
   turnStartedAt: number;
@@ -229,7 +233,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
         tenantId: turn.tenantId,
         conversationId: turn.conversationId,
         actualProvider: turn.provider,
-        actualModel: turn.actualModelUsed || turn.selectedModel,
+        actualModel: params.promptPayload?.model || turn.actualModelUsed || turn.selectedModel,
         bubbleCorrelationId: turn.correlationId,
         promptPayload: params.promptPayload || { model: turn.selectedModel, systemPrompt: turn.currentSystemPrompt, messageCount: turn.messages.length },
         reasoning: params.callReasoning !== undefined ? params.callReasoning : turn.reasoning,
@@ -239,7 +243,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
           executedTools: turn.executedTools.map((t) => t.name),
         },
         finalReply: params.reply,
-        modelUsed: turn.actualModelUsed || turn.selectedModel,
+        modelUsed: params.promptPayload?.model || turn.actualModelUsed || turn.selectedModel,
         durationMs: params.durationMs,
         status: params.status,
         errorMessage: params.errorMessage,
@@ -491,13 +495,15 @@ export class GenerationStage {
       }
     }
 
+    const call1Model = turn.routerModel || turn.selectedModel;
     const firstPayload: any = {
-      model: turn.selectedModel,
+      model: call1Model,
       messages,
       tools: toolsForCall1,
       tool_choice: dynamicToolChoice,
       parallel_tool_calls: false, // MANDAT ATOMIC ROUTING (audit 993955): 1 turn WhatsApp = maksimal 1 tool utama.
       temperature: 0.2,
+      thinking: { type: 'disabled' }, // Nonaktifkan thinking mode pada Call 1 agar latensi kilat (~1.2s) & token hemat
     };
 
     const firstStartedAt = Date.now();
@@ -508,7 +514,7 @@ export class GenerationStage {
       conversationId: turn.conversationId,
       baseUrl: turn.baseUrl,
       apiKey: turn.apiKey,
-      selectedModel: turn.selectedModel,
+      selectedModel: call1Model,
     }).then(async (data) => {
       const actualModel = (data as any)?.__actualModel;
       const actualProvider = (data as any)?.__actualProvider;
@@ -574,7 +580,7 @@ export class GenerationStage {
           : cleanContent,
         status: 'SUCCESS',
         durationMs: firstDurationMs,
-        promptPayload: { model: turn.selectedModel, systemPrompt: turn.currentSystemPrompt, messages: messages.slice(1), tools: toolsForCall1 },
+        promptPayload: { model: call1Model, systemPrompt: turn.currentSystemPrompt, messages: messages.slice(1), tools: toolsForCall1 },
         callReasoning: reasoning,
         toolsCalled: parsedCalls,
         promptTokens: firstUsageTel.promptTokens,
@@ -708,8 +714,9 @@ export class GenerationStage {
     messages[0].content = fullSystemPrompt;
     turn.currentSystemPrompt = fullSystemPrompt;
 
+    const call2Model = turn.generatorModel || turn.selectedModel;
     const secondPayload: any = {
-      model: turn.selectedModel,
+      model: call2Model,
       messages: cachedMessages,
       temperature: 0.65,
     };
@@ -722,7 +729,7 @@ export class GenerationStage {
       conversationId: turn.conversationId,
       baseUrl: turn.baseUrl,
       apiKey: turn.apiKey,
-      selectedModel: turn.selectedModel,
+      selectedModel: call2Model,
     }).then(async (data) => {
       const actualModel = (data as any)?.__actualModel;
       const actualProvider = (data as any)?.__actualProvider;
@@ -781,7 +788,7 @@ export class GenerationStage {
         reply: finalReply,
         status: 'SUCCESS',
         durationMs: secondDurationMs,
-        promptPayload: { model: turn.selectedModel, systemPrompt: fullSystemPrompt, messages: messages.slice(1) },
+        promptPayload: { model: call2Model, systemPrompt: fullSystemPrompt, messages: messages.slice(1) },
         callReasoning: secondReasoning,
         toolsCalled: turn.executedTools.map((t) => ({ name: t.name, args: t.args })),
         promptTokens: secondUsageTel.promptTokens,

@@ -23,17 +23,18 @@ export interface AiTaskModelConfig {
 }
 
 // === Sumber kebenaran tunggal nama model per-provider (katalog live per 2026-09-21) ===
-// Tier 1 (primary)  : SumoPod       -> MiniMax-M2.7-highspeed (server utama klinik)
+// Tier 1 (primary)  : SumoPod       -> glm-5.3-flash (server utama klinik, rekomendasi emas FAST_ECONOMICAL 50% off)
+//   MiniMax-M2.7-highspeed tetap di katalog SumoPod sebagai alternatif (backward-compat), bukan default emas.
 // Tier 2 (secondary): Kenari        -> deepseek-v4-1-flash
 // Tier 3 (last)     : DeepSeek Direct (api.deepseek.com) -> deepseek-chat
-export const SUMOPOD_PRIMARY_MODEL = 'MiniMax-M2.7-highspeed';
+export const SUMOPOD_PRIMARY_MODEL = 'glm-5.3-flash';
 export const SUMOPOD_SECONDARY_MODEL = 'deepseek-v4-flash';
 export const KENARI_PRIMARY_MODEL = 'deepseek-v4-1-flash';
 export const KENARI_SECONDARY_MODEL = 'deepseek-v4-1-flash';
 export const DEEPSEEK_DIRECT_MODEL = 'deepseek-chat';
 
 /** Label display model default runtime. */
-export const DISPLAY_MODEL_LABEL = 'MiniMax-M2.7-highspeed (SumoPod Utama)';
+export const DISPLAY_MODEL_LABEL = 'glm-5.3-flash (SumoPod Utama)';
 
 /** Katalog resmi SumoPod (server utama) — hanya 5 model ini yang valid. */
 export const SUMOPOD_CATALOG = new Set([
@@ -150,7 +151,7 @@ export function sanitizeModelForProvider(model: string, baseUrl?: string): strin
 const defaultProvider = process.env.AI_PROVIDER_CHAT || 'SumoPod';
 const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || SUMOPOD_PRIMARY_MODEL;
 const defaultChatModel = sanitizeModelForProvider(rawChatModel, process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
-const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const rawNluModel = process.env.AI_MODEL_NLU || SUMOPOD_PRIMARY_MODEL;
 const defaultNluModel = sanitizeModelForProvider(rawNluModel, process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
 const defaultDeepModel = sanitizeModelForProvider(process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash-0731:netra', process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
 
@@ -226,11 +227,22 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'INTENT_CLASSIFICATION',
       provider: 'SumoPod',
-      modelName: 'deepseek-v4-flash-0731:netra',
-      description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer. (TERKUNCI: dilarang fallback ke MiniMax/DeepSeek untuk menjaga P50 1.8s)',
+      modelName: defaultNluModel,
+      description: 'Tool Routing & Intent Extraction (Call 1) — evaluasi pemanggilan tool atau direct reply.',
       maxTokens: 500,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
+    },
+  ],
+  [
+    'AI_VERIFIER',
+    {
+      task: 'AI_VERIFIER',
+      provider: 'SumoPod',
+      modelName: 'glm-5.3-flash',
+      description: 'QC Evaluator: penilaian kualitas balasan Bidan Yusi via LLM-as-judge (fallback CHAT_REPLY).',
+      maxTokens: 512,
+      temperature: 0.2,
     },
   ],
 ]);
@@ -653,7 +665,7 @@ export class AiModelConfigService {
     );
     tenantRegistries.set(tenantId, fresh);
     // Golden deterministik (anti-env-drift): paksa task utama ke preset FAST_ECONOMICAL
-    // (MiniMax-M2.7-highspeed SumoPod) agar reset selalu kembali ke rekomendasi emas,
+    // (glm-5.3-flash SumoPod) agar reset selalu kembali ke rekomendasi emas,
     // bukan snapshot env lokal (mis. .env dev yang masih KENARI).
     try {
       this.updateTaskConfig('CHAT_REPLY', { provider: 'SumoPod', modelName: 'glm-5.3-flash' }, tenantId, { persist: false });

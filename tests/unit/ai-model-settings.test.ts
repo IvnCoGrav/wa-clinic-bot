@@ -155,13 +155,13 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
     expect(Array.isArray(body.data)).toBe(true);
     expect(body.activeProvider).toBe('SUMOPOD');
     const chat = body.data.find((c: any) => c.task === 'CHAT_REPLY');
-    expect(chat.modelName).toBe('MiniMax-M2.7-highspeed');
+    expect(chat.modelName).toBe('glm-5.3-flash');
   });
 
   it('AiModelConfigService preset registry: applyPresetProfile per-tenant', async () => {
     const { AiModelConfigService, AI_PRESET_PROFILES } = await import('../../src/config/ai-models.config');
     expect(AI_PRESET_PROFILES.FAST_ECONOMICAL).toBeDefined();
-    expect(AI_PRESET_PROFILES.FAST_ECONOMICAL.chatModel).toBe('MiniMax-M2.7-highspeed');
+    expect(AI_PRESET_PROFILES.FAST_ECONOMICAL.chatModel).toBe('glm-5.3-flash');
     expect(AI_PRESET_PROFILES.DEEP_REASONING.chatModel).toBe('deepseek-v4-flash-0731:netra');
     expect(AI_PRESET_PROFILES.DISCIPLINED_QWEN.chatModel).toBe('qwen3.7-flash-2026-07-15');
     expect(AI_PRESET_PROFILES.FAILOVER_SUMOPOD.provider).toBe('KENARI');
@@ -171,7 +171,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
     AiModelConfigService.applyPresetProfile('DEEP_REASONING', 'tenant-preset-B');
     const aChat = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-preset-A');
     const bChat = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-preset-B');
-    expect(aChat.modelName).toBe('MiniMax-M2.7-highspeed');
+    expect(aChat.modelName).toBe('glm-5.3-flash');
     expect(bChat.modelName).toBe('deepseek-v4-flash-0731:netra');
   });
 
@@ -182,7 +182,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
     expect(cfg.modelName).toBe('qwen3.7-flash-2026-07-15');
     await AiModelConfigService.resetToGoldenDefaults('tenant-reset-test');
     cfg = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-reset-test');
-    expect(cfg.modelName).toBe('MiniMax-M2.7-highspeed');
+    expect(cfg.modelName).toBe('glm-5.3-flash');
     expect(AiModelConfigService.getActiveProvider('tenant-reset-test')).toBe('SUMOPOD');
   });
 
