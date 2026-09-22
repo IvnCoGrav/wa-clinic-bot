@@ -5,6 +5,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 113. [Funnel Pacing] Sisa Pacing & Bank DB — TECH DEBT TERSISA PLAN 11
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** PLAN 11 menghapus todongan jadwal prematur saat `!isFunnelCommitted` (state-gated pruning + few-shot + guardrail). Not pushy: `usia 6 bulan bund` → rekomendasi + tanya-minat (tanpa tanya hari).
+- **Sisa debt yang sengaja tidak dikerjakan plan ini:**
+  1. **Bank DB `few_shot_exemplars`:** row DB dengan `ideal_response` bertodong (`closing_schedule_ask`) belum di-tag/dikurasi via migrasi data — runtime `FewShotExemplarBank` masih bisa menyuntikkan todongan dari DB bila admin membuat exemplar kustom penodong. Perlu skrip deteksi + kurasi admin (inventaris MT-0.3: grep DB).
+  2. **Sisa contoh transaksional:** `location-rules.phase.ts:23-24` (HARMONISASI QUOTED) + `pricing-catalog.phase.ts:71-72` (SOP 2-anak/mom+baby) masih menutup dengan jadwal — by design karena skenario committed/QUOTED, tetapi bila dianggap masih pushy untuk konsultasi murni, butuh Fase 2 lanjutan.
+  3. **`slim:true` global belum dipakai:** konflik prompt-caching (`prompt-composer.ts:137-143`) + blok 7 medis di `SCHEDULING_HIERARCHY_BLOCK` belum dianalisis — pertimbangan plan lanjutan terpisah.
+
+---
+
 ## 112. [AI Monitoring] Batasan Tenant & Presentasi PLAN 10 — TECH DEBT TERSISA
 
 - **Status:** open (tech debt, documented), dicatat 2026-09-22.
@@ -16,15 +27,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 109. [Funnel Pacing] Premature Scheduling & Pushy Closing Transition pada Customer Eksplorasi — PENDING (Plan 11)
+## 109. [Funnel Pacing] Premature Scheduling & Pushy Closing — FIXED (Plan 11, 2026-09-22)
 
-- **Status:** open (planned, documented), dicatat 2026-09-22.
-- **Konteks:** Pada pengujian sandbox (terutama model proaktif seperti MiniMax-M2.7), saat customer baru menginfokan usia si kecil (*"usia 6 bulan bund"*), bot merespon dengan desakan imperatif (*"Ayo segera tangani ya Bund"*) dan langsung menodong hari jadwal (*"Rencana mau kami bantu jadwalkan di hari apa ya Bund?"*).
-- **Akar masalah:**
-  1. Pelanggaran *Information Hiding*: `buildHierarchyFull` dan `buildNegativeConstraintsBlock` selalu menyertakan `SCHEDULING_HIERARCHY_BLOCK` dan `SCHEDULE_NEG_CONSTRAINTS_TAIL` di setiap turn Call 2, meskipun customer masih berada di fase `CONSULTATION` (`session.cartItems.length === 0` dan `lastCommitment === 'EXPLORING'`).
-  2. `src/v3/agent/pipeline/generation-stage.ts:666` tidak pernah mengoper `phaseInjection: { focus: derivePhaseFocus(session), slim: true }`, sehingga `composeSystemPrompt` selalu jatuh ke mode default yang memuat seluruh instruksi penjadwalan.
-  3. Contoh pemicu di `scheduling.phase.ts:55` (*"Rencana mau kami bantu jadwalkan di hari apa..."*) dijiplak oleh model.
-- **Rencana fix:** Tertuang lengkap di `docs/plans/PLAN_11_ANTI_MEMBURU_BURU_PACING_AND_STATE_GATED_FUNNEL.md` (State-Gated Information Hiding, Wiring Phase Injection, Deterministic Funnel Output Normalizer, dan Adversarial Unit Tests).
+- **Status:** fixed (closed), diperbaiki 2026-09-22 via `ecaf158f`+`PLAN11`.
+- **Fix:** State-gated pruning `RULE20`/`RULE21` (`scheduling.phase.ts` pecah tail, `prompt-composer.ts` `isFunnelCommitted` gate), few-shot `closing_schedule_ask` tag + penalti −20 + threading, 6 contoh konsultasi → tanya-minat (`core-persona`, `location-rules`, `pricing-catalog`, `router-direct-reply`), guardrail `CATALOG/DISCUSSED_SERVICE_RECOVERY` + reprompt funnel pacing. Verifikasi: `usia 6 bulan` (EXPLORING) → tanpa todong hari; `mau coba paket pijat lahap juara` (COMMITTED) → boleh jadwal.
+- **Sisa debt:** lihat #113 (bank DB kurasi + sisa contoh transaksional).
 
 ---
 

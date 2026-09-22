@@ -26,7 +26,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'symptom_flu_consultation',
     scenario: 'Pasien berkonsultasi keluhan batuk / pilek / flu / grok-grok pada bayi',
-    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'bapil', 'hidung', 'mampet', 'bersin', 'ngorok', 'lendir hidung', 'sesak'],
+    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'bapil', 'hidung', 'mampet', 'bersin', 'ngorok', 'lendir hidung', 'sesak', 'closing_schedule_ask'],
     customerMessage: 'Anak saya usia 3 bulan lagi grok-grok dan pilek bun, ada pijatnya gak ya?',
     idealResponse:
       'Iya Bunda, untuk membantu melegakan pernapasan dan ketidaknyamanan si kecil, kami ada layanan *Pijat Bayi Pulih Ceria* yang dikombinasikan dengan teknik akupresur dan aromaterapi khusus flu/batuk pilek yaa 😊 Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',
@@ -86,7 +86,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'maternal_lactation_inquiry',
     scenario: 'Pasien menanyakan pijat laktasi / oksitosin untuk Ibu Menyusui',
-    tags: ['laktasi', 'oksitosin', 'ibu', 'moms', 'asi', 'menyusui', 'nifas', 'payudara', 'breast', 'bengkak', 'sumbatan', 'lancar', 'ibu menyusui', 'perawatan_ibu'],
+    tags: ['laktasi', 'oksitosin', 'ibu', 'moms', 'asi', 'menyusui', 'nifas', 'payudara', 'breast', 'bengkak', 'sumbatan', 'lancar', 'ibu menyusui', 'perawatan_ibu', 'closing_schedule_ask'],
     customerMessage: 'Pijat oksitosin itu untuk apa ya bun? Bisa buat lancarin ASI?',
     idealResponse:
       'Benar sekali Bunda 😊 *Pijat Oksitosin* khusus untuk Bunda menyusui/nifas guna merangsang hormon oksitosin alami, membantu melancarkan aliran ASI, serta merilekskan otot punggung dan leher yang tegang. Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',
@@ -96,7 +96,7 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'post_delivery_treatment_continuation',
     scenario: 'Customer memilih/menentukan treatment (Anti-Penjelasan Ulang & Langsung Tanya Hari)',
-    tags: ['follow_up', 'after_ongkir', 'select_treatment', 'massage biasa', 'pijat biasa'],
+    tags: ['follow_up', 'after_ongkir', 'select_treatment', 'massage biasa', 'pijat biasa', 'closing_schedule_ask'],
     customerMessage: 'Massage biasa',
     idealResponse:
       'Baik Bunda, untuk *Pijat Bayi Ceria* rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊',
@@ -582,7 +582,8 @@ export class FewShotExemplarBank {
     extraction: ExtractedEntities,
     slate?: CustomerSlate,
     customerInput?: string,
-    tenantId: string = DEFAULT_TENANT_ID
+    tenantId: string = DEFAULT_TENANT_ID,
+    funnelCommitted?: boolean
   ): FewShotExemplar[] {
     const inputLower = (customerInput || '').toLowerCase();
     // Hard guard: ekstraksi parsial (intents/symptoms undefined) dari NLU/LLM
@@ -657,7 +658,15 @@ export class FewShotExemplarBank {
         score += 2;
       }
 
-      // 6. Filter stopword domain: poin dari kata generik (bayi/moms/spa/anak/ibu)
+      // 6. PLAN 11 — funnel pacing: exemplar penodong hari (closing_schedule_ask) di-penalize
+      // saat belum committed, KECUALI customer eksplisit tanya jadwal (hormati intent aktif).
+      const isClosingScheduleAsk = exTags.includes('closing_schedule_ask');
+      const isExplicitScheduleAsk = safeIntents.includes('ask_schedule') || Boolean(extraction.preferredDateText);
+      if (isClosingScheduleAsk && funnelCommitted === false && !isExplicitScheduleAsk) {
+        score -= 20;
+      }
+
+      // 7. Filter stopword domain: poin dari kata generik (bayi/moms/spa/anak/ibu)
       // hanya dihitung bila ada poin substantif lain — cegah false positive.
       scored.push({ exemplar: ex, score: score > 0 ? score + genericOnlyScore : 0 });
     }

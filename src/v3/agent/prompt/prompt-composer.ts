@@ -45,9 +45,12 @@ import {
 import {
   SCHEDULING_HIERARCHY_BLOCK,
   buildScheduleNegConstraintsHead,
+  SCHEDULE_NEG_CONSTRAINTS_RULE20,
+  SCHEDULE_NEG_CONSTRAINTS_RULE21,
   SCHEDULE_NEG_CONSTRAINTS_TAIL,
   TOOL_GUIDANCE_BLOCK,
 } from './phases/scheduling.phase';
+import { isFunnelCommitted } from '../pipeline/phase-resolver';
 import {
   buildRouterToolRoutingBlock,
 } from './phases/router-tool-routing.layer';
@@ -84,6 +87,11 @@ export interface DynamicPromptResult {
 const NEGATIVE_CONSTRAINTS_HEADER = '[NEGATIVE CONSTRAINTS MUTLAK (ATURAN EMAS KLINIK - WAJIB 100% PATUH)]';
 
 function buildNegativeConstraintsBlock(session?: CustomerGoalSession): string {
+  // PLAN 11 — state-gated pruning RULE20 (tanya-hari). Information hiding: hilang total saat belum committed.
+  const committed = !session || isFunnelCommitted(session as any);
+  const rule20 = committed
+    ? SCHEDULE_NEG_CONSTRAINTS_RULE20
+    : `20. DILARANG MENANYAKAN JAM KUNJUNGAN & DILARANG PERTANYAAN GANDA (MUTLAK): DILARANG menanyakan jam kunjungan spesifik ("jam berapa yang diinginkan?", "mau pagi/siang/sore?") dan DILARANG menanyakan 2 hal sekaligus ("hari apa dan jam berapa?"). Jam kunjungan diatur dan dikonfirmasi langsung oleh tim Bidan kami sesuai rute operasional harian.`;
   return [
     NEGATIVE_CONSTRAINTS_HEADER,
     buildToneNegConstraints(session as any),
@@ -96,7 +104,8 @@ function buildNegativeConstraintsBlock(session?: CustomerGoalSession): string {
     LOCATION_NEG_CONSTRAINTS,
     CATALOG_GROUNDING_NEG_CONSTRAINTS,
     INJECTION_DEFENSE_BLOCK,
-    SCHEDULE_NEG_CONSTRAINTS_TAIL,
+    rule20,
+    SCHEDULE_NEG_CONSTRAINTS_RULE21,
   ].join('\n');
 }
 
@@ -372,11 +381,13 @@ ${greetingInstruction}`;
       isMedicalEmergency: false,
       confidenceScore: 0,
     };
+    const funnelCommitted = isFunnelCommitted(session as any);
     const picked = FewShotExemplarBank.selectRelevantExemplars(
       lightExtraction,
       undefined,
       incomingText,
-      tenantId
+      tenantId,
+      funnelCommitted
     ).slice(0, 2);
     if (!picked || picked.length === 0) {
       return { systemPrompt: base, exemplars: [], usedDynamicExamples: false };
