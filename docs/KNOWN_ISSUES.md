@@ -5,6 +5,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 112. [AI Monitoring] Batasan Tenant & Presentasi PLAN 10 — TECH DEBT TERSISA
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** PLAN 10 memperbaiki 7 bug observability (alias NLU/SLOT, polling, grouping, dark-mode, parser feedback, alias audit).
+- **Sisa debt yang sengaja tidak dikerjakan plan ini:**
+  1. **Tenant plumbing parsial:** `getLlmExecutionLogs`/`getGroupedLlmExecutionLogs` + endpoint `?tenant=` + call-site `generation-stage.ts` (V3 error path + `recordCall`) dan `entity-extractor.service.ts` sudah bawa `tenantId`. Call-site lain (mis. pipeline lama di luar V3) belum diaudit — `tenantId` mungkin kosong bila multi-tenant aktif. Data lama tanpa `tenantId` tidak difilter saat `?tenant=` dipakai (by design, degradasi anggun single-tenant). Perlu audit `rg recordLlmExecution` penuh bila tenant kedua live.
+  2. **AiEvaluations.tsx dominan light-mode:** Tabel audit, kartu stat, dan header masih hardcode `bg-white`/`text-[#111b21]` tanpa varian `dark:`. PLAN 10 hanya memperbaiki `Debug.tsx` select/search; full dark-mode AiEvaluations ditunda (polish fase terpisah).
+  3. **Ambang badge aproksimasi:** `parseJudgeFeedback()` pakai `score >= 4` untuk semua dimensi sebagai `pass`. Backend `evals/persona-rubric.ts` punya ambang per-dimensi: warmth/format=3, golden_rules/grounding/pronoun=4. Badge bukan sumber kebenaran — kebenaran ada di DB `ai_evaluations.feedback` + log LLM evaluator.
+
+---
+
 ## 109. [Funnel Pacing] Premature Scheduling & Pushy Closing Transition pada Customer Eksplorasi — PENDING (Plan 11)
 
 - **Status:** open (planned, documented), dicatat 2026-09-22.

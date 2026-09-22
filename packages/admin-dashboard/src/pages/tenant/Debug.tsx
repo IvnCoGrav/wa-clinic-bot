@@ -664,6 +664,8 @@ interface LlmLogEntry {
   customerName?: string;
   customerInput: string;
   bubbleCorrelationId?: string;
+  actualProvider?: string;
+  actualModel?: string;
   promptPayload?: any;
   reasoning: string | null;
   rawReasoning?: string | null;
@@ -755,40 +757,41 @@ function LlmLogsSection() {
   const [expandedBubbles, setExpandedBubbles] = useState<Record<string, boolean>>({});
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const isInitialLoadedRef = useRef(false);
 
   const loadLogs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [groupedRes, flatRes] = await Promise.allSettled([
-        apiRequest(`/api/admin/debug/llm-grouped-logs?limit=300&flow=${flowFilter}`),
-        apiRequest(`/api/admin/debug/llm-logs?limit=150&flow=${flowFilter}`),
-      ]);
-
-      if (groupedRes.status === 'fulfilled' && groupedRes.value?.data) {
-        const data = groupedRes.value.data;
-        setGroupedData(Array.isArray(data) ? data : []);
-        // Auto-expand first customer on initial load if nothing expanded
-        if (Array.isArray(data) && data.length > 0 && Object.keys(expandedPhones).length === 0) {
-          setExpandedPhones({ [data[0].customerPhone]: true });
-          if (data[0].bubbles?.length > 0) {
-            setExpandedBubbles({ [data[0].bubbles[0].correlationId]: true });
+      if (viewMode === 'grouped') {
+        const groupedRes = await apiRequest(`/api/admin/debug/llm-grouped-logs?limit=300&flow=${flowFilter}`);
+        if (groupedRes?.data) {
+          const data = groupedRes.data;
+          setGroupedData(Array.isArray(data) ? data : []);
+          if (!isInitialLoadedRef.current && Array.isArray(data) && data.length > 0) {
+            isInitialLoadedRef.current = true;
+            setExpandedPhones({ [data[0].customerPhone]: true });
+            if (data[0].bubbles?.length > 0) {
+              setExpandedBubbles({ [data[0].bubbles[0].correlationId]: true });
+            }
           }
         }
-      }
-
-      if (flatRes.status === 'fulfilled' && flatRes.value?.data) {
-        setFlatLogs(Array.isArray(flatRes.value.data) ? flatRes.value.data : []);
+      } else {
+        const flatRes = await apiRequest(`/api/admin/debug/llm-logs?limit=150&flow=${flowFilter}`);
+        if (flatRes?.data) {
+          setFlatLogs(Array.isArray(flatRes.data) ? flatRes.data : []);
+          isInitialLoadedRef.current = true;
+        }
       }
     } catch (err) {
       console.warn('Gagal memuat LLM execution logs:', err);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [flowFilter, expandedPhones]);
+  }, [flowFilter, viewMode]);
 
   useEffect(() => {
     loadLogs(false);
-  }, [flowFilter]);
+  }, [flowFilter, viewMode]);
 
   // Polling interval (silent auto-sync)
   useEffect(() => {
@@ -923,10 +926,16 @@ function LlmLogsSection() {
     return list;
   }, [groupedData, statusFilter, searchQuery]);
 
-  // Aggregate stats
-  const totalCustomers = groupedData.length;
-  const totalBubbles = groupedData.reduce((acc, c) => acc + c.totalBubbles, 0);
-  const totalAiSteps = groupedData.reduce((acc, c) => acc + c.totalAiCalls, 0);
+  // Aggregate stats — derived per viewMode (flat mode jangan pakai groupedData basi)
+  const totalCustomers = viewMode === 'grouped'
+    ? groupedData.length
+    : new Set(flatLogs.map((l) => l.customerPhone || 'unknown')).size;
+  const totalBubbles = viewMode === 'grouped'
+    ? groupedData.reduce((acc, c) => acc + c.totalBubbles, 0)
+    : new Set(flatLogs.map((l) => `${l.customerPhone || 'unknown'}::${l.customerInput || l.id}`)).size || flatLogs.length;
+  const totalAiSteps = viewMode === 'grouped'
+    ? groupedData.reduce((acc, c) => acc + c.totalAiCalls, 0)
+    : flatLogs.length;
 
   return (
     <div className="space-y-4">
@@ -1069,7 +1078,7 @@ function LlmLogsSection() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-2xs"
+            className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-2xs"
           >
             <option value="all">Semua Status</option>
             <option value="SUCCESS">✅ SUCCESS</option>
@@ -1083,7 +1092,7 @@ function LlmLogsSection() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari nomor, reasoning, teks..."
-            className="w-full sm:w-44 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-2xs"
+            className="w-full sm:w-44 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-xs text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] dark:placeholder:text-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
           />
 
           {/* View Switcher */}
@@ -1272,6 +1281,12 @@ function LlmLogsSection() {
                                           {call.modelUsed && (
                                             <span className="text-[10px] font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/40 font-semibold">
                                               {call.modelUsed}
+                                            </span>
+                                          )}
+                                          {(call.actualProvider || call.actualModel) && (
+                                            <span className="text-[10px] font-mono text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/15 px-2 py-0.5 rounded-md border border-sky-200 dark:border-sky-500/40 font-semibold" title={call.actualModel ? `Model aktual: ${call.actualModel}` : undefined}>
+                                              {(call.actualProvider || 'Provider')} {call.actualModel && call.actualModel !== call.modelUsed ? `· ${call.actualModel}` : ''}
+                                              {call.status === 'FALLBACK' && ' ⚠️ fallback'}
                                             </span>
                                           )}
 

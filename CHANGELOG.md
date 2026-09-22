@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-22 — Perbaikan Sistemik PLAN 10: AI Monitoring & LLM Tracing (7 Bug Observability)
+
+- **Fase 1 — Backend logging engine:** alias baca `NLU_EXTRACTOR` ↔ `SLOT_EXTRACTOR` di `getLlmExecutionLogs()` (hilangnya log legacy saat filter), heuristic grouping tahan out-of-order (iterasi seluruh bubble dalam window **35 dtk** tetap, bukan 45), plumbing `tenantId` aditif di `getLlmExecutionLogs`/`getGroupedLlmExecutionLogs` + endpoint `?tenant=` + `recordLlmExecution` call-site V3/entity-extractor, alias baca `task_type` `SLOT_EXTRACTOR`→`NLU_EXTRACTOR` di `ai-audit-summary` tanpa rename writer/migrasi DB (anti split-brain).
+- **Fase 2 — Debug.tsx:** `isInitialLoadedRef` + hapus `expandedPhones` dari deps `loadLogs` (anti-reset timer 6 dtk saat accordion diklik + anti auto-expand paksa `data[0]`), fetch selektif per `viewMode` (1 request vs 2), stats per mode (flat dihitung dari `flatLogs`), pill `actualProvider`/`actualModel` + badge fallback di kartu AI step, dark-mode `select`/`input`.
+- **Fase 3 — AiEvaluations.tsx:** helper `parseJudgeFeedback()` data-driven (parse JSON dalam string, bukan hardcode 5 kunci; fallback mentah bila gagal), render 5 micro-badges dimensi + teks bersih, touch target `min-h-[40px]` + `touch-action: manipulation` pada filter hari, layout kartu ringkas `block sm:hidden` untuk tabel audit di mobile 375px.
+- **Verifikasi:** `npm run build` ✅, `npx vitest run tests/unit/hierarchical-debug-logs.test.ts tests/unit/llm-execution-tracing-deepseek.test.ts tests/unit/cg09-pii-redaction.test.ts` 22/22 ✅, validasi ad-hoc: alias NLU 2/2, grouping out-of-order 1 bubble/3 calls, window >35s split 2, tenant filter 1/2.
+- **Debt jujur:** `KNOWN_ISSUES.md` #112 — call-site V3 lain di luar `generation-stage`/`entity-extractor` belum dijamin bawa `tenantId` (butuh audit pipeline bila multi-tenant aktif), `AiEvaluations.tsx` masih dominan light-mode, ambang badge `>=4` adalah aproksimasi `persona-rubric.ts` (3/4 per dimensi).
+
 #### 2026-09-22 — Penyelesaian Migrasi SumoPod+GLM: Switch .env, Injeksi reasoning_effort, Koreksi Tarif Promo Kedaluwarsa
 
 - **Runtime switch (bagian yang hilang):** `.env` `ACTIVE_LLM_PROVIDER=KENARI` → `SUMOPOD`,
