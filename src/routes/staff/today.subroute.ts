@@ -5,6 +5,7 @@ import { auditService } from '../../services/audit.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
+import { isStaffSupervisorRole } from '../staff.route';
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
@@ -21,9 +22,12 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
-      const scope = request.query.scope === 'all' && isSupervisor ? 'all' : 'mine';
+      const isSupervisor = isStaffSupervisorRole(role);
+      const isAdminImpersonation = !!(request as any).staffSession?.isAdminImpersonation;
+      let scope: 'mine' | 'all' = 'mine';
+      const requestedScope = request.query.scope;
+      if (requestedScope === 'all' && isSupervisor) scope = 'all';
+      else if (!requestedScope && isAdminImpersonation && isSupervisor) scope = 'all';
       const dateParam = request.query.date || 'today';
 
       const dateMeta = StaffReservationService.getWibDateRange(dateParam);
@@ -82,8 +86,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+      const isSupervisor = isStaffSupervisorRole(role);
 
       if (!isSupervisor) {
         return reply.status(403).send({ error: 'Hanya supervisor/admin yang dapat mendelegasikan tugas terapis.' });
@@ -146,8 +149,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
 
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+      const isSupervisor = isStaffSupervisorRole(role);
 
       const owned = await StaffReservationService.assertConversationOwnedByStaffToday(
         id,
@@ -182,6 +184,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           thumbB64?: string;
           mimeType?: string;
           fileName?: string;
+          replyToMessageId?: string;
         };
       }>,
       reply: FastifyReply
@@ -190,11 +193,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName } = request.body || {};
+      const { text, imageB64, thumbB64, mimeType, fileName, replyToMessageId } = request.body || {};
 
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+      const isSupervisor = isStaffSupervisorRole(role);
 
       const owned = await StaffReservationService.assertConversationOwnedByStaffToday(
         id,
@@ -225,6 +227,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         fileName,
         tenantId,
         adminName: staffName,
+        replyToMessageId,
         // Balasan terapis selalu mengaktifkan mode human-handling agar bot
         // tidak menyela percakapan di tengah penanganan oleh staf.
         forceEscalate: true,
@@ -290,6 +293,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const customText = request.body?.text;
 
@@ -311,6 +316,49 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
 
       if (!reservation) {
         return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+      }
+
+      // Cross-tenant guard
+      if ((reservation as any).tenant_id !== tenantId) {
+        return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+      }
+
+      // Hard guard otorisasi (Anti-IDOR) + fail-closed untuk unassigned
+      if (!isSupervisor) {
+        const assigned = (reservation as any).assigned_staff_id;
+        if (!assigned || assigned !== staffId) {
+          return reply.status(403).send({
+            success: false,
+            error: 'Anda tidak memiliki hak akses untuk mengirim pesan OTW pada jadwal terapis lain.',
+          });
+        }
+      }
+
+      // Cegah pengiriman untuk jadwal selesai/batal (case-insensitive)
+      const statusLower = String((reservation as any).status || '').toLowerCase();
+      if (['completed', 'cancelled', 'rejected'].includes(statusLower)) {
+        return reply.status(400).send({
+          success: false,
+          error: `Pesan OTW tidak dapat dikirim untuk jadwal berstatus "${(reservation as any).status}".`,
+        });
+      }
+
+      // Validasi batas waktu (maksimal 2 jam sebelum jam reservasi) — fail-closed bila booking_date null
+      if ((reservation as any).booking_date) {
+        const bookingTime = new Date((reservation as any).booking_date).getTime();
+        const nowTime = Date.now();
+        const twoHoursMs = 2 * 60 * 60 * 1000;
+        if (!isNaN(bookingTime) && nowTime < bookingTime - twoHoursMs && !isSupervisor) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Pesan OTW hanya dapat dikirim maksimal 2 jam sebelum jam reservasi.',
+          });
+        }
+      } else if (!isSupervisor) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Jadwal belum memiliki waktu booking yang valid.',
+        });
       }
 
       const conversation = (reservation as any).customer?.conversations?.[0];
@@ -386,8 +434,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
+      const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const { paymentMethod, amount, proofImageB64, notes } = request.body || {};
 
@@ -439,8 +486,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
+      const isSupervisor = isStaffSupervisorRole(role);
       const { reservationId, lat, lng, housePhotoB64, landmark } = request.body || {};
 
       if (!reservationId) {
@@ -494,8 +540,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
+      const isSupervisor = isStaffSupervisorRole(role);
       const { id, messageId } = request.params;
 
       const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId, isSupervisor);
@@ -536,8 +581,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const isSupervisor =
-        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
+      const isSupervisor = isStaffSupervisorRole(role);
       const { id, messageId } = request.params;
       const { text } = request.body || {};
 
@@ -575,8 +619,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     const staffId = (request as any).staffId;
     const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
     const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-    const isSupervisor =
-      role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+    const isSupervisor = isStaffSupervisorRole(role);
 
     reply.hijack();
 

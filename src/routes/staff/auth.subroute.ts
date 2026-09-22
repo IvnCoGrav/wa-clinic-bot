@@ -6,6 +6,13 @@ import { prisma } from '../../db/client';
 
 // Rate limiting khusus endpoint staff login (terpisah dari admin)
 const staffLoginAttemptsMap = new Map<string, { count: number; resetAt: number }>();
+// Pembersihan berkala setiap 10 menit untuk cegah memory leak (hapus entri yang resetAt sudah lewat)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of staffLoginAttemptsMap.entries()) {
+    if (now > entry.resetAt) staffLoginAttemptsMap.delete(ip);
+  }
+}, 10 * 60 * 1000).unref?.();
 
 export async function staffAuthRoutes(fastify: FastifyInstance) {
   /**

@@ -5,6 +5,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 115. [Staff Terapis] Sisa Hardening Backend — TECH DEBT
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** Hardening IDOR OTW, kalender WIB, LTV, follow-up, N+1, dan rate-limiter.
+- **Sisa debt:** `totalTreatments` di `getTodayTasks` kini hardcode `1` (tanpa `reservations` count) — perlu `_count` bila UI butuh angka akurat; `staff-notification` `sendTaskUnassignedNotification` belum ada (notifikasi unassign Fase 4 ditunda); `OR` window di `assertConversationOwnedByStaffToday` melebar dari hari-ini ke 30+48h — akses chat ikut melebar (disepakati, monitor abuse).
+
+---
+
 ## 114. [Tool Schema & Location] Sisa PLAN 12 — TECH DEBT
 
 - **Status:** open (tech debt, documented), dicatat 2026-09-22.

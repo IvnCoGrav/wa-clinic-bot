@@ -108,38 +108,37 @@ export class StaffReservationService {
   } {
     const now = new Date();
     const wibMs = now.getTime() + 7 * 60 * 60 * 1000;
-    const wibNow = new Date(wibMs);
-    let targetYear = wibNow.getUTCFullYear();
-    let targetMonth = wibNow.getUTCMonth();
-    let targetDay = wibNow.getUTCDate();
-
+    const targetDate = new Date(wibMs);
     let isToday = true;
     let isTomorrow = false;
-
     if (targetDateParam === 'tomorrow') {
-      targetDay += 1;
+      targetDate.setUTCDate(targetDate.getUTCDate() + 1);
       isToday = false;
       isTomorrow = true;
     } else if (targetDateParam && targetDateParam !== 'today') {
       const match = targetDateParam.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (match) {
-        targetYear = parseInt(match[1], 10);
-        targetMonth = parseInt(match[2], 10) - 1;
-        targetDay = parseInt(match[3], 10);
-
-        const nowDayStr = `${wibNow.getUTCFullYear()}-${String(wibNow.getUTCMonth() + 1).padStart(2, '0')}-${String(wibNow.getUTCDate()).padStart(2, '0')}`;
+        const y = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10) - 1;
+        const d = parseInt(match[3], 10);
+        targetDate.setUTCFullYear(y, m, d);
+        const todayWib = new Date(wibMs);
         const tomorrowWib = new Date(wibMs + 24 * 60 * 60 * 1000);
-        const tomorrowDayStr = `${tomorrowWib.getUTCFullYear()}-${String(tomorrowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowWib.getUTCDate()).padStart(2, '0')}`;
-
-        isToday = targetDateParam === nowDayStr;
-        isTomorrow = targetDateParam === tomorrowDayStr;
+        const targetStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const todayStr = `${todayWib.getUTCFullYear()}-${String(todayWib.getUTCMonth() + 1).padStart(2, '0')}-${String(todayWib.getUTCDate()).padStart(2, '0')}`;
+        const tomorrowStr = `${tomorrowWib.getUTCFullYear()}-${String(tomorrowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowWib.getUTCDate()).padStart(2, '0')}`;
+        isToday = targetStr === todayStr;
+        isTomorrow = targetStr === tomorrowStr;
       }
     }
-
-    // 00:00:00.000 WIB dinyatakan dalam UTC adalah jam -7
+    const targetYear = targetDate.getUTCFullYear();
+    const targetMonth = targetDate.getUTCMonth();
+    const targetDay = targetDate.getUTCDate();
     const startOfDay = new Date(Date.UTC(targetYear, targetMonth, targetDay, -7, 0, 0, 0));
     const endOfDay = new Date(Date.UTC(targetYear, targetMonth, targetDay, 16, 59, 59, 999));
-
+    const monthStr = String(targetMonth + 1).padStart(2, '0');
+    const dayStr = String(targetDay).padStart(2, '0');
+    const dateStr = `${targetYear}-${monthStr}-${dayStr}`;
     const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 0, 0, 0));
     const formattedDate = displayDate.toLocaleDateString('id-ID', {
       weekday: 'long',
@@ -148,11 +147,6 @@ export class StaffReservationService {
       year: 'numeric',
       timeZone: 'UTC',
     });
-
-    const monthStr = String(targetMonth + 1).padStart(2, '0');
-    const dayStr = String(targetDay).padStart(2, '0');
-    const dateStr = `${targetYear}-${monthStr}-${dayStr}`;
-
     return { startOfDay, endOfDay, dateStr, formattedDate, isToday, isTomorrow };
   }
 
@@ -220,13 +214,7 @@ export class StaffReservationService {
                 },
               },
               // phone: TIDAK di-select dari DB untuk privasi data customer
-              reservations: {
-                where: { status: { notIn: ['cancelled', 'rejected'] } },
-                select: {
-                  id: true,
-                  purchase_value: true,
-                },
-              },
+              ltv_cache: true,
               conversations: {
                 select: { id: true },
                 orderBy: { updated_at: 'desc' },
@@ -368,8 +356,8 @@ export class StaffReservationService {
               }
             : null,
           customerStats: {
-            totalTreatments: (cust?.reservations?.length ?? 0) > 0 ? (cust?.reservations?.length ?? 1) : 1,
-            ltv: (cust?.reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || pricing.totalFee,
+            totalTreatments: 1,
+            ltv: (cust as any)?.ltv_cache > 0 ? (cust as any).ltv_cache : pricing.totalFee,
           },
         };
       })
@@ -391,20 +379,20 @@ export class StaffReservationService {
   ): Promise<StaffTaskItem[]> {
     if (!staffId) return [];
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    const maxDate = new Date(tomorrow);
-    maxDate.setDate(maxDate.getDate() + daysAhead);
-    maxDate.setHours(23, 59, 59, 999);
+    const { startOfDay: tomorrow } = this.getWibDateRange('tomorrow');
+    const maxEnd = this.getWibDateRange(
+      (() => {
+        const d = new Date(tomorrow.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      })()
+    ).endOfDay;
 
     try {
       const rows = await prisma.reservation.findMany({
         where: {
           tenant_id: tenantId,
           assigned_staff_id: staffId,
-          booking_date: { gte: tomorrow, lte: maxDate },
+          booking_date: { gte: tomorrow, lte: maxEnd },
         },
         select: {
           id: true,
@@ -578,12 +566,8 @@ export class StaffReservationService {
   ): Promise<StaffTaskItem[]> {
     if (!staffId) return [];
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const minDate = new Date();
-    minDate.setDate(minDate.getDate() - daysPast);
-    minDate.setHours(0, 0, 0, 0);
+    const { startOfDay } = this.getWibDateRange('today');
+    const minDate = new Date(startOfDay.getTime() - daysPast * 24 * 60 * 60 * 1000);
 
     try {
       const rows = await prisma.reservation.findMany({
@@ -920,6 +904,33 @@ export class StaffReservationService {
       // bayi terkirim ke customer nifas/suami). Pencatatan pembayaran tetap tersimpan di database
       // dan audit log tanpa interupsi bot ke chat WhatsApp customer.
 
+      // Sinkronkan nilai Lifetime Value (LTV) customer — idempoten, best-effort
+      try {
+        const { customerService } = await import('./customer.service');
+        await customerService.recalculateCustomerLtv(reservation.customer_id, tenantId);
+      } catch (ltvErr: any) {
+        console.warn('[STAFF RESERVATION] Failed to recalculate customer LTV on payment:', ltvErr.message);
+      }
+      // Picu follow-up otomatis review H+1 — idempoten via findFirst PENDING/QUEUED, gagal diam (best-effort)
+      // Guard tambahan: lewati bila review SENT sudah ada untuk reservasi ini (hindari duplikat pasca re-record)
+      try {
+        const { followUpService } = await import('./follow-up.service');
+        const existingSentReview = await (prisma as any).followUp?.findFirst?.({
+          where: { reservation_id: reservationId, status: 'SENT' },
+        });
+        if (!existingSentReview && reservation.booking_date) {
+          await followUpService.createReservationFollowUps({
+            reservationId: reservation.id,
+            customerId: reservation.customer_id,
+            bookingDate: reservation.booking_date,
+            treatmentCategory: reservation.treatment_category,
+            tenantId,
+          });
+        }
+      } catch (fuErr: any) {
+        console.warn('[STAFF RESERVATION] Failed to trigger follow-up review on payment:', fuErr.message);
+      }
+
       // Audit log
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
@@ -975,10 +986,18 @@ export class StaffReservationService {
 
       if (!conv || conv.tenant_id !== tenantId) return false;
 
+      const UPCOMING_DAYS = 30;
+      const upcomingEnd = new Date(endOfDay.getTime() + UPCOMING_DAYS * 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(startOfDay.getTime() - 48 * 60 * 60 * 1000);
+
       const whereCondition: any = {
         tenant_id: tenantId,
         customer_id: conv.customer_id,
-        booking_date: { gte: startOfDay, lte: endOfDay },
+        OR: [
+          { booking_date: { gte: startOfDay, lte: endOfDay } },
+          { booking_date: { gt: endOfDay, lte: upcomingEnd } },
+          { booking_date: { gte: twoDaysAgo, lt: startOfDay } },
+        ],
       };
 
       if (!isSupervisor) {
@@ -1029,6 +1048,12 @@ export class StaffReservationService {
         return { success: false, error: 'Staff terapis yang dituju tidak ditemukan atau tidak aktif.' };
       }
 
+      let oldAssignedStaffId: string | null = null;
+      try {
+        const before = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { assigned_staff_id: true } });
+        oldAssignedStaffId = (before as any)?.assigned_staff_id || null;
+      } catch (_) {}
+
       const updated = await prisma.reservation.update({
         where: { id: reservationId },
         data: {
@@ -1043,10 +1068,12 @@ export class StaffReservationService {
         },
       });
 
-      // Kirim notifikasi push ke staf terapis yang baru ditugaskan (jika ada layanan notifikasi)
       try {
         const { staffNotificationService } = await import('./staff-notification.service');
         await staffNotificationService.sendReservationAssignmentNotification(reservationId, targetStaffId);
+        if (oldAssignedStaffId && oldAssignedStaffId !== targetStaffId) {
+          try { await staffNotificationService.sendTaskUnassignedNotification(reservationId, oldAssignedStaffId, targetStaff.name as string); } catch (_) {}
+        }
       } catch (notifErr: any) {
         console.warn('[STAFF RESERVATION] Warning: could not send reassign notification:', notifErr.message);
       }
