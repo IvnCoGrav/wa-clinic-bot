@@ -380,7 +380,8 @@ export class MediaService {
       return this.getPublicMediaUrl(relativeUrl);
     }
     const hdPath = this.filePathFromRelativeUrl(relativeUrl);
-    return hdPath;
+    if (hdPath && fs.existsSync(hdPath)) return hdPath;
+    return this.resolveThumbFallback(relativeUrl);
   }
 
   /**
@@ -390,6 +391,38 @@ export class MediaService {
     const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
     if (!match) return null;
     return path.join(MEDIA_ROOT, match[1], match[2], match[3]);
+  }
+
+  /**
+   * Fallback ke thumbnail (_thumb.*) bila file HD tidak ada di disk.
+   * Hanya untuk URL /media/... valid, bukan thumb, HD hilang, thumb ada & di dalam MEDIA_ROOT.
+   * Coba ekstensi yang sama dulu, lalu fallback ke .jpg (blur thumb default).
+   */
+  public resolveThumbFallback(relativeUrl: string): string | null {
+    const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
+    if (!match) return null;
+    if (isThumbName(match[3])) return null; // sudah thumb, tidak fallback balik
+    const scope = match[1] as 'outbound' | 'inbound';
+    const tenantId = match[2];
+    const hdFile = match[3];
+    const hdPath = this.filePathFromRelativeUrl(relativeUrl);
+    if (!hdPath || fs.existsSync(hdPath)) return null; // HD ada, tidak perlu fallback
+
+    const thumbDir = path.join(MEDIA_ROOT, scope, tenantId);
+    // 1) Coba ekstensi sama dengan HD (thumb kustom)
+    const thumbFileSameExt = withThumbName(hdFile);
+    const thumbPathSameExt = path.join(thumbDir, thumbFileSameExt);
+    if (thumbPathSameExt.startsWith(MEDIA_ROOT) && fs.existsSync(thumbPathSameExt) && fs.statSync(thumbPathSameExt).isFile()) {
+      return thumbPathSameExt;
+    }
+    // 2) Fallback ke blur thumb default .jpg (stem_thumb.jpg)
+    const stem = hdFile.replace(/(\.\w+)$/, '');
+    const blurThumbFile = `${stem}_thumb.jpg`;
+    const blurThumbPath = path.join(thumbDir, blurThumbFile);
+    if (blurThumbPath.startsWith(MEDIA_ROOT) && fs.existsSync(blurThumbPath) && fs.statSync(blurThumbPath).isFile()) {
+      return blurThumbPath;
+    }
+    return null;
   }
 
   /**
@@ -776,6 +809,16 @@ export class MediaService {
       await prisma.message.updateMany({
         where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
         data: { payload_raw: { path: ['media', 'url'], set: thumbRelUrl } },
+      });
+      // Rewrite Customer.preferences.house_photo_url jika menunjuk ke HD yang dihapus
+      await prisma.customer.updateMany({
+        where: {
+          tenant_id: tenantId,
+          preferences: { path: ['house_photo_url'], equals: hdRelUrl },
+        },
+        data: {
+          preferences: { path: ['house_photo_url'], set: thumbRelUrl },
+        },
       });
     } catch {
       // DB offline / best-effort

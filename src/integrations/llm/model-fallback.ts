@@ -136,7 +136,7 @@ export async function callChatCompletionsWithFallback(
   ): Promise<any> => {
     const finalBaseUrl = overrideBaseUrl || call.baseUrl;
     const finalApiKey = overrideApiKey || call.apiKey;
-    const attemptTimeout = Math.min(call.timeoutMs || 15000, 15000);
+    const attemptTimeout = Math.min(call.timeoutMs || 25000, 25000);
     const effectivePayload: any = { ...(payloadOverride ?? call.payload), model };
     if (model.toLowerCase().includes('luna') || model.toLowerCase().includes('o1') || model.toLowerCase().includes('o3')) {
       delete effectivePayload.temperature;

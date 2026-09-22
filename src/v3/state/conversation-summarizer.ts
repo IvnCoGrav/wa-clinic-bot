@@ -161,7 +161,28 @@ export class V3ConversationSummarizer {
 
     // 7. Cool-off
     const askedLocationRecently = isAskedLocationRecently(history);
-    if (askedLocationRecently) {
+    const locationResolved = Boolean(session.location?.kelurahan || session.location?.distanceKm != null);
+    const locationPartiallyResolved = Boolean(session.location?.kelurahan || session.location?.kecamatan || session.location?.kota || session.location?.distanceKm != null);
+
+    // Heuristic: deteksi apakah input customer menjawab pertanyaan lokasi (nama kota/kecamatan/kelurahan)
+    // tanpa menghafal daftar kota — cek pola jawaban singkat non-pertanyaan.
+    const isLikelyLocationAnswer = (text: string): boolean => {
+      const lower = text.toLowerCase().trim();
+      if (lower.length === 0 || lower.length > 30) return false;
+      if (lower.includes('?') || lower.includes(' apa') || lower.includes(' berapa') || lower.includes(' bisa')) return false;
+      const questionKeywords = ['harga', 'tarif', 'biaya', 'promo', 'pijat', 'batuk', 'pilek', 'kembung', 'grok', 'kolik', 'gtm', 'nafsu', 'makan', 'tidur', 'rewel', 'pegala', 'capek', 'demam', 'panas', 'flu', 'cukur', 'rambut', 'jadwal', 'hari', 'jam', 'slot', 'kosong', 'tersedia', 'bulan', 'tahun', 'usia', 'umur', 'ikut', 'masuk', 'kategori', 'cukur', 'menit', 'durasi', 'lama', 'boleh', 'mau', 'ingin', 'perlu', 'butuh'];
+      if (questionKeywords.some((kw) => lower.includes(kw))) return false;
+      // Partikel percakapan yang BUKAN nama lokasi — hindari false positive pada filler
+      const conversationalFillers = ['ya', 'kak', 'deh', 'dong', 'sih', 'nih', 'gitu', 'oke', 'baik', 'oh', 'siang', 'pagi', 'sore', 'malam', 'terima', 'kasih', 'makasih', 'trims', 'thanks'];
+      const words = lower.split(/\s+/).filter(Boolean);
+      // Jika SEMUA kata adalah filler percakapan → bukan jawaban lokasi
+      if (words.every((w) => conversationalFillers.includes(w))) return false;
+      // Jawaban lokasi cenderung 1-3 kata, tanpa kata tanya/layanan
+      return words.length >= 1 && words.length <= 3;
+    };
+
+    const userAnsweredLocation = askedLocationRecently && !locationResolved && isLikelyLocationAnswer(customerInput);
+    if (askedLocationRecently && !locationResolved && !userAnsweredLocation) {
       janganDiulang.push('Menanyakan alamat/kelurahan rumah Bunda lagi (karena baru saja ditanyakan dan Bunda sedang fokus berkonsultasi). Berikan jawaban empatik tanpa menodong alamat!');
     }
     const recentAssistantMsgs = history.filter((h) => h.role === 'assistant').slice(-2);
@@ -196,7 +217,10 @@ export class V3ConversationSummarizer {
     };
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
-    if (commitReady) {
+    if (userAnsweredLocation) {
+      sedangDibahas = 'Bunda menginfokan daerah tempat tinggal (masih berupa kota/wilayah luas)';
+      yangPerluDijawab = 'Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir ke rumah Bunda.';
+    } else if (commitReady) {
       sedangDibahas = 'Bunda sudah memilih treatment dan menyebutkan hari kunjungan';
       yangPerluDijawab = 'Lokasi sudah diketahui dan hari sudah disebut — KUNCI reservasi lewat save_reservation, sampaikan jadwal akan dikonfirmasi tim Bidan. DILARANG menanyakan JAM spesifik.';
     } else if (hasDayMention) {

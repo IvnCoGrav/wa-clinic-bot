@@ -238,3 +238,22 @@ export function getRollingFollowUpMessage(
     templateIndex: idx + 1, // 1-indexed for UI display
   };
 }
+
+/** Kunci tanggal WIB (YYYY-MM-DD) — WIB = UTC+7. Invalid → ''. */
+export function getWibDateKey(scheduledAt?: Date | string | null): string {
+  if (!scheduledAt) return '';
+  const d = new Date(scheduledAt as any);
+  if (isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** Varian rolling deterministik 1..3: hash(customerId + tanggal-WIB). */
+export function getRollingVariant(customerId: string, scheduledAt?: Date | string | null): number {
+  const str = `${customerId || ''}-${getWibDateKey(scheduledAt)}`;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return (Math.abs(hash) % 3) + 1;
+}

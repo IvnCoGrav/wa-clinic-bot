@@ -351,7 +351,7 @@ export class GoalTracker {
    */
   public static formatGoalSessionForPrompt(
     session: CustomerGoalSession,
-    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean }
+    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean; incomingText?: string }
   ): string {
     // Pre-grounding deterministik (Zero-Code) — audience-aware:
     // keluhan ibu (momProfile.complaints) dan keluhan anak digabung sesuai subjek.
@@ -426,7 +426,27 @@ export class GoalTracker {
       }
     } else {
       const recentlyAsked = opts?.askedLocationRecently ?? (opts?.history ? isAskedLocationRecently(opts.history) : false);
-      if (recentlyAsked) {
+      const locationResolved = Boolean(session.location?.kelurahan || session.location?.distanceKm != null);
+      const locationPartiallyResolved = Boolean(session.location?.kelurahan || session.location?.kecamatan || session.location?.kota || session.location?.distanceKm != null);
+
+      // Heuristic sama seperti conversation-summarizer: cek apakah user menjawab dengan nama lokasi
+      const isLikelyLocationAnswer = (text: string): boolean => {
+        const lower = text.toLowerCase().trim();
+        if (lower.length === 0 || lower.length > 30) return false;
+        if (lower.includes('?') || lower.includes(' apa') || lower.includes(' berapa') || lower.includes(' bisa')) return false;
+        const questionKeywords = ['harga', 'tarif', 'biaya', 'promo', 'pijat', 'batuk', 'pilek', 'kembung', 'grok', 'kolik', 'gtm', 'nafsu', 'makan', 'tidur', 'rewel', 'pegala', 'capek', 'demam', 'panas', 'flu', 'cukur', 'rambut', 'jadwal', 'hari', 'jam', 'slot', 'kosong', 'tersedia', 'bulan', 'tahun', 'usia', 'umur', 'ikut', 'masuk', 'kategori', 'cukur', 'menit', 'durasi', 'lama', 'boleh', 'mau', 'ingin', 'perlu', 'butuh'];
+        if (questionKeywords.some((kw) => lower.includes(kw))) return false;
+        // Partikel percakapan yang BUKAN nama lokasi — hindari false positive pada filler
+        const conversationalFillers = ['ya', 'kak', 'deh', 'dong', 'sih', 'nih', 'gitu', 'oke', 'baik', 'oh', 'siang', 'pagi', 'sore', 'malam', 'terima', 'kasih', 'makasih', 'trims', 'thanks'];
+        const words = lower.split(/\s+/).filter(Boolean);
+        // Jika SEMUA kata adalah filler percakapan → bukan jawaban lokasi
+        if (words.every((w) => conversationalFillers.includes(w))) return false;
+        // Jawaban lokasi cenderung 1-3 kata, tanpa kata tanya/layanan
+        return words.length >= 1 && words.length <= 3;
+      };
+
+      const userAnsweredLocation = recentlyAsked && !locationResolved && opts?.incomingText && isLikelyLocationAnswer(opts.incomingText);
+      if (recentlyAsked && !locationResolved && !userAnsweredLocation) {
         lines.push(`• Lokasi: Belum diketahui (Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi pada turn ini, fokus jawab keluhan/pertanyaan Bunda)`);
       } else {
         lines.push(`• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)`);

@@ -5,6 +5,51 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 108. [Model Config] NLU Migration ke Netra — Risiko Latensi & JSON Parsing
+
+- **Status:** open (known risk, monitored), dicatat 2026-09-22.
+- **Konteks:** `INTENT_CLASSIFICATION` dimigrasikan dari `gpt-4o-mini` (OpenAI, P50 ~1.8s) ke `deepseek-v4-flash-0731:netra` (SumoPod) sesuai implementasi GLM/Netra transition.
+- **Risiko utama:**
+  1. **Latensi:** Netra memiliki reasoning tokens internal (90-134) yang menambah 5-10 detik per request. NLU jalan di **setiap pesan masuk** + fallback geocoding → akumulasi latensi signifikan pada chat volume tinggi.
+  2. **JSON Parsing:** Model reasoning rawan bocor tag `</think>` ke output, berpotensi memecah `JSON.parse` di `entity-extractor.service.ts` (tidak ada sanitizer DSML seperti di `generation-stage.ts:68-85`).
+  3. **Biaya:** Netra output `$0.10/1M` vs gpt-4o-mini `$0.60/1M` — murah per token, tapi reasoning tokens ikut tagih → biaya per request naik.
+- **Mitigasi & Rollback:**
+  - Monitoring: `check-router-accuracy.ts --days=7` + log `llm_audit_logs` untuk latency P50/P95 NLU.
+  - Rollback instan: `AiModelConfigService.updateTaskConfig('INTENT_CLASSIFICATION', { provider: 'OpenAI', modelName: 'gpt-4o-mini' }, tenantId)` via Admin API.
+  - Feature flag belum tersedia — rollback manual via Settings > AI Models.
+- **Catatan:** `MEDICAL_CHECK` **tidak** termigrasi (tetap Engine 5.2 deterministik, `MEDICAL_CHECK_LOCKED` di `ai-models.config.ts:595`).
+
+## 107. [Follow-Up] Sinkronisasi Varian Randomizer Dashboard vs Worker — RESOLVED 2026-09-22
+
+- **Status:** resolved (fondasional; tanpa migrasi DB).
+- **Akar masalah:** `executeFollowUp` menghitung `rollingVariant = hash(customer_id + tanggal) %3+1` secara lokal (dua salinan inline: WAHA `follow-up.service.ts:1368` & WABA `:1512`) tapi `listFollowUps` (`:240-313`) tidak mengirim `variant` ke API; dashboard menebak via `((stage-1)%3)+1` (`FollowUpQueue.tsx:786,992,1004`) → semua Tahap 1 tampak Varian 1.
+- **Koreksi timezone:** hash lama pakai `toISOString().slice(0,10)` = hari **UTC**; penjadwalan + tampilan pakai **WIB** (09:40 WIB = 02:40 UTC). Dekat tengah malam WIB → hari beda → varian preview vs kirim bisa beda 1 hari.
+- **Fix fondasional (3 fase, tanpa migrasi):**
+  1. **Kontrak terpusat** (`src/config/followup-templates.ts:getWibDateKey`, `getRollingVariant`): tanggal WIB (`+7j` → ISO slice), djb2 hash, `%3+1`. Dua cabang `follow-up.service.ts:1367,1504` kini import helper yang sama; prioritas `fu.variant` pada jalur WABA dipertahankan untuk override manual.
+  2. **API enrich** (`follow-up.service.ts:240-313`): `select` tambah `customer_id`, response enrich `variant: getRollingVariant(customer_id, scheduled_at)` per row. Endpoint tetap `GET /api/admin/follow-ups` (`follow-up.subroute.ts:11`); computed property, tidak ada kolom `FollowUp.variant` di `prisma/schema.prisma:493-516`.
+  3. **Dashboard jujur** (`FollowUpQueue.tsx`): `FollowUpItem.variant? + customer_id?`, helper `getWibDateKey/fallbackRollingVariant/effectiveVariant` byte-identik backend (fallback hanya untuk data lama). `getTemplateTextForTypeAndVariant` dijadikan DB-driven (hapus map hardcoded `NO_PURCHASE/NEXT_TREATMENT` `:321-342` yang divergen dari DB/template engine); preview fallback hanya generik. 3 titik render `:781,987,999` + `handleOpenEdit` kini pakai `effectiveVariant(fu)` (modal default = varian baris, bukan selalu 1; row `custom_text` tetap berlabel Custom tanpa nomor).
+- **Batasan jujur (bukan klaim 100%):** (a) `custom_text` → varian tidak relevan (prioritas `executeFollowUp:1377`); (b) milestone-hijack (`resolveMilestoneType:1254`) dapat mengganti `templateType` ke `MILESTONE_*` — preview basis-tipe bisa menyimpang dari teks terkirim; (c) `scheduled_at` digeser setelah preview → varian ikut bergeser (konsekuensi formula tanggal; mitigasi: re-fetch setelah edit jadwal).
+- **Test adversarial:** `tests/unit/follow-up-variant.test.ts` (8 kasus: determinisme, distribusi smoke 300 ID, edge WIB-midnight 00:30 WIB vs 17:30Z, input invalid, `listFollowUps` enrich, WABA `fu.variant` pre-set, `custom_text` precedence, `getWibDateKey` format). Regresi `follow-up-engine.test.ts` 15 kasus tetap hijau. Build `tsc` + `vite build` dashboard hijau; dashboard perlu restart bot untuk serve `dist/` baru.
+- **Rollback:** revert 4 file (`followup-templates.ts`, `follow-up.service.ts`, `FollowUpQueue.tsx`, test baru). Perubahan teks terkirim hanya untuk pasien yang sebelumnya kena hash-UTC di sekitar tengah malam WIB (perbaikan yang diinginkan, blast radius kecil).
+
+---
+
+## 106. [Media] Transparent Thumbnail Fallback & Resource-Minimized House Photo Storage — RESOLVED 2026-09-22
+
+- **Status:** resolved (implemented & tested; backfill script ready for live).
+- **Akar masalah:** Retensi media 30 hari (`deleteExpiredMedia`) & watermark-prune (`pruneToLowWatermark`) menghapus file HD (`{stem}.jpg`) & mempertahankan thumb (`{stem}_thumb.jpg`), tapi **tidak me-rewrite** `Customer.preferences.house_photo_url` yang masih menunjuk ke HD → 404 untuk 14 customer (Bunda Devia + 13 lain).
+- **Fix fondasional (4 fase):**
+  1. **Fallback HTTP & WAHA** (`media.service.ts:resolveThumbFallback`, `media.route.ts`): HD 404 → auto serve thumb + header `X-Media-Fallback: thumbnail`; traversal-safe; auth inbound tidak bocor.
+  2. **Rewrite `house_photo_url` saat retensi** (`media.service.ts:updateMediaRefsAfterHdDelete`): DB update `preferences.house_photo_url: hdUrl → thumbUrl` atomik bersama `Message.payload_raw`.
+  3. **Hemat storage** (`staff-reservation.service.ts`, `customers.subroute.ts`): Upload foto rumah baru → `saveOutboundMedia` → hapus HD segera (`deleteFile(hdUrl)`), simpan hanya thumb (~140 KB). `removePhoto` hapus keduanya.
+  4. **Backfill script** (`scripts/backfill-house-photo-thumb-urls.ts`): Tenant-aware, `--dry-run` default, merge JSON `preferences` aman, idempoten, audit log.
+- **Test adversarial:** `tests/unit/media-fallback-thumb.test.ts` (9 kasus: happy-path, HD-hilang, traversal, auth, reverse-fallback, WAHA/WABA, orphan-HD, integrasi retensi→prefs). Semua hijau + suite regresi existing.
+- **Zero Extra Disk:** Tidak menyimpan kembali HD. Thumb 600x800 (~146 KB, watermark GPS) tetap utuh.
+- **Verifikasi live:** `scratch/audit-all-house-photos.js` → 14 customer `hdExists=false, thumbExists=true` (0 thumb hilang = data loss permanen).
+- **Rollback:** Revert commit Fase 1–3 (stateless). Fase 4 backfill idempoten aman dijalankan ulang.
+
+---
+
 ## 105. [Cost Estimator] Tarif LLM provider-aware; SumoPod verified diskon + Kenari 2 model baru — RESOLVED 2026-09-21 (revisi katalog live)
 
 - **Status:** resolved (estimator provider-aware; SumoPod verified diskon live 2026-09-21; Kenari +2 model baru), sisa = data historis + env dev lokal masih KENARI.

@@ -159,8 +159,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'HARVESTING',
     {
       task: 'HARVESTING',
-      provider: process.env.AI_PROVIDER_HARVESTING || defaultProvider,
-      modelName: sanitizeModelForProvider(process.env.AI_MODEL_HARVESTING || defaultChatModel),
+      provider: 'SumoPod',
+      modelName: 'deepseek-v4-flash-0731:netra',
       description: 'Digunakan untuk mengekstrak Q&A dan data transaksi dari konsolidasi berkas histori chat.',
       maxTokens: 4096,
       temperature: 0.2,
@@ -170,8 +170,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY',
     {
       task: 'CHAT_REPLY',
-      provider: process.env.AI_PROVIDER_CHAT || defaultProvider,
-      modelName: defaultChatModel,
+      provider: 'SumoPod',
+      modelName: 'glm-5.3-flash',
       description: 'Digunakan untuk menghasilkan respon percakapan otomatis kepada customer.',
       maxTokens: 1024,
       temperature: 0.6,
@@ -181,8 +181,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY_DEEP',
     {
       task: 'CHAT_REPLY_DEEP',
-      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'Kenari',
-      modelName: defaultDeepModel,
+      provider: 'SumoPod',
+      modelName: 'deepseek-v4-flash-0731:netra',
       description: 'Digunakan untuk menghasilkan respon percakapan mendalam pada konsultasi klinis multi-gejala / multi-treatment.',
       maxTokens: 1024,
       temperature: 0.5,
@@ -192,9 +192,9 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'MEDICAL_CHECK',
     {
       task: 'MEDICAL_CHECK',
-      provider: process.env.AI_PROVIDER_MEDICAL || defaultProvider,
-      modelName: sanitizeModelForProvider(process.env.AI_MODEL_MEDICAL || defaultChatModel),
-      description: 'Digunakan untuk memverifikasi dan mengevaluasi konteks medis.',
+      provider: 'Internal Engine',
+      modelName: 'Regex/Keywords (Engine 5.2)',
+      description: 'Deterministik Engine (Sesuai PRD Section 5.2 - Non-Switchable)',
       maxTokens: 512,
       temperature: 0.1,
     },
@@ -203,8 +203,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'SUMMARIZATION',
     {
       task: 'SUMMARIZATION',
-      provider: process.env.AI_PROVIDER_SUMMARIZATION || defaultProvider,
-      modelName: sanitizeModelForProvider(process.env.AI_MODEL_SUMMARIZATION || defaultChatModel),
+      provider: 'SumoPod',
+      modelName: 'deepseek-v4-flash-0731:netra',
       description: 'Digunakan untuk merangkum riwayat percakapan panjang.',
       maxTokens: 1024,
       temperature: 0.3,
@@ -214,8 +214,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'PII_SCRUBBING',
     {
       task: 'PII_SCRUBBING',
-      provider: process.env.AI_PROVIDER_PII || defaultProvider,
-      modelName: sanitizeModelForProvider(process.env.AI_MODEL_PII || defaultChatModel),
+      provider: 'SumoPod',
+      modelName: 'deepseek-v4-flash-0731:netra',
       description: 'Digunakan untuk membantu pembersihan nama dan data sensitif dari teks.',
       maxTokens: 512,
       temperature: 0.0,
@@ -225,8 +225,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: 'OpenAI',
-      modelName: 'gpt-4o-mini',
+      provider: 'SumoPod',
+      modelName: 'deepseek-v4-flash-0731:netra',
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer. (TERKUNCI: dilarang fallback ke MiniMax/DeepSeek untuk menjaga P50 1.8s)',
       maxTokens: 500,
       temperature: 0.1,
@@ -241,7 +241,7 @@ export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'An
 // Server utama = SumoPod (5 model resmi). Kenari = cadangan (3 model). DeepSeek Direct = last fallback.
 // KENAPA 3 KINERJA (bukan 1 / bukan 7):
 //  1) FAST_ECONOMICAL  = 95% chat harian (tanya harga/jadwal/bapil ringan) butuh CEPAT+MURAH.
-//     MiniMax-M2.7-highspeed 90% off ($0.03 in / $0.12 out) adalah titik temu termurah & stabil.
+//     glm-5.3-flash 50% off ($0.015 in / $0.25 out) adalah model routing cepat dengan reasoning internal.
 //  2) DEEP_REASONING   = keluhan multi-gejala butuh PENALARAN klinis (elaborasi, empati).
 //     deepseek-v4-flash-0731:netra 80% off adalah varian DeepSeek terpintar di katalog SumoPod.
 //  3) DISCIPLINED_QWEN = kasus rawan format rusak butuh DISIPLIN aturan (anti-sebut harga, anti-Bunda).
@@ -252,8 +252,8 @@ export const AI_PRESET_PROFILES = {
     id: 'FAST_ECONOMICAL' as const,
     name: 'Mode Kilat & Hemat (Rekomendasi Utama)',
     provider: 'SUMOPOD' as const,
-    chatModel: 'MiniMax-M2.7-highspeed',
-    // deepModel = netra (bukan MiniMax): konsultasi multi-gejala butuh penalaran
+    chatModel: 'glm-5.3-flash',
+    // deepModel = netra: konsultasi multi-gejala butuh penalaran
     // DeepSeek tertinggi. Diselaraskan dengan resetToGoldenDefaults agar klik
     // preset "Mode Kilat & Hemat" ≡ "Kembalikan ke Rekomendasi Default".
     deepModel: 'deepseek-v4-flash-0731:netra',
@@ -656,9 +656,9 @@ export class AiModelConfigService {
     // (MiniMax-M2.7-highspeed SumoPod) agar reset selalu kembali ke rekomendasi emas,
     // bukan snapshot env lokal (mis. .env dev yang masih KENARI).
     try {
-      this.updateTaskConfig('CHAT_REPLY', { provider: 'SumoPod', modelName: 'MiniMax-M2.7-highspeed' }, tenantId, { persist: false });
+      this.updateTaskConfig('CHAT_REPLY', { provider: 'SumoPod', modelName: 'glm-5.3-flash' }, tenantId, { persist: false });
       this.updateTaskConfig('CHAT_REPLY_DEEP', { provider: 'SumoPod', modelName: 'deepseek-v4-flash-0731:netra' }, tenantId, { persist: false });
-      this.updateTaskConfig('SUMMARIZATION', { provider: 'SumoPod', modelName: 'MiniMax-M2.7-highspeed' }, tenantId, { persist: false });
+      this.updateTaskConfig('SUMMARIZATION', { provider: 'SumoPod', modelName: 'deepseek-v4-flash-0731:netra' }, tenantId, { persist: false });
     } catch {}
     // Persist reset ke DB sekali (saveConfigsToDbInner sudah upsert ACTIVE_LLM_PROVIDER).
     await this.saveConfigsToDb(tenantId);
