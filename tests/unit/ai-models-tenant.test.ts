@@ -10,28 +10,27 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 describe('AiModelConfigService — tenant-aware registry', () => {
   it('loadConfigsFromDb tenant A tidak menimpa tenant B (registry terpisah)', async () => {
     // Tanpa DB (offline) → loadConfigsFromDb jatuh ke fallback in-memory (clone default).
-    // Default global kini server utama SumoPod (MiniMax-M2.7-highspeed).
+    // Default global kini server utama SumoPod (glm-5.3-flash untuk CHAT_REPLY).
     await AiModelConfigService.loadConfigsFromDb('tenant-A');
     await AiModelConfigService.loadConfigsFromDb('tenant-B');
 
     // Update tenant A ke model SumoPod lain (katalog-native agar tidak di-sanitize)
     const updated = AiModelConfigService.updateTaskConfig(
       'CHAT_REPLY',
-      { modelName: 'glm-5.3-flash', provider: 'SumoPod' },
+      { modelName: 'deepseek-v4-flash-0731:netra', provider: 'SumoPod' },
       'tenant-A'
     );
-    expect(updated.modelName).toBe('glm-5.3-flash');
+    expect(updated.modelName).toBe('deepseek-v4-flash-0731:netra');
 
-    // Tenant B TIDAK berubah — tetap sama dengan snapshot default saat test dimulai
-    // (anti-env-drift: tidak hardcode MiniMax karena .env dev lokal masih KENARI).
+    // Tenant B TIDAK berubah oleh update tenant A — tetap default (glm-5.3-flash)
     const tenantB = AiModelConfigService.getModelConfig('CHAT_REPLY', 'tenant-B');
-    expect(tenantB.modelName).not.toBe('glm-5.3-flash');
+    expect(tenantB.modelName).toBe('glm-5.3-flash');
     const defBefore = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
     expect(tenantB.modelName).toBe(defBefore.modelName);
 
     // Tenant default TIDAK berubah oleh update tenant-A
     const def = AiModelConfigService.getModelConfig('CHAT_REPLY', DEFAULT_TENANT_ID);
-    expect(def.modelName).not.toBe('glm-5.3-flash');
+    expect(def.modelName).toBe('glm-5.3-flash');
   });
 
   it('getAllTaskConfigs per-tenant mengembalikan daftar terpisah', async () => {

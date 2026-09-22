@@ -1223,7 +1223,13 @@ export class StaffReservationService {
           mimeType: 'image/jpeg',
           fileName: `house-${customer.id}.jpg`,
         });
-        housePhotoUrl = saved.hdUrl;
+        // Hemat storage: hapus file HD, hanya simpan thumbnail (~140 KB)
+        if (saved.thumbUrl) {
+          mediaService.deleteFile(saved.hdUrl);
+          housePhotoUrl = saved.thumbUrl;
+        } else {
+          housePhotoUrl = saved.hdUrl;
+        }
       }
 
       const currentPrefs = (customer.preferences as any) || {};

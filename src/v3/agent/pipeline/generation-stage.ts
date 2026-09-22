@@ -10,7 +10,7 @@ import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
 
 export const v3LlmCircuitBreaker = new CircuitBreaker(
   async (url: string, payload: any, headers: any) => {
-    const response = await axios.post(url, payload, { headers, timeout: 15000 });
+    const response = await axios.post(url, payload, { headers, timeout: 25000 });
     return response.data;
   },
   async (url: string, payload: any, headers: any) => {
@@ -165,7 +165,7 @@ export interface RecordCallParams {
 
 export interface TurnTelemetry {
   addUsage: (usage: any) => void;
-  auditUsage: (usage: any, startedAt: number, error?: any) => Promise<void>;
+  auditUsage: (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any) => Promise<void>;
   finishCost: () => Promise<number>;
   recordCall: (params: RecordCallParams) => Promise<void>;
   traceExecution: (params: {
@@ -183,7 +183,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
     turn.totalTokens.completion += c;
     turn.totalTokens.total += p + c;
   };
-  const auditUsage = async (usage: any, startedAt: number, error?: any): Promise<void> => {
+  const auditUsage = async (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any): Promise<void> => {
     try {
       const { auditLlmCall } = await import('../../../utils/llm-audit-buffer');
       auditLlmCall({
@@ -191,8 +191,8 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
         tenant_id: turn.tenantId,
         conversation_id: turn.conversationId,
         task_type: 'V3_AGENT',
-        model_name: turn.selectedModel,
-        baseUrl: turn.baseUrl,
+        model_name: actualModel || turn.actualModelUsed || turn.selectedModel,
+        baseUrl: actualBaseUrl || turn.baseUrl,
         startedAt,
         error: error ?? null,
         usage: usage ?? null,
@@ -202,7 +202,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const calcCostFor = async (prompt: number, completion: number, cachedPrompt = 0): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.selectedModel, prompt, completion, cachedPrompt, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
+      return calculateLlmCost(turn.actualModelUsed || turn.selectedModel, prompt, completion, cachedPrompt, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -210,7 +210,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const finishCost = async (): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, 0, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
+      return calculateLlmCost(turn.actualModelUsed || turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, 0, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -335,7 +335,7 @@ export async function reportTurnError(
       tenant_id: turn.tenantId,
       conversation_id: turn.conversationId,
       task_type: 'V3_AGENT',
-      model_name: turn.selectedModel,
+      model_name: turn.actualModelUsed || turn.selectedModel,
       baseUrl: turn.baseUrl,
       startedAt: turn.turnStartedAt,
       error: { message: err?.message || 'V3_AGENT_ERROR' },
@@ -352,7 +352,7 @@ export async function reportTurnError(
       promptPayload: { model: turn.selectedModel, baseUrl: turn.baseUrl, messages: turn.messages.slice(-2) },
       reasoning: turn.reasoning,
       finalReply: '',
-      modelUsed: turn.selectedModel,
+      modelUsed: turn.actualModelUsed || turn.selectedModel,
       durationMs: Date.now() - turn.turnStartedAt,
       status: 'ERROR',
       errorMessage: safeErrorMessage,
@@ -510,9 +510,11 @@ export class GenerationStage {
       apiKey: turn.apiKey,
       selectedModel: turn.selectedModel,
     }).then(async (data) => {
+      const actualModel = (data as any)?.__actualModel;
+      const actualProvider = (data as any)?.__actualProvider;
+      if (actualModel) turn.actualModelUsed = actualModel;
       tel.addUsage((data as any)?.usage);
-      await tel.auditUsage((data as any)?.usage, firstStartedAt);
-      if ((data as any)?.__actualModel) turn.actualModelUsed = (data as any).__actualModel;
+      await tel.auditUsage((data as any)?.usage, firstStartedAt, actualModel, actualProvider);
       return data;
     });
 
@@ -722,9 +724,11 @@ export class GenerationStage {
       apiKey: turn.apiKey,
       selectedModel: turn.selectedModel,
     }).then(async (data) => {
+      const actualModel = (data as any)?.__actualModel;
+      const actualProvider = (data as any)?.__actualProvider;
+      if (actualModel) turn.actualModelUsed = actualModel;
       tel.addUsage((data as any)?.usage);
-      await tel.auditUsage((data as any)?.usage, secondStartedAt);
-      if ((data as any)?.__actualModel) turn.actualModelUsed = (data as any).__actualModel;
+      await tel.auditUsage((data as any)?.usage, secondStartedAt, actualModel, actualProvider);
       return data;
     });
 

@@ -54,6 +54,8 @@ interface Customer {
 
 interface FollowUpItem {
   id: string;
+  customer_id?: string;
+  variant?: number; // 1..3 — dihitung backend via getRollingVariant (WIB)
   type: string; // NO_PURCHASE | NEXT_TREATMENT | REMINDER_H1 | REVIEW_H1_BABY | REVIEW_H1_MOMS
   stage: number;
   custom_text?: string | null;
@@ -306,53 +308,46 @@ export const FollowUpQueue: React.FC = () => {
     setConfirmReason('');
   };
 
-  // Helper template finder - stage = jadwal, variant = gaya bahasa 1..3
+  // Helpers varian — byte-identik dengan backend (WIB), fallback hanya untuk data lama tanpa field variant
+  const getWibDateKey = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso as string);
+    if (isNaN(d.getTime())) return '';
+    return new Date(d.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  };
+  const fallbackRollingVariant = (fu: FollowUpItem): number => {
+    const cid = fu.customer_id || fu.customer?.id || '';
+    const str = `${cid}-${getWibDateKey(fu.scheduled_at)}`;
+    let h = 0;
+    for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
+    return (Math.abs(h) % 3) + 1;
+  };
+  const effectiveVariant = (fu: FollowUpItem): number => {
+    const v = Number(fu.variant);
+    return v >= 1 && v <= 3 ? v : fallbackRollingVariant(fu);
+  };
+
+  // Helper template finder — DB-driven (tenant-aware). Fallback hanya generik.
   const getTemplateTextForTypeAndVariant = (type: string, stage: number, variant: number = 1) => {
     let templateType = type;
     if (type === 'NO_PURCHASE') templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, stage))}`;
     else if (type === 'NEXT_TREATMENT') templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, stage))}`;
-
     const v = Math.min(3, Math.max(1, variant));
     const found = availableTemplates.find((t) => t.type === templateType && t.variant === v);
     if (found && found.text) return found.text;
-
-    // Fallback default varian berdasarkan variant, bukan stage
-    if (type === 'NO_PURCHASE') {
-      const map: Record<number, Record<number, string>> = {
-        1: { 1: 'Halo Bunda {name}! Bagaimana kabar hari ini? Kemarin sempat menanyakan perihal layanan kami, apakah ada yang bisa kami bantu jelaskan lebih lanjut bund? 😊', 2: 'Pagi Bunda {name}! 🌸 Masih bingung pilih paket treatment yang cocok untuk si kecil? Bidan siap bantu rekomendasikan lho bund, mumpung ada promo bulan ini! 🤗', 3: 'Salam Bunda {name}! ✨ Kalau Bunda butuh informasi tambahan seputar perawatan bayi/ibu hamil, jangan ragu tanya Bidan ya bund. Kami siap datang langsung ke rumah! 🥰' },
-        2: { 1: 'Halo Bunda {name}! Semoga sehat selalu ya bund. Sekedar info, kami siap melayani homecare langsung ke rumah bunda dengan terapis bidan profesional lho. Apakah berkenan kami cek ketersediaan slotnya? 🌸', 2: 'Pagi Bunda {name}! ✨ Bidan cuma mau kasih info nih, promo potongan ongkir & voucher treatment homecare masih berlaku ya bund. Mau dijadwalkan minggu ini? 😊', 3: 'Selamat pagi Bunda {name}! 💖 Momen tumbuh kembang si kecil sangat berharga. Yuk bantu stimulasi & relaksasinya lewat pijat bayi homecare dari bidan bersertifikat! ✨' },
-        3: { 1: 'Halo Bunda {name}! Jika bunda masih membutuhkan layanan baby/mom care, tim kami selalu siap membantu ya bund. Semoga bunda dan si kecil sehat selalu! ❤️', 2: 'Halo Bunda {name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu si kecil atau Bunda butuh treatment homecare, simpan kontak klinik ini ya! 🤗✨', 3: 'Salam hangat Bunda {name}! ✨ Terima kasih sudah pernah menghubungi klinik. Jangan sungkan chat Bidan kapan pun butuh layanan pijat homecare terpercaya ya bund! ❤️' },
-      };
-      if (map[stage]?.[v]) return map[stage][v];
-      if (stage === 1) return 'Halo Bunda {name}! Bagaimana kabar hari ini? Kemarin sempat menanyakan perihal layanan kami, apakah ada yang bisa kami bantu jelaskan lebih lanjut bund? 😊';
-      if (stage === 2) return 'Halo Bunda {name}! Semoga sehat selalu ya bund. Sekedar info, kami siap melayani homecare langsung ke rumah bunda dengan terapis bidan profesional lho. Apakah berkenan kami cek ketersediaan slotnya? 🌸';
-      return 'Halo Bunda {name}! Jika bunda masih membutuhkan layanan baby/mom care, tim kami selalu siap membantu ya bund. Semoga bunda dan si kecil sehat selalu! ❤️';
-    }
-
-    if (type === 'NEXT_TREATMENT') {
-      const map: Record<number, Record<number, string>> = {
-        1: { 1: 'Halo Bunda {name}! Sudah 1 bulan sejak treatment terakhir {babyName}. Bagaimana perkembangannya bund? Terapi/pijat rutin sangat baik untuk relaksasi dan stimulasi tumbuh kembang si kecil lho bund. Apakah ingin reservasi kembali? 😊', 2: 'Selamat pagi Bunda {name}! ✨ Pijat rutin 1 bulan sekali sangat bagus untuk menjaga kelenturan otot & kualitas tidur si kecil lho bund. Mau Bidan jadwalkan minggu ini? 😊', 3: 'Pagi Bunda {name}! 💖 Tidak terasa sudah sebulan lalu ya bund. Yuk amankan slot treatment rutin si kecil atau ibu hamil/nifas minggu ini bersama Bidan! ✨' },
-        2: { 1: 'Halo Bunda {name}! Waktunya perawatan berkala si kecil {babyName} nih bund. Terapis kami siap berkunjung lagi untuk memastikan si kecil tetap bugar dan ceria. Jadwalkan yuk bund? 🌸', 2: 'Pagi Bunda {name}! 🌸 Tubuh Bunda atau si kecil sudah terasa pegal/capek lagi? Yuk manjakan diri & si kecil dengan perawatan homecare bulan ini bund! ✨', 3: 'Salam hangat Bunda {name}! ✨ Bidan siap bantu reservasi pijat rutin bulanan lagi nih bund. Bidan favorit Bunda masih tersedia lho! Mau pilih hari apa bund? 😊' },
-        3: { 1: 'Halo Bunda {name}! Sudah 3 bulan berlalu, jangan lupa jadwalkan kembali sesi perawatan rutin {babyName} ya bund agar tumbuh kembangnya selalu optimal. Kami siap membantu reservasi! 💖', 2: 'Pagi Bunda {name}! ✨ Kalau si kecil butuh pijat tumbuh kembang atau Bunda butuh relaksasi, Bidan selalu siap kapan saja ya bund. Sehat selalu! ❤️', 3: 'Salam Bunda {name}! 💖 Terima kasih telah menjadi pelanggan setia. Simpan kontak ini ya bund, kapan pun butuh treatment homecare kami siap datang! ✨' },
-      };
-      if (map[stage]?.[v]) return map[stage][v];
-      if (stage === 1) return 'Halo Bunda {name}! Sudah 1 bulan sejak treatment terakhir {babyName}. Bagaimana perkembangannya bund? Terapi/pijat rutin sangat baik untuk relaksasi dan stimulasi tumbuh kembang si kecil lho bund. Apakah ingin reservasi kembali? 😊';
-      if (stage === 2) return 'Halo Bunda {name}! Waktunya perawatan berkala si kecil {babyName} nih bund. Terapis kami siap berkunjung lagi untuk memastikan si kecil tetap bugar dan ceria. Jadwalkan yuk bund? 🌸';
-      return 'Halo Bunda {name}! Sudah 3 bulan berlalu, jangan lupa jadwalkan kembali sesi perawatan rutin {babyName} ya bund agar tumbuh kembangnya selalu optimal. Kami siap membantu reservasi! 💖';
-    }
-
     return 'Halo Bunda {name}! Bagaimana kabarnya hari ini? Kami siap melayani bunda dan si kecil.';
   };
 
-  // Open Edit Modal
+  // Open Edit Modal — default varian = varian efektif baris tersebut
   const handleOpenEdit = (item: FollowUpItem) => {
-    const defaultText = getTemplateTextForTypeAndVariant(item.type, item.stage, 1);
+    const ev = effectiveVariant(item);
+    const defaultText = getTemplateTextForTypeAndVariant(item.type, item.stage, ev);
     setEditModal({
       open: true,
       item,
       newDate: item.scheduled_at ? item.scheduled_at.slice(0, 16) : '',
       stage: item.stage || 1,
-      variant: 1,
+      variant: ev,
       customText: item.custom_text || defaultText,
     });
   };
@@ -783,7 +778,7 @@ export const FollowUpQueue: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-2 leading-relaxed">
-                      {fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, ((fu.stage-1)%3)+1)}
+                      {fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))}
                     </p>
                   </div>
 
@@ -989,7 +984,7 @@ export const FollowUpQueue: React.FC = () => {
                           <div className="flex items-center space-x-1.5">
                             <Sparkles size={12} className="text-amber-500 flex-shrink-0" />
                             <span className="font-semibold text-[#111b21]">
-                              {fu.type === 'NO_PURCHASE' ? `Hari ke-${[3,7,14][fu.stage-1]||fu.stage}` : fu.type === 'NEXT_TREATMENT' ? `Bulan ke-${fu.stage}` : `Tahap ${fu.stage}`} {fu.custom_text ? '' : `(Varian ${((fu.stage-1)%3)+1})`}
+                              {fu.type === 'NO_PURCHASE' ? `Hari ke-${[3,7,14][fu.stage-1]||fu.stage}` : fu.type === 'NEXT_TREATMENT' ? `Bulan ke-${fu.stage}` : `Tahap ${fu.stage}`} {fu.custom_text ? '' : `(Varian ${effectiveVariant(fu)})`}
                             </span>
                             {fu.custom_text ? (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 ml-1">
@@ -1001,7 +996,7 @@ export const FollowUpQueue: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-[#667781] truncate max-w-[220px]" title={fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, ((fu.stage-1)%3)+1)}>{(fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, ((fu.stage-1)%3)+1)).slice(0, 48)}...</span>
+                          <span className="text-[11px] text-[#667781] truncate max-w-[220px]" title={fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))}>{(fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))).slice(0, 48)}...</span>
                         </div>
                       </td>
 

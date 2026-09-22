@@ -966,6 +966,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         }
 
+        const { mediaService } = await import('../../services/media.service');
+
         const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
         const targetLatPre = lat !== undefined ? lat : customer.lat;
         const targetLngPre = lng !== undefined ? lng : customer.lng;
@@ -1041,9 +1043,19 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         if (removePhoto) {
+          // Hapus kedua file (HD + thumb) dari disk, bukan cuma null-kan DB
+          const existingUrl = (customer.preferences as any)?.house_photo_url;
+          if (existingUrl) {
+            mediaService.deleteFile(existingUrl);
+            const match = existingUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
+            if (match) {
+              const thumbFile = match[3].replace(/(\.\w+)$/, '_thumb$1');
+              const thumbUrl = `/media/${match[1]}/${match[2]}/${thumbFile}`;
+              mediaService.deleteFile(thumbUrl);
+            }
+          }
           housePhotoUrl = null;
         } else if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
-          const { mediaService } = await import('../../services/media.service');
           const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
           const adminName = (request as any).adminSession?.adminIdentity || 'Admin Klinik';
@@ -1062,7 +1074,13 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             mimeType: 'image/jpeg',
             fileName: `house-${customer.id}.jpg`,
           });
-          housePhotoUrl = saved.hdUrl;
+          // Hemat storage: hapus file HD, hanya simpan thumbnail (~140 KB)
+          if (saved.thumbUrl) {
+            mediaService.deleteFile(saved.hdUrl);
+            housePhotoUrl = saved.thumbUrl;
+          } else {
+            housePhotoUrl = saved.hdUrl;
+          }
         }
 
         const currentPrefs = (customer.preferences as any) || {};

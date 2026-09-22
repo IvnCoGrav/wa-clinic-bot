@@ -99,15 +99,27 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     }
 
     const abs = mediaService.filePathFromRelativeUrl(`/media/${scope}/${tenant}/${file}`);
+    let finalAbs: string = abs || '';
+    let isFallback = false;
     if (!abs || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      return reply.status(404).send({ error: 'Not Found' });
+      const fallbackAbs = mediaService.resolveThumbFallback(`/media/${scope}/${tenant}/${file}`);
+      if (fallbackAbs) {
+        finalAbs = fallbackAbs;
+        isFallback = true;
+      } else {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
     }
 
-    const ext = (path.extname(abs) || '').replace(/^\./, '').toLowerCase();
+    const ext = (path.extname(finalAbs) || '').replace(/^\./, '').toLowerCase();
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Cache-Control', 'public, max-age=86400');
+    if (isFallback) {
+      reply.header('X-Media-Fallback', 'thumbnail');
+      console.log(`[MEDIA FALLBACK] HD→thumb served: /media/${scope}/${tenant}/${file}`);
+    }
     reply.type(MIME_MAP[ext] || 'application/octet-stream');
-    const stream = fs.createReadStream(abs);
+    const stream = fs.createReadStream(finalAbs);
     return reply.send(stream);
   });
 

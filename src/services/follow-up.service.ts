@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES } from '../config/followup-templates';
+import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES, getRollingVariant } from '../config/followup-templates';
 import { typingService } from './typing.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { wabaTemplateService } from './waba-template.service';
@@ -244,6 +244,7 @@ export class FollowUpService {
           where,
           select: {
             id: true,
+            customer_id: true,
             type: true,
             stage: true,
             custom_text: true,
@@ -289,8 +290,12 @@ export class FollowUpService {
         }),
       ]);
 
+      const enriched = (data as any[]).map((item: any) => ({
+        ...item,
+        variant: getRollingVariant(item.customer_id || item.customer?.id || '', item.scheduled_at),
+      }));
       return {
-        data,
+        data: enriched,
         pagination: {
           total,
           page,
@@ -1364,13 +1369,6 @@ export class FollowUpService {
 
       let messageText: string;
 
-      // Rolling variant: hash customer_id + scheduled_at agar setiap customer dapat varian berbeda secara alami
-      const getRollingVariant = (cid: string, scheduledAt?: Date | string): number => {
-        const str = `${cid}-${scheduledAt ? new Date(scheduledAt).toISOString().slice(0, 10) : ''}`;
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
-        return (Math.abs(hash) % 3) + 1;
-      };
       const rollingVariant = getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
 
       // 1. Prioritaskan teks kustom spesifik yang diedit admin untuk customer ini
@@ -1508,13 +1506,6 @@ export class FollowUpService {
   ): Promise<boolean> {
     try {
       const gateway = await resolveGatewayForTenant(tenantId);
-      // Rolling variant untuk WABA agar tidak selalu stage=variant
-      const getRollingVariant = (cid: string, scheduledAt?: Date | string): number => {
-        const str = `${cid}-${scheduledAt ? new Date(scheduledAt).toISOString().slice(0, 10) : ''}`;
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
-        return (Math.abs(hash) % 3) + 1;
-      };
       const variant = fu.variant ? Math.min(3, Math.max(1, fu.variant)) : getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
       const mapping = await wabaTemplateService.getTemplateMapping(tenantId, templateType, variant);
 
