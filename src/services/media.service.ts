@@ -353,7 +353,7 @@ export class MediaService {
           <rect x="0" y="${bannerY}" width="${width}" height="3" fill="#00a884"/>
           <circle cx="18" cy="${bannerY + 20}" r="5" fill="#22c55e" />
           <text x="30" y="${bannerY + 24}" class="title">${latLngText}</text>
-          <text x="${width - 15}" y="${bannerY + 24}" text-anchor="end" class="brand">🌸 ${cleanBrand}</text>
+          <text x="${width - 15}" y="${bannerY + 24}" text-anchor="end" class="brand">${cleanBrand}</text>
           <text x="30" y="${bannerY + 45}" class="sub">${subText}</text>
         </svg>
       `);

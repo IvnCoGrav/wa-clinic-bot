@@ -171,6 +171,8 @@ export class StaffReservationService {
       const whereCondition: any = {
         tenant_id: tenantId,
         booking_date: { gte: startOfDay, lte: endOfDay },
+        status: { notIn: ['cancelled', 'rejected'] },
+        customer: { is_sandbox_test: false },
       };
 
       if (scope !== 'all' || !isSupervisor) {
@@ -393,6 +395,8 @@ export class StaffReservationService {
           tenant_id: tenantId,
           assigned_staff_id: staffId,
           booking_date: { gte: tomorrow, lte: maxEnd },
+          status: { notIn: ['cancelled', 'rejected'] },
+          customer: { is_sandbox_test: false },
         },
         select: {
           id: true,
@@ -574,6 +578,8 @@ export class StaffReservationService {
         where: {
           tenant_id: tenantId,
           assigned_staff_id: staffId,
+          status: { notIn: ['cancelled', 'rejected'] },
+          customer: { is_sandbox_test: false },
           OR: [
             { status: { in: ['completed', 'COMPLETED', 'selesai', 'SELESAI'] } },
             { purchase_occurred_at: { not: null } },
@@ -818,7 +824,12 @@ export class StaffReservationService {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
       }
 
-      const totalPaid = amount ?? reservation.purchase_value ?? 0;
+      // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
+      const deliveryFee = (reservation as any).customer?.ongkir || 0;
+      const totalCollected = amount != null ? amount : ((reservation as any).purchase_value || 0);
+      // Nilai murni layanan yang disimpan di purchase_value agar tidak double-count saat read: totalFee = purchase_value + ongkir
+      const pureTreatmentValue = amount != null ? Math.max(0, totalCollected - deliveryFee) : ((reservation as any).purchase_value || 0);
+      const totalPaid = totalCollected;
       const now = new Date();
 
       // Simpan bukti foto transfer/QRIS jika ada (dikompres max 800px agar
@@ -890,7 +901,7 @@ export class StaffReservationService {
         where: { id: reservationId },
         data: {
           purchase_occurred_at: now,
-          purchase_value: totalPaid,
+          purchase_value: pureTreatmentValue,
           purchase_review_status: purchaseReviewStatus,
           purchase_event_sent_at: purchaseEventSentAt,
           status: 'completed',
@@ -931,7 +942,7 @@ export class StaffReservationService {
         console.warn('[STAFF RESERVATION] Failed to trigger follow-up review on payment:', fuErr.message);
       }
 
-      // Audit log
+      // Audit log — amount = total riil di tangan, pureTreatmentValue tersimpan di purchase_value
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
@@ -941,6 +952,8 @@ export class StaffReservationService {
         payload: {
           paymentMethod,
           amount: totalPaid,
+          pureTreatmentValue,
+          deliveryFee,
           proofUrl,
           notes,
         },
@@ -993,6 +1006,7 @@ export class StaffReservationService {
       const whereCondition: any = {
         tenant_id: tenantId,
         customer_id: conv.customer_id,
+        status: { notIn: ['cancelled', 'rejected'] },
         OR: [
           { booking_date: { gte: startOfDay, lte: endOfDay } },
           { booking_date: { gt: endOfDay, lte: upcomingEnd } },
@@ -1048,11 +1062,25 @@ export class StaffReservationService {
         return { success: false, error: 'Staff terapis yang dituju tidak ditemukan atau tidak aktif.' };
       }
 
-      let oldAssignedStaffId: string | null = null;
-      try {
-        const before = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { assigned_staff_id: true } });
-        oldAssignedStaffId = (before as any)?.assigned_staff_id || null;
-      } catch (_) {}
+      // Validasi status & tenant — jadwal completed/cancelled/rejected tidak boleh didelegasi ulang
+      const currentRes = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { assigned_staff_id: true, status: true, tenant_id: true },
+      });
+      if (!currentRes) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+      if ((currentRes as any).tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
+      }
+      const currentStatus = ((currentRes as any).status || '').toLowerCase();
+      if (['completed', 'cancelled', 'rejected'].includes(currentStatus)) {
+        return {
+          success: false,
+          error: `Jadwal berstatus "${(currentRes as any).status}" tidak dapat didelegasikan ulang.`,
+        };
+      }
+      const oldAssignedStaffId: string | null = (currentRes as any).assigned_staff_id || null;
 
       const updated = await prisma.reservation.update({
         where: { id: reservationId },
@@ -1077,6 +1105,19 @@ export class StaffReservationService {
       } catch (notifErr: any) {
         console.warn('[STAFF RESERVATION] Warning: could not send reassign notification:', notifErr.message);
       }
+
+      // Audit trail mutasi staf — best-effort
+      try {
+        const { auditService } = await import('./audit.service');
+        await auditService.logAdminAction({
+          apiKey: 'STAFF_SESSION',
+          adminIdentity: supervisorStaffId,
+          action: 'STAFF_REASSIGN_TASK',
+          targetId: reservationId,
+          payload: { previousStaffId: oldAssignedStaffId, newStaffId: targetStaffId },
+          tenantId,
+        });
+      } catch (_) {}
 
       return {
         success: true,
@@ -1210,7 +1251,7 @@ export class StaffReservationService {
           const isPreviousCoordEstimated =
             (customer as any).location_source === 'estimated_area' ||
             (customer.preferences as any)?.location_source === 'geocoding' ||
-            !(customer as any).share_location_sent;
+            (customer as any).share_location_sent === false;
           if (diffFromOriginalKm > 1.0 && !isPreviousCoordEstimated) {
             // Selisih > 1km & koordinat lama presisi: JANGAN ubah koordinat utama
             shouldUpdatePrimaryCoords = false;

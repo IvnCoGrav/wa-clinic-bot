@@ -5,6 +5,26 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 117. [Staff Terapis Revisi Audit] Sisa Backfill & Sinkronisasi — TECH DEBT Jujur
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** Revisi fondasional Plan Terapis (filter cancelled/rejected + sandbox, anti double-ongkir, audit reassign, safe notif bypass SW onClick, hapus emoji, cleanExpiredSessions).
+- **Sisa debt yang sengaja tidak dikerjakan plan ini / butuh follow-up:**
+  1. **Backfill historis double-ongkir:** reservasi yang sudah `recordPayment` sebelum fix menyimpan `purchase_value = total` (treatment+ongkir) sehingga `totalFee = purchase_value+ongkir` menggelembung di kartu (170→190rb). Fix ke depan simpan `pure = total-ongkir`; data lama belum di-backfill. Perlu skrip `UPDATE reservations SET purchase_value = purchase_value - (SELECT ongkir FROM customers WHERE id=customer_id) WHERE purchase_occurred_at IS NOT NULL` dengan guard `>0` + audit sample sebelum jalan di live.
+  2. **Divergensi CAPI vs LTV:** CAPI `value = totalCollected` (inc. ongkir), LTV `ltv_cache = Σ pure` (tanpa ongkir) — by design beda 20rb per transaksi berongkir. Dashboard LTV vs report CAPI akan selisih; perlu footnote di FinancialAnalytics bila pertanyaan.
+  3. **Sinkronisasi follow-up H+1:** `recordPayment` idempoten `existingSentReview` guard; `createReservationFollowUps` sudah best-effort, tapi `deliveryFee` drift setelah payment tidak memicu update follow-up template (minor).
+  4. **Test flaky pre-existing (bukan regresi):** `follow-up-inbound-sliding` #11 overdue SKIPPED (processed 1 vs 0) & `production_edge_cases` timeout masih merah — tidak terkait staff patch; monitor `processDueFollowUps` window 48h.
+
+---
+
+## 116. [Staff Notifikasi] Sisa Perbaikan Sistem Notifikasi Terapis — TECH DEBT
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** Perbaikan 5 fase notifikasi (Android Illegal constructor, SSE upcoming/recent, alert tugas baru, Telegram cancel/unassign).
+- **Sisa debt:** (1) `showSafeNotification` kini bypass SW bila `onClick` ada (revisi 2026-09-22) — fallback `new Notification` dalam `try/catch` anti `Illegal constructor`; SW path hanya untuk notif tanpa klik. Monitor `Not supported` di Chrome Android. (2) Polling 20s tetap jalan di background meningkatkan konsumsi baterai/data mobile terapis — pertimbangkan throttling adaptif bila keluhan. (3) `assertConversationOwnedByStaffToday` melebar ke 30 hari upcoming + 48 jam recent (disepakati, audit abuse). (4) Test `staff-auth-and-reservation` diverged landmark **sudah diperbaiki** di revisi ini (`share_location_sent === false` explicit).
+
+---
+
 ## 115. [Staff Terapis] Sisa Hardening Backend — TECH DEBT
 
 - **Status:** open (tech debt, documented), dicatat 2026-09-22.

@@ -218,6 +218,99 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
     return (text || '').replace(/[*_`\[\]]/g, ' ').trim();
   }
 
+  async sendReservationCancelledNotification(
+    reservationId: string,
+    staffId: string,
+    reason?: string
+  ): Promise<{ sent: boolean; reason?: string }> {
+    try {
+      if (!staffId || !reservationId) return { sent: false, reason: 'staffId/reservationId kosong' };
+      const staff = await prisma.staff.findUnique({
+        where: { id: staffId },
+        select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
+      });
+      if (!staff || !staff.telegram_chat_id) {
+        return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi' };
+      }
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: { customer: { include: { children: true } }, children: true },
+      });
+      if (!reservation) return { sent: false, reason: 'Reservasi tidak ditemukan' };
+      const cust: any = reservation.customer;
+      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
+        return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
+      }
+      const addressParts: string[] = [];
+      if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
+      if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
+      if (cust?.kota) addressParts.push(this.escapeMarkdown(cust.kota));
+      const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
+      const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
+      const dateStr = bookingDate
+        ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
+        : 'Tanggal belum ditentukan';
+      const timeStr = bookingDate
+        ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+        : '-';
+      const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
+      const custName = this.escapeMarkdown(cust?.name || 'Bunda');
+      const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
+      const portalUrl = `${baseUrl}/#staff-today`;
+      const reasonLine = reason ? `Alasan: _${this.escapeMarkdown(reason)}_\n` : '';
+      const messageText = `JADWAL KUNJUNGAN DIBATALKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dibatalkan:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\nAlamat: ${addressText}\n${reasonLine}\nCatatan: Anda tidak perlu menuju ke lokasi pasien untuk jadwal ini.\n\n[Buka Portal Terapis](${portalUrl})`;
+      const res = await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
+      return { sent: res.ok, reason: res.description };
+    } catch (err: any) {
+      console.error(`[StaffNotificationService] Failed to send cancelled notification to staff ${staffId}:`, err.message);
+      return { sent: false, reason: err.message };
+    }
+  }
+
+  async sendTaskUnassignedNotification(
+    reservationId: string,
+    oldStaffId: string,
+    newStaffName?: string
+  ): Promise<{ sent: boolean; reason?: string }> {
+    try {
+      if (!oldStaffId || !reservationId) return { sent: false, reason: 'oldStaffId/reservationId kosong' };
+      const staff = await prisma.staff.findUnique({
+        where: { id: oldStaffId },
+        select: { id: true, name: true, telegram_chat_id: true },
+      });
+      if (!staff || !staff.telegram_chat_id) {
+        return { sent: false, reason: 'Staff lama belum menghubungkan Telegram' };
+      }
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: { customer: { select: { name: true, phone: true, is_sandbox_test: true } } },
+      });
+      if (!reservation) return { sent: false, reason: 'Reservasi tidak ditemukan' };
+      const cust: any = reservation.customer;
+      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
+        return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
+      }
+      const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
+      const dateStr = bookingDate
+        ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
+        : 'Tanggal belum ditentukan';
+      const timeStr = bookingDate
+        ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+        : '-';
+      const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
+      const custName = this.escapeMarkdown(cust?.name || 'Bunda');
+      const newStaffLabel = newStaffName ? ` ke *${this.escapeMarkdown(newStaffName)}*` : ' ke rekan terapis lain';
+      const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
+      const portalUrl = `${baseUrl}/#staff-today`;
+      const messageText = `JADWAL DIALIHKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dialihkan${newStaffLabel} oleh supervisor:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\n\nAnda tidak perlu menuju ke lokasi untuk jadwal ini. Terima kasih.\n\n[Buka Portal Terapis](${portalUrl})`;
+      const res = await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
+      return { sent: res.ok, reason: res.description };
+    } catch (err: any) {
+      console.error(`[StaffNotificationService] Failed to send unassigned notification to staff ${oldStaffId}:`, err.message);
+      return { sent: false, reason: err.message };
+    }
+  }
+
   /**
    * Menyusun pesan Markdown Briefing Jadwal Harian Bidan/Terapis
    */

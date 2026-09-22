@@ -1520,9 +1520,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (isBecomingCancelled) {
           try {
             const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.onReservationCancelled(id, DEFAULT_TENANT_ID);
+            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
           } catch (fuErr: any) {
             console.warn('[Admin API] Failed to cancel follow-ups on becoming cancelled:', fuErr.message);
+          }
+          if (existing.assigned_staff_id) {
+            const cancelReason = (body as any)?.cancelReason || (body as any)?.reason || (body as any)?.cancel_reason || undefined;
+            import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
+              staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, cancelReason).catch((e: any) =>
+                console.warn('[Admin API] Failed to send Telegram cancelled notification (edit):', e.message)
+              );
+            }).catch(() => {});
           }
           if (updated.google_calendar_event_id) {
             try {
@@ -1539,6 +1547,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             staffNotificationService.sendReservationAssignmentNotification(id, assignedStaffId).catch((err: any) => {
               console.error('[Admin API] Failed to send Telegram notification to new staff on edit:', err.message);
             });
+            if (existing.assigned_staff_id && existing.assigned_staff_id !== assignedStaffId) {
+              const newStaffName = (updated as any)?.assigned_staff?.name || undefined;
+              staffNotificationService.sendTaskUnassignedNotification(id, existing.assigned_staff_id, newStaffName).catch((err: any) => {
+                console.warn('[Admin API] Failed to send unassigned notification to old staff:', err.message);
+              });
+            }
           } catch (err: any) {
             console.warn('[Admin API] staffNotification import failed:', err.message);
           }
@@ -1697,6 +1711,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             });
           } else if (status === 'cancelled') {
             await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+            if (existing.assigned_staff_id) {
+              const cancelReason = (request.body as any)?.cancelReason || (request.body as any)?.reason || undefined;
+              import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
+                staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, cancelReason).catch((e: any) =>
+                  console.warn('[Admin API] Failed to send Telegram cancelled notification (status patch):', e.message)
+                );
+              }).catch(() => {});
+            }
           }
         } catch (fuErr: any) {
           console.warn('[Admin API] Failed to sync follow-ups on status update:', fuErr.message);
@@ -1999,6 +2021,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
           await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
 
+          if (existing.assigned_staff_id) {
+            import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
+              staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, undefined).catch((e: any) =>
+                console.warn('[Admin API] Failed to send Telegram cancelled (hard delete):', e.message)
+              );
+            }).catch(() => {});
+          }
+
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
@@ -2022,6 +2052,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const { followUpService } = await import('../../services/follow-up.service');
           await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
         } catch (_) {}
+
+        if (existing.assigned_staff_id) {
+          const cancelReason = (request.query as any)?.reason || undefined;
+          import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
+            staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, cancelReason).catch((e: any) =>
+              console.warn('[Admin API] Failed to send Telegram cancelled (soft delete):', e.message)
+            );
+          }).catch(() => {});
+        }
 
         await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
 

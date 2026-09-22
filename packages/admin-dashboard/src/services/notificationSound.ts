@@ -270,35 +270,63 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Kirim notifikasi sistem browser (saat tab diminimalkan / di latar belakang)
+ * Helper aman untuk notifikasi browser - kompatibel Android Chrome & PWA.
  */
+export function showSafeNotification(
+  title: string,
+  options: NotificationOptions & { tag?: string },
+  onClick?: () => void,
+  timeoutMs = 6000
+): void {
+  if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const doFallback = () => {
+    try {
+      const n = new Notification(title, options);
+      if (onClick) n.onclick = () => { try { window.focus(); } catch (_) {} onClick(); try { n.close(); } catch (_) {} };
+      if (timeoutMs > 0) setTimeout(() => { try { n.close(); } catch (_) {} }, timeoutMs);
+    } catch (_) {}
+  };
+  // Jika ada handler klik (buka chat), jangan pakai ServiceWorker showNotification yang menghilangkan onClick
+  if (onClick) {
+    doFallback();
+    return;
+  }
+  if ('serviceWorker' in navigator) {
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) { settled = true; doFallback(); } }, 2500);
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        if (settled) return;
+        clearTimeout(timer);
+        settled = true;
+        const p = (reg as any).showNotification(title, options);
+        if (p && typeof p.catch === 'function') p.catch(() => doFallback());
+      })
+      .catch(() => {
+        if (settled) return;
+        clearTimeout(timer);
+        settled = true;
+        doFallback();
+      });
+    return;
+  }
+  doFallback();
+}
 export function showBrowserNotification(opts: {
   title: string;
   body: string;
   conversationId?: string;
   onClick?: () => void;
 }): void {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
-
-  try {
-    const notification = new Notification(opts.title, {
+  showSafeNotification(
+    opts.title,
+    {
       body: opts.body,
-      icon: '/favicon.ico',
+      icon: '/admin/pwa-192x192.png',
       tag: opts.conversationId || 'live_chat_incoming',
       silent: false,
-    });
-
-    notification.onclick = () => {
-      window.focus();
-      opts.onClick?.();
-      notification.close();
-    };
-
-    setTimeout(() => {
-      try {
-        notification.close();
-      } catch (_) {}
-    }, 6000);
-  } catch (_) {}
+    },
+    opts.onClick,
+    6000
+  );
 }
