@@ -5,6 +5,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 114. [Tool Schema & Location] Sisa PLAN 12 — TECH DEBT
+
+- **Status:** open (tech debt, documented), dicatat 2026-09-22.
+- **Konteks:** PLAN 12 menutup 4 akar forensik (schema string→array, masker kota utama, cool-off ongkir, anti-mutilasi usia).
+- **Sisa debt:** `SaveReservationArgsSchema.children` (`{name,ageMonths}[]`) masih rentan bila LLM mengirim string; `stringArrayPreprocess` hanya untuk array string. Perlu `z.preprocess` serupa bila kasus muncul di log `llm-*.jsonl`. Sesi sandbox `5009556f/0a57576c` sudah hijau—monitoring `llm-*.jsonl` tetap berjalan.
+
+---
+
 ## 113. [Funnel Pacing] Sisa Pacing & Bank DB — TECH DEBT TERSISA PLAN 11
 
 - **Status:** open (tech debt, documented), dicatat 2026-09-22.

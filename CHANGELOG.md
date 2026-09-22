@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-22 — Resilient Tool Schema & Location Routing (PLAN 12 — 4 Akar Forensik)
+
+- **Fase 1 — Defensive Zod Preprocess:** `stringArrayPreprocess` di `tool-schemas.ts:3` (`split /[,;\n]+/`) + `z.preprocess` pada `symptoms` & `additionalTreatments`; GLM `glm-5.3-flash` yang mengirim `symptoms:"anak baru jatuh, susah makan"` kini 100% kebal (validasi sukses → `["anak baru jatuh","susah makan"]`). Test `tool-schemas.test.ts` 6/6 hijau (koma/titik-koma/baris baru).
+- **Fase 2 — Coverage Cities di Masker:** `hasNewLocationEntity` (`tool-masker.ts:53`) tambah cek `getCoverageCities()` (`surabaya,sidoarjo,gresik,sby,sda`) → `"surabaya kak"`/`"ke surabaya berapa"` tidak lagi mask `calculate_delivery`; SOP broad-region di tool (`isBroadRegionQuery`) mengambil alih (minta kelurahan ramah). Fail-open aman karena tool memvalidasi presisi.
+- **Fase 3 — Cool-Off Summarizer:** `conversation-summarizer.ts:184` tambah `hasOngkirOrCoverageEvidence` (ongkir/jarak/transport + kota cakupan via `getCoverageCities`) yang HANYA blok larangan `Menanyakan alamat lagi`; `isLikelyLocationAnswer` JANGAN disentuh (hindari salah klasifikasi ringkasan fokus `:220`).
+- **Fase 4 — Anti-Mutilasi Afirmasi Usia:** `guardrail-pipeline.ts:512` `stripNominalAges` early-return bila `session.childProfile.ageMonths`/`children[].ageMonths` sudah diketahui (state-gated, tanpa regex afirmasi `cocok|sesuai` yang ditolak); `"Usia 3 tahun sangat cocok..."` lestari saat usia diketahui.
+- **Verifikasi:** `npm run build` ✅, `tool-schemas` 6/6 + `guardrail-pipeline` 3/3 hijau, full suite 3143/3176 hijau (5 gagal pre-existing di `staff-auth-and-reservation`/`followUp` — tidak terkait PLAN 12).
+
 #### 2026-09-22 — Perbaikan Sistemik PLAN 11: Anti-Memburu-Buru Funnel Pacing (State-Gated Information Hiding)
 
 - **Fase 1 — State-gated pruning RULE20:** pecah `SCHEDULE_NEG_CONSTRAINTS_TAIL` → `RULE20` (tanya-hari, di-prune saat `!isFunnelCommitted`) + `RULE21` (shareloc/alamat, SELALU ada — anti regresi privasi) di `scheduling.phase.ts:54`, helper tunggal `isFunnelCommitted()` di `phase-resolver.ts:146` (reuse cek kartu/booking/lastCommitment/bookingCommitConfirmed), `prompt-composer.ts:86` information hiding — `RULE20` contoh `jadwalkan di hari apa` hilang total saat EXPLORING (6→5 jadwalkan, RULE20 contoh false) vs byte-identik saat COMMITTED.

@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+const stringArrayPreprocess = (val: unknown): unknown => {
+  if (typeof val === 'string') {
+    return (val as string).split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+  }
+  return val;
+};
+
 export const CalculateDeliveryArgsSchema = z.object({
   locationText: z.string().min(1, 'locationText tidak boleh kosong'),
   streetDetail: z.string().optional(),
@@ -14,7 +21,7 @@ export const GetCatalogArgsSchema = z.object({
   childAgeMonths: z.number().nonnegative().optional(),
   gestationalWeeks: z.number().min(4).max(45).optional(),
   momStage: z.enum(['PREGNANT', 'POSTPARTUM', 'BREASTFEEDING', 'GENERAL']).optional(),
-  symptoms: z.array(z.string()).optional().default([]),
+  symptoms: z.preprocess(stringArrayPreprocess, z.array(z.string()).optional().default([])),
   specificTreatmentName: z.string().optional(),
   inquirePrice: z.boolean().optional().default(false),
   targetPrice: z.number().positive().optional(),
@@ -26,7 +33,7 @@ export const GetCatalogArgsSchema = z.object({
 export const SaveReservationArgsSchema = z.object({
   customerName: z.string().optional(),
   treatmentName: z.string().min(2, 'treatmentName wajib diisi'),
-  additionalTreatments: z.array(z.string()).optional(),
+  additionalTreatments: z.preprocess(stringArrayPreprocess, z.array(z.string()).optional()),
   bookingDate: z.string().min(1, 'bookingDate wajib diisi'),
   bookingTime: z.string().optional(),
   childName: z.string().optional(),
