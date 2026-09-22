@@ -72,7 +72,7 @@ Perawatannya sudah lengkap meliputi:
 
 Bisa juga dikombinasikan dengan terapi hangat *Sinar Moksa* (+*Rp 10.000*) untuk membantu dahak lebih cepat encer.
 
-Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
+Apakah Bunda tertarik untuk mencoba perawatan ini untuk si kecil? 🤗"
 
 Contoh 4 (Customer tanya ketersediaan jadwal "Besok Bisa" / Anti-Afirmasi):
 User: "Selamat malam kak apakah bsk msh ada slot ya ?"
@@ -84,7 +84,7 @@ Assistant: "Iya betul Bunda, untuk paket *Pijat Bayi Ceria (Rileksasi)* saat ini
 
 Perawatan ini sangat cocok untuk membantu si kecil lebih rileks dan tidur lebih nyenyak.
 
-Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
+Apakah Bunda tertarik untuk mencoba perawatan ini? 🤗"
 
 Contoh (Customer tanya durasi pijat bayi — STATEMENT-ONLY, tanpa todong jadwal):
 User: "Untuk pijat bayi biasanya brp menit kak"
@@ -102,7 +102,7 @@ Assistant: "Jika dilihat dari jaraknya kurang lebih 11.4 km ya Bunda. Dari tarif
 
 Jadi untuk *Pijat Bayi Pulih Ceria* (*Rp 70.000*) + ongkir promo (*Rp 15.000*), totalnya menjadi *Rp 85.000* Bunda.
 
-Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗"
+Apakah Bunda tertarik untuk kami bantu jadwalkan perawatannya? 🤗"
 
 Contoh 6 (Customer sebut lokasi PRESISI saja tanpa tanya biaya — jarak & ongkir promo tetap disampaikan):
 User: "Sedati pepe"

@@ -732,11 +732,23 @@ export class GuardrailPipeline {
       if (catalogTool && (catalogTool as any).result?.treatments?.[0]) {
         const top: any = (catalogTool as any).result.treatments[0];
         const isMoms = top.category === 'MOMS';
-        finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
-        console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, timestamp: new Date().toISOString() }));
+        const { isFunnelCommitted } = await import('./phase-resolver');
+        const committed = isFunnelCommitted(session);
+        if (committed) {
+          finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
+        } else {
+          finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nApakah Bunda tertarik untuk mencoba perawatan ini untuk si kecil? 🤗`;
+        }
+        console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, funnelCommitted: committed, timestamp: new Date().toISOString() }));
       } else if (discussedService) {
-        finalReply = `Untuk *${discussedService.name}* ya Bunda 😊\n\n${discussedService.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
-        console.warn(JSON.stringify({ event: 'DISCUSSED_SERVICE_RECOVERY_APPLIED', service: discussedService.name, timestamp: new Date().toISOString() }));
+        const { isFunnelCommitted } = await import('./phase-resolver');
+        const committed = isFunnelCommitted(session);
+        if (committed) {
+          finalReply = `Untuk *${discussedService.name}* ya Bunda 😊\n\n${discussedService.description}\n\nKira-kira rencana mau kami bantu jadwalkan di hari apa ya? 🤗`;
+        } else {
+          finalReply = `Untuk *${discussedService.name}* ya Bunda 😊\n\n${discussedService.description}\n\nApakah Bunda tertarik untuk mencoba perawatan ini? 🤗`;
+        }
+        console.warn(JSON.stringify({ event: 'DISCUSSED_SERVICE_RECOVERY_APPLIED', service: discussedService.name, funnelCommitted: committed, timestamp: new Date().toISOString() }));
       } else if (deliveryTool && (deliveryTool as any).result?.suggestedTemplateReply) {
         // Grounded delivery recovery (sesi 648324): saat draf kosong akibat DSML
         // yang terlucuti tetapi data delivery resmi tersedia, gunakan template
@@ -753,6 +765,48 @@ export class GuardrailPipeline {
         const brand = getBrandIdentity();
         finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
       }
+    }
+
+    // PLAN 11 Fase 3.2 — funnel pacing reprompt: draf menanyakan hari padahal belum committed.
+    // Detektor di OUTPUT level (bukan user intent), koreksi via tulis-ulang penuh (bukan mutilasi/potong kalimat).
+    if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
+      try {
+        const { isFunnelCommitted } = await import('./phase-resolver');
+        if (!isFunnelCommitted(session)) {
+          const lower = finalReply.toLowerCase();
+          const hasScheduleAsk = lower.includes('jadwalkan di hari apa') || lower.includes('hari apa ya') || lower.includes('jadwalkan untuk treatment');
+          if (hasScheduleAsk && input.executeChat) {
+            const correctionNote = `KOREKSI PACING — Customer BELUM menyetujui paket treatment (funnel EXPLORING/CONSIDERING). Draf Anda keliru menanyakan hari/jadwal kunjungan secara prematur. Tulis ulang SELURUH balasan TANPA menanyakan hari/jadwal/tanggal kunjungan; tutup HANYA dengan konfirmasi minat santun atau pertanyaan medis/usia yang relevan. DILARANG menambah contoh kalimat baru.`;
+            const repromptData = await input.executeChat({
+              payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, correctionNote), temperature: 0.3 },
+              tenantId,
+              phone,
+              conversationId,
+              baseUrl,
+              apiKey,
+              selectedModel,
+            });
+            const repromptText = (repromptData?.choices?.[0]?.message?.content || '').trim();
+            if (repromptText) {
+              const stillAsks = repromptText.toLowerCase().includes('jadwalkan di hari apa') || repromptText.toLowerCase().includes('hari apa ya');
+              if (!stillAsks) {
+                console.warn(JSON.stringify({ event: 'FUNNEL_REPROMPT_APPLIED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+                finalReply = repromptText;
+                repromptCount++;
+              } else {
+                // Masih todong → jatuh ke fallback generik (tanpa tanya hari)
+                const { getBrandIdentity } = await import('../../../config/brand');
+                const brand = getBrandIdentity();
+                finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
+                console.warn(JSON.stringify({ event: 'FUNNEL_REPROMPT_STILL_TODONG_FALLBACK', tenantId, conversationId, timestamp: new Date().toISOString() }));
+              }
+            }
+          } else if (hasScheduleAsk && !input.executeChat) {
+            // Tanpa executeChat (test/sim off) → tanpa mutilasi: biarkan, event saja (reprompt butuh LLM)
+            console.warn(JSON.stringify({ event: 'FUNNEL_TODONG_DETECTED_NO_REPROMPT', tenantId, conversationId, timestamp: new Date().toISOString() }));
+          }
+        }
+      } catch {}
     }
 
     // Deterministic Output Normalizer (Rule 1) di gate akhir: trimmer

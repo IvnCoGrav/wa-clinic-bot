@@ -121,6 +121,19 @@ export function buildPhaseDirective(phase: ConversationPhase, session: CustomerG
 }
 
 /**
+ * PLAN 11 — satu kebenaran funnel committed (reuse cek kartu/booking/commit di bucket lain).
+ * True bila customer DIANGGAP sudah menyetujui paket/hari (state-gated pruning).
+ */
+export function isFunnelCommitted(session: CustomerGoalSession): boolean {
+  const hasTreatment = session.selectedTreatment != null || (Array.isArray(session.cartItems) && session.cartItems.length > 0);
+  if (hasTreatment) return true;
+  if (session.booking?.preferredDate != null || session.booking?.reservationId != null) return true;
+  if ((session as any).lastCommitment === 'COMMITTED') return true;
+  if ((session as any).bookingCommitConfirmed === true) return true;
+  return false;
+}
+
+/**
  * Turunan status state-machine dari session (reuse enum existing — tanpa migrasi):
  * lokasi terkonfirmasi → LOCATION_CONFIRMED; cart/treatment terisi → AWAITING_INTEREST;
  * jadwal ditanyakan → RESERVATION_SENT; reservasi tersimpan → COMPLETED.
