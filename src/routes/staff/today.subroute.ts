@@ -507,6 +507,46 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * POST /api/staff/reservations/:id/send-payment-info
+   * Mengirim informasi pembayaran resmi klinik (QRIS & rekening bank)
+   * langsung ke nomor WhatsApp customer secara data-driven.
+   */
+  fastify.post(
+    '/api/staff/reservations/:id/send-payment-info',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor = isStaffSupervisorRole(role);
+      const { id } = request.params;
+
+      const result = await StaffReservationService.sendPaymentInfo({
+        reservationId: id,
+        staffId,
+        tenantId,
+        staffName,
+        isSupervisor,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Informasi pembayaran & QRIS berhasil dikirim ke WhatsApp pasien!',
+        data: result.data,
+      });
+    }
+  );
+
+  /**
    * POST /api/staff/reservations/:id/payment
    * Mencatat penyelesaian pembayaran transaksi homecare oleh terapis di lapangan.
    */

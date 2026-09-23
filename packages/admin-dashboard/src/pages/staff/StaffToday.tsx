@@ -318,6 +318,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
+  const [isSendingPaymentInfo, setIsSendingPaymentInfo] = useState(false);
 
   // Staff Profile Drawer State
   const [showStaffProfileModal, setShowStaffProfileModal] = useState(false);
@@ -1367,6 +1368,58 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       toast(`Gagal: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setCompletingVisitId(null);
+    }
+  };
+
+  // Quick Action: Send Payment Info (QRIS & Bank Accounts) directly to customer WhatsApp
+  const handleSendPaymentInfo = async (task: StaffTask) => {
+    if (!task.conversationId) {
+      toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
+      return;
+    }
+
+    if (!isOnline) {
+      toast('Koneksi internet terputus. Tidak dapat mengirim info pembayaran saat ini.', 'error');
+      return;
+    }
+
+    const patientName = task.customerName || 'Bunda';
+    const isLunas = task.pricing?.paymentStatus === 'LUNAS' || task.status === 'completed';
+
+    const confirmTitle = isLunas ? 'Konfirmasi Tagihan (Status: Lunas)' : 'Kirim Info Pembayaran ke WhatsApp';
+    const confirmMessage = isLunas
+      ? `Pasien ${patientName} tercatat SUDAH LUNAS.\n\nApakah Anda tetap ingin mengirimkan informasi rekening/QRIS ke nomor WhatsApp pasien?`
+      : `Kirim rincian pembayaran, barcode QRIS, dan nomor rekening bank resmi klinik langsung ke nomor WhatsApp ${patientName}?`;
+
+    const confirmed = await confirm({
+      title: confirmTitle,
+      message: confirmMessage,
+      confirmText: isLunas ? 'Tetap Kirim' : 'Ya, Kirim Sekarang',
+      cancelText: 'Batal',
+    });
+
+    if (!confirmed) return;
+
+    setIsSendingPaymentInfo(true);
+    try {
+      const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/send-payment-info`, {
+        method: 'POST',
+      });
+
+      if (res.success) {
+        toast(`✅ Info pembayaran & QRIS berhasil dikirim ke WhatsApp ${patientName}!`, 'success');
+        // Muat ulang pesan percakapan agar langsung muncul di layar chat
+        if (selectedTask?.reservationId === task.reservationId && selectedTask.conversationId) {
+          await fetchMessages(selectedTask.conversationId);
+          scrollToBottom(true);
+        }
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mengirim info pembayaran'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setIsSendingPaymentInfo(false);
     }
   };
 
@@ -3060,11 +3113,34 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 z-10 space-y-2 shrink-0"
                   >
                     {/* Quick Reply Template Chips for Fast Field Messaging */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <div
+                      className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5"
+                      style={{ touchAction: 'pan-x', overscrollBehaviorX: 'contain' }}
+                    >
+                      {/* Action Button: Kirim Pembayaran (QRIS & ATM) */}
+                      <button
+                        type="button"
+                        disabled={isSendingPaymentInfo}
+                        onClick={() => selectedTask && handleSendPaymentInfo(selectedTask)}
+                        className="text-xs font-bold bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border border-[#00a884]/40 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center gap-1.5 disabled:opacity-50 select-none cursor-pointer"
+                        title="Kirim barcode QRIS & daftar rekening bank resmi klinik langsung ke WhatsApp pasien"
+                      >
+                        {isSendingPaymentInfo ? (
+                          <>
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                            <span>Mengirim QRIS...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard size={15} className="text-[#008069]" />
+                            <span>💳 Kirim Pembayaran (QRIS & ATM)</span>
+                          </>
+                        )}
+                      </button>
+
                       {[
                         { label: '🛵 Sedang OTW', text: 'Halo Bunda, saya sudah dalam perjalanan (OTW) menuju ke lokasi Bunda ya 🙏' },
                         { label: '📍 Sudah Sampai', text: 'Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🙏' },
-                        { label: '🙏 Selesai', text: 'Terima kasih banyak Bunda atas kepercayaannya. Treatment hari ini telah selesai 🙏' },
                       ].map((chip, idx) => (
                         <button
                           key={idx}
@@ -3081,7 +3157,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               }, 0);
                             }
                           }}
-                          className="text-xs font-semibold bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 min-h-[38px] px-3.5 py-2 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center"
+                          className="text-xs font-semibold bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center select-none"
                         >
                           {chip.label}
                         </button>
