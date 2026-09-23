@@ -254,6 +254,122 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/settings/payment-info
+   * Mengambil informasi pembayaran klinik (QRIS, rekening bank, instruksi).
+   */
+  fastify.get('/api/admin/settings/payment-info', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { StaffReservationService } = await import('../../services/staff-reservation.service');
+      const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      return reply.status(200).send({
+        success: true,
+        data: paymentInfo,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/payment-info
+   * Memperbarui informasi pembayaran klinik (QRIS image, bank accounts, instruksi).
+   * Menerima upload base64 (imageB64) untuk gambar QRIS, atau URL string (qrisImageUrl).
+   */
+  fastify.put(
+    '/api/admin/settings/payment-info',
+    {
+      bodyLimit: 12 * 1024 * 1024,
+    },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          qrisImageUrl?: string | null;
+          imageB64?: string;
+          mimeType?: string;
+          fileName?: string;
+          bankAccounts?: Array<{ bank: string; accountNumber: string; accountName: string }>;
+          instructions?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { qrisImageUrl, imageB64, mimeType, fileName, bankAccounts, instructions } = request.body || {};
+
+      try {
+        let finalQrisUrl: string | null | undefined = undefined;
+
+        if (imageB64) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId,
+            imageB64: rawB64,
+            mimeType: mimeType || 'image/png',
+            fileName: fileName || 'qris-klinik.png',
+          });
+          finalQrisUrl = saved.hdUrl;
+        } else if (qrisImageUrl !== undefined) {
+          finalQrisUrl = typeof qrisImageUrl === 'string' ? qrisImageUrl.trim() || null : null;
+        }
+
+        // Ambil data settings tenant saat ini
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+
+        const currentSettings = (tenant?.settings as any) || {};
+        const existingPaymentInfo = currentSettings.paymentInfo || {};
+
+        const updatedPaymentInfo = {
+          qrisImageUrl: finalQrisUrl !== undefined
+            ? finalQrisUrl
+            : existingPaymentInfo.qrisImageUrl || null,
+          bankAccounts: Array.isArray(bankAccounts)
+            ? bankAccounts.map((b) => ({
+                bank: String(b.bank || '').trim(),
+                accountNumber: String(b.accountNumber || '').trim(),
+                accountName: String(b.accountName || '').trim(),
+              })).filter((b) => b.bank && b.accountNumber)
+            : existingPaymentInfo.bankAccounts || [],
+          instructions: instructions !== undefined
+            ? (instructions ? String(instructions).trim() : undefined)
+            : existingPaymentInfo.instructions,
+        };
+
+        const updatedSettings = {
+          ...currentSettings,
+          paymentInfo: updatedPaymentInfo,
+        };
+
+        await prisma.tenant.update({
+          where: { id: tenantId },
+          data: { settings: updatedSettings },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_PAYMENT_INFO_SETTINGS',
+          targetId: tenantId,
+          payload: updatedPaymentInfo,
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Informasi pembayaran klinik berhasil diperbarui.',
+          data: updatedPaymentInfo,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/persona
    */
   fastify.get('/api/admin/persona', async (request: FastifyRequest, reply: FastifyReply) => {

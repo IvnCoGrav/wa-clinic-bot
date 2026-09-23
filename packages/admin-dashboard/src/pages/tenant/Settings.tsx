@@ -14,6 +14,7 @@ import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 import { AppearancePanel } from '../../components/settings/AppearancePanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleIntegrationPanel } from '../../components/settings/GoogleIntegrationPanel';
+import { PaymentInfoPanel } from '../../components/settings/PaymentInfoPanel';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
@@ -972,8 +973,12 @@ export const Settings: React.FC = () => {
 
       {/* CATEGORY 4: APP & OPERATIONS */}
       {(activeCategory === 'ALL' || activeCategory === 'APP_OPS') && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left column: Install App + Branch picker */}
+        <div className="space-y-6">
+          {/* Panel Pembayaran & QRIS Klinik */}
+          <PaymentInfoPanel />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left column: Install App + Branch picker */}
           <div className="space-y-6">
             {/* Tampilan & Tema (Light / Dark / System) */}
             <AppearancePanel />
@@ -1241,6 +1246,7 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>
