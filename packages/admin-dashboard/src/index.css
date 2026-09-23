@@ -227,7 +227,7 @@ textarea,
 }
 
 /* Mobile Touch Ergonomics & Typography Baseline Overrides */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   /* Elevate body text readability from 12px (text-xs) to comfortable 13.5px-14px on mobile screens */
   .text-xs {
     font-size: 0.8125rem; /* 13px */
@@ -261,6 +261,11 @@ textarea,
   button:not(.no-touch-min):not(table button):not(.inline-chip):not(.aspect-square):not([class*="w-3"]):not([class*="w-4"]):not([class*="w-5"]):not([class*="w-6"]):not([class*="h-3"]):not([class*="h-4"]):not([class*="h-5"]):not([class*="h-6"]) {
     min-height: 38px;
   }
+}
+
+/* Safe area inset utility for iPhone home indicator */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
 /* Moda Peta Jalan Customer Map: OSM plain grayscale (hanya jalan, tanpa warna), area Sby/Sda */

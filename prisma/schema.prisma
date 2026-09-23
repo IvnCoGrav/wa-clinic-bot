@@ -296,6 +296,8 @@ model Reservation {
   payment_method           String?
   proof_url                String?
   is_repeat_order          Boolean           @default(false)
+  otw_sent_at              DateTime?
+  arrived_at               DateTime?
   series_id                String?
   series                   ReservationSeries? @relation(fields: [series_id], references: [id], onDelete: SetNull)
   session_number           Int?

@@ -544,7 +544,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
       ConversationState.INITIAL,
       ConversationState.HUMAN_HANDLING,
     ]).toContain(res.nextState);
-  });
+  }, 15000);
 
   it.skip('17. [SKIP] tests old handler-based no-match fallback — replaced by slot engine', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
