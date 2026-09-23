@@ -184,6 +184,15 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           name: data.staff.name,
           role: data.staff.role || 'staff',
         });
+
+        // Auto-rebind push notification ke ID staff yang baru login (gesture-approved)
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          import('../services/pushNotification').then(({ subscribeToPushNotifications }) => {
+            subscribeToPushNotifications('STAFF', data.staff.id).catch((pushErr) => {
+              console.warn('[StaffAuth] Auto-rebind push subscription failed:', pushErr);
+            });
+          }).catch(() => {});
+        }
       }
     } catch (err) {
       setStaff(null);

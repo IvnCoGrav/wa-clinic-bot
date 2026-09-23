@@ -279,27 +279,43 @@ export function showSafeNotification(
   timeoutMs = 6000
 ): void {
   if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+  // Deteksi apakah lingkungan browser mengizinkan pemanggilan `new Notification()`
+  // Di iOS Safari / PWA, `new Notification()` adalah illegal constructor dan melempar TypeError
+  const isAppleDevice = typeof navigator !== 'undefined' && /iPad|iPhone|iPod|Macintosh/i.test(navigator.userAgent || '');
+  const canUseConstructor = !isAppleDevice && typeof window.Notification === 'function';
+
   const doFallback = () => {
+    if (!canUseConstructor) return;
     try {
       const n = new Notification(title, options);
-      if (onClick) n.onclick = () => { try { window.focus(); } catch (_) {} onClick(); try { n.close(); } catch (_) {} };
+      if (onClick) {
+        n.onclick = () => {
+          try { window.focus(); } catch (_) {}
+          onClick();
+          try { n.close(); } catch (_) {}
+        };
+      }
       if (timeoutMs > 0) setTimeout(() => { try { n.close(); } catch (_) {} }, timeoutMs);
     } catch (_) {}
   };
-  // Jika ada handler klik (buka chat), jangan pakai ServiceWorker showNotification yang menghilangkan onClick
-  if (onClick) {
-    doFallback();
-    return;
-  }
+
+  // Di browser modern dan iOS WebKit, prioritaskan ServiceWorkerRegistration.showNotification
   if ('serviceWorker' in navigator) {
     let settled = false;
-    const timer = setTimeout(() => { if (!settled) { settled = true; doFallback(); } }, 2500);
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        doFallback();
+      }
+    }, 2500);
+
     navigator.serviceWorker.ready
       .then((reg) => {
         if (settled) return;
         clearTimeout(timer);
         settled = true;
-        const p = (reg as any).showNotification(title, options);
+        const p = reg.showNotification(title, options);
         if (p && typeof p.catch === 'function') p.catch(() => doFallback());
       })
       .catch(() => {
@@ -310,6 +326,7 @@ export function showSafeNotification(
       });
     return;
   }
+
   doFallback();
 }
 export function showBrowserNotification(opts: {
