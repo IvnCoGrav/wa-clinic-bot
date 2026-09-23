@@ -218,33 +218,36 @@ export class WebPushService {
   }
 
   /**
-   * Mengirim Push Notification ke semua perangkat aktif milik tenant.
+   * Mengirim Push Notification ke semua perangkat aktif milik tenant berdasarkan peran tertentu ('ADMIN' | 'STAFF').
    */
-  public async sendPushToTenant(
+  public async sendPushToRole(
     tenantId: string,
-    payload: WebPushPayload,
-    targetUserType?: string
+    role: 'ADMIN' | 'STAFF',
+    payload: WebPushPayload
   ): Promise<{ sent: number; failed: number }> {
     if (!this.vapidKeys) {
       this.initVapid();
     }
 
-    const subscriptions = await this.getSubscriptions(tenantId, targetUserType);
+    const subscriptions = await this.getSubscriptions(tenantId, role);
     if (subscriptions.length === 0) {
-      console.log(`[WEB PUSH] No active push subscriptions found for tenant '${tenantId}'`);
+      console.log(`[WEB PUSH] No active push subscriptions found for role '${role}' in tenant '${tenantId}'`);
       return { sent: 0, failed: 0 };
     }
 
-    console.log(`[WEB PUSH] Dispatching notification to ${subscriptions.length} device(s) for tenant '${tenantId}': "${payload.title}" - "${payload.body}"`);
+    console.log(
+      `[WEB PUSH] Dispatching notification to ${subscriptions.length} device(s) for role '${role}' in tenant '${tenantId}': "${payload.title}" - "${payload.body}"`
+    );
 
     let sent = 0;
     let failed = 0;
 
+    const defaultUrl = role === 'STAFF' ? '/admin/staff/today' : '/admin/live-chat';
     const stringifiedPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      url: payload.url || '/admin/live-chat',
-      tag: payload.tag || 'chat-notification',
+      url: payload.url || defaultUrl,
+      tag: payload.tag || `${role.toLowerCase()}-notification`,
       icon: payload.icon || '/admin/favicon.ico',
       badge: payload.badge || '/admin/favicon.ico',
       image: payload.image,
@@ -285,6 +288,19 @@ export class WebPushService {
     );
 
     return { sent, failed };
+  }
+
+  /**
+   * Mengirim Push Notification ke semua perangkat aktif milik tenant.
+   * Default strictly ke peran 'ADMIN' untuk mencegah kebocoran notifikasi sistem/chat umum ke perangkat staf.
+   */
+  public async sendPushToTenant(
+    tenantId: string,
+    payload: WebPushPayload,
+    targetUserType: string = 'ADMIN'
+  ): Promise<{ sent: number; failed: number }> {
+    const normalizedRole = ((targetUserType || 'ADMIN').toUpperCase() === 'STAFF' ? 'STAFF' : 'ADMIN') as 'ADMIN' | 'STAFF';
+    return this.sendPushToRole(tenantId, normalizedRole, payload);
   }
 
   /**

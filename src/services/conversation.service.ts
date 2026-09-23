@@ -476,7 +476,7 @@ export class ConversationService {
     if (!isSandbox) {
       try {
         const { webPushService } = await import('./web-push.service');
-        void webPushService.sendPushToTenant(tenantId, {
+        void webPushService.sendPushToRole(tenantId, 'ADMIN', {
           title: `🚨 Eskalasi CS: ${customerName}`,
           body: reason || 'Pelanggan membutuhkan penanganan admin',
           url: `/admin/live-chat?conversationId=${conversation.id}`,
