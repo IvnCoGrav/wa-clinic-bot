@@ -13,7 +13,36 @@ interface PaymentInfoData {
   qrisImageUrl: string | null;
   bankAccounts: BankAccount[];
   instructions?: string;
+  customTemplate?: string | null;
 }
+
+const STANDARD_PAYMENT_TEMPLATE = `Halo Bunda {nama_pasien}, berikut informasi pembayaran resmi klinik:
+
+💰 *Total Tagihan:* {total_tagihan}
+_{rincian_biaya}_
+📋 *Layanan:* {daftar_layanan}
+
+🏦 *Transfer Bank Resmi Klinik:*
+{daftar_rekening}
+
+📱 _{keterangan_qris}_
+
+ℹ️ _{petunjuk}_
+
+Mohon konfirmasi atau kirimkan bukti transfer ke sini setelah pembayaran ya Bunda. Terima kasih banyak 🙏
+
+~ {nama_terapis}`;
+
+const TEMPLATE_VARS: Array<{ tag: string; label: string }> = [
+  { tag: '{nama_pasien}', label: 'Nama Pasien' },
+  { tag: '{total_tagihan}', label: 'Total Tagihan' },
+  { tag: '{rincian_biaya}', label: 'Rincian Biaya' },
+  { tag: '{daftar_layanan}', label: 'Daftar Layanan' },
+  { tag: '{daftar_rekening}', label: 'Daftar Rekening' },
+  { tag: '{keterangan_qris}', label: 'Keterangan QRIS' },
+  { tag: '{petunjuk}', label: 'Petunjuk' },
+  { tag: '{nama_terapis}', label: 'Nama Terapis' },
+];
 
 export const PaymentInfoPanel: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
@@ -23,9 +52,11 @@ export const PaymentInfoPanel: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [instructions, setInstructions] = useState<string>('');
+  const [customTemplate, setCustomTemplate] = useState<string>('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateRef = useRef<HTMLTextAreaElement>(null);
 
   const loadPaymentInfo = async () => {
     setLoading(true);
@@ -36,6 +67,7 @@ export const PaymentInfoPanel: React.FC = () => {
         setQrisImageUrl(data.qrisImageUrl || null);
         setBankAccounts(Array.isArray(data.bankAccounts) ? data.bankAccounts : []);
         setInstructions(data.instructions || '');
+        setCustomTemplate(typeof data.customTemplate === 'string' ? data.customTemplate : '');
       }
     } catch (err: any) {
       console.warn('Gagal memuat info pembayaran:', err.message);
@@ -105,6 +137,51 @@ export const PaymentInfoPanel: React.FC = () => {
     setQrisImageUrl(null);
   };
 
+  const insertTemplateVar = (tag: string) => {
+    const el = templateRef.current;
+    if (!el) {
+      setCustomTemplate((prev) => (prev ? `${prev} ${tag}` : tag));
+      return;
+    }
+    const start = el.selectionStart ?? customTemplate.length;
+    const end = el.selectionEnd ?? customTemplate.length;
+    const next = `${customTemplate.slice(0, start)}${tag}${customTemplate.slice(end)}`;
+    setCustomTemplate(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + tag.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  const buildPreview = (tpl: string): string => {
+    if (!tpl.trim()) {
+      let p = STANDARD_PAYMENT_TEMPLATE;
+      p = p.split('{nama_pasien}').join('Bunda Sari');
+      p = p.split('{total_tagihan}').join('Rp 170.000');
+      p = p.split('{rincian_biaya}').join('Treatment: Rp 150.000 + Ongkir: Rp 20.000');
+      p = p.split('{daftar_layanan}').join('Pijat Bayi 60 menit');
+      p = p.split('{daftar_rekening}').join('• BCA: 8877665544 a.n. PT Kala Sejahtera');
+      p = p.split('{keterangan_qris}').join('Barcode QRIS terlampir di atas');
+      p = p.split('{petunjuk}').join(instructions.trim() || 'Mohon cantumkan nama pasien pada berita transfer');
+      p = p.split('{nama_terapis}').join('Bidan Rina');
+      return p;
+    }
+    const vars: Record<string, string> = {
+      '{nama_pasien}': 'Bunda Sari',
+      '{total_tagihan}': 'Rp 170.000',
+      '{rincian_biaya}': 'Treatment: Rp 150.000 + Ongkir: Rp 20.000',
+      '{daftar_layanan}': 'Pijat Bayi 60 menit',
+      '{daftar_rekening}': bankAccounts.length ? bankAccounts.map((a) => `• ${a.bank}: ${a.accountNumber} a.n. ${a.accountName || '-'}`).join('\n') : '• BCA: 8877665544 a.n. PT Kala Sejahtera',
+      '{keterangan_qris}': qrisImageUrl ? 'Barcode QRIS terlampir di atas' : '-',
+      '{petunjuk}': instructions.trim() || '-',
+      '{nama_terapis}': 'Bidan Rina',
+    };
+    let out = tpl;
+    for (const [k, v] of Object.entries(vars)) out = out.split(k).join(v);
+    return out.replace(/\{[a-z_]+\}/gi, '');
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -130,6 +207,7 @@ export const PaymentInfoPanel: React.FC = () => {
       const payload: any = {
         bankAccounts: validAccounts,
         instructions: instructions.trim() || undefined,
+        customTemplate: customTemplate.trim() ? customTemplate : null,
       };
 
       if (imageB64) {
@@ -368,6 +446,62 @@ export const PaymentInfoPanel: React.FC = () => {
           placeholder="Contoh: Harap mencantumkan nama pasien pada berita transfer. Bukti transfer wajib diunggah oleh terapis."
           className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-none shadow-xs"
         />
+      </div>
+
+      {/* SECTION 4: Template Pesan WhatsApp Kustom (data-driven) */}
+      <div className="space-y-3 pt-2 border-t border-[#e9edef]">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+            <span className="text-[#008069]">📝</span>
+            <span>Template Pesan WhatsApp (Kustomisasi Copywriting)</span>
+          </label>
+          <p className="text-[11px] text-[#667781] leading-relaxed">
+            Kosongkan untuk memakai template standar sistem. Gunakan placeholder di bawah — akan diganti otomatis saat kirim ke pasien. Klik chip untuk sisipkan di posisi kursor.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {TEMPLATE_VARS.map((v) => (
+            <button
+              key={v.tag}
+              type="button"
+              onClick={() => insertTemplateVar(v.tag)}
+              className="px-2.5 py-1 rounded-full bg-[#e8f5f2] hover:bg-[#d0ece7] border border-[#c2e7e0] text-[11px] font-semibold text-[#008069] transition active:scale-95"
+              title={`Sisipkan ${v.tag}`}
+            >
+              {v.tag}
+            </button>
+          ))}
+        </div>
+        <textarea
+          ref={templateRef}
+          rows={10}
+          value={customTemplate}
+          onChange={(e) => setCustomTemplate(e.target.value)}
+          placeholder={STANDARD_PAYMENT_TEMPLATE}
+          className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#b0bec5] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-y shadow-xs font-mono leading-relaxed min-h-[180px]"
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setCustomTemplate(STANDARD_PAYMENT_TEMPLATE)}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-xs font-semibold text-[#111b21] shadow-xs active:scale-95 transition"
+          >
+            Muat Template Standar
+          </button>
+          <button
+            type="button"
+            onClick={() => setCustomTemplate('')}
+            className="px-3 py-1.5 rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] border border-[#e9edef] text-xs font-semibold text-[#667781] shadow-xs active:scale-95 transition"
+          >
+            Gunakan Default Sistem
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold text-[#111b21]">Live Preview (simulasi pesan WhatsApp):</p>
+          <pre className="w-full p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-xs text-[#111b21] whitespace-pre-wrap break-words leading-relaxed font-sans max-h-[320px] overflow-auto">
+            {buildPreview(customTemplate)}
+          </pre>
+        </div>
       </div>
 
       {/* Submit Button */}

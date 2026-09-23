@@ -281,7 +281,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     {
       bodyLimit: 12 * 1024 * 1024,
     },
-    async (
+     async (
       request: FastifyRequest<{
         Body: {
           qrisImageUrl?: string | null;
@@ -290,12 +290,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           fileName?: string;
           bankAccounts?: Array<{ bank: string; accountNumber: string; accountName: string }>;
           instructions?: string;
+          customTemplate?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
-      const { qrisImageUrl, imageB64, mimeType, fileName, bankAccounts, instructions } = request.body || {};
+      const { qrisImageUrl, imageB64, mimeType, fileName, bankAccounts, instructions, customTemplate } = request.body || {};
 
       try {
         let finalQrisUrl: string | null | undefined = undefined;
@@ -337,6 +338,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           instructions: instructions !== undefined
             ? (instructions ? String(instructions).trim() : undefined)
             : existingPaymentInfo.instructions,
+          customTemplate: customTemplate !== undefined
+            ? (typeof customTemplate === 'string' && customTemplate.trim() ? customTemplate : null)
+            : (existingPaymentInfo.customTemplate ?? null),
         };
 
         const updatedSettings = {
