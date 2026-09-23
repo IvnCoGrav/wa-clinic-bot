@@ -47,6 +47,8 @@ import {
   Play,
   Volume2,
   WifiOff,
+  Bell,
+  BellRing,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import {
@@ -470,10 +472,48 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
+  const [pushStatus, setPushStatus] = useState<'granted' | 'default' | 'denied' | 'unsupported'>('default');
+  const [pushSyncing, setPushSyncing] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setPushStatus('unsupported');
+    } else {
+      setPushStatus(Notification.permission);
+    }
+  }, []);
+
+  const handleSyncPush = async () => {
+    if (!currentStaff?.id) {
+      toast('Sesi staf belum siap. Coba muat ulang halaman.', 'error');
+      return;
+    }
+    setPushSyncing(true);
+    try {
+      playIncomingMessageSound(true);
+      const res = await subscribeToPushNotifications('STAFF', currentStaff.id);
+      if (res.success) {
+        setPushStatus('granted');
+        toast('✅ Notifikasi perangkat berhasil diaktifkan & disinkronkan!', 'success');
+        showSafeNotification('🔔 Notifikasi Perangkat Aktif', {
+          body: `Perangkat ${currentStaff.name || 'Bidan'} siap menerima notifikasi tugas kunjungan.`,
+          icon: '/admin/pwa-192x192.png',
+          tag: 'push_activated',
+        });
+      } else {
+        toast(`⚠️ ${res.error || 'Gagal mengaktifkan notifikasi. Periksa izin di browser.'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`⚠️ Gagal: ${err.message}`, 'error');
+    } finally {
+      setPushSyncing(false);
+    }
+  };
+
   // Request browser notification permission, unlock audio chime, and load gateway capability
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
+      Notification.requestPermission().then((p) => setPushStatus(p)).catch(() => {});
     }
     const cleanupAudio = initAudioUnlock();
     apiRequest('/api/staff/gateway-capability')
@@ -484,9 +524,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     return cleanupAudio;
   }, []);
 
-  // Daftarkan PWA Web Push Subscription untuk Staff / Terapis
+  // Daftarkan PWA Web Push Subscription untuk Staff / Terapis jika izin sudah granted
   useEffect(() => {
-    if (currentStaff?.id) {
+    if (currentStaff?.id && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       subscribeToPushNotifications('STAFF', currentStaff.id).catch((err) => {
         console.warn('[StaffToday] Web Push auto-subscribe failed:', err);
       });
@@ -1883,6 +1923,31 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 }`}
               />
             </div>
+
+            {/* Notification Status & Activation Button (iOS WebKit User Gesture) */}
+            {pushStatus === 'granted' ? (
+              <button
+                type="button"
+                onClick={handleSyncPush}
+                disabled={pushSyncing}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-semibold border border-emerald-200 transition active:scale-95 shadow-2xs cursor-pointer"
+                title="Notifikasi perangkat aktif. Klik untuk uji coba bunyi & banner."
+              >
+                <Bell size={13} className={pushSyncing ? 'animate-bounce text-emerald-600' : 'text-emerald-600'} />
+                <span className="hidden sm:inline">Notif Aktif</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSyncPush}
+                disabled={pushSyncing}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 transition active:scale-95 animate-pulse shadow-2xs cursor-pointer"
+                title="Klik untuk mengaktifkan notifikasi penugasan di perangkat ini"
+              >
+                <BellRing size={13} className="text-amber-600" />
+                <span>Aktifkan Notif</span>
+              </button>
+            )}
 
             {/* Refresh Tasks Button */}
             <button

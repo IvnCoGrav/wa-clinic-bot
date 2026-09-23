@@ -182,7 +182,7 @@ export class StaffNotificationService {
 
       // 8. Tautan Aman ke Portal Terapis (tanpa mengekspos nomor HP)
       const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-      const portalUrl = `${baseUrl}/#staff-today`;
+      const portalUrl = `${baseUrl}/staff/today`;
 
       // 9. Real-time In-System SSE Broadcast (LiveChatHub)
       try {
@@ -208,14 +208,14 @@ export class StaffNotificationService {
         await webPushService.sendPushToStaff(staff.id, tenantId, {
           title: 'Tugas Kunjungan Baru 💆‍♀️',
           body: `${reservation.treatment_detail || 'Treatment'} untuk ${cust?.name || 'Bunda'} (${dateStr} - ${timeStr} WIB)`,
-          url: '/admin/#staff-today',
+          url: '/admin/staff/today',
           tag: `staff_task_${reservation.id}`,
           icon: '/admin/icon-192.png',
           badge: '/admin/favicon.ico',
           data: {
             reservationId: reservation.id,
             staffId: staff.id,
-            url: '/admin/#staff-today',
+            url: '/admin/staff/today',
           },
         });
       } catch (pushErr: any) {
@@ -317,14 +317,14 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         await webPushService.sendPushToStaff(staff.id, tenantId, {
           title: 'Jadwal Kunjungan Dibatalkan ❌',
           body: `Jadwal ${custName} (${treatmentDetail}) dibatalkan.${reason ? ' Alasan: ' + reason : ''}`,
-          url: '/admin/#staff-today',
+          url: '/admin/staff/today',
           tag: `staff_task_cancel_${reservation.id}`,
           icon: '/admin/icon-192.png',
           badge: '/admin/favicon.ico',
           data: {
             reservationId: reservation.id,
             staffId: staff.id,
-            url: '/admin/#staff-today',
+            url: '/admin/staff/today',
           },
         });
       } catch (pushErr: any) {
@@ -346,7 +346,7 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
           ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
           : '-';
         const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-        const portalUrl = `${baseUrl}/#staff-today`;
+        const portalUrl = `${baseUrl}/staff/today`;
         const reasonLine = reason ? `Alasan: _${this.escapeMarkdown(reason)}_\n` : '';
         const messageText = `JADWAL KUNJUNGAN DIBATALKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dibatalkan:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\nAlamat: ${addressText}\n${reasonLine}\nCatatan: Anda tidak perlu menuju ke lokasi pasien untuk jadwal ini.\n\n[Buka Portal Terapis](${portalUrl})`;
 
@@ -412,7 +412,7 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         await webPushService.sendPushToStaff(oldStaffId, tenantId, {
           title: 'Jadwal Dialihkan 🔄',
           body: `Jadwal kunjungan ${custName} telah dialihkan${newStaffName ? ' ke ' + newStaffName : ''}.`,
-          url: '/admin/#staff-today',
+          url: '/admin/staff/today',
           tag: `staff_task_reassign_${reservation.id}`,
           icon: '/admin/icon-192.png',
           badge: '/admin/favicon.ico',

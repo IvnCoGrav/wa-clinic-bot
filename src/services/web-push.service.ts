@@ -125,7 +125,9 @@ export class WebPushService {
     userAgent?: string;
   }): Promise<StoredSubscription> {
     const tenantId = params.tenantId || DEFAULT_TENANT_ID;
-    const userType = params.userType || 'ADMIN';
+    const rawUserType = (params.userType || 'ADMIN').toUpperCase();
+    const isStaffType = ['STAFF', 'THERAPIST', 'MIDWIFE', 'BIDAN'].includes(rawUserType);
+    const userType = isStaffType ? 'STAFF' : 'ADMIN';
     const subObj: StoredSubscription = {
       id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       tenant_id: tenantId,
@@ -302,7 +304,6 @@ export class WebPushService {
       const list = await prisma.pushSubscription.findMany({
         where: {
           tenant_id: tenantId,
-          user_type: 'STAFF',
           user_id: staffId,
         },
       });
@@ -317,7 +318,6 @@ export class WebPushService {
       for (const sub of this.memorySubscriptions.values()) {
         if (
           sub.tenant_id === tenantId &&
-          sub.user_type === 'STAFF' &&
           sub.user_id === staffId
         ) {
           subscriptions.push(sub);
@@ -340,7 +340,7 @@ export class WebPushService {
     const stringifiedPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      url: payload.url || '/admin/#staff-today',
+      url: payload.url || '/admin/staff/today',
       tag: payload.tag || `staff_task_${staffId}`,
       icon: payload.icon || '/admin/favicon.ico',
       badge: payload.badge || '/admin/favicon.ico',
@@ -425,6 +425,36 @@ export class WebPushService {
       console.warn('[WEB PUSH] Test notification error:', err.message);
       return false;
     }
+  }
+
+  /**
+   * Mengambil pemetaan jumlah perangkat aktif per staffId untuk tenant tertentu.
+   */
+  public async getStaffDeviceCounts(tenantId: string): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {};
+    try {
+      const list = await prisma.pushSubscription.findMany({
+        where: {
+          tenant_id: tenantId,
+          user_id: { not: null },
+        },
+        select: {
+          user_id: true,
+        },
+      });
+      for (const item of list) {
+        if (item.user_id) {
+          counts[item.user_id] = (counts[item.user_id] || 0) + 1;
+        }
+      }
+    } catch {
+      for (const sub of this.memorySubscriptions.values()) {
+        if (sub.tenant_id === tenantId && sub.user_id) {
+          counts[sub.user_id] = (counts[sub.user_id] || 0) + 1;
+        }
+      }
+    }
+    return counts;
   }
 }
 

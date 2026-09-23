@@ -25,6 +25,7 @@ import {
   ListOrdered,
   ArrowUp,
   ArrowDown,
+  Bell,
 } from 'lucide-react';
 import {
   ROLE_LABELS,
@@ -55,6 +56,8 @@ export const StaffManagement: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [activeTab, setActiveTab] = useState<'STAFF' | 'ROLES'>('STAFF');
   const [staffList, setStaffList] = useState<StaffItem[]>([]);
+  const [staffDeviceCounts, setStaffDeviceCounts] = useState<Record<string, number>>({});
+  const [testingPushStaffId, setTestingPushStaffId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter
@@ -97,14 +100,42 @@ export const StaffManagement: React.FC = () => {
   const fetchStaff = async () => {
     setLoading(true);
     try {
-      const res = await apiRequest('/api/admin/staff');
-      if (res.success && Array.isArray(res.data)) {
+      const [res, countsRes] = await Promise.all([
+        apiRequest('/api/admin/staff'),
+        apiRequest('/api/admin/push/staff-device-counts').catch(() => null),
+      ]);
+      if (res?.success && Array.isArray(res.data)) {
         setStaffList(res.data);
+      }
+      if (countsRes?.success && countsRes.counts) {
+        setStaffDeviceCounts(countsRes.counts);
       }
     } catch (err: any) {
       toast(err.message || 'Gagal memuat data staff.', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTestPushStaff = async (staff: StaffItem) => {
+    setTestingPushStaffId(staff.id);
+    toast(`Mengirim notifikasi uji coba ke perangkat ${staff.name}...`, 'info');
+    try {
+      const res = await apiRequest('/api/admin/push/test-staff', {
+        method: 'POST',
+        body: JSON.stringify({ staffId: staff.id }),
+      });
+      if (res?.success) {
+        toast(`✅ Notifikasi uji coba berhasil dikirim ke perangkat ${staff.name}!`, 'success');
+        const countsRes = await apiRequest('/api/admin/push/staff-device-counts').catch(() => null);
+        if (countsRes?.success && countsRes.counts) setStaffDeviceCounts(countsRes.counts);
+      } else {
+        toast(res?.message || `⚠️ Belum ada perangkat terdaftar untuk ${staff.name}.`, 'info');
+      }
+    } catch (err: any) {
+      toast(`⚠️ Gagal: ${err.message}`, 'error');
+    } finally {
+      setTestingPushStaffId(null);
     }
   };
 
@@ -609,20 +640,21 @@ export const StaffManagement: React.FC = () => {
                     <th className="px-5 py-3.5">Nomor WhatsApp</th>
                     <th className="px-5 py-3.5">Peran / Hak Akses</th>
                     <th className="px-5 py-3.5">Notifikasi Telegram</th>
+                    <th className="px-5 py-3.5">Notifikasi Web Push</th>
                     <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9edef]">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
                         <p className="text-xs">Memuat data staff...</p>
                       </td>
                     </tr>
                   ) : filteredStaffList.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
                         <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
                         <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
                         <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
@@ -668,9 +700,33 @@ export const StaffManagement: React.FC = () => {
                           )}
                         </td>
 
+                        {/* Web Push Device Status */}
+                        <td className="px-5 py-3.5">
+                          {(staffDeviceCounts[staff.id] || 0) > 0 ? (
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>{staffDeviceCounts[staff.id]} Perangkat</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] text-[#8696a0] border border-[#e9edef]">
+                              <span>Belum Terdaftar</span>
+                            </span>
+                          )}
+                        </td>
+
                         {/* Actions */}
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end space-x-1">
+                            {/* Test Push Button */}
+                            <button
+                              onClick={() => handleTestPushStaff(staff)}
+                              disabled={testingPushStaffId === staff.id}
+                              className="p-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 transition-colors border border-[#d1d7db] shadow-xs cursor-pointer disabled:opacity-50"
+                              title="Kirim Notifikasi Uji Coba ke Perangkat Staf"
+                            >
+                              <Bell size={13} className={testingPushStaffId === staff.id ? 'animate-bounce' : ''} />
+                            </button>
+
                             {/* Edit Button */}
                             <button
                               onClick={() => handleOpenEdit(staff)}
@@ -738,7 +794,7 @@ export const StaffManagement: React.FC = () => {
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5] text-xs">
-                        <div>
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {staff.telegram_chat_id ? (
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                               <CheckCircle2 size={11} className="text-emerald-600" />
@@ -749,8 +805,27 @@ export const StaffManagement: React.FC = () => {
                               <span>No Telegram</span>
                             </span>
                           )}
+
+                          {(staffDeviceCounts[staff.id] || 0) > 0 ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>{staffDeviceCounts[staff.id]} Web Push</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] text-[#8696a0] border border-[#e9edef]">
+                              <span>No Push</span>
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => handleTestPushStaff(staff)}
+                            disabled={testingPushStaffId === staff.id}
+                            className="p-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 transition-colors border border-[#d1d7db] shadow-xs cursor-pointer disabled:opacity-50"
+                            title="Kirim Notifikasi Uji Coba ke Perangkat Staf"
+                          >
+                            <Bell size={13} className={testingPushStaffId === staff.id ? 'animate-bounce' : ''} />
+                          </button>
                           <button
                             onClick={() => handleOpenEdit(staff)}
                             className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs text-xs font-semibold flex items-center space-x-1 cursor-pointer"

@@ -77,4 +77,79 @@ describe('WebPushService — VAPID Background Push Service', () => {
     const listAfter = await webPushService.getSubscriptions('tenant-test');
     expect(listAfter.some((s) => s.endpoint === deadEndpoint)).toBe(false);
   });
+
+  it('saveSubscription: menormalisasi userType (therapist -> STAFF, super_admin -> ADMIN)', async () => {
+    const ep1 = `https://fcm.googleapis.com/fcm/send/norm1_${Date.now()}`;
+    const ep2 = `https://fcm.googleapis.com/fcm/send/norm2_${Date.now()}`;
+
+    const sub1 = await webPushService.saveSubscription({
+      tenantId: 'tenant-norm',
+      endpoint: ep1,
+      p256dh: 'k1',
+      auth: 'a1',
+      userType: 'therapist',
+      userId: 'staff_abc',
+    });
+    expect(sub1.user_type).toBe('STAFF');
+
+    const sub2 = await webPushService.saveSubscription({
+      tenantId: 'tenant-norm',
+      endpoint: ep2,
+      p256dh: 'k2',
+      auth: 'a2',
+      userType: 'super_admin',
+      userId: 'admin_xyz',
+    });
+    expect(sub2.user_type).toBe('ADMIN');
+  });
+
+  it('sendPushToStaff: menargetkan perangkat berdasarkan user_id (UUID staff)', async () => {
+    const staffId = 'staff_hanifah_123';
+    const ep = `https://web.push.apple.com/test_${Date.now()}`;
+    await webPushService.saveSubscription({
+      tenantId: 'tenant-staff-test',
+      endpoint: ep,
+      p256dh: 'key_apple',
+      auth: 'auth_apple',
+      userType: 'STAFF',
+      userId: staffId,
+    });
+
+    const sendSpy = vi.spyOn(webpush, 'sendNotification').mockResolvedValueOnce({} as any);
+
+    const result = await webPushService.sendPushToStaff(staffId, 'tenant-staff-test', {
+      title: 'Tugas Kunjungan Baru',
+      body: 'Pasien Bunda Sarah',
+    });
+
+    expect(sendSpy).toHaveBeenCalled();
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+  });
+
+  it('getStaffDeviceCounts: mengembalikan jumlah perangkat aktif per staffId', async () => {
+    const staffId = `staff_count_${Date.now()}`;
+    const ep1 = `https://fcm.googleapis.com/fcm/send/c1_${Date.now()}`;
+    const ep2 = `https://fcm.googleapis.com/fcm/send/c2_${Date.now()}`;
+
+    await webPushService.saveSubscription({
+      tenantId: 'tenant-counts',
+      endpoint: ep1,
+      p256dh: 'k1',
+      auth: 'a1',
+      userType: 'STAFF',
+      userId: staffId,
+    });
+    await webPushService.saveSubscription({
+      tenantId: 'tenant-counts',
+      endpoint: ep2,
+      p256dh: 'k2',
+      auth: 'a2',
+      userType: 'STAFF',
+      userId: staffId,
+    });
+
+    const counts = await webPushService.getStaffDeviceCounts('tenant-counts');
+    expect(counts[staffId]).toBe(2);
+  });
 });

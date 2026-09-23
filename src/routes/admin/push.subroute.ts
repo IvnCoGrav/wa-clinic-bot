@@ -128,4 +128,86 @@ export async function pushSubroutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/push/test-staff
+   * Mengirim notifikasi uji coba ke perangkat staff / bidan tertentu.
+   */
+  fastify.post(
+    '/api/admin/push/test-staff',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          staffId: string;
+          tenantId?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { staffId } = request.body || {};
+        if (!staffId) {
+          return reply.status(400).send({ success: false, error: 'staffId wajib disertakan' });
+        }
+
+        const tenantId =
+          request.body?.tenantId ||
+          (request as any).tenantId ||
+          DEFAULT_TENANT_ID;
+
+        // Validasi dan ambil nama staf
+        let staffName = 'Staff';
+        try {
+          const { prisma } = await import('../../db/client');
+          const staff = await prisma.staff.findUnique({
+            where: { id: staffId },
+            select: { id: true, name: true, active: true },
+          });
+          if (staff?.name) staffName = staff.name;
+        } catch {}
+
+        const result = await webPushService.sendPushToStaff(staffId, tenantId, {
+          title: '🔔 Uji Coba Notifikasi Staf',
+          body: `Halo ${staffName}, perangkat Anda terhubung dan siap menerima notifikasi tugas!`,
+          url: '/admin/staff/today',
+          tag: `test-staff-${staffId}`,
+        });
+
+        if (result.sent === 0) {
+          return reply.status(200).send({
+            success: false,
+            reason: 'NO_DEVICES',
+            staffName,
+            sent: 0,
+            failed: result.failed,
+            message: `Belum ada perangkat terdaftar untuk ${staffName}. Minta staf membuka portal jadwal di HP lalu klik tombol 'Aktifkan Notifikasi'.`,
+          });
+        }
+
+        return reply.status(200).send({
+          success: true,
+          staffName,
+          sent: result.sent,
+          failed: result.failed,
+          message: `Notifikasi uji coba berhasil dikirim ke ${result.sent} perangkat ${staffName}.`,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/push/staff-device-counts
+   * Mengambil pemetaan jumlah perangkat aktif per staffId.
+   */
+  fastify.get('/api/admin/push/staff-device-counts', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const counts = await webPushService.getStaffDeviceCounts(tenantId);
+      return reply.status(200).send({ success: true, counts });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
 }
