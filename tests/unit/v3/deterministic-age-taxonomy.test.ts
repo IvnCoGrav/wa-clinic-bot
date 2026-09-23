@@ -24,7 +24,9 @@ describe('Deterministic Age Taxonomy', () => {
     const out = await executeGetCatalog({ category: 'BABY', childAgeMonths: 24, inquirePrice: true });
     expect(out.success).toBe(true);
     expect(out.treatments.length).toBeGreaterThan(0);
-    expect(out.treatments.every((t) => t.category === 'KIDS')).toBe(true);
+    // Fondasional: KIDS pool kini mencakup BUNDLE non-mom (audience anak) data-driven — bukan hanya KIDS strict
+    expect(out.treatments.every((t) => t.category === 'KIDS' || t.category === 'BUNDLE')).toBe(true);
+    expect(out.treatments.some((t) => t.category === 'KIDS')).toBe(true);
   });
 
   it('KIDS 17 bulan dinormalisasi ke BABY (pengganti bridge implisit)', async () => {

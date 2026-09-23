@@ -1,12 +1,8 @@
 import React from 'react';
-import { Cpu, Zap, Calendar, Check, Loader2, Clock } from 'lucide-react';
+import { Zap, Calendar, Check, Loader2, Clock } from 'lucide-react';
 import { ToggleSwitch } from '../common/ToggleSwitch';
 
 interface Props {
-  aiRouterEnabled: boolean;
-  aiRouterShadowMode: boolean;
-  savingAiRouter: boolean;
-  handleToggleAiRouter: (val: 'enabled' | 'shadowMode', next: boolean) => void;
   aiScope: 'NEW_ONLY' | 'ALL';
   aiScopeCutoffAt: string; // format YYYY-MM-DD
   legacyBypassBot: boolean;
@@ -27,10 +23,6 @@ interface Props {
 }
 
 export const AiRouterPanel: React.FC<Props> = ({
-  aiRouterEnabled,
-  aiRouterShadowMode,
-  savingAiRouter,
-  handleToggleAiRouter,
   aiScope,
   aiScopeCutoffAt,
   legacyBypassBot,
@@ -75,58 +67,7 @@ export const AiRouterPanel: React.FC<Props> = ({
 
   return (
     <div className="space-y-6">
-      {/* AI Router Engine Toggle Panel */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-          <Cpu className="text-[#008069]" size={16} />
-          <span>AI Router Engine</span>
-        </h3>
-        <p className="text-xs text-[#667781]">
-          Atur mesin AI Router untuk klasifikasi intent, routing otomatis, dan pencegahan eskalasi manusia yang tidak perlu.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-          {/* Router Activation */}
-          <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#111b21]">Status AI Router</span>
-              <ToggleSwitch
-                checked={aiRouterEnabled}
-                onChange={(next) => handleToggleAiRouter('enabled', next)}
-                loading={savingAiRouter}
-                disabled={savingAiRouter}
-                onLabel="ON (AKTIF)"
-                offLabel="OFF (NONAKTIF)"
-                size="md"
-              />
-            </div>
-            <p className="text-xs text-[#667781] leading-relaxed">
-              Jika aktif, pesan masuk diklasifikasikan oleh AI Router sebelum diarahkan ke state machine.
-            </p>
-          </div>
-
-          {/* AI Output Verifier Activation (QC Guardrail) */}
-          <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#111b21]">AI Output Verifier (QC Guardrail)</span>
-              <ToggleSwitch
-                checked={aiRouterShadowMode}
-                onChange={(next) => handleToggleAiRouter('shadowMode', next)}
-                loading={savingAiRouter}
-                disabled={savingAiRouter}
-                onLabel="QC ON (GUARDRAIL)"
-                offLabel="QC OFF"
-                size="md"
-              />
-            </div>
-            <p className="text-xs text-[#667781] leading-relaxed">
-              Memeriksa draf balasan AI terhadap Ground Truth (kategori usia, SOP klinik, validasi lokasi) sebelum pesan dikirim ke customer.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Rollout Scope Panel */}
+      {/* AI Rollout Scope Panel — dipangkas dari AiRouterPanel: toggle stub router dihapus (V1 retired) */}
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#f0f2f5] pb-3">
           <div className="space-y-0.5">

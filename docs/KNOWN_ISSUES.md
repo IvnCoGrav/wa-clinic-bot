@@ -5,6 +5,73 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 122. [Geocoding Single-Flight & Hesitation Normalizer] Fase 1-5 DONE (2026-09-23)
+
+- **Status:** Fase 1-5 done (2026-09-23), `tests/unit/v3-geocoding-singleflight.test.ts` 18 hijau, subset 57 hijau, `npm run build` hijau.
+- **Akar masalah (audit log `logs/app-2026-09-23.log` + kode):**
+  1. **Re-entry Tier-2 double-LLM (bukan second-pass 216-224):** `geocoding.ts:62-66` fallback breaker `mockGeocodeText` me-re-entry seluruh stack lokal+LLM dengan input identik → LLM 6,4s ("Sidoarjo") + LLM 7,1s ("Sidokare") = 13,5s > `tool-pipeline.ts:260` `TOOL_TIMEOUT 12s` → `V3_TOOL_TIMEOUT_ERROR`, hasil LLM#2 dibuang (padahal presisi Sidokare 15,84km ORS).
+  2. **Tanpa grounding saat timeout:** `tool-pipeline.ts:329-332` hanya `{error}` mentah ke Call 2 → LLM berhalusinasi menutupi kegagalan, memicu artefak ragu "insyaa... eh,".
+  3. **Prompt tabu eksplisit:** `core-persona.layer.ts:125` + `router-direct-reply.layer.ts:70` memuat daftar kata keagamaan — pemicu attention bias pada model reasoning.
+- **Perbaikan fondasional:**
+  1. **Single-flight Tier-2** `geocoding.ts:10-24,72-83,120-122` flag `GOOGLE_CLIENT_REMOVED`, fallback breaker `return {isPrecise:false}` (tanpa LLM), Tier-2 gate `|| GOOGLE_CLIENT_REMOVED`.
+  2. **Pre-geocode specifisitas 0ms** `geocoding.ts:42-64` export `hasResolvableSpecificity()` (street-marker/kelurahan/landmark), hard-gate `mockGeocodeText:694` pakai `hasSpecificKelurahanInText || hasResolvablePoI` sebagai penentu POI vs patokan samar ("dekat pintu masuk tol").
+  3. **Failure grounding via TEMPLATES** `tool-pipeline.ts:6,329-353` + `calculate-delivery.tool.ts:696-704` catch `calculate_delivery` → kontrak `isPrecise:false` + `askKelurahanRetry` + message grounding tanpa nominal (tenant-aware).
+  4. **Persona info-hiding + hesitation normalizer** `core-persona.layer.ts:125` & `router-direct-reply.layer.ts:70` hapus daftar tabu eksplisit → `NETRALITAS PROFESIONAL`; `sanitizer.ts:134-138,372-388` `sanitizeHesitationArtifacts()` (`… eh,` → hapus fragmen) di `cleanOutboundReply`.
+- **Bukti:** `executeCalculateDelivery("sidoarjo kota dekat pintu masuk tol")` → `isPrecise:false` <2000ms tanpa LLM ganda; `geocodeText("banjarmukti residence")` tetap presisi; 6 varian vaga "sidoarjo kota ..." ≤1 LLM; `buildToneNegConstraints()` bersih tabu + `Waalaikumsalam` tetap; hesitation 4 varian tersanitasi.
+- **Sisa debt jujur:**
+  - Single-flight mengorbankan kasus sampling LLM#2 menyelamatkan LLM#1 (mis. Sidokare) — dikembalikan ke SOP minta kelurahan (deterministik, bukan regresi).
+  - `hasResolvableSpecificity` fuzzy threshold 0,80 + flag `GOOGLE_CLIENT_REMOVED` global (bukan per-tenant) — naikkan threshold/turunkan flag bila Google client dipulihkan butuh evaluasi live.
+  - `TEMPLATES` masih code-based (`src/config/persona.ts`), belum DB — migrasi DB di luar scope.
+  - Kausal "Pink Elephant Paradox" belum terbukti eksperimental — normalizer adalah safety-net deterministik, bukan bukti teori.
+
+---
+
+## 121. [ORS Shortest + Anti-Overestimation — Preference & Circuity Cap Final] Fase 1-4 DONE (2026-09-23)
+
+- **Status:** Fase 1-2-3-4 done (2026-09-23), 48 test hijau, `npm run build` hijau, dry-run sync Dyah W verified.
+- **Akar masalah (multi-layer, terverifikasi kode & log):**
+  1. **Tool Contract:** `src/integrations/ors/client.ts:76-81` payload tanpa `preference` → default ORS `fastest` (=`recommended` untuk `driving-car`) memutar via arteri: Waru→Airlangga raw 15.32 km (rasio 1.80× straight 8.50 km) → `×1.10=16.85` (DB) = Tier 5 Rp20.000.
+  2. **State Machine:** `src/services/delivery.service.ts:244-271` ORS & Google langsung `×buffer` tanpa sanity check straight → detour OSM 1.8× lolos ke tier ongkir. Google path sama.
+  3. **Data/Env:** `.env.example` `HAVERSINE_CIRCUITY_FACTOR=1.50` drift vs kode `1.60`; tanpa `ORS_PREFERENCE`/`ORS_MAX_CIRCUITY_RATIO`.
+- **Perbaikan fondasional:**
+  1. **ORS Client** `client.ts:23-49,89-95` tambah `ORS_VALID_PREFERENCES`, `resolveOrsPreference()` whitelist + warn, `preference` di payload (default `shortest`), logika `avoid_features` tidak diubah.
+  2. **DeliveryService** `delivery.service.ts:48-82,244-290` tambah `ORS_MAX_CIRCUITY_RATIO` (env, fallback `HAVERSINE_CIRCUITY_FACTOR`/`1.60`), helper murni `applyCircuityCapToFinalDistance()` cap pada **jarak final setelah buffer** (`straight×ratio`, bukan raw), terapkan ke ORS & Google + warn terstruktur `[DISTANCE CIRCUITY CAP]`.
+  3. **.env.example** `ORS_PREFERENCE=shortest`, `ORS_MAX_CIRCUITY_RATIO=1.60`, `HAVERSINE_CIRCUITY_FACTOR` 1.50→1.60 (selaras kode).
+  4. **Boundary tests** `tests/unit/delivery.test.ts:144-280` `coordsForTarget()` dinamis agar straight≈target (hindari false cap), kontrak `ors-client.test.ts` & `ors-profile-nontol.test.ts` tambah ekspektasi `preference:shortest`, file baru `ors-shortest-routing.test.ts` (7 case) & `delivery-circuity-cap.test.ts` (8 case) adversarial multi-koordinat (Airlangga, KENJERAN/WIYUNG, Google detour, helper).
+  5. **Skrip idempoten** `src/scripts/sync-customer-distance-dyah-w.ts` `--dry-run` default / `--commit`, tenant-aware, `--phone`, resolve via `DeliveryService.calculateDelivery` (shortest+capped), idempoten.
+- **Bukti:** Waru→Airlangga straight 8.50×1.60=13.60 cap; `13.07×1.10=14.38`→capped 13.60 & `15.32×1.10=16.85`→capped 13.60 tetap Tier 4 (Rp15.000 promo, normal 25.000) vs Tier 5 sebelumnya. Dry-run: `16.85→13.60 / 20000→15000`. Tier boundary 5.0-30.01 tetap hijau via coordsForTarget.
+- **Sisa debt jujur:** `ORS_PREFERENCE` global env (bukan per-tenant DB) — diterima sebagai infra routing setara `ORS_PROFILE`; `ORS_MAX_CIRCUITY_RATIO` cap ketat final 1.60 membuat rute normal 14.38 juga ter-cap ke 13.60 (hemat 0.78 km, tier tetap). Jika ingin toleransi 1.76 (raw 1.60×buffer), naikkan `ORS_MAX_CIRCUITY_RATIO` ke 1.76 via env tanpa code change.
+
+---
+
+## 120. [Follow-Up Pasca-Treatment Orphaned — Dekopling REVIEW/NEXT & Backdate] Fase 1-4 DONE (2026-09-23)
+
+- **Status:** Fase 1-2-3-4 done (2026-09-23), pilot-first backfill verified dry-run.
+- **Akar masalah (multi-layer, terverifikasi kode):**
+  1. **Single-point-of-failure coupling:** `follow-up.service.ts:1486` NEXT_TREATMENT hanya lahir saat REVIEW_H1 `SENT`, tapi `processDueFollowUps:1211` + `type notIn:1126` selalu `POSTPONE/skip` REVIEW_H1 → NEXT tidak pernah lahir.
+  2. **Dead-code cron:** `cron.service.ts:252-337` `sendYesterdayReviewsAndScheduleNextFollowups()` tidak pernah dipanggil `runMorningJobs:15-34` → satu-satunya jalur cron NEXT mati total.
+  3. **Tanpa trigger completed:** `reservations.subroute.ts` (`PATCH :id/complete :1239`, `PATCH :id/status :1673`, `PATCH :id edit :1414`) dan `staff-reservation.service.ts:910 recordPayment` tidak pernah menjadwalkan NEXT saat `completed`.
+  4. **Tanpa guard backdate:** `createReservationFollowUps:620` bikin REVIEW tanpa cek `reviewDate <= now` → backdated entry hasilkan row kedaluwarsa.
+  5. **Idempotensi global rapuh:** `createNextTreatmentFollowUps:795` guard `any PENDING/QUEUED → skip all` memblokir 2 stage lain; `scheduledAt` via `setMonth` mentah tanpa WIB & tanpa filter lampau.
+  6. **Skema:** `@@unique([tenant_id, reservation_id, type, stage])` (`schema.prisma:516`) tidak lindungi NEXT karena `reservation_id=NULL` (NULL lolos unique Postgres).
+  7. **Sanitizer:** `name-sanitizer.ts:8` punya `gunung anyar tambak` tapi tidak punya `gunung anyar` → `Bunda Mutia gunung anyar Gubeng` tersisa `Mutia gunung` setelah strip & potong 2 kata.
+- **Perbaikan fondasional Fase 1 (dekopling via deep seam):**
+  1. **Seam terpusat** `reservation-lifecycle.service.ts:167 onReservationCompleted()` (deep module) — panggil `createReservationFollowUps` + `createNextTreatmentFollowUps` + reset V3 episodik; 4 titik `completed` hanya 1 baris panggil seam (admin complete, admin status, admin edit become-completed, staff recordPayment) — anti-spray.
+  2. **Guard backdate** `follow-up.service.ts:673` — `reviewDate <= now → skip REVIEW`; booking masa depan tetap bikin REVIEW PENDING.
+  3. **Per-stage guard** `follow-up.service.ts:773` — helper `computeNextTreatmentAtWib0900` (09:00 WIB = 02:00 UTC), skip `scheduledAt <= now`, cek per-stage `PENDING/QUEUED/SENT`, status baru `PENDING` (bukan `QUEUED`) anti-spam Meta-gate.
+  4. **Dead-code dinetralkan** `cron.service.ts:252-336` — hapus create NEXT di method mati, tandai `@deprecated`.
+  5. **Sanitizer** `name-sanitizer.ts:11` + `gunung anyar` + debt tercatat di sini (Confirmation Gate: DB-driven ditunda, LOC/migrasi besar).
+- **Fase 2 (reconciler):** `follow-up.service.ts:874 reconcileOrphanedCompletedFollowUps()` — filter 90d, tanpa reservasi masa depan, tanpa NEXT PENDING/QUEUED, hormati `hasBypassLabel/isDummyOrTestContact/checkCustomerBypass/blocked/sandbox`, per-stage via `createNextTreatmentFollowUps`; `cron.service.ts:21` wire per-tenant di `runMorningJobs`.
+- **Fase 3 (adversarial):** `tests/unit/follow-up-engine.test.ts:12-15` (backdate H-9 Mutia, stage lampau skip, SENT-aware, WIB+PENDING) + `tests/unit/name-sanitizer-gunung-anyar.test.ts` (5 case Mutia/Devia + adversarial).
+- **Fase 4 (backfill aman):** `src/scripts/backfill-orphaned-followups.ts` — `--dry-run` default, `--commit`, `--tenant`, `--limit`, `--pilot-phones`, hanya `scheduled_at > now` WIB 09:00, PENDING, per-stage SENT-aware. Dry-run produksi: orphaned=124 planned=218 (bukan 160 klaim asal); pilot Devia 6285850166929 → 3 stage masa depan (2026-09-24/10-24/11-24) terverifikasi. D1 pilot-10 → evaluasi → sisa, anti-spam PENDING (bukan QUEUED).
+- **Klaim DB 160/205 LTV 27jt (plan asal): TERKOREKSI via dry-run** → 124 orphaned / 218 rows (90d window). Full 90d window produksi 2026-06-27..2026-09-18.
+- **Sisa debt jujur:**
+  - REVIEW_H1 masih dipostpone permanen (kebijakan klinik) — delegasi keputusan produk terpisah.
+  - Unique-NULL limitation tetap — guard aplikasi per-stage adalah proteksi utama.
+  - District idealnya tabel DB tenant-aware, bukan array hardcode — ditunda via Confirmation Gate.
+
+---
+
 ## 119. [PageView vs Klik CTA — Instrumentation Coverage Gap] RESOLVED (Fase 1-2 atomik 2026-09-23)
 
 - **Status:** resolved (2026-09-23), plan staged-phase Fase 1 (beacon) + Fase 2+3 atomik (query jujur + UI) tereksekusi, 6 test beacon + 3 landing-serving hijau, `npm run build` hijau.
@@ -2500,15 +2567,70 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
 - **Prasyarat bila disetujui:** satu fungsi wiring (verifier menolak/sinyal ambigu → ulang via
   `CHAT_REPLY_DEEP` + `reasoning_effort` high/max) + plumbing effort per task di gateway.
 
-## 109. [Tech Debt] confidenceThreshold + CHAT_REPLY_DEEP + AI_VERIFIER belum dikabel runtime (2026-09-22)
+## 109. [RESOLVED — Housekeeping V1/V2] confidenceThreshold + CHAT_REPLY_DEEP + AI_VERIFIER belum dikabel runtime (2026-09-22)
 
-- **Status:** open (dampak saat ini: tidak ada — fitur opsional yang dorman).
-- **Bukti:** grep `src/`: `getModelConfig('CHAT_REPLY_DEEP'|'AI_VERIFIER')` = 0 pemanggil;
-  `confidenceThreshold` hanya dibaca admin API (alias `confidence_threshold` DB), tidak ada
-  cabang runtime yang memakainya.
-- **Risiko:** admin dapat mengubah threshold/verifier/deep model di dashboard tanpa efek
-  apa pun (ekspektasi palsu). Pertimbangkan: sembunyikan dari UI sampai diimplementasi
-  (lihat #108), atau implementasikan wiring-nya.
+- **Status:** RESOLVED 2026-09-23 (sebagian) pada dekomisioning residu V1/V2 — lihat #123.
+- **Tindakan:** task `AI_VERIFIER` DIHAPUS dari `AiTaskType` + `defaultTaskModelRegistry`
+  (`src/config/ai-models.config.ts`) karena 0 pemanggil runtime. Sisa `CHAT_REPLY_DEEP` +
+  `confidenceThreshold` masih dorman → tetap open di #108/#109-lanjutan bila ingin di-wire.
+
+## 123. [DONE] Dekomisioning Residu Arsitektur V1 (AI Router) & V2 (Slot-Filling/SlateStore) (2026-09-23)
+
+- **Status:** DONE — housekeeping 4 fase (file → kode mati → DB/UI → env/docs).
+- **Yang dihapus (bukti audit read-only sebelum eksekusi):**
+  1. **File:** `FULL1.log`, `scratch_lp.html`, `scratch_root.html`, `test_pv.json`,
+     `implementation_plan.md`, 6 skrip ad-hoc (`scripts/switch-to-minimax.js`,
+     `inspect-mimo.js`, `test-minimax-extractor.js`, `test-mimo-deep.js`,
+     `add-customers-v2.sh`, `add-remaining-v2.sh`), paket `packages/click-catcher/` (9 file, RETIRED).
+  2. **Kode mati:** cabang `sendPricelistImage` unreachable di `machine.ts`; zombie fields
+     `StateHandlerContext`/`StateHandlerResult`; flag Slot-Filling di `feature-flags.ts`;
+     tipe V2 `EngineActionType`/`DecisionResult`/`GroundingPackage` di `types/nlu.ts`;
+     layanan yatim `alert-daemon.service.ts` + `src/utils/searchQueryParser.ts`; `AI_VERIFIER`;
+     stub Google Maps Tier-2 + circuit breaker di `geocoding.ts` (kini murni gazetteer+LLM).
+  3. **DB/UI:** tabel `ai_router_evaluations` DROP via migrasi
+     `20260923000001_drop_ai_router_evaluations` (drift check bersih); `collectAiRouterSummary`
+     + blok `aiRouter` di `system-debug.service.ts`; endpoint stub `GET|PATCH /api/admin/ai-router`
+     + `GET /api/admin/debug/ai-router`; toggle + tab "AI Router" di Admin Dashboard.
+  4. **Env/Docs:** `.env.example` bersih dari `AI_ROUTER_*`/`SLOT_FILLING_*`/`FAST_FAQ_1CALL_ENABLED`/
+     `AI_MODEL_ROUTER`/`ESCALATE_SCHEDULE_IN_INITIAL`/`LLM_TIMEOUT_ROUTER_MS`/`LLM_TIMEOUT_VERIFIER_MS`;
+     `AGENTS.md`/`README.md` bersih dari path basi.
+- **SENGAJA DIPERTAHANKAN (masih dibaca runtime — JANGAN hapus):** `AI_MODEL_NLU`,
+  `NLU_CONFIDENCE_THRESHOLD`, `LLM_TIMEOUT_NLU_MS`, `FAQ_CACHE_TTL_SECONDS`;
+  `getPricelistImageUrl` + kolom `tenants.pricelist_image_url` (dipakai admin settings);
+  parameter `slate?: CustomerSlate` di `few-shot-exemplars.ts` (dipakai di badan fungsi).
+- **Catatan:** `tests/unit/lead-greeting-preservation.test.ts` (Case 3, 2 test) GAGAL
+  pra-ada di HEAD — bukan akibat housekeeping (diverifikasi via stash), ditangani terpisah.
+- **Trade-off diterima:** 3 alarm operasional (`CRITICAL_AI_LOOP`, `NLU_PROVIDER_DEGRADED`,
+  `UNINTENDED_SILENT_DROP`) hilang bersama `alert-daemon.service.ts` yang memang 0 pemanggil
+  runtime; jika alarm ini diinginkan kembali, wire ulang ke `telemetryService` (bukan sekadar
+  memulihkan file).
+
+## 121. [Fondasional BOTH + Broad-City] Sisa env-based & optimasi lanjutan (2026-09-23)
+
+- **Status:** Fase 1-3 DONE (union BOTH tuntas, broad-city consultation-first, kuota vokatif). Sisa debt jujur di bawah.
+- **Yang sudah diperbaiki:**
+  1. `get-catalog.tool.ts:268` + `treatment-catalog.service.ts:1140/1442/1327/1250` + `filterServicesByAudience:1309` → `BOTH` kini union BABY/KIDS/MOMS+BUNDLE data-driven via `resolveServiceAudience` (bukan filter kosong). `getDefaultRelaxationService('BOTH')` union pool.
+  2. `get-catalog.tool.ts:595` anti-brosur BOTH → partisi 1 anak + 1 ibu (bukan slice 2 acak) berbasis skor terapi existing.
+  3. `tool-pipeline.ts:483` partisi gejala BOTH data-driven via skor katalog mom vs child (anti cross-contamination), bukan broadcast ke dua profil.
+  4. `conversation-summarizer.ts:231` + `goal-tracker.ts:452` broad-city coverage-driven via `getCoverageCities()` (single source) — kota-dalam-coverage tanpa treatment → consultation-first (afirmasi jangkauan + tanya kebutuhan perawatan/patokan santai; tanpa todong kelurahan/ongkir). Token-match kata utuh, bukan substring.
+  5. `v3-sanitizer-vocative-quota.test.ts` Turn 6 multi-topik 3x Bunda → ≤1 vokatif terverifikasi via `OutputSanitizer` existing (tanpa file/pass baru).
+- **Sisa debt (Confirmation Gate: butuh infra DB baru):**
+  - Coverage masih env-based (`src/config/coverage.ts:14` `COVERAGE_CITIES` env fallback) — SaaS-ready penuh butuh `TenantCoverage` table per-tenant + migrasi admin UI. Ditunda karena LOC besar + migrasi berisiko (mandat SaaS-readiness).
+  - `getDefaultRelaxationService('BOTH')` masih return single relaks (heuristik pertama); ideal future: return 2 kandidat terpartisi (butuh ubah signature → breaking).
+  - Verdict luar-coverage (malang) masih via `calculate_delivery` tool, bukan penolakan di summarizer — sengaja agar jarak riil tetap otoritas (anti-tebak kota).
+
+## 122. [Dual-Model Isolasi Reasoning & Telemetri] Sisa agregat biaya (2026-09-23)
+
+- **Status:** Fase 1-3 DONE. Fase 4 dibatalkan (gateway single-source `model-fallback.ts:152-158` tetap satu-satunya injektor `reasoning_effort: low`).
+- **Yang sudah diperbaiki:**
+  1. `generation-stage.ts:149/767/789` isolasi reasoning: `turn.generatorReasoning` terpisah, Call 2 `secondReasoning = secondCallReasoning || null` (tanpa fallback `turn.reasoning`). Menu Debug tidak lagi mewarisi reasoning Call 1.
+  2. `generation-stage.ts:170/190` `auditUsage` backward-compat tambah `taskType?` opsional (default `V3_AGENT`), Call 1 `INTENT_CLASSIFICATION` (`:529`) + Call 2 `CHAT_REPLY` (`:745`) dengan `finalCall{1,2}Model` + `finalCall{1,2}BaseUrl` (`turn.routerBaseUrl`/`generatorBaseUrl`).
+  3. `agent-runner.ts:133/137` teruskan `tenantId` ke `getLlmEndpointConfig`, `TurnState:144` tambah `routerBaseUrl/routerApiKey/generatorBaseUrl/generatorApiKey`, `generation-stage.ts:516/732` pakai endpoint per-call (fallback ke `baseUrl` bila kosong).
+  4. Test `tests/v3/dual-model-isolation.test.ts` 3 hijau (reasoning null, task_type per-call, baseUrl per-call). `agent-runner.test.ts` 7 pass, `npm run build` + `admin-dashboard` build 0.
+- **Sisa debt jujur (Confirmation Gate: anti-spaghetti):**
+  - Biaya agregat turn (`finishCost:214` + `calcCostFor:206`) tetap satu model agregat (`actualModelUsed || selectedModel` + `turn.baseUrl` tunggal) — rincian per-call benar di `llm_usage_logs`, agregat per-turn tidak dipecah (butuh refactor signature besar).
+  - `__actualBaseUrl` tidak di-set circuit breaker (`generation-stage.ts:38` hanya `__actualModel/__actualProvider`) → atribusi baseUrl per-call mengandalkan `routerBaseUrl/generatorBaseUrl` config, bukan verifikasi live.
+  - Dashboard `AiEvaluations.tsx:276` render `task_type` mentah tanpa mapping badge 🎰/💬 (badge hidup di `AiModelSettingsPanel`). Tidak butuh migrasi DB (`task_type String` bebas).
 
 ## 110. [Tech Debt] Balasan foto hardcode + daftar frasa booking hafalan (2026-09-22)
 

@@ -228,9 +228,45 @@ export class V3ConversationSummarizer {
       }
       return false;
     };
+    // Fondasional broad-city (Fase 2): kota-dalam-coverage tanpa treatment terpilih → consultation-first
+    const isBroadCoverageCity = (() => {
+      try {
+        const lower = (customerInput || '').toLowerCase();
+        const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+        for (const c of getCoverageCities() || []) {
+          const name = String(c || '').toLowerCase().trim();
+          if (!name) continue;
+          if (tokens.includes(name)) return true;
+          // alias 'sby'/'sda' → treat as surabaya/sidoarjo broad
+          if ((name === 'sby' && tokens.includes('sby')) || (name === 'sda' && tokens.includes('sda'))) return true;
+        }
+      } catch {}
+      return false;
+    })();
+    const broadConsultationFirst = Boolean(userAnsweredLocation && isBroadCoverageCity && !session.selectedTreatment && !(session.cartItems && session.cartItems.length > 0));
+    // Simpan label kota untuk pesan konsultasi (ambil token coverage pertama yang match)
+    const broadCityLabel = (() => {
+      try {
+        const lower = (customerInput || '').toLowerCase();
+        const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+        for (const c of getCoverageCities() || []) {
+          const name = String(c || '').toLowerCase().trim();
+          if (name && tokens.includes(name)) {
+            if (name === 'sby') return 'Surabaya';
+            if (name === 'sda') return 'Sidoarjo';
+            return name.charAt(0).toUpperCase() + name.slice(1);
+          }
+        }
+      } catch {}
+      return 'kota tersebut';
+    })();
+
     let sedangDibahas = 'Bunda mengajukan pertanyaan seputar layanan';
     let yangPerluDijawab = 'Jawab pertanyaan Bunda dengan ramah dan solutif sebagai Bidan Yusi, lalu arahkan ke langkah berikutnya';
-    if (userAnsweredLocation) {
+    if (broadConsultationFirst) {
+      sedangDibahas = `Bunda mengonfirmasi domisili di kota ${broadCityLabel} (wilayah operasional utama kami)`;
+      yangPerluDijawab = `Sambut hangat dan konfirmasikan bahwa area ${broadCityLabel} siap dijangkau tim Bidan kami. Alihkan fokus ke kebutuhan perawatan: tanyakan ramah rencana perawatan untuk si kecil atau Bunda, sambil menanyakan area/patokan daerahnya secara santai.`;
+    } else if (userAnsweredLocation) {
       sedangDibahas = 'Bunda menginfokan daerah tempat tinggal (masih berupa kota/wilayah luas)';
       yangPerluDijawab = 'Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir ke rumah Bunda.';
     } else if (commitReady) {

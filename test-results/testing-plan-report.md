@@ -165,16 +165,7 @@ Untuk area Malang, mohon maaf banget karena jaraknya sudah di luar jangkauan lay
 |---|---|---|---|---|---|
 | 21 | *pre: share-lokasi (koordinat klinik aktual)* · /location -7.34886,112.751677 | Pijat bayi itu manfaatnya apa sih? | Halo Bunda! ✨
 
-Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.
-
-<｜｜DSML｜｜ calls>
-<｜｜DSML｜｜ invoke name="calculate_delivery">
-<｜｜DSML｜｜ parameter name="latitude" string="true">-7.34886</｜｜DSML｜｜ parameter>
-<｜｜DSML｜｜ parameter name="longitude" string="true">112.751677</｜｜DSML｜｜ parameter>
-</｜｜DSML｜｜ invoke>
-</｜｜DSML｜｜ calls><br>· Pijat bayi itu banyak banget manfaatnya Bunda 😊
-
-Selain membantu si kecil tidur lebih nyenyak, pijat juga bisa meredakan kelelahan dan pegalnya, melancarkan sirkulasi darah, serta menstimulasi tumbuh kembang dan motoriknya. Karena si kecil sehat tanpa keluhan, kami sarankan *Pijat Bayi Ceria Newborn* yaa, fokusnya untuk relaksasi dan membantu tubuhnya lebih rileks.<br>· Kalau boleh tahu rumah di daerah mana ya? Biar kami bantu cekkan jangkauan dan ketersediaan jadwal Bidan kami 🤗 | INITIAL | ✅ PASS | mode: LLM asli |
+Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.<br>· Pijat bayi bermanfaat banget Bunda, di antaranya membantu si kecil lebih rileks dan tidur lebih nyenyak, melancarkan sirkulasi darah, meredakan kelelahan, serta menstimulasi tumbuh kembang dan bonding si kecil dengan Bunda 🤍<br>· Biasanya perawatan ini ditangani langsung oleh Bidan kami dengan sentuhan lembut dan aman untuk bayi. Apakah saat ini si kecil ada keluhan tertentu, atau untuk pijat sehat relaksasi saja ya Bunda? 😊 | INITIAL | ✅ PASS | mode: LLM asli |
 | 22 | *pre: share-lokasi (koordinat klinik aktual)* · /location -7.34886,112.751677 | Ada treatment buat ibu hamil ga? | Halo Bunda! ✨
 
 Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.

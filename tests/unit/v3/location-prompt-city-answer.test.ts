@@ -30,8 +30,8 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
   });
 
   describe('conversation-summarizer (V3ConversationSummarizer)', () => {
-    it('customer jawab kota luas ("surabaya") → TIDAK ada larangan cool-off, fokus minta kelurahan', () => {
-      const session = { ...baseSession, location: null };
+    it('customer jawab kota luas ("surabaya") tanpa treatment → consultation-first (Fase 2)', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
       const history = [
         ...historyAskedLocation,
         { role: 'user', content: 'surabaya' },
@@ -39,15 +39,15 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
 
       const summary = V3ConversationSummarizer.summarize(session, 'surabaya', { history });
 
-      // TIDAK boleh ada larangan "JANGAN menanyakan alamat/kelurahan lagi"
       expect(summary).not.toContain('JANGAN menanyakan alamat/kelurahan rumah Bunda lagi');
-      // Fokus harus minta kelurahan/kecamatan
-      expect(summary).toContain('Bunda menginfokan daerah tempat tinggal (masih berupa kota/wilayah luas)');
-      expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+      // Fondasional: kota-dalam-coverage tanpa treatment → consultation-first, bukan todong kelurahan/ongkir
+      expect(summary).toContain('wilayah operasional utama');
+      expect(summary).toContain('Sambut hangat dan konfirmasikan bahwa area Surabaya siap dijangkau');
+      expect(summary).not.toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir');
     });
 
-    it('customer jawab "surabaya utara" → TIDAK ada larangan cool-off, fokus minta kelurahan', () => {
-      const session = { ...baseSession, location: null };
+    it('customer jawab "surabaya utara" tanpa treatment → consultation-first', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
       const history = [
         ...historyAskedLocation,
         { role: 'user', content: 'surabaya utara' },
@@ -56,12 +56,12 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
       const summary = V3ConversationSummarizer.summarize(session, 'surabaya utara', { history });
 
       expect(summary).not.toContain('JANGAN menanyakan alamat/kelurahan rumah Bunda lagi');
-      expect(summary).toContain('Bunda menginfokan daerah tempat tinggal');
-      expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+      expect(summary).toContain('wilayah operasional utama');
+      expect(summary).not.toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir');
     });
 
-    it('customer jawab "sidoarjo" → TIDAK ada larangan cool-off, fokus minta kelurahan', () => {
-      const session = { ...baseSession, location: null };
+    it('customer jawab "sidoarjo" tanpa treatment → consultation-first', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
       const history = [
         ...historyAskedLocation,
         { role: 'user', content: 'sidoarjo' },
@@ -70,12 +70,12 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
       const summary = V3ConversationSummarizer.summarize(session, 'sidoarjo', { history });
 
       expect(summary).not.toContain('JANGAN menanyakan alamat/kelurahan rumah Bunda lagi');
-      expect(summary).toContain('Bunda menginfokan daerah tempat tinggal');
-      expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+      expect(summary).toContain('wilayah operasional utama');
+      expect(summary).not.toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir');
     });
 
-    it('customer jawab "gresik" → TIDAK ada larangan cool-off, fokus minta kelurahan', () => {
-      const session = { ...baseSession, location: null };
+    it('customer jawab "gresik" tanpa treatment → consultation-first', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
       const history = [
         ...historyAskedLocation,
         { role: 'user', content: 'gresik' },
@@ -84,8 +84,19 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
       const summary = V3ConversationSummarizer.summarize(session, 'gresik', { history });
 
       expect(summary).not.toContain('JANGAN menanyakan alamat/kelurahan rumah Bunda lagi');
-      expect(summary).toContain('Bunda menginfokan daerah tempat tinggal');
+      expect(summary).toContain('wilayah operasional utama');
+      expect(summary).not.toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya dengan ramah agar kami bisa bantu cekkan jangkauan Bidan dan ongkir');
+    });
+
+    it('customer jawab kota luas dengan treatment sudah dipilih → tetap jalur kelurahan/ongkir (bukan consultation-first)', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: 'Pijat Bayi Pulih Ceria', cartItems: [{ name: 'Pijat Bayi Pulih Ceria', price: 75000 }] as any[] };
+      const history = [
+        ...historyAskedLocation,
+        { role: 'user', content: 'surabaya' },
+      ];
+      const summary = V3ConversationSummarizer.summarize(session, 'surabaya', { history });
       expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+      expect(summary).not.toContain('wilayah operasional utama');
     });
 
     it('customer mengabaikan lokasi dan bertanya bapil ("yg untuk batuk pilek apa") → larangan cool-off TETAP AKTIF', () => {
@@ -125,16 +136,23 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
   });
 
   describe('goal-tracker (formatGoalSessionForPrompt)', () => {
-    it('customer jawab kota luas ("surabaya") → TIDAK ada instruksi cool-off di prompt goal-tracker', () => {
-      const session = { ...baseSession, location: null };
+    it('customer jawab kota luas ("surabaya") tanpa treatment → status Area Terjangkau (consultation-first)', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
       const history = historyAskedLocation;
 
-      const promptText = GoalTracker.formatGoalSessionForPrompt(session, { history, incomingText: 'surabaya' });
+      const promptText = GoalTracker.formatGoalSessionForPrompt(session as any, { history, incomingText: 'surabaya' });
 
-      // TIDAK boleh ada "Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi"
       expect(promptText).not.toContain('Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi');
-      // Harus ada instruksi normal minta kelurahan
-      expect(promptText).toContain('Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)');
+      expect(promptText).toContain('Area Terjangkau');
+      expect(promptText).not.toContain('Perlu ditanyakan kelurahan/kecamatannya');
+    });
+
+    it('customer jawab kota luas dengan treatment sudah dipilih → tetap minta kelurahan (bukan consultation-first)', () => {
+      const session = { ...baseSession, location: null, selectedTreatment: 'Pijat Bayi Pulih Ceria', cartItems: [{ name: 'Pijat Bayi Pulih Ceria', price: 75000 }] as any[] };
+      const history = historyAskedLocation;
+      const promptText = GoalTracker.formatGoalSessionForPrompt(session as any, { history, incomingText: 'surabaya' });
+      expect(promptText).toContain('Perlu ditanyakan kelurahan/kecamatannya');
+      expect(promptText).not.toContain('Area Terjangkau');
     });
 
     it('customer mengabaikan lokasi dan bertanya bapil → instruksi cool-off TETAP AKTIF di goal-tracker', () => {
@@ -222,17 +240,21 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
     ];
 
     for (const input of broadAreaInputs) {
-      it(`input "${input}" (gagal resolve kelurahan) → cool-off TIDAK aktif, fokus minta kelurahan`, () => {
-        const session = { ...baseSession, location: null };
+      it(`input "${input}" (gagal resolve kelurahan) → cool-off TIDAK aktif, fokus sesuai mode`, () => {
+        const session = { ...baseSession, location: null, selectedTreatment: null, cartItems: [] as any[] };
         const history = historyAskedLocation;
 
         const summary = V3ConversationSummarizer.summarize(session, input, { history });
 
-        // Cool-off TIDAK aktif karena input adalah jawaban lokasi (meski belum presisi kelurahan)
         expect(summary).not.toContain('JANGAN menanyakan alamat/kelurahan rumah Bunda lagi');
-        // Fokus minta kelurahan/kecamatan spesifik
-        expect(summary).toContain('Bunda menginfokan daerah tempat tinggal');
-        expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+        const isCoverageCity = ['surabaya','sidoarjo','gresik'].some((c) => input.toLowerCase().split(/[^a-z0-9]+/).includes(c));
+        if (isCoverageCity) {
+          // Kota-dalam-coverage tanpa treatment → consultation-first
+          expect(summary).toContain('wilayah operasional utama');
+        } else {
+          expect(summary).toContain('Bunda menginfokan daerah tempat tinggal');
+          expect(summary).toContain('Tanyakan nama kelurahan atau kecamatan spesifiknya');
+        }
       });
     }
   });

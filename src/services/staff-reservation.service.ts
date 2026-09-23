@@ -932,24 +932,25 @@ export class StaffReservationService {
       } catch (ltvErr: any) {
         console.warn('[STAFF RESERVATION] Failed to recalculate customer LTV on payment:', ltvErr.message);
       }
-      // Picu follow-up otomatis review H+1 — idempoten via findFirst PENDING/QUEUED, gagal diam (best-effort)
-      // Guard tambahan: lewati bila review SENT sudah ada untuk reservasi ini (hindari duplikat pasca re-record)
+      // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT (guard backdate + per-stage WIB) + reset V3
       try {
-        const { followUpService } = await import('./follow-up.service');
-        const existingSentReview = await (prisma as any).followUp?.findFirst?.({
-          where: { reservation_id: reservationId, status: 'SENT' },
-        });
-        if (!existingSentReview && reservation.booking_date) {
-          await followUpService.createReservationFollowUps({
-            reservationId: reservation.id,
-            customerId: reservation.customer_id,
-            bookingDate: reservation.booking_date,
-            treatmentCategory: reservation.treatment_category,
-            tenantId,
+        const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
+        if (reservation.booking_date) {
+          const existingSentReview = await (prisma as any).followUp?.findFirst?.({
+            where: { reservation_id: reservationId, status: 'SENT' },
           });
+          if (!existingSentReview) {
+            await reservationLifecycleService.onReservationCompleted({
+              customerId: reservation.customer_id,
+              reservationId: reservation.id,
+              bookingDate: reservation.booking_date,
+              treatmentCategory: reservation.treatment_category,
+              tenantId,
+            });
+          }
         }
       } catch (fuErr: any) {
-        console.warn('[STAFF RESERVATION] Failed to trigger follow-up review on payment:', fuErr.message);
+        console.warn('[STAFF RESERVATION] Failed to trigger follow-up on payment:', fuErr.message);
       }
 
       // Audit log — amount = total riil di tangan, pureTreatmentValue tersimpan di purchase_value

@@ -699,7 +699,11 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       success: false,
       isPrecise: false,
       isOutOfCoverage: false,
-      message: `Gagal menghitung ongkir: ${error.message}`
+      suggestedTemplateReply: TEMPLATES.askKelurahanRetry({
+        textLocation: String(locationText || 'area tersebut'),
+        currentAttempts: 1,
+      }),
+      message: `Perhitungan jarak otomatis terkendala teknis (${error.message}). Sampaikan bahwa area tersebut masuk jangkauan layanan homecare kami, lalu tanyakan nama kelurahan atau perumahan spesifik agar Bidan kami dapat memastikan jarak dan rutenya. DILARANG menyebut nominal jarak maupun ongkir.`,
     };
   }
 }

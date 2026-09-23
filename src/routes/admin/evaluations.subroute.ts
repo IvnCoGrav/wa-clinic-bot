@@ -441,23 +441,6 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * GET /api/admin/debug/ai-router
-   */
-  fastify.get(
-    '/api/admin/debug/ai-router',
-    async (request: FastifyRequest<{ Querystring: { days?: string } }>, reply: FastifyReply) => {
-      try {
-        const { collectAiRouterSummary } = await import('../../services/system-debug.service');
-        const days = Math.max(1, Math.min(90, parseInt(request.query?.days || '7', 10) || 7));
-        const summary = await collectAiRouterSummary(days);
-        return reply.status(200).send({ success: true, data: summary });
-      } catch (err: any) {
-        return reply.status(500).send({ success: false, message: err?.message });
-      }
-    }
-  );
-
-  /**
    * GET /api/admin/debug/logs
    */
   fastify.get(

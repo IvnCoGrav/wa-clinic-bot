@@ -1255,35 +1255,31 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        // CG-02 (pemicu 'closing'): admin menandai reservasi selesai → bersihkan
-        // sesi V3 episodik customer (cart, treatment, booking, komitmen) agar
-        // percakapan berikutnya dimulai dari episode bersih. Profil durable tetap.
+        // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT + reset V3 episodik
         try {
-          const activeConv = await prisma.conversation.findFirst({
-            where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || DEFAULT_TENANT_ID },
-            orderBy: { updated_at: 'desc' },
-            select: { id: true },
-          });
-          if (activeConv?.id) {
-            const { GoalTracker } = await import('../../v3/state/goal-tracker');
-            await GoalTracker.updateGoalSession(
-              activeConv.id,
-              {
-                cartItems: [],
-                selectedTreatment: undefined,
-                booking: undefined,
-                discussedTreatments: [],
-                priceDiscussed: undefined,
-                bookingCommitConfirmed: undefined,
-                lastCommitment: undefined,
-                ongkirStatus: undefined,
-                totalPrice: undefined,
-              } as any,
-              existing.tenant_id || DEFAULT_TENANT_ID
-            );
+          const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+          if (existing.booking_date) {
+            await reservationLifecycleService.onReservationCompleted({
+              customerId: existing.customer_id,
+              reservationId: id,
+              bookingDate: existing.booking_date,
+              treatmentCategory: existing.treatment_category,
+              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+            });
+          } else {
+            // Tanpa booking_date: tetap reset sesi V3
+            const activeConv = await prisma.conversation.findFirst({
+              where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || DEFAULT_TENANT_ID },
+              orderBy: { updated_at: 'desc' },
+              select: { id: true },
+            });
+            if (activeConv?.id) {
+              const { GoalTracker } = await import('../../v3/state/goal-tracker');
+              await GoalTracker.updateGoalSession(activeConv.id, { cartItems: [], selectedTreatment: undefined, booking: undefined, discussedTreatments: [], priceDiscussed: undefined, bookingCommitConfirmed: undefined, lastCommitment: undefined, ongkirStatus: undefined, totalPrice: undefined } as any, existing.tenant_id || DEFAULT_TENANT_ID);
+            }
           }
-        } catch (resetErr: any) {
-          console.warn('[Admin API] Gagal membersihkan sesi V3 pasca-complete:', resetErr?.message);
+        } catch (fuErr: any) {
+          console.warn('[Admin API] onReservationCompleted (complete) failed:', fuErr?.message);
         }
 
         await auditService.logAdminAction({
@@ -1418,6 +1414,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       try {
         const isBecomingConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
         const isBecomingCancelled = status === 'cancelled' && existing.status !== 'cancelled';
+        const isBecomingCompleted = status === 'completed' && existing.status !== 'completed';
         const staffChanged = assignedStaffId !== undefined && assignedStaffId !== existing.assigned_staff_id;
 
         const updateData: any = {};
@@ -1516,6 +1513,23 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             }
           }
           // CAPI Purchase decoupled: tidak auto-kirim saat edit menjadi confirmed — eksklusif via Purchase Queue.
+        }
+        if (isBecomingCompleted) {
+          const targetBookingDate = parsedBookingDate || existing.booking_date;
+          if (targetBookingDate) {
+            try {
+              const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+              await reservationLifecycleService.onReservationCompleted({
+                customerId: existing.customer_id,
+                reservationId: id,
+                bookingDate: targetBookingDate,
+                treatmentCategory: updated.treatment_category,
+                tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+              });
+            } catch (fuErr: any) {
+              console.warn('[Admin API] Failed to sync follow-ups on becoming completed:', fuErr.message);
+            }
+          }
         }
         if (isBecomingCancelled) {
           try {
@@ -1705,6 +1719,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             await followUpService.createReservationFollowUps({
               reservationId: id,
               customerId: existing.customer_id,
+              bookingDate: existing.booking_date,
+              treatmentCategory: existing.treatment_category,
+              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+            });
+          } else if (status === 'completed' && existing.booking_date) {
+            const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+            await reservationLifecycleService.onReservationCompleted({
+              customerId: existing.customer_id,
+              reservationId: id,
               bookingDate: existing.booking_date,
               treatmentCategory: existing.treatment_category,
               tenantId: existing.tenant_id || DEFAULT_TENANT_ID,

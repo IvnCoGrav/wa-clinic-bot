@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { ConversationState } from '@prisma/client';
 
 /**
@@ -88,66 +87,4 @@ export interface ExtractedEntities {
   confidenceScore: number;
 }
 
-/**
- * Tipe Aksi Keputusan yang dihasilkan oleh Decision Matrix.
- */
-export type EngineActionType =
-  | 'ESCALATE_HUMAN_EMERGENCY'
-  | 'ESCALATE_HUMAN_SCHEDULE'
-  | 'ESCALATE_HUMAN_AGENT_REQUEST'
-  | 'ESCALATE_HUMAN_COMPLAINT'
-  | 'ESCALATE_HUMAN_UNLISTED_SERVICE'
-  | 'ESCALATE_RESCHEDULE_CANCEL'
-  | 'NOT_INTERESTED_COMPLETED'
-  | 'SILENT_HUMAN_ACTIVE'
-  | 'REJECT_OUT_OF_COVERAGE'
-  | 'SEND_RESERVATION_FORM'
-  | 'RESOLVE_LOCATION_AND_DELIVERY'
-  | 'RESOLVE_LOCATION_COMPARISON'
-  | 'GENERATE_AI_RESPONSE';
 
-/**
- * Output Keputusan dari Decision Matrix.
- */
-export interface DecisionResult {
-  action: EngineActionType;
-  reason: string;
-  updatedSlate: CustomerSlate;
-  shouldSendPricelistImage: boolean;
-  pricelistCaption?: string;
-  deterministicTemplateReply?: string;
-}
-
-/**
- * Paket Data Faktual Bersih (Token Diet) yang disuplai ke LLM Generator.
- */
-export interface GroundingPackage {
-  filteredCatalog: Array<{
-    name: string;
-    category: string;
-    promoPrice: number;
-    durationMinutes?: number;
-    description?: string;
-  }>;
-  deliveryFacts: {
-    distanceKm: number;
-    ongkirNormal: number | null;
-    ongkirPromo: number | null;
-    kelurahan: string;
-  } | null;
-  clinicFacts: {
-    homebase: string;
-    coverage: string;
-  };
-  symptomsDiscussed: string[];
-  missingSlotsToPrompt: 'LOCATION' | 'AGE' | 'TREATMENT_CHOICE' | 'RESERVATION_DETAILS' | null;
-  relevantFaqs?: Array<{
-    title: string;
-    content: string;
-  }>;
-  customerPreferencesText?: string | null;
-  durationSummaryText?: string;
-  operationalFactsText?: string;
-  isBookingReady?: boolean;
-  suggestedPreFilledForm?: string | null;
-}

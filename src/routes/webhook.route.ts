@@ -6,7 +6,6 @@ import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wahaClient } from '../integrations/waha/client';
-import { googleContactsService } from '../services/google-contacts.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { wahaTenantService } from '../services/waha-tenant.service';
 import { ConversationState } from '@prisma/client';

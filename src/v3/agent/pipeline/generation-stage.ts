@@ -132,6 +132,10 @@ export interface TurnState {
   generatorModel?: string;
   baseUrl: string;
   apiKey: string;
+  routerBaseUrl?: string;
+  routerApiKey?: string;
+  generatorBaseUrl?: string;
+  generatorApiKey?: string;
   turnStartedAt: number;
   correlationId: string;
   /** ID kanonis turn inbound (aditif, opsional). */
@@ -147,6 +151,8 @@ export interface TurnState {
   retrievedChunks: V3RetrievedChunk[];
   fewShotExemplars: any[];
   reasoning: string | null;
+  /** Reasoning milik Call 2 saja (tidak pernah fallback ke Call 1). */
+  generatorReasoning?: string | null;
   perCallLogged: boolean;
 }
 
@@ -169,7 +175,7 @@ export interface RecordCallParams {
 
 export interface TurnTelemetry {
   addUsage: (usage: any) => void;
-  auditUsage: (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any) => Promise<void>;
+  auditUsage: (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any, taskType?: string) => Promise<void>;
   finishCost: () => Promise<number>;
   recordCall: (params: RecordCallParams) => Promise<void>;
   traceExecution: (params: {
@@ -187,14 +193,14 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
     turn.totalTokens.completion += c;
     turn.totalTokens.total += p + c;
   };
-  const auditUsage = async (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any): Promise<void> => {
+  const auditUsage = async (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any, taskType?: string): Promise<void> => {
     try {
       const { auditLlmCall } = await import('../../../utils/llm-audit-buffer');
       auditLlmCall({
         customer_phone: turn.phone,
         tenant_id: turn.tenantId,
         conversation_id: turn.conversationId,
-        task_type: 'V3_AGENT',
+        task_type: taskType || 'V3_AGENT',
         model_name: actualModel || turn.actualModelUsed || turn.selectedModel,
         baseUrl: actualBaseUrl || turn.baseUrl,
         startedAt,
@@ -516,15 +522,16 @@ export class GenerationStage {
       tenantId: turn.tenantId,
       phone: turn.phone,
       conversationId: turn.conversationId,
-      baseUrl: turn.baseUrl,
-      apiKey: turn.apiKey,
+      baseUrl: (turn as any).routerBaseUrl || turn.baseUrl,
+      apiKey: (turn as any).routerApiKey || turn.apiKey,
       selectedModel: call1Model,
     }).then(async (data) => {
       const actualModel = (data as any)?.__actualModel;
-      const actualProvider = (data as any)?.__actualProvider;
+      const actualBaseUrl = (data as any)?.__actualBaseUrl || (turn as any).routerBaseUrl || turn.baseUrl;
       if (actualModel) turn.actualModelUsed = actualModel;
       tel.addUsage((data as any)?.usage);
-      await tel.auditUsage((data as any)?.usage, firstStartedAt, actualModel, actualProvider);
+      const finalCall1Model = actualModel || call1Model;
+      await tel.auditUsage((data as any)?.usage, firstStartedAt, finalCall1Model, actualBaseUrl, undefined, 'INTENT_CLASSIFICATION');
       return data;
     });
 
@@ -731,15 +738,16 @@ export class GenerationStage {
       tenantId: turn.tenantId,
       phone: turn.phone,
       conversationId: turn.conversationId,
-      baseUrl: turn.baseUrl,
-      apiKey: turn.apiKey,
+      baseUrl: (turn as any).generatorBaseUrl || turn.baseUrl,
+      apiKey: (turn as any).generatorApiKey || turn.apiKey,
       selectedModel: call2Model,
     }).then(async (data) => {
       const actualModel = (data as any)?.__actualModel;
-      const actualProvider = (data as any)?.__actualProvider;
+      const actualBaseUrl = (data as any)?.__actualBaseUrl || (turn as any).generatorBaseUrl || turn.baseUrl;
       if (actualModel) turn.actualModelUsed = actualModel;
       tel.addUsage((data as any)?.usage);
-      await tel.auditUsage((data as any)?.usage, secondStartedAt, actualModel, actualProvider);
+      const finalCall2Model = actualModel || call2Model;
+      await tel.auditUsage((data as any)?.usage, secondStartedAt, finalCall2Model, actualBaseUrl, undefined, 'CHAT_REPLY');
       return data;
     });
 
@@ -764,9 +772,7 @@ export class GenerationStage {
         }));
       }
     } catch {}
-    if (!turn.reasoning && secondCallReasoning) {
-      turn.reasoning = secondCallReasoning;
-    }
+    turn.generatorReasoning = secondCallReasoning || null;
 
     // Plan 7 (Audit 216683 - Garansi Sapaan Resmi Turn-0):
     // Jika turn ini adalah chat pembuka (!isFollowUp), pastikan sapaan resmi Bidan Yusi
@@ -786,7 +792,8 @@ export class GenerationStage {
     {
       const secondDurationMs = Date.now() - secondStartedAt;
       const secondUsageTel = extractUsageTelemetry((secondData as any)?.usage);
-      const secondReasoning = secondCallReasoning || turn.reasoning;
+      // Isolasi murni: Call 2 HANYA reasoning miliknya sendiri (jangan warisi Call 1)
+      const secondReasoning = secondCallReasoning || null;
       await tel.recordCall({
         flowType: 'V3_GENERATION',
         reply: finalReply,

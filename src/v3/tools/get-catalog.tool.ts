@@ -265,17 +265,49 @@ export async function executeGetCatalog(
     // per-tenant, bukan hafalan). Diisi bila targetPrice cocok dengan ≥1 layanan.
     let priceClarification: string | undefined = undefined;
 
-    // 1. Filter kategori
-    // Catatan Tahap 3: bridge 0-24 bulan (audit 222655) sudah digantikan snap
-    // taksonomi kanonis di atas — query KIDS dengan usia <24 bulan langsung
-    // menjadi pool BABY yang fit usia (tidak ada lagi kasus "hanya Bubble Spa
-    // tersisa"). Cabang bridge lama dihapus agar tidak menjadi kode mati.
+    // 1. Filter kategori (fondasional BOTH = union audiens, bukan kategori layanan)
+    // Semantik kanonis: category 'BOTH' di tool = union ibu+anak. Tidak ada
+    // layanan berkategori 'BOTH' di katalog/DB — filter WAJIB union BABY/KIDS/
+    // MOMS + BUNDLE, data-driven via resolveServiceAudience (bukan hafal ID).
     if (category) {
-      filtered = filtered.filter(s => {
-        if (s.category === category) return true;
-        if (category === 'BABY' && s.category === 'BUNDLE') return true;
-        return false;
-      });
+      if (category === 'BOTH') {
+        const byIdBoth = new Map(allServices.map((s: any) => [(s?.id || '').toLowerCase(), s]));
+        const isMomBundleBoth = (s: ClinicServiceItem): boolean => resolveServiceAudience(s as any, (id: string) => byIdBoth.get(id.toLowerCase())) === 'MOMS';
+        filtered = filtered.filter(s => {
+          if (s.category === 'BABY' || s.category === 'KIDS' || s.category === 'MOMS') return true;
+          if (s.category === 'BUNDLE') return true; // semua BUNDLE ikut (mom maupun anak) — partisi di tahap 3 anti-brosur
+          if (s.category === 'BOTH') return true;
+          return false;
+        });
+      } else if (category === 'BABY') {
+        const byIdBaby = new Map(allServices.map((s: any) => [(s?.id || '').toLowerCase(), s]));
+        filtered = filtered.filter(s => {
+          if (s.category === 'BABY') return true;
+          if (s.category === 'BOTH') return true;
+          if (s.category === 'BUNDLE') return resolveServiceAudience(s as any, (id: string) => byIdBaby.get(id.toLowerCase())) !== 'MOMS';
+          return false;
+        });
+      } else if (category === 'KIDS') {
+        filtered = filtered.filter(s => {
+          if (s.category === 'KIDS') return true;
+          if (s.category === 'BOTH') return true;
+          return false;
+        });
+      } else if (category === 'MOMS') {
+        const byIdMoms = new Map(allServices.map((s: any) => [(s?.id || '').toLowerCase(), s]));
+        filtered = filtered.filter(s => {
+          if (s.category === 'MOMS') return true;
+          if (s.category === 'BOTH') return true;
+          if (s.category === 'BUNDLE') return resolveServiceAudience(s as any, (id: string) => byIdMoms.get(id.toLowerCase())) === 'MOMS';
+          return false;
+        });
+      } else {
+        filtered = filtered.filter(s => {
+          if (s.category === category) return true;
+          if (s.category === 'BOTH') return true;
+          return false;
+        });
+      }
     }
 
     // 2. Filter usia jika ada
@@ -568,8 +600,43 @@ export async function executeGetCatalog(
     // (intent sempit menang) dan pool klarifikasi nominal (butuh pembanding
     // lintas-audiens; selalu showPrices). Nama yang diabaikan karena
     // membajak rekomendasi klinis TIDAK mengecualikan (pool tetap dirampingkan).
+    // Fondasional BOTH: potongan WAJIB partisi 1 anak + 1 ibu (bukan 2 acak) agar
+    // rekomendasi ibu tidak terpotong saat skor terapi anak mendominasi.
     if (!showPrices && !nameFilterApplied && formattedTreatments.length > 2) {
-      formattedTreatments.length = 2;
+      if (category === 'BOTH') {
+        const byIdBrosur = new Map(allServices.map((s: any) => [(s?.id || '').toLowerCase(), s]));
+        const isMomAudience = (t: CatalogTreatmentDetail): boolean => {
+          if (t.category === 'MOMS') return true;
+          if (t.category === 'BUNDLE') return resolveServiceAudience({ category: t.category, bundleItemIds: (byIdBrosur.get(t.id.toLowerCase()) as any)?.bundleItemIds } as any, (id: string) => byIdBrosur.get(id.toLowerCase())) === 'MOMS';
+          return false;
+        };
+        const isChildAudience = (t: CatalogTreatmentDetail): boolean => {
+          if (t.category === 'BABY' || t.category === 'KIDS') return true;
+          if (t.category === 'BUNDLE') return resolveServiceAudience({ category: t.category, bundleItemIds: (byIdBrosur.get(t.id.toLowerCase()) as any)?.bundleItemIds } as any, (id: string) => byIdBrosur.get(id.toLowerCase())) !== 'MOMS';
+          return false;
+        };
+        let bestChild: CatalogTreatmentDetail | undefined;
+        let bestMom: CatalogTreatmentDetail | undefined;
+        for (const t of formattedTreatments) {
+          if (!bestChild && isChildAudience(t)) bestChild = t;
+          if (!bestMom && isMomAudience(t)) bestMom = t;
+          if (bestChild && bestMom) break;
+        }
+        if (bestChild && bestMom) {
+          const partitioned: CatalogTreatmentDetail[] = [];
+          // Pertahankan urutan skor terapi: yang skor lebih tinggi dulu
+          const childIdx = formattedTreatments.indexOf(bestChild);
+          const momIdx = formattedTreatments.indexOf(bestMom);
+          if (childIdx < momIdx) partitioned.push(bestChild, bestMom);
+          else partitioned.push(bestMom, bestChild);
+          formattedTreatments.length = 0;
+          formattedTreatments.push(...partitioned);
+        } else {
+          formattedTreatments.length = 2;
+        }
+      } else {
+        formattedTreatments.length = 2;
+      }
     }
 
     // Fondational Tool Output Scoping (Akar 1): bila customer TIDAK bertanya

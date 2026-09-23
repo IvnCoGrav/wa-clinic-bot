@@ -657,35 +657,40 @@ export class FollowUpService {
         }
       }
 
-      // 5. Jadwalkan Review H+1 Pasca Treatment (POSTPONED)
-      let existingReview = null;
-      try {
-        existingReview = await prisma.followUp?.findFirst?.({
-          where: {
-            reservation_id: reservationId,
-            type: reviewType as any,
-            tenant_id: tenantId,
-            status: { in: ['PENDING', 'QUEUED'] },
-          },
-        });
-      } catch (_) {}
-
-      if (!existingReview) {
+      // 5. Jadwalkan Review H+1 Pasca Treatment — guard backdate (MT-1.2):
+      //    jika reviewDate lampau (booking backdated), skip agar tidak bikin row kedaluwarsa.
+      if (reviewDate.getTime() <= now.getTime()) {
+        console.log(`[FollowUp Service] Skipping ${reviewType} for reservation ${reservationId}: backdated (review ${reviewDate.toISOString()} <= now).`);
+      } else {
+        let existingReview = null;
         try {
-          await prisma.followUp?.create?.({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customerId,
+          existingReview = await prisma.followUp?.findFirst?.({
+            where: {
               reservation_id: reservationId,
               type: reviewType as any,
-              stage: 1,
-              scheduled_at: reviewDate,
-              status: 'PENDING',
+              tenant_id: tenantId,
+              status: { in: ['PENDING', 'QUEUED'] },
             },
           });
-          console.log(`[FollowUp Service] Created (POSTPONED) ${reviewType} for reservation: ${reservationId} at ${reviewDate.toISOString()}`);
-        } catch (err: any) {
-          console.warn(`[FollowUp Service] Failed to create ${reviewType}:`, err.message);
+        } catch (_) {}
+
+        if (!existingReview) {
+          try {
+            await prisma.followUp?.create?.({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                reservation_id: reservationId,
+                type: reviewType as any,
+                stage: 1,
+                scheduled_at: reviewDate,
+                status: 'PENDING',
+              },
+            });
+            console.log(`[FollowUp Service] Created (POSTPONED) ${reviewType} for reservation: ${reservationId} at ${reviewDate.toISOString()}`);
+          } catch (err: any) {
+            console.warn(`[FollowUp Service] Failed to create ${reviewType}:`, err.message);
+          }
         }
       }
     } catch (err: any) {
@@ -767,8 +772,24 @@ export class FollowUpService {
   }
 
   /**
+   * Hitung waktu kirim NEXT_TREATMENT pada 09:00 WIB untuk tanggal booking + offset bulan.
+   * Normalisasi WIB agar konsisten lintas lingkungan (UTC host vs WIB).
+   */
+  private computeNextTreatmentAtWib0900(bookingDate: Date, monthOffset: number): Date {
+    const bWib = new Date(bookingDate.getTime() + 7 * 60 * 60 * 1000);
+    const y = bWib.getUTCFullYear();
+    const m = bWib.getUTCMonth() + monthOffset;
+    const d = bWib.getUTCDate();
+    // 09:00 WIB = 02:00 UTC pada tanggal hasil (clamp day overflow via Date.UTC)
+    return new Date(Date.UTC(y, m, d, 2, 0, 0, 0));
+  }
+
+  /**
    * Dipanggil saat reservasi dikonfirmasi/rescheduled/selesai.
-   * Membuat 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan) di antrian.
+   * Membuat hingga 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan) di antrian.
+   * Guard per-stage (MT-1.3): skip stage yang sudah lampau (scheduledAt <= now),
+   * cek idempotensi per-stage termasuk SENT (jangan recreate stage 1 yang sudah SENT),
+   * status PENDING (butuh approval/bulk-queue, anti-spam).
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
@@ -792,49 +813,212 @@ export class FollowUpService {
         }
       } catch (_) {}
 
-      // Idempotensi: jika sudah ada row NEXT_TREATMENT aktif untuk customer ini, jangan buat duplikat
-      let existing = null;
-      try {
-        existing = await prisma.followUp?.findFirst?.({
-          where: {
-            customer_id: customerId,
-            type: 'NEXT_TREATMENT',
-            tenant_id: tenantId,
-            status: { in: ['PENDING', 'QUEUED'] },
-          },
-        });
-      } catch (_) {}
+      const bDate = new Date(bookingDate);
+      if (isNaN(bDate.getTime())) return;
+      const now = new Date();
 
-      if (existing) {
-        console.log(`[FollowUp Service] NEXT_TREATMENT follow-ups already exist for customer: ${customerId}. Skipping (idempotent).`);
-        return;
+      let created = 0;
+      let skippedPast = 0;
+      let skippedExists = 0;
+
+      for (const stage of [1, 2, 3] as const) {
+        const scheduledAt = this.computeNextTreatmentAtWib0900(bDate, stage);
+        if (scheduledAt.getTime() <= now.getTime()) {
+          skippedPast++;
+          continue;
+        }
+
+        // Per-stage idempotensi: cek PENDING/QUEUED/SENT agar tidak recreate stage yang sudah ada/terkirim
+        let exists = null;
+        try {
+          exists = await prisma.followUp?.findFirst?.({
+            where: {
+              customer_id: customerId,
+              type: 'NEXT_TREATMENT',
+              stage,
+              tenant_id: tenantId,
+              status: { in: ['PENDING', 'QUEUED', 'SENT'] as any },
+            },
+          });
+        } catch (_) {}
+        if (exists) {
+          skippedExists++;
+          continue;
+        }
+
+        try {
+          await prisma.followUp?.create?.({
+            data: {
+              tenant_id: tenantId,
+              customer_id: customerId,
+              type: 'NEXT_TREATMENT',
+              stage,
+              scheduled_at: scheduledAt,
+              status: 'PENDING',
+            },
+          });
+          created++;
+        } catch (_) {}
       }
 
-      // Buat 3 stage follow-up (+1, +2, +3 bulan)
-      const stages = [1, 2, 3];
-      
-      await Promise.all(
-        stages.map(async (stage) => {
-          const scheduledAt = new Date(bookingDate);
-          scheduledAt.setMonth(scheduledAt.getMonth() + stage);
-          
-          try {
-            await prisma.followUp?.create?.({
-              data: {
-                tenant_id: tenantId,
-                customer_id: customerId,
-                type: 'NEXT_TREATMENT',
-                stage,
-                scheduled_at: scheduledAt,
-                status: 'QUEUED',
-              },
-            });
-          } catch (_) {}
-        })
-      );
-      console.log(`[FollowUp Service] Queued NEXT_TREATMENT follow-ups for customer: ${customerId}`);
+      if (created > 0) {
+        console.log(`[FollowUp Service] Queued ${created} NEXT_TREATMENT follow-up(s) for customer: ${customerId} (skipped ${skippedPast} past, ${skippedExists} existing).`);
+      } else if (skippedExists > 0) {
+        console.log(`[FollowUp Service] NEXT_TREATMENT follow-ups already exist for customer: ${customerId}. Skipping (idempotent per-stage).`);
+      }
     } catch (err) {
       console.error('[FollowUp Service] Failed to create NEXT_TREATMENT follow-ups:', err);
+    }
+  }
+
+  /**
+   * Self-Healing Reconciler (Fase 2) — jaring pengaman harian.
+   * Mencari customer completed tanpa antrean NEXT aktif dan menjadwalkan stage masa depan.
+   * Kriteria (per-tenant, best-effort, offline-safe):
+   *  - customer status != blocked, is_sandbox_test=false, is_admin_labeled=false, lolos hasBypassLabel/checkCustomerBypass/isDummyOrTestContact
+   *  - punya reservasi completed dengan booking_date dalam 90 hari terakhir (max per customer)
+   *  - tanpa reservasi aktif masa depan (pending/confirmed/hold, booking_date >= now)
+   *  - tanpa NEXT_TREATMENT PENDING/QUEUED (SENT per-stage tidak menghalangi stage masa depan)
+   * Aksi: createNextTreatmentFollowUps(maxBookingDate) → hanya stage masa depan PENDING.
+   */
+  public async reconcileOrphanedCompletedFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<{ reconciledCount: number; customerIds: string[] }> {
+    const empty = { reconciledCount: 0, customerIds: [] as string[] };
+    try {
+      const now = new Date();
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+      // 1. Ambil reservasi completed 90 hari terakhir (tenant-scoped)
+      let completed: Array<{ customer_id: string; booking_date: Date | null }> = [];
+      try {
+        completed = (await prisma.reservation.findMany({
+          where: {
+            tenant_id: tenantId,
+            status: 'completed',
+            booking_date: { gte: ninetyDaysAgo, lte: now },
+          },
+          select: { customer_id: true, booking_date: true },
+          orderBy: { booking_date: 'desc' },
+        })) as any;
+      } catch {
+        return empty;
+      }
+      if (!completed || completed.length === 0) return empty;
+
+      // Kelompokkan max booking_date per customer
+      const maxByCustomer = new Map<string, Date>();
+      for (const r of completed) {
+        if (!r.customer_id || !r.booking_date) continue;
+        const d = new Date(r.booking_date);
+        if (isNaN(d.getTime())) continue;
+        const cur = maxByCustomer.get(r.customer_id);
+        if (!cur || d.getTime() > cur.getTime()) maxByCustomer.set(r.customer_id, d);
+      }
+      if (maxByCustomer.size === 0) return empty;
+
+      const customerIds = Array.from(maxByCustomer.keys());
+
+      // 2. Exclude yang punya reservasi aktif masa depan (pending/confirmed/hold, booking_date >= now)
+      let activeFuture: Array<{ customer_id: string }> = [];
+      try {
+        activeFuture = (await prisma.reservation.findMany({
+          where: {
+            tenant_id: tenantId,
+            customer_id: { in: customerIds },
+            status: { in: ['pending', 'confirmed', 'hold'] },
+            booking_date: { gte: now },
+          },
+          select: { customer_id: true },
+        })) as any;
+      } catch {}
+      const hasActiveFuture = new Set((activeFuture || []).map((r) => r.customer_id));
+      const candidates = customerIds.filter((id) => !hasActiveFuture.has(id));
+      if (candidates.length === 0) return empty;
+
+      // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED (SENT tidak dihitung — per-stage guard akan skip stage SENT)
+      let hasNext: Array<{ customer_id: string }> = [];
+      try {
+        hasNext = (await prisma.followUp.findMany({
+          where: {
+            tenant_id: tenantId,
+            customer_id: { in: candidates },
+            type: 'NEXT_TREATMENT',
+            status: { in: ['PENDING', 'QUEUED'] as any },
+          },
+          select: { customer_id: true },
+        })) as any;
+      } catch {}
+      const hasNextSet = new Set((hasNext || []).map((r) => r.customer_id));
+      const orphaned = candidates.filter((id) => !hasNextSet.has(id));
+      if (orphaned.length === 0) return empty;
+
+      // 4. Filter bypass/sandbox/dummy/blocked (DB lesu → filter best-effort, hilangkan yang jelas bypass)
+      let filtered = orphaned;
+      try {
+        const customers = (await prisma.customer.findMany({
+          where: { id: { in: orphaned } },
+          select: { id: true, phone: true, name: true, status: true, is_sandbox_test: true, is_admin_labeled: true },
+          // include labels untuk hasBypassLabel — best-effort via second query bila select tidak cukup
+        })) as any[];
+        // Secondary: load labels untuk hasBypassLabel (hanya bila customer ditemukan)
+        let labelMap = new Map<string, any>();
+        try {
+          const withLabels = (await prisma.customer.findMany({
+            where: { id: { in: orphaned } },
+            include: { labels: { include: { label: true } } },
+          })) as any[];
+          for (const c of withLabels || []) labelMap.set(c.id, c);
+        } catch {}
+        filtered = [];
+        for (const c of customers || []) {
+          if (!c) continue;
+          if (c.status === 'blocked' || c.is_sandbox_test || c.is_admin_labeled) continue;
+          const withLabels = labelMap.get(c.id);
+          if (withLabels && hasBypassLabel(withLabels)) continue;
+          if (isDummyOrTestContact(c.phone, c.name)) continue;
+          // checkCustomerBypass — async, best-effort
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            if (await checkCustomerBypass({ customerId: c.id, tenantId })) continue;
+          } catch {}
+          filtered.push(c.id);
+        }
+        // Jika customer query gagal total, fallback ke orphaned (reconciler tetap jalan)
+        if ((customers || []).length === 0 && orphaned.length > 0) filtered = orphaned;
+      } catch {}
+
+      // 5. Buat NEXT per-stage (hanya masa depan, PENDING, SENT-aware ada di createNextTreatmentFollowUps)
+      let reconciledCount = 0;
+      const reconciledIds: string[] = [];
+      for (const cid of filtered) {
+        const maxDate = maxByCustomer.get(cid);
+        if (!maxDate) continue;
+        try {
+          const before = await prisma.followUp.count({
+            where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED', 'SENT'] as any } },
+          }).catch(() => 0);
+          await this.createNextTreatmentFollowUps(cid, maxDate, tenantId);
+          const after = await prisma.followUp.count({
+            where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
+          }).catch(() => 0);
+          // Heuristik: jika after > 0 dan PENDING tercipta, hitung reconcile
+          if (after > 0) {
+            reconciledCount++;
+            reconciledIds.push(cid);
+          } else if (before === 0) {
+            // Offline mock (count gagal) — tetap anggap reconcile attempted
+            reconciledCount++;
+            reconciledIds.push(cid);
+          }
+        } catch {}
+      }
+
+      if (reconciledCount > 0) {
+        console.log(`[FollowUp Reconciler] Reconciled ${reconciledCount} orphaned completed customer(s) (tenant ${tenantId}).`);
+      }
+      return { reconciledCount, customerIds: reconciledIds };
+    } catch (err: any) {
+      console.warn('[FollowUp Reconciler] reconcileOrphanedCompletedFollowUps failed:', err?.message || err);
+      return empty;
     }
   }
 

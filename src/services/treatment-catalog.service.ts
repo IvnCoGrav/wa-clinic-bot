@@ -1137,6 +1137,10 @@ export class TreatmentCatalogService {
     if (category === 'ADD_ON') {
       return this.getAllServices().filter((s) => this.isAddonService(s));
     }
+    if (category === 'BOTH') {
+      // Fondasional: BOTH = union ibu+anak — tidak ada layanan berkategori BOTH di DB
+      return this.getAllServices().filter((s) => s.category === 'BABY' || s.category === 'KIDS' || s.category === 'MOMS' || s.category === 'BUNDLE' || s.category === 'BOTH');
+    }
     return this.getAllServices().filter((s) => s.category === category || s.category === 'BOTH');
   }
 
@@ -1247,7 +1251,7 @@ export class TreatmentCatalogService {
     services: ClinicServiceItem[],
     context: {
       ageMonths?: number | null;
-      audienceIntent?: 'BABY' | 'KIDS' | 'MOMS' | 'GENERAL';
+      audienceIntent?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'GENERAL';
       isMaternalKeyword?: boolean;
     }
   ): ClinicServiceItem[] {
@@ -1303,6 +1307,13 @@ export class TreatmentCatalogService {
       );
     }
 
+    // 5. Audience BOTH (fondasional: union ibu+anak, bukan fallthrough)
+    if (audienceIntent === 'BOTH') {
+      return services.filter(
+        (s) => s.category === 'BABY' || s.category === 'KIDS' || s.category === 'MOMS' || s.category === 'BOTH' || s.category === 'BUNDLE' || s.category === 'ADD_ON'
+      );
+    }
+
     return services;
   }
 
@@ -1324,7 +1335,14 @@ export class TreatmentCatalogService {
       .filter((w) => w.length > 2);
     if (tokens.length === 0) return undefined;
     let pool = this.getAllServices(true, tenantId);
-    if (category) pool = pool.filter((s) => s.category === category || s.category === 'BOTH');
+    if (category) {
+      if (category === 'BOTH') {
+        // Fondasional: BOTH = union ibu+anak, bukan filter kategori 'BOTH' (tidak ada layanan BOTH di DB)
+        pool = pool.filter((s) => s.category === 'BABY' || s.category === 'KIDS' || s.category === 'MOMS' || s.category === 'BUNDLE' || s.category === 'BOTH');
+      } else {
+        pool = pool.filter((s) => s.category === category || s.category === 'BOTH');
+      }
+    }
     if (ageMonths != null && ageMonths > 0) {
       pool = this.filterServicesByAudience(pool, { ageMonths });
     }
@@ -1432,15 +1450,16 @@ export class TreatmentCatalogService {
       resolvedTenantId = tenantId;
     }
     let pool = this.getAllServices(true, resolvedTenantId).filter((s) => s.isActive);
-    // Plan Fase 2.3 (sesi 89-turn): kategori MOMS WAJIB difilter ke layanan ibu
-    // (MOMS/BOTH) — sebelumnya jatuh ke cabang default yang memfilter BABY/BOTH,
-    // menyebabkan sesi konsultasi ibu direkomendasikan "Pijat Bayi Ceria Newborn".
+    // Plan Fase 2.3 + Fase 1 BOTH: kategori difilter data-driven, BOTH = union ibu+anak
     if (category === 'MOMS') {
       pool = pool.filter((s) => s.category === 'MOMS' || s.category === 'BOTH');
     } else if (category === 'KIDS') {
       pool = pool.filter((s) => s.category === 'KIDS' || s.category === 'BOTH');
-    } else if (category === 'BABY' || category === 'BOTH') {
+    } else if (category === 'BABY') {
       pool = pool.filter((s) => s.category === 'BABY' || s.category === 'BOTH');
+    } else if (category === 'BOTH') {
+      // Fondasional: BOTH = union — tidak boleh jatuh ke pool BABY saja (regresi ibu dapat rekomendasi bayi)
+      pool = pool.filter((s) => s.category === 'BABY' || s.category === 'KIDS' || s.category === 'MOMS' || s.category === 'BUNDLE' || s.category === 'BOTH');
     }
     // 391501: saring usia data-driven bila tersedia
     if (ageMonths != null && Number.isFinite(ageMonths)) {

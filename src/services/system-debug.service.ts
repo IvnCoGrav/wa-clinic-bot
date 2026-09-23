@@ -34,10 +34,7 @@ const SECRET_ENV_KEYS = [
 ];
 
 const FEATURE_FLAG_KEYS = [
-  { key: 'AI_ROUTER_ENABLED', label: 'AI Router Engine' },
-  { key: 'AI_ROUTER_SHADOW_MODE', label: 'AI Router Shadow Mode' },
   { key: 'HUMANIZER_ENABLED', label: 'Humanizer (Typing Simulation)' },
-  { key: 'ESCALATE_SCHEDULE_IN_INITIAL', label: 'Eskalasi Jadwal di INITIAL' },
   { key: 'ENABLE_WAHA_HOLD_LABEL', label: 'WAHA Hold Label' },
   { key: 'TERMINAL_APPROVAL_ENABLED', label: 'Terminal Approval (Safety Net)' },
   { key: 'WAHA_MOCK', label: 'WAHA Mock Mode' },
@@ -61,50 +58,9 @@ export interface SystemInfo {
     messages: number | null;
     reservations: number | null;
     followUps: number | null;
-    aiRouterEvaluations: number | null;
-  };
-  aiRouter: {
-    enabled: boolean;
-    shadowMode: boolean;
-    circuitState: string;
   };
   logBuffer: { installed: boolean; stats: Record<LogLevel, number> };
 }
-
-export interface AiRouterSummary {
-  days: number;
-  since: string;
-  allTotal: number;
-  mappedTotal: number;
-  intentMatch: number;
-  escalationMatch: number;
-  unmapped: number;
-  intentMatchRate: number | null; // persen, null jika mappedTotal=0
-  escalationMatchRate: number | null;
-  unmappedRate: number | null;
-  medicalMismatches: Array<{
-    message_text: string;
-    llm_intent: string | null;
-    legacy_intent: string;
-    created_at: string;
-  }>;
-  recentEvaluations: Array<{
-    id: string;
-    created_at: string;
-    current_state: string;
-    message_text: string;
-    llm_intent: string | null;
-    legacy_intent: string;
-    intent_match: boolean;
-    escalation_match: boolean;
-    llm_used_fallback: boolean;
-    mismatch_notes: string | null;
-    response_time_ms: number | null;
-  }>;
-  dbNote?: string;
-}
-
-const SECONDS_IN_DAY = 24 * 60 * 60 * 1000;
 
 function flagValue(key: string): boolean | 'unset' {
   const v = process.env[key];
@@ -141,13 +97,12 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
     }
   }
 
-  const [customers, conversations, messages, reservations, followUps, aiRouterEvaluations] = await Promise.all([
+  const [customers, conversations, messages, reservations, followUps] = await Promise.all([
     safeCount(() => prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
     safeCount(() => prisma.conversation.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
     safeCount(() => prisma.message.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
     safeCount(() => prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
     safeCount(() => prisma.followUp.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
-    safeCount(() => prisma.aiRouterEvaluation.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
   ]);
 
   return {
@@ -166,74 +121,9 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
     database: dbStatus,
     featureFlags: FEATURE_FLAG_KEYS.map(({ key, label }) => ({ key, label, value: flagValue(key) })),
     secretKeysPresent: SECRET_ENV_KEYS.filter((k) => process.env[k] !== undefined && process.env[k] !== ''),
-    counts: { customers, conversations, messages, reservations, followUps, aiRouterEvaluations },
-    aiRouter: {
-      enabled: process.env.AI_ROUTER_ENABLED === 'true',
-      shadowMode: process.env.AI_ROUTER_SHADOW_MODE === 'true',
-      circuitState: 'CLOSED',
-    },
+    counts: { customers, conversations, messages, reservations, followUps },
     logBuffer: { installed: isLogBufferInstalled(), stats: getLogBufferStats() },
   };
-}
-
-export async function collectAiRouterSummary(days = 7): Promise<AiRouterSummary> {
-  const since = new Date(Date.now() - days * SECONDS_IN_DAY);
-  const base = { created_at: { gte: since }, tenant_id: DEFAULT_TENANT_ID } as any;
-
-  const out: AiRouterSummary = {
-    days,
-    since: since.toISOString(),
-    allTotal: 0,
-    mappedTotal: 0,
-    intentMatch: 0,
-    escalationMatch: 0,
-    unmapped: 0,
-    intentMatchRate: null,
-    escalationMatchRate: null,
-    unmappedRate: null,
-    medicalMismatches: [],
-    recentEvaluations: [],
-  };
-
-  try {
-    const [allTotal, mappedTotal, intentMatch, escalationMatch, unmapped, medicalMismatches, recent] = await Promise.all([
-      prisma.aiRouterEvaluation.count({ where: base }),
-      prisma.aiRouterEvaluation.count({ where: { ...base, legacy_intent: { not: 'UNMAPPED' } } }),
-      prisma.aiRouterEvaluation.count({ where: { ...base, legacy_intent: { not: 'UNMAPPED' }, intent_match: true } }),
-      prisma.aiRouterEvaluation.count({ where: { ...base, legacy_intent: { not: 'UNMAPPED' }, escalation_match: true } }),
-      prisma.aiRouterEvaluation.count({ where: { ...base, legacy_intent: 'UNMAPPED' } }),
-      prisma.aiRouterEvaluation.findMany({
-        where: {
-          ...base,
-          escalation_match: false,
-          OR: [{ legacy_intent: 'MEDICAL_CONCERN' }, { llm_intent: 'MEDICAL_CONCERN' }],
-        },
-        select: { message_text: true, llm_intent: true, legacy_intent: true, created_at: true },
-        orderBy: { created_at: 'desc' },
-        take: 50,
-      }),
-      prisma.aiRouterEvaluation.findMany({
-        where: base,
-        orderBy: { created_at: 'desc' },
-        take: 25,
-      }),
-    ]);
-
-    out.allTotal = allTotal;
-    out.mappedTotal = mappedTotal;
-    out.intentMatch = intentMatch;
-    out.escalationMatch = escalationMatch;
-    out.unmapped = unmapped;
-    out.intentMatchRate = mappedTotal > 0 ? (intentMatch / mappedTotal) * 100 : null;
-    out.escalationMatchRate = mappedTotal > 0 ? (escalationMatch / mappedTotal) * 100 : null;
-    out.unmappedRate = allTotal > 0 ? (unmapped / allTotal) * 100 : null;
-    out.medicalMismatches = medicalMismatches.map((m) => ({ ...m, created_at: m.created_at.toISOString() }));
-    out.recentEvaluations = recent.map((r) => ({ ...r, created_at: r.created_at.toISOString() }));
-  } catch (err: any) {
-    out.dbNote = 'DB offline';
-  }
-
-  return out;
 }
 
 export interface MessageTraceEntry {

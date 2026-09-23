@@ -1,7 +1,9 @@
 import { executeToolByName } from '../../tools/tool-registry';
 import { validateToolArgs } from '../../tools/tool-schemas';
 import { CustomerGoalSession, GoalTracker } from '../../state/goal-tracker';
+import { treatmentCatalogService, resolveServiceAudience } from '../../../services/treatment-catalog.service';
 import { maskPhoneNumber, maskToolArgsForLogging } from '../../../utils/pii-masker';
+import { TEMPLATES } from '../../../config/persona';
 import type { GroundingOutput } from './context-grounder';
 import type { V3RetrievedChunk } from '../agent-runner';
 
@@ -327,7 +329,24 @@ export class ToolExecutionPipeline {
           );
         } catch (toolErr: any) {
           console.warn(JSON.stringify({ event: 'V3_TOOL_TIMEOUT_ERROR', tenantId, conversationId, phone: maskPhoneNumber(phone), tool: fnName, error: toolErr.message, timestamp: new Date().toISOString() }));
-          toolResult = { error: toolErr.message };
+          if (fnName === 'calculate_delivery') {
+            // Kontrak pemulihan fondasional: Call 2 menerima jangkar terstruktur
+            // (bukan error mentah) — konfirmasi jangkauan + minta kelurahan,
+            // TANPA nominal. Template via TEMPLATES terpusat (tenant-aware).
+            toolResult = {
+              success: false,
+              isPrecise: false,
+              isOutOfCoverage: false,
+              error: toolErr.message,
+              suggestedTemplateReply: TEMPLATES.askKelurahanRetry({
+                textLocation: String((fnArgs as any)?.locationText || 'area tersebut'),
+                currentAttempts: 1,
+              }),
+              message: `Perhitungan jarak otomatis terkendala teknis (${toolErr.message}). Sampaikan bahwa area tersebut masuk jangkauan layanan homecare kami, lalu tanyakan nama kelurahan atau perumahan spesifik agar Bidan kami dapat memastikan jarak dan rutenya. DILARANG menyebut nominal jarak maupun ongkir.`,
+            };
+          } else {
+            toolResult = { error: toolErr.message };
+          }
         }
       }
 
@@ -479,10 +498,70 @@ export class ToolExecutionPipeline {
         || fnArgs.gestationalWeeks != null || fnArgs.momStage != null;
       const isChildArgs = fnArgs.category === 'BABY' || fnArgs.category === 'KIDS' || fnArgs.category === 'BOTH'
         || fnArgs.childAgeMonths != null;
+      // Fondasional BOTH: partisi gejala data-driven (bukan broadcast ke dua profil)
+      const partitionBothSymptoms = (syms: string[]): { mom: string[]; child: string[] } => {
+        if (!syms || syms.length === 0) return { mom: [], child: [] };
+        try {
+          const all = treatmentCatalogService.getAllServices(true, tenantId) || [];
+          const byId = new Map(all.map((s: any) => [(s?.id || '').toLowerCase(), s]));
+          const isMomService = (s: any): boolean => {
+            if (s.category === 'MOMS') return true;
+            if (s.category === 'BUNDLE') {
+              try { return resolveServiceAudience(s as any, (id: string) => byId.get(id.toLowerCase())) === 'MOMS'; } catch { return false; }
+            }
+            return false;
+          };
+          const isChildService = (s: any): boolean => {
+            if (s.category === 'BABY' || s.category === 'KIDS') return true;
+            if (s.category === 'BUNDLE') {
+              try { return resolveServiceAudience(s as any, (id: string) => byId.get(id.toLowerCase())) !== 'MOMS'; } catch { return true; }
+            }
+            return false;
+          };
+          const momPool = all.filter(isMomService);
+          const childPool = all.filter(isChildService);
+          const scoreAgainst = (symLower: string, pool: any[]): number => {
+            let best = 0;
+            for (const svc of pool) {
+              const hay = `${svc.name || ''} ${svc.description || ''}`.toLowerCase();
+              if (hay.includes(symLower)) {
+                const inName = (svc.name || '').toLowerCase().includes(symLower) ? 4 : 0;
+                best = Math.max(best, inName || 2);
+              } else {
+                for (const tok of symLower.split(/[^a-z0-9]+/).filter((w: string) => w.length > 2)) {
+                  if ((svc.name || '').toLowerCase().includes(tok)) { best = Math.max(best, 4); break; }
+                  if ((svc.description || '').toLowerCase().includes(tok)) best = Math.max(best, 2);
+                }
+              }
+            }
+            return best;
+          };
+          const mom: string[] = [];
+          const child: string[] = [];
+          for (const raw of syms) {
+            const lower = String(raw || '').toLowerCase().trim();
+            if (!lower) continue;
+            const momScore = scoreAgainst(lower, momPool);
+            const childScore = scoreAgainst(lower, childPool);
+            if (momScore > childScore) mom.push(raw);
+            else if (childScore > momScore) child.push(raw);
+            else {
+              // Tie: maternal keywords eksplisit → mom, selain itu child (data-driven fallback)
+              const maternalTie = ['hamil','nifas','menyusui','laktasi','oksitosin','payudara','perineum','prenatal','postpartum','pegal','relaksasi'].some((k) => lower.includes(k));
+              if (maternalTie) mom.push(raw); else child.push(raw);
+            }
+          }
+          // Jika partisi kosong salah satu sisi (gejala ambigu) → jangan hilangkan: biarkan sisi yang ada
+          return { mom, child };
+        } catch {
+          return { mom: [], child: [...syms] };
+        }
+      };
       if (isMomArgs) {
         const prevMom = session.momProfile || { complaints: [] as string[] };
         const mergedComplaints = [...(prevMom.complaints || [])];
-        for (const s of (fnArgs.symptoms || [])) {
+        const momSymptoms = fnArgs.category === 'BOTH' ? partitionBothSymptoms(fnArgs.symptoms || []).mom : (fnArgs.symptoms || []);
+        for (const s of momSymptoms) {
           if (s && !mergedComplaints.includes(s)) mergedComplaints.push(s);
         }
         const patch: any = { complaints: mergedComplaints };
@@ -498,7 +577,7 @@ export class ToolExecutionPipeline {
         // BOTH: gejala anak tetap dicatat ke anak; MOMS-only: JANGAN timpa anak.
         const shouldWriteChild = fnArgs.category !== 'MOMS' || fnArgs.childAgeMonths != null;
         if (shouldWriteChild) {
-          const childSymptoms = fnArgs.category === 'BOTH' ? (fnArgs.symptoms || []) : (fnArgs.category === 'MOMS' ? [] : (fnArgs.symptoms || []));
+          const childSymptoms = fnArgs.category === 'BOTH' ? partitionBothSymptoms(fnArgs.symptoms || []).child : (fnArgs.category === 'MOMS' ? [] : (fnArgs.symptoms || []));
           if (fnArgs.childAgeMonths != null || childSymptoms.length > 0) {
             const prevChild = session.childProfile || { symptoms: [] as string[] };
             const merged = [...(prevChild.symptoms || [])];

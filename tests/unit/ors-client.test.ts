@@ -52,6 +52,7 @@ describe('OrsClient Directions API Suite', () => {
           [112.751677, -7.34886],
           [112.7137227, -7.4688613],
         ],
+        preference: 'shortest',
         options: {
           avoid_features: ['tollways'],
         },
