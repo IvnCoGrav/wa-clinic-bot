@@ -31,7 +31,6 @@ wa-clinic-bot/
 │   │   ├── persona.ts             # Persona & tone of voice system prompt untuk LLM
 │   │   ├── brand.ts               # Brand identity (tenant-aware)
 │   │   ├── ai-models.config.ts    # Registry model per task LLM (CHAT/NLU/HARVESTING/…)
-│   │   ├── ai-router-config.ts    # Konfigurasi AI Router per tenant (DB → env → default)
 │   │   ├── ai-eligibility-config.ts # AI rollout scope per tenant
 │   │   ├── idle-greeting.config.ts # Sapaan hangat setelah idle
 │   │   ├── llm-context.ts         # Batas riwayat percakapan ke LLM
@@ -46,7 +45,6 @@ wa-clinic-bot/
 │   │   ├── google-maps/           # Geocoding gazetteer + LLM fallback
 │   │   ├── ors/                   # OpenRouteService Directions API
 │   │   └── llm/
-│   │       ├── ai-router.ts       # AI Router Engine (LLM intent classifier + circuit breaker + shadow mode)
 │   │       ├── intent.ts          # NLU Intent (interested, faq_question, medical_query, …)
 │   │       ├── generator.ts       # Persona-based RAG FAQ Response Generator
 │   │       ├── phrasing.service.ts # Natural language response generation via LLM (intent + facts)
@@ -69,13 +67,12 @@ wa-clinic-bot/
 │   │   ├── media.route.ts         # /media/:scope/:tenant/:file
 │   │   └── health.route.ts        # /health
 │   ├── cli/                       # chat-simulator.ts, seed-faq.ts, scrape-all.ts, dsb
-│   ├── scripts/                   # check-router-accuracy.ts, push-persona.ts, benchmark-*, dsb
+│   ├── scripts/                   # push-persona.ts, benchmark-*, dsb
 │   ├── utils/                     # encryption, circuit-breaker, jid, similarity, whatsapp-format, dsb
 │   └── landing/public/            # go.html, external-tracker.js, clientParamBuilder.bundle.js
 ├── tests/                         # Vitest (unit + integration), setup.ts mock DB & Redis
 ├── packages/
-│   ├── admin-dashboard/           # React SPA dashboard admin (di-serve bot di /admin/*)
-│   └── click-catcher/             # RETIRED — referensi saja, tidak dipakai lagi
+│   └── admin-dashboard/           # React SPA dashboard admin (di-serve bot di /admin/*)
 ├── scripts/                       # copy-landing-assets.js, backup.sh, deploy-*.sh
 ├── assets/                        # Aset gambar (pricelist_spa.jpg, dsb)
 ├── Dockerfile
@@ -174,29 +171,6 @@ npx prisma migrate deploy
 > perubahan terbaru). Gunakan `--from-url` (perintah di atas) sebagai pengganti. Detail:
 > `docs/KNOWN_ISSUES.md`.
 
-### Shadow Mode AI Router — Timeline Monitoring
-
-AI Router **default ON per tenant** (diatur dari Admin Dashboard → Settings → AI Router Engine).
-Sumber kebenaran: kolom `tenants.ai_router_enabled` / `tenants.ai_router_shadow_mode`
-(default ON + shadow ON — aman). Env `AI_ROUTER_ENABLED` / `AI_ROUTER_SHADOW_MODE`
-hanya fallback saat DB tidak tersedia. Router menulis evaluasi per pesan ke tabel
-`ai_router_evaluations`. Cek akurasi dengan:
-
-```bash
-npx tsx src/scripts/check-router-accuracy.ts --days=7
-```
-
-**Jadwal cek yang disarankan:**
-- **Hari ke-1:** langsung jalankan script — kriteria **mismatch `MEDICAL_CONCERN` = 0 (hard-zero)**
-  wajib dipantau dari hari pertama, jangan menunggu 7 hari.
-- **Hari ke-3:** cek tren pertama (escalation match rate, UNMAPPED rate).
-- **Hari ke-7:** jalankan gate lengkap sebelum memutuskan mematikan shadow mode.
-
-**Kriteria aman mematikan `AI_ROUTER_SHADOW_MODE` (semua wajib):**
-1. `escalation match rate >= 98%` selama minimal 7 hari berturut-turut, DAN
-2. mismatch terkait `MEDICAL_CONCERN` = **0** (hard-zero), DAN
-3. `UNMAPPED` rate di `legacy_intent` < 5%.
-
 ### Live Chat Panel — Catatan Deployment (SSE)
 
 Endpoint `GET /api/admin/live-chat/events` memakai **Server-Sent Events** (satu kanal per tenant:
@@ -213,7 +187,7 @@ Endpoint `GET /api/admin/live-chat/events` memakai **Server-Sent Events** (satu 
 
 ### Landing Page — Di-Serve Langsung oleh Bot
 
-Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain yang sama dengan admin dashboard). Microservice `packages/click-catcher` **tidak lagi dipakai** di docker-compose (dibiarkan sebagai referensi).
+Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain yang sama dengan admin dashboard). Microservice `packages/click-catcher` sudah **dihapus** dari monorepo (fungsinya diserap ke `src/landing/`).
 
 **URL yang dilayani:**
 - `GET /go` — pintu masuk kampanye (fail-open, selalu 200 generik). Opsional `?slug=` untuk memuat landing spesifik.

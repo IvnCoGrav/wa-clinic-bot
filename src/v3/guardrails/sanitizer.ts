@@ -132,6 +132,11 @@ export class OutputSanitizer {
       text = text.replace(pattern, '').trim();
     }
 
+    // 3b. Reparasi artefak ragu/keceplosan model (deterministik — Mandat #3:
+    //     kendali gaya via kode, bukan kepatuhan prompt). Pola struktural
+    //     fragmen + "..." + filler koreksi (eh/euh/anu) + koma opsional.
+    text = OutputSanitizer.sanitizeHesitationArtifacts(text);
+
     // 4. Aturan Enter Setelah Emot: Hapus titik setelah emot & sisipkan \n\n jika diikuti kalimat baru
     text = text.replace(/([\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+)\s*\./gu, '$1');
     text = text.replace(/(?<!^)(?<!\n)([\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+)\s+([A-Z*#0-9])/gu, '$1\n\n$2');
@@ -360,6 +365,23 @@ export class OutputSanitizer {
     return text
       .replace(/\bAda\s+yang\s+bisa\s+saya\s+bantu\b/gi, 'Ada yang bisa kami bantu')
       .replace(/\b(?:saya|aku)\s+(bantu|sarankan|cekkan|rekomendasikan)\b/gi, 'kami $1');
+  }
+
+  /**
+   * Butir 8 — Reparasi artefak ragu/keceplosan (deterministik, struktural):
+   * fragmen kata + elipsis + filler koreksi ("... eh,") dihapus beserta
+   * fragmennya ("jadi insyaa... eh, kami bantu" → "jadi kami bantu").
+   * Pola STRUKTURAL (bukan hafalan kalimat): berlaku untuk kata apa pun.
+   * Non-mutilasi: hanya menyentuh fragmen+filler, kalimat sekitar utuh.
+   */
+  public static sanitizeHesitationArtifacts(text: string): string {
+    if (!text) return text;
+    let out = text;
+    // Fragmen + "..." + filler koreksi (eh/euh/anu) + koma opsional → buang
+    out = out.replace(/(\S+)\s*\.\.\.\s*(?:eh|euh|anu|itu)\s*,?\s*/gi, '');
+    // Sisa elipsis ganda akibat penghapusan → rapikan spasi ganda
+    out = out.replace(/\s{2,}/g, ' ');
+    return out;
   }
 
   /**

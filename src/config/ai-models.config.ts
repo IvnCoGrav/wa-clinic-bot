@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { DEFAULT_TENANT_ID } from './tenant';
 
-export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'AI_VERIFIER';
+export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION';
 
 export interface AiTaskModelConfig {
   task: AiTaskType;
@@ -232,17 +232,6 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       maxTokens: 500,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
-    },
-  ],
-  [
-    'AI_VERIFIER',
-    {
-      task: 'AI_VERIFIER',
-      provider: 'SumoPod',
-      modelName: 'glm-5.3-flash',
-      description: 'QC Evaluator: penilaian kualitas balasan Bidan Yusi via LLM-as-judge (fallback CHAT_REPLY).',
-      maxTokens: 512,
-      temperature: 0.2,
     },
   ],
 ]);

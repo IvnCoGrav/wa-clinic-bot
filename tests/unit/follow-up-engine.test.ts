@@ -67,11 +67,16 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Idem', DEFAULT_TENANT_ID);
     const bookingDate = new Date();
 
-    // Simulasikan DB nyata: setelah pemanggilan pertama, findFirst mengembalikan
-    // row NEXT_TREATMENT PENDING (seperti DB sesungguhnya). Di in-memory fallback
-    // findFirst selalu null, jadi kita mock agar guard idempotency teruji.
+    // Per-stage guard: tiap stage dicek terpisah (3x findFirst per panggilan).
+    // Mock: 3 panggilan pertama → null (buat 3 stage), 3 panggilan kedua → existing (skip semua).
     const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
-    findFirstSpy.mockResolvedValueOnce(null as any).mockResolvedValueOnce({ id: 'existing' } as any);
+    findFirstSpy
+      .mockResolvedValueOnce(null as any) // stage 1 call 1
+      .mockResolvedValueOnce(null as any) // stage 2 call 1
+      .mockResolvedValueOnce(null as any) // stage 3 call 1
+      .mockResolvedValueOnce({ id: 'existing-1' } as any) // stage 1 call 2
+      .mockResolvedValueOnce({ id: 'existing-2' } as any) // stage 2 call 2
+      .mockResolvedValueOnce({ id: 'existing-3' } as any); // stage 3 call 2
 
     const createSpy = vi.spyOn(prisma.followUp, 'create');
     await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
@@ -81,7 +86,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     const afterSecond = createSpy.mock.calls.filter((c) => c[0].data?.type === 'NEXT_TREATMENT').length;
 
     // Pemanggilan pertama membuat 3 stage; pemanggilan kedua TIDAK menambah
-    // (guard idempotency menemukan row existing → skip).
+    // (guard per-stage menemukan row existing → skip).
     expect(afterFirst).toBe(3);
     expect(afterSecond).toBe(3);
   });
@@ -369,6 +374,81 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(sorted[0].id).toBe('2'); // NEXT_TREATMENT comes first
     expect(sorted[1].id).toBe('3'); // NO_PURCHASE earlier time
     expect(sorted[2].id).toBe('1'); // NO_PURCHASE later time
+  });
+
+  // MT-3.1 — Fase 1 guards: backdate, per-stage, WIB, SENT-aware
+  it('12. createReservationFollowUps backdate (H-9, Bunda Mutia) → skip REVIEW_H1 lampau', async () => {
+    const phone = `62893${Date.now()}mutia`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Mutia', DEFAULT_TENANT_ID);
+    const backdated = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000); // 9 hari lalu
+    const createSpy = vi.spyOn(prisma.followUp, 'create');
+    const before = createSpy.mock.calls.length;
+    await followUpService.createReservationFollowUps({
+      reservationId: `res-back-${Date.now()}`,
+      customerId: customer.id,
+      bookingDate: backdated,
+      treatmentCategory: 'BABY',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+    const reviewCalls = createSpy.mock.calls.slice(before).filter((c: any) => String(c[0]?.data?.type || '').startsWith('REVIEW_H1'));
+    expect(reviewCalls.length).toBe(0); // skip, tidak buat row kedaluwarsa
+  });
+
+  it('13. createNextTreatmentFollowUps hanya buat stage masa depan (WIB), stage lampau di-skip', async () => {
+    const phone = `62893${Date.now()}future`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Future', DEFAULT_TENANT_ID);
+    // Booking 60 hari lalu → stage 1 (≈30 hari lalu) lampau, stage 2/3 masih masa depan
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const createSpy = vi.spyOn(prisma.followUp, 'create');
+    // findFirst selalu null agar per-stage guard lolos
+    vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
+    const before = createSpy.mock.calls.length;
+    await followUpService.createNextTreatmentFollowUps(customer.id, sixtyDaysAgo, DEFAULT_TENANT_ID);
+    const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
+    // Stage 1 lampau → skip, minimal 1 stage tercipta, maksimal 2 (stage 2 & 3)
+    expect(nextCalls.length).toBeGreaterThanOrEqual(1);
+    expect(nextCalls.length).toBeLessThanOrEqual(2);
+    // Jika 2, pastikan stage yang tercipta adalah 2 dan 3
+    const stages = nextCalls.map((c: any) => c[0].data.stage).sort();
+    if (stages.length === 2) expect(stages).toEqual([2, 3]);
+  });
+
+  it('14. createNextTreatmentFollowUps SENT-aware per-stage: stage SENT tidak direcreate', async () => {
+    const phone = `62893${Date.now()}sent`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Sent', DEFAULT_TENANT_ID);
+    const bookingDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // besok → semua stage masa depan
+    const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
+    // stage 1 → SENT (skip), stage 2/3 → null (buat)
+    findFirstSpy
+      .mockResolvedValueOnce({ id: 'sent-1', status: 'SENT' } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+    const createSpy = vi.spyOn(prisma.followUp, 'create');
+    const before = createSpy.mock.calls.length;
+    await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
+    const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
+    expect(nextCalls.length).toBe(2);
+    expect(nextCalls.map((c: any) => c[0].data.stage).sort()).toEqual([2, 3]);
+  });
+
+  it('15. createNextTreatmentFollowUps WIB & PENDING: jam 09:00 WIB, status PENDING', async () => {
+    const phone = `62893${Date.now()}wib`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Wib', DEFAULT_TENANT_ID);
+    const bookingDate = new Date('2026-09-14T10:00:00+07:00');
+    vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
+    const createSpy = vi.spyOn(prisma.followUp, 'create');
+    const before = createSpy.mock.calls.length;
+    await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
+    const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
+    expect(nextCalls.length).toBe(3);
+    for (const c of nextCalls) {
+      expect(c[0].data.status).toBe('PENDING');
+      const d: Date = c[0].data.scheduled_at;
+      // 09:00 WIB = 02:00 UTC
+      expect(d.getUTCHours()).toBe(2);
+      expect(d.getUTCMinutes()).toBe(0);
+    }
+    expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-14T02:00:00.000Z');
   });
 });
 

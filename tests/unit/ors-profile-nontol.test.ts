@@ -51,6 +51,7 @@ describe('OrsClient profil mobil non-tol (driving-car + avoid tollways)', () => 
           [FROM.lng, FROM.lat],
           [TO.lng, TO.lat],
         ],
+        preference: 'shortest',
         options: { avoid_features: ['tollways'] },
       },
       expect.anything()
@@ -66,7 +67,7 @@ describe('OrsClient profil mobil non-tol (driving-car + avoid tollways)', () => 
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
       expect.stringContaining('/v2/directions/driving-car'),
-      expect.objectContaining({ options: { avoid_features: ['tollways', 'highways'] } }),
+      expect.objectContaining({ preference: 'shortest', options: { avoid_features: ['tollways', 'highways'] } }),
       expect.anything()
     );
   });
@@ -79,6 +80,7 @@ describe('OrsClient profil mobil non-tol (driving-car + avoid tollways)', () => 
     await new OrsClient().calculateRoute(FROM.lat, FROM.lng, TO.lat, TO.lng);
 
     const payload = mockedAxios.post.mock.calls[0][1] as Record<string, any>;
+    expect(payload).toHaveProperty('preference', 'shortest');
     expect(payload).not.toHaveProperty('options');
   });
 
@@ -91,6 +93,7 @@ describe('OrsClient profil mobil non-tol (driving-car + avoid tollways)', () => 
 
     const [url, payload] = mockedAxios.post.mock.calls[0] as [string, Record<string, any>];
     expect(url).toBe('https://api.heigit.org/openrouteservice/v2/directions/cycling-electric');
+    expect(payload).toHaveProperty('preference', 'shortest');
     expect(payload).not.toHaveProperty('options');
   });
 });

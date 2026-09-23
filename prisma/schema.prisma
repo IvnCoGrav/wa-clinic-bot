@@ -182,36 +182,6 @@ model Conversation {
   @@map("conversations")
 }
 
-model AiRouterEvaluation {
-  id        String @id @default(cuid())
-  tenant_id String @default("default-tenant")
-
-  customer_phone String
-  message_text   String @db.Text
-  current_state  String
-
-  llm_raw_output    Json?
-  llm_intent        String?
-  llm_confidence    Float?
-  llm_used_fallback Boolean @default(false)
-
-  legacy_intent    String
-  legacy_escalated Boolean
-
-  intent_match     Boolean
-  escalation_match Boolean
-  mismatch_notes   String? @db.Text
-
-  response_time_ms Int?
-
-  created_at DateTime @default(now())
-
-  @@index([tenant_id, created_at])
-  @@index([intent_match])
-  @@index([escalation_match])
-  @@map("ai_router_evaluations")
-}
-
 model AiEvaluation {
   id              String   @id @default(cuid())
   tenant_id       String   @default("default-tenant")

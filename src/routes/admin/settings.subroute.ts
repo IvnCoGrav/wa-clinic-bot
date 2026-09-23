@@ -1305,42 +1305,6 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * GET /api/admin/ai-router
-   */
-  fastify.get('/api/admin/ai-router', async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.status(200).send({
-      success: true,
-      data: {
-        enabled: process.env.AI_ROUTER_ENABLED === 'true',
-        shadowMode: process.env.AI_ROUTER_SHADOW_MODE === 'true',
-      },
-    });
-  });
-
-  /**
-   * PATCH /api/admin/ai-router
-   */
-  fastify.patch(
-    '/api/admin/ai-router',
-    async (
-      request: FastifyRequest<{
-        Body: { enabled?: boolean; shadowMode?: boolean };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const body = request.body || {};
-      return reply.status(200).send({
-        success: true,
-        message: 'Konfigurasi diperbarui.',
-        data: {
-          enabled: body.enabled ?? true,
-          shadowMode: body.shadowMode ?? false,
-        },
-      });
-    }
-  );
-
-  /**
    * GET /api/admin/ai-rollout-scope
    */
   fastify.get('/api/admin/ai-rollout-scope', async (_request: FastifyRequest, reply: FastifyReply) => {

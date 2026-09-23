@@ -8,7 +8,7 @@
 const COMMON_DISTRICTS = [
   // Multi-word districts / areas / clusters (Panjang dulu agar matching lebih spesifik)
   'tambak sari sby', 'sidotopo wetan', 'sekawan nyaman', 'citraland wiyung', 'medokan semampir',
-  'gunung anyar tambak', 'tenggilis mejoyo', 'pabean cantian', 'pabean cantikan', 'lidah kulon',
+  'gunung anyar tambak', 'gunung anyar', 'tenggilis mejoyo', 'pabean cantian', 'pabean cantikan', 'lidah kulon',
   'lidah wetan', 'karang pilang', 'karangpilang', 'wisata bukit mas', 'grand pakuwon', 'pakuwon city',
   'pakuwon indah', 'graha family', 'royal residence', 'puri surya jaya', 'medokan ayu', 'medokan asri',
   'tambak sumur', 'tambaksumur', 'tambak sawah', 'tambaksawah', 'tambak oso', 'tambakoso',

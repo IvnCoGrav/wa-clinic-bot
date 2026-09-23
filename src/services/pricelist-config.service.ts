@@ -1,5 +1,4 @@
 import { prisma } from '../db/client';
-import { mediaService } from './media.service';
 
 /**
  * pricelist-config.service.ts — Konfigurasi gambar pricelist per-tenant.
@@ -30,28 +29,6 @@ export async function getPricelistImageUrl(tenantId: string): Promise<string> {
     // DB offline → lanjut ke fallback env/aset
   }
   return process.env.CLINIC_PRICELIST_IMAGE_URL || DEFAULT_PRICELIST_IMAGE;
-}
-
-/**
- * Menyelesaikan sumber gambar pricelist menjadi target yang bisa dikirim
- * gateway (WAHA: path/URL; WABA: URL publik). Mengembalikan null jika tak
- * bisa di-resolve untuk provider tersebut.
- */
-export async function resolvePricelistImageTarget(
-  tenantId: string,
-  provider: 'WAHA' | 'WABA'
-): Promise<string | null> {
-  const raw = await getPricelistImageUrl(tenantId);
-  if (/^https?:\/\//i.test(raw)) return raw;
-
-  if (raw.startsWith('/media/outbound/')) {
-    return mediaService.resolveOutboundForProvider(raw, provider);
-  }
-
-  // Path file lokal: WAHA bisa kirim langsung; WABA butuh URL publik yang
-  // tidak tersedia untuk path sembarang → gagal eksplisit.
-  if (provider === 'WAHA') return raw;
-  return null;
 }
 
 /** Menyimpan/menghapus pricelist_image_url per-tenant (null = hapus → fallback). */

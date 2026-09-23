@@ -19,6 +19,12 @@ export class CronService {
       const tenantIds = await getAllTenantIds();
       for (const tenantId of tenantIds) {
         await followUpService.processDueFollowUps(tenantId);
+        try {
+          const rec = await followUpService.reconcileOrphanedCompletedFollowUps(tenantId);
+          if (rec.reconciledCount > 0) console.log(`[Cron] Reconciled ${rec.reconciledCount} orphaned NEXT_TREATMENT (tenant ${tenantId}).`);
+        } catch (e: any) {
+          console.warn('[Cron] reconcileOrphanedCompletedFollowUps failed:', e?.message);
+        }
         await followUpService.checkAndSetLostCustomers(tenantId);
         await this.checkPendingPurchaseModerationAlerts(tenantId);
         const { staffNotificationService } = await import('./staff-notification.service');
@@ -246,8 +252,10 @@ export class CronService {
   }
 
   /**
-   * Mengirim review H+1 jam 07:00 untuk reservasi kemarin,
-   * dan mendaftarkan follow-up NEXT_TREATMENT (+1, +2, +3 bulan)
+   * @deprecated MT-1.5 — REVIEW_H1 dipostpone permanen (follow-up.service processDueFollowUps skip REMINDER/REVIEW),
+   * dan NEXT_TREATMENT kini dijadwalkan via reservationLifecycleService.onReservationCompleted (dekopling dari REVIEW).
+   * Method ini dead-code (tidak dipanggil runMorningJobs); dipertahankan stub agar tidak break import, lihat KNOWN_ISSUES.
+   * Jika H+1 diaktifkan kembali, wire ulang secara eksplisit dan hapus deprecasi ini.
    */
   private async sendYesterdayReviewsAndScheduleNextFollowups(): Promise<void> {
     const { whatsappProviderService } = await import('./whatsapp-provider.service');
@@ -333,8 +341,9 @@ export class CronService {
         tenantId: targetTenantId,
       });
 
-      // 3. Daftarkan 3 row follow_ups NEXT_TREATMENT (+1, +2, +3 bulan)
-      await followUpService.createNextTreatmentFollowUps(res.customer_id, res.booking_date, DEFAULT_TENANT_ID);
+      // 3. [MT-1.5] NEXT_TREATMENT dinetralkan — sudah dijadwalkan via onReservationCompleted (seam terpusat).
+      //     Jika H+1 diaktifkan kembali, panggil reservationLifecycleService.onReservationCompleted di sini.
+      void followUpService;
     }
   }
 

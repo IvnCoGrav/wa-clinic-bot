@@ -1,7 +1,5 @@
-import axios from 'axios';
 import dotenv from 'dotenv';
 import { getStringSimilarity } from '../../utils/similarity';
-import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
@@ -31,6 +29,35 @@ export function hasStreetAddressDetail(text: string | null | undefined): boolean
   return STREET_ADDRESS_MARKERS.test(text);
 }
 
+/**
+ * Spesifisitas resolvable 0ms (pure, sinkron, tanpa LLM): true bila teks memuat
+ * (a) penanda alamat jalan/perumahan (STREET_ADDRESS_MARKERS), ATAU
+ * (b) nama kelurahan gazetteer (eksak maupun fuzzy Dice ≥0,80, toleransi typo
+ * seperti "brebek"≈"Berbek"), ATAU (c) landmark populer terdaftar.
+ * Token sisa yang TIDAK cocok ketiganya ("dekat pintu masuk tol") membawa NOL
+ * daya resolusi → bukan alasan memanggil LLM.
+ */
+export function hasResolvableSpecificity(text: string | null | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  if (hasStreetAddressDetail(lower)) return true;
+  if (findPopularLandmark(text || '')) return true;
+  try {
+    const data = getGazetteerData();
+    const tokens = lower.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+    for (const d of data) {
+      const kel = (d.Kelurahan_Desa || '').toLowerCase();
+      if (kel.length < 3) continue;
+      const reg = new RegExp(`\\b${escapeRegex(kel)}\\b`, 'i');
+      if (reg.test(lower)) return true;
+      for (const t of tokens) {
+        if (getStringSimilarity(t, kel) >= 0.80) return true;
+      }
+    }
+  } catch { /* fallback: tidak ada bukti spesifik → false */ }
+  return false;
+}
+
 export interface ResolvedLocation {
   isPrecise: boolean;
   isFuzzyMatch?: boolean;
@@ -52,30 +79,9 @@ export interface ResolvedLocation {
  */
 export class GeocodingService {
   private apiKey: string;
-  public geocodeBreaker: CircuitBreaker<[any], any>;
-  public reverseGeocodeBreaker: CircuitBreaker<[any], any>;
 
   constructor() {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
-
-    this.geocodeBreaker = new CircuitBreaker(
-      async (params: any) => { throw new Error('Google Maps client removed - use gazetteer/LLM'); },
-      async (params: any): Promise<any> => {
-        const locationText = params.params.address.replace(', Surabaya', '');
-        return this.mockGeocodeText(locationText);
-      },
-      { name: 'Google Geocoding' }
-    );
-
-    this.reverseGeocodeBreaker = new CircuitBreaker(
-      async (params: any) => { throw new Error('Google Maps client removed'); },
-      async (params: any): Promise<any> => {
-        const { lat, lng } = params.params.latlng;
-        return this.mockReverseGeocode(lat, lng);
-      },
-      { name: 'Google Reverse Geocoding' }
-    );
-
   }
 
   /**
@@ -105,181 +111,10 @@ export class GeocodingService {
           return localMatch;
         }
 
-        // --- TIER 2: GOOGLE MAPS API (FALLBACK UNTUK NAMA JALAN/PERUMAHAN) ---
-        if (!this.apiKey || this.apiKey.startsWith('mock')) {
-          return localMatch;
-        }
-
-        const lower = locationText.toLowerCase();
-        let queryText = locationText;
-        // Lapis 3: Territory-biased — bias ke Surabaya/Sidoarjo unless eksplisit kota luar
-        const hasExplicitOutsideCity = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban|gresik\s*luar|gresik kota luar)\b/i.test(lower);
-        if (!lower.includes('surabaya') && !lower.includes('sidoarjo') && !lower.includes('gresik') && !lower.includes('jawa timur')) {
-          if (!hasExplicitOutsideCity) {
-            queryText = `${locationText}, Surabaya, Jawa Timur, Indonesia`;
-          } else {
-            queryText = `${locationText}, Jawa Timur, Indonesia`;
-          }
-        }
-
-        // =========================================================================
-        // GAZETTEER PRE-VALIDATION GATE
-        // Mencegah blind geocoding ke Google Maps ketika input sepenuhnya generik/tanya
-        // (misal "dmn ya", "lokasi dimana") tanpa nama wilayah konkret, agar DecisionMatrix
-        // tidak memicu kalkulasi ongkir salah.
-        // =========================================================================
-        try {
-          const { isClinicLocationQuestion } = await import('../../utils/location-classifier');
-          const isPureQuestionOrNoise =
-            isClinicLocationQuestion(locationText) ||
-            locationText.toLowerCase().split(/\s+/).filter(Boolean).every((w) => INDONESIAN_STOP_WORDS.has(w));
-
-          if (isPureQuestionOrNoise) {
-            console.log(`[GEOCODING GATE] Input "${locationText}" is pure question/stop-words → bypass Google Maps`);
-            return { isPrecise: false };
-          }
-        } catch (_) {
-          // Jika gagal cek, lanjutkan ke Google Maps (fallback)
-        }
-
-        const response = await this.geocodeBreaker.execute({
-          params: {
-            address: queryText,
-            key: this.apiKey,
-            components: { country: 'ID' }, // Batasi pencarian ke Indonesia
-          },
-        });
-
-        if (response && 'isPrecise' in response) {
-          return response;
-        }
-
-        if (!response.data.results || response.data.results.length === 0) {
-          return localMatch.isPrecise ? localMatch : { isPrecise: false };
-        }
-
-        const topResult = response.data.results[0];
-        const components = topResult.address_components;
-
-        const kelurahan = this.extractComponent(components, [
-          'administrative_area_level_4', // Tingkat Kelurahan / Desa di Indonesia
-          'sublocality_level_1',          // Alternatif sublocality
-          'neighborhood',
-        ]);
-
-        const kecamatan = this.extractComponent(components, [
-          'administrative_area_level_3', // Tingkat Kecamatan
-          'sublocality',
-        ]);
-
-        const kota = this.extractComponent(components, [
-          'administrative_area_level_2', // Tingkat Kota / Kabupaten
-          'locality',
-        ]);
-
-        const lat = topResult.geometry.location.lat;
-        const lng = topResult.geometry.location.lng;
-        const zipcode = this.extractComponent(components, ['postal_code']);
-
-        // Presisi jika kelurahan/desa berhasil terdeteksi
-        const isPrecise = Boolean(kelurahan);
-
-        const googleResult: ResolvedLocation = {
-          isPrecise,
-          kelurahan,
-          kecamatan,
-          kota,
-          lat,
-          lng,
-          formattedAddress: topResult.formatted_address,
-          zipcode,
-        };
-
-        // Lapis 4: Second-pass verification — jika hasil Google jauh (OOC) tapi query tidak menyebut kota luar eksplisit,
-        // coba verifikasi ulang dengan bias eksplisit Surabaya/Sidoarjo.
-        // Validasi struktural (bukan regex kota): second-pass DILARANG jika kota hasil awal
-        // sudah valid di luar Surabaya/Sidoarjo (misal Kabupaten Gresik) — menempel bias
-        // Surabaya ke query Gresik hanya menghasilkan hijack (kasus "Menganti Gresik"
-        // dibajak ke "Dukuh Sutorejo, Mulyorejo, Surabaya").
-        if (googleResult.lat != null && googleResult.lng != null) {
-          try {
-            const { calculateHaversineDistance } = await import('../../utils/haversine');
-            const { clinicConfig } = await import('../../config/clinic');
-            const distKm = calculateHaversineDistance(
-              { lat: clinicConfig.lat, lng: clinicConfig.lng },
-              { lat: googleResult.lat, lng: googleResult.lng }
-            ) * 1.6; // haversine estimate
-            const isOOC = distKm > 30;
-            const firstPassKota = (googleResult.kota || '').toLowerCase();
-            const isKnownOutsideMetro =
-              firstPassKota.length > 0 && !/(surabaya|sidoarjo)/i.test(firstPassKota);
-            if (isOOC && !isKnownOutsideMetro && lower.trim().split(/\s+/).length <= 3) {
-              // Coba second-pass dengan bias eksplisit Surabaya
-              console.log(`[GEOCODING SECOND-PASS] Google result OOC (${distKm.toFixed(1)}km, ${googleResult.kelurahan || '-'} -> ${googleResult.kota || '-'}) untuk "${locationText}" — coba verifikasi Surabaya/Sidoarjo`);
-              const retryQueries = [
-                `${locationText}, Kota Surabaya, Jawa Timur, Indonesia`,
-                `${locationText}, Kabupaten Sidoarjo, Jawa Timur, Indonesia`,
-              ];
-              for (const retryQuery of retryQueries) {
-                try {
-                  const retryResponse = await this.geocodeBreaker.execute({
-                    params: {
-                      address: retryQuery,
-                      key: this.apiKey,
-                      components: { country: 'ID' },
-                    },
-                  });
-                  if (retryResponse && 'isPrecise' in retryResponse) continue;
-                  if (!retryResponse.data.results || retryResponse.data.results.length === 0) continue;
-                  const retryTop = retryResponse.data.results[0];
-                  const retryLat = retryTop.geometry.location.lat;
-                  const retryLng = retryTop.geometry.location.lng;
-                  const retryDistKm = calculateHaversineDistance(
-                    { lat: clinicConfig.lat, lng: clinicConfig.lng },
-                    { lat: retryLat, lng: retryLng }
-                  ) * 1.6;
-                  if (retryDistKm <= 30) {
-                    const retryKelurahan = this.extractComponent(retryTop.address_components, ['administrative_area_level_4', 'sublocality_level_1', 'neighborhood']);
-                    const retryKecamatan = this.extractComponent(retryTop.address_components, ['administrative_area_level_3', 'sublocality']);
-                    const retryKota = this.extractComponent(retryTop.address_components, ['administrative_area_level_2', 'locality']);
-                    // Validasi konsistensi komponen alamat: hasil retry WAJIB memuat salah satu
-                    // token bermakna dari query asli (misal "menganti") — tolak hijack seperti
-                    // "Menganti Gresik" → "Dukuh Sutorejo, Mulyorejo".
-                    const retryComponentsText = (retryTop.address_components || [])
-                      .map((c: any) => c.long_name || '')
-                      .join(' ')
-                      .toLowerCase();
-                    const queryTokens = lower.split(/\s+/).map((t) => t.replace(/[^a-z0-9]/gi, '')).filter((t) =>
-                      t.length >= 4 &&
-                      !INDONESIAN_STOP_WORDS.has(t) &&
-                      !/^(surabaya|sidoarjo|gresik|jawa|timur|kota|kabupaten|indonesia)$/i.test(t)
-                    );
-                    const hasComponentOverlap = queryTokens.some((t) => retryComponentsText.includes(t));
-                    if (!hasComponentOverlap) {
-                      console.log(`[GEOCODING SECOND-PASS REJECT] "${retryQuery}" → ${retryKelurahan || '-'}, ${retryKecamatan || '-'} tidak memuat token query ${JSON.stringify(queryTokens)} — tolak hijack, lanjut`);
-                      continue;
-                    }
-                    console.log(`[GEOCODING SECOND-PASS HIT] "${retryQuery}" → ${retryKelurahan || '-'}, ${retryKecamatan || '-'}, ${retryKota || '-'} (${retryDistKm.toFixed(1)}km) — override OOC`);
-                    return {
-                      isPrecise: Boolean(retryKelurahan),
-                      kelurahan: retryKelurahan,
-                      kecamatan: retryKecamatan,
-                      kota: retryKota,
-                      lat: retryLat,
-                      lng: retryLng,
-                      formattedAddress: retryTop.formatted_address,
-                      zipcode: this.extractComponent(retryTop.address_components, ['postal_code']),
-                    };
-                  }
-                } catch (_) {}
-              }
-            }
-          } catch (_) {}
-        }
-
-        return googleResult;
+        // Google Maps tier dihapus — sistem murni gazetteer + LLM fallback (via mockGeocodeText)
+        return localMatch;
       } catch (error) {
-        console.error('Error in Google Maps geocodeText, falling back to local database:', error);
+        console.error('Error in geocodeText, falling back to local database:', error);
         return this.mockGeocodeText(locationText);
       }
     });
@@ -287,67 +122,10 @@ export class GeocodingService {
 
   /**
    * Reverse Geocode koordinat native WhatsApp share location (Latitude & Longitude).
+   * Murni gazetteer — Google Maps client dihapus.
    */
   public async reverseGeocode(lat: number, lng: number): Promise<ResolvedLocation> {
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
-      return this.mockReverseGeocode(lat, lng);
-    }
-
-    try {
-      const response = await this.reverseGeocodeBreaker.execute({
-        params: {
-          latlng: { lat, lng },
-          key: this.apiKey,
-        },
-      });
-
-      if (response && 'isPrecise' in response) {
-        return response;
-      }
-
-      if (!response.data.results || response.data.results.length === 0) {
-        return {
-          isPrecise: true, // Native coordinates always have lat/lng
-          lat,
-          lng,
-        };
-      }
-
-      const topResult = response.data.results[0];
-      const components = topResult.address_components;
-
-      const kelurahan = this.extractComponent(components, [
-        'administrative_area_level_4',
-        'sublocality_level_1',
-        'neighborhood',
-      ]);
-
-      const kecamatan = this.extractComponent(components, [
-        'administrative_area_level_3',
-        'sublocality',
-      ]);
-
-      const kota = this.extractComponent(components, [
-        'administrative_area_level_2',
-        'locality',
-      ]);
-
-      const zipcode = this.extractComponent(components, ['postal_code']);
-
-      return {
-        isPrecise: true,
-        kelurahan: kelurahan || 'Area Terdaftar',
-        kecamatan,
-        kota,
-        lat,
-        lng,
-        formattedAddress: topResult.formatted_address,
-        zipcode,
-      };
-    } catch (error) {
-      console.error('Error in Google Maps reverseGeocode, falling back to mockReverseGeocode:', error);
-      return this.mockReverseGeocode(lat, lng);
-    }
+    return this.mockReverseGeocode(lat, lng);
   }
 
   /**
@@ -651,7 +429,13 @@ export class GeocodingService {
              !matchedKecWords.has(cleanW);
     });
     const hasMeaningfulPoiTokens = wordsInClean.length > 0;
-    const hasSpecificLocationContext = hasStreetAddressKeyword || hasMeaningfulPoiTokens;
+    // Vaga vs POI: token sisa generik ("dekat pintu masuk tol") BUKAN POI.
+    // Gunakan hasResolvableSpecificity (kelurahan/landmark/street-marker) sebagai
+    // penentu spesifik, BUKAN semua kata bermakna. Exact-kecamatan dikecualikan
+    // agar "pabean cantian" tetapambigu (kelurahan "pabean" di kecamatan lain
+    // tidak dihitung sebagai POI untuk kecamatan tersebut).
+    const hasResolvablePoI = hasResolvableSpecificity(lower) && !isExactKecamatanName;
+    const hasSpecificLocationContext = hasStreetAddressKeyword || hasSpecificKelurahanInText || hasResolvablePoI;
 
     if ((matchedKecSubdistricts || isStaticImpreciseWord) && !hasExplicitKelurahanKeyword && !hasSpecificKelurahanInText && (isExactKecamatanName || (!isExactKelurahanName && !hasAnyKelurahanInText))) {
       if (hasSpecificLocationContext) {

@@ -20,11 +20,23 @@ export interface IOrsClient {
  * Client Service untuk OpenRouteService (ORS) Directions API.
  * Dokumentasi ORS: https://openrouteservice.org/dev/#/api-docs/v2/directions/{profile}/post
  */
+export const ORS_VALID_PREFERENCES = ['fastest', 'shortest', 'recommended'] as const;
+
+export function resolveOrsPreference(raw: string | undefined): string {
+  const v = (raw || '').trim().toLowerCase();
+  if ((ORS_VALID_PREFERENCES as readonly string[]).includes(v)) return v;
+  if (raw !== undefined && raw !== '') {
+    console.warn(`[ORS] Invalid ORS_PREFERENCE="${raw}", fallback to 'shortest'. Valid: fastest|shortest|recommended`);
+  }
+  return 'shortest';
+}
+
 export class OrsClient implements IOrsClient {
   private baseUrl: string;
   private profile: string;
   private apiKey: string;
   private avoidFeatures: string[];
+  private preference: string;
 
   constructor() {
     let rawBaseUrl = process.env.ORS_BASE_URL || 'https://api.heigit.org/openrouteservice';
@@ -34,6 +46,7 @@ export class OrsClient implements IOrsClient {
     this.baseUrl = rawBaseUrl.replace(/\/$/, '');
     this.profile = process.env.ORS_PROFILE || 'driving-car';
     this.apiKey = process.env.ORS_API_KEY || '';
+    this.preference = resolveOrsPreference(process.env.ORS_PREFERENCE);
 
     // Hindari jalan tol (tollways) khusus operasional rute non-tol / motor
     const rawAvoid = process.env.ORS_AVOID_FEATURES;
@@ -78,6 +91,7 @@ export class OrsClient implements IOrsClient {
           [fromLng, fromLat],
           [toLng, toLat],
         ],
+        preference: this.preference,
       };
 
       if (this.avoidFeatures.length > 0) {

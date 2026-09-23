@@ -122,7 +122,7 @@ const RULE4_AGE_UNKNOWN = `4. KLARIFIKASI USIA SAAT TANYA HARGA/BIAYA/TOTAL ANAK
 /** Aturan 4 versi saat USIA ANAK SUDAH DIKETAHUI: dilarang menodong usia lagi (state-gated pruning). */
 const RULE4_AGE_KNOWN = `4. USIA SI KECIL SUDAH DIKETAHUI (MUTLAK): Data usia si kecil sudah tercatat di [STATUS DATA CUSTOMER SAAT INI]. DILARANG KERAS menanyakan usia/umur si kecil lagi dalam bentuk apa pun! Langsung gunakan data usia tersebut untuk menyelaraskan rekomendasi paket dan tarif.`;
 
-const RULE4B_RELIGION = `4b. NETRALITAS AGAMA & PENGGUNAAN SALAM (MUTLAK): Pelanggan klinik berasal dari latar belakang keyakinan yang beragam. DILARANG KERAS menggunakan kata-kata keagamaan ("Alhamdulillah", "Bismillah", "Insya Allah", "Puji Tuhan", dll.) secara sepihak/tanpa dipicu customer! JANGAN menyelipkan kata "Alhamdulillah" dalam balasan normal atau saat konfirmasi jangkauan lokasi. PENGECUALIAN: jika customer menyapa "Assalamualaikum", wajib dijawab "Waalaikumsalam Bunda" di awal respon.`;
+const RULE4B_RELIGION = `4b. NETRALITAS PROFESIONAL (MUTLAK): Berkomunikasilah dengan bahasa pelayanan kesehatan yang universal, santun, dan inklusif bagi seluruh customer. Gunakan frasa konfirmasi resmi klinik (contoh: "Baik Bunda, kami bantu pastikan...", "Siap Bunda, kami cekkan..."). PENGECUALIAN: bila customer menyapa "Assalamualaikum", jawab hangat "Waalaikumsalam Bunda" di awal respon.`;
 
 /**
  * Aturan negative-constraints nada/gaya (1–4b) dengan STATE-GATED PRUNING

@@ -166,6 +166,77 @@ export class ReservationLifecycleService {
   }
 
   /**
+   * Dipanggil saat reservasi berstatus completed (treatment selesai).
+   * Deep seam terpusat — SEMUA transisi completed WAJIB lewat sini (anti-spray).
+   * Best-effort: tidak pernah throw ke pemanggil; setiap efek guarded try/catch.
+   * Efek:
+   *  1. Jadwalkan reminder/review H-1/H+1 dengan guard backdate (skip REVIEW lampau)
+   *  2. Jadwalkan NEXT_TREATMENT +1/+2/+3 bulan per-stage (skip lampau, SENT-aware, PENDING)
+   *  3. Reset sesi V3 episodik (cart/booking/komitmen) agar percakapan berikut bersih
+   */
+  public async onReservationCompleted(params: {
+    customerId: string;
+    reservationId: string;
+    bookingDate: Date;
+    treatmentCategory?: string | null;
+    tenantId: string;
+  }): Promise<void> {
+    const { customerId, reservationId, bookingDate, treatmentCategory, tenantId } = params;
+    if (!customerId || !reservationId || !bookingDate) return;
+
+    // 1. Review/Reminder (guard backdate ada di follow-up.service)
+    try {
+      const { followUpService } = await import('./follow-up.service');
+      await followUpService.createReservationFollowUps({
+        reservationId,
+        customerId,
+        bookingDate,
+        treatmentCategory: treatmentCategory || null,
+        tenantId,
+      });
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] onReservationCompleted createReservationFollowUps failed:', err?.message || err);
+    }
+
+    // 2. NEXT_TREATMENT (per-stage guard + WIB + SENT-aware ada di follow-up.service)
+    try {
+      const { followUpService } = await import('./follow-up.service');
+      await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] onReservationCompleted createNextTreatmentFollowUps failed:', err?.message || err);
+    }
+
+    // 3. Reset sesi V3 episodik (CG-02 closing)
+    try {
+      const activeConv = await prisma.conversation.findFirst({
+        where: { customer_id: customerId, tenant_id: tenantId },
+        orderBy: { updated_at: 'desc' },
+        select: { id: true },
+      });
+      if (activeConv?.id) {
+        const { GoalTracker } = await import('../v3/state/goal-tracker');
+        await GoalTracker.updateGoalSession(
+          activeConv.id,
+          {
+            cartItems: [],
+            selectedTreatment: undefined,
+            booking: undefined,
+            discussedTreatments: [],
+            priceDiscussed: undefined,
+            bookingCommitConfirmed: undefined,
+            lastCommitment: undefined,
+            ongkirStatus: undefined,
+            totalPrice: undefined,
+          } as any,
+          tenantId
+        );
+      }
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] onReservationCompleted reset V3 session failed:', err?.message || err);
+    }
+  }
+
+  /**
    * Terapkan label lifecycle pada customer — DB-ONLY (Mandat Mutlak Anti-Label WAHA).
    * - priorConfirmedCount > 0  → tambah 'Repeat Order', hapus 'New Customer' + 'Pending Payment'
    * - priorConfirmedCount === 0 → tambah 'Pending Payment', hapus 'New Customer'

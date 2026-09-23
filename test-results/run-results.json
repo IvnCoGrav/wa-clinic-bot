@@ -496,14 +496,30 @@
     "category": "D",
     "title": "FAQ — \"Pijat bayi itu manfaatnya apa sih?\"",
     "mode": "llm",
+    "toolLog": [
+      {
+        "name": "get_clinic_policy_faq",
+        "args": {
+          "commitment": "EXPLORING",
+          "topic": "homebase_and_coverage"
+        }
+      },
+      {
+        "name": "search_knowledge_faq",
+        "args": {
+          "commitment": "EXPLORING",
+          "query": "manfaat pijat bayi"
+        }
+      }
+    ],
     "messages": "/location -7.34886,112.751677 | Pijat bayi itu manfaatnya apa sih?",
     "preLocation": true,
     "bubbles": [
-      "Halo Bunda! ✨\n\nPerkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\n<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"calculate_delivery\">\n<｜｜DSML｜｜ parameter name=\"latitude\" string=\"true\">-7.34886</｜｜DSML｜｜ parameter>\n<｜｜DSML｜｜ parameter name=\"longitude\" string=\"true\">112.751677</｜｜DSML｜｜ parameter>\n</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>",
-      "Pijat bayi itu banyak banget manfaatnya Bunda 😊\n\nSelain membantu si kecil tidur lebih nyenyak, pijat juga bisa meredakan kelelahan dan pegalnya, melancarkan sirkulasi darah, serta menstimulasi tumbuh kembang dan motoriknya. Karena si kecil sehat tanpa keluhan, kami sarankan *Pijat Bayi Ceria Newborn* yaa, fokusnya untuk relaksasi dan membantu tubuhnya lebih rileks.",
-      "Kalau boleh tahu rumah di daerah mana ya? Biar kami bantu cekkan jangkauan dan ketersediaan jadwal Bidan kami 🤗"
+      "Halo Bunda! ✨\n\nPerkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.",
+      "Pijat bayi bermanfaat banget Bunda, di antaranya membantu si kecil lebih rileks dan tidur lebih nyenyak, melancarkan sirkulasi darah, meredakan kelelahan, serta menstimulasi tumbuh kembang dan bonding si kecil dengan Bunda 🤍",
+      "Biasanya perawatan ini ditangani langsung oleh Bidan kami dengan sentuhan lembut dan aman untuk bayi. Apakah saat ini si kecil ada keluhan tertentu, atau untuk pijat sehat relaksasi saja ya Bunda? 😊"
     ],
-    "replyText": "Halo Bunda! ✨\n\nPerkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\n<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"calculate_delivery\">\n<｜｜DSML｜｜ parameter name=\"latitude\" string=\"true\">-7.34886</｜｜DSML｜｜ parameter>\n<｜｜DSML｜｜ parameter name=\"longitude\" string=\"true\">112.751677</｜｜DSML｜｜ parameter>\n</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>\n\nPijat bayi itu banyak banget manfaatnya Bunda 😊\n\nSelain membantu si kecil tidur lebih nyenyak, pijat juga bisa meredakan kelelahan dan pegalnya, melancarkan sirkulasi darah, serta menstimulasi tumbuh kembang dan motoriknya. Karena si kecil sehat tanpa keluhan, kami sarankan *Pijat Bayi Ceria Newborn* yaa, fokusnya untuk relaksasi dan membantu tubuhnya lebih rileks.\n\nKalau boleh tahu rumah di daerah mana ya? Biar kami bantu cekkan jangkauan dan ketersediaan jadwal Bidan kami 🤗",
+    "replyText": "Halo Bunda! ✨\n\nPerkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nPijat bayi bermanfaat banget Bunda, di antaranya membantu si kecil lebih rileks dan tidur lebih nyenyak, melancarkan sirkulasi darah, meredakan kelelahan, serta menstimulasi tumbuh kembang dan bonding si kecil dengan Bunda 🤍\n\nBiasanya perawatan ini ditangani langsung oleh Bidan kami dengan sentuhan lembut dan aman untuk bayi. Apakah saat ini si kecil ada keluhan tertentu, atau untuk pijat sehat relaksasi saja ya Bunda? 😊",
     "stateChain": [
       "INITIAL",
       "INITIAL"
@@ -515,8 +531,8 @@
     "burstCoalesceHandled": [],
     "exception": null,
     "turnNotes": [],
-    "ranAt": "2026-09-18T01:49:26.477Z",
-    "durationMs": 10298
+    "ranAt": "2026-09-23T07:43:49.604Z",
+    "durationMs": 10000
   },
   {
     "no": 22,

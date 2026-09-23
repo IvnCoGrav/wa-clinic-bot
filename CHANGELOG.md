@@ -4,6 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-23 — Optimasi ORS Shortest + Anti-Overestimation (Preference & Circuity Cap Final)
+
+- **Akar masalah:** `src/integrations/ors/client.ts:76` tanpa `preference` → default ORS `fastest`/`recommended` memutar via arteri: Waru→Airlangga 15.32 km (1.80× straight 8.50) → `×1.10=16.85` (DB Tier 5 Rp20.000) vs rute riil ~12 km via `shortest` 13.07 km → `×1.10=14.38`→capped 13.60 Tier 4 Rp15.000. `delivery.service.ts:244` tanpa sanity check (ORS & Google).
+- **Fondasional:** `OrsClient` whitelist `resolveOrsPreference()` + `preference:shortest` di payload ORS; `DeliveryService` helper `applyCircuityCapToFinalDistance()` cap **final setelah buffer** = `straight×ORS_MAX_CIRCUITY_RATIO` (env, default 1.60, fallback `HAVERSINE_CIRCUITY_FACTOR`) untuk ORS & Google + warn `[DISTANCE CIRCUITY CAP]`; `.env.example` `ORS_PREFERENCE`/`ORS_MAX_CIRCUITY_RATIO`/`HAVERSINE_CIRCUITY_FACTOR 1.50→1.60`; skrip `src/scripts/sync-customer-distance-dyah-w.ts` idempoten `--dry-run`/`--commit` tenant-aware.
+- **Verifikasi:** `tests/unit/ors-shortest-routing.test.ts` 7/7, `delivery-circuity-cap.test.ts` 8/8 (Airlangga, detour sintetis ORS/Google, KENJERAN/WIYUNG), `ors-client.test.ts` & `ors-profile-nontol.test.ts` kontrak `preference:shortest`, `delivery.test.ts` 14 boundary via `coordsForTarget`, `delivery_circuity.test.ts` 4/4 — **48 test hijau**, `npm run build` hijau. Live diff Dyah W: dry-run `16.85→13.60 / 20000→15000`.
+
 #### 2026-09-23 — Perbaikan Fondasional PageView vs Klik CTA (Instrumentation Coverage Gap, CTR >100%)
 
 - **Akar masalah:** Dashboard `Total Page View / Kunjungan = 66` vs `Total Klik CTA` lebih besar bukan salah hitung SQL, melainkan coverage timpang: `POST /api/tracking/pageview` hanya diproduksi `src/landing/public/external-tracker.js:226`, sedangkan LP internal `src/landing/public/go.html:24` dan `src/services/html-sanitizer.ts:154` hanya `fbq('track','PageView')` tanpa beacon server; `src/routes/admin/meta-attribution.subroute.ts:240` menyamarkan `views===0` dengan `totalClicks`; `GET /cta` membuat `AdClick` atomik tanpa PageView.

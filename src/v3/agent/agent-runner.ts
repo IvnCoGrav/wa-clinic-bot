@@ -130,11 +130,11 @@ export class V3AgentRunner {
     // Call 1 (Router): INTENT_CLASSIFICATION (mis. glm-5.3-flash, hemat & cepat ~1.2s tanpa thinking)
     // Call 2 (Generator): CHAT_REPLY (mis. gpt-4o-mini, persona ramah & natural)
     const routerModelConfig = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION', tenantId);
-    const routerEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION' });
+    const routerEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION', tenantId });
     const routerModel = forceModel || routerEndpointConfig.model || routerModelConfig?.modelName || 'glm-5.3-flash';
 
     const generatorModelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
-    const generatorEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+    const generatorEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
     const generatorModel = forceModel || generatorEndpointConfig.model || generatorModelConfig?.modelName || 'gpt-4o-mini';
 
     const selectedModel = generatorModel;
@@ -200,7 +200,10 @@ export class V3AgentRunner {
       (input as any).bubbleCorrelationId || (chatId ? `${phone}_${Date.now()}` : `bubble_${Date.now()}`);
     const turn: TurnState = {
       tenantId, phone, conversationId, incomingText,
-      selectedModel, routerModel, generatorModel, baseUrl, apiKey, turnStartedAt: Date.now(), correlationId,
+      selectedModel, routerModel, generatorModel, baseUrl, apiKey,
+      routerBaseUrl: routerEndpointConfig.baseUrl, routerApiKey: routerEndpointConfig.apiKey,
+      generatorBaseUrl: generatorEndpointConfig.baseUrl, generatorApiKey: generatorEndpointConfig.apiKey,
+      turnStartedAt: Date.now(), correlationId,
       turnId: input.turnId, provider: input.provider,
       totalTokens: { prompt: 0, completion: 0, total: 0 },
       currentSystemPrompt, messages, executedTools: [], retrievedChunks,

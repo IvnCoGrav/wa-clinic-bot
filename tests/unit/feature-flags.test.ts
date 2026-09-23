@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  normalizePhoneForFlagCheck,
-  isSlotFillingEnabledForCustomer,
-  isSlotFillingShadowMode,
-} from '../../src/config/feature-flags';
+import { isToolMaskingShadowMode, isToolMaskingEnforced } from '../../src/config/feature-flags';
 
-describe('Feature Flags & Sandbox Infrastructure (Part 1)', () => {
+describe('Feature Flags — Tool Masking (V3 aktif)', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -13,61 +9,36 @@ describe('Feature Flags & Sandbox Infrastructure (Part 1)', () => {
   });
 
   afterEach(() => {
-    delete process.env.SLOT_FILLING_ENGINE_ENABLED;
-    delete process.env.SLOT_FILLING_WHITELIST_PHONES;
-    delete process.env.SLOT_FILLING_SHADOW_MODE;
+    delete process.env.TOOL_MASKING_SHADOW_MODE;
+    delete process.env.TOOL_MASKING_ENFORCE;
   });
 
-  describe('normalizePhoneForFlagCheck', () => {
-    it('should normalize leading 0 to 62', () => {
-      expect(normalizePhoneForFlagCheck('088235780925')).toBe('6288235780925');
-      expect(normalizePhoneForFlagCheck('081234567890')).toBe('6281234567890');
+  describe('isToolMaskingShadowMode', () => {
+    it('should return true when TOOL_MASKING_SHADOW_MODE is true', () => {
+      process.env.TOOL_MASKING_SHADOW_MODE = 'true';
+      expect(isToolMaskingShadowMode()).toBe(true);
     });
 
-    it('should preserve already normalized 62 prefix', () => {
-      expect(normalizePhoneForFlagCheck('6288235780925')).toBe('6288235780925');
-    });
-
-    it('should strip spaces, dashes, and plus signs', () => {
-      expect(normalizePhoneForFlagCheck('+62 882-3578-0925')).toBe('6288235780925');
+    it('should return false when TOOL_MASKING_SHADOW_MODE is unset or false', () => {
+      delete process.env.TOOL_MASKING_SHADOW_MODE;
+      expect(isToolMaskingShadowMode()).toBe(false);
     });
   });
 
-  describe('isSlotFillingEnabledForCustomer', () => {
-    it('should enable for whitelisted testing phone 088235780925 by default', () => {
-      delete process.env.SLOT_FILLING_ENGINE_ENABLED;
-      process.env.SLOT_FILLING_WHITELIST_PHONES = '6288235780925';
-
-      expect(isSlotFillingEnabledForCustomer('088235780925')).toBe(true);
-      expect(isSlotFillingEnabledForCustomer('6288235780925')).toBe(true);
-      expect(isSlotFillingEnabledForCustomer('+62 882-3578-0925')).toBe(true);
+  describe('isToolMaskingEnforced', () => {
+    it('should return true by default (enforce aktif)', () => {
+      delete process.env.TOOL_MASKING_ENFORCE;
+      expect(isToolMaskingEnforced()).toBe(true);
     });
 
-    it('should reject non-whitelisted customer when master flag is false', () => {
-      delete process.env.SLOT_FILLING_ENGINE_ENABLED;
-      process.env.SLOT_FILLING_WHITELIST_PHONES = '6288235780925';
-
-      expect(isSlotFillingEnabledForCustomer('081299998888')).toBe(false);
-      expect(isSlotFillingEnabledForCustomer('6281299998888')).toBe(false);
+    it('should return false when TOOL_MASKING_ENFORCE is false', () => {
+      process.env.TOOL_MASKING_ENFORCE = 'false';
+      expect(isToolMaskingEnforced()).toBe(false);
     });
 
-    it('should enable for ALL customers when SLOT_FILLING_ENGINE_ENABLED is true', () => {
-      process.env.SLOT_FILLING_ENGINE_ENABLED = 'true';
-
-      expect(isSlotFillingEnabledForCustomer('081299998888')).toBe(true);
-      expect(isSlotFillingEnabledForCustomer('62855554444')).toBe(true);
-    });
-  });
-
-  describe('isSlotFillingShadowMode', () => {
-    it('should return true when SLOT_FILLING_SHADOW_MODE is true', () => {
-      process.env.SLOT_FILLING_SHADOW_MODE = 'true';
-      expect(isSlotFillingShadowMode()).toBe(true);
-    });
-
-    it('should return false when SLOT_FILLING_SHADOW_MODE is unset or false', () => {
-      delete process.env.SLOT_FILLING_SHADOW_MODE;
-      expect(isSlotFillingShadowMode()).toBe(false);
+    it('should return true when TOOL_MASKING_ENFORCE is true', () => {
+      process.env.TOOL_MASKING_ENFORCE = 'true';
+      expect(isToolMaskingEnforced()).toBe(true);
     });
   });
 });

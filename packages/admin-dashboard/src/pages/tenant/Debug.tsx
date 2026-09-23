@@ -35,11 +35,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-type TabId = 'system' | 'router' | 'llm' | 'logs' | 'messages' | 'conversations';
+type TabId = 'system' | 'llm' | 'logs' | 'messages' | 'conversations';
 
 const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: 'system', label: 'System Overview', icon: Server },
-  { id: 'router', label: 'AI Router', icon: BrainCircuit },
   { id: 'llm', label: '🧠 LLM Execution Logs', icon: Sparkles },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'messages', label: 'Message Trace', icon: MessageSquare },
@@ -51,8 +50,6 @@ const fmtTime = (iso?: string | null) => {
   const d = new Date(iso);
   return d.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' });
 };
-
-const pct = (v: number | null) => (v === null ? 'N/A' : `${v.toFixed(2)}%`);
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: string }) {
   const toneCls =
@@ -114,8 +111,7 @@ interface SystemInfo {
   database: { status: string; detail?: string };
   featureFlags: Array<{ key: string; label: string; value: boolean | 'unset' }>;
   secretKeysPresent: string[];
-  counts: { customers: number | null; conversations: number | null; messages: number | null; reservations: number | null; followUps: number | null; aiRouterEvaluations: number | null };
-  aiRouter: { enabled: boolean; shadowMode: boolean; circuitState: string };
+  counts: { customers: number | null; conversations: number | null; messages: number | null; reservations: number | null; followUps: number | null };
   logBuffer: { installed: boolean; stats: Record<string, number> };
 }
 
@@ -142,7 +138,6 @@ function SystemSection() {
   }, [load]);
 
   const dbOk = data?.database.status === 'CONNECTED';
-  const circuit = data?.aiRouter.circuitState || 'CLOSED';
 
   return (
     <div className="space-y-4">
@@ -166,28 +161,12 @@ function SystemSection() {
         <StatCard label="Customers" value={data?.counts.customers ?? '-'} />
         <StatCard label="Conversations" value={data?.counts.conversations ?? '-'} />
         <StatCard label="Messages" value={data?.counts.messages ?? '-'} />
-        <StatCard label="AI Router Evaluations" value={data?.counts.aiRouterEvaluations ?? '-'} />
       </div>
 
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
         <h4 className="text-xs font-bold text-[#111b21] flex items-center gap-2">
-          <Cpu size={15} className="text-[#008069]" /> <span>AI Router &amp; Feature Flags</span>
+          <Cpu size={15} className="text-[#008069]" /> <span>Feature Flags</span>
         </h4>
-        <div className="flex flex-wrap gap-2">
-          <Badge ok={!!data?.aiRouter.enabled} label={`AI_ROUTER_ENABLED=${data?.aiRouter.enabled ? 'ON' : 'OFF'}`} />
-          <Badge ok={!!data?.aiRouter.shadowMode} label={`SHADOW_MODE=${data?.aiRouter.shadowMode ? 'ON' : 'OFF'}`} />
-          <span
-            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-              circuit === 'CLOSED'
-                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                : circuit === 'HALF_OPEN'
-                ? 'bg-amber-100 text-amber-800 border-amber-200'
-                : 'bg-rose-100 text-rose-800 border-rose-200'
-            }`}
-          >
-            <Activity size={11} /> Circuit: {circuit}
-          </span>
-        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -223,163 +202,6 @@ function SystemSection() {
         <p className="text-xs text-[#8696a0]">
           Log buffer: {data?.logBuffer.installed ? 'aktif' : 'tidak terpasang'} · log={data?.logBuffer.stats.log ?? 0} warn={data?.logBuffer.stats.warn ?? 0} error={data?.logBuffer.stats.error ?? 0}
         </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- AI Router
-interface RouterSummary {
-  days: number;
-  allTotal: number;
-  mappedTotal: number;
-  intentMatch: number;
-  escalationMatch: number;
-  unmapped: number;
-  intentMatchRate: number | null;
-  escalationMatchRate: number | null;
-  unmappedRate: number | null;
-  medicalMismatches: Array<{ message_text: string; llm_intent: string | null; legacy_intent: string; created_at: string }>;
-  recentEvaluations: Array<{
-    id: string;
-    created_at: string;
-    current_state: string;
-    message_text: string;
-    llm_intent: string | null;
-    legacy_intent: string;
-    intent_match: boolean;
-    escalation_match: boolean;
-    llm_used_fallback: boolean;
-    mismatch_notes: string | null;
-    response_time_ms: number | null;
-  }>;
-  dbNote?: string;
-}
-
-function RouterSection() {
-  const [data, setData] = useState<RouterSummary | null>(null);
-  const [days, setDays] = useState(7);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiRequest(`/api/admin/debug/ai-router?days=${days}`);
-      setData(res.data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Gagal memuat ringkasan AI Router');
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const escOk = data ? (data.escalationMatchRate ?? 0) >= 98 : false;
-  const medOk = data ? data.medicalMismatches.length === 0 : false;
-  const unmappedOk = data ? (data.unmappedRate ?? 100) < 5 : false;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 bg-white border border-[#e9edef] rounded-xl p-1 shadow-xs">
-          {[1, 3, 7, 30].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                days === d ? 'bg-[#008069] text-white shadow-xs' : 'text-[#667781] hover:text-[#111b21]'
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
-        <SectionHeader title={`Akurasi AI Router (${days} hari)`} onRefresh={load} loading={loading} />
-      </div>
-      {error && <ErrNote note={error} />}
-      {data?.dbNote && <ErrNote note={data.dbNote} />}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total Evaluasi" value={data?.allTotal ?? '-'} />
-        <StatCard label="Intent Match" value={pct(data?.intentMatchRate ?? null)} sub={`${data?.intentMatch ?? 0}/${data?.mappedTotal ?? 0} (excl UNMAPPED)`} />
-        <StatCard label="Escalation Match" value={pct(data?.escalationMatchRate ?? null)} tone={escOk ? 'ok' : 'warn'} />
-        <StatCard label="UNMAPPED Rate" value={pct(data?.unmappedRate ?? null)} tone={unmappedOk ? 'ok' : 'warn'} sub={`target < 5%`} />
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Badge ok={escOk} label={`Gate 1: escalation ≥ 98% (${escOk ? 'PASS' : 'FAIL'})`} />
-        <Badge ok={medOk} label={`Gate 2: medical mismatch = 0 (${medOk ? 'PASS' : 'FAIL'})`} />
-        <Badge ok={unmappedOk} label={`Gate 3: UNMAPPED < 5% (${unmappedOk ? 'PASS' : 'FAIL'})`} />
-      </div>
-
-      <div className={`bg-white border rounded-2xl p-5 shadow-xs ${medOk ? 'border-[#e9edef]' : 'border-rose-300 bg-rose-50/40'}`}>
-        <h4 className="text-xs font-bold text-[#111b21] flex items-center gap-2 mb-3">
-          <AlertTriangle size={15} className={medOk ? 'text-[#008069]' : 'text-rose-600'} />
-          <span>Mismatch MEDICAL_CONCERN (wajib 0 sebelum matikan shadow mode)</span>
-        </h4>
-        {medOk ? (
-          <p className="text-xs text-emerald-700 font-medium">Tidak ada mismatch terkait MEDICAL_CONCERN — aman.</p>
-        ) : (
-          <div className="space-y-2">
-            {data?.medicalMismatches.map((m, i) => (
-              <div key={i} className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs shadow-xs">
-                <XCircle size={14} className="text-rose-600 mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[#111b21] font-semibold truncate">{m.message_text}</p>
-                  <p className="text-[#667781] text-[11px] mt-0.5">
-                    LLM: <span className="text-rose-700 font-bold">{m.llm_intent ?? 'N/A'}</span> · Legacy: <span className="text-rose-700 font-bold">{m.legacy_intent}</span> · {fmtTime(m.created_at)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
-        <h4 className="text-xs font-bold text-[#111b21] mb-3">Evaluasi Terbaru</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
-                <th className="py-2.5 px-3">Waktu</th>
-                <th className="py-2.5 px-3">State</th>
-                <th className="py-2.5 px-3">Pesan</th>
-                <th className="py-2.5 px-3">LLM</th>
-                <th className="py-2.5 px-3">Legacy</th>
-                <th className="py-2.5 px-3">Intent ✓</th>
-                <th className="py-2.5 px-3">Esc ✓</th>
-                <th className="py-2.5 px-3">Fallback</th>
-                <th className="py-2.5 px-3">ms</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.recentEvaluations ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-4 text-center text-[#8696a0]">Belum ada data evaluasi.</td>
-                </tr>
-              )}
-              {data?.recentEvaluations.map((e) => (
-                <tr key={e.id} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
-                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(e.created_at)}</td>
-                  <td className="py-2.5 px-3 text-[#111b21] font-mono">{e.current_state}</td>
-                  <td className="py-2.5 px-3 text-[#111b21] max-w-[200px] truncate" title={e.message_text}>{e.message_text}</td>
-                  <td className="py-2.5 px-3 font-semibold">{e.llm_intent ?? <span className="text-[#8696a0]">N/A</span>}</td>
-                  <td className="py-2.5 px-3 text-[#667781]">{e.legacy_intent}</td>
-                  <td className="py-2.5 px-3">{e.intent_match ? <CheckCircle2 size={14} className="text-emerald-600" /> : <XCircle size={14} className="text-rose-600" />}</td>
-                  <td className="py-2.5 px-3">{e.escalation_match ? <CheckCircle2 size={14} className="text-emerald-600" /> : <XCircle size={14} className="text-rose-600" />}</td>
-                  <td className="py-2.5 px-3">{e.llm_used_fallback ? <span className="text-amber-700 font-bold">yes</span> : <span className="text-[#8696a0]">no</span>}</td>
-                  <td className="py-2.5 px-3 text-[#667781]">{e.response_time_ms ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );
@@ -1631,7 +1453,6 @@ export const Debug: React.FC = () => {
       </div>
 
       {tab === 'system' && <SystemSection />}
-      {tab === 'router' && <RouterSection />}
       {tab === 'llm' && <LlmLogsSection />}
       {tab === 'logs' && <LogsSection />}
       {tab === 'messages' && <MessagesSection />}

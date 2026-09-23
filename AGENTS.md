@@ -7,7 +7,6 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 - `npm run dev` — hot-reload dev server (`tsx watch src/app.ts`). No separate lint/typecheck script exists; `npm run build` (`tsc`) is the typecheck.
 - `npm test` — full Vitest suite; `npx vitest run tests/unit/typing.test.ts` — one file.
 - `npm run chat` — interactive CLI conversation simulator, no WhatsApp needed.
-- `npx tsx src/scripts/check-router-accuracy.ts --days=7` — AI-router shadow-mode accuracy gate (see README for pass criteria).
 - `npm run prisma:generate` / `npm run prisma:migrate` / `npx prisma db push` — schema sync.
 - Local runs without a real WhatsApp: set `WAHA_MOCK=true` (wired in `src/integrations/waha/client.ts`).
 

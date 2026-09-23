@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   collectSystemInfo,
-  collectAiRouterSummary,
   collectRecentMessages,
   collectConversationTrace,
   humanUptime,
@@ -10,8 +9,6 @@ import {
 describe('System Debug Service', () => {
   afterEach(() => {
     delete process.env.LLM_API_KEY;
-    delete process.env.AI_ROUTER_ENABLED;
-    delete process.env.AI_ROUTER_SHADOW_MODE;
   });
 
   it('humanUptime format', () => {
@@ -19,7 +16,7 @@ describe('System Debug Service', () => {
     expect(humanUptime(59)).toBe('0d 0h 0m 59s');
   });
 
-  it('collectSystemInfo: secret TIDAK bocor, flag default ON (router aktif shadow), tidak throw saat DB offline', async () => {
+  it('collectSystemInfo: secret TIDAK bocor, flags bebas AI Router, tidak throw saat DB offline', async () => {
     process.env.LLM_API_KEY = 'SUPER_SECRET_XYZ';
     const info = await collectSystemInfo();
     const json = JSON.stringify(info);
@@ -27,32 +24,22 @@ describe('System Debug Service', () => {
     expect(json).not.toContain('SUPER_SECRET_XYZ');
     expect(info.secretKeysPresent).toContain('LLM_API_KEY');
 
-    const routerFlag = info.featureFlags.find((f) => f.key === 'AI_ROUTER_ENABLED');
-    expect(routerFlag?.value).toBe('unset');
-    expect(info.aiRouter.enabled).toBe(false); // default OFF when AI_ROUTER_ENABLED is unset
-    expect(info.aiRouter.shadowMode).toBe(false); // default shadow OFF (mode aktif penuh)
+    // AI Router sudah didekomisioning — flag/field router tidak boleh tersisa di payload.
+    expect(info.featureFlags.find((f) => f.key === 'AI_ROUTER_ENABLED')).toBeUndefined();
+    expect((info as any).aiRouter).toBeUndefined();
+    expect((info as any).counts?.aiRouterEvaluations).toBeUndefined();
 
     // DB di-mock offline di test → status bukan CONNECTED, tapi service tetap return (tidak throw)
     expect(['CONNECTED', 'FAILED', 'UNKNOWN']).toContain(info.database.status);
     expect(info.counts.customers).toBeNull();
   });
 
-  it('collectSystemInfo: AI_ROUTER_ENABLED=true terbaca sebagai aktif', async () => {
-    process.env.AI_ROUTER_ENABLED = 'true';
-    process.env.AI_ROUTER_SHADOW_MODE = 'true';
+  it('collectSystemInfo: flag fitur aktif tetap terbaca', async () => {
+    process.env.WAHA_MOCK = 'true';
     const info = await collectSystemInfo();
-    const routerFlag = info.featureFlags.find((f) => f.key === 'AI_ROUTER_ENABLED');
-    expect(routerFlag?.value).toBe(true);
-    expect(info.aiRouter.enabled).toBe(true);
-    expect(info.aiRouter.shadowMode).toBe(true);
-  });
-
-  it('collectAiRouterSummary: DB offline -> angka 0 + dbNote, tidak throw', async () => {
-    const summary = await collectAiRouterSummary(7);
-    expect(summary.allTotal).toBe(0);
-    expect(summary.medicalMismatches).toEqual([]);
-    expect(summary.recentEvaluations).toEqual([]);
-    expect(summary.dbNote).toBeTruthy();
+    const flag = info.featureFlags.find((f) => f.key === 'WAHA_MOCK');
+    expect(flag?.value).toBe(true);
+    delete process.env.WAHA_MOCK;
   });
 
   it('collectRecentMessages: DB offline -> entries kosong + dbNote', async () => {

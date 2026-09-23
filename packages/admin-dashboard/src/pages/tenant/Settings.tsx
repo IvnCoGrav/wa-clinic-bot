@@ -102,10 +102,6 @@ export const Settings: React.FC = () => {
   const [resettingSession, setResettingSession] = useState(false);
   const qrStatusRef = useRef('UNKNOWN');
 
-  // AI Router Engine (default ON + shadow ON)
-  const [aiRouterEnabled, setAiRouterEnabled] = useState(true);
-  const [aiRouterShadowMode, setAiRouterShadowMode] = useState(true);
-
   // AI Rollout Scope (AI hanya untuk customer baru)
   const [aiScope, setAiScope] = useState<'NEW_ONLY' | 'ALL'>('NEW_ONLY');
   const [aiScopeCutoffAt, setAiScopeCutoffAt] = useState('');
@@ -118,7 +114,6 @@ export const Settings: React.FC = () => {
     silencedByScope: number;
   }>({ totalCustomers: 0, newCustomers: 0, legacyCustomers: 0, silencedByScope: 0 });
   const [savingAiScope, setSavingAiScope] = useState(false);
-  const [savingAiRouter, setSavingAiRouter] = useState(false);
 
   // Meta Pixel & CAPI (konversi iklan — berlaku semua provider WAHA/WABA)
   const [metaPixelId, setMetaPixelId] = useState('');
@@ -270,7 +265,6 @@ export const Settings: React.FC = () => {
           tiersRes,
           , // provider
           , // qr
-          , // aiRouter
           , // aiScope
           , // capi
           , // mql
@@ -281,7 +275,6 @@ export const Settings: React.FC = () => {
           apiRequest('/api/admin/delivery-tiers'),
           loadWhatsAppProvider(),
           loadQr(),
-          loadAiRouterConfig(),
           loadAiScopeConfig(),
           loadCapiConfig(),
           loadMqlSettings(),
@@ -315,19 +308,6 @@ export const Settings: React.FC = () => {
     }
     loadSettings();
   }, []);
-
-  const loadAiRouterConfig = async () => {
-    try {
-      const res = await apiRequest('/api/admin/ai-router');
-      const d = res?.data;
-      if (d) {
-        setAiRouterEnabled(d.enabled ?? true);
-        setAiRouterShadowMode(d.shadowMode ?? true);
-      }
-    } catch (err) {
-      console.warn('Failed to load AI Router config:', err);
-    }
-  };
 
   const loadAiScopeConfig = async () => {
     try {
@@ -651,27 +631,6 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleToggleAiRouter = async (val: 'enabled' | 'shadowMode', next: boolean) => {
-    setSavingAiRouter(true);
-    try {
-      await apiRequest('/api/admin/ai-router', {
-        method: 'PATCH',
-        body: JSON.stringify(val === 'enabled' ? { enabled: next } : { shadowMode: next }),
-      });
-      if (val === 'enabled') {
-        setAiRouterEnabled(next);
-        toast(`AI Router Engine ${next ? 'diaktifkan' : 'dinonaktifkan'}`, 'success');
-      } else {
-        setAiRouterShadowMode(next);
-        toast(`AI Router Shadow Mode ${next ? 'diaktifkan' : 'dinonaktifkan (full mode)'}`, 'success');
-      }
-    } catch (err: any) {
-      toast(`Failed to update AI Router config: ${err.message}`, 'error');
-    } finally {
-      setSavingAiRouter(false);
-    }
-  };
-
   const handleSaveWabaConfig = async () => {
     setSavingProvider(true);
     try {
@@ -882,12 +841,8 @@ export const Settings: React.FC = () => {
           {/* Konfigurasi Model AI Per-Tugas (Slot Extractor, Balasan Chat, QC) */}
           <AiModelSettingsPanel />
 
-          {/* AI Router Engine & AI Rollout Scope */}
+          {/* AI Rollout Scope (target pelanggan AI) */}
           <AiRouterPanel
-            aiRouterEnabled={aiRouterEnabled}
-            aiRouterShadowMode={aiRouterShadowMode}
-            savingAiRouter={savingAiRouter}
-            handleToggleAiRouter={handleToggleAiRouter}
             aiScope={aiScope}
             aiScopeCutoffAt={aiScopeCutoffAt}
             legacyBypassBot={legacyBypassBot}

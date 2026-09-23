@@ -156,4 +156,14 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     );
     expect((out.match(/\bBunda\b/gi) || []).length).toBeLessThanOrEqual(1);
   });
+
+  // Fase 3 — Turn 6 multi-topik 4x Bunda → ≤1 vokatif bebas (tanpa mutilasi)
+  it('Turn 6 multi-topik 3x Bunda periferal → tersisa 1', () => {
+    const input = 'Terima kasih sudah cerita detail ya Bunda 🤗 kami perlu pastikan dulu ya Bunda: apakah panasnya masih naik turun... sebaiknya diperiksakan ke dokter dulu ya Bunda.';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(input, true);
+    const count = (out.match(/\bBunda\b/gi) || []).length;
+    expect(count).toBeLessThanOrEqual(1);
+    expect(out).toContain('Terima kasih sudah cerita detail ya Bunda');
+    expect(out).not.toMatch(/,\s*[!?.]/);
+  });
 });

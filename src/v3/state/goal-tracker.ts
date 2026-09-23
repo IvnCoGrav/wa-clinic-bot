@@ -4,6 +4,7 @@ import { treatmentCatalogService } from '../../services/treatment-catalog.servic
 import { CartManager } from './cart-manager';
 import { PatientProfileExtractor } from './patient-extractor';
 import { isAskedLocationRecently } from './conversation-summarizer';
+import { getCoverageCities } from '../../config/coverage';
 import type {
   LocationState,
   ChildState,
@@ -450,7 +451,37 @@ export class GoalTracker {
       };
 
       const userAnsweredLocation = recentlyAsked && !locationResolved && opts?.incomingText && isLikelyLocationAnswer(opts.incomingText);
-      if (recentlyAsked && !locationResolved && !userAnsweredLocation) {
+      // Fondasional broad-city (Fase 2): kota-dalam-coverage tanpa treatment → status adaptif consultation-first
+      const isBroadCoverageCity = (() => {
+        try {
+          const lower = (opts?.incomingText || '').toLowerCase();
+          const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+          for (const c of getCoverageCities() || []) {
+            const name = String(c || '').toLowerCase().trim();
+            if (name && tokens.includes(name)) return true;
+          }
+        } catch {}
+        return false;
+      })();
+      const broadConsultationFirst = Boolean(userAnsweredLocation && isBroadCoverageCity && !session.selectedTreatment && !(session.cartItems && session.cartItems.length > 0));
+      if (broadConsultationFirst) {
+        const cityLabel = (() => {
+          try {
+            const lower = (opts?.incomingText || '').toLowerCase();
+            const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+            for (const c of getCoverageCities() || []) {
+              const name = String(c || '').toLowerCase().trim();
+              if (name && tokens.includes(name)) {
+                if (name === 'sby') return 'Surabaya';
+                if (name === 'sda') return 'Sidoarjo';
+                return name.charAt(0).toUpperCase() + name.slice(1);
+              }
+            }
+          } catch {}
+          return 'kota tersebut';
+        })();
+        lines.push(`• Lokasi: Kota ${cityLabel} (Area Terjangkau — tanyakan kebutuhan perawatan si kecil/Bunda, patokan daerah menyusul mengalir)`);
+      } else if (recentlyAsked && !locationResolved && !userAnsweredLocation) {
         lines.push(`• Lokasi: Belum diketahui (Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi pada turn ini, fokus jawab keluhan/pertanyaan Bunda)`);
       } else {
         lines.push(`• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)`);

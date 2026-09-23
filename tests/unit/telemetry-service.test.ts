@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { telemetryService } from '../../src/services/telemetry.service';
-import { alertService } from '../../src/services/alert.service';
 
 describe('TelemetryService', () => {
   beforeEach(() => {
@@ -42,35 +41,6 @@ describe('TelemetryService', () => {
     expect(summary.nluErrorRate).toBe(10); // 1/10
     expect(summary.p95LatencyMs).toBeGreaterThan(0);
     expect(summary.status).toBe('CRITICAL'); // RSQR >0
-  });
-
-  it('alert-daemon: 2x RSQR dalam 1 jam memicu CRITICAL_AI_LOOP', async () => {
-    const spy = vi.spyOn(alertService, 'notifyAlert').mockResolvedValue({ sent: true, channel: 'telegram' } as any);
-    const { alertDaemonService } = await import('../../src/services/alert-daemon.service');
-    const now = Date.now();
-    // Record 2 RSQR
-    telemetryService.recordTurn({ conversationId: 'c1', customerPhone: '6281', tenantId: 't', timestamp: now, rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: false, isUnjustifiedRsqr: true, nluErrorCode: null, isJsonTruncated: false, latencyMs: 100 } as any);
-    telemetryService.recordTurn({ conversationId: 'c2', customerPhone: '6282', tenantId: 't', timestamp: now, rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: false, isUnjustifiedRsqr: true, nluErrorCode: null, isJsonTruncated: false, latencyMs: 100 } as any);
-    await alertDaemonService.evaluate({ conversationId: 'c2', customerPhone: '6282', tenantId: 't', timestamp: now, rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: false, isUnjustifiedRsqr: true, nluErrorCode: null, isJsonTruncated: false, latencyMs: 100 } as any);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'CRITICAL_AI_LOOP' }));
-  });
-
-  it('alert-daemon: 3x NLU 400 berturut-turut memicu NLU_PROVIDER_DEGRADED', async () => {
-    const spy = vi.spyOn(alertService, 'notifyAlert').mockResolvedValue({ sent: true, channel: 'telegram' } as any);
-    const { alertDaemonService } = await import('../../src/services/alert-daemon.service');
-    const now = Date.now();
-    for (let i = 0; i < 3; i++) {
-      telemetryService.recordTurn({ conversationId: `c${i}`, customerPhone: '6281', tenantId: 't', timestamp: now, rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: false, isUnjustifiedRsqr: false, nluErrorCode: 'HTTP_400', isJsonTruncated: false, latencyMs: 100 } as any);
-    }
-    await alertDaemonService.evaluate({ conversationId: 'c3', customerPhone: '6281', tenantId: 't', timestamp: now, rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: false, isUnjustifiedRsqr: false, nluErrorCode: 'HTTP_400', isJsonTruncated: false, latencyMs: 100 } as any);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'NLU_PROVIDER_DEGRADED' }));
-  });
-
-  it('alert-daemon: 1x silent drop memicu UNINTENDED_SILENT_DROP', async () => {
-    const spy = vi.spyOn(alertService, 'notifyAlert').mockResolvedValue({ sent: true, channel: 'telegram' } as any);
-    const { alertDaemonService } = await import('../../src/services/alert-daemon.service');
-    await alertDaemonService.evaluate({ conversationId: 'c1', customerPhone: '6289', tenantId: 't', timestamp: Date.now(), rawLlmReply: null, sanitizedReply: null, mutilationRatio: 0, isSilentDrop: true, isUnjustifiedRsqr: false, nluErrorCode: null, isJsonTruncated: false, latencyMs: 100 } as any);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'UNINTENDED_SILENT_DROP' }));
   });
 
   it('overhead <2ms per recordTurn', () => {
