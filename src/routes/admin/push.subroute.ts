@@ -115,9 +115,9 @@ export async function pushSubroutes(fastify: FastifyInstance) {
           return reply.status(200).send({ success: sent });
         }
 
-        // Jika endpoint tidak dikirim, broadcast ke seluruh tenant default
-        const result = await webPushService.sendPushToTenant(DEFAULT_TENANT_ID, {
-          title: '🔔 Uji Coba Web Push',
+        // Jika endpoint tidak dikirim, broadcast ke seluruh perangkat ADMIN pada tenant default
+        const result = await webPushService.sendPushToRole(DEFAULT_TENANT_ID, 'ADMIN', {
+          title: '🔔 Uji Coba Web Push Admin',
           body: 'Notifikasi berhasil terkirim dari server Kala Clinic!',
           url: '/admin/live-chat',
           tag: 'test-push',

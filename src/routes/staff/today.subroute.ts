@@ -634,9 +634,22 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     let closed = false;
     let unsubscribe: (() => void) | null = null;
 
+    const ALLOWED_STAFF_EVENTS = new Set([
+      'staff.task_assigned',
+      'staff.task_cancelled',
+      'message.created',
+      'message.updated',
+      'message.status_updated',
+      'conversation.updated',
+    ]);
+
     const sendEvent = async (event: any) => {
       if (closed) return;
       try {
+        if (!event?.type || !ALLOWED_STAFF_EVENTS.has(event.type)) {
+          return;
+        }
+
         // Event penugasan & pembatalan reservasi staff internal
         if (event.type === 'staff.task_assigned' || event.type === 'staff.task_cancelled') {
           if (!isSupervisor && event.payload?.staffId && event.payload.staffId !== staffId) {
@@ -653,15 +666,17 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           event.payload?.id;
 
         // Server-side filter: hanya kirim event percakapan yang dimiliki staff hari ini (atau semua jika supervisor)
-        if (conversationId) {
-          const isOwned = await StaffReservationService.assertConversationOwnedByStaffToday(
-            conversationId,
-            staffId,
-            tenantId,
-            isSupervisor
-          );
-          if (!isOwned) return;
+        if (!conversationId) {
+          return;
         }
+
+        const isOwned = await StaffReservationService.assertConversationOwnedByStaffToday(
+          conversationId,
+          staffId,
+          tenantId,
+          isSupervisor
+        );
+        if (!isOwned) return;
 
         const data = JSON.stringify(event.payload || {});
         reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);

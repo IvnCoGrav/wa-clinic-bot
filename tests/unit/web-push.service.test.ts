@@ -152,4 +152,63 @@ describe('WebPushService — VAPID Background Push Service', () => {
     const counts = await webPushService.getStaffDeviceCounts('tenant-counts');
     expect(counts[staffId]).toBe(2);
   });
+
+  it('sendPushToRole: mengisolasi pengiriman notifikasi antar peran (ADMIN vs STAFF)', async () => {
+    const tenantId = `tenant-iso-${Date.now()}`;
+    const epAdmin = `https://fcm.googleapis.com/fcm/send/admin_${Date.now()}`;
+    const epStaff = `https://fcm.googleapis.com/fcm/send/staff_${Date.now()}`;
+
+    await webPushService.saveSubscription({
+      tenantId,
+      endpoint: epAdmin,
+      p256dh: 'k_admin',
+      auth: 'a_admin',
+      userType: 'ADMIN',
+    });
+
+    await webPushService.saveSubscription({
+      tenantId,
+      endpoint: epStaff,
+      p256dh: 'k_staff',
+      auth: 'a_staff',
+      userType: 'STAFF',
+      userId: 'staff_1',
+    });
+
+    const sentEndpoints: string[] = [];
+    vi.spyOn(webpush, 'sendNotification').mockImplementation(async (sub: any) => {
+      sentEndpoints.push(sub.endpoint);
+      return {} as any;
+    });
+
+    // 1. Kirim ke ADMIN -> hanya endpoint admin yang menerima
+    sentEndpoints.length = 0;
+    const adminResult = await webPushService.sendPushToRole(tenantId, 'ADMIN', {
+      title: 'Pesan Admin',
+      body: 'Untuk admin saja',
+    });
+    expect(adminResult.sent).toBe(1);
+    expect(sentEndpoints).toContain(epAdmin);
+    expect(sentEndpoints).not.toContain(epStaff);
+
+    // 2. Kirim via sendPushToTenant (default ke ADMIN) -> staf tetap terlindungi
+    sentEndpoints.length = 0;
+    const tenantResult = await webPushService.sendPushToTenant(tenantId, {
+      title: 'Broadcast Tenant',
+      body: 'Default admin',
+    });
+    expect(tenantResult.sent).toBe(1);
+    expect(sentEndpoints).toContain(epAdmin);
+    expect(sentEndpoints).not.toContain(epStaff);
+
+    // 3. Kirim ke STAFF -> hanya endpoint staff yang menerima
+    sentEndpoints.length = 0;
+    const staffResult = await webPushService.sendPushToRole(tenantId, 'STAFF', {
+      title: 'Pesan Staff',
+      body: 'Untuk staf saja',
+    });
+    expect(staffResult.sent).toBe(1);
+    expect(sentEndpoints).toContain(epStaff);
+    expect(sentEndpoints).not.toContain(epAdmin);
+  });
 });

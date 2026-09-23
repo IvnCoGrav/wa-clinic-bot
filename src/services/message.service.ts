@@ -477,34 +477,18 @@ export class MessageService {
       // Invalidate live chat cached lists & unread badge for instant update
       responseCacheService.invalidatePrefix('livechat:');
 
-      // Web Push Background Notification: kirim ke perangkat yang sedang offline/background (hanya pesan live real-time customer asli, bukan riwayat/sandbox)
+      // Web Push Background Notification: delegasikan ke InboundNotificationRouter untuk isolasi peran dan routing terarah
       if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical && !isSandboxCustomer) {
         void (async () => {
           try {
-            const { webPushService } = await import('./web-push.service');
-
-            const senderName = resolvedCustomer?.name || data.senderName || 'Pelanggan';
-            const customerId = resolvedCustomer?.id || '';
-
-            const avatarUrl = customerId
-              ? `/media/avatar/${customerId}.jpg`
-              : `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=008069&color=fff&size=256&bold=true`;
-
-            const snippet = data.content
-              ? (data.content.length > 120 ? data.content.slice(0, 117) + '...' : data.content)
-              : '📷 Mengirim lampiran gambar / media';
-
-            const media = extractMediaFromPayload(data.payloadRaw);
-            const imageUrl = media?.url || avatarUrl;
-
-            await webPushService.sendPushToTenant(data.tenantId, {
-              title: senderName,
-              body: snippet,
-              icon: avatarUrl,
-              badge: '/admin/favicon.ico',
-              image: imageUrl,
-              url: `/admin/live-chat?conversationId=${data.conversationId}`,
-              tag: `chat-${data.conversationId}`,
+            const { inboundNotificationRouter } = await import('./inbound-notification-router.service');
+            await inboundNotificationRouter.routeInboundMessage({
+              tenantId: data.tenantId,
+              conversationId: data.conversationId,
+              customerId: resolvedCustomer?.id || '',
+              senderName: resolvedCustomer?.name || data.senderName || 'Pelanggan',
+              content: data.content,
+              payloadRaw: data.payloadRaw,
             });
           } catch {}
         })();
