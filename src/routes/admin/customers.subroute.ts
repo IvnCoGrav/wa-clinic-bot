@@ -334,6 +334,19 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               reservations: { orderBy: { created_at: 'desc' }, include: { assigned_staff: { select: { id: true, name: true } } } },
               labels: { include: { label: true } },
               adClick: true,
+              follow_ups: {
+                orderBy: { scheduled_at: 'asc' },
+                include: {
+                  reservation: {
+                    select: {
+                      id: true,
+                      booking_date: true,
+                      treatment_category: true,
+                      treatment_detail: true,
+                    },
+                  },
+                },
+              },
             },
           });
         } catch (dbErr) {
@@ -355,6 +368,31 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
         if (!customer) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan' });
+        }
+
+        // Hydrate follow_ups bila belum ter-include (fallback memory / customerService)
+        if (!Array.isArray((customer as any).follow_ups)) {
+          try {
+            const fus = await prisma.followUp.findMany({
+              where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID },
+              orderBy: { scheduled_at: 'asc' },
+              include: {
+                reservation: {
+                  select: {
+                    id: true,
+                    booking_date: true,
+                    treatment_category: true,
+                    treatment_detail: true,
+                  },
+                },
+              },
+            });
+            (customer as any).follow_ups = fus;
+          } catch {
+            (customer as any).follow_ups = [];
+          }
+        } else if ((customer as any).follow_ups == null) {
+          (customer as any).follow_ups = [];
         }
 
         let customerLabels = customer.labels || [];
@@ -437,6 +475,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             children: enrichedChildren,
             reservations: customer.reservations || [],
             labels: customerLabels,
+            follow_ups: (customer as any).follow_ups || [],
             ltv: ((customer as any).ltv_cache ?? ltv) as any,
             purchaseCount: purchaseCount as any,
           },

@@ -18,6 +18,7 @@ import {
   SAME_DAY_EVIDENCE_ALIASES,
   isSameDayRequestText,
   hasBookingCommitSignal,
+  isConsultativeUserText,
 } from '../../utils/date-confirmation';
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
@@ -223,6 +224,8 @@ export function resolveCandidateTreatment(
   if (session.selectedTreatment?.trim()) return session.selectedTreatment.trim();
   if (session.cartItems && session.cartItems.length > 0) return session.cartItems[0].name;
   const lower = (cleanIncomingText || '').toLowerCase();
+  // Fondasional: pertanyaan konsultatif murni (nama + ?) bukan komitmen — DILARANG seed treatment
+  if (isConsultativeUserText(cleanIncomingText, session as any)) return undefined;
   const hasCommitSignal = hasBookingCommitSignal(lower);
   if (!hasCommitSignal || !conversationHistory) return undefined;
 

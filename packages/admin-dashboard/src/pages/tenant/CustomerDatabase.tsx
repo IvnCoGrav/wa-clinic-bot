@@ -8,6 +8,7 @@ import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
+import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import {
@@ -1438,6 +1439,25 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Antrean Follow-Up (reusable modular) */}
+                  <CustomerFollowUpSection
+                    customerId={detailData?.id || activeDetailCustomer?.id || ''}
+                    customerPhone={detailData?.phone || activeDetailCustomer?.phone}
+                    customerName={detailData?.name || activeDetailCustomer?.name}
+                    followUps={detailData?.follow_ups || []}
+                    onRefresh={async () => {
+                      if (!activeDetailCustomer) return;
+                      try {
+                        const res: any = await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}`);
+                        if (res?.success && res.data) setDetailData((prev: any) => ({ ...prev, ...res.data, follow_ups: res.data.follow_ups || prev?.follow_ups }));
+                        try {
+                          const sRes: any = await apiRequest(`/api/admin/reservation-series/customer/${activeDetailCustomer.id}`);
+                          if (sRes?.success && Array.isArray(sRes.data)) setCustomerSeries(sRes.data);
+                        } catch {}
+                      } catch {}
+                    }}
+                  />
 
                   {/* Section 4: Atribusi Meta Ads & Label */}
                   <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-2 shadow-2xs">

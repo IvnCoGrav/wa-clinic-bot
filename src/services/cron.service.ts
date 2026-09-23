@@ -15,15 +15,17 @@ export class CronService {
   public async runMorningJobs(): Promise<void> {
     try {
       console.log('[Cron Service] Starting Morning Jobs...');
-      await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
-      await followUpService.checkAndSetLostCustomers(DEFAULT_TENANT_ID);
+      const { getAllTenantIds } = await import('./media.service');
+      const tenantIds = await getAllTenantIds();
+      for (const tenantId of tenantIds) {
+        await followUpService.processDueFollowUps(tenantId);
+        await followUpService.checkAndSetLostCustomers(tenantId);
+        await this.checkPendingPurchaseModerationAlerts(tenantId);
+        const { staffNotificationService } = await import('./staff-notification.service');
+        await staffNotificationService.sendAllStaffMorningBriefings(tenantId);
+      }
       await this.cleanupOldAdClicks();
       await this.purgeOldLegacyStaging();
-      await this.checkPendingPurchaseModerationAlerts();
-
-      // Kirim Morning Briefing Jadwal ke Telegram pribadi seluruh Bidan/Terapis yang bertugas hari ini
-      const { staffNotificationService } = await import('./staff-notification.service');
-      await staffNotificationService.sendAllStaffMorningBriefings(DEFAULT_TENANT_ID);
 
       console.log('[Cron Service] Morning Jobs Completed successfully.');
     } catch (err) {
@@ -36,10 +38,13 @@ export class CronService {
    */
   public async runFollowUpWorker(): Promise<void> {
     try {
-      const processed = await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
-      if (processed > 0) {
-        console.log(`[Cron Service] FollowUp Worker processed ${processed} messages.`);
+      const { getAllTenantIds } = await import('./media.service');
+      const tenantIds = await getAllTenantIds();
+      let total = 0;
+      for (const tenantId of tenantIds) {
+        total += await followUpService.processDueFollowUps(tenantId);
       }
+      if (total > 0) console.log(`[Cron Service] FollowUp Worker processed ${total} messages.`);
     } catch (err) {
       console.error('[Cron Service] Error running FollowUp worker:', err);
     }
@@ -53,8 +58,15 @@ export class CronService {
   public async runLabelReconciliation(): Promise<void> {
     try {
       const { labelReconciliationService } = await import('./label-reconciliation.service');
-      const result = await labelReconciliationService.reconcileLabels(DEFAULT_TENANT_ID);
-      console.log(`[Cron Service] Label reconciliation complete (drifts found: ${result.driftsFound}, fixed: ${result.driftsFixed}).`);
+      const { getAllTenantIds } = await import('./media.service');
+      const tenantIds = await getAllTenantIds();
+      let driftsFound = 0, driftsFixed = 0;
+      for (const tenantId of tenantIds) {
+        const r = await labelReconciliationService.reconcileLabels(tenantId);
+        driftsFound += r.driftsFound || 0;
+        driftsFixed += r.driftsFixed || 0;
+      }
+      console.log(`[Cron Service] Label reconciliation complete (drifts found: ${driftsFound}, fixed: ${driftsFixed}).`);
     } catch (err) {
       console.error('[Cron Service] Error running label reconciliation:', err);
     }

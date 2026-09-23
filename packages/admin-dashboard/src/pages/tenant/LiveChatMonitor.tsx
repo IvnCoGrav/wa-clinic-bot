@@ -85,6 +85,7 @@ import {
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
+import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
 import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
@@ -5287,6 +5288,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       </>
                     )}
                   </div>
+
+                  {/* Antrean Follow-Up (reusable modular) */}
+                  <CustomerFollowUpSection
+                    customerId={customerDetailData?.id || selectedChat?.customerId || ''}
+                    customerPhone={customerDetailData?.phone || selectedChat?.customerPhone}
+                    customerName={customerDetailData?.name || selectedChat?.customerName}
+                    followUps={customerDetailData?.follow_ups || []}
+                    onRefresh={async () => {
+                      const cid = customerDetailData?.id || selectedChat?.customerId;
+                      if (!cid) return;
+                      try {
+                        const res: any = await apiRequest(`/api/admin/customers/${cid}`);
+                        if (res?.success && res.data) setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, follow_ups: res.data.follow_ups || prev?.follow_ups }));
+                      } catch {}
+                    }}
+                  />
                 </>
               )}
             </div>

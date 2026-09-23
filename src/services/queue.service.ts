@@ -382,9 +382,38 @@ export class QueueService {
       } catch {}
     } catch (e: any) {
       console.error(`[QUEUE Memory-Fallback ERROR] Failed processing message for ${phone}:`, e.message);
+      const attempts = ((payload as any)._memoryAttempts || 0) + 1;
+      (payload as any)._memoryAttempts = attempts;
+      if (attempts <= 2) {
+        const backoffMs = 1000 * attempts;
+        console.warn(`[QUEUE RETRY] Re-queue ${phone} attempt ${attempts}/2 backoff ${backoffMs}ms`);
+        // flag retry pending — finally akan skip cleanup, biarkan timeout yang lanjutkan
+        (payload as any)._retryPending = true;
+        setTimeout(() => {
+          (payload as any)._retryPending = false;
+          const q = this.memoryQueues.get(phone) || [];
+          q.unshift(payload as any);
+          this.memoryQueues.set(phone, q);
+          this.memoryProcessing.delete(phone);
+          this.processNextInMemory(phone);
+        }, backoffMs);
+      } else {
+        // Dead-letter: max retries exceeded → alert
+        console.error(`[QUEUE DEAD-LETTER] ${phone} tenant=${(payload as any).tenantId || '-'} permanently failed after ${attempts} attempts: ${e.message}`);
+        try {
+          const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+          await alertService.notifyAlert({
+            type: AlertType.QUEUE_JOB_FAILED,
+            severity: AlertSeverity.CRITICAL,
+            message: `[QUEUE DEAD-LETTER] In-memory ${phone} failed after ${attempts} attempts: ${e.message}`,
+            metadata: { tenantId: (payload as any).tenantId, phone: hashPiiPhone(phone), error: e.message, attempts },
+          });
+        } catch {}
+      }
     } finally {
+      const isRetryPending = (payload as any)._retryPending === true;
+      if (isRetryPending) return;
       this.memoryProcessing.delete(phone);
-      // Pemicu otomatis untuk pesan berikutnya di antrian customer tersebut
       this.processNextInMemory(phone);
     }
   }

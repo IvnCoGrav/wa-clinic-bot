@@ -191,8 +191,8 @@ export const SAVE_RESERVATION_TOOL_SCHEMA = {
         },
         momStage: {
           type: 'string',
-          enum: ['PREGNANT', 'POSTPARTUM', 'GENERAL'],
-          description: 'Kondisi ibu (Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum).'
+          enum: ['PREGNANT', 'POSTPARTUM', 'BREASTFEEDING', 'GENERAL'],
+          description: 'Kondisi ibu (Hamil, Paska Melahirkan/Nifas, Menyusui/Laktasi, atau Relaksasi Umum).'
         },
         momNotes: {
           type: 'string',
@@ -419,10 +419,13 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     // [SAME_DAY_REQUEST] agar admin memprioritaskan cek rute.
     const bookingLower = (bookingDate || '').toLowerCase();
     const sameDayByText = bookingLower.includes('sekarang') || bookingLower.includes('hari ini');
-    const now = new Date();
-    const sameDayByDate = parsedDate.getFullYear() === now.getFullYear()
-      && parsedDate.getMonth() === now.getMonth()
-      && parsedDate.getDate() === now.getDate();
+    function isSameWibCalendarDay(d1: Date, d2: Date): boolean {
+      const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+      const w1 = new Date(d1.getTime() + WIB_OFFSET_MS);
+      const w2 = new Date(d2.getTime() + WIB_OFFSET_MS);
+      return w1.getUTCFullYear() === w2.getUTCFullYear() && w1.getUTCMonth() === w2.getUTCMonth() && w1.getUTCDate() === w2.getUTCDate();
+    }
+    const sameDayByDate = isSameWibCalendarDay(parsedDate, new Date());
     const isSameDay = sameDayByText || sameDayByDate;
 
     // Persistensi momProfile ke catatan reservasi (raw_text) agar bidan & admin
@@ -430,7 +433,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     const momLines: string[] = [];
     if (gestationalWeeks != null) momLines.push(`Usia Kehamilan: ${gestationalWeeks} minggu`);
     if (effectiveMomStage) {
-      const stageLabel = effectiveMomStage === 'PREGNANT' ? 'Ibu Hamil' : effectiveMomStage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : 'Relaksasi Umum';
+      const stageLabel = effectiveMomStage === 'PREGNANT' ? 'Ibu Hamil' : effectiveMomStage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : effectiveMomStage === 'BREASTFEEDING' ? 'Ibu Menyusui/Laktasi' : 'Relaksasi Umum';
       momLines.push(`Kondisi Ibu: ${stageLabel}`);
     }
     if (momNotes) momLines.push(`Keluhan Bunda: ${momNotes}`);
@@ -439,17 +442,11 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     const addressSuffix = effectiveAddress ? `\nAlamat: ${effectiveAddress}` : '';
     const effectiveRawText = `[V3_NATIVE_AGENT_TOOL] ${treatmentDetail} | ${bookingDate}${bookingTime ? ' ' + bookingTime : ''} | ${effectiveName || '-'}${momRawSuffix}${addressSuffix}`;
 
-    // purchaseValue terstruktur: subtotal promo katalog + ongkir promo session.
-    // Tidak lagi null — staff & CAPI memakai nilai ini sebagai nilai transaksi.
+    // purchase_value = murni subtotal promo layanan (tanpa ongkir).
+    // Ongkir tercatat terpisah di Customer.ongkir — mencegah double-ongkir
+    // saat staff menghitung totalFee = treatmentFee (purchase_value) + deliveryFee (ongkir).
     const { subtotalPromo } = calcBookedSubtotal(allTreatments, tenantId);
-    let ongkirPromo = 0;
-    if (conversationId) {
-      try {
-        const purchaseSession = await GoalTracker.getGoalSession(conversationId, tenantId);
-        ongkirPromo = purchaseSession.location?.ongkirPromo ?? 0;
-      } catch (_) {}
-    }
-    const purchaseValue = subtotalPromo > 0 ? subtotalPromo + ongkirPromo : null;
+    const purchaseValue = subtotalPromo > 0 ? subtotalPromo : null;
 
     const result = await reservationCoreService.saveReservation({
       tenantId,

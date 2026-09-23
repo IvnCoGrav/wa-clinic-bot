@@ -530,8 +530,10 @@ export class ToolExecutionPipeline {
       // isConfirmed tetap false agar state = RESERVATION_SENT, bukan COMPLETED.
       // Skema 462651: tandai butuh verifikasi staf agar acknowledgement
       // berikutnya (oke/siap) memicu 1x closing + handoff, bukan loop LLM.
+      // Reset bookingCommitConfirmed agar turn berikutnya tidak otomatis membuka save_reservation.
       session = await GoalTracker.updateGoalSession(conversationId, {
         selectedTreatment: fnArgs.treatmentName,
+        bookingCommitConfirmed: false,
         booking: {
           preferredDate: fnArgs.bookingDate,
           preferredTime: fnArgs.bookingTime,
