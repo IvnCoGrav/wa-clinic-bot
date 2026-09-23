@@ -167,4 +167,99 @@ describe('StaffReservationService.sendPaymentInfo', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('percakapan WhatsApp');
   });
+
+  it('should render customTemplate with all 8 placeholders substituted', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      id: 'res-201',
+      tenant_id: DEFAULT_TENANT_ID,
+      assigned_staff_id: 'staff-1',
+      treatment_detail: 'Pijat Laktasi',
+      purchase_value: 200000,
+      customer: {
+        name: 'Bunda Sari',
+        ongkir: 25000,
+        conversations: [{ id: 'conv-201', tenant_id: DEFAULT_TENANT_ID }],
+      },
+      assigned_staff: { id: 'staff-1', name: 'Bidan Rina' },
+    } as any);
+
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: DEFAULT_TENANT_ID,
+      name: 'Kala Spa',
+      settings: {
+        paymentInfo: {
+          qrisImageUrl: '/media/outbound/qris.png',
+          bankAccounts: [{ bank: 'BCA', accountNumber: '999888', accountName: 'PT Kala' }],
+          instructions: 'Konfirmasi ke admin',
+          customTemplate: 'Halo {nama_pasien} tagihan {total_tagihan} rincian {rincian_biaya} layanan {daftar_layanan} rekening {daftar_rekening} qris {keterangan_qris} petunjuk {petunjuk} terapis {nama_terapis} end',
+        },
+      },
+    } as any);
+
+    const spy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true } as any);
+    const result = await StaffReservationService.sendPaymentInfo({
+      reservationId: 'res-201', staffId: 'staff-1', tenantId: DEFAULT_TENANT_ID, staffName: 'Bidan Rina', isSupervisor: false,
+    });
+    expect(result.success).toBe(true);
+    const text = spy.mock.calls[0][0].text as string;
+    expect(text).toContain('Bunda Sari');
+    expect(text).toContain('Rp 225.000');
+    expect(text).toContain('Pijat Laktasi');
+    expect(text).toContain('999888');
+    expect(text).toContain('Bidan Rina');
+    expect(text).not.toContain('{nama_pasien}');
+    expect(text).not.toContain('{total_tagihan}');
+  });
+
+  it('should fallback to default layout when customTemplate is null/empty', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      id: 'res-202',
+      tenant_id: DEFAULT_TENANT_ID,
+      assigned_staff_id: 'staff-1',
+      treatment_detail: 'Baby Spa',
+      purchase_value: 100000,
+      customer: {
+        name: 'Bunda Maya', ongkir: 10000,
+        conversations: [{ id: 'conv-202', tenant_id: DEFAULT_TENANT_ID }],
+      },
+      assigned_staff: { id: 'staff-1', name: 'Bidan Rina' },
+    } as any);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: DEFAULT_TENANT_ID, name: 'Kala', settings: { paymentInfo: { qrisImageUrl: null, bankAccounts: [{ bank: 'BRI', accountNumber: '111', accountName: 'Kala' }], customTemplate: '' } },
+    } as any);
+    const spy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true } as any);
+    const result = await StaffReservationService.sendPaymentInfo({
+      reservationId: 'res-202', staffId: 'staff-1', tenantId: DEFAULT_TENANT_ID, staffName: 'Bidan Rina', isSupervisor: false,
+    });
+    expect(result.success).toBe(true);
+    expect(spy.mock.calls[0][0].text).toContain('Bunda Maya');
+    expect(spy.mock.calls[0][0].text).toContain('Rp 110.000');
+  });
+
+  it('should replace missing placeholder values without error (graceful empty)', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      id: 'res-203',
+      tenant_id: DEFAULT_TENANT_ID,
+      assigned_staff_id: 'staff-1',
+      treatment_detail: null,
+      purchase_value: 0,
+      customer: {
+        name: 'Bunda N',
+        ongkir: 0,
+        conversations: [{ id: 'conv-203', tenant_id: DEFAULT_TENANT_ID }],
+      },
+      assigned_staff: { id: 'staff-1', name: 'Bidan Rina' },
+    } as any);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: DEFAULT_TENANT_ID, name: 'Kala', settings: { paymentInfo: { qrisImageUrl: null, bankAccounts: [{ bank: 'BCA', accountNumber: '222', accountName: 'Kala' }], customTemplate: 'Hai {nama_pasien} layanan {daftar_layanan} total {total_tagihan}' } },
+    } as any);
+    const spy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true } as any);
+    const result = await StaffReservationService.sendPaymentInfo({
+      reservationId: 'res-203', staffId: 'staff-1', tenantId: DEFAULT_TENANT_ID, staffName: 'Bidan Rina', isSupervisor: false,
+    });
+    expect(result.success).toBe(true);
+    const text = spy.mock.calls[0][0].text as string;
+    expect(text).toContain('Bunda N');
+    expect(text).not.toContain('{daftar_layanan}');
+  });
 });

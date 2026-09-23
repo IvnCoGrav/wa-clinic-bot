@@ -1417,6 +1417,7 @@ export class StaffReservationService {
     qrisImageUrl: string | null;
     bankAccounts: Array<{ bank: string; accountNumber: string; accountName: string }>;
     instructions?: string;
+    customTemplate?: string | null;
   }> {
     try {
       // 1. Cek Tenant.settings.paymentInfo
@@ -1432,6 +1433,7 @@ export class StaffReservationService {
           qrisImageUrl: pInfo.qrisImageUrl || null,
           bankAccounts: Array.isArray(pInfo.bankAccounts) ? pInfo.bankAccounts : [],
           instructions: pInfo.instructions || undefined,
+          customTemplate: typeof pInfo.customTemplate === 'string' ? pInfo.customTemplate : null,
         };
       }
 
@@ -1449,6 +1451,7 @@ export class StaffReservationService {
               qrisImageUrl: parsed.qrisImageUrl || null,
               bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
               instructions: parsed.instructions || undefined,
+              customTemplate: typeof parsed.customTemplate === 'string' ? parsed.customTemplate : null,
             };
           }
         } catch (_) {
@@ -1707,47 +1710,72 @@ export class StaffReservationService {
       const deliveryFee = typeof (reservation.customer as any)?.ongkir === 'number' ? (reservation.customer as any).ongkir : 0;
       const totalFee = treatmentFee + deliveryFee;
 
-      // Susun pesan WhatsApp
-      const lines: string[] = [
-        `Halo Bunda ${patientName}, berikut informasi pembayaran resmi klinik:`,
-      ];
-
-      if (totalFee > 0) {
-        lines.push('');
-        lines.push(`💰 *Total Tagihan:* Rp ${totalFee.toLocaleString('id-ID')}`);
-        if (treatmentFee > 0 && deliveryFee > 0) {
-          lines.push(`_(Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')})_`);
+      // Susun pesan WhatsApp — data-driven: customTemplate dari DB (Tenant.settings.paymentInfo.customTemplate)
+      const rawTemplate = (paymentInfo as any).customTemplate;
+      const hasCustomTemplate = typeof rawTemplate === 'string' && rawTemplate.trim().length > 0;
+      let fullText: string;
+      if (hasCustomTemplate) {
+        const daftarRekening = hasBank
+          ? paymentInfo.bankAccounts.map((a) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n. ${a.accountName}`).join('\n')
+          : '-';
+        const rincianBiaya = totalFee > 0
+          ? (treatmentFee > 0 && deliveryFee > 0
+            ? `Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')}`
+            : `Total: Rp ${totalFee.toLocaleString('id-ID')}`)
+          : '-';
+        const keteranganQris = hasQris ? 'Barcode QRIS terlampir di atas untuk kemudahan scan pembayaran' : '-';
+        const vars: Record<string, string> = {
+          '{nama_pasien}': patientName,
+          '{total_tagihan}': totalFee > 0 ? `Rp ${totalFee.toLocaleString('id-ID')}` : '-',
+          '{rincian_biaya}': rincianBiaya,
+          '{daftar_layanan}': reservation.treatment_detail || '-',
+          '{daftar_rekening}': daftarRekening,
+          '{keterangan_qris}': keteranganQris,
+          '{petunjuk}': (paymentInfo.instructions || '').trim() || '-',
+          '{nama_terapis}': therapistName,
+        };
+        fullText = rawTemplate;
+        for (const [k, v] of Object.entries(vars)) {
+          fullText = fullText.split(k).join(v);
         }
-        if (reservation.treatment_detail) {
-          lines.push(`📋 *Layanan:* ${reservation.treatment_detail}`);
+        // Variabel tak dikenal dibiarkan kosong tanpa error (hapus sisa placeholder {xxx})
+        fullText = fullText.replace(/\{[a-z_]+\}/gi, '');
+      } else {
+        const lines: string[] = [
+          `Halo Bunda ${patientName}, berikut informasi pembayaran resmi klinik:`,
+        ];
+        if (totalFee > 0) {
+          lines.push('');
+          lines.push(`💰 *Total Tagihan:* Rp ${totalFee.toLocaleString('id-ID')}`);
+          if (treatmentFee > 0 && deliveryFee > 0) {
+            lines.push(`_(Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')})_`);
+          }
+          if (reservation.treatment_detail) {
+            lines.push(`📋 *Layanan:* ${reservation.treatment_detail}`);
+          }
         }
-      }
-
-      if (hasBank) {
-        lines.push('');
-        lines.push('🏦 *Transfer Bank Resmi Klinik:*');
-        for (const acc of paymentInfo.bankAccounts) {
-          lines.push(`• *${acc.bank}*: \`${acc.accountNumber}\``);
-          lines.push(`  a.n. ${acc.accountName}`);
+        if (hasBank) {
+          lines.push('');
+          lines.push('🏦 *Transfer Bank Resmi Klinik:*');
+          for (const acc of paymentInfo.bankAccounts) {
+            lines.push(`• *${acc.bank}*: \`${acc.accountNumber}\``);
+            lines.push(`  a.n. ${acc.accountName}`);
+          }
         }
-      }
-
-      if (hasQris) {
+        if (hasQris) {
+          lines.push('');
+          lines.push('📱 _(Barcode QRIS terlampir di atas untuk kemudahan scan pembayaran)_');
+        }
+        if (paymentInfo.instructions && paymentInfo.instructions.trim()) {
+          lines.push('');
+          lines.push(`ℹ️ _${paymentInfo.instructions.trim()}_`);
+        }
         lines.push('');
-        lines.push('📱 _(Barcode QRIS terlampir di atas untuk kemudahan scan pembayaran)_');
-      }
-
-      if (paymentInfo.instructions && paymentInfo.instructions.trim()) {
+        lines.push('Mohon konfirmasi atau kirimkan bukti transfer ke sini setelah pembayaran ya Bunda. Terima kasih banyak 🙏');
         lines.push('');
-        lines.push(`ℹ️ _${paymentInfo.instructions.trim()}_`);
+        lines.push(`~ ${therapistName}`);
+        fullText = lines.join('\n');
       }
-
-      lines.push('');
-      lines.push('Mohon konfirmasi atau kirimkan bukti transfer ke sini setelah pembayaran ya Bunda. Terima kasih banyak 🙏');
-      lines.push('');
-      lines.push(`~ ${therapistName}`);
-
-      const fullText = lines.join('\n');
 
       const { liveChatService } = await import('./live-chat.service');
 
