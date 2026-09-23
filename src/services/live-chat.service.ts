@@ -323,6 +323,7 @@ export class LiveChatService {
     conversationId: string;
     text?: string;
     imageB64?: string;
+    mediaUrl?: string;
     thumbB64?: string;
     mimeType?: string;
     fileName?: string;
@@ -341,19 +342,19 @@ export class LiveChatService {
      */
     replyToMessageId?: string;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId } = params;
+    const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId } = params;
 
     const hasText = !!text && !!text.trim();
     
     // Idempotency Check: cegah pengiriman ganda dalam 2 detik
-    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64}:${replyToMessageId || ''}`;
+    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64 || !!mediaUrl}:${replyToMessageId || ''}`;
     const now = Date.now();
     const lastSent = LiveChatService.recentReplies.get(hash);
     if (lastSent && now - lastSent < 2000) {
       return { success: false, error: { code: 'DUPLICATE_REPLY', message: 'Pesan yang sama sedang diproses/sudah dikirim dalam 2 detik terakhir.' } };
     }
     LiveChatService.recentReplies.set(hash, now);
-    const hasImage = !!imageB64;
+    const hasImage = !!imageB64 || !!mediaUrl;
     if (!hasText && !hasImage) {
       return { success: false, error: { code: 'EMPTY_REPLY', message: 'Isi balasan tidak boleh kosong.' } };
     }
@@ -457,23 +458,34 @@ export class LiveChatService {
     // Hanya proses media satu kali, jangan dilakukan berulang kali dalam loop
     if (hasImage) {
       const { mediaService } = await import('./media.service');
-      const saved = await mediaService.saveOutboundMedia({
-        tenantId,
-        imageB64: imageB64!,
-        thumbB64,
-        mimeType,
-        fileName,
-      });
+      let hdUrl = '';
+      let thumbUrl: string | null = null;
 
-      const resolved = mediaService.resolveOutboundForProvider(saved.hdUrl, gateway.providerType);
+      if (mediaUrl) {
+        // Reuse existing saved media URL without creating duplicate files on disk
+        hdUrl = mediaUrl;
+        thumbUrl = mediaService.resolveThumbFallback(mediaUrl);
+      } else {
+        const saved = await mediaService.saveOutboundMedia({
+          tenantId,
+          imageB64: imageB64!,
+          thumbB64,
+          mimeType,
+          fileName,
+        });
+        hdUrl = saved.hdUrl;
+        thumbUrl = saved.thumbUrl;
+      }
+
+      const resolved = mediaService.resolveOutboundForProvider(hdUrl, gateway.providerType);
       if (!resolved) {
         return { success: false, error: { code: 'MEDIA_PUBLIC_URL_REQUIRED', message: 'Gagal me-resolve URL media untuk pengiriman.' }, provider: gateway.providerType };
       }
       sendTarget = resolved;
       
       mediaMeta = {
-        url: saved.thumbUrl || saved.hdUrl,
-        hdUrl: saved.hdUrl,
+        url: thumbUrl || hdUrl,
+        hdUrl: hdUrl,
         mimeType,
         caption: hasText ? text!.trim() : null,
         fileName,

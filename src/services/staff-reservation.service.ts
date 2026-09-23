@@ -1633,4 +1633,209 @@ export class StaffReservationService {
       return { success: false, error: `Gagal menyelesaikan kunjungan: ${err.message}` };
     }
   }
+
+  /**
+   * Mengirimkan informasi pembayaran resmi klinik (QRIS & rekening bank)
+   * langsung ke nomor WhatsApp customer secara data-driven dan anti-duplikasi file.
+   */
+  static async sendPaymentInfo(params: {
+    reservationId: string;
+    staffId: string;
+    tenantId: string;
+    staffName?: string;
+    isSupervisor?: boolean;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false } = params;
+
+    try {
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: {
+          customer: {
+            include: {
+              conversations: {
+                where: { tenant_id: tenantId },
+                orderBy: { updated_at: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          assigned_staff: true,
+        },
+      });
+
+      if (!reservation || reservation.tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+
+      // Anti-IDOR: Hanya staf yang ditugaskan atau supervisor yang dapat mengirim info pembayaran
+      if (!isSupervisor) {
+        const assigned = reservation.assigned_staff_id;
+        if (!assigned || assigned !== staffId) {
+          return {
+            success: false,
+            error: 'Anda tidak memiliki hak akses untuk jadwal terapis lain.',
+          };
+        }
+      }
+
+      const conversation = (reservation as any).customer?.conversations?.[0];
+      if (!conversation) {
+        return {
+          success: false,
+          error: 'Belum ada percakapan WhatsApp yang terhubung dengan customer ini.',
+        };
+      }
+
+      // Ambil konfigurasi data-driven pembayaran klinik
+      const paymentInfo = await this.getPaymentInfo(tenantId);
+      const hasQris = !!paymentInfo.qrisImageUrl;
+      const hasBank = Array.isArray(paymentInfo.bankAccounts) && paymentInfo.bankAccounts.length > 0;
+
+      if (!hasQris && !hasBank) {
+        return {
+          success: false,
+          error: 'Informasi pembayaran (QRIS / Rekening Bank) belum diatur di Pengaturan Klinik.',
+        };
+      }
+
+      const patientName = reservation.customer?.name || 'Bunda';
+      const therapistName = reservation.assigned_staff?.name || staffName;
+
+      // Hitung rincian biaya
+      const treatmentFee = typeof reservation.purchase_value === 'number' ? reservation.purchase_value : 0;
+      const deliveryFee = typeof (reservation.customer as any)?.ongkir === 'number' ? (reservation.customer as any).ongkir : 0;
+      const totalFee = treatmentFee + deliveryFee;
+
+      // Susun pesan WhatsApp
+      const lines: string[] = [
+        `Halo Bunda ${patientName}, berikut informasi pembayaran resmi klinik:`,
+      ];
+
+      if (totalFee > 0) {
+        lines.push('');
+        lines.push(`💰 *Total Tagihan:* Rp ${totalFee.toLocaleString('id-ID')}`);
+        if (treatmentFee > 0 && deliveryFee > 0) {
+          lines.push(`_(Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')})_`);
+        }
+        if (reservation.treatment_detail) {
+          lines.push(`📋 *Layanan:* ${reservation.treatment_detail}`);
+        }
+      }
+
+      if (hasBank) {
+        lines.push('');
+        lines.push('🏦 *Transfer Bank Resmi Klinik:*');
+        for (const acc of paymentInfo.bankAccounts) {
+          lines.push(`• *${acc.bank}*: \`${acc.accountNumber}\``);
+          lines.push(`  a.n. ${acc.accountName}`);
+        }
+      }
+
+      if (hasQris) {
+        lines.push('');
+        lines.push('📱 _(Barcode QRIS terlampir di atas untuk kemudahan scan pembayaran)_');
+      }
+
+      if (paymentInfo.instructions && paymentInfo.instructions.trim()) {
+        lines.push('');
+        lines.push(`ℹ️ _${paymentInfo.instructions.trim()}_`);
+      }
+
+      lines.push('');
+      lines.push('Mohon konfirmasi atau kirimkan bukti transfer ke sini setelah pembayaran ya Bunda. Terima kasih banyak 🙏');
+      lines.push('');
+      lines.push(`~ ${therapistName}`);
+
+      const fullText = lines.join('\n');
+
+      const { liveChatService } = await import('./live-chat.service');
+
+      let sendResult: any = null;
+
+      // Smart Caption Splitter: WhatsApp membatasi caption gambar maks 1024 karakter.
+      if (hasQris && paymentInfo.qrisImageUrl) {
+        if (fullText.length <= 1000) {
+          // Muat dalam 1 pesan bergambar ber-caption
+          sendResult = await liveChatService.sendAdminReply({
+            conversationId: conversation.id,
+            text: fullText,
+            mediaUrl: paymentInfo.qrisImageUrl,
+            mimeType: 'image/png',
+            fileName: 'qris-klinik.png',
+            tenantId,
+            adminName: therapistName,
+            forceEscalate: true,
+          });
+        } else {
+          // Melebihi 1000 karakter: kirim QRIS terlebih dahulu, lalu rincian teks lengkap
+          await liveChatService.sendAdminReply({
+            conversationId: conversation.id,
+            text: 'Barcode QRIS Resmi Klinik:',
+            mediaUrl: paymentInfo.qrisImageUrl,
+            mimeType: 'image/png',
+            fileName: 'qris-klinik.png',
+            tenantId,
+            adminName: therapistName,
+            forceEscalate: true,
+          });
+
+          sendResult = await liveChatService.sendAdminReply({
+            conversationId: conversation.id,
+            text: fullText,
+            tenantId,
+            adminName: therapistName,
+            forceEscalate: true,
+          });
+        }
+      } else {
+        // Hanya teks rekening bank (tanpa QRIS)
+        sendResult = await liveChatService.sendAdminReply({
+          conversationId: conversation.id,
+          text: fullText,
+          tenantId,
+          adminName: therapistName,
+          forceEscalate: true,
+        });
+      }
+
+      if (!sendResult.success) {
+        return {
+          success: false,
+          error: sendResult.error?.message || 'Gagal mengirim informasi pembayaran ke WhatsApp.',
+        };
+      }
+
+      // Audit Trail
+      const { auditService } = await import('./audit.service');
+      await auditService.logAdminAction({
+        apiKey: 'STAFF_SESSION',
+        adminIdentity: therapistName,
+        action: 'STAFF_SEND_PAYMENT_INFO',
+        targetId: reservationId,
+        payload: {
+          conversationId: conversation.id,
+          hasQris,
+          totalFee,
+          bankAccountsCount: paymentInfo.bankAccounts.length,
+        },
+        tenantId,
+      });
+
+      return {
+        success: true,
+        data: {
+          reservationId,
+          sentAt: new Date(),
+          hasQris,
+          totalFee,
+          waResult: sendResult,
+        },
+      };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error sending payment info:', err.message);
+      return { success: false, error: `Gagal mengirim info pembayaran: ${err.message}` };
+    }
+  }
 }
+
