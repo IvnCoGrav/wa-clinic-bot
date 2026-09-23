@@ -21,8 +21,43 @@
     s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '__FB_PIXEL_ID__');
-    fbq('track', 'PageView');
-    __EVENTS_ONLOAD__
+    (function(){
+      var pvEventId = 'pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+      window._kala_pv_event_id = pvEventId;
+      try { fbq('track', 'PageView', {}, { eventID: pvEventId }); } catch(e) {}
+      __EVENTS_ONLOAD__
+      try {
+        if (window._kala_pageview_tracked) return;
+        window._kala_pageview_tracked = true;
+        var baseUrl = '__TRACKING_API_BASE_URL__' ? '__TRACKING_API_BASE_URL__'.replace(/\/+$/, '') : '';
+        var endpoint = baseUrl + '/api/tracking/pageview';
+        var params = new URLSearchParams(window.location.search);
+        var getCookie = function(n){ var v='; '+document.cookie; var p=v.split('; '+n+'='); return p.length===2?p.pop().split(';').shift():null; };
+        var payload = {
+          eventID: pvEventId,
+          landingUrl: window.location.href,
+          fbclid: params.get('fbclid') || null,
+          fbp: getCookie('_fbp') || null,
+          fbc: getCookie('_fbc') || null,
+          utm_source: params.get('utm_source') || null,
+          utm_medium: params.get('utm_medium') || null,
+          utm_campaign: params.get('utm_campaign') || null,
+          utm_term: params.get('utm_term') || null,
+          utm_content: params.get('utm_content') || null,
+          utm_id: params.get('utm_id') || null,
+          tenantId: '__TENANT_ID__',
+          tenant_id: '__TENANT_ID__'
+        };
+        var body = JSON.stringify(payload);
+        if (navigator.sendBeacon) {
+          try { var blob = new Blob([body], {type:'application/json'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
+            fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
+          }
+        } else {
+          fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
+        }
+      } catch(e) {}
+    })();
   </script>
   <noscript>
     <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=__FB_PIXEL_ID__&ev=PageView&noscript=1"/>
@@ -209,6 +244,43 @@
       const defaultPhone = '__DEFAULT_WHATSAPP_PHONE__';
       const tenantId = '__TENANT_ID__';
       const tenantSlug = '__TENANT_SLUG__';
+
+      // Fallback beacon PageView untuk kasus pixel dihapus (isolasi multi-tenant tanpa pixel) atau fbq gagal
+      (function(){
+        try {
+          if (window._kala_pageview_tracked) return;
+          var pvEventId = window._kala_pv_event_id || ('pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+          window._kala_pv_event_id = pvEventId;
+          window._kala_pageview_tracked = true;
+          var baseUrl2 = trackingApiBaseUrl ? trackingApiBaseUrl.replace(/\/+$/, '') : '';
+          var endpoint2 = baseUrl2 + '/api/tracking/pageview';
+          var params2 = new URLSearchParams(window.location.search);
+          var getCookie2 = function(n){ var v='; '+document.cookie; var p=v.split('; '+n+'='); return p.length===2?p.pop().split(';').shift():null; };
+          var payload2 = {
+            eventID: pvEventId,
+            landingUrl: window.location.href,
+            fbclid: params2.get('fbclid') || null,
+            fbp: getCookie2('_fbp') || null,
+            fbc: getCookie2('_fbc') || null,
+            utm_source: params2.get('utm_source') || null,
+            utm_medium: params2.get('utm_medium') || null,
+            utm_campaign: params2.get('utm_campaign') || null,
+            utm_term: params2.get('utm_term') || null,
+            utm_content: params2.get('utm_content') || null,
+            utm_id: params2.get('utm_id') || null,
+            tenantId: tenantId,
+            tenant_id: tenantId
+          };
+          var body2 = JSON.stringify(payload2);
+          if (navigator.sendBeacon) {
+            try { var blob2 = new Blob([body2], {type:'application/json'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
+              fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
+            }
+          } else {
+            fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
+          }
+        } catch(e) {}
+      })();
 
       // Helper untuk mengambil query param dari URL
       function getQueryParam(name) {

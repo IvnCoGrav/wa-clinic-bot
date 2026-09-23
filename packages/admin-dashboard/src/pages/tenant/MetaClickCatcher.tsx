@@ -72,6 +72,10 @@ interface MetaSummary {
   purchaseEvents: number;
   capiEventsDelivered: number;
   capiNote?: string;
+  isTrackingCodeFiltered?: boolean;
+  ctrNote?: string;
+  coverage?: { pageViewSources: string[]; note: string };
+  coverageNote?: string;
   capiHealth: {
     pixelIdConfigured: boolean;
     tokenConfigured: boolean;
@@ -445,19 +449,35 @@ export const MetaClickCatcher: React.FC = () => {
       )}
 
       {/* ---------------- 1. Summary KPI Cards ---------------- */}
+      {summary?.coverageNote && (
+        <div className="flex items-start gap-2 text-xs text-[#5b6b73] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+          <span>{summary.coverageNote}</span>
+        </div>
+      )}
+      {summary?.ctrNote && (
+        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+          <span>{summary.ctrNote}</span>
+        </div>
+      )}
       <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard
           label="Total Page View / Kunjungan"
-          value={summary?.totalPageViews ?? summary?.totalClicks ?? '-'}
-          sub="pengunjung buka web/LP"
+          value={summary?.totalPageViews ?? 0}
+          sub={summary?.coverage ? 'LP terinstrumentasi (subset)' : 'pengunjung buka web/LP'}
         />
         <StatCard
           label="Total Klik CTA"
           value={summary?.totalClicks ?? '-'}
           sub={
-            summary && summary.totalPageViews && summary.totalPageViews > 0
-              ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR dari Page View`
-              : 'klik tombol chat / redirect WA'
+            summary?.isTrackingCodeFiltered
+              ? 'Filter kode tracking aktif — CTR disembunyikan'
+              : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalPageViews >= summary.totalClicks
+                ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR dari Page View`
+                : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalClicks > summary.totalPageViews
+                  ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR parsial (klik > view)`
+                  : 'klik tombol chat / redirect WA'
           }
         />
         <StatCard

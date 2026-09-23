@@ -5,6 +5,23 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 119. [PageView vs Klik CTA — Instrumentation Coverage Gap] RESOLVED (Fase 1-2 atomik 2026-09-23)
+
+- **Status:** resolved (2026-09-23), plan staged-phase Fase 1 (beacon) + Fase 2+3 atomik (query jujur + UI) tereksekusi, 6 test beacon + 3 landing-serving hijau, `npm run build` hijau.
+- **Gejala:** Dashboard Meta Click Catcher menampilkan `Total Page View / Kunjungan = 66` sementara `Total Klik CTA` lebih besar (CTR >100%). Bukan salah hitung SQL/Prisma.
+- **Akar masalah (multi-layer):**
+  1. **Data/DB:** `landing_page_views` (migrasi `20260839000000_add_landing_page_views`, 23 Agu 2026) baru; `ad_clicks` lama. 30 hari default window membuat klik historis tanpa padanan view.
+  2. **Kontrak instrumentasi:** `POST /api/tracking/pageview` hanya diproduksi `src/landing/public/external-tracker.js:226`, tidak pernah oleh LP internal `src/landing/public/go.html:24` dan `src/services/html-sanitizer.ts:154` (hanya `fbq('track','PageView')` client-side). `src/routes/tracking.route.ts:271` adalah satu-satunya penerima.
+  3. **Masking kosmetik:** `src/routes/admin/meta-attribution.subroute.ts:240` `views > 0 ? views : totalClicks` menyamarkan 0 menjadi 100% CTR; saat 66 view masuk, CTR >100% terekspos.
+  4. **Direct /cta:** `src/routes/landing.route.ts:234` `GET /cta` membuat `AdClick` atomik tanpa butuh PageView (deep-link WA / share link).
+- **Perbaikan fondasional:**
+  1. **Fase 1 — Beacon kembar:** `src/services/html-sanitizer.ts:142-245` dan `src/landing/public/go.html:13-31,205-244` kini generate `pvEventId` sekali (`pv_Date.now()+random`), `fbq('track','PageView',{}, {eventID:pvEventId})` + `POST /api/tracking/pageview {eventID:pvEventId}` (sendBeacon prioritas, fallback fetch keepalive, guard `window._kala_pageview_tracked`, payload parity `utm_term/content/id + fbp/fbc`, tenant-aware via `config.tenantId`/`__TENANT_ID__`, CSP nonce). `src/routes/tracking.route.ts:327-350` kirim CAPI PageView dengan eventID yang sama untuk dedup Meta.
+  2. **Fase 2 — Query jujur:** `src/routes/admin/meta-attribution.subroute.ts:239-345` hapus fallback `views>0?views:clicks` → `views` murni; tambah `memoryPageViews` import + fallback in-memory saat DB offline (filter tenant/date/utm/bot, konsisten dengan `memoryAdClicks`); tambah field `coverage`, `coverageNote`, `isTrackingCodeFiltered`, `ctrNote` — PageView subset vs klik superset tanpa backfill.
+  3. **Fase 3 — UI jujur:** `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx:66-485` label `LP terinstrumentasi (subset)`, badge coverage/ctrNote, sembunyikan CTR saat filter `search` (trackingCode) aktif karena `LandingPageView` tak punya kolom `trackingCode`.
+- **Sisa debt jujur:** Data historis sebelum deploy beacon tetap timpang (tidak di-backfill by-design, tidak mungkin rekonstruksi). Window 30 hari pasca-deploy akan bertahap membaik; butuh checklist operasional: LP eksternal utama wajib pasang `external-tracker.js` dan pastikan tombol CTA `href` mengandung `/cta` + `landing_url` (cek `logs/*` untuk `[CTA LANDING_URL MISSING]`). Test seam: `tests/unit/pageview-beacon.test.ts` (6), `tests/integration/landing-serving.test.ts` (10), `tests/unit/tracking.test.ts`.
+
+---
+
 ## 118. [Revisi Fondasional CAPI/Queue/Cron/StateMachine] Status Implementasi 2026-09-23 — RESOLVED
 
 - **Status:** resolved (2026-09-23), plan 4 fase fondasional dieksekusi tuntas, 377 test pas hijau.
