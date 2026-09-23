@@ -54,15 +54,18 @@ const MAX_MEMORY_SESSIONS = 1000;
 const MEMORY_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam
 const memorySessionTimestamps = new Map<string, number>();
 
-/** Helper pruning FIFO + TTL + COMPLETED. Diekspor untuk testing. */
+const COMPLETED_GRACE_MS = 30 * 60 * 1000; // 30 menit grace agar chat lanjutan pasca-booking tidak amnesia saat DB offline
+
+/** Helper pruning FIFO + TTL + COMPLETED (grace 30m). Diekspor untuk testing. */
 export function pruneMemoryMap(map: Map<string, CustomerGoalSession>, max = MAX_MEMORY_SESSIONS): void {
   const now = Date.now();
-  // 1. Auto-cleanup: COMPLETED (booking terkonfirmasi) atau inactive >24 jam
+  // 1. Auto-cleanup: inactive >24 jam atau COMPLETED lewat grace period
   for (const [key, session] of map.entries()) {
     const ts = memorySessionTimestamps.get(key);
     const isExpired = ts != null && now - ts > MEMORY_SESSION_TTL_MS;
     const isCompleted = (session as CustomerGoalSession)?.booking?.isConfirmed === true;
-    if (isExpired || isCompleted) {
+    const completedExpired = isCompleted && ts != null && now - ts > COMPLETED_GRACE_MS;
+    if (isExpired || completedExpired) {
       map.delete(key);
       memorySessionTimestamps.delete(key);
     }
@@ -100,10 +103,11 @@ async function withConversationLock<T>(conversationId: string, fn: () => Promise
   const currentLock = conversationLocks.get(conversationId) || Promise.resolve();
   let release: () => void;
   const nextLock = new Promise<void>((resolve) => { release = resolve; });
-  conversationLocks.set(conversationId, currentLock.then(() => nextLock));
+  // Pastikan rejection currentLock tidak memblokir antrian berikutnya
+  conversationLocks.set(conversationId, currentLock.then(() => nextLock, () => nextLock));
 
-  await currentLock;
   try {
+    await currentLock.catch(() => {});
     return await fn();
   } finally {
     release!();

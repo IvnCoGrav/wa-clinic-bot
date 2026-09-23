@@ -584,8 +584,19 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
       });
 
       const responseData = callResult.data;
-      const rawContent = responseData?.choices?.[0]?.message?.content || '{}';
-      const extractedStr = extractJsonContent(rawContent) || '{}';
+      const rawContentRaw = responseData?.choices?.[0]?.message?.content || '{}';
+      // DeepSeek reasoning sanitization: strip <think>...</think> (global, case-insensitive) dan fallback ke reasoning_content bila content kosong
+      let rawContent = rawContentRaw;
+      const reasoningFallback = (responseData?.choices?.[0]?.message as any)?.reasoning_content || (responseData?.choices?.[0]?.message as any)?.reasoning || '';
+      if ((!rawContent || rawContent.trim() === '{}' || rawContent.trim().length < 10) && reasoningFallback && typeof reasoningFallback === 'string' && reasoningFallback.includes('{')) {
+        rawContent = reasoningFallback;
+      }
+      if (/<think>/i.test(rawContent)) {
+        rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        // unclosed <think> tanpa penutup — buang prefix hingga akhir jika masih ada tag pembuka
+        if (/<think>/i.test(rawContent)) rawContent = rawContent.replace(/<think>[\s\S]*/gi, '').trim();
+      }
+      const extractedStr = extractJsonContent(rawContent, 'intents') || '{}';
       const isJsonTruncated = rawContent.length > 300 && (!extractedStr.trim().endsWith('}') || extractedStr.length < rawContent.length * 0.5);
       if (isJsonTruncated) {
         telemetryService.setLastNluError(context?.customerPhone || 'unknown', 'JSON_TRUNCATED');

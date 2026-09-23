@@ -5,6 +5,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 118. [Revisi Fondasional CAPI/Queue/Cron/StateMachine] Status Implementasi 2026-09-23 — RESOLVED
+
+- **Status:** resolved (2026-09-23), plan 4 fase fondasional dieksekusi tuntas, 377 test pas hijau.
+- **Konteks:** Plan staged-phase (Fase 1-4) tanpa hardcode, tanpa tambal-sulam prompt: CAPI data-driven, double-ongkir, NLU reasoning, queue retry, deadlock, multi-tenant cron, WIB, state-machine latch, tool-masking, enum.
+- **Perubahan fondasional:**
+  1. **Fase 1 — CAPI & Finansial:** `capi.service.ts:68-89,96-213` hapus `KNOWN_SERVICE_MATCHERS` 240+ baris hardcode, `resolveTreatmentValue(treatmentDetail, tenantId)` kini `treatmentCatalogService.getAllServices(false, tenantId)` + `findCatalogPrice` longest-match + desc/token fallback + category fallback data-driven (prefer ceria/hamil, fallback min); `save-reservation.tool.ts:442-446` `purchaseValue = subtotalPromo` murni tanpa `ongkirPromo` (cegah `totalFee = purchase_value + ongkir` double); skrip `src/scripts/backfill-double-ongkir-purchase-value.ts` idempoten `--dry-run`/`--execute` tenant-aware.
+  2. **Fase 2 — NLU & Resilience:** `entity-extractor.service.ts:586-598` strip `<think>` global + fallback `reasoning_content` + `extractJsonContent(..., 'intents')` + unclosed guard; `queue.service.ts:383-422` in-memory retry `_memoryAttempts` ≤2 backoff 1s*attempts + dead-letter `alertService` (PII-masked) + `_retryPending` guard; `goal-tracker.ts:58-77,99-114` `pruneMemoryMap` grace 30m untuk `isConfirmed` + `withConversationLock` `currentLock.then(()=>nextLock, ()=>nextLock)` + `await currentLock.catch(()=>{})` di dalam try (anti-deadlock).
+  3. **Fase 3 — Multi-Tenant Cron & WIB:** `cron.service.ts:15-32,37-46,53-61` `runMorningJobs`/`runFollowUpWorker`/`runLabelReconciliation` iterasi `getAllTenantIds()` per-tenant (sebelumnya `DEFAULT_TENANT_ID` statis); `save-reservation.tool.ts:420-426` `isSameWibCalendarDay` WIB_OFFSET +7h (UTC host vs WIB).
+  4. **Fase 4 — State Machine & Masking:** `tool-pipeline.ts:533-543` `save_reservation` sukses reset `bookingCommitConfirmed:false` (tutup latch pasca-reservasi); `tool-masker.ts:15-21,219-228` `isConsultativeUserText` guard pada `resolveCandidateTreatment` (pertanyaan konsultatif `?` tanpa commit tidak seed treatment, referent asisten tetap butuh `hasBookingCommitSignal`); `save-reservation.tool.ts:192-196,435-437` enum `momStage` tambah `BREASTFEEDING` + label `Ibu Menyusui/Laktasi`.
+- **Revisi plan vs klaim asli:** Micro-Task 4.2 asli (hapus scan asisten total) ditolak — benar `detectAgreedTreatment` sudah user-only, asisten sebagai referent anaphoric (`boleh deh yang itu`) dengan gate `hasBookingCommitSignal` dipertahankan, hanya ditambah `isConsultativeUserText` guard. Regression Gate paths asli (8 file fiktif) diganti ke suite riil `npx vitest run tests/unit/` (377 passed).
+- **Divergensi CAPI vs LTV:** `purchase_value` pure (tanpa ongkir) konsisten dengan `ltv_cache = Σ pure`; CAPI `value = totalCollected` tetap di `purchase-detection.service.ts:191` (inc. ongkir) — divergensi by-design terdokumentasi di #117.
+- **Sisa debt:** call-site `resolveTreatmentValue` tenant propagation baru default (`DEFAULT_TENANT_ID`) untuk kompatibilitas; tenant non-default butuh audit lanjutan bila multi-tenant aktif penuh. Enum DB `momStage` Prisma belum migrasi (hanya TS schema) — perlu migrasi bila kolom enum DB ketat.
+
+---
+
 ## 117. [Staff Terapis Revisi Audit] Sisa Backfill & Sinkronisasi — TECH DEBT Jujur
 
 - **Status:** open (tech debt, documented), dicatat 2026-09-22.
