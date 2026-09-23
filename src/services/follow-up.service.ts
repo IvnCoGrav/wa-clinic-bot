@@ -1187,6 +1187,16 @@ export class FollowUpService {
       const cooldownMs = cooldownHours * 60 * 60 * 1000;
 
       for (const fu of dueFollowUps) {
+        // Overdue Guard: Follow-up yang sudah terlewat > 48 jam ditandai SKIPPED agar tidak mengirim pesan basi
+        if (fu.scheduled_at && (now.getTime() - new Date(fu.scheduled_at).getTime() > 48 * 60 * 60 * 1000)) {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} for ${fu.customer?.phone} is SKIPPED (Overdue > 48h).`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.OVERDUE_48H },
+          });
+          continue;
+        }
+
         // Bypass Guard: Jangan kirim follow-up untuk customer berlabel Skip atau Admin CS
         if (fu.customer && (fu.customer.is_admin_labeled || hasBypassLabel(fu.customer))) {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} for ${fu.customer?.phone} is SKIPPED (Bypass contact label).`);

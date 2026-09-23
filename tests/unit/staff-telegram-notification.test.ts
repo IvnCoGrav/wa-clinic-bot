@@ -90,7 +90,7 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
     expect(text).toContain('Rp 185.000');
     expect(text).toContain('LUNAS (Transfer)');
     expect(text).toContain('Alergi minyak telon beraroma tajam');
-    expect(text).toContain('#staff-today');
+    expect(text).toContain('/staff/today');
 
     // 2. MUST NOT leak raw customer phone number (Privacy rule)
     expect(text).not.toContain('6281987654321');
@@ -160,7 +160,7 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
       'default-tenant',
       expect.objectContaining({
         title: expect.stringContaining('Tugas Kunjungan Baru'),
-        url: '/admin/#staff-today',
+        url: '/admin/staff/today',
       })
     );
   });

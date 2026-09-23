@@ -49,6 +49,8 @@ import {
   WifiOff,
   Bell,
   BellRing,
+  QrCode,
+  Copy,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import {
@@ -103,6 +105,8 @@ interface StaffTask {
   treatmentCategory: string | null;
   bookingDate: string | null;
   status: string;
+  otwSentAt?: string | null;
+  arrivedAt?: string | null;
   conversationId: string | null;
   mapsUrl: string | null;
   navigationUrl: string | null;
@@ -301,6 +305,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [sendingOtwId, setSendingOtwId] = useState<string | null>(null);
+  const [sendingArrivalId, setSendingArrivalId] = useState<string | null>(null);
+  const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
+  const [todayFilter, setTodayFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [paymentInfo, setPaymentInfo] = useState<{
+    qrisImageUrl: string | null;
+    bankAccounts: Array<{ bank: string; accountNumber: string; accountName: string }>;
+    instructions?: string;
+  } | null>(null);
+  const [loadingPaymentInfo, setLoadingPaymentInfo] = useState(false);
+  const [qrisZoomModal, setQrisZoomModal] = useState(false);
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
@@ -523,6 +537,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       .catch(() => {});
     return cleanupAudio;
   }, []);
+
+  // Load payment info (QRIS & Bank Accounts) from data-driven endpoint when payment modal opens
+  useEffect(() => {
+    if (paymentModalTask && !paymentInfo && !loadingPaymentInfo) {
+      setLoadingPaymentInfo(true);
+      apiRequest('/api/staff/payment-info')
+        .then((res) => {
+          if (res && res.success && res.data) {
+            setPaymentInfo(res.data);
+          }
+        })
+        .catch((err) => console.warn('[STAFF] Failed to load payment info:', err))
+        .finally(() => setLoadingPaymentInfo(false));
+    }
+  }, [paymentModalTask, paymentInfo, loadingPaymentInfo]);
 
   // Daftarkan PWA Web Push Subscription untuk Staff / Terapis jika izin sudah granted
   useEffect(() => {
@@ -1227,21 +1256,133 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       if (!confirmed) return;
 
       setSendingOtwId(task.reservationId);
-      const res = await apiRequest(`/api/staff/conversations/${task.conversationId}/reply`, {
+      const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
         method: 'POST',
-        body: JSON.stringify({ text: otwMessage }),
+        body: JSON.stringify({ customText: otwMessage }),
       });
 
       if (res.success) {
         toast(`Pesan OTW berhasil dikirim ke WhatsApp ${patientName}!`, 'success');
+        const nowIso = new Date().toISOString();
+        const updateOtw = (t: StaffTask): StaffTask =>
+          t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso } : t;
+        setTasks((prev) => prev.map(updateOtw));
+        setUpcomingTasks((prev) => prev.map(updateOtw));
+        if (selectedTask?.reservationId === task.reservationId) {
+          setSelectedTask((prev) => (prev ? updateOtw(prev) : null));
+        }
         if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
           setMessages((prev) => [...prev, res.data].slice(-10));
         }
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mengirim info OTW'}`, 'error');
       }
     } catch (err: any) {
       toast(`Gagal mengirim info OTW: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setSendingOtwId(null);
+    }
+  };
+
+  // Quick Action: Record Arrival and send "Sudah Sampai" notification
+  const handleRecordArrival = async (task: StaffTask, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    if (!isOnline) {
+      toast('Koneksi internet terputus. Tidak dapat memperbarui status kedatangan saat ini.', 'error');
+      return;
+    }
+
+    const patientName = task.customerName || 'Bunda';
+    const arrivalMessage = `Halo ${patientName}, saya ${staff?.name || 'Bidan Terapis'} sudah sampai di depan rumah/lokasi Bunda ya 🙏`;
+
+    const confirmed = await confirm({
+      title: 'Konfirmasi Tiba di Lokasi',
+      message: `Kirim pesan WhatsApp bahwa Anda sudah sampai di depan lokasi ${patientName}?\n\n"${arrivalMessage}"`,
+      confirmText: 'Ya, Sudah Sampai',
+      cancelText: 'Batal',
+    });
+
+    if (!confirmed) return;
+
+    setSendingArrivalId(task.reservationId);
+    try {
+      const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/arrive`, {
+        method: 'POST',
+      });
+
+      if (res.success) {
+        toast(`✅ Status tiba di lokasi tercatat & pesan terkirim ke ${patientName}!`, 'success');
+        const nowIso = new Date().toISOString();
+        const updateArrival = (t: StaffTask): StaffTask =>
+          t.reservationId === task.reservationId ? { ...t, arrivedAt: nowIso } : t;
+        setTasks((prev) => prev.map(updateArrival));
+        setUpcomingTasks((prev) => prev.map(updateArrival));
+        if (selectedTask?.reservationId === task.reservationId) {
+          setSelectedTask((prev) => (prev ? updateArrival(prev) : null));
+        }
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mencatat kedatangan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setSendingArrivalId(null);
+    }
+  };
+
+  // Quick Action: Complete Visit (for already paid or independent completion)
+  const handleCompleteVisit = async (task: StaffTask, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const patientName = task.customerName || 'Bunda';
+    const confirmed = await confirm({
+      title: 'Selesaikan Kunjungan',
+      message: `Tandai kunjungan & tindakan untuk ${patientName} telah selesai dilakukan?`,
+      confirmText: 'Ya, Kunjungan Selesai',
+      cancelText: 'Batal',
+    });
+
+    if (!confirmed) return;
+
+    setCompletingVisitId(task.reservationId);
+    try {
+      const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/complete`, {
+        method: 'POST',
+      });
+
+      if (res.success) {
+        toast(`✅ Kunjungan untuk ${patientName} berhasil diselesaikan!`, 'success');
+        const updateCompleted = (t: StaffTask): StaffTask =>
+          t.reservationId === task.reservationId ? { ...t, status: 'completed' } : t;
+        setTasks((prev) => prev.map(updateCompleted));
+        setUpcomingTasks((prev) => prev.map(updateCompleted));
+        if (selectedTask?.reservationId === task.reservationId) {
+          setSelectedTask((prev) => (prev ? updateCompleted(prev) : null));
+        }
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat menyelesaikan kunjungan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setCompletingVisitId(null);
+    }
+  };
+
+  // Helper: Salin nomor rekening ke clipboard
+  const handleCopyAccountNumber = async (accNum: string, bank: string) => {
+    try {
+      await navigator.clipboard.writeText(accNum);
+      toast(`Nomor rekening ${bank} (${accNum}) berhasil disalin! 📋`, 'success');
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = accNum;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      toast(`Nomor rekening ${bank} (${accNum}) berhasil disalin! 📋`, 'success');
     }
   };
 
@@ -1758,19 +1899,25 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   };
 
   const isTrulyCompleted = (t: StaffTask) => {
-    const isStatusDone = (t.status || '').toLowerCase() === 'completed';
-    const isPaidAndPast = t.pricing?.paymentStatus === 'LUNAS' && isOverdueSchedule(t);
-    return isStatusDone || isPaidAndPast;
+    return (t.status || '').toLowerCase() === 'completed';
   };
 
-  const activeTodayTasks = tasks.filter((t) => !isTrulyCompleted(t));
-  const pastOrCompletedTodayTasks = tasks.filter((t) => isTrulyCompleted(t));
+  const pendingTodayTasks = tasks.filter((t) => !isTrulyCompleted(t));
+  const completedTodayTasks = tasks.filter((t) => isTrulyCompleted(t));
+
+  const activeTodayTasks =
+    todayFilter === 'all'
+      ? tasks
+      : todayFilter === 'pending'
+      ? pendingTodayTasks
+      : completedTodayTasks;
+
   const combinedCompletedTasks = [
     ...completedTasks.map((c) => {
-      const fromToday = pastOrCompletedTodayTasks.find((t) => t.reservationId === c.reservationId);
+      const fromToday = completedTodayTasks.find((t) => t.reservationId === c.reservationId);
       return fromToday?.conversationId ? { ...c, conversationId: fromToday.conversationId } : c;
     }),
-    ...pastOrCompletedTodayTasks.filter((t) => !completedTasks.some((c) => c.reservationId === t.reservationId)),
+    ...completedTodayTasks.filter((t) => !completedTasks.some((c) => c.reservationId === t.reservationId)),
   ];
 
   // Filter list
@@ -2032,7 +2179,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari pasien atau alamat..."
-                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] text-xs text-[#111b21] placeholder-[#667781] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] text-[16px] sm:text-xs text-[#111b21] placeholder-[#667781] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
                   />
                   {searchQuery && (
                     <button
@@ -2079,6 +2226,58 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </button>
                   </div>
                 )}
+
+                {/* Status Sub-filter Pills for Today (Operational vs Completed) */}
+                <div className="flex items-center gap-1.5 pt-1 overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setTodayFilter('all')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      todayFilter === 'all'
+                        ? 'bg-[#111b21] text-white shadow-xs'
+                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                    }`}
+                  >
+                    <span>Semua</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      todayFilter === 'all' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                    }`}>
+                      {tasks.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTodayFilter('pending')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      todayFilter === 'pending'
+                        ? 'bg-[#008069] text-white shadow-xs'
+                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                    }`}
+                  >
+                    <span>Perlu Dikunjungi</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      todayFilter === 'pending' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                    }`}>
+                      {pendingTodayTasks.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTodayFilter('completed')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      todayFilter === 'completed'
+                        ? 'bg-[#008069] text-white shadow-xs'
+                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                    }`}
+                  >
+                    <span>Selesai</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      todayFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                    }`}>
+                      {completedTodayTasks.length}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
@@ -2148,11 +2347,26 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
 
                           <div className="flex items-center space-x-1.5 flex-shrink-0">
-                            {isOverdueSchedule(task) && (
+                            {task.status === 'completed' ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                <CheckCircle2 size={10} />
+                                <span>Selesai</span>
+                              </span>
+                            ) : task.arrivedAt ? (
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
+                                <span>📍</span>
+                                <span>Tiba</span>
+                              </span>
+                            ) : task.otwSentAt ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
+                                <span>🛵</span>
+                                <span>OTW</span>
+                              </span>
+                            ) : isOverdueSchedule(task) ? (
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-300">
                                 Berlangsung
                               </span>
-                            )}
+                            ) : null}
                             <div className="flex items-center space-x-1 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-md whitespace-nowrap border border-[#00a884]/30">
                               <Clock size={11} />
                               <span>{formatTime(task.bookingDate).split(' ')[0]}</span>
@@ -2333,26 +2547,79 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             </div>
                           )}
 
-                          <button
-                            type="button"
-                            disabled={isSendingOtw || !isOtwAllowed(task)}
-                            onClick={(e) => handleSendOtw(task, e)}
-                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={
-                              isOtwAllowed(task)
-                                ? 'Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi'
-                                : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
-                            }
-                          >
-                            {isSendingOtw ? (
-                              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
-                            ) : (
-                              <>
-                                <Navigation2 size={15} />
-                                <span>Infokan OTW</span>
-                              </>
-                            )}
-                          </button>
+                          {/* 3-State Operational Action: Infokan OTW -> Sudah Sampai -> Selesai Tindakan */}
+                          {task.status === 'completed' ? (
+                            <div className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
+                              <CheckCircle2 size={15} />
+                              <span>Selesai</span>
+                            </div>
+                          ) : task.arrivedAt ? (
+                            <button
+                              type="button"
+                              disabled={completingVisitId === task.reservationId}
+                              onClick={(e) => handleCompleteVisit(task, e)}
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                              title="Tandai tindakan selesai dan kunjungan tuntas"
+                            >
+                              {completingVisitId === task.reservationId ? (
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                              ) : (
+                                <>
+                                  <CheckCircle2 size={15} />
+                                  <span>Selesai</span>
+                                </>
+                              )}
+                            </button>
+                          ) : task.otwSentAt ? (
+                            <button
+                              type="button"
+                              disabled={sendingArrivalId === task.reservationId}
+                              onClick={(e) => handleRecordArrival(task, e)}
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                              title="Infokan ke pasien dan klinik bahwa Anda sudah sampai di lokasi"
+                            >
+                              {sendingArrivalId === task.reservationId ? (
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                              ) : (
+                                <>
+                                  <MapPin size={15} />
+                                  <span>Sampai</span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isSendingOtw}
+                              onClick={(e) => {
+                                if (!isOtwAllowed(task)) {
+                                  e.stopPropagation();
+                                  toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
+                                  return;
+                                }
+                                handleSendOtw(task, e);
+                              }}
+                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
+                                isOtwAllowed(task)
+                                  ? 'text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30'
+                                  : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
+                              }`}
+                              title={
+                                isOtwAllowed(task)
+                                  ? 'Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi'
+                                  : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
+                              }
+                            >
+                              {isSendingOtw ? (
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                              ) : (
+                                <>
+                                  <Navigation2 size={15} />
+                                  <span>Infokan OTW</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
 
                         {/* Bar Terapis Penanggung Jawab & Delegasi (Khusus Supervisor / Mode Tim) */}
@@ -2467,26 +2734,68 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         <CreditCard size={16} />
                       </button>
 
-                      <button
-                        onClick={() => handleSendOtw(selectedTask)}
-                        disabled={sendingOtwId === selectedTask.reservationId || !isOtwAllowed(selectedTask)}
-                        className={`h-9 w-9 flex items-center justify-center rounded-lg text-[#008069] transition-all border shadow-xs active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-                          isOtwAllowed(selectedTask)
-                            ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] border-[#00a884]/30'
-                            : 'bg-[#f0f2f5] border-[#e9edef]'
-                        }`}
-                        title={
-                          isOtwAllowed(selectedTask)
-                            ? 'Kirim info menuju lokasi (OTW) ke WhatsApp pasien'
-                            : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`
-                        }
-                      >
-                        {sendingOtwId === selectedTask.reservationId ? (
-                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
-                        ) : (
-                          <Navigation2 size={16} />
-                        )}
-                      </button>
+                      {/* Dynamic Transit Progress Button in Chat Drawer */}
+                      {selectedTask.status === 'completed' ? (
+                        <div
+                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs"
+                          title="Kunjungan telah selesai"
+                        >
+                          <CheckCircle2 size={16} />
+                        </div>
+                      ) : selectedTask.arrivedAt ? (
+                        <button
+                          onClick={() => handleCompleteVisit(selectedTask)}
+                          disabled={completingVisitId === selectedTask.reservationId}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                          title="Tandai Tindakan Selesai"
+                        >
+                          {completingVisitId === selectedTask.reservationId ? (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          ) : (
+                            <CheckCircle2 size={16} />
+                          )}
+                        </button>
+                      ) : selectedTask.otwSentAt ? (
+                        <button
+                          onClick={() => handleRecordArrival(selectedTask)}
+                          disabled={sendingArrivalId === selectedTask.reservationId}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                          title="Tandai Sudah Sampai di Lokasi"
+                        >
+                          {sendingArrivalId === selectedTask.reservationId ? (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          ) : (
+                            <MapPin size={16} />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!isOtwAllowed(selectedTask)) {
+                              toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
+                              return;
+                            }
+                            handleSendOtw(selectedTask);
+                          }}
+                          disabled={sendingOtwId === selectedTask.reservationId}
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
+                            isOtwAllowed(selectedTask)
+                              ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border-[#00a884]/30'
+                              : 'bg-[#f0f2f5] text-[#667781] border-[#e9edef]'
+                          }`}
+                          title={
+                            isOtwAllowed(selectedTask)
+                              ? 'Kirim info menuju lokasi (OTW) ke WhatsApp pasien'
+                              : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`
+                          }
+                        >
+                          {sendingOtwId === selectedTask.reservationId ? (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                          ) : (
+                            <Navigation2 size={16} />
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2885,7 +3194,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari jadwal pasien mendatang (nama, kelurahan, treatment)..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
                 <button
@@ -3133,7 +3442,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari riwayat treatment yang sudah selesai (nama, kelurahan, treatment)..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
                 <button
@@ -3982,6 +4291,119 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </div>
               </div>
 
+              {/* Dynamic Payment Info Details (Data-Driven from Clinic Policy / Tenant Settings) */}
+              {paymentMethod === 'QRIS' && (
+                <div className="p-3 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+                      <QrCode size={15} className="text-[#008069]" />
+                      <span>Barcode QRIS Klinik</span>
+                    </span>
+                    {paymentInfo?.qrisImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setQrisZoomModal(true)}
+                        className="text-[11px] font-bold text-[#008069] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Perbesar Layar</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingPaymentInfo ? (
+                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-[#667781]">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                      <span className="text-[11px]">Memuat QRIS resmi...</span>
+                    </div>
+                  ) : paymentInfo?.qrisImageUrl ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <div
+                        onClick={() => setQrisZoomModal(true)}
+                        className="p-2 bg-white rounded-xl border border-[#d1d7db] shadow-xs cursor-pointer hover:border-[#008069] transition group"
+                        title="Ketuk untuk memperbesar QRIS ke layar penuh"
+                      >
+                        <img
+                          src={paymentInfo.qrisImageUrl}
+                          alt="QRIS Klinik"
+                          className="w-44 h-44 object-contain rounded-lg group-hover:scale-[1.02] transition-transform"
+                        />
+                      </div>
+                      <p className="text-[11px] text-[#667781] text-center">
+                        Tunjukkan QRIS di atas kepada pasien untuk discan langsung via GoPay, OVO, Dana, BCA Mobile, dll.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="py-4 px-3 text-center text-xs text-amber-800 bg-amber-50 rounded-xl border border-amber-200">
+                      Gambar QRIS belum dikonfigurasi di pengaturan klinik. Silakan minta admin mengunggah QRIS atau gunakan transfer rekening.
+                    </div>
+                  )}
+                  {paymentInfo?.instructions && (
+                    <p className="text-[10px] text-[#8696a0] italic text-center">{paymentInfo.instructions}</p>
+                  )}
+                </div>
+              )}
+
+              {paymentMethod === 'TRANSFER' && (
+                <div className="p-3 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2.5">
+                  <span className="text-xs font-bold text-[#111b21] block">
+                    Rekening Resmi Klinik:
+                  </span>
+
+                  {loadingPaymentInfo ? (
+                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-[#667781]">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                      <span className="text-[11px]">Memuat rekening...</span>
+                    </div>
+                  ) : paymentInfo?.bankAccounts && paymentInfo.bankAccounts.length > 0 ? (
+                    <div className="space-y-2">
+                      {paymentInfo.bankAccounts.map((acc, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 bg-white rounded-xl border border-[#e9edef] flex items-center justify-between shadow-2xs"
+                        >
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-[#111b21] block">{acc.bank}</span>
+                            <span className="font-mono text-xs font-semibold text-[#008069] tracking-wider block">
+                              {acc.accountNumber}
+                            </span>
+                            <span className="text-[10px] text-[#667781] block truncate">
+                              a.n. {acc.accountName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAccountNumber(acc.accountNumber, acc.bank)}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#d9fdd3] text-[#54656f] hover:text-[#008069] text-xs font-bold transition flex items-center gap-1 border border-[#e9edef] active:scale-95 flex-shrink-0 cursor-pointer"
+                            title="Salin nomor rekening"
+                          >
+                            <Copy size={12} />
+                            <span>Salin</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-3 px-3 text-center text-xs text-amber-800 bg-amber-50 rounded-xl border border-amber-200">
+                      Rekening bank belum terdaftar di pengaturan klinik.
+                    </div>
+                  )}
+                  {paymentInfo?.instructions && (
+                    <p className="text-[10px] text-[#8696a0] italic text-center">{paymentInfo.instructions}</p>
+                  )}
+                </div>
+              )}
+
+              {paymentMethod === 'CASH' && (
+                <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                  <span className="font-bold block">💵 Pembayaran Tunai di Tempat</span>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    Terima uang tunai pas sejumlah{' '}
+                    <strong className="font-bold">{formatRupiah(paymentModalTask.pricing.totalFee)}</strong>.
+                    Bukti foto struk tidak diwajibkan untuk metode tunai.
+                  </p>
+                </div>
+              )}
+
               {/* Upload Proof if Non-Cash */}
               {paymentMethod !== 'CASH' && (
                 <div className="space-y-2">
@@ -4051,6 +4473,53 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL FULLSCREEN QRIS LIGHTBOX (UNTUK DITUNJUKKAN & DISCAN PASIEN) */}
+      {/* ========================================================================= */}
+      {qrisZoomModal && (
+        <div
+          className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setQrisZoomModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setQrisZoomModal(false)}
+              className="absolute top-3 right-3 p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition"
+              title="Tutup QRIS"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="space-y-1 pt-2">
+              <h3 className="font-bold text-base text-[#111b21]">Scan QRIS Resmi Klinik</h3>
+              <p className="text-xs text-[#667781]">
+                Arahkan kamera e-wallet / mobile banking pasien ke barcode di bawah ini
+              </p>
+            </div>
+
+            <div className="p-4 bg-white rounded-2xl border-2 border-[#e9edef] shadow-inner">
+              <img
+                src={paymentInfo?.qrisImageUrl || ''}
+                alt="QRIS Fullscreen"
+                className="w-64 h-64 sm:w-72 sm:h-72 object-contain"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setQrisZoomModal(false)}
+              className="w-full py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition active:scale-95 shadow-xs"
+            >
+              Tutup Tampilan QRIS
+            </button>
           </div>
         </div>
       )}
@@ -4391,7 +4860,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     value={locLandmark}
                     onChange={(e) => setLocLandmark(e.target.value)}
                     placeholder="Contoh: Pagar hitam, samping toko berkah, seberang masjid"
-                    className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
                   />
                 </div>
 
@@ -4500,7 +4969,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   onChange={(e) => setEditContent(e.target.value)}
                   rows={4}
                   placeholder="Ketik perbaikan teks pesan..."
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
                 />
               </div>
 

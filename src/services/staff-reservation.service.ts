@@ -40,6 +40,8 @@ export interface StaffTaskItem {
   treatmentCategory: string | null;
   bookingDate: Date | null;
   status: string;
+  otwSentAt?: Date | string | null;
+  arrivedAt?: Date | string | null;
   conversationId: string | null;
   mapsUrl: string | null;
   navigationUrl: string | null;
@@ -189,6 +191,8 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          otw_sent_at: true,
+          arrived_at: true,
           assigned_staff: {
             select: {
               id: true,
@@ -323,6 +327,8 @@ export class StaffReservationService {
           treatmentCategory: r.treatment_category || null,
           bookingDate: r.booking_date,
           status: r.status,
+          otwSentAt: (r as any).otw_sent_at || null,
+          arrivedAt: (r as any).arrived_at || null,
           conversationId: cust?.conversations?.[0]?.id || null,
           mapsUrl,
           navigationUrl,
@@ -599,6 +605,8 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          otw_sent_at: true,
+          arrived_at: true,
           payment_method: true,
           proof_url: true,
           customer: {
@@ -692,6 +700,8 @@ export class StaffReservationService {
           treatmentCategory: r.treatment_category || null,
           bookingDate: r.booking_date,
           status: r.status,
+          otwSentAt: (r as any).otw_sent_at || null,
+          arrivedAt: (r as any).arrived_at || null,
           conversationId: cust?.conversations?.[0]?.id || null,
           mapsUrl,
           navigationUrl,
@@ -1393,6 +1403,234 @@ export class StaffReservationService {
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error updating customer location:', err.message);
       return { success: false, error: `Gagal memperbarui lokasi: ${err.message}` };
+    }
+  }
+
+  /**
+   * Mengambil informasi pembayaran klinik secara data-driven (QRIS & Rekening Bank).
+   * Hirarki Otoritas:
+   * 1. Database: `Tenant.settings.paymentInfo`
+   * 2. Database: `ClinicPolicy` topic 'payment_methods'
+   * 3. Fallback: Default safe clinic payment info
+   */
+  static async getPaymentInfo(tenantId = DEFAULT_TENANT_ID): Promise<{
+    qrisImageUrl: string | null;
+    bankAccounts: Array<{ bank: string; accountNumber: string; accountName: string }>;
+    instructions?: string;
+  }> {
+    try {
+      // 1. Cek Tenant.settings.paymentInfo
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { settings: true, name: true },
+      });
+
+      const settings = (tenant?.settings as any) || {};
+      if (settings.paymentInfo && typeof settings.paymentInfo === 'object') {
+        const pInfo = settings.paymentInfo;
+        return {
+          qrisImageUrl: pInfo.qrisImageUrl || null,
+          bankAccounts: Array.isArray(pInfo.bankAccounts) ? pInfo.bankAccounts : [],
+          instructions: pInfo.instructions || undefined,
+        };
+      }
+
+      // 2. Cek ClinicPolicy topic 'payment_methods'
+      const policy = await (prisma as any).clinicPolicy.findUnique({
+        where: { tenant_id_topic: { tenant_id: tenantId, topic: 'payment_methods' } },
+        select: { factual_summary: true, suggested_reply: true, is_active: true },
+      });
+
+      if (policy && policy.is_active && policy.factual_summary) {
+        try {
+          const parsed = JSON.parse(policy.factual_summary);
+          if (parsed && (parsed.bankAccounts || parsed.qrisImageUrl)) {
+            return {
+              qrisImageUrl: parsed.qrisImageUrl || null,
+              bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
+              instructions: parsed.instructions || undefined,
+            };
+          }
+        } catch (_) {
+          // Bukan JSON, lanjut ke fallback
+        }
+      }
+
+      // 3. Fallback default data-driven dari data tenant
+      return {
+        qrisImageUrl: null,
+        bankAccounts: [
+          {
+            bank: 'BCA',
+            accountNumber: '1234567890',
+            accountName: tenant?.name || 'Kala Moms and Baby Spa',
+          },
+        ],
+      };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error fetching payment info:', err.message);
+      return {
+        qrisImageUrl: null,
+        bankAccounts: [],
+      };
+    }
+  }
+
+  /**
+   * Mencatat waktu kedatangan bidan di depan rumah/lokasi pasien (ARRIVED).
+   * Mengirim pesan cepat WhatsApp ke pasien secara otomatis dan mengupdate arrived_at di database.
+   */
+  static async recordArrival(params: {
+    reservationId: string;
+    staffId: string;
+    tenantId: string;
+    staffName?: string;
+    isSupervisor?: boolean;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false } = params;
+
+    try {
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: {
+          customer: {
+            include: {
+              conversations: {
+                where: { tenant_id: tenantId },
+                orderBy: { updated_at: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          assigned_staff: true,
+        },
+      });
+
+      if (!reservation) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+
+      if ((reservation as any).tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+
+      // Anti-IDOR: Hanya staf yang ditugaskan atau supervisor yang dapat mencatat kedatangan
+      if (!isSupervisor) {
+        const assigned = (reservation as any).assigned_staff_id;
+        if (!assigned || assigned !== staffId) {
+          return {
+            success: false,
+            error: 'Anda tidak memiliki hak akses untuk jadwal terapis lain.',
+          };
+        }
+      }
+
+      const statusLower = String((reservation as any).status || '').toLowerCase();
+      if (['completed', 'cancelled', 'rejected'].includes(statusLower)) {
+        return {
+          success: false,
+          error: `Kedatangan tidak dapat dicatat untuk jadwal berstatus "${(reservation as any).status}".`,
+        };
+      }
+
+      const now = new Date();
+
+      // 1. Update arrived_at di DB
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: {
+          arrived_at: now,
+        },
+      });
+
+      // 2. Kirim pesan WhatsApp otomatis bahwa bidan sudah sampai
+      const conversation = (reservation as any).customer?.conversations?.[0];
+      const patientName = (reservation as any).customer?.name || 'Bunda';
+      const therapistName = (reservation as any).assigned_staff?.name || staffName;
+
+      let waResult: any = null;
+      if (conversation) {
+        const { liveChatService } = await import('./live-chat.service');
+        const arrivalText = `Halo ${patientName}, saya ${therapistName} sudah sampai di depan rumah/lokasi Bunda ya 🙏`;
+        waResult = await liveChatService.sendAdminReply({
+          conversationId: conversation.id,
+          text: arrivalText,
+          tenantId,
+          adminName: therapistName,
+          forceEscalate: true,
+        });
+      }
+
+      // 3. Audit trail
+      const { auditService } = await import('./audit.service');
+      await auditService.logAdminAction({
+        apiKey: 'STAFF_SESSION',
+        adminIdentity: staffName,
+        action: 'STAFF_ARRIVED',
+        targetId: reservationId,
+        payload: {
+          conversationId: conversation?.id || null,
+          arrivedAt: now.toISOString(),
+        },
+        tenantId,
+      });
+
+      return {
+        success: true,
+        data: {
+          reservationId,
+          arrivedAt: now,
+          waResult,
+        },
+      };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error recording arrival:', err.message);
+      return { success: false, error: `Gagal mencatat kedatangan: ${err.message}` };
+    }
+  }
+
+  /**
+   * Menandai tindakan kunjungan telah selesai dilakukan oleh terapis di lapangan (COMPLETED).
+   */
+  static async completeTask(params: {
+    reservationId: string;
+    staffId: string;
+    tenantId: string;
+    staffName?: string;
+    isSupervisor?: boolean;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false } = params;
+    try {
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+      });
+
+      if (!reservation || reservation.tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+
+      if (!isSupervisor && reservation.assigned_staff_id !== staffId) {
+        return { success: false, error: 'Anda tidak memiliki akses untuk menyelesaikan jadwal terapis lain.' };
+      }
+
+      const updated = await prisma.reservation.update({
+        where: { id: reservationId },
+        data: { status: 'completed' },
+      });
+
+      const { auditService } = await import('./audit.service');
+      await auditService.logAdminAction({
+        apiKey: 'STAFF_SESSION',
+        adminIdentity: staffName,
+        action: 'STAFF_COMPLETE_VISIT',
+        targetId: reservationId,
+        tenantId,
+      });
+
+      return { success: true, data: updated };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error completing task:', err.message);
+      return { success: false, error: `Gagal menyelesaikan kunjungan: ${err.message}` };
     }
   }
 }

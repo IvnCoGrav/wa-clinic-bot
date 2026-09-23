@@ -392,6 +392,12 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: replyResult.error });
       }
 
+      // Persist status OTW di DB
+      await prisma.reservation.update({
+        where: { id },
+        data: { otw_sent_at: new Date() },
+      });
+
       // Audit trail
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
@@ -410,6 +416,95 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  /**
+   * POST /api/staff/reservations/:id/arrive
+   * Mencatat kedatangan bidan di depan rumah/lokasi pasien (ARRIVED) dan mengirim pesan WA otomatis.
+   */
+  fastify.post(
+    '/api/staff/reservations/:id/arrive',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor = isStaffSupervisorRole(role);
+      const { id } = request.params;
+
+      const result = await StaffReservationService.recordArrival({
+        reservationId: id,
+        staffId,
+        tenantId,
+        staffName,
+        isSupervisor,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Status kedatangan berhasil dicatat & pesan telah dikirim ke pasien!',
+        data: result.data,
+      });
+    }
+  );
+
+  /**
+   * POST /api/staff/reservations/:id/complete
+   * Menandai tindakan kunjungan telah selesai dilakukan oleh terapis di lapangan.
+   */
+  fastify.post(
+    '/api/staff/reservations/:id/complete',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor = isStaffSupervisorRole(role);
+      const { id } = request.params;
+
+      const result = await StaffReservationService.completeTask({
+        reservationId: id,
+        staffId,
+        tenantId,
+        staffName,
+        isSupervisor,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Kunjungan berhasil diselesaikan!',
+        data: result.data,
+      });
+    }
+  );
+
+  /**
+   * GET /api/staff/payment-info
+   * Mengambil informasi pembayaran resmi klinik (QRIS barcode URL & daftar rekening bank)
+   * secara data-driven dari database.
+   */
+  fastify.get('/api/staff/payment-info', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+    return reply.status(200).send({ success: true, data: paymentInfo });
+  });
 
   /**
    * POST /api/staff/reservations/:id/payment
