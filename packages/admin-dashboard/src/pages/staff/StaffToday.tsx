@@ -2008,8 +2008,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
-      {/* WhatsApp Web Minimalist Clean Top Bar */}
-      <header className="bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0">
+      {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
+      <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
           <div className="flex items-center space-x-2.5 min-w-0">
             {mobileView === 'chat' && activeTab === 'today' && (
@@ -2575,7 +2575,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               e.stopPropagation();
                               handleOpenChat(task);
                             }}
-                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
                             title="Buka Ruang Percakapan WhatsApp Pasien"
                           >
                             <MessageSquare size={15} className="text-[#008069]" />
@@ -2588,7 +2588,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs"
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs"
                               title="Buka Peta Navigasi Google Maps"
                             >
                               <Navigation size={15} />
@@ -2602,7 +2602,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                           {/* 3-State Operational Action: Infokan OTW -> Sudah Sampai -> Selesai Tindakan */}
                           {task.status === 'completed' ? (
-                            <div className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
+                            <div className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
                               <CheckCircle2 size={15} />
                               <span>Selesai</span>
                             </div>
@@ -2611,7 +2611,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               type="button"
                               disabled={completingVisitId === task.reservationId}
                               onClick={(e) => handleCompleteVisit(task, e)}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
                               title="Tandai tindakan selesai dan kunjungan tuntas"
                             >
                               {completingVisitId === task.reservationId ? (
@@ -2628,7 +2628,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               type="button"
                               disabled={sendingArrivalId === task.reservationId}
                               onClick={(e) => handleRecordArrival(task, e)}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
                               title="Infokan ke pasien dan klinik bahwa Anda sudah sampai di lokasi"
                             >
                               {sendingArrivalId === task.reservationId ? (
@@ -2652,7 +2652,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 }
                                 handleSendOtw(task, e);
                               }}
-                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-3 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
+                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
                                 isOtwAllowed(task)
                                   ? 'text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30'
                                   : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
@@ -2715,8 +2715,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             >
               {selectedTask ? (
                 <>
-                  {/* WhatsApp Web Chat Header */}
-                  <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 py-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
+                  {/* WhatsApp Web Chat Header — safe-area for notch/Dynamic Island */}
+                  <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pb-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       {/* Mobile Back to List Button */}
                       <button
@@ -3110,31 +3110,26 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 z-10 space-y-2 shrink-0"
+                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:pb-3 z-10 space-y-2 shrink-0"
                   >
                     {/* Quick Reply Template Chips for Fast Field Messaging */}
                     <div
                       className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5"
                       style={{ touchAction: 'pan-x', overscrollBehaviorX: 'contain' }}
                     >
-                      {/* Action Button: Kirim Pembayaran (QRIS & ATM) */}
+                      {/* Action Button: Kirim Pembayaran — Icon-Only 44x44 (hemat ruang vertikal keyboard) */}
                       <button
                         type="button"
                         disabled={isSendingPaymentInfo}
                         onClick={() => selectedTask && handleSendPaymentInfo(selectedTask)}
-                        className="text-xs font-bold bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border border-[#00a884]/40 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center gap-1.5 disabled:opacity-50 select-none cursor-pointer"
-                        title="Kirim barcode QRIS & daftar rekening bank resmi klinik langsung ke WhatsApp pasien"
+                        className="h-[44px] w-[44px] min-h-[44px] min-w-[44px] rounded-full bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border border-[#00a884]/40 flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95 shadow-xs flex-shrink-0 disabled:opacity-50 select-none cursor-pointer"
+                        title="Kirim QRIS & Rekening Bank Resmi ke WhatsApp Pasien"
+                        aria-label="Kirim QRIS & Rekening Bank"
                       >
                         {isSendingPaymentInfo ? (
-                          <>
-                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
-                            <span>Mengirim QRIS...</span>
-                          </>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
                         ) : (
-                          <>
-                            <CreditCard size={15} className="text-[#008069]" />
-                            <span>💳 Kirim Pembayaran (QRIS & ATM)</span>
-                          </>
+                          <CreditCard size={18} className="text-[#008069]" />
                         )}
                       </button>
 
@@ -3209,7 +3204,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           rows={1}
                           value={replyText}
                           onChange={handleReplyTextChange}
-                          placeholder="Ketik pesan balasan... (Enter untuk baris baru)"
+                          placeholder={`Ketik balasan sebagai ~ ${staff?.name || 'Terapis'}...`}
                           disabled={sending}
                           style={{ fontSize: '16px' }}
                           className="w-full resize-none bg-white border border-[#e9edef] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
@@ -3230,15 +3225,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       </button>
                     </div>
                   </form>
-
-                  {/* Sender Identity Signature Badge */}
-                  <div className="px-4 pb-2 pt-0.5 flex items-center justify-between text-[11px] text-[#667781] bg-[#f0f2f5] select-none">
-                    <span className="flex items-center gap-1">
-                      <span>✍️ Identitas pengirim:</span>
-                      <strong className="text-[#008069]">~ {staff?.name || 'Terapis'}</strong>
-                    </span>
-                    <span className="hidden sm:inline text-[10px] text-[#8696a0]">Otomatis disematkan di akhir pesan</span>
-                  </div>
                 </>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-[#667781] space-y-4 bg-[#f0f2f5]/40">
