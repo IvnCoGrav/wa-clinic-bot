@@ -138,6 +138,7 @@ export class TenantHtmlService {
     // 1. Inject Meta Pixel into <head> with nonce — DITIADAKAN bila ID kosong
     // (isolasi multi-tenant: tenant tanpa pixel tidak memuat fbevents.js sama sekali).
     // Click-catcher (bagian 2) tetap dipasang karena tidak bergantung pada Pixel.
+    // PageView beacon server: eventID kembar untuk dedup Meta CAPI (pola external-tracker.js).
     const hasPixel = !!(metaPixelId && metaPixelId.trim());
     const pixelSnippet = hasPixel
       ? `
@@ -151,8 +152,44 @@ export class TenantHtmlService {
         s.parentNode.insertBefore(t,s)}(window, document,'script',
         'https://connect.facebook.net/en_US/fbevents.js');
         fbq('init', '${metaPixelId}');
-        fbq('track', 'PageView');
-${pixelOnloadLines}
+        (function(){
+          var pvEventId = 'pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+          window._kala_pv_event_id = pvEventId;
+          try { fbq('track', 'PageView', {}, { eventID: pvEventId }); } catch(e) {}
+${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` : ''}
+          // Kirim beacon PageView ke server untuk landing_page_views (tenant-aware, idempoten)
+          try {
+            if (window._kala_pageview_tracked) return;
+            window._kala_pageview_tracked = true;
+            var baseUrl = ${JSON.stringify(config.trackingApiBaseUrl)} ? ${JSON.stringify(config.trackingApiBaseUrl)}.replace(/\\/+$/, '') : '';
+            var endpoint = baseUrl + '/api/tracking/pageview';
+            var params = new URLSearchParams(window.location.search);
+            var getCookie = function(n){ var v='; '+document.cookie; var p=v.split('; '+n+'='); return p.length===2?p.pop().split(';').shift():null; };
+            var payload = {
+              eventID: pvEventId,
+              landingUrl: window.location.href,
+              fbclid: params.get('fbclid') || null,
+              fbp: getCookie('_fbp') || null,
+              fbc: getCookie('_fbc') || null,
+              utm_source: params.get('utm_source') || null,
+              utm_medium: params.get('utm_medium') || null,
+              utm_campaign: params.get('utm_campaign') || null,
+              utm_term: params.get('utm_term') || null,
+              utm_content: params.get('utm_content') || null,
+              utm_id: params.get('utm_id') || null,
+              tenantId: ${JSON.stringify(config.tenantId)},
+              tenant_id: ${JSON.stringify(config.tenantId)}
+            };
+            var body = JSON.stringify(payload);
+            if (navigator.sendBeacon) {
+              try { var blob = new Blob([body], {type:'application/json'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
+                fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
+              }
+            } else {
+              fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
+            }
+          } catch(e) {}
+        })();
       </script>
     `
       : '';
@@ -166,6 +203,7 @@ ${pixelOnloadLines}
     }
 
     // 2. Inject Click-Catcher Script before </body> with nonce (Zero Trust for tenant DOM attributes)
+    // Beacon fallback: jika pixelSnippet tidak ada (tanpa PageView), kirim PageView terinstrumentasi dari sini
     const clickCatcherSnippet = `
       <script nonce="${nonce}">
         (function() {
@@ -174,6 +212,42 @@ ${pixelOnloadLines}
           const defaultPhone = ${JSON.stringify(config.whatsappNumber)};
           const tenantId = ${JSON.stringify(config.tenantId)};
           const tenantSlug = ${JSON.stringify(config.tenantSlug)};
+          // Fallback beacon PageView untuk kasus tanpa pixel (hasPixel=false) — idempoten via _kala_pageview_tracked
+          (function(){
+            try {
+              if (window._kala_pageview_tracked) return;
+              var pvEventId = window._kala_pv_event_id || ('pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+              window._kala_pv_event_id = pvEventId;
+              window._kala_pageview_tracked = true;
+              var baseUrl2 = trackingApiBaseUrl ? trackingApiBaseUrl.replace(/\\/+$/, '') : '';
+              var endpoint2 = baseUrl2 + '/api/tracking/pageview';
+              var params2 = new URLSearchParams(window.location.search);
+              var getCookie2 = function(n){ var v='; '+document.cookie; var p=v.split('; '+n+'='); return p.length===2?p.pop().split(';').shift():null; };
+              var payload2 = {
+                eventID: pvEventId,
+                landingUrl: window.location.href,
+                fbclid: params2.get('fbclid') || null,
+                fbp: getCookie2('_fbp') || null,
+                fbc: getCookie2('_fbc') || null,
+                utm_source: params2.get('utm_source') || null,
+                utm_medium: params2.get('utm_medium') || null,
+                utm_campaign: params2.get('utm_campaign') || null,
+                utm_term: params2.get('utm_term') || null,
+                utm_content: params2.get('utm_content') || null,
+                utm_id: params2.get('utm_id') || null,
+                tenantId: tenantId,
+                tenant_id: tenantId
+              };
+              var body2 = JSON.stringify(payload2);
+              if (navigator.sendBeacon) {
+                try { var blob2 = new Blob([body2], {type:'application/json'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
+                  fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
+                }
+              } else {
+                fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
+              }
+            } catch(e) {}
+          })();
 
           function getQueryParam(name) {
             const urlParams = new URLSearchParams(window.location.search);

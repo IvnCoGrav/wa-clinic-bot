@@ -50,7 +50,7 @@ function buildDateRange(startDate?: string, endDate?: string): { createdAt?: { g
   return range;
 }
 
-import { isBotOrCrawler } from '../tracking.route';
+import { isBotOrCrawler, memoryPageViews } from '../tracking.route';
 
 const BOT_EXCLUDE_CLAUSE = {
   NOT: [
@@ -237,7 +237,8 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
         ]);
         totalClicks = clicks;
-        totalPageViews = views > 0 ? views : totalClicks;
+        // Hapus masking kosmetik: views murni (tanpa fallback ke clicks) agar dashboard jujur
+        totalPageViews = views;
         matchedChats = matched;
         mqlLeads = mqlCount;
         pendingPurchases = pendingCount;
@@ -246,11 +247,52 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         purchaseEvents = approvedCount;
       } catch (err: any) {
         dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
+        // Fallback in-memory saat DB offline — agar npm test offline deterministik
+        try {
+          const gte = (dateRange as any).createdAt?.gte ? new Date((dateRange as any).createdAt.gte).getTime() : 0;
+          const lte = (dateRange as any).createdAt?.lte ? new Date((dateRange as any).createdAt.lte).getTime() : Date.now() + 86400000;
+          const isInRange = (d: any) => {
+            const t = new Date(d).getTime();
+            return t >= gte && t <= lte;
+          };
+          const pageViewsInMem = Array.from(memoryPageViews.values()).filter((r: any) => {
+            if (r.tenant_id !== DEFAULT_TENANT_ID) return false;
+            if (!isInRange(r.createdAt)) return false;
+            if (isBotOrCrawler(r.userAgent)) return false;
+            if (utmCampaign && !(r.utmCampaign || '').toLowerCase().includes(utmCampaign.toLowerCase())) return false;
+            return true;
+          });
+          const clicksInMem = Array.from(memoryAdClicks.values()).filter((r: any) => {
+            if (r.tenant_id !== DEFAULT_TENANT_ID) return false;
+            if (!isInRange(r.createdAt)) return false;
+            if (isBotOrCrawler(r.userAgent)) return false;
+            if (search && !(r.trackingCode || '').toLowerCase().includes(search.toLowerCase())) return false;
+            if (utmCampaign && !(r.utmCampaign || '').toLowerCase().includes(utmCampaign.toLowerCase())) return false;
+            return true;
+          });
+          totalPageViews = pageViewsInMem.length;
+          totalClicks = clicksInMem.length;
+          matchedChats = clicksInMem.filter((r: any) => r.matchedAt).length;
+        } catch {}
       }
 
       const unmatchedDrain = totalClicks - matchedChats;
       const conversionRate = totalClicks > 0 ? (matchedChats / totalClicks) * 100 : 0;
       const capiEventsDelivered = matchedChats + approvedPurchases;
+      // Coverage & filter honesty: PageView subset vs klik superset (tanpa backfill historis)
+      const isTrackingCodeFiltered = Boolean(search);
+      const ctrNote = isTrackingCodeFiltered
+        ? 'Filter kode tracking hanya menyaring klik; PageView tidak memiliki trackingCode — CTR disembunyikan.'
+        : totalPageViews > 0 && totalClicks > totalPageViews
+          ? 'CTR terhitung parsial — sebagian klik berasal dari link langsung / LP tanpa tracker (coverage gap).'
+          : undefined;
+      const coverageNote = totalPageViews === 0 && totalClicks > 0
+        ? 'Belum ada PageView terinstrumentasi pada rentang ini (LP belum pasang external-tracker.js / beacon).'
+        : 'PageView = LP terinstrumentasi (subset); Klik CTA = superset (termasuk direct /cta & LP tanpa tracker). Data historis sebelum beacon tidak di-backfill.';
+      const coverage = {
+        pageViewSources: ['external-tracker.js', 'internal-beacon (go.html + html-sanitizer)'],
+        note: coverageNote,
+      };
 
       // Kesehatan CAPI (tenant-aware + env fallback), token TIDAK pernah dibocorkan
       let tenant: any = null;
@@ -292,6 +334,10 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           },
           capiEventsDelivered,
           capiNote: 'Contact diestimasi dari jumlah klik yang MATCHED; Purchase dari reservasi ber-status approved.',
+          isTrackingCodeFiltered,
+          ctrNote,
+          coverage,
+          coverageNote,
           capiHealth: {
             pixelIdConfigured,
             tokenConfigured,

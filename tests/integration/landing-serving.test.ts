@@ -54,7 +54,11 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
 
     const html = res.body;
     expect(html).toContain("fbq('init', 'PIXEL_123')");
-    expect(html).toContain("fbq('track', 'PageView')");
+    // PageView kini dengan eventID kembar untuk dedup CAPI (Fase 1)
+    expect(html).toContain("fbq('track', 'PageView'");
+    expect(html).toContain('eventID');
+    expect(html).toContain('/api/tracking/pageview');
+    expect(html).toContain('_kala_pageview_tracked');
     // events onload (ViewContent) + click events (Lead) ter-inject
     expect(html).toContain("fbq('track', 'ViewContent')");
     expect(html).toContain('"Lead"');
