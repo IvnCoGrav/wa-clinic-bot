@@ -5,6 +5,8 @@ import { StaffOption } from './types';
 
 export interface StaffScheduleTimelineStripProps {
   selectedStaff?: StaffOption | null;
+  allStaff?: StaffOption[];
+  onSelectStaff?: (staffId: string) => void;
   bookingDate: string; // YYYY-MM-DD
   currentSelectedTime: string; // HH:MM
   treatmentDurationMinutes: number; // pure + buffer
@@ -19,6 +21,8 @@ const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 600 menit (10 jam)
 
 export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProps> = ({
   selectedStaff,
+  allStaff = [],
+  onSelectStaff,
   bookingDate,
   currentSelectedTime,
   treatmentDurationMinutes = 80,
@@ -188,6 +192,28 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
         )}
       </div>
 
+      {/* Quick Staff Selection Pills if no staff is selected */}
+      {!selectedStaff && allStaff && allStaff.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 pb-0.5">
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <UserCheck size={11} className="text-[#008069]" />
+            <span>Pilih Bidan:</span>
+          </span>
+          {allStaff
+            .filter((s) => s.active !== false)
+            .map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onSelectStaff?.(s.id)}
+                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer active:scale-97"
+              >
+                {s.name}
+              </button>
+            ))}
+        </div>
+      )}
+
       {/* Visual Timeline Bar */}
       <div className="space-y-1">
         <div className="relative w-full h-9 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden shadow-inner select-none">
@@ -279,10 +305,10 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                   key={time}
                   type="button"
                   onClick={() => onSelectTimeSlot(time)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-transform active:scale-97 cursor-pointer border ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-97 cursor-pointer border ${
                     isSelected
-                      ? 'bg-[#008069] text-white border-[#008069] shadow-xs'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'
+                      ? 'bg-[#008069] text-white border-[#008069] shadow-sm ring-2 ring-[#008069]/40 font-extrabold scale-105'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                   }`}
                   title={`Pilih jam ${time} WIB`}
                 >
