@@ -50,8 +50,9 @@ export class ReservationLifecycleService {
       if (targetName && targetName.length > 1) {
         const cleanName = targetName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
         if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
-          const effectiveKec = (kecamatan || '').trim();
-          const contactFormattedName = `Bunda ${cleanName}${effectiveKec ? ` ${effectiveKec}` : ''}`.trim();
+          // Integritas penamaan: kecamatan hidup di kolom kecamatan (dipakai
+          // formatter Google Contacts dari DB), DILARANG ditempel ke Customer.name.
+          const contactFormattedName = `Bunda ${cleanName}`.trim();
           await customerService.updateCustomerName(customerId, contactFormattedName, tenantId).catch(() => {});
         }
       }
