@@ -166,4 +166,20 @@ describe('Sanitizer — kuota sapaan vokatif chat lanjutan (sesi 993955)', () =>
     expect(out).toContain('Terima kasih sudah cerita detail ya Bunda');
     expect(out).not.toMatch(/,\s*[!?.]/);
   });
+
+  // Sesi 640820/315730 — koma yatim sebelum emoji wajib ternormalisasi deterministik
+  // Fondasional: limitVocativeQuota baris 525 `,\s*(?=emoji)` + cleanOutboundReply global
+  it('koma yatim sebelum emoji dibersihkan: "ya, ☺️" → "ya ☺️"', () => {
+    const input = 'jadi layanan kami GRATIS ongkir ya, ☺️ Rencana mau ambil apa?';
+    const out = OutputSanitizer.cleanOutboundReply(input, 'halo', true);
+    expect(out).not.toContain('ya, ☺️');
+    expect(out).toContain('ya ☺️');
+    expect(out).not.toMatch(/,\s*(?=[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/u);
+  });
+
+  it('koma yatim multi-emoji: "ya, 😊" juga ternormalisasi tanpa mutilasi', () => {
+    const out = OutputSanitizer.limitVocativeQuota('Halo Bunda! Ya, Bunda 😊 Rencana mau ambil apa ya, Bunda?', 1);
+    expect(out).not.toContain(', 😊');
+    expect(out).toContain('😊');
+  });
 });

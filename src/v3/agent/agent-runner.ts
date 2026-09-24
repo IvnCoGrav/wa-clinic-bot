@@ -127,11 +127,11 @@ export class V3AgentRunner {
     }
 
     // 2. Endpoint & model LLM (Dual-Model Pipeline).
-    // Call 1 (Router): INTENT_CLASSIFICATION (mis. glm-5.3-flash, hemat & cepat ~1.2s tanpa thinking)
-    // Call 2 (Generator): CHAT_REPLY (mis. gpt-4o-mini, persona ramah & natural)
+    // Call 1 (Router): INTENT_CLASSIFICATION (deepseek-v4-flash-0731:netra, fast-NLU ~1.2s; glm-5.3-flash reasoning 24s di sesi 640820 → dihindari)
+    // Call 2 (Generator): CHAT_REPLY (mis. glm-5.3-flash, persona ramah & natural)
     const routerModelConfig = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION', tenantId);
     const routerEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION', tenantId });
-    const routerModel = forceModel || routerEndpointConfig.model || routerModelConfig?.modelName || 'glm-5.3-flash';
+    const routerModel = forceModel || routerEndpointConfig.model || routerModelConfig?.modelName || 'deepseek-v4-flash-0731:netra';
 
     const generatorModelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
     const generatorEndpointConfig = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });

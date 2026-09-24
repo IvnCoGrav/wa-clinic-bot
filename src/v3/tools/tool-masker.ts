@@ -388,11 +388,23 @@ export function evaluateToolMasking(
   if (!isSaveReservationAllowed) {
     maskedToolNames.push('save_reservation');
   }
-  // State-gate: belum resolved → DILARANG mask (LLM ekstrak typo/singkatan/patokan apa pun)
-  // Sudah resolved + tanpa entitas baru → mask (anti-recycle 337880 "Waru Kepuh")
-  if (!isLocationFullyResolved(session)) {
-    // belum resolved: biarkan calculate_delivery terbuka untuk LLM
-  } else if (!hasNewLocationEntity(cleanIncomingText)) {
+  // State-gate deterministik (anti-recycle 337880 "Waru Kepuh"):
+  // - Bila ada entitas lokasi baru → BUKA (LLM/geocoding validasi)
+  // - Bila respons pendek (≤4 kata) pasca-tanya-domisili walau typo → BUKA (Sesi 640820 "bngurasi berapa kak")
+  // - Selain itu → TUTUP (jangan hitung ulang kota luas / jangan bocorkan calculate_delivery untuk pure "biayanya brp")
+  const isAskedLocationRecentlyForMask = (() => {
+    try {
+      const recent = (conversationHistory || []).filter((h) => h.role === 'assistant').slice(-2);
+      return recent.some((m) => {
+        const c = (m.content || '').toLowerCase();
+        return c.includes('daerah atau kelurahan') || c.includes('kelurahan mana') || c.includes('rumah bunda dimana') || c.includes('rumah bunda di mana') || c.includes('rumahnya dimana') || c.includes('rumahnya di mana') || c.includes('daerah mana') || c.includes('lokasi rumah') || c.includes('alamat rumah') || c.includes('tinggal dimana') || c.includes('tinggal di mana');
+      });
+    } catch { return false; }
+  })();
+  const customerWordsForMask = (cleanIncomingText || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const isShortCompositeResponse = isAskedLocationRecentlyForMask && !isLocationFullyResolved(session) && customerWordsForMask.length > 0 && customerWordsForMask.length <= 4;
+  const hasLocationEntity = hasNewLocationEntity(cleanIncomingText) || isShortCompositeResponse;
+  if (!hasLocationEntity) {
     maskedToolNames.push('calculate_delivery');
   }
 

@@ -151,7 +151,7 @@ export function sanitizeModelForProvider(model: string, baseUrl?: string): strin
 const defaultProvider = process.env.AI_PROVIDER_CHAT || 'SumoPod';
 const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || SUMOPOD_PRIMARY_MODEL;
 const defaultChatModel = sanitizeModelForProvider(rawChatModel, process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
-const rawNluModel = process.env.AI_MODEL_NLU || SUMOPOD_PRIMARY_MODEL;
+const rawNluModel = process.env.AI_MODEL_NLU || 'deepseek-v4-flash-0731:netra';
 const defaultNluModel = sanitizeModelForProvider(rawNluModel, process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
 const defaultDeepModel = sanitizeModelForProvider(process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash-0731:netra', process.env.SUMOPOD_BASE_URL || 'https://ai.sumopod.com/v1');
 
@@ -229,7 +229,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       provider: 'SumoPod',
       modelName: defaultNluModel,
       description: 'Tool Routing & Intent Extraction (Call 1) — evaluasi pemanggilan tool atau direct reply.',
-      maxTokens: 500,
+      maxTokens: 2048,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
     },
