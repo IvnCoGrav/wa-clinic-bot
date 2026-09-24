@@ -32,11 +32,11 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
   currentReservationId,
 }) => {
   // Filter reservasi bidan terpilih pada tanggal ini — WIB
+  // Tampilkan semua (termasuk yang sedang diedit) — visual dibedakan via arsir, bukan dihilangkan
   const staffBookings = useMemo(() => {
     if (!bookingDate) return [];
     return bookedReservations.filter((r) => {
       if (!r.booking_date) return false;
-      if (currentReservationId && r.id === currentReservationId) return false;
       if (r.status === 'cancelled') return false;
       if (getWibDateKey(r.booking_date) !== bookingDate) return false;
 
@@ -228,12 +228,15 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
             const leftPercent = (b.startMinutes / TOTAL_MINUTES) * 100;
             const widthPercent = Math.max(2, ((b.endMinutes - b.startMinutes) / TOTAL_MINUTES) * 100);
             const isHold = b.status === 'hold';
+            const isEditingThis = currentReservationId && b.id === currentReservationId;
 
             return (
               <div
                 key={b.id}
                 className={`absolute top-1 bottom-1 rounded-md px-1.5 flex items-center justify-between text-[10px] font-semibold border shadow-2xs truncate transition-transform hover:scale-[1.02] cursor-default ${
-                  isHold
+                  isEditingThis
+                    ? 'bg-cyan-100 dark:bg-cyan-950/70 border-cyan-300 text-cyan-900 dark:text-cyan-200 ring-1 ring-cyan-300'
+                    : isHold
                     ? 'bg-amber-100 dark:bg-amber-950/70 border-amber-300 text-amber-900 dark:text-amber-200'
                     : 'bg-rose-100 dark:bg-rose-950/70 border-rose-300 text-rose-900 dark:text-rose-200'
                 }`}

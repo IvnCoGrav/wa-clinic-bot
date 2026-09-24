@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-24 — Optimasi Fondasional Disk & Memori Server Produksi (Fase 1R-3R & 5R)
+
+- **Fase 0R — Baseline terverifikasi:** `free -m` 1967/1407/560 + swap 837M, `df 40G 31G 7.4G 81%`, `docker stats` app 203M/waha 284M, `health` via `https://app.kalababyspa.online/health` OK, `sudo NOPASSWD ok`, probe WIB today=2 & page300 tidak mencakup hari ini (akar jadwal 0 terkonfirmasi).
+- **Fase 1R — Disk:** `docker-prune.sh` hapus `until=168h` + log ke `storage/docker-prune.log` (tanpa sudo), `builder prune -af` + `journalctl --vacuum-size=50M` + `apt clean` → `df 40G 22G 17G 58%` (+9.6G), build cache 15.2G → 7.6G (sisa buildx).
+- **Fase 2R — Host OS:** `disable --now multipathd ModemManager` (upower/fwupd sudah inactive) → `RAM available 560→957M`, swap 837→197M, tanpa `mask` agresif.
+- **Fase 3R — Compose:** `DATABASE_URL connection_limit 20→12`, `NODE_OPTIONS --max-old-space-size=384` (vs RSS 172M, aman), `WAHA_NOWEB_STORE_FULLSYNC false` (dorman sampai restart waha, terdokumentasi), `git pull` + `docker compose build app` + `up -d --no-deps app` (WAHA untouched, Up 6 weeks).
+- **Fase 4R — Daemon live-restore DITUNDA:** `/etc/docker/daemon.json` valid JSON namun dockerd gagal `invalid character 'l'` → rollback `rm daemon.json` + `systemctl restart docker` (downtime 1m, app sempat Exited lalu `up -d app` pulih, health OK). Ditunda hingga verifikasi syntax & jendela maintenance 2-step.
+- **Fase 5R — Cron:** `crontab` `30 3 * * 0 docker-prune.sh` + `* * * * * clean-trigger.sh` sudah ada, `chmod +x` semua sh, `vm.swappiness=10` sudah aktif, `swapoff -a` ditunda (available 957M <1G gate).
+- **Verifikasi:** `free -m`, `df`, `docker ps` (app/waha/caddy/postgres/redis Up), `health OK`, `pg_stat_activity idle 3/12`, `docker stats` app ~170M.
+
 #### 2026-09-23 — Sinkronisasi Komprehensif Pricelist Katalog Layanan Klinik (Brand Prefix Kala & Deaktivasi Layanan Usang)
 
 - **Sinkronisasi Database (`clinic_services`)**: Tabel `clinic_services` di PostgreSQL container diperbarui untuk 36 layanan aktif berlabel resmi Kala (*Kala Baby*, *Kala Kids*, *Kala Mom*, *Kala Bundle*, *Kala Terapi*) dengan harga normal, promo, tier usia, dan durasi menit terbaru. 4 layanan usang (`moms-relaksasi`, `moms-oksitosin-partial`, `baby-cukur-pijat-terapi`, `custom-kids-spa`) dinonaktifkan (`is_active = false`) tanpa menghapus row database demi menjaga integritas data historis reservasi.
