@@ -20,7 +20,8 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=15
+      - NODE_OPTIONS=--max-old-space-size=384
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=12&pool_timeout=15
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_WEBHOOK_SECRET=${WAHA_WEBHOOK_SECRET}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}
@@ -115,8 +116,9 @@ services:
       - WAHA_CLIENT_DEVICE_NAME=Mac OS
       - WAHA_CLIENT_BROWSER_NAME=Safari
       - WAHA_NOWEB_STORE_ENABLED=true
-      - WAHA_NOWEB_STORE_FULLSYNC=true
-      - WAHA_NOWEB_STORE_FULL_SYNC=true
+      # FASE 3R: fullsync chat history dimatikan untuk hemat RAM (efektif setelah waha restart — WAHA untouched di fase ini)
+      - WAHA_NOWEB_STORE_FULLSYNC=false
+      - WAHA_NOWEB_STORE_FULL_SYNC=false
       - WAHA_WEBHOOKS=[{"url":"http://host.docker.internal:3000/webhook","events":["message","message.any","session.status"]}]
     extra_hosts:
       - "host.docker.internal:host-gateway"
