@@ -56,7 +56,11 @@ export function sanitizeQueryForFts(userQuery: string): string {
   // 3. Hapus tanda baca & stopword umum + stopword domain generik klinik (anti false-positive FTS)
   text = text
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa|saya|pijat|massage|treatment|perawatan|bisa|boleh|kalau|kalo|klo|setelah|sehabis|sebelum|pada)\b/gi, ' ')
+    // I1 (quick-win kecerdasan): HANYA sapaan/partikel/konjungsi yang dibuang.
+    // Nomina domain (pijat, treatment, bisa/boleh, setelah/sebelum, gimana)
+    // DIPERTAHANKAN — menghapusnya melumpuhkan retrieval ("boleh pijat
+    // setelah vaksin?" tersisa "vaksin" saja).
+    .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|siapa|saya|pada|kalau|kalo|klo)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -231,10 +235,10 @@ export class KnowledgeBaseService {
           } else {
             rawResults = [];
           }
-          // Jika gate menghasilkan 0, jangan lanjut paksa plainto — kembalikan [] (topik belum ada artikel)
-          if (!rawResults || rawResults.length === 0) {
-            return [];
-          }
+          // Jika gate menghasilkan 0, JANGAN return dini — teruskan ke tier
+          // plainto (Step 3) lalu tier trigram pg_trgm (Step 4) yang masing-masing
+          // punya relevance gate sendiri; [] final hanya bila semua tier kosong.
+          // (Revisi Fase 4: early-return lama membuat tier 3 & 4 unreachable.)
         }
       }
 
@@ -263,6 +267,32 @@ export class KnowledgeBaseService {
             });
             rawResults = filtered.length > 0 ? filtered.slice(0, limit) : [];
           }
+        }
+      }
+
+      // 4. Tier trigram pg_trgm (Fase 4 refaktor, koreksi audit 2026-09-24):
+      //    toleran afiks Bahasa Indonesia ('menyusuinya'→'menyusui') & typo
+      //    1 huruf yang lolos FTS 'simple' (tanpa stemming). WAJIB
+      //    word_similarity(query, dokumen) — similarity() dokumen-utuh vs query
+      //    pendek terukur ~0.02-0.06 sehingga ambang tak pernah lolos; arah
+      //    argumen dibalik = skor ~0.6-0.7 untuk kasus di atas (terverifikasi
+      //    aproksimasi trigram PG). Gate DISENGAJA tanpa cek token-eksak;
+      //    hanya ambang rank ≥0.25. Seq-scan dapat diterima pada skala tabel
+      //    saat ini (tier ini hanya jalan bila 3 tier FTS kosong). Degradasi
+      //    aman: ekstensi belum terpasang (42883) / kolom keywords lama
+      //    (42703) → ditangkap catch → in-memory fallback.
+      if (!rawResults || rawResults.length === 0) {
+        rawResults = await prisma.$queryRaw<any[]>`
+          SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, keywords, document_name as "documentName",
+                 word_similarity(${queryToSearch}, title || ' ' || coalesce(keywords, '') || ' ' || content) as rank
+          FROM knowledge_chunks
+          WHERE tenant_id = ${tenantId} AND word_similarity(${queryToSearch}, title || ' ' || coalesce(keywords, '') || ' ' || content) > 0.4
+          ORDER BY rank DESC
+          LIMIT ${limit};
+        `;
+        if (rawResults && rawResults.length > 0) {
+          const gated = rawResults.filter((r: any) => typeof r.rank === 'number' && r.rank >= 0.25);
+          rawResults = gated.length > 0 ? gated.slice(0, limit) : [];
         }
       }
 

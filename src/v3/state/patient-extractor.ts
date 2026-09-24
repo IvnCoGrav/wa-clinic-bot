@@ -436,11 +436,27 @@ export class PatientProfileExtractor {
     // Usia via helper bersama (bulan/tahun + "baru lahir" + minggu bayi).
     const ages: number[] = PatientProfileExtractor.extractAgesMonths(lower);
 
-    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung',
+    const SYMPTOM_WORDS = ['pilek', 'batuk', 'demam', 'kembung', 'kolik', 'grok', 'rewel', 'susah tidur', 'gtm', 'diare', 'bapil', 'flu', 'kuning', 'ruam', 'makan', 'lahap', 'sulit makan', 'doyan makan', 'hidung', 'muntah', 'sembelit',
       // Audit 337101: riwayat trauma sebagai konteks keluhan (_security path
       // skrining ditangani persona + RAG; di sini hanya pencatatan konteks).
       'jatuh', 'jatoh', 'terbentur', 'benjol'];
-    const foundSymptoms = SYMPTOM_WORDS.filter((s) => lower.includes(s));
+    // Fase A (I3 batch kecerdasan): alias kolokial → kanonis katalog SEBELUM
+    // pencocokan, agar "mampet/bersin" mencetak skor 'pilek' di katalog dan
+    // "mencret" mencetak 'diare'. Normalisasi pada SALINAN (lower asli utuh
+    // untuk ekstraksi usia di atas); urutan panjang-desc agar frasa menang.
+    const SYMPTOM_ALIASES: Record<string, string> = {
+      'mampet': 'pilek',
+      'meler': 'pilek',
+      'bersin': 'pilek',
+      'mencret': 'diare',
+    };
+    let normalizedLower = lower;
+    for (const alias of Object.keys(SYMPTOM_ALIASES).sort((a, b) => b.length - a.length)) {
+      if (normalizedLower.includes(alias)) {
+        normalizedLower = normalizedLower.split(alias).join(SYMPTOM_ALIASES[alias]);
+      }
+    }
+    const foundSymptoms = SYMPTOM_WORDS.filter((s) => normalizedLower.includes(s));
 
     const addSymptoms = (child: ChildState) => {
       for (const s of foundSymptoms) {

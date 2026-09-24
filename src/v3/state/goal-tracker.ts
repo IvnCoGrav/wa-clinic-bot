@@ -381,7 +381,13 @@ export class GoalTracker {
         const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint);
         if (rec) {
           const subjectLabel = isMomSubject && momComplaints.length > 0 && childSymptoms.length === 0 ? 'keluhan Bunda' : 'keluhan si kecil';
-          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}* (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`}) — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]\n  [MANDAT ANTI-RELAKSASI-MURNI (audit 337101): si kecil ada keluhan fisik di atas — DILARANG merekomendasikan paket relaksasi murni (untuk bayi sehat tanpa keluhan)! WAJIB paket terapi penanganan keluhan di atas.]`;
+          // I4 (quick-win kecerdasan): nominal promo HANYA bila customer sudah
+          // tanya harga (priceDiscussed) — mode konsultasi murni menerima
+          // nama+deskripsi saja (Aturan Emas: tanpa ditanya harga).
+          const pricePart = (session as any).priceDiscussed === true
+            ? ` (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`})`
+            : '';
+          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}*${pricePart} — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]\n  [MANDAT ANTI-RELAKSASI-MURNI (audit 337101): si kecil ada keluhan fisik di atas — DILARANG merekomendasikan paket relaksasi murni (untuk bayi sehat tanpa keluhan)! WAJIB paket terapi penanganan keluhan di atas.]`;
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
@@ -512,6 +518,9 @@ export class GoalTracker {
         const who = it.recipientLabel
           || (scope === 'MOMS' ? 'Bunda' : scope === 'CHILD_2' ? 'Kakak' : scope === 'CHILD_1' ? 'Si Kecil'
             : (session.targetAudience === 'MOMS' || session.momProfile != null ? 'Bunda' : 'Si Kecil'));
+        // I4b (batch kecerdasan): nominal per-item HANYA bila transaksional —
+        // melengkapi gate grandTotal di bawah (konsisten instruksi konsultasi).
+        const showPrices = (session as any).priceDiscussed === true;
         const priceLabel = it.type === 'ADDON'
           ? `Tambahan: ${fmtRp(it.promoPrice ?? it.price)}`
           : it.type === 'SERVICE'
@@ -529,7 +538,7 @@ export class GoalTracker {
         }
         const metaStr = metaParts.length > 0 ? ` [${metaParts.join(' | ')}]` : '';
 
-        return `  - [Untuk ${who}${ageSuffixFor(scope, it.recipientLabel)}] ${it.name} (${priceLabel})${metaStr}`;
+        return `  - [Untuk ${who}${ageSuffixFor(scope, it.recipientLabel)}] ${it.name}${showPrices ? ` (${priceLabel})` : ''}${metaStr}`;
       });
       lines.push(`• Keranjang Layanan Terpilih:\n${rows.join('\n')}`);
       const subtotal = session.cartItems.reduce((s, it) => s + (it.promoPrice ?? it.price), 0);
@@ -544,7 +553,9 @@ export class GoalTracker {
         lines.push(`• Total Akumulasi Biaya: ${fmtRp(grandTotal)} (Treatment ${fmtRp(subtotal)} + Ongkir ${fmtRp(ongkir)})`);
         lines.push(`[MANDAT INTEGRITAS MATEMATIKA: Total Akumulasi Biaya Resmi adalah ${fmtRp(grandTotal)} (Rincian: ${rincian}). HANYA sebutkan angka total ini bila customer di turn ini menanyakan biaya/harga/total, ATAU saat merangkum pesanan final sebelum konfirmasi booking! DILARANG KERAS menyebutkan angka total ini di tengah pembicaraan jadwal/jam tanpa ditanya customer! Saat menyebutkan total biaya, WAJIB gunakan angka resmi ${fmtRp(grandTotal)} ini. DILARANG menghitung sendiri, menebak, atau mengubah nominal!]`);
       } else {
-        lines.push(`[MODE KONSULTASI: customer BELUM bertanya harga/total — DILARANG menyebut atau menjumlahkan nominal uang apa pun (harga treatment, ongkir, grand total)! Fokus pada manfaat klinis tiap layanan di atas. Total resmi (${fmtRp(grandTotal)}) DISEMBUNYIKAN dari balasan hingga customer bertanya harga.]`);
+        // I4b lanjutan: instruksi mode konsultasi DILARANG memuat nominal itu
+        // sendiri (menyebut angka sambil melarang = LLM tetap melihat angka).
+        lines.push(`[MODE KONSULTASI: customer BELUM bertanya harga/total — DILARANG menyebut atau menjumlahkan nominal uang apa pun (harga treatment, ongkir, grand total)! Fokus pada manfaat klinis tiap layanan di atas. Total resmi DISEMBUNYIKAN dari prompt ini hingga customer bertanya harga.]`);
       }
       // Audit 854065 Phase 5: estimasi durasi multi-item dari durasi resmi
       // katalog (data-driven, tanpa tebakan "~40 menit" hafalan). Item yang
@@ -663,6 +674,20 @@ export class GoalTracker {
       lines.push(`• Treatment Terpilih: ${session.selectedTreatment}`);
     } else {
       lines.push(`• Treatment Terpilih: Belum dipilih`);
+    }
+
+    // I6 (batch kecerdasan): pin deterministik anti-amnesia anafora.
+    // Nama terkonsultasi (belum dikunci) + keluhan tanpa rekomendasi TIDAK
+    // dirender di blok mana pun di atas — tanpa pin ini "yang tadi itu"
+    // gagal setelah riwayat terpotong. Masuk Call 1+Call 2 via prompt-composer.
+    const discussedNames = (((session as any).discussedTreatments || []) as any[])
+      .filter((n: any) => typeof n === 'string' && n.length > 0)
+      .slice(0, 3);
+    if (!session.selectedTreatment && discussedNames.length > 0) {
+      lines.push(`• Treatment Dikonsultasikan: ${discussedNames.join(', ')}`);
+    }
+    if (allSymptoms.length > 0 && !pregroundedRecommendation) {
+      lines.push(`• Keluhan Tercatat: ${allSymptoms.join(', ')}`);
     }
 
     if (session.booking?.preferredDate) {

@@ -26,10 +26,10 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'symptom_flu_consultation',
     scenario: 'Pasien berkonsultasi keluhan batuk / pilek / flu / grok-grok pada bayi',
-    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'bapil', 'hidung', 'mampet', 'bersin', 'ngorok', 'lendir hidung', 'sesak', 'closing_schedule_ask'],
+    tags: ['consult_symptom', 'flu', 'batuk', 'pilek', 'grok', 'gejala', 'bapil', 'hidung', 'mampet', 'bersin', 'ngorok', 'lendir hidung', 'sesak', 'closing_domicile_ask'],
     customerMessage: 'Anak saya usia 3 bulan lagi grok-grok dan pilek bun, ada pijatnya gak ya?',
     idealResponse:
-      'Iya Bunda, untuk membantu melegakan pernapasan dan ketidaknyamanan si kecil, kami ada layanan *Pijat Bayi Pulih Ceria* yang dikombinasikan dengan teknik akupresur dan aromaterapi khusus flu/batuk pilek yaa 😊 Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',
+      'Iya Bunda, untuk membantu melegakan pernapasan dan ketidaknyamanan si kecil, kami ada layanan *Pijat Bayi Pulih Ceria* yang dikombinasikan dengan teknik akupresur dan aromaterapi khusus flu/batuk pilek yaa 😊 Bunda tinggal di daerah/kelurahan mana? Biar kami cek jangkauan homecare ke lokasi Bunda 🤗',
     isActive: true,
     sortOrder: 1,
   },
@@ -86,10 +86,10 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   {
     id: 'maternal_lactation_inquiry',
     scenario: 'Pasien menanyakan pijat laktasi / oksitosin untuk Ibu Menyusui',
-    tags: ['laktasi', 'oksitosin', 'ibu', 'moms', 'asi', 'menyusui', 'nifas', 'payudara', 'breast', 'bengkak', 'sumbatan', 'lancar', 'ibu menyusui', 'perawatan_ibu', 'closing_schedule_ask'],
+    tags: ['laktasi', 'oksitosin', 'ibu', 'moms', 'asi', 'menyusui', 'nifas', 'payudara', 'breast', 'bengkak', 'sumbatan', 'lancar', 'ibu menyusui', 'perawatan_ibu', 'closing_domicile_ask'],
     customerMessage: 'Pijat oksitosin itu untuk apa ya bun? Bisa buat lancarin ASI?',
     idealResponse:
-      'Benar sekali Bunda 😊 *Pijat Oksitosin* khusus untuk Bunda menyusui/nifas guna merangsang hormon oksitosin alami, membantu melancarkan aliran ASI, serta merilekskan otot punggung dan leher yang tegang. Rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🤗',
+      'Benar sekali Bunda 😊 *Pijat Oksitosin* khusus untuk Bunda menyusui/nifas guna merangsang hormon oksitosin alami, membantu melancarkan aliran ASI, serta merilekskan otot punggung dan leher yang tegang. Bunda tinggal di daerah/kelurahan mana? Biar kami pastikan jangkauan homecare ke lokasi Bunda 😊',
     isActive: true,
     sortOrder: 5,
   },

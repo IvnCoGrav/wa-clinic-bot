@@ -5,7 +5,7 @@ describe('Smart FTS Query Sanitizer Unit Tests', () => {
   it('should strip polite greetings and normalize slang min. & brp', () => {
     const raw = 'Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?';
     const clean = sanitizeQueryForFts(raw);
-    expect(clean).toBe('bayi minimal usia berapa');
+    expect(clean).toBe('pijat bayi minimal usia berapa');
   });
 
   it('should normalize slang abbreviations (utk, bln, thn, dgn, klo)', () => {
@@ -17,6 +17,14 @@ describe('Smart FTS Query Sanitizer Unit Tests', () => {
   it('should retain substantive domain terms like bayi, harga while stripping generic stopwords', () => {
     const raw = 'Halo bunda mau tanya harga pijat bayi di mana ya';
     const clean = sanitizeQueryForFts(raw);
-    expect(clean).toBe('harga bayi mana');
+    expect(clean).toBe('harga pijat bayi mana');
+  });
+
+  it('I1: nomina domain dipertahankan untuk query pasca-vaksin', () => {
+    const clean = sanitizeQueryForFts('Apakah pijat boleh setelah vaksin imunisasi?');
+    expect(clean).toContain('pijat');
+    expect(clean).toContain('boleh');
+    expect(clean).toContain('setelah');
+    expect(clean).toContain('vaksin');
   });
 });
