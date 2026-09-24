@@ -66,6 +66,42 @@ export function isBypassLabelName(labelName: string): boolean {
 }
 
 /**
+ * Nilai `name` label bypass untuk query Prisma `in` — single source, dipakai
+ * worker & reschedule agar tidak menyebar hardcode array di banyak file.
+ */
+export const BYPASS_LABEL_PRISMA_IN: readonly string[] = [
+  'Skip',
+  'skip',
+  'SKIP',
+  'Admin (CS)',
+  'admin (cs)',
+  'Admin CS',
+  'admin cs',
+  'Admin',
+  'admin',
+] as const;
+
+/**
+ * Filter Prisma `customer` untuk MENGECUALIKAN kontak bypass/admin/sandbox/blocked.
+ * Central seam — dipakai `processDueFollowUps` & `rescheduleOverdueFollowUps`
+ * agar daftar hardcode tidak duplikasi (Anti-Spaghetti).
+ */
+export function buildNonBypassCustomerWhere(): Record<string, unknown> {
+  return {
+    status: { not: 'blocked' },
+    is_sandbox_test: false,
+    is_admin_labeled: false,
+    labels: {
+      none: {
+        label: {
+          name: { in: [...BYPASS_LABEL_PRISMA_IN] as unknown as string[] },
+        },
+      },
+    },
+  };
+}
+
+/**
  * Memeriksa apakah objek customer in-memory memiliki label bypass.
  * Mendukung berbagai format customer Prisma atau DTO:
  * - customer.is_admin_labeled === true

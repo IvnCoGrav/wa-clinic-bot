@@ -80,6 +80,18 @@ export class CustomerService {
       if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
       cust.labels_synced_at = new Date();
     }
+
+    // Fase 1.3: hook auto-skip — tenant-isolated, best-effort, SKIPPED kanonis
+    if (flags.isAdminLabeled === true) {
+      try {
+        const repo2 = (await import('../repositories/customer.repository')).getCustomerRepository();
+        const rec = await repo2.findByPhone(phone, tenantId);
+        if (rec?.id) {
+          const { followUpService } = await import('./follow-up.service');
+          await followUpService.skipFollowUpsForBypassCustomer(rec.id, tenantId);
+        }
+      } catch {}
+    }
   }
 
   /**

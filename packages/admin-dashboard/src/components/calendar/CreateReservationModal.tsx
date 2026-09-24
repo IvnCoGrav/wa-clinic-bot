@@ -403,6 +403,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       isDirty: isFormDirty,
     }
   );
+  const formDirtyContainerRef = useRef<HTMLFormElement>(null);
 
   // Safe close dengan konfirmasi draf (anti window.confirm — useUiFeedback)
   const handleSafeClose = useCallback(async () => {
@@ -433,6 +434,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     onClose();
   }, [isFormDirty, hasDraft, confirm, discardDraft, isReservationDraftMeaningful, currentFormPayload, onClose]);
+
+  // Dirty tracking via DOM events (input/change/click button) — anti phantom auto-save
+  useEffect(() => {
+    if (!isOpen || mode === 'edit') return;
+    const el = formDirtyContainerRef.current;
+    if (!el) return;
+    const mark = () => setIsFormDirty(true);
+    el.addEventListener('input', mark);
+    el.addEventListener('change', mark);
+    const clickMark = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('button')) mark();
+    };
+    el.addEventListener('click', clickMark);
+    return () => {
+      el.removeEventListener('input', mark);
+      el.removeEventListener('change', mark);
+      el.removeEventListener('click', clickMark);
+    };
+  }, [isOpen, mode]);
 
   // Load clinic services catalog with auto-repair
   useEffect(() => {
@@ -1589,7 +1610,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       window.removeEventListener('app-swipe-back', handleSwipeBack);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [isOpen, showBookedSlotsModal, onClose]);
+  }, [isOpen, showBookedSlotsModal, handleSafeClose]);
 
   if (!isOpen) return null;
 
@@ -1654,7 +1675,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         )}
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+        <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' as any }}>
           {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
           {mode !== 'edit' && hasDraft && (
             <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">

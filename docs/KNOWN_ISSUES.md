@@ -5,6 +5,23 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 126. [Audit & Rekonstruksi Sistem Reservasi & Form Modal — Self-Exclusion, Extractor, Draft] Fase 1-5 DONE (2026-09-24)
+
+- **Status:** Fase 1-5 done (2026-09-24), 37 extractor tests hijau (2 tests diadaptasi ke data-driven), dashboard `tsc && vite build` hijau, `window.confirm` nol.
+- **Akar masalah (verifikasi file:line):**
+  1. **Self-exclusion** `CreateReservationModal.tsx:917` & `StaffScheduleTimelineStrip.tsx:39` mengeluarkan reservasi yang sedang diedit dari `bookedReservationsForDate` → drawer "Hari Ini Masih Kosong" palsu + rekomendasi slot salah; `loadingReservations` tanpa skeleton.
+  2. **Extractor fallback** `chatScheduleExtractor.ts:846-855` memaksa `clinicServices[0]` (Memandikan Bayi) bila chat tanpa treatment — melanggar Non-Hardcode & Data-Driven.
+  3. **Toggle palsu** `CreateReservationModal.tsx:207,1572-1598,1877` `isCompactView` hanya toggle 1 tombol kustom — bloat.
+  4. **Draft lifecycle** `useFormDraft.ts:10-21,212-238` tanpa `isDirty` → phantom auto-save saat hidrasi; kunci `reservation_new` bocor antar-customer; `handleRestoreDraft:268-292` tanpa sanitasi tanggal/harga; `discardDraft` hanya di jalur sukses, tidak di Batal/X/Escape/backdrop/swipe/popstate.
+- **Perbaikan fondasional (audit A-J):**
+  1. Tampilan daftar memuat self + badge `Sedang Diedit` (cyan) + skeleton saat `loadingReservations`; strip tidak mem-filter self + arsir cyan; `handleGenerateRecommendations:1111` skip-self; `bookedReservations` strip kini dari `bookedReservationsForDate`.
+  2. Extractor fallback dihapus → `''/0`; `LiveChatMonitor.tsx:5478` `trim()` hardening.
+  3. Toggle `isCompactView` dihapus; `+ Tambah Treatment Kustom` selalu terlihat tanpa toggle (anti-bloat, modularity-first).
+  4. `useFormDraft.ts` tambah `isDirty` gate, `CreateReservationModal.tsx:368-380,267-315` isolasi kunci `''` bila tanpa customer, `isFormDirty` via `formDirtyContainerRef` (input/change/click), `handleSafeClose` via `useUiFeedback.confirm` untuk 6 jalur abort (Batal/X/backdrop/Escape/swipe/popstate), `handleRestoreDraft` clamp tanggal lampau ke hari ini + re-sync harga katalog (skip bila `services.length===0`).
+- **Sisa debt jujur:** `getWibDateKey` clamp hanya tanggal, tidak jam; harga re-sync hanya promoPrice; `hasDraft` banner tanpa preview customer/tanggal (sesuai mandat anti-bloat). TC-02 live (Bidan Yusi 2026-09-25) tidak dijalankan di prod — staging only.
+
+---
+
 ## 125. [Eliminasi Blank Page — Global Boundary + Safe Chaining + RBAC] Fase 1-4 DONE (2026-09-23)
 
 - **Status:** Fase 1-4 done (2026-09-23), `npx tsc --noEmit` root+dashboard ✅, `vite build` ✅, auto-reload chunk sekali-per-sesi + `kala-admin-v12`.

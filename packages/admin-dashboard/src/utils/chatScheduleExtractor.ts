@@ -844,15 +844,9 @@ export function extractScheduleFromMessages(
   // 5. Pencocokan Treatment dengan Katalog Layanan — support akumulasi 2+ treatment
   // Data-driven: harga HANYA dari DB/katalog; tanpa katalog → harga 0 (jujur belum terpetakan, bukan 60000 karangan)
   if (!extractedTreatment) {
-    if (clinicServices.length > 0) {
-      const s0 = clinicServices[0];
-      extractedTreatment = s0.name;
-      const p = catalogPriceOf(s0);
-      extractedPrice = p ?? 0;
-    } else {
-      extractedTreatment = '';
-      extractedPrice = 0;
-    }
+    // Data-driven: jika chat tidak menyebutkan layanan, biarkan kosong (DILARANG memaksakan clinicServices[0] / Memandikan Bayi)
+    extractedTreatment = '';
+    extractedPrice = 0;
   } else if (extractedPrice === null) {
     // Intelligent catalog matching (token overlap + anti-bundle) — "pijat ceria"
     // → "Pijat Bayi Ceria (Rileksasi)", bukan "Paket Selapan (Cukur + Pijat Ceria)".

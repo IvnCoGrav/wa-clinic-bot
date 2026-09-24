@@ -18,6 +18,8 @@ export interface UseFormDraftOptions<T = any> {
    * Mencegah form kosong / default ter-autosave menjadi draf hantu.
    */
   isMeaningful?: (data: T) => boolean;
+  /** HANYA autosave jika user telah melakukan interaksi aktif (anti phantom auto-save) */
+  isDirty?: boolean;
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -110,7 +112,8 @@ export function useFormDraft<T>(
     autoSaveDebounceMs = 1500,
     enabled = true,
     isMeaningful = defaultIsMeaningful,
-  } = options;
+    isDirty = undefined,
+  } = options as UseFormDraftOptions<T> & { isDirty?: boolean };
 
   const storageKey = `wa_clinic_draft_${draftKey}`;
   const prevStorageKeyRef = useRef<string>(storageKey);
@@ -208,9 +211,13 @@ export function useFormDraft<T>(
     [storageKey, ttlMs, isMeaningful, toast]
   );
 
-  // Auto-save dengan debounce saat form data berubah
+  // Auto-save dengan debounce saat form data berubah — hanya jika dirty (interaksi manusia)
   useEffect(() => {
     if (!enabled || isDiscardedRef.current) return;
+    if (isDirty !== undefined && !isDirty) {
+      isRestoring.current = false;
+      return;
+    }
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
@@ -235,7 +242,7 @@ export function useFormDraft<T>(
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [currentFormData, autoSave, autoSaveDebounceMs, enabled, saveDraftToStorage]);
+  }, [currentFormData, autoSave, autoSaveDebounceMs, enabled, saveDraftToStorage, isDirty]);
 
   // Simpan Draf Manual
   const saveDraftManually = useCallback(() => {
