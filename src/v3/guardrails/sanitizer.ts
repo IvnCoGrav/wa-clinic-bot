@@ -522,6 +522,7 @@ export class OutputSanitizer {
       .replace(/\u0000\s*[,،]?\s*/g, ' ')
       .replace(/,\s*:/g, ':')
       .replace(/,\s*([!?.])/g, '$1')
+      .replace(/,\s*(?=[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, ' ')
       .replace(/[ \t]{2,}/g, ' ')
       .replace(/\s+([,.!?])/g, '$1')
       .replace(/[ \t]+\n/g, '\n')

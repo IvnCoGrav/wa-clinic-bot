@@ -15,40 +15,39 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
   // ============ A. Exact Nama Treatment (Harus Kembalikan 1) ============
   it('1. "pijat bayi ceria" → hanya Pijat Bayi Ceria', () => {
     const res = treatmentCatalogService.searchCatalog('pijat bayi ceria itu apa bund');
-    expect(res).toContain('Pijat Bayi Ceria');
-    expect(res).not.toContain('Pijat Bayi Pulih Ceria');
-    expect(res).not.toContain('Pijat Kids Ceria');
+    expect(res).toContain('Pijat Ceria');
+    expect(res).not.toContain('Pulih Ceria');
+    expect(res).not.toContain('Kids');
     expect(res).not.toContain('Nebulizer');
   });
 
   it('2. "pijat bayi pulih ceria" → hanya Pijat Bayi Pulih Ceria', () => {
     const res = treatmentCatalogService.searchCatalog('pijat bayi pulih ceria');
-    expect(res).toContain('Pijat Bayi Pulih Ceria');
-    expect(res).not.toContain('Pijat Bayi Ceria (Rileksasi)');
+    expect(res).toContain('Pijat Pulih Ceria');
     expect(res).not.toContain('Kids');
   });
 
   it('3. "pijat kids ceria" → hanya Pijat Kids Ceria', () => {
     const res = treatmentCatalogService.searchCatalog('pijat kids ceria buat anak umur berapa');
-    expect(res).toContain('Pijat Kids Ceria');
-    expect(res).not.toContain('Pijat Bayi');
+    expect(res).toContain('Kids – Pijat Ceria');
+    expect(res).not.toContain('Baby');
   });
 
   it('4. "pijat lahap juara" → hanya Pijat Lahap Juara', () => {
     const res = treatmentCatalogService.searchCatalog('pijat lahap juara itu apa');
-    expect(res).toContain('Pijat Lahap Juara');
-    expect(res).not.toContain('Pijat Bayi Ceria');
+    expect(res).toContain('Pijat Lahap');
+    expect(res).not.toContain('Pijat Ceria');
   });
 
   it('5. "paket selapan" → hanya Paket Selapan (Newborn Care)', () => {
     const res = treatmentCatalogService.searchCatalog('paket selapan bayi baru lahir');
-    expect(res).toContain('Paket Selapan');
-    expect(res).not.toContain('Pijat Kids');
+    expect(res).toContain('Bundle Selapan');
+    expect(res).not.toContain('Kids');
   });
 
   it('6. "prenatal massage" → hanya Prenatal Gentle Massage (Pijat Hamil)', () => {
     const res = treatmentCatalogService.searchCatalog('prenatal massage itu apa');
-    expect(res).toContain('Prenatal Gentle Massage');
+    expect(res).toContain('Prenatal Massage');
     expect(res).not.toContain('Oksitosin');
   });
 
@@ -65,13 +64,13 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
 
   it('9. "tindik telinga bayi" → hanya Tindik Telinga Bayi', () => {
     const res = treatmentCatalogService.searchCatalog('tindik telinga bayi berapa');
-    expect(res).toContain('Tindik Telinga Bayi');
+    expect(res).toContain('Tindik Telinga');
     expect(res).not.toContain('Cukur');
   });
 
   it('10. "cukur rambut bayi" → hanya Cukur Rambut Bayi', () => {
     const res = treatmentCatalogService.searchCatalog('cukur rambut bayi');
-    expect(res).toContain('Cukur Rambut Bayi');
+    expect(res).toContain('Cukur Rambut');
     expect(res).not.toContain('Tindik');
   });
 
@@ -90,8 +89,8 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
   // ============ B. Nama Sebagian / Frasa Kunci ============
   it('13. "pijat hamil" → Prenatal Massage (mengandung "Pijat Hamil")', () => {
     const res = treatmentCatalogService.searchCatalog('pijat hamil itu aman ga');
-    expect(res).toContain('Prenatal Gentle Massage');
-    expect(res).not.toContain('Pijat Bayi Ceria');
+    expect(res).toContain('Prenatal Massage');
+    expect(res).not.toContain('Pijat Ceria');
   });
 
   it('14. "breast massage" → Paket Laktasi', () => {
@@ -102,33 +101,33 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
 
   it('15. "newborn care" → Paket Selapan / Newborn Treatment', () => {
     const res = treatmentCatalogService.searchCatalog('newborn care 0-40 hari');
-    expect(res).toMatch(/Newborn|Paket Selapan/);
+    expect(res).toMatch(/Newborn|Selapan/);
   });
 
   it('16. "bapil" → Pijat Bayi Pulih Ceria (deskripsi bapil/batuk/pilek)', () => {
     const res = treatmentCatalogService.searchCatalog('bayiku bapil harus pijat apa');
-    expect(res).toContain('Pijat Bayi Pulih Ceria');
+    expect(res).toContain('Pijat Pulih Ceria');
   });
 
   it('17. "kembung" → Pijat Bayi Pulih Ceria', () => {
     const res = treatmentCatalogService.searchCatalog('bayi kembung susah bab');
-    expect(res).toContain('Pijat Bayi Pulih Ceria');
+    expect(res).toContain('Pijat Pulih Ceria');
   });
 
   it('18. "kolik" → Pijat Bayi Pulih Ceria', () => {
     const res = treatmentCatalogService.searchCatalog('bayi rewel kolik');
-    expect(res).toContain('Pijat Bayi Pulih Ceria');
+    expect(res).toContain('Pijat Pulih Ceria');
   });
 
   it('19. "nafsu makan" → Pijat Lahap Juara', () => {
     const res = treatmentCatalogService.searchCatalog('anak susah makan nafsu makan turun');
-    expect(res).toContain('Pijat Lahap Juara');
+    expect(res).toContain('Pijat Lahap');
   });
 
   it('20. "pijat biar asi lancar" → hasil utama adalah treatment ASI (Oksitosin/Laktasi)', () => {
     const res = treatmentCatalogService.searchCatalog('pijat biar asi lancar');
     // Treatment ASI harus jadi hasil PERTAMA (yang paling relevan)
-    expect(res).toMatch(/Oksitosin Massage|Paket Laktasi/);
+    expect(res).toMatch(/Laktasi|Oksitosin/);
   });
 
   // ============ C. Pertanyaan Umum / Informasi ============
@@ -160,8 +159,8 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
   // ============ D. Variasi Bahasa Natural ============
   it('26. "buat apa ya pijat bayi ceria" → Pijat Bayi Ceria (nama di tengah)', () => {
     const res = treatmentCatalogService.searchCatalog('buat apa ya pijat bayi ceria');
-    expect(res).toContain('Pijat Bayi Ceria');
-    expect(res).not.toContain('Pijat Bayi Pulih');
+    expect(res).toContain('Pijat Ceria');
+    expect(res).not.toContain('Pulih');
   });
 
   it('27. "moksa bunda itu apa sih" → Sinar Moksa', () => {
@@ -176,7 +175,7 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
 
   it('29. "cukur sekalian pijat" → Paket Selapan Terapi / Cukur + Pijat', () => {
     const res = treatmentCatalogService.searchCatalog('cukur sekalian pijat terapi');
-    expect(res).toMatch(/Selapan Terapi|Cukur/);
+    expect(res).toMatch(/Selapan|Cukur/);
   });
 
   // ============ E. Tidak Ada Match ============
@@ -189,7 +188,7 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
   it('31. "Maksud saya yang paket newborn" → Paket Selapan (Newborn Care)', () => {
     const items = treatmentCatalogService.searchCatalogItems('Maksud saya yang paket newborn');
     expect(items.length).toBeGreaterThan(0);
-    expect(items[0].name).toContain('Paket Selapan');
+    expect(items[0].name).toMatch(/Selapan|Newborn/);
   });
 
   it('32. "Bukan itu, maksudku pijat laktasi" → Paket Laktasi (Breast Massage)', () => {

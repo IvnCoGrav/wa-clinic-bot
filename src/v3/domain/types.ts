@@ -198,7 +198,7 @@ export interface TurnInterpretation {
 export const GENERIC_CLINIC_TOKENS = new Set([
   'treatment', 'treatments', 'layanan', 'service', 'services', 'homecare',
   'perawatan', 'terapi', 'therapy', 'pijat', 'massage', 'paket',
-  'bunda', 'bayi', 'baby', 'anak', 'moms', 'klinik',
+  'bunda', 'bayi', 'baby', 'anak', 'moms', 'klinik', 'kala',
   // Kosakata kategori/usia generik (audit Turn 6): "balita usia 2 tahun"
   // BUKAN penanda paket spesifik — DILARANG mengunci layanan hanya dari ini.
   'balita', 'usia', 'umur', 'tahun', 'bulan', 'toddler',
