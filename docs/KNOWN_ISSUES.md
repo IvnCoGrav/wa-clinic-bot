@@ -2671,6 +2671,20 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
   - `__actualBaseUrl` tidak di-set circuit breaker (`generation-stage.ts:38` hanya `__actualModel/__actualProvider`) → atribusi baseUrl per-call mengandalkan `routerBaseUrl/generatorBaseUrl` config, bukan verifikasi live.
   - Dashboard `AiEvaluations.tsx:276` render `task_type` mentah tanpa mapping badge 🎰/💬 (badge hidup di `AiModelSettingsPanel`). Tidak butuh migrasi DB (`task_type String` bebas).
 
+## 126. [Jadwal Terisi — Split-brain WIB Residual] Fase 1–3 DONE, sisa situs terdokumentasi (2026-09-24)
+
+- **Status:** Fase 1 (backend WIB `wibDayRangeToUtc`) + Fase 2 (`dateWib` helpers) + Fase 3 (modal reaktif per-tanggal, WIB filter, badge hold/confirmed, timeline strip) DONE 2026-09-24, verifikasi `npm run build` root+dashboard hijau, probe DB `today=2` & `page300` tidak mencakup hari ini terbukti.
+- **Perbaikan fondasional:**
+  1. `src/utils/time-wib.ts` pure `wibDayRangeToUtc(YYYY-MM-DD)`; `reservations.subroute.ts:99` daily-slots & `:291` list memakai WIB 00:00-23:59 → UTC, sinkron.
+  2. `packages/admin-dashboard/src/utils/dateWib.ts` `getWibHoursAndMinutes` + `getTodayWibDateKey` (`Intl` Asia/Jakarta).
+  3. `CreateReservationModal.tsx:425` fetch reaktif `startDate=endDate=bookingDate` + `903` filter `getWibDateKey` + `949` collisions WIB + `2754` badge 🟢/🟡 + null-safe + `560` prefill WIB.
+  4. `StaffScheduleTimelineStrip.tsx:33-123` filter & menit WIB.
+- **Sisa debt jujur (ditunda, tidak bocor ke kronik):**
+  - `WeekScheduleGrid.tsx:48,332`, `DayScheduleGrid.tsx:139,160`, `QuickHoldModal.tsx:74-75` masih `getHours()` lokal — perlu migrasi WIB serupa (blast-radius rendah, hanya grid kalender alternatif / quick-hold lakon; jadwal inti modal & strip sudah fondasional).
+  - Audit Fase 4.1/4.2 (probe + build + unit test + audit deploy script) belum dieksekusi sebagai gate terpisah — dicatat sebagai R7/R8 plan revisi.
+
+---
+
 ## 110. [Tech Debt] Balasan foto hardcode + daftar frasa booking hafalan (2026-09-22)
 
 - **Status:** open (diterima sadar saat push 2026-09-22; dampak saat ini: rendah).

@@ -66,3 +66,15 @@ export function formatLastChatWib(dateStr: string | null): string {
   // >=7 hari tampilkan tanggal WIB
   return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: WIB_TZ });
 }
+
+/** Ambil jam dan menit dalam format WIB: { hours, minutes, timeFormatted: 'HH:mm' } */
+export function getWibHoursAndMinutes(dateStr: string | Date): { hours: number; minutes: number; timeFormatted: string } {
+  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+  const timeFormatted = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: WIB_TZ });
+  const [hh, mm] = timeFormatted.split(':').map(Number);
+  return { hours: isNaN(hh) ? 0 : hh, minutes: isNaN(mm) ? 0 : mm, timeFormatted };
+}
+/** Ambil tanggal hari ini dalam format YYYY-MM-DD (WIB) */
+export function getTodayWibDateKey(): string {
+  return getWibDateKey(new Date());
+}

@@ -43,6 +43,7 @@ import {
   SelectedTreatmentItem 
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
+import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -422,27 +423,38 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   }, [isOpen]);
 
-  // Synchronize active reservations from database on open
+  // FASE 3.1: reaktif per-tanggal — selaras WIB backend, fallback prop existingReservations (R5)
   useEffect(() => {
-    if (isOpen) {
-      if (Array.isArray(existingReservations) && existingReservations.length > 0) {
-        setLoadedReservations(existingReservations);
-      } else {
-        setLoadingReservations(true);
-        apiRequest('/api/admin/reservations?pageSize=300')
-          .then((res) => {
-            const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
-            setLoadedReservations(list);
-          })
-          .catch((err) => {
-            console.error('Gagal memuat jadwal reservasi untuk modal:', err);
-          })
-          .finally(() => {
-            setLoadingReservations(false);
-          });
-      }
+    if (!isOpen) return;
+    if (bookingDate) {
+      setLoadingReservations(true);
+      apiRequest(`/api/admin/reservations?startDate=${bookingDate}&endDate=${bookingDate}&status=all&pageSize=100`)
+        .then((res) => {
+          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
+          setLoadedReservations(list);
+        })
+        .catch((err) => {
+          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
+        })
+        .finally(() => setLoadingReservations(false));
+      return;
     }
-  }, [isOpen, existingReservations]);
+    // Fallback saat bookingDate kosong (mis. edit tanpa tanggal): pakai prop atau fetch 300
+    if (Array.isArray(existingReservations) && existingReservations.length > 0) {
+      setLoadedReservations(existingReservations);
+    } else {
+      setLoadingReservations(true);
+      apiRequest('/api/admin/reservations?pageSize=300')
+        .then((res) => {
+          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
+          setLoadedReservations(list);
+        })
+        .catch((err) => {
+          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
+        })
+        .finally(() => setLoadingReservations(false));
+    }
+  }, [isOpen, bookingDate, existingReservations]);
 
   // Sync initial target slot if opened via calendar slot click
   useEffect(() => {
@@ -547,13 +559,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         try {
           const d = new Date(res.booking_date);
           if (!isNaN(d.getTime())) {
-            const yr = d.getFullYear();
-            const mo = String(d.getMonth() + 1).padStart(2, '0');
-            const dy = String(d.getDate()).padStart(2, '0');
-            setBookingDate(`${yr}-${mo}-${dy}`);
-            const hh = String(d.getHours()).padStart(2, '0');
-            const mm = String(d.getMinutes()).padStart(2, '0');
-            setBookingTime(`${hh}:${mm}`);
+            setBookingDate(getWibDateKey(d));
+            const { timeFormatted } = getWibHoursAndMinutes(d);
+            setBookingTime(timeFormatted);
           }
         } catch {}
       }
@@ -900,27 +908,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setBabies((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Filter existing reservations for selected date — fondasional: kecualikan diri sendiri saat edit agar tidak self-collision
+  // Filter existing reservations for selected date — fondasional: WIB Date Key (R2), anti split-brain
   const bookedReservationsForDate = useMemo(() => {
     if (!bookingDate) return [];
-    const targetDateStr = bookingDate.trim(); // "YYYY-MM-DD"
+    const targetDateStr = bookingDate.trim();
     const sourceList = loadedReservations.length > 0 ? loadedReservations : existingReservations;
-
     return sourceList.filter((r) => {
       if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
       if (!r.booking_date || (r.status as string) === 'cancelled' || (r.status as string) === 'rejected') return false;
-      
-      if (typeof r.booking_date === 'string' && r.booking_date.startsWith(targetDateStr)) {
-        return true;
-      }
-
-      const rDate = new Date(r.booking_date);
-      if (isNaN(rDate.getTime())) return false;
-
-      const yyyy = rDate.getFullYear();
-      const mm = String(rDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(rDate.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}` === targetDateStr;
+      return getWibDateKey(r.booking_date) === targetDateStr;
     });
   }, [loadedReservations, existingReservations, bookingDate, mode, (initialReservation as any)?.id]);
 
@@ -969,8 +965,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
       const rDate = new Date(r.booking_date!);
       if (isNaN(rDate.getTime())) continue;
-
-      const rStartMin = rDate.getHours() * 60 + rDate.getMinutes();
+      const { hours: rH, minutes: rM, timeFormatted } = getWibHoursAndMinutes(r.booking_date!);
+      const rStartMin = rH * 60 + rM;
       const rDur = (r as any).duration_minutes || 60;
       const rEndMin = rStartMin + rDur;
 
@@ -979,7 +975,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       const rStaffId = r.assigned_staff_id || r.assigned_staff?.id;
       if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && isOverlap) {
         const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
-        const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+        const timeStr = timeFormatted;
         staffCollisions.push({
           id: r.id,
           customerName: (r.customer as any)?.name || 'Pasien Lain',
@@ -1007,7 +1003,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             timeGapMinutes
           );
           if (travelCheck && !travelCheck.sufficient) {
-            const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+            const timeStr = timeFormatted;
             const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
             staffCollisions.push({
               id: r.id,
@@ -1035,7 +1031,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             timeGapMinutes
           );
           if (travelCheck && !travelCheck.sufficient) {
-            const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+            const timeStr = timeFormatted;
             const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
             staffCollisions.push({
               id: r.id,
@@ -1055,7 +1051,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
       const rCustId = r.customer_id || (r.customer as any)?.id;
       if (customerId && rCustId === customerId && isOverlap) {
-        const timeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+        const timeStr = timeFormatted;
         customerCollisions.push({
           id: r.id,
           time: timeStr,
@@ -1102,14 +1098,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       '14:30', '15:00', '15:30', '16:00', '16:30',
     ];
 
-    // Cek apakah tanggal reservasi adalah HARI INI (Case 1: Hindari rekomendasi jam lampau)
-    const now = new Date();
-    const todayYyyy = now.getFullYear();
-    const todayMm = String(now.getMonth() + 1).padStart(2, '0');
-    const todayDd = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${todayYyyy}-${todayMm}-${todayDd}`;
+    // Cek apakah tanggal reservasi adalah HARI INI — WIB
+    const todayStr = getWibDateKey(new Date());
     const isToday = bookingDate === todayStr;
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const { hours: nowH, minutes: nowM } = getWibHoursAndMinutes(new Date());
+    const nowMinutes = nowH * 60 + nowM;
 
     const results: SlotRecommendation[] = [];
 
@@ -1135,10 +1128,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         let nextBooking: Reservation | null = null;
 
         for (const b of staffBookings) {
-          const bDate = new Date(b.booking_date!);
-          const bStartMinutes = bDate.getHours() * 60 + bDate.getMinutes();
+          const { hours: bH, minutes: bM } = getWibHoursAndMinutes(b.booking_date!);
+          const bStartMinutes = bH * 60 + bM;
           const bDuration = (b as any).duration_minutes || 60;
-          const bBuffer = 20; // standard buffer
+          const bBuffer = 20;
           const bEndMinutes = bStartMinutes + bDuration + bBuffer;
 
           // Direct slot overlap
@@ -1183,8 +1176,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         // If midwife has prior booking, departure cannot be earlier than previous booking end
         if (prevBooking) {
-          const bDate = new Date(prevBooking.booking_date!);
-          const prevEndMinutes = bDate.getHours() * 60 + bDate.getMinutes() + ((prevBooking as any).duration_minutes || 60) + 20;
+          const { hours: pbH, minutes: pbM } = getWibHoursAndMinutes(prevBooking.booking_date!);
+          const prevEndMinutes = pbH * 60 + pbM + ((prevBooking as any).duration_minutes || 60) + 20;
           if (plannedDepartureMinutes < prevEndMinutes) {
             continue; // Midwife hasn't finished prior patient yet!
           }
@@ -1202,8 +1195,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         // If midwife has next booking, verify she can travel to next booking on time
         if (nextBooking) {
-          const nbDate = new Date(nextBooking.booking_date!);
-          const nextStartMinutes = nbDate.getHours() * 60 + nbDate.getMinutes();
+          const { hours: nbH, minutes: nbM } = getWibHoursAndMinutes(nextBooking.booking_date!);
+          const nextStartMinutes = nbH * 60 + nbM;
           const nextCust = nextBooking.customer as any;
           const nextLat = nextCust?.lat || CLINIC_COORDS.lat;
           const nextLng = nextCust?.lng || CLINIC_COORDS.lng;
@@ -1615,8 +1608,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               {customerConflictsForDate.slice(0, 3).map((r: any) => {
                 let timeLabel = '-';
                 try {
-                  const d = new Date(r.booking_date);
-                  timeLabel = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} WIB`;
+                  timeLabel = `${getWibHoursAndMinutes(r.booking_date!).timeFormatted} WIB`;
                 } catch {}
                 return (
                   <li key={r.id} className="flex items-center justify-between gap-2">
@@ -2752,17 +2744,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   </div>
                 ) : (
                   bookedReservationsForDate.map((res) => {
-                    const rDate = new Date(res.booking_date!);
-                    const startTimeStr = `${String(rDate.getHours()).padStart(2, '0')}:${String(rDate.getMinutes()).padStart(2, '0')}`;
+                    const { timeFormatted: startTimeStr } = getWibHoursAndMinutes(res.booking_date!);
                     const cust = res.customer as any;
+                    const isHold = res.status === 'hold';
                     return (
                       <div
                         key={res.id}
                         className="p-3 bg-white dark:bg-[#1c272e] border border-[#e9edef] dark:border-[#2a3942] rounded-xl shadow-2xs space-y-1.5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold font-mono">
-                            🔴 {startTimeStr} WIB
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold font-mono border ${isHold ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            {isHold ? '🟡' : '🟢'} {startTimeStr} WIB {isHold ? '— Hold Ditawarkan' : '— Terjadwal Resmi'}
                           </span>
                           <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-full">
                             {res.assigned_staff?.name || 'Terapis Belum Ditugaskan'}
@@ -2771,7 +2763,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
                         <div className="text-xs space-y-0.5">
                           <p className="font-bold text-[#111b21] dark:text-[#e9edef]">
-                            {cust?.name || 'Bunda'} ({cust?.phone})
+                            {(cust?.name || 'Bunda')} {(cust?.phone ? `(${cust.phone})` : '')}
                           </p>
                           <p className="text-[#54656f] dark:text-[#aebac1] text-[11px] line-clamp-1">
                             {res.treatment_detail || res.treatment_category}

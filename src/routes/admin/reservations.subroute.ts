@@ -16,6 +16,7 @@ import { parsePaymentSection } from '../../utils/conversation-transaction-extrac
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { memoryReservations } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
+import { wibDayRangeToUtc } from '../../utils/time-wib';
 
 function getCatalogFallbackPrice(): number {
   try {
@@ -94,19 +95,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const dateStr = (request.query?.date || '').trim();
-      let targetDate: Date;
-      if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        targetDate = new Date(`${dateStr}T00:00:00`);
+      // R2: deterministik WIB via wibDayRangeToUtc (Asia/Jakarta), bukan server-local
+      let dayStart: Date;
+      let dayEnd: Date;
+      let y: number, m: number, d: number;
+      const wibRange = dateStr ? wibDayRangeToUtc(dateStr) : null;
+      if (wibRange) {
+        dayStart = wibRange.start;
+        dayEnd = wibRange.end;
+        [y, m, d] = dateStr.split('-').map(Number);
+        m = m - 1;
       } else {
-        targetDate = new Date();
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+        const todayRange = wibDayRangeToUtc(todayKey)!;
+        dayStart = todayRange.start;
+        dayEnd = todayRange.end;
+        [y, m, d] = todayKey.split('-').map(Number);
+        m = m - 1;
       }
-      if (isNaN(targetDate.getTime())) targetDate = new Date();
-      const y = targetDate.getFullYear();
-      const m = targetDate.getMonth();
-      const d = targetDate.getDate();
-      // WIB 00:00 - 23:59 -> UTC 17:00 previous day - 16:59
-      const dayStart = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - 7 * 60 * 60 * 1000);
-      const dayEnd = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
 
       const SLOTS = ['09:00', '10:00', '10:30', '11:00', '13:00', '14:00', '14:30', '15:00', '16:00'];
       const slotMins = SLOTS.map((t) => {
@@ -287,38 +293,27 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         ];
       }
 
-      // Date range filter (Calendar view)
+      // Date range filter (Calendar view & Day queries — selaras WIB UTC+7, R3 pure)
       if (startDateParam && endDateParam) {
-        let start = new Date(startDateParam);
-        let end = new Date(endDateParam);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(startDateParam)) {
-          start = new Date(`${startDateParam}T00:00:00`);
-        }
-        if (/^\d{4}-\d{2}-\d{2}$/.test(endDateParam)) {
-          end = new Date(`${endDateParam}T23:59:59.999`);
-        }
+        let start: Date;
+        let end: Date;
+        const sRange = wibDayRangeToUtc(startDateParam);
+        const eRange = wibDayRangeToUtc(endDateParam);
+        if (sRange) start = sRange.start; else start = new Date(startDateParam);
+        if (eRange) end = eRange.end; else end = new Date(endDateParam);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-          where.booking_date = {
-            gte: start,
-            lte: end,
-          };
+          where.booking_date = { gte: start, lte: end };
         }
       } else if (startDateParam) {
-        let start = new Date(startDateParam);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(startDateParam)) {
-          start = new Date(`${startDateParam}T00:00:00`);
-        }
-        if (!isNaN(start.getTime())) {
-          where.booking_date = { gte: start };
-        }
+        const sRange = wibDayRangeToUtc(startDateParam);
+        let start: Date;
+        if (sRange) start = sRange.start; else start = new Date(startDateParam);
+        if (!isNaN(start.getTime())) where.booking_date = { gte: start };
       } else if (endDateParam) {
-        let end = new Date(endDateParam);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(endDateParam)) {
-          end = new Date(`${endDateParam}T23:59:59.999`);
-        }
-        if (!isNaN(end.getTime())) {
-          where.booking_date = { lte: end };
-        }
+        const eRange = wibDayRangeToUtc(endDateParam);
+        let end: Date;
+        if (eRange) end = eRange.end; else end = new Date(endDateParam);
+        if (!isNaN(end.getTime())) where.booking_date = { lte: end };
       }
 
       // Sort Order
