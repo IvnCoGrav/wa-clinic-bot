@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-24 — Batch Quick Wins Audit Holistik (E1+E3, I1+I4, R1+R3)
+
+- **E1:** `resolveMaxTokensForTask` — `max_tokens` registry (1024/512/…) kini dikirim di payload Call 1/Call 2 (`generation-stage.ts`); sebelumnya completion tak terbatas.
+- **E3:** `finishCost` memakai `cachedPrompt` terakumulasi (`totalTokens.cachedPrompt` via `addUsage`) — dasbor tak lagi over-estimate saat cache aktif.
+- **I1:** stopword FTS hanya sapaan/partikel — nomina domain (`pijat`, `boleh`, `setelah`…) dipertahankan; "boleh pijat setelah vaksin?" tak lagi lumpuh.
+- **I4:** nominal promo `pregroundedRecommendation` digate `priceDiscussed` (`goal-tracker.ts`) — konsultasi murni tanpa angka (Aturan Emas).
+- **R1:** `[NEW] OUTAGE_TRANSITION_REPLY` — outage LLM kirim pesan transisi deterministik + tetap eskalasi (pola `machine.ts:212`); customer tak lagi didiamkan.
+- **R3:** `[NEW] resolveQueueJobId` — turnId kanonis → UUID fallback; pesan tanpa id tak lagi dibuang sebagai `job_<phone>_undefined`.
+- **Verifikasi (TDD):** `[NEW] telemetry-cost` 4/4, `[NEW] outage-transition` 2/2, stopword/goal-tracker/queue suites hijau, `tsc` 0. `tool-masker.test` 4 gagal dibuktikan pre-existing (gagal di HEAD murni terisolasi; lolos full-suite via polusi urutan) — bukan regresi batch ini.
+
+#### 2026-09-24 — Batch Kecerdasan (I3, I5, I4b+I6, M0)
+
+- **Fase A (I3):** alias gejala kanonis di `patient-extractor.ts` (`mampet/meler/bersin→pilek`, `mencret→diare`, +`muntah`/`sembelit` mentah) pada salinan teks (usia utuh); `[NEW] patient-symptom-alias.test.ts` 5/5.
+- **Fase B (I5):** 2 exemplar gejala → closing domicile-ask + tag `closing_domicile_ask` (`few-shot-exemplars.ts`); `[NEW] scripts/sync-few-shot-defaults.ts` (`--dry-run/--apply`, hanya baris belum dikustom admin; eksekusi live manual menyusul).
+- **Fase C (I4b+I6):** nominal per-item keranjang digate `priceDiscussed` + instruksi konsultasi dibersihkan dari nominal kontradiktif; pin `Treatment Dikonsultasikan` + `Keluhan Tercatat` di `formatGoalSessionForPrompt` (1 seam → Call 1+2).
+- **Fase D (M0):** `[NEW] location-mask-typo.test.ts` 4/4 hijau sekali jalan — mode typo `bngurasih`/`kenjern`/`waru kepuh` sudah tertangani fuzzy layer; tanpa ubah runtime (`KNOWN_ISSUES:11` tinggal penutupan dokumen pemilik area).
+- **Verifikasi:** `tsc` 0; gate A 24/24, B 28/28, C 24/24 + guardrails-391501, D 4/4.
+
+#### 2026-09-24 — Retrieval FTS + Trigram pg_trgm (Fase 4 refaktor; Fase 1 di-drop, Fase 3 ditolak, Fase 2→P3)
+
+- **Audit plan:** Fase 1 (Zod wiring) terbukti basi — skema & `validation.data` sudah hidup (`tool-schemas.ts:19-31`, `tool-pipeline.ts:326`) → di-drop. Fase 3 (multi-tool) ditolak — menabrak Mandat Atomic Routing (`parallel_tool_calls:false` wajib). Fase 2 (token budget) → P3 backlog (overflow tak terbukti).
+- **Fase 4 dieksekusi (TDD):** migrasi `20260925000000` (`CREATE EXTENSION pg_trgm` + GIN index ekspresi identik query; butuh superuser; rollback = DROP INDEX manual); tier-4 trigram di `knowledge.service.ts` (toleran afiks/typo, gate similarity ≥0.25 tanpa cek token-eksak — disengaja); hapus early-return tier-2 yang membuat tier 3–4 unreachable; `[NEW] tests/unit/knowledge-search.test.ts` 4/4.
+- **Verifikasi:** `tsc` 0; knowledge suites 16/16 + trigram 4/4 hijau.
+
 #### 2026-09-24 — Pemulihan Integritas Penamaan Google Contacts & Database (Fase 1-5, hasil audit plan)
 
 - **Bukti live (read-only):** 729 customer, 156 ber-kelurahan → 78,6% tanpa label wilayah (koreksi klaim plan 86,6%); 10 baris kelurahan tercemar (URL/maps/`Jl.`/>40 char). Template aktif dari DB `tenant_google_integrations.naming_template`.

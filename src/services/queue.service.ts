@@ -1,5 +1,6 @@
 ﻿import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { stateMachine } from '../state-machine/machine';
 import { StateHandlerContext } from '../state-machine/types';
 import { customerService } from './customer.service';
@@ -23,6 +24,19 @@ export interface QueuePayload {
   provider?: 'WAHA' | 'WABA';
   /** ID pesan asli provider. */
   inboundMessageId?: string;
+}
+
+/**
+ * R3 (quick-win efektivitas): kunci dedup BullMQ yang kanonis.
+ * Hierarki: turnId (`tenant:provider:msgId`) → inboundMessageId →
+ * incomingMessage.id → UUID acak. Tanpa fallback UUID, pesan tanpa id
+ * bertabrakan di `job_<phone>_undefined` dan dibuang diam-diam sebagai
+ * "duplikat". UUID mengorbankan dedup demi tak pernah membuang pesan sah.
+ */
+export function resolveQueueJobId(phone: string, payload: QueuePayload): string {
+  const stable =
+    payload.turnId || payload.inboundMessageId || payload.incomingMessage?.id;
+  return `job_${phone}_${stable || randomUUID()}`;
 }
 
 export class QueueService {
@@ -286,7 +300,7 @@ export class QueueService {
           // Enqueue ke BullMQ
           await queue.add('process_message', payload, {
             // Cegah eksekusi ganda jika pesan identik masuk cepat (optional deduplication)
-            jobId: `job_${phone}_${payload.incomingMessage.id}`,
+            jobId: resolveQueueJobId(phone, payload),
           });
           return;
         }

@@ -5,6 +5,7 @@ import { ALL_V3_TOOLS } from '../../tools/tool-registry';
 import { PersonaPromptBuilder, extractFastIntents, PERSONA_STABLE_PREFIX_MARKER } from '../persona';
 import { buildCacheableSystemPrompt, buildCachedMessages } from '../../../integrations/llm/prompt-cache';
 import { CustomerGoalSession } from '../../state/goal-tracker';
+import { AiModelConfigService } from '../../../config/ai-models.config';
 import { ContextGrounder, GroundingOutput } from './context-grounder';
 import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
 
@@ -126,6 +127,23 @@ export function extractUsageTelemetry(usage: any): {
 }
 
 /**
+ * E1 (quick-win efisiensi): ambil maxTokens registry per task untuk dikirim
+ * sebagai `max_tokens` payload LLM. Fail-safe: undefined bila registry tak
+ * terbaca (perilaku lama — completion tak dibatasi).
+ */
+export function resolveMaxTokensForTask(
+  task: 'INTENT_CLASSIFICATION' | 'CHAT_REPLY',
+  tenantId: string
+): number | undefined {
+  try {
+    const v = AiModelConfigService.getModelConfig(task as any, tenantId)?.maxTokens;
+    return typeof v === 'number' && v > 0 ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Status turn bersama yang di-threading lintas stage (menggantikan closure
  * monolitik): observability, messages LLM, dan akumulasi tool/chunks.
  */
@@ -153,7 +171,7 @@ export interface TurnState {
   provider?: 'WAHA' | 'WABA';
   /** Stage 8: model AKTUAL yang melayani (fallback bisa berbeda dari selected). */
   actualModelUsed?: string;
-  totalTokens: { prompt: number; completion: number; total: number };
+  totalTokens: { prompt: number; completion: number; total: number; cachedPrompt?: number };
   currentSystemPrompt: string;
   messages: any[];
   executedTools: Array<{ name: string; args: any; result: any }>;
@@ -198,9 +216,18 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const addUsage = (usage: any): void => {
     const p = Number(usage?.prompt_tokens) || 0;
     const c = Number(usage?.completion_tokens) || 0;
+    const cached = Number(
+      usage?.prompt_cache_hit_tokens ??
+        usage?.prompt_tokens_details?.cached_tokens ??
+        usage?.prompt_tokens_details?.cache_read_input_tokens ??
+        0
+    ) || 0;
     turn.totalTokens.prompt += p;
     turn.totalTokens.completion += c;
     turn.totalTokens.total += p + c;
+    // E3: akumulasi cache-hit agar finishCost memakai tarif diskon (sebelumnya
+    // selalu 0 → dasbor over-estimate).
+    turn.totalTokens.cachedPrompt = (turn.totalTokens.cachedPrompt || 0) + cached;
   };
   const auditUsage = async (usage: any, startedAt: number, actualModel?: string, actualBaseUrl?: string, error?: any, taskType?: string): Promise<void> => {
     try {
@@ -229,7 +256,7 @@ export function createTelemetry(turn: TurnState): TurnTelemetry {
   const finishCost = async (): Promise<number> => {
     try {
       const { calculateLlmCost } = await import('../../../utils/cost-calculator');
-      return calculateLlmCost(turn.actualModelUsed || turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, 0, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
+      return calculateLlmCost(turn.actualModelUsed || turn.selectedModel, turn.totalTokens.prompt, turn.totalTokens.completion, turn.totalTokens.cachedPrompt || 0, { baseUrl: turn.baseUrl }).totalCostIdr || 0;
     } catch {
       return 0;
     }
@@ -330,7 +357,15 @@ export async function persistTurnMessages(opts: {
   } catch (e) {}
 }
 
-/** Jalur error turn (Fase B): audit + trace ERROR + eskalasi sunyi. */
+/**
+ * R1 (quick-win efektivitas): pesan transisi deterministik saat outage LLM.
+ * Customer TIDAK PERNAH didiamkan — template statis (tanpa LLM, tanpa PII/
+ * detail error teknis) dikirim SEBELUM eskalasi (pola machine.ts:212).
+ */
+export const OUTAGE_TRANSITION_REPLY =
+  'Mohon maaf Bunda, koneksi sistem kami sedang terkendala sesaat 🙏 Tim Bidan kami sudah menerima pesan Bunda dan akan segera membantu. Terima kasih atas kesabarannya ya Bunda.';
+
+/** Jalur error turn (Fase B): audit + trace ERROR + eskalasi berpesan transisi. */
 export async function reportTurnError(
   turn: TurnState,
   session: CustomerGoalSession,
@@ -374,7 +409,7 @@ export async function reportTurnError(
       actualModel: turn.actualModelUsed || turn.selectedModel,
       promptPayload: { model: turn.selectedModel, baseUrl: turn.baseUrl, messages: turn.messages.slice(-2) },
       reasoning: turn.reasoning,
-      finalReply: '',
+      finalReply: OUTAGE_TRANSITION_REPLY,
       modelUsed: turn.actualModelUsed || turn.selectedModel,
       durationMs: Date.now() - turn.turnStartedAt,
       status: 'ERROR',
@@ -382,10 +417,10 @@ export async function reportTurnError(
     });
   } catch {}
   return {
-    replyText: '',
+    replyText: OUTAGE_TRANSITION_REPLY,
     executedTools: [],
     updatedSession: session,
-    shouldSendReply: false,
+    shouldSendReply: true,
     isEscalated: true,
     retrievedChunks: turn.retrievedChunks,
     fewShotExemplars: turn.fewShotExemplars,
@@ -515,6 +550,7 @@ export class GenerationStage {
     }
 
     const call1Model = turn.routerModel || turn.selectedModel;
+    const call1MaxTokens = resolveMaxTokensForTask('INTENT_CLASSIFICATION', turn.tenantId);
     const firstPayload: any = {
       model: call1Model,
       messages,
@@ -522,6 +558,7 @@ export class GenerationStage {
       tool_choice: dynamicToolChoice,
       parallel_tool_calls: false, // MANDAT ATOMIC ROUTING (audit 993955): 1 turn WhatsApp = maksimal 1 tool utama.
       temperature: 0.2,
+      ...(call1MaxTokens ? { max_tokens: call1MaxTokens } : {}),
       thinking: { type: 'disabled' }, // Nonaktifkan thinking mode pada Call 1 agar latensi kilat (~1.2s) & token hemat
     };
 
@@ -735,10 +772,12 @@ export class GenerationStage {
     turn.currentSystemPrompt = fullSystemPrompt;
 
     const call2Model = turn.generatorModel || turn.selectedModel;
+    const call2MaxTokens = resolveMaxTokensForTask('CHAT_REPLY', turn.tenantId);
     const secondPayload: any = {
       model: call2Model,
       messages: cachedMessages,
       temperature: 0.65,
+      ...(call2MaxTokens ? { max_tokens: call2MaxTokens } : {}),
     };
 
     const secondStartedAt = Date.now();

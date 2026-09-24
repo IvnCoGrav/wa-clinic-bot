@@ -15,9 +15,10 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
  * yang terjadi di lapisan dalam (validator numerik, faktual, pronoun, age, visit-time,
  * maupun sanitasi output).
  *
- * SATU-SATUNYA PENGECUALIAN (keputusan owner, Fase B — docs/KNOWN_ISSUES#853 &
- * CHANGELOG#5705): **outage LLM total** → eskalasi sunyi TANPA apology, antrean CS
- * didahulukan (diverifikasi di describe blok 4).
+ * REVISI R1 (batch quick-wins, keputusan owner baru — menggantikan Fase B /
+ * docs/KNOWN_ISSUES#853): **outage LLM total** → pesan transisi deterministik
+ * DIKIRIM + tetap eskalasi (diverifikasi di describe blok 4). Pengecualian
+ * sunyi dihapus: customer tidak pernah didiamkan.
  */
 describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
   const dummySession: any = {
@@ -163,7 +164,7 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
   });
 
   describe('4. Runner Global Error Boundary (Uncaught Exceptions / Pipeline Crash)', () => {
-    it('LLM outage total → eskalasi sunyi: NOL balasan apology, tetap tercatat HUMAN_HANDLING', async () => {
+    it('LLM outage total → transisi terkirim + eskalasi tercatat HUMAN_HANDLING', async () => {
       const sentToCustomer: string[] = [];
       const sm = new ConversationStateMachine({
         simulateHumanReply: async (params: any) => {
@@ -196,12 +197,14 @@ describe('Anti-Silent-Drop Invariant (Tier 1 Offline)', () => {
         },
       });
 
-      // Keputusan owner (Fase B): outage total → TANPA apology minta-coba-lagi,
-      // eskalasi sunyi ke human handling. Antrean CS didahulukan daripada skenario apology.
-      expect(result.shouldSendReply).toBe(false);
-      expect(result.replyText).toBeFalsy();
+      // Keputusan owner (R1 batch quick-wins, revisi Fase B): outage total →
+      // pesan transisi deterministik DIKIRIM + eskalasi ke human handling.
+      // Antrean CS tetap didahulukan; customer tidak didiamkan.
+      expect(result.shouldSendReply).toBe(true);
+      expect(result.replyText).toContain('Bidan');
+      expect(result.replyText).not.toContain('Fatal upstream');
       expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-      expect(sentToCustomer.length).toBe(0);
+      expect(sentToCustomer.length).toBe(1);
       expect(escSpy.mock.calls.length).toBeGreaterThan(0);
       const updated = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
       expect(updated.is_human_handling).toBe(true);

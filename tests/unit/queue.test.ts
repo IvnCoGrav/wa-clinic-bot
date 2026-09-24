@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
-import { queueService, QueuePayload } from '../../src/services/queue.service';
+import { queueService, QueuePayload, resolveQueueJobId } from '../../src/services/queue.service';
 import { stateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
@@ -159,5 +159,32 @@ describe('Message Queue Service Unit Tests', () => {
     expect(processSpy).toHaveBeenCalledTimes(2);
     // Job kedua harus melihat current_state yang sudah berubah dari pesan pertama.
     expect(statesSeen).toEqual(['INITIAL', 'AWAITING_INTEREST']);
+  });
+
+  // R3 — kunci dedup kanonis: stabil bila ada ID, unik bila tidak ada.
+  it('R3. turnId kanonis dipakai sebagai jobId (dedup stabil retry)', () => {
+    const base: QueuePayload = {
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-1',
+      phone: '628111',
+      incomingMessage: { id: 'wamid.X' },
+      turnId: 'default-tenant:WAHA:wamid.X',
+      inboundMessageId: 'wamid.X',
+    };
+    expect(resolveQueueJobId('628111', base)).toBe('job_628111_default-tenant:WAHA:wamid.X');
+    expect(resolveQueueJobId('628111', base)).toBe(resolveQueueJobId('628111', base));
+  });
+
+  it('R3. tanpa ID apa pun jobId unik (tidak pernah drop pesan sah sebagai duplikat)', () => {
+    const mk = (): QueuePayload => ({
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-1',
+      phone: '628111',
+      incomingMessage: {},
+    });
+    const a = resolveQueueJobId('628111', mk());
+    const b = resolveQueueJobId('628111', mk());
+    expect(a).not.toContain('undefined');
+    expect(a).not.toBe(b);
   });
 });

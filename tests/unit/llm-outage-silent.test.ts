@@ -8,10 +8,11 @@ import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
- * Fase B — Outage LLM total: TANPA balasan generik tanya-alamat.
- * Runner mengembalikan eskalasi sunyi; machine mencatat & memberi tahu CS.
+ * R1 (batch quick-wins, revisi Fase B): outage LLM total → pesan transisi
+ * deterministik + tetap eskalasi. Customer TIDAK PERNAH didiamkan; CS tetap
+ * diberi tahu. Kontrak lama "sunyi total" dinyatakan kedaluwarsa.
  */
-describe('LLM outage — eskalasi sunyi tanpa balasan', () => {
+describe('LLM outage — pesan transisi + eskalasi (anti silent-drop)', () => {
   const sentToCustomer: string[] = [];
   const testStateMachine = new ConversationStateMachine({
     simulateHumanReply: async (params: any) => {
@@ -27,7 +28,7 @@ describe('LLM outage — eskalasi sunyi tanpa balasan', () => {
     vi.restoreAllMocks();
   });
 
-  it('Call-1 LLM throw → sunyi total, eskalasi tercatat, nol teks keluar', async () => {
+  it('Call-1 LLM throw → transisi terkirim, eskalasi tercatat, tanpa bocor error', async () => {
     const phone = `62892${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Sari', DEFAULT_TENANT_ID);
     const escSpy = vi.spyOn(conversationService, 'escalateToHumanHandling');
@@ -46,10 +47,12 @@ describe('LLM outage — eskalasi sunyi tanpa balasan', () => {
       },
     });
 
-    expect(result.shouldSendReply).toBe(false);
-    expect(result.replyText).toBeFalsy();
+    expect(result.shouldSendReply).toBe(true);
+    expect(result.replyText).toContain('Bidan');
+    expect(result.replyText).not.toContain('LLM outage simulasi');
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(sentToCustomer.length).toBe(0);
+    expect(sentToCustomer.length).toBe(1);
+    expect(sentToCustomer[0]).toContain('Bidan');
 
     const reasons = escSpy.mock.calls.map((c) => c[4]);
     expect(reasons.length).toBeGreaterThan(0);
