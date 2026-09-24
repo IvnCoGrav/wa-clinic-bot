@@ -49,6 +49,10 @@ RUN npx prisma generate
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/config/surabaya_sidoarjo_subdistricts.json ./src/config/surabaya_sidoarjo_subdistricts.json
+# Katalog layanan & tier delivery (runtime dibaca dari file + DB) — wajib ikut
+# agar /api/admin/services dan TreatmentCatalogService tidak fallback ke default lama.
+COPY --from=builder /app/services_custom.json ./services_custom.json
+COPY --from=builder /app/delivery_tiers_custom.json ./delivery_tiers_custom.json
 # Aset statis (mis. gambar pricelist default assets/pricelist_spa.jpg) — wajib ikut
 # dicopy supaya pengiriman pricelist image tidak gagal di container.
 COPY --from=builder /app/assets ./assets
