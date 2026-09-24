@@ -400,17 +400,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
             },
           }).catch(() => {});
 
-          // Jika terdapat label bypass (Skip atau Admin CS), batalkan seluruh follow-up aktif
-          if (hasBypass) {
-            await prisma.followUp.updateMany({
-              where: {
-                customer_id: resolvedCustomerId,
-                status: { in: ['PENDING', 'QUEUED'] },
-              },
-              data: {
-                status: 'SKIPPED',
-              },
-            }).catch(() => {});
+          // Jika terdapat label bypass/admin, batalkan seluruh follow-up aktif — SKIPPED kanonis, tenant-isolated
+          if (hasBypass || hasAdmin) {
+            try {
+              const { followUpService } = await import('../../services/follow-up.service');
+              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, DEFAULT_TENANT_ID);
+            } catch {}
           }
 
           const updatedCustomer = await prisma.customer.findUnique({
@@ -506,17 +501,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
             });
           }
 
-          // Jika label bypass di-assign, batalkan follow-up aktif seketika
-          if (isAssigned && isBypass) {
-            await prisma.followUp.updateMany({
-              where: {
-                customer_id: resolvedCustomerId,
-                status: { in: ['PENDING', 'QUEUED'] },
-              },
-              data: {
-                status: 'SKIPPED',
-              },
-            }).catch(() => {});
+          // Jika label bypass/admin di-assign, batalkan follow-up aktif seketika — SKIPPED kanonis
+          if (isAssigned && (isBypass || normName.includes('admin'))) {
+            try {
+              const { followUpService } = await import('../../services/follow-up.service');
+              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, DEFAULT_TENANT_ID);
+            } catch {}
           }
         } catch {
           // Best-effort flag sync

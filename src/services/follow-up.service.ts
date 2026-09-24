@@ -7,7 +7,7 @@ import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
 import { parsePositiveInt } from '../utils/env-numeric';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
-import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
+import { hasBypassLabel, checkCustomerBypass, buildNonBypassCustomerWhere, BYPASS_LABEL_PRISMA_IN } from '../utils/customer-bypass';
 import {
   sanitizeCustomerNameForGreeting,
   formatGreetingBunda,
@@ -1100,6 +1100,39 @@ export class FollowUpService {
   }
 
   /**
+   * Skip seluruh antrian follow-up aktif untuk customer bypass/admin.
+   * Central seam Fase 1 — status kanonis SKIPPED + CANCEL_REASON.BYPASS_LABEL,
+   * terisolasi tenant_id. Dipanggil dari label route & customer.service hook.
+   */
+  public async skipFollowUpsForBypassCustomer(
+    customerId: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+  ): Promise<number> {
+    try {
+      const res = await prisma.followUp.updateMany({
+        where: {
+          customer_id: customerId,
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL },
+      });
+      if (res.count > 0) {
+        console.log(
+          `[FollowUp Service] Auto-skipped ${res.count} active follow-ups for bypass customer ${customerId} (tenant ${tenantId})`,
+        );
+      }
+      return res.count;
+    } catch (err: any) {
+      console.warn(
+        `[FollowUp Service] Failed to skip follow-ups for bypass customer ${customerId}:`,
+        err.message,
+      );
+      return 0;
+    }
+  }
+
+  /**
    * Bulk cancel follow-ups (misal semua PENDING atau QUEUED).
    * `options.reason` opsional — default: pembatalan massal oleh Admin.
    */
@@ -1211,6 +1244,7 @@ export class FollowUpService {
         type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
         status: { in: ['PENDING', 'QUEUED'] },
         scheduled_at: { lt: baseCutoff },
+        customer: buildNonBypassCustomerWhere() as any,
       },
       orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
     });
@@ -1304,24 +1338,36 @@ export class FollowUpService {
         console.warn('[FollowUp Worker] Failed to auto-cancel expired PENDING follow-ups:', pendingCancelErr.message);
       }
 
+      // Self-Healing Prune Fase 2.1: bersihkan zombie PENDING/QUEUED milik kontak admin/bypass
+      // sebelum batch — query terisolasi tenant, 1 updateMany, status kanonis SKIPPED.
+      try {
+        const pruned = await prisma.followUp.updateMany({
+          where: {
+            tenant_id: tenantId,
+            status: { in: ['PENDING', 'QUEUED'] },
+            OR: [
+              { customer: { is_admin_labeled: true } },
+              { customer: { is_sandbox_test: true } },
+              { customer: { status: 'blocked' } },
+              { customer: { labels: { some: { label: { name: { in: [...BYPASS_LABEL_PRISMA_IN] as unknown as string[] } } } } } },
+            ],
+          },
+          data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL },
+        });
+        if (pruned.count > 0) {
+          console.log(`[FollowUp Worker] Self-healing pruned ${pruned.count} zombie follow-ups for bypass/admin contacts (tenant ${tenantId}).`);
+        }
+      } catch (pruneErr: any) {
+        console.warn('[FollowUp Worker] Prune zombie follow-ups error:', pruneErr.message);
+      }
+
       const rawDueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
           type: { notIn: ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
           status: { in: targetStatuses as any },
           scheduled_at: { lte: now },
-          customer: {
-            status: { not: 'blocked' },
-            is_sandbox_test: false,
-            is_admin_labeled: false,
-            labels: {
-              none: {
-                label: {
-                  name: { in: ['Skip', 'skip', 'SKIP', 'Admin (CS)', 'admin (cs)', 'Admin CS', 'admin cs', 'Admin', 'admin'] },
-                },
-              },
-            },
-          },
+          customer: buildNonBypassCustomerWhere() as any,
         },
         include: {
           reservation: {

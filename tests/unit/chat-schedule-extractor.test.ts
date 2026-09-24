@@ -27,8 +27,9 @@ describe('Chat Schedule & Context Extractor Unit Tests', () => {
 
     expect(extracted.isExtractedFromChat).toBe(true);
     expect(extracted.timeDisplay).toBe('12.00-12.30');
-    expect(extracted.treatmentName.toLowerCase()).toContain('pijat');
-    expect(extracted.treatmentPrice).toBe(70000);
+    // Data-driven: chat kasual tanpa Treatment: ... di form → kosong (anti-fallback Memandikan Bayi)
+    expect(extracted.treatmentName).toBe('');
+    expect(extracted.treatmentPrice).toBe(0);
     expect(extracted.bundaName).toBe('Karmila');
     expect(extracted.childName.toLowerCase()).toContain('leo');
     expect(extracted.childAge).toContain('3tahun 7 bulan');
@@ -60,8 +61,9 @@ describe('Chat Schedule & Context Extractor Unit Tests', () => {
     const extracted = extractScheduleFromMessages(messages, customer, clinicServices);
 
     expect(extracted.timeDisplay).toBe('10.00');
-    expect(extracted.treatmentName).toBe('Baby Massage & Gym');
-    expect(extracted.treatmentPrice).toBe(75000);
+    // Data-driven: tanpa Treatment: ... di form → kosong
+    expect(extracted.treatmentName).toBe('');
+    expect(extracted.treatmentPrice).toBe(0);
     expect(extracted.ongkir).toBe(15000);
     expect(extracted.bundaName).toBe('Maya');
   });

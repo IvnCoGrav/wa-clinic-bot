@@ -5475,7 +5475,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           initialTreatmentName={quickBookingExtracted?.treatmentName}
           initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
           initialBabies={quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined}
-          initialNotes={quickBookingExtracted?.treatmentName ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
+          initialNotes={quickBookingExtracted?.treatmentName && quickBookingExtracted.treatmentName.trim() ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
           onSuccess={async (newRes) => {
             setShowQuickBookingModal(false);
             setConvertingHoldId(null);

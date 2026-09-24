@@ -450,6 +450,59 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     }
     expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-14T02:00:00.000Z');
   });
+
+  // Fase 3 adversarial — bypass/zombie immunity
+  it('16. skipFollowUpsForBypassCustomer: tenant-isolated, SKIPPED kanonis', async () => {
+    const spy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 2 } as any);
+    const n = await followUpService.skipFollowUpsForBypassCustomer('cust-bypass-1', 'tenant-a');
+    expect(n).toBe(2);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          customer_id: 'cust-bypass-1',
+          tenant_id: 'tenant-a',
+          status: { in: ['PENDING', 'QUEUED'] },
+        }),
+        data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL },
+      }),
+    );
+  });
+
+  it('17. processDueFollowUps: self-healing prune skip zombie bypass sebelum batch', async () => {
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 1 } as any);
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([] as any);
+    // Mock outbound cutoff check
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+    await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+    // First updateMany is self-healing prune (OR with bypass), second is expired PENDING prunes, we assert at least prune called
+    const pruneCall = updateManySpy.mock.calls.find((c: any) => c[0]?.where?.OR);
+    expect(pruneCall).toBeDefined();
+    expect(pruneCall[0].where.tenant_id).toBe(DEFAULT_TENANT_ID);
+    expect(pruneCall[0].data.status).toBe('SKIPPED');
+  });
+
+  it('18. rescheduleOverdueFollowUps: anti-zombie filter mengecualikan admin/bypass', async () => {
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([] as any);
+    const res = await followUpService.rescheduleOverdueFollowUps(DEFAULT_TENANT_ID, { maxPerDay: 5 });
+    expect(res.rescheduledCount).toBe(0);
+    // Verifikasi where mengandung customer filter via buildNonBypassCustomerWhere (tenant isolated)
+    const { buildNonBypassCustomerWhere } = await import('../../src/utils/customer-bypass');
+    const expectedCustomerWhere = buildNonBypassCustomerWhere();
+    // findMany should have been called with customer filter
+    const callArg = (prisma.followUp.findMany as any).mock.calls[0]?.[0]?.where;
+    expect(callArg.customer).toEqual(expectedCustomerWhere);
+    expect(callArg.tenant_id).toBe(DEFAULT_TENANT_ID);
+  });
+
+  it('19. Pencabutan label tidak membangkitkan SKIPPED — status terminal', async () => {
+    // SKIPPED is terminal; simulate that skip creates SKIPPED, and subsequent label removal does not revert
+    vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 1 } as any);
+    await followUpService.skipFollowUpsForBypassCustomer('cust-revoke-1', DEFAULT_TENANT_ID);
+    // No method exists to "uns skip" — ensure no auto-restore logic exists (audit: no updateMany with SKIPPED->QUEUED)
+    const { followUpService: svc } = await import('../../src/services/follow-up.service');
+    expect((svc as any).restoreFollowUpsForCustomer).toBeUndefined();
+  });
 });
 
 
