@@ -5,6 +5,45 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 125. [Eliminasi Blank Page — Global Boundary + Safe Chaining + RBAC] Fase 1-4 DONE (2026-09-23)
+
+- **Status:** Fase 1-4 done (2026-09-23), `npx tsc --noEmit` root+dashboard ✅, `vite build` ✅, auto-reload chunk sekali-per-sesi + `kala-admin-v12`.
+- **Akar masalah (terverifikasi kode & grep):**
+  1. Tanpa `ErrorBoundary`: `App.tsx:90-335` hanya `Suspense` — error render/lazy chunk apapun unmount `#root` jadi blank.
+  2. Broken `?.a.b` (24 titik): `Debug.tsx:140,157,159,161-163,180,203` + `FinancialAnalytics.tsx:584,611,635,726` + `TodayTreatments.tsx:576-587` + `StaffToday.tsx:1749-1760` — `obj?.prop.subprop` lempar `Cannot read properties of undefined` saat `prop` undefined/null (mis. `data?.database.status` saat `data=null`).
+  3. SW `public/sw.js:2` `v11` + cache hash lama tanpa auto-reload chunk.
+  4. RBAC `rolePermissions.ts:289` vs `admin.route.ts:137-149`: `admin_cs` boleh `/admin/chat-migration` di frontend tapi `403` di backend; cache `localStorage kala_custom_roles_v1` masih simpan path lama.
+- **Perbaikan fondasional:**
+  1. `[NEW] AppErrorBoundary.tsx` + `App.tsx` global + `Layout.tsx` page (2 lapis, kart tema WA, deteksi `ChunkLoadError` + purge `apiCache:*` riil `services/api.ts:128` + `CacheStorage` + reload sekali, anti-loop `chunk_reload_attempt`).
+  2. Safe chaining + normalisasi `res?.data?.entries` (tanpa ubah `TaskAddress.fullText` ke `|null` — churn massal ditunda; hanya rantai `?.` di watermark).
+  3. `rolePermissions.ts` cabut `/admin/chat-migration` dari `admin_cs` + guard `if(path==='/admin/chat-migration') return false` + fallback filter anti-bocor.
+  4. `sw.js` `v11→v12`.
+- **Verifikasi:** `npx tsc --noEmit` 0 error, `vite build` 11-12s OK, `npm test` 3230/3263 hijau (5 gagal pre-existing `v3-conversation-matrix: CM-19 / lead-greeting-preservation x2 / location-ingestion / tool-masking-enforce` — bukan regresi dashboard). Manual: `/admin/debug` DB putus tetap render, task tanpa alamat tidak crash, chunk hash lama reload sekali.
+- **Sisa debt jujur:**
+  - `tenant_admin` masih `[...ALL_PATHS]` (`rolePermissions.ts:240-241`) tapi backend blokir `/api/admin/migration,/debug,/settings…` untuk `!==SUPER_ADMIN` — mismatch sistemik di luar scope migrasi ini (perlu keputusan produk: izinkan tenant_admin di backend ATAU cabut path super-only dari `ALL_PATHS` tenant).
+  - Boundary belum reset otomatis saat `location.pathname` berubah (kartu menempel sampai `Coba Lagi`/`Muat Ulang`); opsi `key={location.pathname}` atau `getDerivedStateFromProps` ditunda (blast-radius rendah).
+  - `TaskAddress | null` penuh ditunda — jika backend kirim `address: null` total (bukan hanya `lat: null`), `fullText` downstream masih butuh `?.` massal.
+
+---
+
+## 124. [State-Gate Masking + Koma-Yatim] Revisi Tanpa Churn PLAN 12 (2026-09-23)
+
+- **Status:** Fase 1-2 done (2026-09-23), `tool-masker 20/20` + `typo-match 9/9` + `v3-sanitizer-vocative-quota 18/18` hijau, `npm run build` hijau, `isLocationFullyResolved()` field-riil (tanpa fiktif `isDeliveryCalculated`).
+- **Konteks:** Plan asli `isDeliveryCalculated` fiktif + lokasi baris meleset + hapus Levenshtein total; audit buktikan `wdro kak` (09-23) masker cabut `calculate_delivery` (log `V3_ROUTING` tanpa tool) — state-gate adalah fix fondasional.
+- **Perbaikan:** (1) Predikat `LocationState` riil + gerbang `!resolved → open / resolved+tanpa-entitas → mask` (anti-recycle 337880 terjaga, typo `≥6` tetap sebagai lapis kedua). (2) `sanitizer.ts:525` koma-sebelum-emoji → `ya, Bunda ☺️` → `ya ☺️`. Decision Phase 3/4 PLAN 12 ditutup (Zod+cool-off sudah live).
+- **Sisa debt jujur:** (1) Permukaan tool melebar saat unresolved (monitor `suspectOverRestrictive`); (2) typo hanya `≤1`/`≥6`; (3) `asksDeliveryFee` tetap di tool gate (bukan masker) — opsi b.
+
+---
+
+## 123. [GLM Timeout + Typo Terpusat] Revisi Fondasional Tanpa Duplikasi (2026-09-23)
+
+- **Status:** Fase 1-2 done (2026-09-23), `typo-match 9/9` + `tool-masker 20/20` + `tool-schemas 6/6` + `circuit-breaker 19/19` hijau, `npm run build` hijau.
+- **Konteks:** Plan asli mengusulkan ulang 4 fase PLAN 12 (sudah live `e4b6809c`) + timeout GLM hardcode + regex afirmasi ditolak. Revisi hanya kerjakan 2 item baru tanpa churn/duplikasi.
+- **Perbaikan:** (1) Timeout per-model via env `LLM_TIMEOUT_GLM_MS` (primary 60s/fallback 60s GLM, default 25s/20s non-GLM) — tanpa sniff literal. (2) Util typo terpusat `src/utils/typo-match.ts` (`isTypoAtMostOne` + `GEO_TOKEN_SKIPLIST`) dipakai bersama `calculate-delivery` & `tool-masker` (token `≥6`, kecamatan+kelurahan, kota cakupan tetap blok lama).
+- **Sisa debt jujur:** (1) P95 GLM 60s perlu monitor — env dapat diturunkan tanpa deploy; fallback DeepSeek 20s tetap (tinjau bila GLM fallback sering 60s). (2) Typo hanya `≤1` edit + token `≥6` (typo parah 2+ huruf/ token pendek tetap ke geocoding/LLM; "waru" pendek tetap fail-open via kecamatan exact). (3) Log `llm-*.jsonl` 0 `ECONNABORTED` saat audit — hipotesis prematur timeout belum terbukti, 60s adalah toleransi reasoning, bukan fix insiden.
+
+---
+
 ## 122. [Geocoding Single-Flight & Hesitation Normalizer] Fase 1-5 DONE (2026-09-23)
 
 - **Status:** Fase 1-5 done (2026-09-23), `tests/unit/v3-geocoding-singleflight.test.ts` 18 hijau, subset 57 hijau, `npm run build` hijau.

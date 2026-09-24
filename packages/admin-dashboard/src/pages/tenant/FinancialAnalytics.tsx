@@ -581,7 +581,7 @@ export const FinancialAnalytics: React.FC = () => {
             )}
           </div>
           <div className="space-y-1.5 pt-2 border-t border-[#f0f2f5] text-xs">
-            {data?.categoryBreakdown.map((cat, idx) => (
+            {(data?.categoryBreakdown || []).map((cat, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
                   <div
@@ -608,7 +608,7 @@ export const FinancialAnalytics: React.FC = () => {
             <span>Metode Pembayaran</span>
           </h2>
           <div className="space-y-2.5">
-            {data?.paymentBreakdown.map((pay, idx) => (
+            {(data?.paymentBreakdown || []).map((pay, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-[#111b21]">{pay.label}</span>
@@ -632,7 +632,7 @@ export const FinancialAnalytics: React.FC = () => {
               Top Layanan Paling Laris
             </h3>
             <div className="space-y-2">
-              {data?.topServices.slice(0, 4).map((s, idx) => (
+              {(data?.topServices || []).slice(0, 4).map((s, idx) => (
                 <div key={idx} className="flex items-center justify-between text-xs bg-[#f8fafc] p-2 rounded-xl border border-[#e9edef]">
                   <div className="flex items-center space-x-2 min-w-0 pr-2">
                     <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
@@ -723,7 +723,7 @@ export const FinancialAnalytics: React.FC = () => {
                   : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
               }`}
             >
-              Semua ({data?.transactions.length || 0})
+              Semua ({(data?.transactions || []).length})
             </button>
             <button
               onClick={() => setStatusFilter('LUNAS')}

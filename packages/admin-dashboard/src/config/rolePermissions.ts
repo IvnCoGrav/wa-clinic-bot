@@ -286,7 +286,6 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/overview',
       '/admin/today-treatments',
       '/admin/customers',
-      '/admin/chat-migration',
       '/admin/labels',
       '/admin/customer-service',
       '/admin/reservations',
@@ -440,6 +439,8 @@ export function hasAccess(role: string, path: string): boolean {
   if (path === '/admin/login' || path === '/admin/unauthorized') return true;
   const formattedRole = role.toLowerCase().replace(/[^a-z0-9]/g, '_');
   if (formattedRole === 'super_admin' || formattedRole === 'tenant_admin') return true;
+  // Fail-closed untuk migrasi: hanya super/tenant yang boleh, blokir semua role lain termasuk cache lama admin_cs
+  if (path === '/admin/chat-migration') return false;
 
   const roles = getCustomRoles();
   const config =
@@ -461,8 +462,9 @@ export function hasAccess(role: string, path: string): boolean {
 
   // Jika custom role belum tersimpan di localStorage perangkat ini,
   // berikan default akses operasional agar staf tidak terblokir di unauthorized
+  // (fail-closed: chat-migration dikecualikan agar tidak bocor ke role tak dikenal)
   if (formattedRole !== 'therapist') {
-    return DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths.includes(path);
+    return DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths.filter((p) => p !== '/admin/chat-migration').includes(path);
   }
 
   return path === '/admin/staff/today';

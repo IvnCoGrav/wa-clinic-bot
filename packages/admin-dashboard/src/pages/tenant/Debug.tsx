@@ -137,7 +137,7 @@ function SystemSection() {
     load();
   }, [load]);
 
-  const dbOk = data?.database.status === 'CONNECTED';
+  const dbOk = data?.database?.status === 'CONNECTED';
 
   return (
     <div className="space-y-4">
@@ -154,13 +154,13 @@ function SystemSection() {
         />
         <StatCard
           label="Database"
-          value={dbOk ? 'CONNECTED' : data?.database.status || '-'}
+          value={dbOk ? 'CONNECTED' : data?.database?.status || '-'}
           tone={dbOk ? 'ok' : 'err'}
-          sub={!dbOk ? data?.database.detail : undefined}
+          sub={!dbOk ? data?.database?.detail : undefined}
         />
-        <StatCard label="Customers" value={data?.counts.customers ?? '-'} />
-        <StatCard label="Conversations" value={data?.counts.conversations ?? '-'} />
-        <StatCard label="Messages" value={data?.counts.messages ?? '-'} />
+        <StatCard label="Customers" value={data?.counts?.customers ?? '-'} />
+        <StatCard label="Conversations" value={data?.counts?.conversations ?? '-'} />
+        <StatCard label="Messages" value={data?.counts?.messages ?? '-'} />
       </div>
 
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
@@ -177,7 +177,7 @@ function SystemSection() {
               </tr>
             </thead>
             <tbody>
-              {data?.featureFlags.map((f) => (
+              {(data?.featureFlags || []).map((f) => (
                 <tr key={f.key} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
                   <td className="py-2.5 px-3 font-mono text-xs text-[#111b21] font-semibold">{f.key}</td>
                   <td className="py-2.5 px-3 text-xs text-[#667781]">{f.label}</td>
@@ -200,7 +200,7 @@ function SystemSection() {
           </p>
         )}
         <p className="text-xs text-[#8696a0]">
-          Log buffer: {data?.logBuffer.installed ? 'aktif' : 'tidak terpasang'} · log={data?.logBuffer.stats.log ?? 0} warn={data?.logBuffer.stats.warn ?? 0} error={data?.logBuffer.stats.error ?? 0}
+          Log buffer: {data?.logBuffer?.installed ? 'aktif' : 'tidak terpasang'} · log={data?.logBuffer?.stats?.log ?? 0} warn={data?.logBuffer?.stats?.warn ?? 0} error={data?.logBuffer?.stats?.error ?? 0}
         </p>
       </div>
     </div>
@@ -304,7 +304,7 @@ function MessagesSection() {
     setLoading(true);
     try {
       const res = await apiRequest('/api/admin/debug/messages?limit=80');
-      setData(res.data);
+      setData(res?.data?.entries ? res.data : { entries: [] });
     } catch (err) {
       setData({ entries: [], dbNote: 'Gagal memuat trace pesan' });
     } finally {
@@ -332,12 +332,12 @@ function MessagesSection() {
             </tr>
           </thead>
           <tbody>
-            {data.entries.length === 0 && (
+            {(data?.entries || []).length === 0 && (
               <tr>
                 <td colSpan={5} className="py-4 text-center text-[#8696a0]">Belum ada pesan.</td>
               </tr>
             )}
-            {data.entries.map((m) => (
+            {(data?.entries || []).map((m) => (
               <tr key={m.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] transition-colors">
                 <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(m.created_at)}</td>
                 <td className="py-2.5 px-3">
@@ -385,7 +385,7 @@ function ConversationsSection() {
     setLoading(true);
     try {
       const res = await apiRequest('/api/admin/debug/conversations?limit=80');
-      setData(res.data);
+      setData(res?.data?.entries ? res.data : { entries: [] });
     } catch (err) {
       setData({ entries: [], dbNote: 'Gagal memuat trace conversation' });
     } finally {
@@ -398,14 +398,15 @@ function ConversationsSection() {
   }, [load]);
 
   const reasonOptions = useMemo(
-    () => Array.from(new Set(data.entries.map((e) => e.escalation_reason).filter((r): r is string => Boolean(r)))).sort(),
+    () => Array.from(new Set((data?.entries || []).map((e) => e.escalation_reason).filter((r): r is string => Boolean(r)))).sort(),
     [data.entries]
   );
 
   const filteredEntries = useMemo(() => {
-    if (escFilter === 'all') return data.entries;
-    if (escFilter === 'none') return data.entries.filter((e) => !e.escalation_reason);
-    return data.entries.filter((e) => e.escalation_reason === escFilter);
+    const entries = data?.entries || [];
+    if (escFilter === 'all') return entries;
+    if (escFilter === 'none') return entries.filter((e) => !e.escalation_reason);
+    return entries.filter((e) => e.escalation_reason === escFilter);
   }, [data.entries, escFilter]);
 
   return (
@@ -427,7 +428,7 @@ function ConversationsSection() {
             </option>
           ))}
         </select>
-        <span className="text-xs text-[#8696a0]">{filteredEntries.length} / {data.entries.length} baris</span>
+        <span className="text-xs text-[#8696a0]">{filteredEntries.length} / {(data?.entries || []).length} baris</span>
       </div>
       <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
         <table className="w-full text-xs">

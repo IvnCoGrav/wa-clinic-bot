@@ -1746,8 +1746,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     taskObj?: StaffTask | null
   ) => {
     const currentTask = taskObj || updateLocationModalTask;
-    const targetLat = coords?.lat ?? currentTask?.address.lat ?? null;
-    const targetLng = coords?.lng ?? currentTask?.address.lng ?? null;
+    const targetLat = coords?.lat ?? currentTask?.address?.lat ?? null;
+    const targetLng = coords?.lng ?? currentTask?.address?.lng ?? null;
     const targetAcc = coords?.accuracy ?? null;
 
     const takerName = staff?.name || 'Bidan Terapis';
@@ -1755,9 +1755,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       lat: targetLat,
       lng: targetLng,
       accuracy: targetAcc,
-      kelurahan: currentTask?.address.kelurahan,
-      kecamatan: currentTask?.address.kecamatan,
-      landmark: landmark || currentTask?.address.landmark || null,
+      kelurahan: currentTask?.address?.kelurahan,
+      kecamatan: currentTask?.address?.kecamatan,
+      landmark: landmark || currentTask?.address?.landmark || null,
       customerName: currentTask?.customerName || undefined,
       takerName,
       staffName: takerName,
