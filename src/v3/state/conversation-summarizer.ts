@@ -167,19 +167,26 @@ export class V3ConversationSummarizer {
 
     // Heuristic: deteksi apakah input customer menjawab pertanyaan lokasi (nama kota/kecamatan/kelurahan)
     // tanpa menghafal daftar kota — cek pola jawaban singkat non-pertanyaan.
+    // Revisi fondasional Sesi 640820: gabungan "bngurasi berapa kak" (≤4 kata + tanya biaya)
+    // sebelumnya tercoret oleh `includes(' berapa')` → Router dicuci otak ke katalog harga.
     const isLikelyLocationAnswer = (text: string): boolean => {
       const lower = text.toLowerCase().trim();
       if (lower.length === 0 || lower.length > 30) return false;
-      if (lower.includes('?') || lower.includes(' apa') || lower.includes(' berapa') || lower.includes(' bisa')) return false;
+      const words = lower.split(/\s+/).filter(Boolean);
+      const isShortCompositeLocationFee = words.length <= 4 && (lower.includes('berapa') || lower.includes('brp') || lower.includes('ongkir'));
+      if (!isShortCompositeLocationFee && (lower.includes('?') || lower.includes(' apa') || lower.includes(' berapa') || lower.includes(' bisa'))) return false;
       const questionKeywords = ['harga', 'tarif', 'biaya', 'promo', 'pijat', 'batuk', 'pilek', 'kembung', 'grok', 'kolik', 'gtm', 'nafsu', 'makan', 'tidur', 'rewel', 'pegala', 'capek', 'demam', 'panas', 'flu', 'cukur', 'rambut', 'jadwal', 'hari', 'jam', 'slot', 'kosong', 'tersedia', 'bulan', 'tahun', 'usia', 'umur', 'ikut', 'masuk', 'kategori', 'cukur', 'menit', 'durasi', 'lama', 'boleh', 'mau', 'ingin', 'perlu', 'butuh'];
       if (questionKeywords.some((kw) => lower.includes(kw))) return false;
       // Partikel percakapan yang BUKAN nama lokasi — hindari false positive pada filler
       const conversationalFillers = ['ya', 'kak', 'deh', 'dong', 'sih', 'nih', 'gitu', 'oke', 'baik', 'oh', 'siang', 'pagi', 'sore', 'malam', 'terima', 'kasih', 'makasih', 'trims', 'thanks'];
-      const words = lower.split(/\s+/).filter(Boolean);
-      // Jika SEMUA kata adalah filler percakapan → bukan jawaban lokasi
-      if (words.every((w) => conversationalFillers.includes(w))) return false;
-      // Jawaban lokasi cenderung 1-3 kata, tanpa kata tanya/layanan
-      return words.length >= 1 && words.length <= 3;
+      const priceBase = ['berapa', 'brp', 'harga', 'tarif', 'biaya', 'ongkir', 'promo'];
+      const fillerSet = new Set(conversationalFillers);
+      const isPriceLike = (w: string): boolean => priceBase.some((kw) => w.includes(kw));
+      // Pure price/filler (mis. "berapa", "berapa kak", "ongkirnya berapa") bukan jawaban lokasi
+      if (words.every((w) => isPriceLike(w) || fillerSet.has(w))) return false;
+      if (words.every((w) => fillerSet.has(w))) return false;
+      // Jawaban lokasi cenderung 1-4 kata (4 untuk komposit "bngurasi berapa ya kak")
+      return words.length >= 1 && words.length <= 4;
     };
 
     const userAnsweredLocation = askedLocationRecently && !locationResolved && isLikelyLocationAnswer(customerInput);
@@ -292,8 +299,31 @@ export class V3ConversationSummarizer {
       sedangDibahas = 'Bunda mengklarifikasi kategori usia dan kesesuaian perawatan si kecil';
       yangPerluDijawab = 'Jelaskan kesesuaian paket berdasarkan data resmi katalog DB (kategori BAYI untuk usia 0-24 bulan, kategori KIDS untuk 2-10 tahun). STATEMENT-ONLY RESPONSE: Jawab secara ramah dan tuntas tanpa menodong jadwal kunjungan.';
     } else if (rawInputLower.includes('berapa') || rawInputLower.includes('harga') || rawInputLower.includes('tarif') || rawInputLower.includes('biaya')) {
-      sedangDibahas = 'Bunda menanyakan tarif / harga layanan';
-      yangPerluDijawab = 'Sebutkan tarif promo paket yang relevan secara jelas dan transparan sesuai data katalog grounding.';
+      // Fondasional Sesi 640820: hanya komposit pendek lokasi+biaya (≤4 kata, ada token lokasi bukan harga/filler)
+      // yang diprioritaskan sebagai respons domisili; pure "berapa"/"harganya berapa?" tetap tarif umum.
+      const compositeWords = rawInputLower.trim().split(/\s+/).filter(Boolean);
+      const priceBaseSet = new Set(['berapa', 'brp', 'harga', 'tarif', 'biaya', 'ongkir', 'promo', 'kak', 'ya', 'deh', 'dong', 'sih', 'nih', 'gitu', 'oke', 'baik']);
+      const isPriceLikeToken = (clean: string): boolean => {
+        if (priceBaseSet.has(clean)) return true;
+        return ['harga', 'tarif', 'biaya', 'berapa', 'brp', 'ongkir', 'promo'].some((kw) => clean.includes(kw));
+      };
+      const serviceBase = ['pijat', 'batuk', 'pilek', 'kembung', 'grok', 'kolik', 'gtm', 'nafsu', 'makan', 'tidur', 'rewel', 'pegala', 'capek', 'demam', 'panas', 'flu', 'cukur', 'rambut', 'jadwal', 'hari', 'jam', 'slot', 'bulan', 'tahun', 'usia', 'umur', 'menit', 'durasi', 'bayi', 'anak', 'lahap', 'ceria', 'terapi', 'oksitosin', 'moksa'];
+      const hasLocationTokenInPriceQuery = compositeWords.some((w) => {
+        const clean = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+        if (clean.length < 3) return false;
+        if (isPriceLikeToken(clean)) return false;
+        if (['kak', 'ya', 'deh', 'dong', 'sih', 'nih', 'gitu', 'oke', 'baik'].includes(clean)) return false;
+        if (serviceBase.some((kw) => clean.includes(kw))) return false;
+        return true;
+      });
+      const isLocationFeeComposite = compositeWords.length > 0 && compositeWords.length <= 4 && hasLocationTokenInPriceQuery && (rawInputLower.includes('berapa') || rawInputLower.includes('brp') || rawInputLower.includes('ongkir'));
+      if (askedLocationRecently && !locationResolved && isLocationFeeComposite) {
+        sedangDibahas = 'Bunda merespons pertanyaan lokasi atau menanyakan jangkauan/biaya ke area tempat tinggal';
+        yangPerluDijawab = 'Cek jangkauan dan ongkir ke lokasi Bunda via calculate_delivery, lalu jelaskan dengan ramah serta tawarkan paket perawatan yang sesuai.';
+      } else {
+        sedangDibahas = 'Bunda menanyakan biaya / tarif';
+        yangPerluDijawab = 'Jawab pertanyaan biaya/tarif secara transparan dan solutif sesuai konteks percakapan (biaya layanan dari katalog atau estimasi ongkir ke wilayah yang ditanyakan).';
+      }
     } else if (rawInputLower.includes('cukur') && (rawInputLower.includes('berapa') || rawInputLower.includes('biaya'))) {
       sedangDibahas = 'Bunda menanyakan TARIF biaya cukur rambut';
       yangPerluDijawab = 'Sebutkan biaya cukur rambut dan akumulasikan ke total biaya.';

@@ -5,6 +5,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 127. [Foundational Call 1 Router Neutralization — Sesi 640820] DONE (2026-09-24)
+
+- **Status:** Fase 1-5 done (2026-09-24), core 5 suites 37/37 hijau (`summarizer-statement-only` 3/3, `composite-location-fee-routing` 7/7 [NEW], `v3-sanitizer-vocative-quota` 20/20, `location-ingestion` 3/3, `location-mask-typo` 4/4), `typecheck` & `build` hijau.
+- **Akar masalah (verifikasi `logs/llm-2026-09-24.jsonl:0-1`, `src/v3/state/conversation-summarizer.ts:173`):** heuristik kaku `includes(' berapa')` mendikte "berapa" selalu harga katalog → `bngurasi berapa kak` (typo Bungurasih + tanya ongkir, ≤4 kata) salah dikunci `Sebutkan tarif promo paket` + injeksi `🚫 Menanyakan alamat lagi`, sehingga Call 1 `glm-5.3-flash` 24.7 dtk/835 token salah panggil `get_catalog_and_price` (bukan `calculate_delivery`) dan membombardir katalog; Call 2 `deepseek-v4-flash-0731:netra` 1.2 dtk sudah benar kenal "Bungurasih" tapi tanpa data ongkir.
+- **Perbaikan fondasional:** (1) `conversation-summarizer.ts` state-gated: `isLikelyLocationAnswer` + `isShortCompositeLocationFee` + `isLocationFeeComposite` (price/serviceBase substring-aware, ≤4 kata) — pure "berapa"/"harganya berapa?" tetap tarif, komposit lokasi+biaya → `calculate_delivery`; (2) `router-tool-routing.layer.ts:20` panduan multi-turn `asksDeliveryFee:true`; (3) `tool-masker.ts` fail-open `hasLocationEntity || isShortCompositeResponse` — anti-recycle kota luas, anti-shadow typo; (4) `ai-models.config.ts:154-155` + `.env.example:137` + `agent-runner.ts:130/134` harmonisasi `INTENT_CLASSIFICATION` ke `deepseek-v4-flash-0731:netra` (golden `migrate-model-config-to-sumopod-glm.ts:41`) + migrasi DB 20 baris.
+- **Sisa debt jujur:** full suite 77 gagal pre-existing akibat rebrand `Kala Baby/Kids` (nama katalog `Pijat Bayi Pulih Ceria (Terapi Bapil` → `Kala Baby – Pijat Pulih Ceria` etc) — bukan regresi batch ini; sanitizer koma yatim sudah ada di `sanitizer.ts:525` (hanya tambah regression test, tanpa churn); drift model akan kembali bila migrasi tidak dijalankan di fresh DB — mitigasi via `.env.example` & `resetToGoldenDefaults`.
+
+---
+
 ## 126. [Audit & Rekonstruksi Sistem Reservasi & Form Modal — Self-Exclusion, Extractor, Draft] Fase 1-5 DONE (2026-09-24)
 
 - **Status:** Fase 1-5 done (2026-09-24), 37 extractor tests hijau (2 tests diadaptasi ke data-driven), dashboard `tsc && vite build` hijau, `window.confirm` nol.
