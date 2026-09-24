@@ -11,6 +11,16 @@ export interface WibTimeInfo {
   wibTimeString: string;
 }
 
+/** Pure: 00:00-23:59 WIB → UTC gte/lte untuk query Prisma (Asia/Jakarta UTC+7). */
+export function wibDayRangeToUtc(dayStr: string): { start: Date; end: Date } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayStr)) return null;
+  const [y, m, d] = dayStr.split('-').map(Number);
+  return {
+    start: new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 7 * 60 * 60 * 1000),
+    end: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) - 7 * 60 * 60 * 1000),
+  };
+}
+
 export function getWibTimeInfo(nowDate: Date = new Date()): WibTimeInfo {
   // WIB is UTC+7
   const wibDate = new Date(nowDate.getTime() + 7 * 60 * 60 * 1000);

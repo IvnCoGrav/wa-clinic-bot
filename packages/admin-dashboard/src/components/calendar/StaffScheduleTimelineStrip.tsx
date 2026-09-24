@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Clock, UserCheck, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { Reservation } from '../../types';
 import { StaffOption } from './types';
+import { getWibDateKey, getWibHoursAndMinutes, getTodayWibDateKey } from '../../utils/dateWib';
 
 export interface StaffScheduleTimelineStripProps {
   selectedStaff?: StaffOption | null;
@@ -30,22 +31,14 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
   onSelectTimeSlot,
   currentReservationId,
 }) => {
-  // Filter reservasi bidan terpilih pada tanggal ini
+  // Filter reservasi bidan terpilih pada tanggal ini — WIB
   const staffBookings = useMemo(() => {
     if (!bookingDate) return [];
     return bookedReservations.filter((r) => {
       if (!r.booking_date) return false;
       if (currentReservationId && r.id === currentReservationId) return false;
       if (r.status === 'cancelled') return false;
-
-      // Filter tanggal YYYY-MM-DD
-      const bDate = new Date(r.booking_date);
-      if (isNaN(bDate.getTime())) return false;
-      const yr = bDate.getFullYear();
-      const mo = String(bDate.getMonth() + 1).padStart(2, '0');
-      const dy = String(bDate.getDate()).padStart(2, '0');
-      const dateStr = `${yr}-${mo}-${dy}`;
-      if (dateStr !== bookingDate) return false;
+      if (getWibDateKey(r.booking_date) !== bookingDate) return false;
 
       // Jika ada staf spesifik yang dipilih, filter berdasarkan staf tersebut
       if (selectedStaff?.id) {
@@ -56,20 +49,18 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
     });
   }, [bookedReservations, bookingDate, selectedStaff?.id, currentReservationId]);
 
-  // Hitung interval menit untuk setiap booking yang ada
+  // Hitung interval menit untuk setiap booking yang ada — WIB
   const bookingIntervals = useMemo(() => {
     return staffBookings.map((b) => {
-      const bDate = new Date(b.booking_date!);
-      const startMinutes = (bDate.getHours() - START_HOUR) * 60 + bDate.getMinutes();
+      const { hours, minutes, timeFormatted } = getWibHoursAndMinutes(b.booking_date!);
+      const startMinutes = (hours - START_HOUR) * 60 + minutes;
       const duration = (b as any).duration_minutes || 60;
-      const buffer = 20; // 20m buffer jeda
+      const buffer = 20;
       const totalSpan = duration + buffer;
       const endMinutes = startMinutes + totalSpan;
 
       const customerName = (b.customer as any)?.name || 'Pasien';
       const cleanCustomerName = customerName.replace(/^(?:bunda|ibu|mama|moms?)\s+/i, '').trim();
-
-      const timeFormatted = `${String(bDate.getHours()).padStart(2, '0')}:${String(bDate.getMinutes()).padStart(2, '0')}`;
 
       return {
         id: b.id,
@@ -117,10 +108,10 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
       '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
     ];
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayWibDateKey();
     const isToday = bookingDate === todayStr;
-    const now = new Date();
-    const nowMinutesFromStart = (now.getHours() - START_HOUR) * 60 + now.getMinutes();
+    const { hours: nowH, minutes: nowM } = getWibHoursAndMinutes(new Date());
+    const nowMinutesFromStart = (nowH - START_HOUR) * 60 + nowM;
 
     for (const time of candidateTimes) {
       const [h, m] = time.split(':').map(Number);
