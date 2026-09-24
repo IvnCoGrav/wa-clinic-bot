@@ -445,6 +445,25 @@ export class ToolExecutionPipeline {
           isOutOfCoverage: toolResult.isOutOfCoverage,
         },
       }, tenantId);
+      // Auto-sync Google Contacts saat kelurahan/kecamatan baru terverifikasi di chat.
+      // Jalur chat V3 persist via mirror GoalTracker (bukan customerService) sehingga
+      // hook updateCustomerLocation tidak terpicu — sinkronisasi eksplisit non-blocking.
+      // customerId di-resolve via conversation (CustomerGoalSession tidak membawa customerId).
+      if (toolResult.kelurahan || toolResult.kecamatan) {
+        void (async () => {
+          try {
+            const { prisma } = await import('../../../db/client');
+            const conv = await prisma.conversation.findUnique({
+              where: { id: conversationId },
+              select: { customer_id: true },
+            });
+            const resolvedId = (conv as any)?.customer_id as string | undefined;
+            if (!resolvedId) return;
+            const { googleContactsService } = await import('../../../services/google-contacts.service');
+            await googleContactsService.syncCustomer(tenantId, resolvedId, { trigger: 'chat' }).catch(() => {});
+          } catch {}
+        })();
+      }
       // Lifecycle ongkir (RC-3, sesi 535222; diperluas sesi 779408): QUOTED sah
       // bila nominal ongkir BENAR-BENAR diekspos ke LLM/customer. Kontrak baru:
       // ekspos terjadi bila customer menanya biaya (asksDeliveryFee) ATAU lokasi

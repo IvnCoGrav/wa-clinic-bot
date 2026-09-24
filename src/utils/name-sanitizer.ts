@@ -5,7 +5,9 @@
  * catatan admin (+ Alamat, status WA), simbol/emoji, serta menangani multiple babies (kembar / 2 anak).
  */
 
-const COMMON_DISTRICTS = [
+// Diekspor untuk dipakai ulang skrip healing data (sanitize-customer-names) —
+// DILARANG menduplikasi daftar ini di modul lain (single source of truth).
+export const COMMON_DISTRICTS = [
   // Multi-word districts / areas / clusters (Panjang dulu agar matching lebih spesifik)
   'tambak sari sby', 'sidotopo wetan', 'sekawan nyaman', 'citraland wiyung', 'medokan semampir',
   'gunung anyar tambak', 'gunung anyar', 'tenggilis mejoyo', 'pabean cantian', 'pabean cantikan', 'lidah kulon',

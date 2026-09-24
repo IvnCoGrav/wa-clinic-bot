@@ -7,8 +7,36 @@ import {
   normalizePhoneForGoogle,
   buildContactNotes,
   extractContactPhoneAndName,
+  splitImportedContactName,
   CustomerContactContext,
 } from './google-contacts-formatter';
+import { getGazetteerCoordinates, getGazetteerKecamatanNames } from '../utils/gazetteer';
+
+/**
+ * Klasifikasi tag wilayah hasil belahan nama impor komposit ("Nama - Wilayah").
+ * Data-driven via gazetteer resmi (bukan daftar hafalan): hit koordinat dipakai
+ * apa adanya; nama kecamatan dikenal → slot kecamatan; sisanya → slot kelurahan.
+ */
+export function classifyImportedAreaTag(areaTag: string | null): {
+  kelurahan?: string;
+  kecamatan?: string;
+} {
+  const tag = (areaTag || '').trim();
+  if (!tag) return {};
+  try {
+    const hit = getGazetteerCoordinates(tag);
+    if (hit) {
+      const out: { kelurahan?: string; kecamatan?: string } = {};
+      if (hit.kelurahan) out.kelurahan = hit.kelurahan;
+      if (hit.kecamatan) out.kecamatan = hit.kecamatan;
+      return out;
+    }
+    const known = getGazetteerKecamatanNames().some((k) => k.toLowerCase() === tag.toLowerCase());
+    if (known) return { kecamatan: tag };
+  } catch {}
+  // Fallback: slot label komposit "= kelurahan" bila tak dikenali
+  return { kelurahan: tag };
+}
 
 export interface GoogleIntegrationStatus {
   isConfiguredOnPlatform: boolean;
@@ -193,7 +221,9 @@ export class GoogleContactsService {
     context: CustomerContactContext,
     template: string = '{{name}} - {{child_name}}'
   ): Promise<{ resourceName: string; etag: string } | null> {
-    const { givenName, familyName } = formatContactName(context, null, template);
+    // displayName People API bersifat output-only (diabaikan saat create) —
+    // kirim unstructuredName (free-form, writable) + given/family terstruktur.
+    const { displayName, givenName, familyName } = formatContactName(context, null, template);
     const normalizedPhone = normalizePhoneForGoogle(context.phone);
     const notes = buildContactNotes(context);
 
@@ -204,6 +234,7 @@ export class GoogleContactsService {
             {
               givenName,
               familyName: familyName || undefined,
+              unstructuredName: displayName || undefined,
             },
           ],
           phoneNumbers: [
@@ -244,7 +275,7 @@ export class GoogleContactsService {
     context: CustomerContactContext,
     template: string = '{{name}} - {{child_name}}'
   ): Promise<{ resourceName: string; etag: string } | null> {
-    const { givenName, familyName } = formatContactName(context, null, template);
+    const { displayName, givenName, familyName } = formatContactName(context, null, template);
     const normalizedPhone = normalizePhoneForGoogle(context.phone);
     const notes = buildContactNotes(context);
 
@@ -268,6 +299,7 @@ export class GoogleContactsService {
             {
               givenName,
               familyName: familyName || undefined,
+              unstructuredName: displayName || undefined,
             },
           ],
           phoneNumbers: [
@@ -537,24 +569,35 @@ export class GoogleContactsService {
           });
 
           if (existing) {
-            // Update resource name & lengkapi nama jika sebelumnya null/kosong
+            // Isolasi impor dua arah: nama komposit "Nama - Wilayah" dibelah —
+            // nama bersih + tag wilayah terklasifikasi gazetteer. Kolom existing
+            // yang sudah terisi TIDAK ditimpa (hanya melengkapi yang kosong).
+            const { cleanName: importedName, areaTag } = splitImportedContactName(extracted.name);
+            const area = classifyImportedAreaTag(areaTag);
+            const patch: any = {
+              google_resource_name: extracted.resourceName,
+              google_etag: extracted.etag,
+              google_synced_at: new Date(),
+            };
+            if (!existing.name && importedName) patch.name = importedName;
+            if (area.kelurahan && !(existing as any).kelurahan) patch.kelurahan = area.kelurahan;
+            if (area.kecamatan && !(existing as any).kecamatan) patch.kecamatan = area.kecamatan;
             await prisma.customer.update({
               where: { id: existing.id },
-              data: {
-                google_resource_name: extracted.resourceName,
-                google_etag: extracted.etag,
-                google_synced_at: new Date(),
-                name: !existing.name && extracted.name ? extracted.name : undefined,
-              },
+              data: patch,
             });
             updatedExisting++;
           } else {
-            // Buat record Customer baru sebagai legacy/import source
+            // Buat record Customer baru sebagai legacy/import source (nama terisolasi)
+            const { cleanName: newName, areaTag: newAreaTag } = splitImportedContactName(extracted.name);
+            const newArea = classifyImportedAreaTag(newAreaTag);
             await prisma.customer.create({
               data: {
                 tenant_id: tenantId,
                 phone: `62${clean}`,
-                name: extracted.name,
+                name: newName,
+                ...(newArea.kelurahan ? { kelurahan: newArea.kelurahan } : {}),
+                ...(newArea.kecamatan ? { kecamatan: newArea.kecamatan } : {}),
                 is_legacy_source: true,
                 google_resource_name: extracted.resourceName,
                 google_etag: extracted.etag,

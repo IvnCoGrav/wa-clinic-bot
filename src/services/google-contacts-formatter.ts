@@ -59,46 +59,87 @@ export function formatContactName(
       .replace(/{{\s*child_name\s*}}/gi, '');
   }
 
-  if (subdistrict) {
-    formatted = formatted.replace(/{{\s*kelurahan\s*}}/gi, subdistrict);
+  // Smart Location Fallback: jika {{kelurahan}} diminta tapi kosong, gunakan kecamatan
+  // HANYA bila template tidak memuat {{kecamatan}} sendiri (anti-duplikat "Gedangan, Gedangan").
+  const templateHasDistrict = /{{\s*kecamatan\s*}}/i.test(template);
+  const effectiveSubdistrict = subdistrict || (templateHasDistrict ? '' : district);
+  if (effectiveSubdistrict) {
+    formatted = formatted.replace(/{{\s*kelurahan\s*}}/gi, effectiveSubdistrict);
   } else {
-    formatted = formatted.replace(/{{\s*kelurahan\s*}}/gi, '');
+    formatted = formatted
+      .replace(/-\s*{{\s*kelurahan\s*}}/gi, '')
+      .replace(/{{\s*kelurahan\s*}}\s*-/gi, '')
+      .replace(/{{\s*kelurahan\s*}}/gi, '');
   }
 
   if (district) {
     formatted = formatted.replace(/{{\s*kecamatan\s*}}/gi, district);
   } else {
-    formatted = formatted.replace(/{{\s*kecamatan\s*}}/gi, '');
+    formatted = formatted
+      .replace(/-\s*{{\s*kecamatan\s*}}/gi, '')
+      .replace(/{{\s*kecamatan\s*}}\s*-/gi, '')
+      .replace(/{{\s*kecamatan\s*}}/gi, '');
   }
 
   formatted = formatted
     .replace(/{{\s*phone\s*}}/gi, phone)
     .replace(/{{\s*(kota|city)\s*}}/gi, city);
 
-  // Bersihkan tanda koma, kurung kosong (), minus gantung, dan multiple spaces
+  // Bersihkan tanda koma, kurung kosong (), minus gantung di awal/akhir/tengah, dan multiple spaces
   let displayName = formatted
     .replace(/\(\s*,\s*/g, '(')
     .replace(/\s*,\s*\)/g, ')')
     .replace(/\(\s*\)/g, '')
     .replace(/,\s*,+/g, ',')
+    .replace(/\s+,/g, ',')
+    .replace(/\s+-\s*$/g, '')
+    .replace(/^\s*-\s+/g, '')
     .replace(/^[\s,–—\-]+|[\s,–—\-]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   if (!displayName) {
-    displayName = customerName || `Pelanggan ${phone}`;
+    displayName = customerName || `Pelanggan ${phone.slice(-4)}`;
   }
 
-  // Pisahkan givenName dan familyName untuk Google People API
-  const nameParts = displayName.split(' ');
-  const givenName = nameParts[0] || 'Pelanggan';
-  const familyName = nameParts.slice(1).join(' ') || '';
+  // Pemecahan terstruktur anti-hyphen untuk Google People API:
+  // Jika displayName memuat pemisah " - ", pisahkan nama murni dan penanda wilayah
+  // agar familyName tidak menempel tanda minus ("- Bulakbanteng, Desy" di locale family-first).
+  let givenName = '';
+  let familyName = '';
+  if (displayName.includes(' - ')) {
+    const parts = displayName.split(' - ');
+    givenName = parts[0]?.trim() || 'Pelanggan';
+    familyName = parts.slice(1).join(' - ').trim();
+  } else {
+    const nameParts = displayName.split(' ');
+    givenName = nameParts[0] || 'Pelanggan';
+    familyName = nameParts.slice(1).join(' ').trim();
+  }
 
   return {
     displayName,
     givenName,
     familyName,
   };
+}
+
+/**
+ * Belah nama komposit hasil impor Google ("Nama - Wilayah") menjadi nama bersih
+ * dan tag wilayah. Murni (pure) agar unit-testable; klasifikasi tag dilakukan
+ * terpisah via gazetteer (data-driven, bukan hafalan).
+ */
+export function splitImportedContactName(compositeName: string): {
+  cleanName: string;
+  areaTag: string | null;
+} {
+  const raw = (compositeName || '').trim();
+  if (!raw) return { cleanName: '', areaTag: null };
+  const idx = raw.indexOf(' - ');
+  if (idx < 0) return { cleanName: raw, areaTag: null };
+  const cleanName = raw.slice(0, idx).trim();
+  const areaTag = raw.slice(idx + 3).trim();
+  return { cleanName: cleanName || raw, areaTag: areaTag || null };
 }
 
 /**

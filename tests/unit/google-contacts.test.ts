@@ -4,7 +4,9 @@ import {
   normalizePhoneForGoogle,
   buildContactNotes,
   extractContactPhoneAndName,
+  splitImportedContactName,
 } from '../../src/services/google-contacts-formatter';
+import { classifyImportedAreaTag } from '../../src/services/google-contacts.service';
 import { googleOAuthClientManager } from '../../src/integrations/google-contacts/google-oauth.client';
 import { googleContactsService } from '../../src/services/google-contacts.service';
 
@@ -65,8 +67,9 @@ describe('Google Contacts Integration Suite', () => {
       );
 
       expect(res.displayName).toBe('Bunda Alisa - Rayyan');
-      expect(res.givenName).toBe('Bunda');
-      expect(res.familyName).toBe('Alisa - Rayyan');
+      // Anti-hyphen: pemisah " - " memisahkan nama murni vs penanda (bukan split kata)
+      expect(res.givenName).toBe('Bunda Alisa');
+      expect(res.familyName).toBe('Rayyan');
     });
 
     it('removes dangling hyphen when child name is missing', () => {
@@ -100,8 +103,8 @@ describe('Google Contacts Integration Suite', () => {
       );
 
       expect(res.displayName).toBe('Ibu Maya - Kimi (Kalisari, Mulyorejo)');
-      expect(res.givenName).toBe('Ibu');
-      expect(res.familyName).toBe('Maya - Kimi (Kalisari, Mulyorejo)');
+      expect(res.givenName).toBe('Ibu Maya');
+      expect(res.familyName).toBe('Kimi (Kalisari, Mulyorejo)');
     });
 
     it('cleans up empty location tags cleanly', () => {
@@ -166,6 +169,106 @@ describe('Google Contacts Integration Suite', () => {
 
       const extracted = extractContactPhoneAndName(person);
       expect(extracted).toBeNull();
+    });
+
+    // Matriks adversarial integritas penamaan (audit 2026-09-24): nama satu kata,
+    // fallback kecamatan, minus gantung, spasi template acak, anti-duplikat dual-tag.
+    it('TC-01: single-word name tidak menempelkan minus di familyName', () => {
+      const res = formatContactName(
+        { name: 'Desy', phone: '081234567890', kelurahan: 'Bulakbanteng' },
+        null,
+        '{{name}} - {{kelurahan}}'
+      );
+      expect(res.displayName).toBe('Desy - Bulakbanteng');
+      expect(res.givenName).toBe('Desy');
+      expect(res.familyName).toBe('Bulakbanteng');
+      expect(res.familyName).not.toContain('-');
+    });
+
+    it('TC-02: kelurahan NULL fallback cerdas ke kecamatan', () => {
+      const res = formatContactName(
+        { name: 'Bunda Retno', phone: '081234567890', kecamatan: 'Gedangan' },
+        null,
+        '{{name}} - {{kelurahan}}'
+      );
+      expect(res.displayName).toBe('Bunda Retno - Gedangan');
+      expect(res.givenName).toBe('Bunda Retno');
+      expect(res.familyName).toBe('Gedangan');
+    });
+
+    it('TC-03: kelurahan & kecamatan NULL tanpa minus gantung', () => {
+      const res = formatContactName(
+        { name: 'Bunda Citra', phone: '081234567890' },
+        null,
+        '{{name}} - {{kelurahan}}'
+      );
+      expect(res.displayName).toBe('Bunda Citra');
+      expect(res.displayName).not.toMatch(/-\s*$/);
+    });
+
+    it('TC-04: nama NULL memakai 4 digit akhir telepon', () => {
+      const res = formatContactName(
+        { name: null, phone: '081803220432', kelurahan: 'Cemandi' },
+        null,
+        '{{name}} - {{kelurahan}}'
+      );
+      expect(res.displayName).toBe('Pelanggan 0432 - Cemandi');
+      expect(res.givenName).toBe('Pelanggan 0432');
+      expect(res.familyName).toBe('Cemandi');
+    });
+
+    it('TC-04b: template spasi acak tetap resolusi bersih', () => {
+      const res = formatContactName(
+        { name: 'Desy', phone: '081234567890', kelurahan: 'Bulakbanteng' },
+        null,
+        '{{ name }}  -  {{ kelurahan }}'
+      );
+      expect(res.displayName).toBe('Desy - Bulakbanteng');
+    });
+
+    it('TC-04c: anti-duplikat saat template memuat kelurahan DAN kecamatan', () => {
+      const res = formatContactName(
+        { name: 'Bunda Retno', phone: '081234567890', kecamatan: 'Gedangan' },
+        null,
+        '{{name}} - {{kelurahan}}, {{kecamatan}}'
+      );
+      // Separator koma template dipertahankan; yang dilarang hanya duplikat nilai
+      expect(res.displayName).toBe('Bunda Retno, Gedangan');
+      expect(res.displayName).not.toContain('Gedangan, Gedangan');
+    });
+
+    it('TC-06: tag anak hilang bersih tanpa kurung kosong', () => {
+      const res = formatContactName(
+        { name: 'Bunda Maya', phone: '081234567890', kelurahan: 'Mulyorejo', children: [] },
+        null,
+        '{{name}} - {{child_name}} ({{kelurahan}})'
+      );
+      expect(res.displayName).toBe('Bunda Maya (Mulyorejo)');
+      expect(res.displayName).not.toContain('()');
+    });
+
+    // Isolasi impor dua arah: belah komposit + klasifikasi gazetteer
+    it('TC-08: impor "Bunda Sari - Waru" terisolasi nama + kecamatan', () => {
+      const split = splitImportedContactName('Bunda Sari - Waru');
+      expect(split.cleanName).toBe('Bunda Sari');
+      expect(split.areaTag).toBe('Waru');
+      const area = classifyImportedAreaTag(split.areaTag);
+      expect(area.kecamatan).toBe('Waru');
+    });
+
+    it('TC-05b: impor "Pelanggan 8247 - Manukan Kulon" → kelurahan resmi gazetteer', () => {
+      const split = splitImportedContactName('Pelanggan 8247 - Manukan Kulon');
+      expect(split.cleanName).toBe('Pelanggan 8247');
+      const area = classifyImportedAreaTag(split.areaTag);
+      expect(area.kelurahan).toBe('Manukan Kulon');
+      expect(area.kecamatan).toBe('Tandes');
+    });
+
+    it('TC-08b: nama tanpa delimiter lolos utuh, tag tak dikenal → kelurahan', () => {
+      expect(splitImportedContactName('Bunda Sari')).toEqual({ cleanName: 'Bunda Sari', areaTag: null });
+      expect(splitImportedContactName('')).toEqual({ cleanName: '', areaTag: null });
+      expect(classifyImportedAreaTag(null)).toEqual({});
+      expect(classifyImportedAreaTag('Kawasan Tak Dikenal XYZ').kelurahan).toBe('Kawasan Tak Dikenal XYZ');
     });
   });
 

@@ -1599,9 +1599,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             if (address) nextPrefs.address = address;
             if (landmark) nextPrefs.landmark = landmark;
             custUpdate.preferences = nextPrefs;
-            if (address && !custUpdate.kelurahan && !(existing.customer as any)?.kelurahan) {
-              custUpdate.kelurahan = String(address).substring(0, 100);
-            }
+            // Proteksi Integritas Spasial: alamat jalan fisik DILARANG disalin ke
+            // kolom kelurahan (sumber pencemaran "Jl. Griya...(https://maps...)").
+            // Kolom kelurahan hanya diisi entitas desa/kelurahan resmi dari
+            // geocoding/gazetteer; alamat jalan hidup di preferences.address.
           }
           // assigned_staff_id: string kosong → null agar tidak menabrak FK
           // (ditangani di updateData.assigned_staff_id di atas; blok ini hanya customer)
@@ -2303,8 +2304,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             if (pr.success && pr.reservation?.name) {
               const cleanName = pr.reservation.name.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
               if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
-                const kec = pr.reservation.kec || existing.customer.kecamatan || '';
-                const formattedName = `Bunda ${cleanName}${kec ? ` ${kec}` : ''}`.trim();
+                const formattedName = `Bunda ${cleanName}`.trim();
                 const { customerService } = await import('../../services/customer.service');
                 await customerService.updateCustomerName(existing.customer.id, formattedName, DEFAULT_TENANT_ID).catch(() => {});
                 existing.customer.name = formattedName;

@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-24 — Pemulihan Integritas Penamaan Google Contacts & Database (Fase 1-5, hasil audit plan)
+
+- **Bukti live (read-only):** 729 customer, 156 ber-kelurahan → 78,6% tanpa label wilayah (koreksi klaim plan 86,6%); 10 baris kelurahan tercemar (URL/maps/`Jl.`/>40 char). Template aktif dari DB `tenant_google_integrations.naming_template`.
+- **Fase 1 — Formatter & People API contract:** `google-contacts-formatter.ts` smart fallback kelurahan→kecamatan (guard anti-duplikat bila template memuat kedua tag) + strip minus gantung tengah (`\s+,` cleanup) + split terstruktur ` - ` anti-hyphen familyName + fallback `Pelanggan {4 digit}`; `google-contacts.service.ts` kirim `unstructuredName` (writable) — `displayName` output-only DITOLAK plan asli per typing resmi `googleapis/people/v1.d.ts:871`.
+- **Fase 2 — Stop pencemaran:** `reservation-lifecycle.service.ts:53` & `reservations.subroute.ts:2306` hapus tempel kecamatan ke `Customer.name`; `reservations.subroute.ts:1602` larang salin alamat jalan ke kolom kelurahan (hidup di `preferences.address`).
+- **Fase 3 — Auto-sync chat:** `tool-pipeline.ts` hook non-blocking pasca `calculate_delivery` (V3 persist via mirror GoalTracker, bukan `customerService` — hook lama tak terpicu); `customerId` via conversation lookup (session tak membawa customerId); Micro-Task 3.2 plan (comment-only) DI-DROP — dirty-check lolos alami via bump `updated_at`.
+- **Fase 4 — Isolasi impor dua arah:** `[NEW] splitImportedContactName` (pure) + `classifyImportedAreaTag` via gazetteer (`Waru`→kec. Waru, `Manukan Kulon`→kel. Manukan Kulon/kec. Tandes); hanya lengkapi kolom kosong, tidak timpa existing.
+- **Fase 5 — Healing:** `[NEW] src/scripts/sanitize-customer-names-and-kelurahan.ts` (`--dry-run` default/`--apply`/`--tenant`/`--limit`, 3 aturan isi-kosong-saja) + `[NEW] src/utils/customer-name-healing.ts` (pure) + `export COMMON_DISTRICTS` (single source, anti-duplikat); `--apply` live DITUNDA hingga konfirmasi eksplisit.
+- **Verifikasi:** `tsc` 0; `google-contacts` 23/23, `healing` 5/5, `customer-database-api` 3/3, `location-refresh` 5/5, `tool-pipeline-price-intent` 22/22; full suite 3278/3312 — 6 gagal BUKAN regresi (5 matrix milik perubahan paralel tak-terkait + 1 `catalog-price-age-aware` pre-existing di HEAD `bff22cfd`, terbukti via worktree isolasi).
+
 #### 2026-09-24 — Optimasi Fondasional Disk & Memori Server Produksi (Fase 1R-3R & 5R)
 
 - **Fase 0R — Baseline terverifikasi:** `free -m` 1967/1407/560 + swap 837M, `df 40G 31G 7.4G 81%`, `docker stats` app 203M/waha 284M, `health` via `https://app.kalababyspa.online/health` OK, `sudo NOPASSWD ok`, probe WIB today=2 & page300 tidak mencakup hari ini (akar jadwal 0 terkonfirmasi).
