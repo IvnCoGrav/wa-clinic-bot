@@ -49,6 +49,7 @@ import { emitBootPhase } from '../../lib/bootProgress';
 import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
 import { useUiFeedback } from './UiFeedback';
 import { ThemeToggle } from './ThemeToggle';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -1000,7 +1001,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         </header>
 
-        {/* Content Body */}
+        {/* Content Body — isolated page ErrorBoundary (Fase 1: blank-page guard) */}
         <main
           className={`flex-1 ${
             isLiveChat
@@ -1008,7 +1009,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               : 'p-4 sm:p-5 md:p-7 space-y-6'
           } bg-[#f0f2f5] dark:bg-black`}
         >
-          {children}
+          <AppErrorBoundary scopeLabel="page">{children}</AppErrorBoundary>
         </main>
       </div>
     </div>

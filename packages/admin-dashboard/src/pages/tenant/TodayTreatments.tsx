@@ -573,8 +573,8 @@ export const TodayTreatments: React.FC = () => {
   ) => {
     const currentTask = taskObj || locationTask;
     // Koordinat target: koordinat saat ini -> fallback ke koordinat task di database
-    const targetLat = coords?.lat ?? currentTask?.address.lat ?? null;
-    const targetLng = coords?.lng ?? currentTask?.address.lng ?? null;
+    const targetLat = coords?.lat ?? currentTask?.address?.lat ?? null;
+    const targetLng = coords?.lng ?? currentTask?.address?.lng ?? null;
     const targetAcc = coords?.accuracy ?? null;
 
     const currentTakerName = user?.name || user?.email || 'Admin Klinik';
@@ -582,9 +582,9 @@ export const TodayTreatments: React.FC = () => {
       lat: targetLat,
       lng: targetLng,
       accuracy: targetAcc,
-      kelurahan: currentTask?.address.kelurahan,
-      kecamatan: currentTask?.address.kecamatan,
-      landmark: landmark || currentTask?.address.landmark || null,
+      kelurahan: currentTask?.address?.kelurahan,
+      kecamatan: currentTask?.address?.kecamatan,
+      landmark: landmark || currentTask?.address?.landmark || null,
       customerName: currentTask?.customerName || undefined,
     takerName: currentTakerName,
       staffName: currentTakerName,

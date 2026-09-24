@@ -9,6 +9,7 @@ import { StaffAuthProvider } from './contexts/StaffAuthContext';
 import { StaffProtectedRoute } from './components/staff/StaffProtectedRoute';
 import { Login } from './pages/auth/Login';
 import { BootProgress } from './components/common/BootProgress';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { emitBootPhase } from './lib/bootProgress';
 import { getDefaultRedirect } from './config/rolePermissions';
 
@@ -98,6 +99,7 @@ export const App: React.FC = () => {
       <AuthProvider>
         <UiFeedbackProvider>
         <BootProgress />
+        <AppErrorBoundary scopeLabel="global">
         <Suspense fallback={
           <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
@@ -328,6 +330,7 @@ export const App: React.FC = () => {
             <Route path="*" element={<IndexRedirect />} />
           </Routes>
         </Suspense>
+        </AppErrorBoundary>
         </UiFeedbackProvider>
       </AuthProvider>
       </ThemeProvider>
