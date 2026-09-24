@@ -8,9 +8,17 @@ import { CustomerGoalSession } from '../../state/goal-tracker';
 import { ContextGrounder, GroundingOutput } from './context-grounder';
 import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
 
+const GLM_TIMEOUT_MS = Math.max(1000, parseInt(process.env.LLM_TIMEOUT_GLM_MS || '60000', 10) || 60000);
+const V3_DEFAULT_TIMEOUT_MS = 25000;
+function isGlmPayload(p: any): boolean {
+  const m = String(p?.model || '').toLowerCase();
+  return m.startsWith('glm-') || m.includes('/glm-') || m.includes('glm');
+}
+
 export const v3LlmCircuitBreaker = new CircuitBreaker(
   async (url: string, payload: any, headers: any) => {
-    const response = await axios.post(url, payload, { headers, timeout: 25000 });
+    const timeout = isGlmPayload(payload) ? GLM_TIMEOUT_MS : V3_DEFAULT_TIMEOUT_MS;
+    const response = await axios.post(url, payload, { headers, timeout });
     return response.data;
   },
   async (url: string, payload: any, headers: any) => {
@@ -27,9 +35,10 @@ export const v3LlmCircuitBreaker = new CircuitBreaker(
         const fallbackPayload = { ...payload, model: tier.model };
         const fallbackHeaders = { Authorization: `Bearer ${tier.apiKey}`, 'Content-Type': 'application/json' };
         console.warn(`[CIRCUIT BREAKER FALLBACK] Executing fallback to Tier ${tier.name} (${tier.model})...`);
+        const fbTimeout = isGlmPayload(fallbackPayload) ? GLM_TIMEOUT_MS : 20000;
         const fallbackResponse = await axios.post(`${tier.baseUrl}/chat/completions`, fallbackPayload, {
           headers: fallbackHeaders,
-          timeout: 20000,
+          timeout: fbTimeout,
         });
         // Stage 8: tandai model/provider AKTUAL yang melayani (fallback), agar
         // observability tidak salah mengaitkan dengan model primary.

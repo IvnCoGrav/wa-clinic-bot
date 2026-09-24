@@ -23,6 +23,7 @@ import {
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
 import { getOutsideCities, getCoverageCities } from '../../config/coverage';
+import { isTypoAtMostOne } from '../../utils/typo-match';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -35,6 +36,17 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
  * coverage runtime + token kata utuh ala extractFastIntents — tanpa regex
  * semantik). Tanpa entitas → calculate_delivery di-mask fisik.
  */
+// Resolved = ada bukti lokasi presisi di sesi (kelurahan/kecamatan/kota/jarak/ongkir atau verdict luar-jangkauan).
+// Predikat field-riil LocationState (domain/types.ts:18-27) — tanpa field fiktif.
+export function isLocationFullyResolved(session: { location?: { kelurahan?: string; kecamatan?: string; kota?: string; distanceKm?: number; ongkirNormal?: number; ongkirPromo?: number; isOutOfCoverage?: boolean; rawText?: string } } | null | undefined): boolean {
+  const loc = session?.location as any;
+  if (!loc) return false;
+  if (loc.isOutOfCoverage === true) return true;
+  if (loc.kelurahan || loc.kecamatan || loc.kota) return true;
+  if (typeof loc.distanceKm === 'number' || typeof loc.ongkirPromo === 'number' || typeof loc.ongkirNormal === 'number') return true;
+  return false;
+}
+
 /** Cache token inti kecamatan (lazy, data-driven dari gazetteer runtime). */
 let kecamatanCoreTokensCache: Set<string> | null = null;
 function getKecamatanCoreTokens(): Set<string> {
@@ -67,6 +79,19 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
     const kecNames = getGazetteerKecamatanNames() || [];
     for (const n of kecNames) {
       if (n && n.length >= 4 && lower.includes(n.toLowerCase())) return true;
+    }
+  } catch {}
+  // Typo-tolerant 1-huruf terpusat (shared utils/typo-match): token ≥6 agar "waru/sby" pendek tidak false-positive
+  try {
+    const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length >= 6);
+    if (toks.length > 0) {
+      for (const [areaLower] of getGazetteerAreas().entries()) {
+        if (areaLower.length >= 6 && toks.some((t) => isTypoAtMostOne(t, areaLower))) return true;
+      }
+      for (const n of getGazetteerKecamatanNames() || []) {
+        const nl = String(n || '').toLowerCase();
+        if (nl.length >= 6 && toks.some((t) => isTypoAtMostOne(t, nl))) return true;
+      }
     }
   } catch {}
   // Plan regresi Fase 6 (anti-amnesia jawaban domisili): nama kecamatan yang
@@ -363,10 +388,11 @@ export function evaluateToolMasking(
   if (!isSaveReservationAllowed) {
     maskedToolNames.push('save_reservation');
   }
-  // Sesi 337880 Issue 2: tanpa entitas lokasi baru di pesan SAAT INI,
-  // calculate_delivery dicabut fisik (anti-recycle "Waru Kepuh" dari riwayat
-  // saat customer hanya bertanya kuota/jadwal/harga/sapaan).
-  if (!hasNewLocationEntity(cleanIncomingText)) {
+  // State-gate: belum resolved → DILARANG mask (LLM ekstrak typo/singkatan/patokan apa pun)
+  // Sudah resolved + tanpa entitas baru → mask (anti-recycle 337880 "Waru Kepuh")
+  if (!isLocationFullyResolved(session)) {
+    // belum resolved: biarkan calculate_delivery terbuka untuk LLM
+  } else if (!hasNewLocationEntity(cleanIncomingText)) {
     maskedToolNames.push('calculate_delivery');
   }
 

@@ -319,6 +319,8 @@ function isBroadRegionQuery(text: string): boolean {
 // Delegates to central gazetteer service (Single Source of Truth) — no direct fs I/O.
 // ---------------------------------------------------------------------------
 import { getGazetteerKecamatanEntries } from '../../utils/gazetteer';
+import { isTypoAtMostOne } from '../../utils/typo-match';
+import { GEO_TOKEN_SKIPLIST as KECAMATAN_TOKEN_SKIPLIST } from '../../utils/typo-match';
 
 function getKecamatanNames(): Array<{ lower: string; orig: string }> {
   // Filter len >=4 to match previous behavior (skip short kecamatan names)
@@ -330,30 +332,13 @@ export function initKecamatanGazetteerSync(): void {
   getKecamatanNames();
 }
 initKecamatanGazetteerSync();
-
-function levenshteinAtMostOne(a: string, b: string): boolean {
-  if (a === b) return true;
-  const la = a.length, lb = b.length;
-  if (Math.abs(la - lb) > 1) return false;
-  let i = 0, j = 0, edits = 0;
-  while (i < la && j < lb) {
-    if (a[i] === b[j]) { i++; j++; continue; }
-    edits++;
-    if (edits > 1) return false;
-    if (la === lb) { i++; j++; } else if (la > lb) { i++; } else { j++; }
-  }
-  return edits + (la - i) + (lb - j) <= 1;
-}
-
-/** Kembalikan nama kecamatan resmi yang disebut (atau typo 1-huruf) di query, atau null. */
-const KECAMATAN_TOKEN_SKIPLIST = new Set(['kota', 'desa', 'jawa', 'timur', 'kecamatan', 'kabupaten', 'surabaya', 'sidoarjo', 'gresik', 'sby', 'sda']);
 function findKecamatanInQuery(query: string): string | null {
   const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4 && !KECAMATAN_TOKEN_SKIPLIST.has(t));
   if (tokens.length === 0) return null;
   for (const { lower, orig } of getKecamatanNames()) {
     for (const t of tokens) {
       if (t === lower || t.includes(lower) || lower.includes(t)) return orig;
-      if (lower.length >= 6 && levenshteinAtMostOne(t, lower)) return orig;
+      if (lower.length >= 6 && isTypoAtMostOne(t, lower)) return orig;
     }
   }
   return null;

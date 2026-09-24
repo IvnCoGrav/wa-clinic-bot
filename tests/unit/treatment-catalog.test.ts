@@ -27,10 +27,15 @@ describe('Treatment Catalog Service Unit Tests', () => {
   });
 
   it('should filter baby/kids services by age in months', () => {
-    // 3 months old baby -> should match 0-24 months treatment
+    // 3 months old baby -> should match 0-6 months newborn treatment
     const threeMonthServices = treatmentCatalogService.getServicesByAge(3);
-    expect(threeMonthServices.some((s) => s.id === 'baby-massage-ceria')).toBe(true);
+    expect(threeMonthServices.some((s) => s.id === 'baby-massage-ceria-newborn')).toBe(true);
     expect(threeMonthServices.some((s) => s.id === 'kids-massage-ceria')).toBe(false);
+
+    // 10 months old baby -> should match 7-24 months baby treatment
+    const tenMonthServices = treatmentCatalogService.getServicesByAge(10);
+    expect(tenMonthServices.some((s) => s.id === 'baby-massage-ceria')).toBe(true);
+    expect(tenMonthServices.some((s) => s.id === 'kids-massage-ceria')).toBe(false);
 
     // 30 months old toddler (2.5 yrs) -> tiered 2-4th variant (sesi 214956:
     // generic kids-massage-ceria dinonaktifkan agar tak ganda dengan tiered)
@@ -64,7 +69,7 @@ describe('Treatment Catalog Service Unit Tests', () => {
 
   it('should format catalog text clearly for LLM / WhatsApp response', () => {
     const text = treatmentCatalogService.formatCatalogText();
-    expect(text).toContain('Pijat Bayi Ceria');
+    expect(text).toContain('Pijat Ceria');
     expect(text).toContain('Harga Normal');
     expect(text).toContain('Promo');
     expect(text).toContain('Durasi');
