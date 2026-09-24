@@ -904,6 +904,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
           purchaseValue?: number;
+          ongkir?: number;
           durationMinutes?: number;
           force?: boolean;
         };
@@ -947,6 +948,22 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const reservationStatus = status === 'hold' ? 'hold' : 'confirmed';
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
       const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
+      // Fase 1R — Pemisahan mutlak purchase_value (murni layanan) dan ongkir (Customer.ongkir).
+      // Ongkir dikirim terpisah dari frontend; sinkron ke Customer tanpa mencemari purchase_value.
+      const rawOngkir = (request.body as any)?.ongkir;
+      if (rawOngkir !== undefined && rawOngkir !== null && String(rawOngkir).trim() !== '') {
+        const parsedOngkir = Number(rawOngkir);
+        if (!isNaN(parsedOngkir) && parsedOngkir >= 0) {
+          try {
+            await prisma.customer.update({
+              where: { id: customerId },
+              data: { ongkir: Math.round(parsedOngkir) },
+            });
+          } catch (e) {
+            console.warn('[Admin API] Gagal update Customer.ongkir saat CREATE reservation:', (e as Error).message);
+          }
+        }
+      }
 
       try {
         const { reservationCoreService, ReservationConflictError } = await import('../../services/reservation-core.service');

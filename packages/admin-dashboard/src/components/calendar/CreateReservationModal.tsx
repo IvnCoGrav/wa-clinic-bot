@@ -42,6 +42,7 @@ import {
   isAddonService, 
   SelectedTreatmentItem 
 } from '../../utils/treatmentParser';
+import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -83,6 +84,13 @@ interface CreateReservationModalProps {
   initialReservation?: Reservation | any;
   /** Opsional: buka detail/edit reservasi eksisting dari warning jadwal aktif. */
   onEditReservation?: (reservation: any) => void;
+
+  // Smart Pre-Fill Pipeline
+  initialTreatmentName?: string | null;
+  initialTreatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | null;
+  initialBabies?: Array<{ name: string; ageText: string }> | null;
+  initialNotes?: string | null;
+  onSuccessAndInvoice?: (newReservation: any) => void;
 }
 
 export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
@@ -97,6 +105,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   mode = 'create',
   initialReservation,
   onEditReservation,
+  initialTreatmentName,
+  initialTreatmentCategory,
+  initialBabies,
+  initialNotes,
+  onSuccessAndInvoice,
 }) => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
@@ -127,9 +140,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Category Pills (Filter / Overall)
   const [treatmentCategory, setTreatmentCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
 
-  // Date & Time
+  // Date & Time — Fase 2R: cabut silent default 09:00 (anti-jam-senyap), required gate di handleSubmit
   const [bookingDate, setBookingDate] = useState('');
-  const [bookingTime, setBookingTime] = useState('09:00');
+  const [bookingTime, setBookingTime] = useState('');
 
   // Staff & Status — fondasional: dukung semua state pembayaran
   const [assignedStaffId, setAssignedStaffId] = useState('');
@@ -189,11 +202,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Children / Babies (Multi-Anak Support)
   const [babies, setBabies] = useState<Array<{ name: string; ageText: string }>>([]);
 
+  // Quick Mode vs Advanced Mode UI
+  const [isCompactView, setIsCompactView] = useState(true);
+
   // Modals & Recommendations UI
   const [showBookedSlotsModal, setShowBookedSlotsModal] = useState(false);
   const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
   const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
   const initializedEditIdRef = useRef<string | null>(null);
+  const hydratedWithLiveCatalogRef = useRef<boolean>(false);
   // Double-booking conflict UX (409 DUPLICATE_BOOKING / STAFF_COLLISION)
   const [conflictInfo, setConflictInfo] = useState<{ code: string; message: string; existingReservation: any } | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -286,7 +303,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setCustomIsAddon(false);
     setShowCustomServiceInput(false);
     setBookingDate('');
-    setBookingTime('09:00');
+    setBookingTime('');
     setAssignedStaffId('');
     setStatus('confirmed');
     setNotes('');
@@ -430,22 +447,39 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Sync initial target slot if opened via calendar slot click
   useEffect(() => {
     if (isOpen && initialSlotTarget) {
-      const d = new Date(initialSlotTarget.date);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      setBookingDate(`${yyyy}-${mm}-${dd}`);
-
-      const hh = String(initialSlotTarget.hour || 9).padStart(2, '0');
-      setBookingTime(`${hh}:00`);
+      // Dukung dua bentuk date: Date object (kalender) & string YYYY-MM-DD (LiveChat)
+      const rawDate: any = (initialSlotTarget as any).date;
+      let yyyy: string, mm: string, dd: string;
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        [yyyy, mm, dd] = rawDate.split('-');
+        setBookingDate(rawDate);
+      } else {
+        const d = new Date(rawDate);
+        yyyy = String(d.getFullYear());
+        mm = String(d.getMonth() + 1).padStart(2, '0');
+        dd = String(d.getDate()).padStart(2, '0');
+        setBookingDate(`${yyyy}-${mm}-${dd}`);
+      }
+      // Prioritas timeStr (HH:MM dari chat), fallback hour
+      const ts = (initialSlotTarget as any).timeStr as string | undefined;
+      if (ts && /^\d{1,2}:\d{2}$/.test(ts)) {
+        setBookingTime(ts);
+      } else {
+        const hh = String((initialSlotTarget as any).hour ?? 9).padStart(2, '0');
+        setBookingTime(`${hh}:00`);
+      }
+      if ((initialSlotTarget as any).staffId) {
+        setAssignedStaffId((initialSlotTarget as any).staffId);
+      }
     } else if (isOpen && !bookingDate && mode !== 'edit') {
-      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit!
+      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
+      // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
       setBookingDate(`${yyyy}-${mm}-${dd}`);
-      setBookingTime('09:00');
+      setBookingTime('');
     }
   }, [isOpen, initialSlotTarget, mode]);
 
@@ -463,13 +497,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   }, [isOpen, initialCustomer, initialCustomerId, mode]);
 
-  // Pre-fill state when opened in edit mode
+  // Pre-fill state when opened in edit mode — Fase 3R anti-race hidrasi katalog
   useEffect(() => {
     if (isOpen && mode === 'edit' && initialReservation) {
+      const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
       if (initializedEditIdRef.current === initialReservation.id) {
-        return;
+        if (hydratedWithLiveCatalogRef.current) return;
+        if (!isLiveCatalogReady) return;
       }
       initializedEditIdRef.current = initialReservation.id;
+      if (isLiveCatalogReady) hydratedWithLiveCatalogRef.current = true;
 
       const res = initialReservation;
       const cust = res.customer;
@@ -558,6 +595,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       }
     } else if (!isOpen) {
       initializedEditIdRef.current = null;
+      hydratedWithLiveCatalogRef.current = false;
     }
   }, [isOpen, mode, initialReservation, services]);
 
@@ -593,6 +631,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           ageText: child.current_age || child.raw_age_text || '',
         }))
       );
+    } else if (initialBabies && initialBabies.length > 0) {
+      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
     }
 
     // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers
@@ -703,6 +743,55 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     );
   };
 
+  // Smart Pre-Fill Pipeline (Live Chat / Quick Booking handoff)
+  const prefillTreatmentMatchedRef = useRef(false);
+  useEffect(() => {
+    if (!isOpen) {
+      prefillTreatmentMatchedRef.current = false;
+      return;
+    }
+    if (mode === 'edit') return;
+
+    // 1. Data anak dari chat (jika state masih kosong)
+    if (initialBabies && initialBabies.length > 0 && babies.length === 0) {
+      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
+    }
+
+    // 2. Catatan awal dari chat
+    if (initialNotes && !notes.trim()) {
+      setNotes(initialNotes);
+    }
+
+    // 3. Treatment category awal
+    if (initialTreatmentCategory) {
+      setTreatmentCategory(initialTreatmentCategory);
+    }
+
+    // 4. Auto-match treatment ke katalog dinamis database
+    if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && services.length > 0) {
+      const normTarget = initialTreatmentName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const matched = services.find((s) => {
+        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
+      });
+      if (matched) {
+        prefillTreatmentMatchedRef.current = true;
+        handleAddServiceInstance(matched);
+      }
+    }
+  }, [
+    isOpen,
+    mode,
+    initialBabies,
+    initialNotes,
+    initialTreatmentCategory,
+    initialTreatmentName,
+    services,
+    selectedTreatments.length,
+    babies.length,
+    notes,
+  ]);
+
   const handleAddCustomTreatment = () => {
     if (!customServiceName.trim()) {
       toast('Nama treatment kustom wajib diisi', 'error');
@@ -775,10 +864,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     return selectedTreatments.filter((t) => isAddonService(t)).length;
   }, [selectedTreatments]);
 
+  // Fase 4R: buffer kanonis tunggal 20 menit per kunjungan (selaras backend resolveDurationBreakdown) — anti-snowball
   const totalBufferMinutes = useMemo(() => {
     if (selectedTreatments.length === 0) return 20;
     if (mainTreatmentsCount === 0) return 10;
-    return mainTreatmentsCount * 20; // 20 menit per MAIN treatment (moksa/addon = 0 buffer)
+    return 20; // satu buffer per kunjungan bila ada layanan utama (bundle = durasi penuh)
   }, [selectedTreatments, mainTreatmentsCount]);
 
   const totalScheduledDurationMinutes = useMemo(() => {
@@ -855,8 +945,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     const selectedStartMin = slotH * 60 + slotM;
     const dur = totalScheduledDurationMinutes || 60;
-    const bufferMinutes = 20;
-    const selectedEndMin = selectedStartMin + dur + bufferMinutes;
+    const selectedEndMin = selectedStartMin + dur;
 
     const staffCollisions: Array<{ 
       id: string; 
@@ -883,7 +972,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
       const rStartMin = rDate.getHours() * 60 + rDate.getMinutes();
       const rDur = (r as any).duration_minutes || 60;
-      const rEndMin = rStartMin + rDur + bufferMinutes;
+      const rEndMin = rStartMin + rDur;
 
       const isOverlap = selectedStartMin < rEndMin && selectedEndMin > rStartMin;
 
@@ -1203,7 +1292,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         status,
         notes: notes.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
-        purchaseValue: totalPaymentAmount,
+        purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+        ongkir: Number(ongkir) || 0,
         ...(force ? { force: true } : {}),
       },
     };
@@ -1230,7 +1320,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, withInvoice = false) => {
     e.preventDefault();
     if (!customerId) {
       toast('Pilih customer terlebih dahulu', 'error');
@@ -1238,6 +1328,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     if (selectedTreatments.length === 0) {
       toast('Pilih minimal 1 layanan treatment', 'error');
+      return;
+    }
+    if (!bookingDate) {
+      toast('Pilih tanggal reservasi terlebih dahulu', 'error');
+      return;
+    }
+    if (!bookingTime || !bookingTime.trim()) {
+      toast('Pilih jam mulai reservasi terlebih dahulu', 'error');
       return;
     }
 
@@ -1302,7 +1400,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
           toast('Perubahan reservasi berhasil disimpan!', 'success');
           discardDraft(true);
-          onSuccess(res?.reservation || res?.data || res || initialReservation);
+          const savedRes = res?.reservation || res?.data || res || initialReservation;
+          onSuccess(savedRes);
+          if (withInvoice && onSuccessAndInvoice && savedRes) {
+            onSuccessAndInvoice(savedRes);
+          }
           onClose();
         } catch (editErr: any) {
           const code = editErr?.code || editErr?.error;
@@ -1329,7 +1431,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             treatmentName: primaryTreatment?.name || treatmentSummary,
             treatmentCategory: computedCategory,
             totalSessions: multiSessionTotal,
-            purchaseValue: totalPaymentAmount,
+            purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
             assignedStaffId: assignedStaffId || undefined,
             notes: notes.trim() || undefined,
             sessions: multiSessionSchedule.map((s) => ({
@@ -1342,7 +1444,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         toast(`Paket ${multiSessionTotal} sesi berhasil dibuat!`, 'success');
         discardDraft(true);
-        onSuccess(res?.data || res);
+        const savedRes = res?.data || res;
+        onSuccess(savedRes);
+        if (withInvoice && onSuccessAndInvoice && savedRes) {
+          onSuccessAndInvoice(savedRes);
+        }
         onClose();
       } else {
         const { payload } = buildCreatePayload(forceSubmit);
@@ -1353,7 +1459,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           });
           toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
           discardDraft(true);
-          onSuccess(res?.reservation || res?.data || res);
+          const savedRes = res?.reservation || res?.data || res;
+          onSuccess(savedRes);
+          if (withInvoice && onSuccessAndInvoice && savedRes) {
+            onSuccessAndInvoice(savedRes);
+          }
           onClose();
          } catch (createErr: any) {
            const code = createErr?.code || createErr?.error;
@@ -1376,6 +1486,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmitWithInvoice = (e: React.FormEvent) => {
+    handleSubmit(e, true);
   };
 
   // Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
@@ -1448,16 +1562,47 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         </button>
 
         {/* Modal Header — safe-area Notch */}
-        <div className="mb-4 pr-6 pt-[calc(0.25rem+env(safe-area-inset-top,0px))] sm:pt-0">
-          <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-            <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
-            <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
-          </h3>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
-            {mode === 'edit'
-              ? 'Perbarui rincian layanan, pasien anak, tanggal, jam, terapis, dan tarif reservasi'
-              : 'Mendukung multi-treatment, reservasi 2 anak (kembar/kakak-adik), add-on tanpa buffer (moksa), dan rekomendasi jam'}
-          </p>
+        <div className="mb-4 pr-10 pt-[calc(0.25rem+env(safe-area-inset-top,0px))] sm:pt-0 flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
+              <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
+              <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
+            </h3>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+              {mode === 'edit'
+                ? 'Perbarui rincian layanan, pasien anak, tanggal, jam, terapis, dan tarif reservasi'
+                : 'Mendukung multi-treatment, reservasi 2 anak, dan rekomendasi jam'}
+            </p>
+          </div>
+
+          {/* Quick Mode Toggle */}
+          <div className="flex items-center space-x-1 p-0.5 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-xl border border-[#d1d7db] dark:border-[#374248]">
+            <button
+              type="button"
+              onClick={() => setIsCompactView(true)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-97 cursor-pointer flex items-center space-x-1 ${
+                isCompactView
+                  ? 'bg-[#008069] text-white shadow-2xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21]'
+              }`}
+              title="Mode Ringkas: Form cepat 30 detik untuk kebutuhan esensial"
+            >
+              <Zap size={11} />
+              <span>Ringkas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCompactView(false)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-97 cursor-pointer flex items-center space-x-1 ${
+                !isCompactView
+                  ? 'bg-[#008069] text-white shadow-2xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21]'
+              }`}
+              title="Mode Lengkap: Tampilkan opsi lanjutan manual & multi-sesi"
+            >
+              <span>Lengkap</span>
+            </button>
+          </div>
         </div>
 
         {/* Pre-flight double-booking warning */}
@@ -1663,13 +1808,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <Sparkles size={14} className="text-[#008069]" />
                 <span>Pilih Layanan / Treatment ({selectedTreatments.length} Dipilih) *</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setShowCustomServiceInput(!showCustomServiceInput)}
-                className="text-[11px] text-[#008069] font-bold hover:underline cursor-pointer"
-              >
-                {showCustomServiceInput ? 'Batal Kustom' : '+ Tambah Treatment Kustom'}
-              </button>
+              {(!isCompactView || showCustomServiceInput) && (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomServiceInput(!showCustomServiceInput)}
+                  className="text-[11px] text-[#008069] font-bold hover:underline cursor-pointer"
+                >
+                  {showCustomServiceInput ? 'Batal Kustom' : '+ Tambah Treatment Kustom'}
+                </button>
+              )}
             </div>
 
             {/* Custom service creator input */}
@@ -2047,6 +2194,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 />
               </div>
             </div>
+
+            {/* Visual Therapist Schedule Strip (08:00 - 18:00 WIB) */}
+            {bookingDate && (
+              <StaffScheduleTimelineStrip
+                selectedStaff={effectiveStaffList.find((s) => s.id === assignedStaffId) || null}
+                bookingDate={bookingDate}
+                currentSelectedTime={bookingTime}
+                treatmentDurationMinutes={totalScheduledDurationMinutes || 80}
+                bookedReservations={loadedReservations}
+                onSelectTimeSlot={(slot) => setBookingTime(slot)}
+                currentReservationId={initialReservation?.id || null}
+              />
+            )}
 
             {/* Real-time Overlap & Travel Time Warning Banner */}
             {realtimeCollisions.staffCollisions.length > 0 && (
@@ -2518,14 +2678,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-97"
               >
                 Batal
               </button>
+              {onSuccessAndInvoice && (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleSubmitWithInvoice}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-97 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
+                  title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
+                >
+                  <Receipt size={14} />
+                  <span>Simpan & Masukkan Invoice ke Chat</span>
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-97 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Check size={14} />
                 <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>

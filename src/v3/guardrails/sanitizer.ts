@@ -379,8 +379,8 @@ export class OutputSanitizer {
     let out = text;
     // Fragmen + "..." + filler koreksi (eh/euh/anu) + koma opsional → buang
     out = out.replace(/(\S+)\s*\.\.\.\s*(?:eh|euh|anu|itu)\s*,?\s*/gi, '');
-    // Sisa elipsis ganda akibat penghapusan → rapikan spasi ganda
-    out = out.replace(/\s{2,}/g, ' ');
+    // Sisa elipsis ganda akibat penghapusan → rapikan spasi in-line ganda (pertahankan newline)
+    out = out.replace(/[^\S\r\n]{2,}/g, ' ');
     return out;
   }
 

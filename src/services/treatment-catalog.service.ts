@@ -897,6 +897,23 @@ export class TreatmentCatalogService {
    * Ceria") dan menolak fragmen acak ("breast" tidak mengunci bundle besar).
    * Double-count dicegah di pemanggil dengan pemisah item yang benar (`splitTopLevelItems`).
    */
+  // Fase 3R: helper tokenisasi generik (dipakai untuk nama + deskripsi)
+  private catalogWordTokensRaw(text: string | null | undefined): Set<string> {
+    const cleaned = (text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+    const alias: Record<string, string> = {
+      rileksasi: 'relaksasi', rileks: 'relaksasi', pijet: 'pijat', moxa: 'moksa',
+      kidz: 'kids', baby: 'bayi', oksitoksin: 'oksitosin', oksifull: 'oksitosin', therapist: 'terapi',
+    };
+    const stop = new Set(['addon', 'add', 'on', 'dan', 'the', 'paket', 'spa', 'treatment', 'layanan']);
+    return new Set(cleaned.split(' ').map((w) => alias[w] || w).filter((w) => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w)));
+  }
+
+  private getServiceCombinedTokens(s: ClinicServiceItem): Set<string> {
+    const nameTokens = this.catalogWordTokensRaw(s.name);
+    const descTokens = this.catalogWordTokensRaw(s.description || '');
+    return new Set([...nameTokens, ...descTokens]);
+  }
+
   public matchCatalogItem(itemText: string, tenantId: string = DEFAULT_TENANT_ID): ClinicServiceItem | undefined {
     const itemTokens = this.catalogWordTokens(itemText);
     // Butuh >= 2 token bermakna: kata tunggal generik ("breast", "body") tidak boleh
@@ -906,7 +923,8 @@ export class TreatmentCatalogService {
     let best: ClinicServiceItem | undefined;
     let bestKey: [number, number, number] | undefined;
     for (const s of this.getAllServices(true, tenantId)) {
-      const svcTokens = this.catalogWordTokens(s.name);
+      // Fase 3R: data-driven — cocokkan terhadap gabungan nama + deskripsi klinis DB
+      const svcTokens = this.getServiceCombinedTokens(s);
       if (svcTokens.size < itemTokens.size) continue;
       let containsAll = true;
       for (const t of itemTokens) {
@@ -915,11 +933,13 @@ export class TreatmentCatalogService {
       if (!containsAll) continue;
       // Prioritas 1: teks item adalah bagian nama katalog utuh (mis. "Prenatal Massage"
       // ⊂ "Prenatal Massage (Pijat Hamil)") — paling dapat dipercaya.
+      // Fase 3R: penalti bundle sebelum surplus agar "pijet bapil" → Pulih Ceria (STANDARD) bukan bundle hemat.
       const normSvc = this.normalizeCatalogKey(this.stripParenthetical(s.name));
       const isNamedSubset = normItemKey.length >= 4 && normSvc.includes(normItemKey);
-      const surplus = svcTokens.size - itemTokens.size;
+      const isAddon = (s as any).isAddon || s.category === 'ADD_ON';
+      const surplus = svcTokens.size - itemTokens.size + (isAddon ? 100 : 0);
       const bundlePenalty = s.category === 'BUNDLE' ? 1 : 0;
-      const key: [number, number, number] = [isNamedSubset ? 0 : 1, surplus, bundlePenalty];
+      const key: [number, number, number] = [isNamedSubset ? 0 : 1, bundlePenalty, surplus];
       if (!bestKey || key[0] < bestKey[0] ||
           (key[0] === bestKey[0] && key[1] < bestKey[1]) ||
           (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] < bestKey[2])) {

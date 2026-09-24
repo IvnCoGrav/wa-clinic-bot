@@ -408,6 +408,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [userManuallyExpanded, setUserManuallyExpanded] = useState(false);
   const manualExpandRef = useRef(false);
   const [quickBookingTargetSlot, setQuickBookingTargetSlot] = useState<any>(null);
+  const [quickBookingExtracted, setQuickBookingExtracted] = useState<ExtractedScheduleData | null>(null);
   const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -2668,6 +2669,58 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
         if (res?.data) setCustomerDetailData(res.data);
       } catch {}
+    }
+    // Fase 2R: Pre-fill cerdas tanggal & jam dari chat (data-driven, tanpa hardcode jam)
+    try {
+      let currentServices = clinicServices;
+      if (currentServices.length === 0) {
+        try {
+          const sRes: any = await apiRequest('/api/admin/services');
+          if (sRes?.data && Array.isArray(sRes.data)) {
+            currentServices = sRes.data;
+            setClinicServices(sRes.data);
+          } else if (Array.isArray(sRes)) {
+            currentServices = sRes;
+            setClinicServices(sRes);
+          }
+        } catch {}
+      }
+      let wilayahRef: WilayahReference | null = null;
+      try { wilayahRef = await getWilayahRef(); } catch {}
+      const custData = customerDetailData || (selectedChat ? {
+        id: (selectedChat as any).customerId,
+        name: (selectedChat as any).customerName,
+        phone: (selectedChat as any).customerPhone,
+      } : null);
+      const extracted = extractScheduleFromMessages(messages, custData as any, currentServices as any, wilayahRef);
+      setQuickBookingExtracted(extracted || null);
+      if (extracted?.bookingDate && extracted?.timeDisplay) {
+        // Normalisasi "13.00-14.30" / "13.00" -> "13:00"
+        const rawTime = String(extracted.timeDisplay).split('-')[0].trim().split('–')[0].trim();
+        const normalized = rawTime.replace('.', ':');
+        const timeHHMM = /^\d{1,2}[:.]\d{2}$/.test(normalized) ? normalized.padStart(5, '0').replace('.', ':') : normalized;
+        const [hhStr] = timeHHMM.split(':');
+        const hh = parseInt(hhStr, 10);
+        if (!isNaN(hh) && extracted.bookingDate) {
+          const d = new Date(extracted.bookingDate);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const cleanHHMM = /^\d{2}:\d{2}$/.test(timeHHMM) ? timeHHMM : `${String(hh).padStart(2, '0')}:00`;
+          setQuickBookingTargetSlot({
+            date: `${yyyy}-${mm}-${dd}`,
+            hour: hh,
+            timeStr: cleanHHMM,
+            staffId: '',
+          });
+        } else {
+          setQuickBookingTargetSlot(null);
+        }
+      } else {
+        setQuickBookingTargetSlot(null);
+      }
+    } catch {
+      setQuickBookingTargetSlot(null);
     }
     setShowQuickBookingModal(true);
     pushModalHistory('quick-booking');
@@ -5393,7 +5446,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           isOpen={showQuickBookingModal}
           mode={activeEditingHoldReservation || activeEditingConfirmedReservation ? 'edit' : 'create'}
           initialReservation={activeEditingHoldReservation || activeEditingConfirmedReservation || undefined}
-          onClose={() => { setShowQuickBookingModal(false); setConvertingHoldId(null); setActiveEditingHoldReservation(null); setActiveEditingConfirmedReservation(null); setQuickBookingTargetSlot(null); }}
+          onClose={() => {
+            setShowQuickBookingModal(false);
+            setConvertingHoldId(null);
+            setActiveEditingHoldReservation(null);
+            setActiveEditingConfirmedReservation(null);
+            setQuickBookingTargetSlot(null);
+            setQuickBookingExtracted(null);
+          }}
           staffList={reservationStaffList}
           initialSlotTarget={quickBookingTargetSlot}
           initialCustomer={
@@ -5412,17 +5472,41 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 } : null)
           }
           initialCustomerId={selectedChat?.customerId}
-           onSuccess={async (newRes) => {
-             setShowQuickBookingModal(false);
-             setConvertingHoldId(null);
-             setActiveEditingHoldReservation(null);
-             setActiveEditingConfirmedReservation(null);
-             setQuickBookingTargetSlot(null);
-             await handleReservationUpdate();
-             if (newRes) {
-               handleGenerateAndInsertInvoice(newRes);
-             }
-           }}
+          initialTreatmentName={quickBookingExtracted?.treatmentName}
+          initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
+          initialBabies={quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined}
+          initialNotes={quickBookingExtracted?.treatmentName ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
+          onSuccess={async (newRes) => {
+            setShowQuickBookingModal(false);
+            setConvertingHoldId(null);
+            setActiveEditingHoldReservation(null);
+            setActiveEditingConfirmedReservation(null);
+            setQuickBookingTargetSlot(null);
+            setQuickBookingExtracted(null);
+            await handleReservationUpdate();
+            if (newRes && !newRes._withInvoice) {
+              handleGenerateAndInsertInvoice(newRes);
+            }
+          }}
+          onSuccessAndInvoice={(newRes) => {
+            const customerObj = (customerDetailData && customerDetailData.id === selectedChat?.customerId)
+              ? customerDetailData
+              : (selectedChat ? {
+                  name: selectedChat.customerName,
+                  phone: selectedChat.customerPhone,
+                  kelurahan: (selectedChat as any).kelurahan || null,
+                  kecamatan: (selectedChat as any).kecamatan || null,
+                  kota: (selectedChat as any).kota || null,
+                  ongkir: (selectedChat as any).ongkir ?? 0,
+                } : null);
+            const invoiceText = generateReservationInvoiceText({
+              reservation: newRes,
+              customer: customerObj as any,
+              discount: Number(newRes?.discount || 0),
+            });
+            handleInsertInvoiceToChat(invoiceText);
+            toast('Reservasi berhasil disimpan & format invoice langsung dimasukkan ke chat WhatsApp! ✨', 'success');
+          }}
         />
       )}
 

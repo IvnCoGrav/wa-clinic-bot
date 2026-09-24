@@ -84,6 +84,22 @@ function getMeaningfulTokens(name: string): Set<string> {
   );
 }
 
+function tokenizeRaw(text: string | null | undefined): Set<string> {
+  const cleaned = (text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  return new Set(
+    cleaned
+      .split(' ')
+      .map((w) => ALIAS_MAP[w] || w)
+      .filter((w) => w.length >= 3 && !STOP_WORDS.has(w) && !/^\d+$/.test(w))
+  );
+}
+
+function getServiceCombinedTokens(s: ClinicServiceItem): Set<string> {
+  const nameTokens = tokenizeRaw(s.name);
+  const descTokens = tokenizeRaw(s.description || '');
+  return new Set([...nameTokens, ...descTokens]);
+}
+
 const normKey = (s: string) =>
   s.toLowerCase().replace(/\(add-?on\)|\[add-?on\]/g, '').replace(/[^a-z0-9]/g, '').replace(/addon/g, '');
 
@@ -102,7 +118,8 @@ function matchCatalogItem(itemText: string, cat: ClinicServiceItem[]): ClinicSer
   let best: MatchCandidate | undefined;
 
   for (const s of cat) {
-    const svcTokens = getMeaningfulTokens(s.name);
+    // Fase 3R: data-driven matching — gabungkan token nama + deskripsi klinis DB (clinical dominance)
+    const svcTokens = getServiceCombinedTokens(s);
     if (svcTokens.size < itemTokens.size) continue;
 
     let containsAll = true;
@@ -118,18 +135,20 @@ function matchCatalogItem(itemText: string, cat: ClinicServiceItem[]): ClinicSer
     const isNamedSubset = normItemKey.length >= 4 && normSvcBase.includes(normItemKey);
     const surplus = svcTokens.size - itemTokens.size;
     const bundlePenalty = s.category === 'BUNDLE' ? 1 : 0;
+    const addonPenalty = (s as any).isAddon || (s.category as any) === 'ADD_ON' ? 1 : 0;
 
-    const candidate: MatchCandidate = { service: s, isNamedSubset, surplus, bundlePenalty };
+    const candidate: MatchCandidate = { service: s as any, isNamedSubset, surplus: surplus + addonPenalty * 100, bundlePenalty } as any;
 
     if (!best) {
       best = candidate;
     } else {
+      // Prioritas: namedSubset > non-bundle > surplus terkecil (bundle dipenalti sebelum ukuran)
       if (candidate.isNamedSubset !== best.isNamedSubset) {
         if (candidate.isNamedSubset) best = candidate;
-      } else if (candidate.surplus !== best.surplus) {
-        if (candidate.surplus < best.surplus) best = candidate;
       } else if (candidate.bundlePenalty !== best.bundlePenalty) {
         if (candidate.bundlePenalty < best.bundlePenalty) best = candidate;
+      } else if (candidate.surplus !== best.surplus) {
+        if (candidate.surplus < best.surplus) best = candidate;
       }
     }
   }
@@ -156,8 +175,10 @@ export function parseTreatmentsFromDetail(
 ): SelectedTreatmentItem[] {
   if (!detail) return [];
   const effectiveCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_CLINIC_SERVICES_FALLBACK;
+  // Fase 4R: bersihkan semua variasi tag total durasi sebelum split (anti-snowball)
   const cleanSummary = detail
-    .replace(/\[\s*Total\s+.*?\]/gi, '')
+    .replace(/\[\s*Total[^]]*\]/gi, '')
+    .replace(/\[\s*\d+\s*m[^]]*\]/gi, '')
     .trim();
 
   const parts = cleanSummary.split(/\s*[\+,]\s*/).map((p) => p.trim()).filter(Boolean);
