@@ -1801,6 +1801,80 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             )}
           </div>
 
+          {/* Section: Data Anak / Bayi (Multi-Anak Support) */}
+          {treatmentCategory !== 'MOMS' && (
+            <div className="space-y-2 p-3.5 bg-[#f8fafc] dark:bg-[#141e24] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
+                  <Baby size={14} />
+                  <span>Data Pasien Anak / Bayi ({babies.length} Anak)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddBaby}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs flex items-center space-x-1 cursor-pointer active:scale-97"
+                >
+                  <Plus size={12} />
+                  <span>+ Tambah Anak</span>
+                </button>
+              </div>
+
+              {babies.length === 0 ? (
+                <p className="text-[11px] text-[#8696a0] italic">
+                  Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {babies.map((b, idx) => (
+                    <div key={idx} className="p-2.5 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Anak #{idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBaby(idx)}
+                          className="text-[#8696a0] hover:text-rose-600 p-1 cursor-pointer transition"
+                          title="Hapus anak ini"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={b.name}
+                          onChange={(e) => handleUpdateBaby(idx, 'name', e.target.value)}
+                          placeholder="Nama Lengkap / Panggilan Anak"
+                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                        />
+                        <input
+                          type="text"
+                          value={b.ageText}
+                          onChange={(e) => handleUpdateBaby(idx, 'ageText', e.target.value)}
+                          placeholder="Usia (misal: 8 bulan / 2 tahun)"
+                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {babies.length > 1 && selectedTreatments.length === 1 && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px] text-amber-800 dark:text-amber-200 flex items-center justify-between">
+                      <span>💡 Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
+                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2 active:scale-97"
+                      >
+                        + Duplikat Layanan
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Section 2: Multi-Treatment Selection (Supports multiple identical treatments for 2 children) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -2130,10 +2204,44 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             )}
           </div>
 
-          {/* Section 3: Date, Time & Smart Recommendations */}
+          {/* Section 3: Waktu, Bidan & Ketersediaan Jadwal Terpadu */}
           <div className="space-y-3 pt-2 border-t border-[#e9edef] dark:border-[#2a3942]">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Date */}
+            {/* Row 1: Bidan, Tanggal Kunjungan, Status Booking */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* 1. Penugasan Bidan / Terapis */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
+                    <UserCheck size={12} className="text-[#008069]" />
+                    <span>Terapis / Bidan</span>
+                  </label>
+                  {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignedStaffId(user.id)}
+                      className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-97"
+                    >
+                      <span>⚡ Saya</span>
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={assignedStaffId}
+                  onChange={(e) => setAssignedStaffId(e.target.value)}
+                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                >
+                  <option value="">-- Pilih / Acak Bidan --</option>
+                  {effectiveStaffList
+                    .filter((s) => s.active !== false || s.id === assignedStaffId)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.active === false ? '(Nonaktif)' : s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* 2. Tanggal Kunjungan */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
@@ -2145,7 +2253,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     className="text-[11px] text-[#008069] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <Eye size={12} />
-                    <span>Lihat Jadwal Terisi ({bookedReservationsForDate.length})</span>
+                    <span>Terisi ({bookedReservationsForDate.length})</span>
                   </button>
                 </div>
                 <div className="flex items-center space-x-1.5">
@@ -2157,12 +2265,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       setBookingDate(e.target.value);
                       setHasCalculatedRecommendations(false);
                     }}
-                    className="flex-1 p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                    className="flex-1 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
                   />
                   <button
                     type="button"
                     onClick={() => setShowBookedSlotsModal(true)}
-                    className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] shadow-xs transition cursor-pointer"
+                    className="p-2 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs transition cursor-pointer active:scale-97"
                     title="Lihat Jadwal Terisi Hari Ini"
                   >
                     <CalendarDays size={16} />
@@ -2170,28 +2278,22 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </div>
               </div>
 
-              {/* Start Time & Recommendation Button */}
+              {/* 3. Status Booking */}
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                    Jam Mulai (WIB) *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGenerateRecommendations}
-                    className="text-[11px] text-[#008069] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Zap size={12} className="text-amber-500 fill-amber-500" />
-                    <span>Rekomendasikan Jam</span>
-                  </button>
-                </div>
-                <input
-                  type="time"
-                  required
-                  value={bookingTime}
-                  onChange={(e) => setBookingTime(e.target.value)}
-                  className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold"
-                />
+                <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                  Status Pembayaran
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                >
+                  <option value="pending">Menunggu Pembayaran (Pending)</option>
+                  <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
+                  <option value="hold">Hold / Ditawarkan Sementara</option>
+                  <option value="completed">Selesai Treatment (Completed)</option>
+                  <option value="cancelled">Dibatalkan (Cancelled)</option>
+                </select>
               </div>
             </div>
 
@@ -2199,6 +2301,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {bookingDate && (
               <StaffScheduleTimelineStrip
                 selectedStaff={effectiveStaffList.find((s) => s.id === assignedStaffId) || null}
+                allStaff={effectiveStaffList}
+                onSelectStaff={(staffId) => setAssignedStaffId(staffId)}
                 bookingDate={bookingDate}
                 currentSelectedTime={bookingTime}
                 treatmentDurationMinutes={totalScheduledDurationMinutes || 80}
@@ -2207,6 +2311,31 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 currentReservationId={initialReservation?.id || null}
               />
             )}
+
+            {/* Jam Mulai (WIB) & Tombol Rekomendasikan Jam */}
+            <div className="p-3 bg-[#f8fafc] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center space-x-2">
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] shrink-0">
+                  Jam Mulai (WIB) *:
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={bookingTime}
+                  onChange={(e) => setBookingTime(e.target.value)}
+                  className="w-28 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerateRecommendations}
+                className="text-xs text-[#008069] dark:text-[#00a884] font-bold hover:underline flex items-center space-x-1.5 cursor-pointer bg-white dark:bg-[#111b21] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-2xs active:scale-97"
+              >
+                <Zap size={13} className="text-amber-500 fill-amber-500" />
+                <span>Rekomendasikan Jam</span>
+              </button>
+            </div>
 
             {/* Real-time Overlap & Travel Time Warning Banner */}
             {realtimeCollisions.staffCollisions.length > 0 && (
@@ -2381,134 +2510,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
             )}
           </div>
-
-          {/* Section 4: Staff / Terapis Assignment & Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Staff */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
-                  <UserCheck size={12} />
-                  <span>Penugasan Terapis</span>
-                </label>
-                {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
-                  <button
-                    type="button"
-                    onClick={() => setAssignedStaffId(user.id)}
-                    className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
-                  >
-                    <span>⚡ Saya Sendiri</span>
-                  </button>
-                )}
-              </div>
-              <select
-                value={assignedStaffId}
-                onChange={(e) => setAssignedStaffId(e.target.value)}
-                className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-              >
-                <option value="">-- Otomatis / Belum Ditugaskan --</option>
-                {effectiveStaffList
-                  .filter((s) => s.active !== false || s.id === assignedStaffId)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.active === false ? '(Nonaktif)' : s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Status */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                Status Pembayaran / Booking
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-              >
-                <option value="pending">Menunggu Pembayaran (Pending)</option>
-                <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
-                <option value="hold">Hold / Ditawarkan Sementara</option>
-                <option value="completed">Selesai Treatment (Completed)</option>
-                <option value="cancelled">Dibatalkan (Cancelled)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Section 5: Children / Baby details (Multi-Anak Support) */}
-          {treatmentCategory !== 'MOMS' && (
-            <div className="space-y-2 p-3.5 bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
-                  <Baby size={14} />
-                  <span>Data Anak / Bayi ({babies.length} Anak)</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddBaby}
-                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] shadow-xs flex items-center space-x-1 cursor-pointer"
-                >
-                  <Plus size={12} />
-                  <span>+ Tambah Anak</span>
-                </button>
-              </div>
-
-              {babies.length === 0 ? (
-                <p className="text-[11px] text-[#8696a0] italic">
-                  Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {babies.map((b, idx) => (
-                    <div key={idx} className="p-2.5 bg-white border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Anak #{idx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBaby(idx)}
-                          className="text-[#8696a0] hover:text-rose-600 p-1 cursor-pointer"
-                          title="Hapus anak ini"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={b.name}
-                          onChange={(e) => handleUpdateBaby(idx, 'name', e.target.value)}
-                          placeholder="Nama Lengkap / Panggilan Anak"
-                          className="p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                        />
-                        <input
-                          type="text"
-                          value={b.ageText}
-                          onChange={(e) => handleUpdateBaby(idx, 'ageText', e.target.value)}
-                          placeholder="Usia (misal: 8 bulan / 2 tahun)"
-                          className="p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  {babies.length > 1 && selectedTreatments.length === 1 && (
-                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 flex items-center justify-between">
-                      <span>💡 Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
-                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2"
-                      >
-                        + Duplikat Layanan
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Section: Rincian Biaya & Total Pembayaran */}
           <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 dark:from-[#141e24] dark:to-[#00a884]/10 border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-3 shadow-2xs">
