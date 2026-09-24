@@ -1,7 +1,7 @@
 import { reservationCoreService } from '../../services/reservation-core.service';
 import { BabyDetail } from '../../utils/reservation-text-parser';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
-import { parseIndonesianDate } from '../../utils/indonesian-date-parser';
+import { parseIndonesianDate, applyBookingTimeToDate } from '../../utils/indonesian-date-parser';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { GoalTracker } from '../state/goal-tracker';
 
@@ -410,7 +410,11 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
         : []);
 
     const parsedResult = parseIndonesianDate(bookingDate);
-    const parsedDate = parsedResult.date;
+    let parsedDate = parsedResult.date;
+    // Fase 2R: terapkan jam booking eksplisit (WIB → UTC) secara terpusat
+    if (bookingTime && typeof bookingTime === 'string' && bookingTime.trim()) {
+      parsedDate = applyBookingTimeToDate(parsedDate, bookingTime);
+    }
 
     // Audit 337101 (same-day dispatch trap): permintaan hari ini DILARANG
     // dijanjikan kedatangan langsung (slot & rute belum terverifikasi admin).

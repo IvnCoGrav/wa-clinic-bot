@@ -118,3 +118,45 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
 
   return { date: referenceDate, isRecognized: false, rawMatched: '' };
 }
+
+/**
+ * Fase 2R — Terapkan jam booking eksplisit (WIB) ke tanggal yang sudah ter-parse.
+ * Deterministik, tanpa regex hafalan di caller: parsing jam terpusat di sini.
+ * - Mendukung "14.00", "14:00", "14.30-15.30", "pukul 10.00 WIB" (ambil jam mulai).
+ * - Validasi range 00:00-23:59; invalid → kembalikan baseDate apa adanya.
+ * - Konversi WIB (UTC+7) ke UTC untuk penyimpanan DB (`Date` internal UTC).
+ */
+export function applyBookingTimeToDate(baseDate: Date, bookingTime: string | null | undefined): Date {
+  if (!bookingTime || typeof bookingTime !== 'string') return baseDate;
+  const trimmed = bookingTime.trim();
+  if (!trimmed) return baseDate;
+  // Ambil jam pertama dari range "14.00-15.30" / "14:00 - 15:00"
+  const firstSegment = trimmed.split('-')[0].split('–')[0].trim();
+  const timeMatch = firstSegment.match(/(\d{1,2})\s*[:.]\s*(\d{2})/);
+  // Fallback "jam 10" tanpa menit
+  const hourOnlyMatch = !timeMatch ? firstSegment.match(/\b(\d{1,2})\b/) : null;
+  let hh: number, mm: number;
+  if (timeMatch) {
+    hh = parseInt(timeMatch[1], 10);
+    mm = parseInt(timeMatch[2], 10);
+  } else if (hourOnlyMatch) {
+    hh = parseInt(hourOnlyMatch[1], 10);
+    mm = 0;
+    if (hh < 0 || hh > 23) return baseDate;
+  } else {
+    return baseDate;
+  }
+  if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return baseDate;
+  const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const wibTime = new Date(baseDate.getTime() + WIB_OFFSET_MS);
+  const utcMs = Date.UTC(
+    wibTime.getUTCFullYear(),
+    wibTime.getUTCMonth(),
+    wibTime.getUTCDate(),
+    hh - 7,
+    mm,
+    0,
+    0
+  );
+  return new Date(utcMs);
+}

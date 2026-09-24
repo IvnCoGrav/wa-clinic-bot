@@ -55,8 +55,15 @@ describe('Resolusi durasi fondasional (main vs add-on)', () => {
     expect(treatmentCatalogService.resolveCanonicalDuration(addonOnly)).toBe(15);
   });
 
-  it('Urutan kata berbeda tetap cocok katalog (Pijat Ceria Bayi -> Pijat Bayi Ceria 40m + Kids 45m + buffer 20m)', () => {
-    expect(treatmentCatalogService.resolveCanonicalDuration('Combination: Pijat Ceria Bayi, Pijat Ceria Kids')).toBe(105);
+  it('Urutan kata berbeda tetap cocok katalog (order-invariant, satu buffer kunjungan)', () => {
+    // Fase 3R: matcher kini description-aware — tier Kids yang menang tanpa info usia
+    // bersifat arbitrer (2-4th 45m vs 4-6th 50m), maka asersi struktural, bukan literal tier.
+    const r = treatmentCatalogService.resolveDurationBreakdown('Combination: Pijat Ceria Bayi, Pijat Ceria Kids');
+    expect(r.confident).toBe(true);
+    expect(r.matchedItemIds).toHaveLength(2);
+    const durs = r.matchedItemIds.map((id) => treatmentCatalogService.getServiceById(id)!.durationMinutes);
+    expect(r.totalMinutes).toBe(durs[0] + durs[1] + 20);
+    expect(treatmentCatalogService.resolveCanonicalDuration('Combination: Pijat Ceria Bayi, Pijat Ceria Kids')).toBe(r.totalMinutes);
   });
 
   it('resolveDurationBreakdown memberi flag confident=false saat item tak dikenali', () => {
