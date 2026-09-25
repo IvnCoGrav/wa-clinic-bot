@@ -614,14 +614,20 @@ export class GoalTracker {
           const label = k.roleLabel || 'Anak';
           const age = k.ageMonths != null
             ? (k.ageMonths >= 12 && k.ageMonths % 12 === 0 ? `${Math.round(k.ageMonths / 12)} tahun (${k.ageMonths} bulan)` : `${k.ageMonths} bulan`)
-            : 'usia belum diketahui';
+            : '';
           const sym = (k.symptoms && k.symptoms.length > 0) ? `, Keluhan: ${k.symptoms.join(', ')}` : ', Sehat/Relaksasi';
-          return `  - ${label}: Usia ${age}${sym}${i <= 1 ? cartTreatmentFor(i as 0 | 1) : ''}`;
+          const agePart = age ? `Usia ${age}` : '';
+          return `  - ${label}: ${[agePart, sym.replace(/^, /, '')].filter(Boolean).join(', ')}${i <= 1 ? cartTreatmentFor(i as 0 | 1) : ''}`;
         });
         lines.push(`[DATA PASIEN: MULTI-ANAK (${kids.length} ANAK DALAM 1 KUNJUNGAN)]\n${kidLines.join('\n')}\n  • Aturan Kunjungan: Keduanya bisa dikerjakan berurutan dalam 1x kunjungan dengan 1x ongkir promo.`);
       } else if (kids.length === 1) {
         const cp = kids[0];
-        lines.push(`• Data Si Kecil: Usia ${cp.ageMonths != null ? cp.ageMonths + ' bulan' : 'belum spesifik'}${(cp.symptoms || []).length > 0 ? `, Keluhan: ${cp.symptoms.join(', ')}` : ''}`);
+        const agePart = cp.ageMonths != null ? `Usia ${cp.ageMonths} bulan` : '';
+        const symPart = (cp.symptoms || []).length > 0 ? `Keluhan: ${cp.symptoms.join(', ')}` : '';
+        const parts = [agePart, symPart].filter(Boolean).join(', ');
+        if (parts) {
+          lines.push(`• Data Si Kecil: ${parts}`);
+        }
       }
     }
 

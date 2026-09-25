@@ -218,4 +218,38 @@ describe('Factual claim validator', () => {
       expect(ok.isValid).toBe(true);
     });
   });
+
+  // D10 — Anti-Amnesia Keluhan (sesi 796217): pola generik, bukan hafalan kalimat.
+  describe('D10: tanya-keluhan saat symptomsKnown=true → invalid; false → valid', () => {
+    it.each([
+      'boleh dibagikan keluhan atau kondisi si kecil saat ini ya',
+      'Apakah saat ini si kecil ada keluhan tertentu Bunda',
+      'ada keluhan apa si kecil Bunda',
+      'Apakah ada keluhan tertentu pada si kecil',
+    ])('varian parafrase "%s" → invalid bila symptomsKnown', (text) => {
+      const bad = validateFactualClaims(`Untuk Lahap ya Bunda. ${text} 🤗`, [], [], { symptomsKnown: true });
+      expect(bad.isValid).toBe(false);
+      expect(bad.violations.join(' ')).toMatch(/D10_SYMPTOM_AMNESIA/);
+    });
+
+    it('symptomsKnown=false → tanya keluhan sah (valid)', () => {
+      const ok = validateFactualClaims('Apakah saat ini si kecil ada keluhan tertentu Bunda, atau untuk pijat sehat relaksasi saja?', [], [], { symptomsKnown: false });
+      expect(ok.isValid).toBe(true);
+    });
+
+    it('tanpa opts → tanya keluhan sah (gate mati, valid)', () => {
+      const ok = validateFactualClaims('boleh dibagikan keluhan atau kondisi si kecil saat ini ya', []);
+      expect(ok.isValid).toBe(true);
+    });
+
+    it('"untuk relaksasi saja" BUKAN pola tanya-keluhan → tidak dituduh D10', () => {
+      const ok = validateFactualClaims('Untuk pijat sehat relaksasi saja ya Bunda', [], [], { symptomsKnown: true });
+      expect(ok.isValid).toBe(true);
+    });
+
+    it('rekomendasi + empati tanpa tanya ulang → valid', () => {
+      const ok = validateFactualClaims('Untuk GTM-nya kami sarankan Pijat Lahap ya Bunda. Semoga si kecil lekas sehat kembali ya 🤗', [], [], { symptomsKnown: true });
+      expect(ok.isValid).toBe(true);
+    });
+  });
 });

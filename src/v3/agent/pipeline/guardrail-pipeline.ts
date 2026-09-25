@@ -334,6 +334,14 @@ export class GuardrailPipeline {
     // netral tanya domisili (keputusan) + tandai unresolvedFaq untuk kurasi.
     const { validateFactualClaims } = await import('../../guardrails/factual-claim-validator');
     const locationKnown = !!(session?.location?.kelurahan || (session?.location as any)?.kecamatan);
+    // D10 (sesi 796217): keluhan diketahui dari profil sesi ATAU args tool turn ini.
+    // Cermin shape summarizer (childProfile/children/momProfile) — BUKAN input.session.symptoms.
+    const symptomsKnown = Boolean(
+      ((session as any)?.childProfile?.symptoms || []).length > 0 ||
+      ((session as any)?.children || []).some((c: any) => (c?.symptoms || []).length > 0) ||
+      ((session as any)?.momProfile?.complaints || []).length > 0 ||
+      executedTools.some((t) => Array.isArray((t as any)?.args?.symptoms) && (t as any).args.symptoms.length > 0)
+    );
     // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
     // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
     // deterministik trauma-jatuh/vaksin pada pesan masuk. Dihitung dari
@@ -353,7 +361,7 @@ export class GuardrailPipeline {
         .map((s: any) => (typeof s?.name === 'string' ? s.name : ''))
         .filter((n: string) => n.length > 0);
     } catch { extraCatalogNames = undefined; }
-    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, isRefusalOrEscalation, customerInput: incomingText, extraCatalogNames });
+    const factCheck = validateFactualClaims(finalReply, executedTools, retrievedChunks, { locationKnown, symptomsKnown, isRefusalOrEscalation, customerInput: incomingText, extraCatalogNames });
     if (!factCheck.isValid && shouldSendReply && !isEscalated && finalReply.trim()) {
       console.warn(JSON.stringify({ event: 'FACTUAL_HALLUCINATION_DETECTED', tenantId, conversationId, phone: maskPhoneNumber(phone), violations: factCheck.violations, timestamp: new Date().toISOString() }));
       violationsDetected.push(...factCheck.violations);
@@ -375,7 +383,7 @@ export class GuardrailPipeline {
         const factRetryText = (factRetryData?.choices?.[0]?.message?.content || '').trim();
         if (factRetryText) {
           const factCleaned = OutputSanitizer.cleanOutboundReply(factRetryText, incomingText, isFollowUp, sanitizeOpts);
-          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown, customerInput: incomingText, extraCatalogNames });
+          const factRecheck = validateFactualClaims(factCleaned, executedTools, retrievedChunks, { locationKnown, symptomsKnown, customerInput: incomingText, extraCatalogNames });
           if (factRecheck.isValid) {
             finalReply = factCleaned;
             factRepromptOk = true;
@@ -398,11 +406,33 @@ export class GuardrailPipeline {
       }
       if (!factRepromptOk) {
         const hasD9 = factCheck.violations.some((v) => v.includes('D9_LOCATION_AMNESIA'));
+        const hasD10 = factCheck.violations.some((v) => v.includes('D10_SYMPTOM_AMNESIA'));
         if (hasD9) {
           finalReply = `Baik Bunda, untuk ketersediaan jadwalnya kami bantu cekkan terlebih dahulu ya Bunda 😊 Nanti segera kami infokan ya bund 🤗`;
           shouldSendReply = true;
           emptyKnowledgeResult = false;
           violationsDetected.push('D9_LOCATION_AMNESIA_FALLBACK: amnesia diganti konfirmasi jadwal deterministik');
+        } else if (hasD10) {
+          // D10 (sesi 796217): salvage TINGKAT KALIMAT via modul eksisting —
+          // kalimat tanya-keluhan dibuang, kalimat valid dipertahankan verbatim
+          // (anti-mutilasi tengah kalimat). Tanpa kalimat valid → empati canned.
+          let d10Salvaged = false;
+          try {
+            const { salvageValidSentences } = await import('../../guardrails/sentence-salvage');
+            const salvage = salvageValidSentences(finalReply, executedTools, retrievedChunks, { locationKnown, symptomsKnown, customerInput: incomingText, extraCatalogNames });
+            if (salvage.kept.length > 0) {
+              finalReply = `${salvage.kept.join(' ')} Untuk membantu meredakan keluhan si kecil, rekomendasi perawatan kami sudah sangat sesuai ya Bunda 😊 Ada yang ingin Bunda tanyakan seputar perawatannya? 🤗`;
+              d10Salvaged = true;
+              violationsDetected.push(...salvage.droppedViolations);
+              violationsDetected.push(`D10_SYMPTOM_AMNESIA_FALLBACK: ${salvage.kept.length} kalimat valid dipertahankan, ${salvage.dropped.length} tanya-keluhan dibuang`);
+            }
+          } catch {}
+          if (!d10Salvaged) {
+            finalReply = `Untuk membantu meredakan keluhan si kecil, rekomendasi perawatan kami sudah sangat sesuai ya Bunda 😊 Ada yang ingin Bunda tanyakan seputar perawatannya? 🤗`;
+            violationsDetected.push('D10_SYMPTOM_AMNESIA_FALLBACK: tanpa kalimat valid, empati canned deterministik');
+          }
+          shouldSendReply = true;
+          emptyKnowledgeResult = false;
         } else {
         const onlyDomicile = factCheck.violations.length > 0
           && factCheck.violations.every((v) => v.startsWith('Domicile'));
@@ -422,7 +452,7 @@ export class GuardrailPipeline {
           let salvaged = false;
           try {
             const { salvageValidSentences } = await import('../../guardrails/sentence-salvage');
-            const salvage = salvageValidSentences(finalReply, executedTools, retrievedChunks, { locationKnown });
+            const salvage = salvageValidSentences(finalReply, executedTools, retrievedChunks, { locationKnown, symptomsKnown, customerInput: incomingText, extraCatalogNames });
             if (salvage.kept.length > 0 && salvage.dropped.length > 0) {
               finalReply = `${salvage.kept.join(' ')} Untuk detail pastinya, tim Bidan kami akan segera membantu mengecek dan melengkapinya ya Bunda 🙏`;
               violationsDetected.push(...salvage.droppedViolations);
@@ -557,7 +587,10 @@ export class GuardrailPipeline {
       const ageRepromptStartedAt = Date.now();
       let ageRepromptOk = false;
       try {
-        const ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        let ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        if (symptomsKnown) {
+          ageCorrectionNote += ` PERHATIAN: Customer SUDAH menyampaikan keluhan si kecil di chat. DILARANG menanyakan kembali keluhan/kondisi si kecil ("boleh dibagikan keluhan", "apakah ada keluhan")! Cukup tutup dengan empati Bidan yang hangat atau tanyakan apakah Bunda berminat mencoba perawatan tersebut.`;
+        }
         const ageRetryData = await input.executeChat({
           payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, ageCorrectionNote), temperature: 0.3 },
           tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
