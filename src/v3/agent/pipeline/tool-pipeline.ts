@@ -256,6 +256,18 @@ export class ToolExecutionPipeline {
         fnArgs.asksDeliveryFee = priceIntent.asksPrice || carryOver;
       }
       if (fnName === 'get_catalog_and_price') {
+        // P1-3: gate specificTreatmentName — hanya teruskan bila muncul di pesan user turn ini
+        if (typeof fnArgs.specificTreatmentName === 'string' && fnArgs.specificTreatmentName.trim()) {
+          const needle = fnArgs.specificTreatmentName.toLowerCase().trim();
+          const hay = (cleanIncomingText || '').toLowerCase();
+          // normalisasi: hilangkan tanda baca, spasi ganda
+          const normHay = hay.replace(/[^a-z0-9]+/g, ' ').trim();
+          const normNeedle = needle.replace(/[^a-z0-9]+/g, ' ').trim();
+          const appears = normHay.includes(normNeedle) || normNeedle.split(' ').some((tok: string) => tok.length >= 4 && normHay.includes(tok));
+          if (!appears) {
+            delete fnArgs.specificTreatmentName;
+          }
+        }
         fnArgs.inquirePrice = priceIntent.asksPrice;
         if (!priceIntent.mentionsNominal) {
           delete fnArgs.targetPrice;

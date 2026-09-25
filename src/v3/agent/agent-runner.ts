@@ -226,6 +226,29 @@ export class V3AgentRunner {
       }
       session = await ContextGrounder.applySessionLatches(session, cleanIncomingText, conversationId, tenantId);
 
+      // P1-1: re-evaluate masking PASCA-latch (single source) dan selaraskan prompt + turn
+      try {
+        const { evaluateToolMasking } = await import('../tools/tool-masker');
+        const { ALL_V3_TOOLS } = await import('../tools/tool-registry');
+        const postLatchEval = evaluateToolMasking(ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory);
+        const postSaveMasked = !postLatchEval.isSaveReservationAllowed;
+        const postDeliveryMasked = postLatchEval.maskedToolNames.includes('calculate_delivery');
+        if (postSaveMasked !== isSaveReservationMasked || postDeliveryMasked !== isCalculateDeliveryMasked) {
+          isSaveReservationMasked = postSaveMasked;
+          isCalculateDeliveryMasked = postDeliveryMasked;
+          const updatedPrompt = await PersonaPromptBuilder.buildRouterPromptAsync(session, isFollowUp, {
+            contextSummary,
+            phaseDirective: lastPhaseDirective,
+            tenantId,
+            isSaveReservationMasked,
+            isCalculateDeliveryMasked,
+          });
+          messages[0].content = updatedPrompt;
+          turn.currentSystemPrompt = updatedPrompt;
+        }
+        (turn as any).maskingEval = postLatchEval;
+      } catch {}
+
       // Stage 2: Call 1 Tool Routing.
       const routing = await GenerationStage.routeTools(turn, tel, { cleanIncomingText, session, messages, grounding, conversationHistory });
 
