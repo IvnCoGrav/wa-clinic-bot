@@ -241,38 +241,39 @@ export class ConversationService {
       return { released: false, updatedConversation: conversation };
     }
 
-    // EXPLICIT GUARD: 6-hour auto-release is DISABLED for medical_concern escalation to protect customer safety
+    // P3-2: sewa berjenjang ganti pengecualian abadi (fondasional)
+    const sinceEarly = new Date(conversation.human_handling_since).getTime();
+    const nowEarly = Date.now();
+    const hoursEarly = (nowEarly - sinceEarly) / (1000 * 60 * 60);
+    // medical_concern: sewa 24 jam (bukan abadi) — jaga safety tapi tidak livelock selamanya
     if (conversation.escalation_reason === 'medical_concern') {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to medical_concern. Auto-release is DISABLED.`);
-      return { released: false, updatedConversation: conversation };
+      if (hoursEarly < 24) {
+        console.log(`[AUTO-RELEASE SEWA] Conversation ${conversation.id} medical_concern ${hoursEarly.toFixed(1)}h <24h — belum release.`);
+        return { released: false, updatedConversation: conversation };
+      }
     }
-
-    // EXPLICIT GUARD: Legacy & Repeat customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
-    // kembali ke bot — customer ini memang diarahkan ke human handling permanen.
-    // ACTIVE_APPOINTMENT_MANUAL juga dikecualikan: pasien yang menunggu terapis
-    // TIDAK boleh dibalikkan ke bot oleh timer 6 jam (koordinasi operasional CS).
     if (
       conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON ||
       conversation.escalation_reason === 'LEGACY_CUSTOMER_MANUAL' ||
       conversation.escalation_reason === 'EXISTING_PATIENT_MANUAL' ||
       conversation.escalation_reason === ACTIVE_APPOINTMENT_ESCALATION_REASON
     ) {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${conversation.escalation_reason}. Auto-release is DISABLED.`);
-      return { released: false, updatedConversation: conversation };
+      if (hoursEarly < 48) {
+        console.log(`[AUTO-RELEASE SEWA] Conversation ${conversation.id} ${conversation.escalation_reason} ${hoursEarly.toFixed(1)}h <48h — belum release.`);
+        return { released: false, updatedConversation: conversation };
+      }
     }
-
-    // EXPLICIT GUARD: Manual reply via WhatsApp HP atau Takeover CS via Dashboard
-    // TIDAK boleh di-auto-release oleh timer malam/diam — hanya boleh dilepas manual oleh admin via UI/command.
-    const isManualTakeover = 
+    const isManualTakeover =
       conversation.escalation_reason === 'manual_reply' ||
       conversation.escalation_reason === 'manual_takeover' ||
       conversation.escalation_reason === 'admin_takeover' ||
       conversation.escalation_reason === 'admin_manual_reply' ||
       (typeof conversation.escalation_reason === 'string' && conversation.escalation_reason.startsWith('manual_'));
-
     if (isManualTakeover) {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to CS manual action (${conversation.escalation_reason}). Auto-release is DISABLED.`);
-      return { released: false, updatedConversation: conversation };
+      if (hoursEarly < 12) {
+        console.log(`[AUTO-RELEASE SEWA] Conversation ${conversation.id} manual ${hoursEarly.toFixed(1)}h <12h — belum release.`);
+        return { released: false, updatedConversation: conversation };
+      }
     }
 
     const since = new Date(conversation.human_handling_since).getTime();
