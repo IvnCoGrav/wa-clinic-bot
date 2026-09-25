@@ -97,7 +97,10 @@ function getTenantCatalog(tenantId: string = DEFAULT_TENANT_ID): Map<string, Cli
 // Backwards-compat: alias untuk default tenant (dipakai legacy code tanpa tenantId)
 const serviceCatalog: Map<string, ClinicServiceItem> = getTenantCatalog(DEFAULT_TENANT_ID);
 
-// Default data catalog
+// Default data katalog — SEED-ONLY (bukan sumber kebenaran runtime).
+// Sumber kebenaran runtime: tabel `clinic_services` per-tenant via loadServicesFromDb().
+// DEFAULT dipakai hanya saat DB kosong (fresh deploy) atau offline/test fallback.
+// Perubahan harga/nama produksi WAJIB lewat DB/admin API, bukan edit array ini.
 export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     "id": "baby-cukur",
@@ -894,11 +897,25 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     }
 
     // Tidak ada data di DB -> seed dari file/default lalu simpan
-    const source = Array.from(targetCatalog.values());
+    let source: ClinicServiceItem[] = [];
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const filePath = path.join(process.cwd(), 'services_custom.json');
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const fileData = JSON.parse(raw) as ClinicServiceItem[];
+        if (Array.isArray(fileData) && fileData.length > 0) {
+          source = fileData;
+          console.warn(`[SEED] Catalog kosong untuk tenant ${tenantId}; seeding dari file services_custom.json (${source.length} layanan).`);
+        }
+      }
+    } catch {}
     if (source.length === 0) {
-      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${DEFAULT_CLINIC_SERVICES.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
-      DEFAULT_CLINIC_SERVICES.forEach((item) => targetCatalog.set(item.id, item));
+      source = [...DEFAULT_CLINIC_SERVICES];
+      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${source.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
     }
+    source.forEach((item) => targetCatalog.set(item.id, item));
     await saveServicesToDb(tenantId);
   } catch (err) {
     console.warn('[TREATMENT CATALOG] DB unavailable, using file/default:', (err as Error).message);
