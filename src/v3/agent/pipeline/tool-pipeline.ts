@@ -192,9 +192,26 @@ export class ToolExecutionPipeline {
         // cari entitas gazetteer verbatim di teks asli customer dan pakai itu.
         // WAJIB sebelum stale-strip agar prefiks basi tidak mengaburkan cek overlap.
         if (typeof fnArgs.locationText === 'string' && typeof cleanIncomingText === 'string') {
-          const origToks = new Set(cleanIncomingText.toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2));
+          const origLower = cleanIncomingText.toLowerCase();
+          const origToks = new Set(origLower.split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2));
           const locToks = (fnArgs.locationText || '').toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2);
-          const hasOverlap = locToks.some((t: string) => origToks.has(t));
+          // P1-5: hasOverlap hanya untuk token entitas (bukan token generik kak/berapa)
+          // + toleransi typo 1-huruf, agar "wdoro" vs "wedoro" dianggap overlap
+          const genericChat = new Set(['berapa','berapaan','harga','tarif','ongkir','kak','bunda','bund','min','mas','mbak','gan','sis','kakak','ya','kok','sih','dong','aja','saja']);
+          const plausibleOrigToks = Array.from(origToks).filter((t) => t.length >= 4 && !genericChat.has(t));
+          let hasOverlap = false;
+          try {
+            const { isTypoAtMostOne } = require('../../../utils/typo-match');
+            for (const lt of locToks) {
+              for (const ot of plausibleOrigToks) {
+                if (lt === ot) { hasOverlap = true; break; }
+                if (lt.length >= 5 && ot.length >= 5 && isTypoAtMostOne(lt, ot)) { hasOverlap = true; break; }
+              }
+              if (hasOverlap) break;
+            }
+          } catch {
+            hasOverlap = locToks.some((t: string) => (plausibleOrigToks as any).includes(t));
+          }
           if (!hasOverlap && locToks.length > 0) {
             try {
               const { getGazetteerData } = await import('../../../utils/gazetteer');
