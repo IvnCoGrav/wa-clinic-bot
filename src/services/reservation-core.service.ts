@@ -280,26 +280,27 @@ export class ReservationCoreService {
            durationMinutes: durForCheck,
            excludeId: sameDayReservations[0]?.id,
          });
-         if (staffConflicts.length > 0 && source === 'ADMIN_PANEL' && !force) {
-           throw new ReservationConflictError('STAFF_COLLISION', staffConflicts[0]);
-         }
-         if (staffConflicts.length > 0 && source !== 'ADMIN_PANEL') {
-           console.warn(`[RESERVATION CORE] Staff collision tolerated on ${source} path (staff=${assignedStaffId}, kept new/merged record).`);
-         }
+        if (staffConflicts.length > 0 && !force) {
+            throw new ReservationConflictError('STAFF_COLLISION', staffConflicts[0]);
+          }
        }
 
-       if (exactConflicts.length > 0 || customerSameDayActive) {
-         if (source === 'ADMIN_PANEL' && force) {
-           console.log(
-             `[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,
-             `customer=${customerId} date=${bookingDate.toISOString()}`
-           );
-         } else {
-           // Berlaku untuk:
-           // a) ADMIN_PANEL saat customer HANYA punya hold (confirmedSameDay.length === 0 & holdSameDay.length > 0)
-           //    -> Auto-upgrade slot hold milik customer tersebut menjadi confirmed!
-           // b) BOT / WEBHOOK / AGENT -> Idempotent merge ke reservasi pertama hari ini
-           const primary = sameDayReservations[0];
+        // P2-4: kunci sempit (slot+treatment) — hanya merge bila interval tumpang tindih
+        // (exactConflicts), bukan semua same-day. Mencegah booking pagi+sore beda treatment saling timpa.
+        const sameTreatment = Boolean(treatmentDetail && sameDayReservations[0]?.treatment_detail === treatmentDetail);
+        const shouldMerge = exactConflicts.length > 0 && (sameTreatment || !treatmentDetail);
+        if (shouldMerge || (customerSameDayActive && sameTreatment)) {
+          if (source === 'ADMIN_PANEL' && force) {
+            console.log(
+              `[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,
+              `customer=${customerId} date=${bookingDate.toISOString()}`
+            );
+          } else {
+            // Berlaku untuk:
+            // a) ADMIN_PANEL saat customer HANYA punya hold (confirmedSameDay.length === 0 & holdSameDay.length > 0)
+            //    -> Auto-upgrade slot hold milik customer tersebut menjadi confirmed!
+            // b) BOT / WEBHOOK / AGENT -> Idempotent merge hanya bila slot & treatment sama
+            const primary = sameDayReservations[0];
            const duplicates = sameDayReservations.slice(1);
            const targetStatus = status || 'confirmed';
 
