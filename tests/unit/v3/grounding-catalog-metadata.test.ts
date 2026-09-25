@@ -17,7 +17,7 @@ describe('Grounding Metadata Katalog Dinamis (sesi 887216)', () => {
       children: [{ roleLabel: 'Si Kecil', ageMonths: 16, symptoms: ['pilek'] }],
       childProfile: { ageMonths: 16, symptoms: ['pilek'] },
       cartItems: [
-        { name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)', price: 90000, promoPrice: 75000, type: 'PRIMARY', recipientScope: 'CHILD_1' },
+        { name: 'Kala Baby – Pijat Pulih Ceria', price: 100000, promoPrice: 75000, type: 'PRIMARY', recipientScope: 'CHILD_1' },
       ],
     } as any);
     expect(text).toContain('Durasi Resmi: 40 menit');
@@ -25,7 +25,7 @@ describe('Grounding Metadata Katalog Dinamis (sesi 887216)', () => {
     // langsung dari katalog aktif agar test tetap valid bila admin mengubahnya.
     const svc = treatmentCatalogService
       .getAllServices(true)
-      .find((s) => s.name === 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)') as any;
+      .find((s) => s.name === 'Kala Baby – Pijat Pulih Ceria') as any;
     expect(svc?.ageTier?.label).toBeTruthy();
     expect(text).toContain(`Batasan Usia: ${svc.ageTier.label}`);
   });
@@ -35,10 +35,10 @@ describe('Grounding Metadata Katalog Dinamis (sesi 887216)', () => {
       genderGreeting: 'Bunda',
       targetAudience: 'KIDS',
       cartItems: [
-        { name: 'Pijat Kids Pulih Ceria (2 - 4 Tahun)', price: 100000, promoPrice: 85000, type: 'PRIMARY', recipientScope: 'CHILD_1' },
+        { name: 'Kala Kids – Pijat Pulih Ceria', price: 100000, promoPrice: 85000, type: 'PRIMARY', recipientScope: 'CHILD_1' },
       ],
     } as any);
-    expect(text).toContain('Durasi Resmi: 45 menit');
+    expect(text).toContain('Durasi Resmi: 40 menit');
     expect(text).toContain('Batasan Usia: 2 - 4 Tahun');
   });
 });

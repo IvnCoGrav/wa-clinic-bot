@@ -4,18 +4,20 @@ import { parseTreatmentItemsFromRaw } from '../../packages/admin-dashboard/src/u
 
 // Katalog tenant-aware (DB-driven) — harga jujur dari DB, tanpa 60000 karangan
 const CATALOG = [
-  { id: 'baby-massage-ceria', name: 'Pijat Bayi Ceria (Rileksasi)', price: 80000, promoPrice: 70000, category: 'BABY', min_age_months: 0, max_age_months: 24 },
-  { id: 'kids-massage-2-4', name: 'Pijat Kids Ceria (Usia 2-4 th)', price: 90000, promoPrice: 70000, category: 'KIDS', min_age_months: 24, max_age_months: 48 },
+  { id: 'baby-massage-ceria', name: 'Kala Baby – Pijat Ceria', price: 80000, promoPrice: 70000, category: 'BABY', min_age_months: 7, max_age_months: 24 },
+  { id: 'baby-massage-ceria-newborn', name: 'Kala Baby – Pijat Ceria Newborn', price: 80000, promoPrice: 60000, category: 'BABY', min_age_months: 0, max_age_months: 6 },
+  { id: 'kids-massage-2-4', name: 'Kala Kids – Pijat Ceria', price: 85000, promoPrice: 75000, category: 'KIDS', min_age_months: 24, max_age_months: 48 },
 ] as any;
 
 describe('Fase 3 — Dynamic Catalog & Price Resolution (Anti-60000)', () => {
-  it('Pijat Rileksasi untuk 15 bulan → Pijat Bayi Ceria 70000 (usia-aware)', () => {
+  it('Pijat Ceria untuk 15 bulan → harga 70000 dari katalog (usia-aware)', () => {
     const messages = [
-      { direction: 'INBOUND', content: 'Mau Pijat Rileksasi untuk anak 15 bulan' },
+      { direction: 'INBOUND', content: 'Treatment : Pijat Ceria\nUsia Bayi/Anak : 15 bulan\nHari dan tanggal : Kamis, 27 Agustus 2026 jam 16.30-17.00' },
     ];
     const customer = { children: [{ raw_age_text: '15 bulan' }] };
     const out = extractScheduleFromMessages(messages, customer, CATALOG);
-    expect(out.treatmentName).toBe('Pijat Bayi Ceria (Rileksasi)');
+    // Ekstraktor form mengembalikan nama mentah dari form; pencocokan katalog hanya untuk harga
+    expect(out.treatmentName).toBe('Pijat Ceria');
     expect(out.treatmentPrice).toBe(70000);
   });
 
@@ -41,8 +43,8 @@ describe('Fase 3 — Dynamic Catalog & Price Resolution (Anti-60000)', () => {
   });
 
   it('parser dengan katalog → harga DB', () => {
-    const items = parseTreatmentItemsFromRaw('Pijat Bayi Ceria (Rileksasi)', CATALOG);
+    const items = parseTreatmentItemsFromRaw('Kala Baby – Pijat Ceria', CATALOG);
     expect(items[0].price).toBe(70000);
-    expect(items[0].name).toBe('Pijat Bayi Ceria (Rileksasi)');
+    expect(items[0].name).toBe('Kala Baby – Pijat Ceria');
   });
 });
