@@ -51,6 +51,13 @@ const DOMICILE_ATTR_RE =
 const HOMEBASE_EXEMPT_RE = /homebase\s+(kami|klinik)|klinik\s+kami\s+di/i;
 
 /**
+ * D10 — pola tanya-keluhan generik (cermin ASKING_LOCATION_RE D9).
+ * Hanya dicocokkan bila symptomsKnown=true di call-site.
+ */
+export const ASKING_SYMPTOM_RE =
+  /\b(apakah\s+(?:saat\s+ini\s+)?si\s+kecil\s+ada\s+keluhan|boleh\s+(?:di)?bagikan\s+keluhan|ada\s+keluhan\s+apa|keluhan\s+atau\s+kondisi\s+si\s+kecil|apakah\s+ada\s+keluhan\s+tertentu|bagikan\s+keluhan\s+atau\s+kondisi)/i;
+
+/**
  * Pencocokan frasa kata-utuh (sliding window token): "warung" DILARANG
  * membebaskan klaim "waru"; "ke kenjeran berapa ya" membebaskan "kenjeran".
  * Tokenisasi teknis, bukan hafalan kalimat.
@@ -68,6 +75,8 @@ function mentionsPhrase(haystack: string, phrase: string): boolean {
 export interface FactualValidationOptions {
   /** True bila sesi sudah memuat kelurahan/kecamatan customer. */
   locationKnown?: boolean;
+  /** True bila keluhan fisik/symptoms sudah diketahui di sesi atau tool turn ini. */
+  symptomsKnown?: boolean;
   /**
    * Plan regresi Fase 1 (Sesi 580976): pesan customer turn ini. Kecamatan
    * yang DISEBUT CUSTOMER atau DIKEMBALIKAN tool calculate_delivery adalah
@@ -317,6 +326,15 @@ export function validateFactualClaims(
       /\b(rumah(?:nya)?\s+(?:bunda\s+)?di\s+(?:daerah|wilayah|kelurahan|kecamatan|mana)|daerah\s+mana\s+ya\s+bunda|lokasi(?:nya)?\s+di\s+mana|biar\s+sekalian\s+kami\s+pastikan\s+jangkauan|biar\s+sekalian\s+kami\s+bantu\s+cekkan\s+jangkauan)/i;
     if (ASKING_LOCATION_RE.test(reply) && !HOMEBASE_EXEMPT_RE.test(reply)) {
       violations.push('D9_LOCATION_AMNESIA: Lokasi sudah diketahui di sesi, DILARANG bertanya alamat/daerah lagi. Ganti dengan konfirmasi pengecekan jadwal atau tawaran perawatan.');
+    }
+  }
+
+  // D10 — Anti-Amnesia Keluhan: bila keluhan fisik/symptoms SUDAH diketahui
+  // di sesi atau tool turn ini, DILARANG menanyakan keluhan lagi.
+  // Cermin D9 (state-gated, pola generik — bukan hafalan kalimat).
+  if (opts?.symptomsKnown === true) {
+    if (ASKING_SYMPTOM_RE.test(reply)) {
+      violations.push('D10_SYMPTOM_AMNESIA: Keluhan si kecil sudah diketahui di sesi/percakapan, DILARANG menanyakan keluhan/kondisi lagi. Ganti dengan konfirmasi empati atau penawaran perawatan.');
     }
   }
 
