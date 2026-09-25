@@ -222,6 +222,17 @@ vi.mock('../src/db/client', () => {
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
+      // SEC-AUDIT-02: sesi admin kini di DB (hash). Default offline agar
+      // service memakai fallback memori; test jalur-DB memasang double sendiri.
+      adminSession: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
+        deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
       child: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),

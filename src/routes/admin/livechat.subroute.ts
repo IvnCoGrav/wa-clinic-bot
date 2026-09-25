@@ -45,9 +45,10 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * REST Endpoint untuk melihat daftar percakapan yang aktif diserahkan ke Human Agent.
    */
   fastify.get('/api/admin/human-handling-conversations', async (request, reply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
     try {
       const activeHumanHandling = await prisma.conversation.findMany({
-        where: { is_human_handling: true, tenant_id: DEFAULT_TENANT_ID },
+        where: { is_human_handling: true, tenant_id: tenantId },
         include: {
           customer: true,
           messages: {
@@ -86,6 +87,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const offset = Math.max(parseInt(request.query.offset || '0', 10) || 0, 0);
@@ -98,7 +100,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           process.env.NODE_ENV === 'production' && mode === 'all' ? 'real' : mode;
 
         // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik & tanpa filter label)
-        const cacheKey = !search && !label ? `livechat:list:${DEFAULT_TENANT_ID}:${effectiveMode}:${limit}:${offset}` : null;
+        const cacheKey = !search && !label ? `livechat:list:${tenantId}:${effectiveMode}:${limit}:${offset}` : null;
         if (cacheKey) {
           const cached = responseCacheService.get(cacheKey);
           if (cached) {
@@ -109,7 +111,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, effectiveMode, search, label as any);
+        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any);
         const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
@@ -168,9 +170,10 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const limit = Math.min(Math.max(parseInt(String(body.limit || '50'), 10) || 50, 1), 200);
       const offset = Math.max(parseInt(String(body.offset || '0'), 10) || 0, 0);
       const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
 
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-      const result = await wahaHistorySyncService.syncChats(limit, offset, messagesPerChat, DEFAULT_TENANT_ID);
+      const result = await wahaHistorySyncService.syncChats(limit, offset, messagesPerChat, tenantId);
 
       if (!result.success) {
         return reply.status(500).send({ success: false, error: result.error || 'Sync history gagal.' });
@@ -180,7 +183,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LIVE_CHAT_SYNC_HISTORY',
-        targetId: DEFAULT_TENANT_ID,
+        targetId: tenantId,
         payload: { limit, offset, messagesPerChat, syncedChats: result.syncedChats, syncedMessages: result.syncedMessages, totalChats: result.totalChats },
         ipAddress: request.ip,
       });
@@ -203,15 +206,16 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const body = request.body || {};
       const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
 
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-      const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, DEFAULT_TENANT_ID);
+      const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, tenantId);
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LIVE_CHAT_SYNC_FULL_START',
-        targetId: DEFAULT_TENANT_ID,
+        targetId: tenantId,
         payload: { messagesPerChat, started: result.started },
         ipAddress: request.ip,
       });
@@ -226,7 +230,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/live-chat/sync-status', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const status = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+    const status = wahaHistorySyncService.getBackgroundSyncStatus((request as any).tenantId || DEFAULT_TENANT_ID);
     return reply.status(200).send({ success: true, data: status });
   });
 
@@ -236,7 +240,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/live-chat/sync-cancel', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const cancelled = wahaHistorySyncService.stopBackgroundSync(DEFAULT_TENANT_ID);
+    const cancelled = wahaHistorySyncService.stopBackgroundSync((request as any).tenantId || DEFAULT_TENANT_ID);
     return reply.status(200).send({ success: true, cancelled });
   });
 
@@ -248,7 +252,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/live-chat/sync-health', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const activeSync = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const activeSync = wahaHistorySyncService.getBackgroundSyncStatus(tenantId);
     const checkedAt = new Date().toISOString();
     try {
       const driftRows = (await prisma.$queryRaw`
@@ -259,7 +264,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           FROM messages
           GROUP BY conversation_id
         ) sub ON sub.conversation_id = c.id
-        WHERE c.tenant_id = ${DEFAULT_TENANT_ID}
+        WHERE c.tenant_id = ${tenantId}
           AND (c.last_message_at IS NULL OR c.last_message_at != sub.latest)
       `) as Array<{ count: bigint }>;
       const missingRows = (await prisma.$queryRaw`
@@ -269,7 +274,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           COUNT(*) FILTER (WHERE m.direction = 'OUTBOUND') AS outbound
         FROM messages m
         JOIN conversations c ON c.id = m.conversation_id
-        WHERE c.tenant_id = ${DEFAULT_TENANT_ID}
+        WHERE c.tenant_id = ${tenantId}
           AND m.wa_message_id IS NULL
       `) as Array<{ total: bigint; inbound: bigint; outbound: bigint }>;
       const driftsFound = Number(driftRows?.[0]?.count ?? 0);
@@ -335,13 +340,14 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       reply
     ) => {
       const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
         const focusMessageId = request.query.focusMessageId?.trim() || undefined;
         const { messages, hasMore } = await liveChatService.getConversationMessagesPaged(
           id,
-          DEFAULT_TENANT_ID,
+          tenantId,
           limit,
           before,
           focusMessageId
@@ -395,7 +401,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         thumbB64,
         mimeType,
         fileName,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: (request as any).tenantId || DEFAULT_TENANT_ID,
         adminName,
         acknowledgeOutsideWindow,
         replyToMessageId,
@@ -680,16 +686,18 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/conversation/:id/release',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       let restoredState = 'INITIAL';
       try {
         let existing: any = null;
         try {
-          existing = await prisma.conversation.findUnique({ where: { id } });
+          // SEC-AUDIT-07: scope tenant pada lookup (anti IDOR lintas-tenant).
+          existing = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
         } catch {
           existing = null;
         }
         if (!existing) {
-          existing = await conversationService.getConversationById(id, DEFAULT_TENANT_ID);
+          existing = await conversationService.getConversationById(id, tenantId);
         }
         if (!existing) {
           return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
@@ -729,7 +737,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
               data: { is_hold_labeled: false },
             });
             const holdLabel = await prisma.label.findFirst({
-              where: { tenant_id: DEFAULT_TENANT_ID, name: { equals: 'Hold', mode: 'insensitive' } },
+              where: { tenant_id: tenantId, name: { equals: 'Hold', mode: 'insensitive' } },
             });
             if (holdLabel) {
               await prisma.customerLabel.deleteMany({
@@ -747,7 +755,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         getLiveChatHub()
           .publish({
             type: 'conversation.updated',
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             payload: buildConversationUpdatedPayload(updated),
           })
           .catch(() => {});
@@ -767,7 +775,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
               humanHandlingSince: null,
               escalationReason: null,
             },
-            DEFAULT_TENANT_ID
+            tenantId
           );
         } catch (memErr: any) {
           console.warn('[ADMIN RELEASE] Failed to update in-memory conversation:', memErr.message);
@@ -787,15 +795,17 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   const handleTakeoverRoute = async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = request.params;
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
     try {
       let existing: any = null;
       try {
-        existing = await prisma.conversation.findUnique({ where: { id } });
+        // SEC-AUDIT-07: scope tenant pada lookup (anti IDOR lintas-tenant).
+        existing = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
       } catch {
         existing = null;
       }
       if (!existing) {
-        existing = await conversationService.getConversationById(id, DEFAULT_TENANT_ID);
+        existing = await conversationService.getConversationById(id, tenantId);
       }
       if (!existing) {
         return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
@@ -834,7 +844,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
             escalationReason: 'manual_takeover',
             previousState: existing.current_state || 'INITIAL',
           },
-          DEFAULT_TENANT_ID
+          tenantId
         );
       }
 
@@ -868,7 +878,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       getLiveChatHub()
         .publish({
           type: 'conversation.updated',
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           payload: buildConversationUpdatedPayload(updated),
         })
         .catch(() => {});
@@ -895,13 +905,14 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const customer = await customerService.getCustomerById(id, tenantId);
         if (!customer) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         }
 
         const { resolveGatewayForTenant } = await import('../../integrations/whatsapp/factory');
-        const gateway = await resolveGatewayForTenant(DEFAULT_TENANT_ID);
+        const gateway = await resolveGatewayForTenant(tenantId);
         let profilePictureUrl: string | null = null;
         if (gateway && typeof gateway.getProfilePicture === 'function') {
           profilePictureUrl = await gateway.getProfilePicture(customer.phone);
@@ -930,8 +941,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations/:id/suggest-reply',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
-        const draftText = await liveChatService.generateAiSuggestion(id, DEFAULT_TENANT_ID);
+        const draftText = await liveChatService.generateAiSuggestion(id, tenantId);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'admin',
@@ -940,7 +952,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { conversationId: id },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(200).send({

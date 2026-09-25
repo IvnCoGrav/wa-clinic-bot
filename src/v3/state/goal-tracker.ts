@@ -3,7 +3,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { CartManager } from './cart-manager';
 import { PatientProfileExtractor } from './patient-extractor';
-import { isAskedLocationRecently } from './conversation-summarizer';
+import { isAskedLocationRecently } from './location-helpers';
 import { getCoverageCities } from '../../config/coverage';
 import type {
   LocationState,

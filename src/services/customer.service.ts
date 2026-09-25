@@ -120,6 +120,16 @@ export class CustomerService {
     let customer = await repo.findByPhone(phone, tenantId);
     let isNewlyCreated = false;
 
+    // SEC-AUDIT-14: customer yang sebelumnya di-arsipkan (/reset) akan di-revive
+    // saat nomor yang sama mengirim pesan baru (soft-delete, bukan data hilang).
+    if (customer && (customer as any).deleted_at) {
+      try {
+        customer = await repo.update(customer.id, { deleted_at: null, status: 'active' } as any);
+      } catch {
+        // DB offline → tetap pakai objek yang ada.
+      }
+    }
+
     if (!customer) {
       // Skema: @@unique([tenant_id, phone]) — nomor boleh ada di tenant berbeda.
       // Create atomic; bila race (P2002) → re-read dalam tenant (bukan global).
@@ -1167,7 +1177,8 @@ export class CustomerService {
     const sortOrder: 'asc' | 'desc' = options?.sortOrder === 'asc' ? 'asc' : 'desc';
 
     try {
-      const where: any = { tenant_id: tenantId, is_sandbox_test: false };
+      // SEC-AUDIT-14: customer yang di-arsipkan via /reset tidak muncul di daftar.
+      const where: any = { tenant_id: tenantId, is_sandbox_test: false, deleted_at: null };
       if (mqlOnly || segment === 'mql') {
         where.is_mql = true;
       }

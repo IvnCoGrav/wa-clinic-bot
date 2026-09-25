@@ -80,7 +80,7 @@ describe('CommandService — Slash Commands', () => {
     expect(otherResult).toBeNull();
   });
 
-  it('2. Balasan YA setelah pending → hard wipe customer + recreate untuk balasan konfirmasi', async () => {
+  it('2. Balasan YA setelah pending → soft-delete (arsip) customer + conversation baru untuk balasan', async () => {
     const phone = '6281000000011';
     const customer = makeCustomer(phone);
     const conversation = makeConversation(customer.id);
@@ -90,12 +90,13 @@ describe('CommandService — Slash Commands', () => {
     const result = await commandService.tryHandle({ customer, conversation, incomingMessage: { text: { body: 'ya' } } } as any, tenantId);
 
     expect(result).not.toBeNull();
-    expect(result!.replyText).toContain('dihapus');
-    expect(prisma.customer.delete).toHaveBeenCalledWith({ where: { id: customer.id } });
-    expect(result!.conversationId).not.toBe(conversation.id); // conversation baru hasil recreate
-
-    // Data lama tidak lagi ditemukan (memory store sudah dibersihkan).
-    expect(await customerService.getCustomerById(customer.id, tenantId)).toBeNull();
+    // SEC-AUDIT-14: arsip, bukan hard delete.
+    expect(result!.replyText).toMatch(/arsip|diarsipkan|dipulihkan/i);
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: customer.id }, data: expect.objectContaining({ deleted_at: expect.any(Date) }) })
+    );
+    expect(prisma.customer.delete).not.toHaveBeenCalled();
+    expect(result!.conversationId).not.toBe(conversation.id); // conversation baru
   });
 
   it('3. Pesan non-konfirmasi saat pending → batal, diproses sebagai pesan biasa (null)', async () => {
@@ -126,16 +127,28 @@ describe('CommandService — Slash Commands', () => {
     }
   });
 
-  it('5. /state → tampilkan info internal percakapan', async () => {
+  it('5. /state → tampilkan info internal percakapan (non-produksi)', async () => {
     const customer = makeCustomer('6281000000041');
     const conversation = makeConversation(customer.id);
 
     const result = await commandService.tryHandle({ customer, conversation, incomingMessage: { text: { body: ' /STATE ' } } } as any, tenantId);
-
     expect(result).not.toBeNull();
     expect(result!.replyText).toContain('AWAITING_INTEREST');
     expect(result!.replyText).toContain('LOCATION_CONFIRMED');
     expect(result!.conversationId).toBe(conversation.id);
+  });
+
+  it('5b. /state di produksi untuk non-admin → tidak membocorkan state internal', async () => {
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const customer = makeCustomer('6281000000042');
+      const conversation = makeConversation(customer.id);
+      const result = await commandService.tryHandle({ customer, conversation, incomingMessage: { text: { body: '/state' } } } as any, tenantId);
+      expect(result).toBeNull();
+    } finally {
+      process.env.NODE_ENV = prev;
+    }
   });
 
   it('6. /mulai → reset state ke INITIAL + balasan greeting', async () => {

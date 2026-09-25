@@ -108,7 +108,11 @@ export class AlertService {
         const { prisma } = await import('../db/client');
         const tenant = await prisma.tenant.findUnique({ where: { id: payload.tenantId } });
         if (tenant) {
-          if (!botToken && tenant.telegram_bot_token) botToken = tenant.telegram_bot_token;
+          if (!botToken && tenant.telegram_bot_token) {
+            // SEC-AUDIT-11: decrypt token terenkripsi (fallback plaintext legacy).
+            const { decryptSecretCompat } = await import('../utils/encryption');
+            botToken = decryptSecretCompat(tenant.telegram_bot_token);
+          }
           if (!chatId && tenant.telegram_chat_id) chatId = tenant.telegram_chat_id;
 
           if (payload.type === AlertType.DAILY_OPS_REPORT && tenant.telegram_topic_daily_report) {

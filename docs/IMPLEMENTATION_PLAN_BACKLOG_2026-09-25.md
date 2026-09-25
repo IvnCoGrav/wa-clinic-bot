@@ -117,3 +117,68 @@
 3. Gate per fase: suite tersentuh + `npm run build` (+ `vite build` bila sentuh dashboard).
 4. Manual: skenario WhatsApp nyata per fase (bukan kalimat hafalan tunggal).
 5. Push live hanya bila diminta eksplisit per fase; DB live via runbook + backup `SELECT` dulu.
+
+---
+
+## §8. SISA EKSEKUSI — Audit Mikro Sept 2026 (dicatat 2026-09-25 sore, BELUM dieksekusi)
+
+> Konteks: batch 2026-09-25 menutup ~30 file test; suite kini **3446 passed / 2 failed / 28 skipped (3476)**.
+> Sisa 2 gagal BLOCKED penulis paralel (lihat §8.0). Jangan jalankan §8 tanpa membereskan §8.0 dulu.
+
+### §8.0 BLOCKED — Penulis paralel (WAJIB beres dulu)
+- `tests/unit/v3-persona-rules.test.ts` Test 2 (`'30 km'` hilang) & Test 7 (eskalasi `CS|admin` hilang).
+- Akar: rewrite `trimToMaxSentences` + `stripInternalInstructionArtifacts` di `src/v3/guardrails/sanitizer.ts` oleh proses lain (LastWrite 15:18 vs batch 13:36). Bukan regresi batch katalog.
+- Aksi: pastikan tak ada 2 agen menulis bersamaan (1 agen = 1 git worktree + partisi file), lalu re-run file ini; bila masih merah, perbaiki trimmer (`ends` ordering) — JANGAN tambal test.
+
+### §8.1 Fase A — Unifikasi Katalog (fondasional, unblock semua drift)
+- `src/services/treatment-catalog.service.ts:101` `DEFAULT_CLINIC_SERVICES` → seed-only sudah; **hapus `saveServices()` sinkron ke file** (`:819-832`) atau jadikan export-only.
+- 3 copy katalog: seed TS vs `services_custom.json` vs `packages/admin-dashboard/src/utils/treatmentParser.ts:14` `DEFAULT_CLINIC_SERVICES_FALLBACK`. Rencana: fallback dashboard fetch `/api/admin/clinic-services` (jangan hardcode array), atau generate file dari DB saat build.
+- Alias legacy: token `juara` (dari "Lahap Juara" lama) tak match fuzzy ≥2 token di `cart-manager.ts`; tambah peta alias terpusat di `src/v3/domain` (bukan per-file).
+- Ekuivalensi semantik merge-key P2-4 (`src/services/reservation-core.service.ts:288-292`): ganti `treatment_detail ===` string-equality dengan hash kanonik katalog (`treatmentCatalogService.matchCatalogItem` → id) agar "Pijat Rileksasi" ≈ "Kala Baby – Pijat Ceria".
+- Acceptance: ubah 1 layanan via dashboard → tidak ada drift TS/file/test; `grep` nama legacy di `src/` = 0.
+- Gate: `npm run build` + suite katalog/cart/reservation hijau.
+
+### §8.2 Fase B — Sisa Silent Fallback (data-loss prod)
+- 72 hit `memory*` sisa; exemplar sudah 2 (`customer.service.ts:8-15,56-65,258-293`). Pola per-service: guard `isTestRuntime()` → prod `throw` + log.
+- Prioritas: `src/services/conversation.service.ts:8` (`memoryConversations`), `src/services/capi.service.ts:812`, `src/services/customer.service.ts:1311` (`listCustomersWithLtvAndAdClick`), `src/services/follow-up.service.ts`.
+- Acceptance: `rg "Memory fallback|memoryCustomers|memoryReservations|memoryConversations" src/` = 0 di jalur prod (kecuali helper test).
+- Gate: suite services + `npm run build`.
+
+### §8.3 Fase C — Bloat Skema `Customer` (`pending_*`)
+- `prisma/schema.prisma:76-95` sudah `// DEPRECATED`. Langkah: (1) dual-read `session_data.pendingLocation`; (2) skrip backfill idempoten; (3) migrasi drop kolom.
+- Sentuh: `src/services/customer.service.ts:316-364` (`updateCustomerPendingLocation`), `promotePendingLocation`, `conversation.service.ts` session_data.
+- **Confirmation Gate** (migrasi destruktif): butuh approval + backup sebelum drop.
+- Acceptance: `prisma migrate diff` empty setelah dual-read; restart server tidak kehilangan pending lokasi.
+
+### §8.4 Fase D — Putus 22 Sirkular + 329 `await import`
+- `madge --circular src` = 22. Seam baru `src/types/service-contracts.ts` + `src/types/whatsapp-contracts.ts` (port interface untuk `waha/client ↔ factory ↔ waba/waha.driver ↔ whatsapp-provider`, `customer ↔ capi`, `conversation/message ↔ waha`).
+- `src/state-machine/machine.ts:32-552` (27 `await import`) → static setelah siklus putus; verifikasi TDZ per modul.
+- **Confirmation Gate**: DI wiring `app.ts` + semua caller `stateMachine.processMessage`.
+- Acceptance: `madge` turun per-PR, `tsc` hijau tanpa "Cannot access before initialization".
+
+### §8.5 Fase E — Dekomposisi God Files (blast radius UI, DB-safe)
+- Frontend (`packages/admin-dashboard/src`): `pages/tenant/LiveChatMonitor.tsx:6040` → `useLiveChatSse.ts` + `LiveChatSidebar` + `LiveChatMessageList` + `LiveChatComposer`; lalu `pages/staff/StaffToday.tsx:5278`, `components/calendar/CreateReservationModal.tsx:2911`.
+- Backend: `src/routes/admin/reservations.subroute.ts:2995` (SLOTS `:117`, CAPI, cache, parser → service), `settings.subroute.ts:2076`, `src/routes/webhook.route.ts:1474`.
+- Aturan: reusability-first; extract hook dulu; tiap pecahan <500 baris; gate `vite build` (dashboard) / `npm run build` (root) per pecahan.
+- Acceptance: tidak ada page >800 baris / route >500 baris.
+
+### §8.6 Fase F — State Machine + Atomic Tool Routing
+- Split-brain: `src/state-machine/machine.ts:552` (`ConversationState` V2) vs `GoalTracker.session_data` V3. Jadikan `V3AgentRunner` owner dialog tunggal; guard pesan → Fastify pre-middleware (`src/state-machine/conversation-gates.ts`).
+- `parallel_tool_calls:false` di Call 1 Router (**belum ada di `src/` sama sekali**) + physical tool masking `save_reservation` hingga komitmen user.
+- Acceptance: 1 tool/turn di `logs/llm-*.jsonl`; `current_state` read-only legacy.
+
+### §8.7 Fase G — Dead Code
+- Hapus `src/config/service-areas.ts` (0 importer). Gabung `src/services/tenant-html.service.ts` → `html-sanitizer.ts` + update `src/routes/landing.route.ts:53`. Arsip `scripts/` (135 file) ke `scripts/_archive/`. Daftarkan/pindahkan `src/cli/reset-customer.ts`. Evaluasi 70+ dead export.
+- Acceptance: `rg` path mati = 0; build hijau.
+
+### §8.8 Fase H — Deploy/DB (server, bukan lokal)
+- `npx prisma migrate deploy` untuk `20260926000000_add_newborn_pulih_therapy` (+ `20260926000001`/`0002` dari #129 siber).
+- **Konfirmasi Bidan**: harga/tier `baby-massage-pulih-ceria-newborn` (0-6 bln, 100/75rb) — data klinis, bukan keputusan kode.
+- Rebuild `packages/admin-dashboard` dist + restart bot.
+- Acceptance: `clinic_services` punya row newborn-pulih; `prisma migrate status` up-to-date.
+
+### §8.9 Fase I — Lintas-cabang
+- Sisa 14 temuan `docs/CYBERSECURITY_AUDIT_REPORT.md` (#129 Fase 3+).
+- 30+ handler `settings.subroute.ts` masih `DEFAULT_TENANT_ID` (`persona`/`deliveryTiers`/`telegram`/`ai-models`/`tenant`) — Confirmation Gate.
+
+**Urutan disarankan:** §8.0 → §8.1 (unblock drift) → §8.2/§8.3 (data-loss) → §8.7 (dead code, cepat) → §8.4 → §8.6 → §8.5 (paling besar) → §8.8/§8.9.

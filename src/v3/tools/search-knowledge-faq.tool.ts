@@ -79,7 +79,7 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
         success: true,
         query,
         chunks: [],
-        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, berikan penjelasan edukatif komplementer umum yang ramah, solutif, dan profesional berdasarkan prinsip kebidanan, serta gunakan informasi resmi dari katalog layanan bila relevan. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer. DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response untuk pertanyaan teknis/persiapan/SOP).`,
+        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, berikan penjelasan edukatif komplementer umum yang ramah, solutif, dan profesional berdasarkan prinsip kebidanan, serta gunakan informasi resmi dari katalog layanan via tool get_catalog_and_price bila relevan. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer. DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response untuk pertanyaan teknis/persiapan/SOP).`,
       };
     }
 

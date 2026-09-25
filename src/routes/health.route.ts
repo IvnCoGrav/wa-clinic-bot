@@ -30,7 +30,10 @@ export async function healthRoutes(fastify: FastifyInstance) {
       await prisma.$queryRaw`SELECT 1`;
       checks.database = 'CONNECTED';
     } catch (err: any) {
-      checks.database = `FAILED: ${err.message}`;
+      // SEC-AUDIT-16: pesan error mentah (host/port/stack) hanya ke log server,
+      // klien publik menerima status generik.
+      console.error('[READY CHECK] Database check failed:', err?.message);
+      checks.database = 'FAILED: Database unavailable';
       isHealthy = false;
     }
 
@@ -42,7 +45,8 @@ export async function healthRoutes(fastify: FastifyInstance) {
         isHealthy = false;
       }
     } catch (err: any) {
-      checks.waha = `FAILED: ${err.message}`;
+      console.error('[READY CHECK] WAHA check failed:', err?.message);
+      checks.waha = 'FAILED: WAHA unavailable';
       isHealthy = false;
     }
 

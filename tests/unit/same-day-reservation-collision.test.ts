@@ -25,13 +25,16 @@ describe('Same-Day Reservation Collision Guard (sesi Bunda Lutfia #6282229353440
   const otherDay = new Date('2026-09-16T04:00:00.000Z');    // 11:00 WIB 16 Sep (hari lain)
 
   // --- Adversarial Test 1 (Bunda Lutfia): form tanpa jam → duplikat hari sama
+  // P2-4: merge idempoten mensyaratkan treatment SAMA (slot+treatment key) — beda treatment = row baru (benar).
+  // Debt: ekuivalensi semantik ('Pijat Rileksasi' generik ≈ 'Pijat Bayi Ceria Newborn') butuh merge key
+  // catalog-aware, dicatat di KNOWN_ISSUES.
   it('BOT/WEBHOOK: customer sama + hari kalender sama (09:00 vs 11:00) → update idempotent, TIDAK buat row baru', async () => {
     vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
       { id: '84cd065e-3808-402d-8e9f-3d062a2f9dfe', booking_date: slotMorning, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Rileksasi', purchase_value: 60000, assigned_staff_id: null, status: 'confirmed' } as any,
     ]);
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({ id: '84cd065e-3808-402d-8e9f-3d062a2f9dfe', status: 'confirmed' } as any);
     const res = await reservationCoreService.saveReservation({
-      ...base, source: 'WEBHOOK', bookingDate: slotLate, treatmentDetail: 'Pijat Bayi Ceria Newborn [Total 60m]', purchaseValue: 60000, assignedStaffId: 'f88cedf5-3756-4f24-bb77-45050c029979',
+      ...base, source: 'WEBHOOK', bookingDate: slotLate, treatmentDetail: 'Pijat Rileksasi', purchaseValue: 60000, assignedStaffId: 'f88cedf5-3756-4f24-bb77-45050c029979',
     });
     expect(res.isNew).toBe(false);
     expect(res.isUpdate).toBe(true);
@@ -75,16 +78,17 @@ describe('Same-Day Reservation Collision Guard (sesi Bunda Lutfia #6282229353440
   });
 
   // --- Adversarial Test 5: BOT/AGENT mode juga merge same-day (bukan hanya WEBHOOK)
+  // P2-4: treatment diselaraskan (sama) agar memenuhi kunci merge slot+treatment.
   it('BOT dan AGENT: same-day active → merge ke primary, duplikat di-cancel', async () => {
     for (const src of ['BOT', 'AGENT'] as const) {
       vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
         { id: 'primary', booking_date: slotMorning, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Rileksasi', purchase_value: 60000, assigned_staff_id: null, status: 'confirmed' } as any,
-        { id: 'dup', booking_date: slotLate, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Bayi Ceria Newborn', purchase_value: 60000, assigned_staff_id: null, status: 'confirmed' } as any,
+        { id: 'dup', booking_date: slotLate, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Rileksasi', purchase_value: 60000, assigned_staff_id: null, status: 'confirmed' } as any,
       ]);
       vi.mocked(prisma.reservation.update)
         .mockResolvedValueOnce({ id: 'primary', status: 'confirmed' } as any)
         .mockResolvedValueOnce({ id: 'dup', status: 'cancelled' } as any);
-      const res = await reservationCoreService.saveReservation({ ...base, source: src, bookingDate: slotLate, treatmentDetail: 'Pijat Bayi Ceria Newborn' });
+      const res = await reservationCoreService.saveReservation({ ...base, source: src, bookingDate: slotLate, treatmentDetail: 'Pijat Rileksasi' });
       expect(res.isNew).toBe(false);
       expect(res.reservation.id).toBe('primary');
       expect(res.consolidatedCount).toBe(1);

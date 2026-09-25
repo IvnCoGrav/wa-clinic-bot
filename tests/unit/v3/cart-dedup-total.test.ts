@@ -34,11 +34,16 @@ describe('Cart Bundle Dedup (audit 315036)', () => {
   });
 
   it('inflasi warisan DB ikut bersih saat seed (bundle + parsial tersimpan)', () => {
+    // Tahan rebrand Kala: seed pakai nama katalog kini (parsial = komponen bundle aktif).
+    const partial = treatmentCatalogService.getServiceById('moms-paket-laktasi')?.name
+      ?? 'Kala Mom – Laktasi & Breast Care';
+    const bundle = treatmentCatalogService.getServiceById('bundle-laktasi-oksitosin')?.name
+      ?? 'Kala Bundle – Laktasi Booster (Breast + Oksitosin Punggung)';
     const cart = GoalTracker.syncCartItems(
       {
         cartItems: [
-          { name: 'Pijat Laktasi / Breast Care Massage', price: 110000, promoPrice: 85000, type: 'PRIMARY', category: 'MOMS', recipientScope: 'MOMS' },
-          { name: 'Breast + Oksitosin Fullbody Massage', price: 250000, promoPrice: 155000, type: 'SERVICE', category: 'BUNDLE', recipientScope: 'GENERAL' },
+          { name: partial, price: 110000, promoPrice: 85000, type: 'PRIMARY', category: 'MOMS', recipientScope: 'MOMS' },
+          { name: bundle, price: 200000, promoPrice: 140000, type: 'SERVICE', category: 'BUNDLE', recipientScope: 'GENERAL' },
         ],
       } as any,
       [],
@@ -49,15 +54,17 @@ describe('Cart Bundle Dedup (audit 315036)', () => {
   });
 
   it('cukur+terapi bundle menyerap ceria se-famili (jalur anak), moksa tetap ikut', () => {
+    // Tahan rebrand Kala: bundle 'Cukur + Pijat Terapi' nonaktif → pakai 'Selapan – Cukur + Pijat Pulih Ceria' aktif;
+    // parsial yang diserap = cukur (komponen bundle), moksa aditif.
     const history = [
-      { role: 'user', content: 'pijat bayi ceria untuk si kecil' },
+      { role: 'user', content: 'cukur rambut bayi untuk si kecil' },
       { role: 'user', content: 'tambah sinar moksa juga' },
-      { role: 'user', content: 'jadi ambil cukur + pijat terapi saja untuk si kecil' },
+      { role: 'user', content: 'jadi ambil cukur + pijat pulih ceria saja untuk si kecil' },
     ];
     const cart = GoalTracker.syncCartItems({ cartItems: [] } as any, history, catalog());
     const names = cart.map((c) => c.name);
-    expect(names.some((n) => n.includes('Cukur + Pijat Terapi'))).toBe(true);
-    expect(names.some((n) => n === 'Pijat Bayi Ceria (Rileksasi)')).toBe(false);
+    expect(names.some((n) => n.includes('Cukur + Pijat Pulih Ceria'))).toBe(true);
+    expect(names.some((n) => n === 'Kala Baby – Cukur Rambut')).toBe(false);
     // Add-on moksa tidak terserap (akumulatif)
     expect(names.some((n) => n.toLowerCase().includes('moksa'))).toBe(true);
   });
@@ -65,12 +72,12 @@ describe('Cart Bundle Dedup (audit 315036)', () => {
   it('jalur ibu terpisah: bundle bayi TIDAK menyerap oksitosin MOMS', () => {
     const history = [
       { role: 'user', content: 'oksitosin massage buat saya bunda sendiri' },
-      { role: 'user', content: 'cukur + pijat terapi untuk si kecil' },
+      { role: 'user', content: 'cukur + pijat pulih ceria saja untuk si kecil' },
     ];
     const cart = GoalTracker.syncCartItems({ cartItems: [] } as any, history, catalog());
     const names = cart.map((c) => c.name);
     expect(names.some((n) => n.toLowerCase().includes('oksitosin'))).toBe(true);
-    expect(names.some((n) => n.includes('Cukur + Pijat Terapi'))).toBe(true);
+    expect(names.some((n) => n.includes('Cukur + Pijat Pulih Ceria'))).toBe(true);
   });
 });
 

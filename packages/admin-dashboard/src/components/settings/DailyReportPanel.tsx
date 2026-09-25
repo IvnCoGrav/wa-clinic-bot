@@ -25,6 +25,7 @@ export const DailyReportPanel: React.FC = () => {
   const [enabled, setEnabled] = useState(false);
   const [reportHour, setReportHour] = useState(7);
   const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramBotTokenConfigured, setTelegramBotTokenConfigured] = useState(false);
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramPairingToken, setTelegramPairingToken] = useState('');
   const [telegramDirectLink, setTelegramDirectLink] = useState('');
@@ -51,7 +52,8 @@ export const DailyReportPanel: React.FC = () => {
         data: {
           enabled: boolean;
           reportHour: number;
-          telegramBotToken: string;
+          telegramBotToken?: string;
+          telegramBotTokenConfigured?: boolean;
           telegramChatId: string;
           telegramPairingToken?: string;
           telegramDirectLink?: string;
@@ -67,6 +69,7 @@ export const DailyReportPanel: React.FC = () => {
         setEnabled(res.data.enabled);
         setReportHour(res.data.reportHour);
         setTelegramBotToken(res.data.telegramBotToken || '');
+        setTelegramBotTokenConfigured(Boolean(res.data.telegramBotTokenConfigured));
         setTelegramChatId(res.data.telegramChatId || '');
         setTelegramPairingToken(res.data.telegramPairingToken || '');
         setTelegramDirectLink(res.data.telegramDirectLink || '');
@@ -349,7 +352,7 @@ export const DailyReportPanel: React.FC = () => {
                     type="password"
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
-                    placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyZ..."
+                    placeholder={telegramBotTokenConfigured ? '•••••• tersimpan — biarkan kosong untuk mempertahankan' : '123456789:ABCdefGHIjklMNOpqrsTUVwxyZ...'}
                     className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                   <span className="text-[10px] text-[#8696a0] block">

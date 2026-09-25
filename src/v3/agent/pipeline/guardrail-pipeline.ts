@@ -336,7 +336,7 @@ export class GuardrailPipeline {
     // vs output tool turn ini. Gagal → re-prompt bersih 1x → masih gagal →
     // SUNYI TOTAL + eskalasi, KECUALI murni D6 (halu domisili) → template
     // netral tanya domisili (keputusan) + tandai unresolvedFaq untuk kurasi.
-    const { validateFactualClaims } = await import('../../guardrails/factual-claim-validator');
+    const { validateFactualClaims, stripAmnesiaQuestions } = await import('../../guardrails/factual-claim-validator');
     const locationKnown = !!(session?.location?.kelurahan || (session?.location as any)?.kecamatan);
     // D10 (sesi 796217): keluhan diketahui dari profil sesi ATAU args tool turn ini.
     // Cermin shape summarizer (childProfile/children/momProfile) — BUKAN input.session.symptoms.
@@ -346,6 +346,13 @@ export class GuardrailPipeline {
       ((session as any)?.momProfile?.complaints || []).length > 0 ||
       executedTools.some((t) => Array.isArray((t as any)?.args?.symptoms) && (t as any).args.symptoms.length > 0)
     );
+    // Fase 2 (audit 25-09): gerbang deterministik anti-amnesia. Reprompt kognitif
+    // hilir (usia/jam/shareloc/pronoun) menghasilkan draf BARU yang tak pernah
+    // divalidasi D9/D10 — model bisa menyisipkan tanya keluhan/lokasi yang sudah
+    // diketahui (kaset rusak). Gerbang ini membuang kalimat tersebut di level
+    // kalimat, otoritas pola tunggal dari validator (information hiding).
+    const gateAmnesia = (text: string): string =>
+      stripAmnesiaQuestions(text, { locationKnown, symptomsKnown });
     // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
     // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
     // deterministik trauma-jatuh/vaksin pada pesan masuk. Dihitung dari
@@ -512,9 +519,9 @@ export class GuardrailPipeline {
         input.addUsage((pronounRetryData as any)?.usage);
         const pronounRetryText = (pronounRetryData?.choices?.[0]?.message?.content || '').trim();
         if (pronounRetryText) {
-          const pronounCleaned = OutputSanitizer.cleanOutboundReply(pronounRetryText, incomingText, isFollowUp, sanitizeOpts);
+          const pronounCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(pronounRetryText, incomingText, isFollowUp, sanitizeOpts));
           const pronounRecheck = detectFirstPersonSlip(pronounCleaned, { isFollowUp });
-          if (pronounRecheck.isValid) {
+          if (pronounCleaned.trim() && pronounRecheck.isValid) {
             finalReply = pronounCleaned;
             console.log(JSON.stringify({ event: 'PRONOUN_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
             await input.recordCall({
@@ -613,8 +620,8 @@ export class GuardrailPipeline {
         repromptCount++;
         const ageRetryText = (ageRetryData?.choices?.[0]?.message?.content || '').trim();
         if (ageRetryText) {
-          const ageCleaned = OutputSanitizer.cleanOutboundReply(ageRetryText, incomingText, isFollowUp, sanitizeOpts);
-          if (!hasAgeQuestion(ageCleaned)) {
+          const ageCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(ageRetryText, incomingText, isFollowUp, sanitizeOpts));
+          if (ageCleaned.trim() && !hasAgeQuestion(ageCleaned)) {
             finalReply = ageCleaned;
             ageRepromptOk = true;
             console.log(JSON.stringify({ event: 'AGE_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
@@ -653,8 +660,8 @@ export class GuardrailPipeline {
         repromptCount++;
         const timeRetryText = (timeRetryData?.choices?.[0]?.message?.content || '').trim();
         if (timeRetryText) {
-          const timeCleaned = OutputSanitizer.cleanOutboundReply(timeRetryText, incomingText, isFollowUp, sanitizeOpts);
-          if (!detectVisitTimeQuestion(timeCleaned)) {
+          const timeCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(timeRetryText, incomingText, isFollowUp, sanitizeOpts));
+          if (timeCleaned.trim() && !detectVisitTimeQuestion(timeCleaned)) {
             finalReply = timeCleaned;
             timeRepromptOk = true;
             console.log(JSON.stringify({ event: 'VISIT_TIME_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
@@ -719,8 +726,8 @@ export class GuardrailPipeline {
         repromptCount++;
         const locRetryText = (locRetryData?.choices?.[0]?.message?.content || '').trim();
         if (locRetryText) {
-          const locCleaned = OutputSanitizer.cleanOutboundReply(locRetryText, incomingText, isFollowUp, sanitizeOpts);
-          if (!hasShareLocationSolicitation(locCleaned)) {
+          const locCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(locRetryText, incomingText, isFollowUp, sanitizeOpts));
+          if (locCleaned.trim() && !hasShareLocationSolicitation(locCleaned)) {
             finalReply = locCleaned;
             locRepromptOk = true;
             console.log(JSON.stringify({ event: 'SHARELOC_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));

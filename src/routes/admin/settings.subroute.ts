@@ -36,6 +36,10 @@ function buildProvidersStatus(activeProvider: string) {
   };
 }
 
+function resolveTenantId(request: FastifyRequest): string {
+  return (request as any).tenantId || DEFAULT_TENANT_ID;
+}
+
 export async function settingsAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/settings/mql
@@ -43,7 +47,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/settings/mql', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { customerService } = await import('../../services/customer.service');
-      const settings = await customerService.getMqlSettings(DEFAULT_TENANT_ID);
+      const settings = await customerService.getMqlSettings(resolveTenantId(request));
       return reply.status(200).send({ success: true, data: settings });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
@@ -68,7 +72,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const { customerService } = await import('../../services/customer.service');
-        const updated = await customerService.updateMqlSettings(DEFAULT_TENANT_ID, {
+        const updated = await customerService.updateMqlSettings(resolveTenantId(request), {
           mqlThresholdBubbles,
           mqlAutoLeadEnabled,
         });
@@ -91,12 +95,12 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/settings/media
    */
-  fastify.get('/api/admin/settings/media', async (_request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/settings/media', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { mediaService } = await import('../../services/media.service');
       let tenantRetention: number | null = null;
       try {
-        const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        const tenant = await prisma.tenant.findUnique({ where: { id: resolveTenantId(request) } });
         tenantRetention = tenant?.media_retention_days ?? null;
       } catch {}
       return reply.status(200).send({
@@ -133,11 +137,12 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        const tenantId = resolveTenantId(request);
         const updated = await prisma.tenant.upsert({
-          where: { id: DEFAULT_TENANT_ID },
+          where: { id: tenantId },
           create: {
-            id: DEFAULT_TENANT_ID,
-            slug: DEFAULT_TENANT_ID,
+            id: tenantId,
+            slug: tenantId,
             name: `Default Clinic`,
             media_retention_days: Math.floor(mediaRetentionDays),
           },
@@ -169,8 +174,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/settings/pricelist-image', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { getPricelistImageUrl, DEFAULT_PRICELIST_IMAGE } = await import('../../services/pricelist-config.service');
+      const tenantId = resolveTenantId(request);
       const tenant = await prisma.tenant.findUnique({
-        where: { id: DEFAULT_TENANT_ID },
+        where: { id: tenantId },
         select: { pricelist_image_url: true },
       });
       const storedUrl = tenant?.pricelist_image_url ?? null;
@@ -178,7 +184,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         success: true,
         data: {
           pricelistImageUrl: storedUrl,
-          effectiveUrl: await getPricelistImageUrl(DEFAULT_TENANT_ID),
+          effectiveUrl: await getPricelistImageUrl(tenantId),
           envFallbackUrl: process.env.CLINIC_PRICELIST_IMAGE_URL || null,
           defaultUrl: DEFAULT_PRICELIST_IMAGE,
         },
@@ -215,7 +221,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
           const saved = await mediaService.saveOutboundMedia({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolveTenantId(request),
             imageB64: rawB64,
             mimeType,
             fileName,
@@ -231,13 +237,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         }
 
         const { setPricelistImageUrl } = await import('../../services/pricelist-config.service');
-        const result = await setPricelistImageUrl(DEFAULT_TENANT_ID, storedUrl);
+        const result = await setPricelistImageUrl(resolveTenantId(request), storedUrl);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_PRICELIST_IMAGE',
-          targetId: DEFAULT_TENANT_ID,
+          targetId: resolveTenantId(request),
           payload: { pricelist_image_url: result.url },
           ipAddress: request.ip,
         });
@@ -1809,7 +1815,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const { telegramService } = await import('../../services/telegram.service');
       const pairingInfo = await telegramService.getTenantPairingInfo(DEFAULT_TENANT_ID);
 
-      const effectiveToken = tenant?.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+      const effectiveToken = tenant?.telegram_bot_token
+        ? (await import('../../utils/encryption')).decryptSecretCompat(tenant.telegram_bot_token)
+        : process.env.TELEGRAM_BOT_TOKEN;
       const effectiveChatId = tenant?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
       const telegramConfigured = Boolean(effectiveToken && effectiveChatId);
 
@@ -1818,7 +1826,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         data: {
           enabled: tenant ? tenant.daily_report_enabled : envEnabled,
           reportHour: tenant ? tenant.daily_report_hour : envHour,
-          telegramBotToken: tenant?.telegram_bot_token || '',
+          // SEC-AUDIT-11: token mentah tidak dikirim; hanya status terkonfigurasi.
+          telegramBotTokenConfigured: Boolean(tenant?.telegram_bot_token),
+          telegramBotToken: '',
           telegramChatId: tenant?.telegram_chat_id || '',
           telegramPairingToken: pairingInfo.pairingToken,
           telegramDirectLink: pairingInfo.directLink,
@@ -1901,7 +1911,12 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         const updateData: any = {};
         if (enabled !== undefined) updateData.daily_report_enabled = Boolean(enabled);
         if (reportHour !== undefined) updateData.daily_report_hour = Math.floor(reportHour);
-        if (telegramBotToken !== undefined) updateData.telegram_bot_token = telegramBotToken.trim() || null;
+        // SEC-AUDIT-11: token Telegram disimpan terenkripsi; nilai kosong tidak
+        // menimpa token yang sudah ada (respons API tidak lagi mengirim token mentah).
+        if (telegramBotToken !== undefined && String(telegramBotToken).trim()) {
+          const { encryptSecretIfPossible } = await import('../../utils/encryption');
+          updateData.telegram_bot_token = encryptSecretIfPossible(String(telegramBotToken).trim());
+        }
         if (telegramChatId !== undefined) updateData.telegram_chat_id = telegramChatId.trim() || null;
         if (telegramTopicDailyReport !== undefined) updateData.telegram_topic_daily_report = telegramTopicDailyReport.trim() || null;
         if (telegramTopicSystemErrors !== undefined) updateData.telegram_topic_system_errors = telegramTopicSystemErrors.trim() || null;
@@ -1936,7 +1951,8 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           data: {
             enabled: updated.daily_report_enabled,
             reportHour: updated.daily_report_hour,
-            telegramBotToken: updated.telegram_bot_token || '',
+            // SEC-AUDIT-11: jangan pernah mengembalikan token mentah ke klien.
+            telegramBotTokenConfigured: Boolean(updated.telegram_bot_token),
             telegramChatId: updated.telegram_chat_id || '',
             telegramTopicDailyReport: updated.telegram_topic_daily_report || '',
             telegramTopicSystemErrors: updated.telegram_topic_system_errors || '',

@@ -287,7 +287,15 @@ export class ReservationCoreService {
 
         // P2-4: kunci sempit (slot+treatment) — hanya merge bila interval tumpang tindih
         // (exactConflicts), bukan semua same-day. Mencegah booking pagi+sore beda treatment saling timpa.
-        const sameTreatment = Boolean(treatmentDetail && sameDayReservations[0]?.treatment_detail === treatmentDetail);
+        // Pengecualian fondasional: primary HOLD placeholder ('[HOLD] ...' / status hold) adalah wildcard —
+        // upgrade hold→confirmed SELALU mengganti teks placeholder dengan treatment riil, jadi equality
+        // string tidak pernah terpenuhi. Tanpa ini P2-4 me-regresi jalur auto-upgrade kasus (a) di bawah.
+        const primaryDetail = sameDayReservations[0]?.treatment_detail || '';
+        const primaryIsHoldPlaceholder =
+          sameDayReservations[0]?.status === 'hold' || /\[HOLD\]/i.test(primaryDetail);
+        const sameTreatment = Boolean(
+          treatmentDetail && (primaryDetail === treatmentDetail || primaryIsHoldPlaceholder)
+        );
         const shouldMerge = exactConflicts.length > 0 && (sameTreatment || !treatmentDetail);
         if (shouldMerge || (customerSameDayActive && sameTreatment)) {
           if (source === 'ADMIN_PANEL' && force) {

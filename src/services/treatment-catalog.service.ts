@@ -263,7 +263,23 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 100000,
     "promoPrice": 75000,
-    "description": "Terapi khusus batuk, pilek, flu, rewel, susah BAB, kembung/kolik dengan double aromaterapi & titik akupresur.",
+      "description": "Terapi khusus batuk, pilek (bapil), flu, rewel, susah BAB, kembung/kolik dengan double aromaterapi & titik akupresur.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-pulih-ceria-newborn",
+    "name": "Kala Baby – Pijat Pulih Ceria Newborn",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 6,
+      "label": "0 - 6 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 100000,
+    "promoPrice": 75000,
+      "description": "Terapi khusus batuk, pilek (bapil), flu, rewel, susah BAB, kembung/kolik pada bayi newborn 0-6 bulan dengan double aromaterapi & titik akupresur lembut.",
     "isActive": true
   },
   {
@@ -775,7 +791,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 20,
     "originalPrice": 45000,
     "promoPrice": 35000,
-    "description": "[ADDON] Terapi inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
+      "description": "[ADDON] Terapi uap inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
     "isActive": true,
     "isAddon": true
   },
@@ -792,7 +808,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 20,
     "originalPrice": 60000,
     "promoPrice": 50000,
-    "description": "[ADDON] Terapi inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
+      "description": "[ADDON] Terapi uap inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
     "isActive": true,
     "isAddon": true
   }
@@ -2035,6 +2051,10 @@ export class TreatmentCatalogService {
       'juga', 'saja', 'aja', 'semua', 'daftar', 'list', 'please',
       'pijat', // generic, semua treatment ada kata "pijat" → skip dari scoring
       'kala',
+      // Unit waktu/usia BUKAN diskriminator layanan — df kecilnya (mis. 'hari' df=1 dari
+      // 'menjelang hari persalinan') memberi bobot IDF raksasa dan menenggelamkan kata kunci
+      // niat ('newborn care' kalah oleh bundle pra-kelahiran). Test: treatment-catalog-search#15.
+      'hari', 'bulan', 'bln', 'tahun', 'thn', 'minggu', 'mgg', 'jam', 'menit', 'usia', 'umur',
     ]);
     const keywords = q
       .split(/\s+/)

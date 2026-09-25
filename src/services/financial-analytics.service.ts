@@ -3,6 +3,20 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveTreatmentValue } from './capi.service';
 
+/**
+ * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236). Nilai yang diawali
+ * = + - @ TAB CR diberi prefix kutip tunggal agar spreadsheet memperlakukannya
+ * sebagai teks murni, lalu dibungkus kutip ganda dengan escape standar.
+ */
+export function escapeCsvCell(val: any): string {
+  let s = String(val ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
+  s = s.replace(/"/g, '""');
+  return `"${s}"`;
+}
+
 export interface MonthlyKpiSummary {
   totalRevenue: number;
   lunasRevenue: number;
@@ -445,10 +459,9 @@ export class FinancialAnalyticsService {
       'Jenis Pasien',
     ];
 
-    const escapeCsv = (val: any) => {
-      const s = String(val ?? '').replace(/"/g, '""');
-      return `"${s}"`;
-    };
+    // SEC-AUDIT-12: cegah formula injection (CWE-1236). Nilai yang diawali
+    // = + - @ TAB CR dipaksa menjadi teks murni dengan prefix kutip tunggal.
+    const escapeCsv = escapeCsvCell;
 
     const rows = data.transactions.map((t) => {
       const dateFormatted = t.bookingDate

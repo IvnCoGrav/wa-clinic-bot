@@ -8,6 +8,53 @@ import crypto from 'crypto';
 export const memoryAdClicks = new Map<string, any>();
 
 /**
+ * SEC-AUDIT-15: cache singkat host landing terdaftar (60 dtk) agar guard origin
+ * tidak menghantam DB setiap request. Sumber data = `Tenant.landing_domain`
+ * (dikelola admin via settings) — bukan hardcode domain di kode.
+ */
+let cachedLandingHosts: { at: number; hosts: Set<string> } | null = null;
+
+function originHostname(request: FastifyRequest): string | null {
+  const origin = (request.headers['origin'] || request.headers['referer'] || '') as string;
+  if (!origin) return null;
+  try {
+    // API URL standar (bukan regex hafalan) untuk ekstraksi host.
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Origin dipercaya bila same-origin (landing diserve server ini: /promo, /go, /cta)
+ * ATAU host-nya terdaftar sebagai `landing_domain` salah satu tenant di DB.
+ * DB offline → hanya same-origin (fail-closed, bukan fail-open).
+ */
+async function isTrustedTrackingOrigin(request: FastifyRequest): Promise<boolean> {
+  const host = originHostname(request);
+  if (!host) return false;
+  if (host === (request.hostname || '').toLowerCase()) return true;
+  try {
+    const now = Date.now();
+    if (!cachedLandingHosts || now - cachedLandingHosts.at > 60_000) {
+      const tenants = await prisma.tenant.findMany({ select: { landing_domain: true } });
+      const hosts = new Set<string>();
+      for (const t of tenants as any[]) {
+        const d = String(t?.landing_domain || '').trim().toLowerCase().replace(/\/$/, '');
+        if (!d) continue;
+        try {
+          hosts.add(new URL(d.includes('://') ? d : `https://${d}`).hostname);
+        } catch {}
+      }
+      cachedLandingHosts = { at: now, hosts };
+    }
+    return cachedLandingHosts.hosts.has(host);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mendeteksi crawler/bot otomatis (Meta link preview bot, Googlebot, Twitterbot, dsb.)
  * agar tidak mengotori tabel AdClick di database dan tidak merusak kalkulasi grafik konversi.
  */
@@ -183,12 +230,11 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         if (!trackingApiKey || !safeCompare(clientKey, trackingApiKey)) {
           return reply.status(401).send({ error: 'Unauthorized: Invalid X-Tracking-Api-Key header.' });
         }
-      } else if (trackingApiKey) {
-        const origin = (request.headers['origin'] || request.headers['referer'] || '') as string;
-        const isBrowserLanding = origin.includes('/promo/') || origin.includes('/go') || origin.includes('/cta') || origin.startsWith('http');
-        if (!isBrowserLanding) {
-          return reply.status(401).send({ error: 'Unauthorized: Missing X-Tracking-Api-Key header.' });
-        }
+      } else if (!(await isTrustedTrackingOrigin(request))) {
+        // SEC-AUDIT-15: `origin.startsWith('http')` lama bernilai true untuk domain
+        // penyerang mana pun. Tanpa key, hanya origin same-origin / landing_domain
+        // tenant terdaftar yang lolos — berlaku bahkan saat TRACKING_API_KEY unset.
+        return reply.status(401).send({ error: 'Unauthorized: Missing X-Tracking-Api-Key header or untrusted origin.' });
       }
 
       // 2. PARSE BODY: Mengabaikan sepenuhnya ipAddress/userAgent yang mungkin dikirim oleh attacker/iseng di body
@@ -203,12 +249,11 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       const phone = body.phone || null;
       const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
 
-      // 3. CAPTURE IP & USER-AGENT dari request headers langsung (no spoofing)
-      const cookiesHeader = request.headers.cookie || '';
-      const fbiMatch = cookiesHeader.match(/_fbi=([^;]+)/);
-      const cookieIp = fbiMatch ? decodeURIComponent(fbiMatch[1]).split('.')[0] : null;
-
-      const ipAddress = cookieIp || request.ip || (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || null;
+      // 3. CAPTURE IP & USER-AGENT dari socket peer langsung (no spoofing).
+      // SEC-AUDIT-15: cookie `_fbi` dan header XFF dikendalikan klien (tanpa
+      // trustProxy) sehingga DILARANG menimpa request.ip. Catatan deploy: bila
+      // di belakang reverse proxy, IP tercatat = IP proxy (lihat KNOWN_ISSUES 129).
+      const ipAddress = request.ip || null;
       const userAgent = request.headers['user-agent'] || null;
 
       // 3b. BOT / CRAWLER FILTER: Abaikan bot Meta / crawler agar tidak mencemari database & grafik
@@ -291,7 +336,8 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, ignored: true });
       }
 
-      const ipAddress = (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || request.ip || null;
+      // SEC-AUDIT-15: XFF dapat dispoof klien; socket peer (request.ip) otoritatif.
+      const ipAddress = request.ip || null;
       const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
 
       const viewData = {

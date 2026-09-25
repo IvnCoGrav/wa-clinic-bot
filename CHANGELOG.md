@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-25 — Resolusi 4 Defect Sistemik Percakapan (Trimmer, Leak RAG, D3 Komparasi, D10 Amnesia)
+
+- **Audit ulang plan vs kode/log (bukan menelan klaim):** (1) Isu leak RAG — `return ''` saja TIDAK menangkap pesan tool `search-knowledge-faq.tool.ts:82` karena tak match regex `DEFERRAL`; `<br>` sudah dibersihkan `sanitizer.ts:84-92`. (2) Isu D3 — pada turn audit `calledTools: []` (`app-2026-09-25.log:913`) → `names=[]`, jadi perbaikan matcher saja tak cukup; router wajib memanggil katalog. (3) D10 pasca-reprompt `guardrail-pipeline.ts:624` hanya cek usia. (4) Bug trimmer `pushEnd` monotonik terverifikasi.
+- **Fase 1 — Sanitizer (`src/v3/guardrails/sanitizer.ts`):** `trimToMaxSentences` kumpulkan batas via `Set`+sort (urutan-independen); emoji jadi batas HANYA bila mengakhiri baris/teks & tak didahului `.!?` (cegah over-trim emoji dekoratif — regresi ditemukan saat verifikasi); `stripVagueTeamDeferral` kembalikan `''` bila seluruh balasan deferral (bukan teks mentah); `[NEW] stripInternalInstructionArtifacts` buang salinan pesan instruksi tool di level kalimat.
+- **Fase 2 — Gerbang amnesia deterministik (`factual-claim-validator.ts` + `guardrail-pipeline.ts`):** `ASKING_LOCATION_RE` diekspor + `[NEW] stripAmnesiaQuestions` (otoritas pola tunggal D9/D10); diterapkan ke SEMUA 5 cabang reprompt (numeric/pronoun/age/time/shareloc) via `gateAmnesia`, bukan tambal satu cabang.
+- **Fase 3 — D3 komparasi (`factual-claim-validator.ts`, `router-tool-routing.layer.ts`):** `[NEW] replyMentionsCatalogName` token-based (nama pokok tanpa prefix brand "Kala Baby - ", varian token, reuse `significantTokens`); router guidance eksplisit pertanyaan pemilihan/perbandingan → `get_catalog_and_price`.
+- **Verifikasi:** `[NEW] tests/unit/v3/systemic-defect-fixes-2509.test.ts` 19/19 adversarial; `tsc`/`build` hijau; **full suite 453/454 files hijau, 3467 passed / 0 failed** (baseline: `v3-persona-rules` 1 gagal).
+- **Debt:** `stripInternalInstructionArtifacts` berbasis daftar penanda mesin (perlu diperluas bila muncul frasa tool baru); Isu 1 tanpa bukti replay log (`llm-2026-09-25.jsonl` 0 byte). Detail: `docs/KNOWN_ISSUES.md` #130.
+
 #### 2026-09-24 — Foundational Call 1 Router Neutralization, Model Harmonization & Output Punctuation Sanitizer (Sesi 640820)
 
 - **Akar masalah (audit log `llm-2026-09-24.jsonl:0-1`):** Call 1 `glm-5.3-flash` 24.7 dtk / 835 reasoning token mencuci otak Router via heuristik `includes(' berapa')` di `conversation-summarizer.ts:173` → `bngurasi berapa kak` (typo Bungurasih + tanya ongkir) salah dikunci `Bunda menanyakan tarif / harga layanan` + injeksi `🚫 Menanyakan alamat lagi`, sehingga LLM salah memanggil `get_catalog_and_price` (bukan `calculate_delivery`) dan membombardir katalog; Call 2 `deepseek-v4-flash-0731:netra` 1.2 dtk sudah benar mengenali "Bungurasih" tetapi tanpa data ongkir.
