@@ -187,6 +187,46 @@ export class ToolExecutionPipeline {
       // `extractFastIntents` (satu sumber kebenaran intent ask_price/ongkir).
       const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
       if (fnName === 'calculate_delivery') {
+        // Verbatim Gate (wdoro→Wonodoro): tolak halusinasi elongasi LLM.
+        // Jika locationText LLM tak punya irisan token dengan cleanIncomingText,
+        // cari entitas gazetteer verbatim di teks asli customer dan pakai itu.
+        // WAJIB sebelum stale-strip agar prefiks basi tidak mengaburkan cek overlap.
+        if (typeof fnArgs.locationText === 'string' && typeof cleanIncomingText === 'string') {
+          const origToks = new Set(cleanIncomingText.toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2));
+          const locToks = (fnArgs.locationText || '').toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2);
+          const hasOverlap = locToks.some((t: string) => origToks.has(t));
+          if (!hasOverlap && locToks.length > 0) {
+            try {
+              const { getGazetteerData } = await import('../../../utils/gazetteer');
+              const { isTypoAtMostOne } = await import('../../../utils/typo-match');
+              const data = getGazetteerData();
+              const cleanLower = cleanIncomingText.toLowerCase();
+              const cleanToks = cleanLower.split(/[^a-z0-9]+/).filter((t: string) => t.length >= 3);
+              let verbatim: string | null = null;
+              for (const d of data) {
+                const kel = (d.Kelurahan_Desa || '').toLowerCase();
+                if (!kel || kel.length < 4) continue;
+                if (cleanLower.includes(kel)) { verbatim = d.Kelurahan_Desa; break; }
+                for (const ct of cleanToks) {
+                  if (ct.length >= 5 && (kel.length >= 5) && isTypoAtMostOne(ct, kel)) { verbatim = d.Kelurahan_Desa; break; }
+                }
+                if (verbatim) break;
+              }
+              if (!verbatim) {
+                for (const d of data) {
+                  const kec = (d.Kecamatan || '').toLowerCase();
+                  if (!kec || kec.length < 4) continue;
+                  if (cleanLower.includes(kec)) { verbatim = d.Kecamatan; break; }
+                  for (const ct of cleanToks) {
+                    if (ct.length >= 5 && kec.length >= 5 && isTypoAtMostOne(ct, kec)) { verbatim = d.Kecamatan; break; }
+                  }
+                  if (verbatim) break;
+                }
+              }
+              if (verbatim) fnArgs.locationText = verbatim;
+            } catch {}
+          }
+        }
         // RC-4 (sesi 535222): router Call 1 dapat menggabungkan wilayah BASI
         // (kecamatan yang sudah dikenal sesi) dengan entitas BARU ("Buduran
         // Bungurasih"). Guard deterministik membuang prefiks basi agar hanya
