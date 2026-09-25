@@ -6,6 +6,7 @@ import {
   extractCityScope,
   getCanonicalCities,
 } from './toponym-normalizer';
+import { isTypoAtMostOne, GEO_TOKEN_SKIPLIST } from './typo-match';
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -322,19 +323,67 @@ function rankedGazetteerScan(
 ): { lat: number; lng: number; kelurahan: string; kecamatan: string; kota: string; zipcode: string } | null {
   const rows = rawDataCache || [];
   const candidates: PhraseCandidate[] = [];
+  const alreadyMatchedPhrases = new Set<string>();
 
   for (const row of rows) {
     const kec = (row.Kecamatan || '').toLowerCase().trim();
     if (kec && kec.length >= 3) {
       const km = boundedMatchIndex(qNorm, kec);
-      if (km) candidates.push({ row, level: 'kecamatan', phrase: kec, start: km.start, end: km.end });
+      if (km) {
+        candidates.push({ row, level: 'kecamatan', phrase: kec, start: km.start, end: km.end });
+        alreadyMatchedPhrases.add(`kec:${kec}`);
+      }
     }
     const kel = (row.Kelurahan_Desa || '').toLowerCase().trim();
     if (kel && kel.length >= 3 && kel !== kec && !['surabaya', 'sidoarjo', 'gresik', 'desa', 'kota', 'kabupaten'].includes(kel)) {
       const km = boundedMatchIndex(qNorm, kel);
-      if (km) candidates.push({ row, level: 'kelurahan', phrase: kel, start: km.start, end: km.end });
+      if (km) {
+        candidates.push({ row, level: 'kelurahan', phrase: kel, start: km.start, end: km.end });
+        alreadyMatchedPhrases.add(`kel:${kel}`);
+      }
     }
   }
+
+  // Fase 2: fallback typo generik 1-edit untuk kelurahan/kecamatan single-word (tanpa hardcode desa)
+  // Contoh: 'damarsih' (typo) → 'damarsi'. Hanya token ≥4 huruf, bukan skiplist, dan tidak sudah exact-match.
+  if (qNorm && qNorm.length >= 3) {
+    const qTokens = qNorm
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 4 && !GEO_TOKEN_SKIPLIST.has(t));
+    if (qTokens.length > 0) {
+      const findTypoIndex = (phraseLower: string): { start: number; end: number } | null => {
+        if (phraseLower.includes(' ') || phraseLower.length < 4) return null;
+        for (const tok of qTokens) {
+          if (isTypoAtMostOne(tok, phraseLower)) {
+            // cari posisi token di qNorm (first occurrence)
+            const idx = qNorm.toLowerCase().indexOf(tok);
+            if (idx !== -1) return { start: idx, end: idx + tok.length };
+          }
+        }
+        return null;
+      };
+      for (const row of rows) {
+        const kec = (row.Kecamatan || '').toLowerCase().trim();
+        if (kec && kec.length >= 4 && !alreadyMatchedPhrases.has(`kec:${kec}`)) {
+          const typoIdx = findTypoIndex(kec);
+          if (typoIdx) {
+            candidates.push({ row, level: 'kecamatan', phrase: kec, start: typoIdx.start, end: typoIdx.end });
+            alreadyMatchedPhrases.add(`kec:${kec}`);
+          }
+        }
+        const kel = (row.Kelurahan_Desa || '').toLowerCase().trim();
+        if (kel && kel.length >= 4 && kel !== kec && !['surabaya', 'sidoarjo', 'gresik', 'desa', 'kota', 'kabupaten'].includes(kel) && !alreadyMatchedPhrases.has(`kel:${kel}`)) {
+          const typoIdx = findTypoIndex(kel);
+          if (typoIdx) {
+            candidates.push({ row, level: 'kelurahan', phrase: kel, start: typoIdx.start, end: typoIdx.end });
+            alreadyMatchedPhrases.add(`kel:${kel}`);
+          }
+        }
+      }
+    }
+  }
+
   if (candidates.length === 0) return null;
 
   // Coverage guard (generic): tolak kelurahan 1 kata yang tertutup frasa lebih panjang.
@@ -348,13 +397,22 @@ function rankedGazetteerScan(
   const scoped = cityScope ? kept.filter((c) => c.row.Kabupaten_Kota === cityScope) : kept;
   if (cityScope && scoped.length === 0) return null;
 
+  // Anti-homonim hijacking: token kota ("sidoarjo"/"gresik") jangan kalahkan distrik spesifik karena panjang karakter.
+  // cityBaseTokens data-driven dari dataset (tanpa hardcode).
+  const canonicalCities = getGazetteerCanonicalCities();
+  const cityBaseTokens = new Set(
+    canonicalCities.map((c) => c.toLowerCase().replace(/^(kabupaten|kota)\s+/i, '').trim().replace(/[()]/g, '').replace(/\s+/g, ' ').trim())
+  );
+  const normalizeParen = (s: string): string => s.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
+  const isSpecificDistrict = (c: PhraseCandidate): boolean => !cityBaseTokens.has(normalizeParen(c.phrase));
+
   const kecMentioned = (c: PhraseCandidate): boolean =>
     !!c.row.Kecamatan && boundedMatchIndex(qNorm, c.row.Kecamatan.toLowerCase().trim()) != null;
 
   const best = scoped.reduce<PhraseCandidate | null>((bestSoFar, c) => {
     if (!bestSoFar) return c;
-    const a = [wordCount(c.phrase), c.level === 'kelurahan' ? 1 : 0, kecMentioned(c) ? 1 : 0, c.phrase.length];
-    const b = [wordCount(bestSoFar.phrase), bestSoFar.level === 'kelurahan' ? 1 : 0, kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.phrase.length];
+    const a = [wordCount(c.phrase), c.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(c) ? 1 : 0, kecMentioned(c) ? 1 : 0, c.phrase.length];
+    const b = [wordCount(bestSoFar.phrase), bestSoFar.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(bestSoFar) ? 1 : 0, kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.phrase.length];
     for (let i = 0; i < a.length; i++) {
       if (a[i] !== b[i]) return a[i] > b[i] ? c : bestSoFar;
     }
