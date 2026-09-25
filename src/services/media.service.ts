@@ -377,7 +377,17 @@ export class MediaService {
   public resolveOutboundForProvider(relativeUrl: string, provider: 'WAHA' | 'WABA'): string | null {
     if (!relativeUrl.startsWith('/media/outbound/')) return null;
     if (provider === 'WABA') {
-      return this.getPublicMediaUrl(relativeUrl);
+      // P3-5: provider-aware — cek eksistensi dulu, fallback ke thumb bila HD expired
+      const hdPath = this.filePathFromRelativeUrl(relativeUrl);
+      const thumb = this.resolveThumbFallback(relativeUrl);
+      if (hdPath && fs.existsSync(hdPath)) return this.getPublicMediaUrl(relativeUrl);
+      if (thumb) {
+        const thumbPath = this.filePathFromRelativeUrl(thumb);
+        if (thumbPath && fs.existsSync(thumbPath)) return this.getPublicMediaUrl(thumb);
+      }
+      // HD hilang & thumb juga hilang → jangan paksa Meta fetch URL mati
+      if (hdPath && fs.existsSync(hdPath)) return this.getPublicMediaUrl(relativeUrl);
+      return null;
     }
     const hdPath = this.filePathFromRelativeUrl(relativeUrl);
     if (hdPath && fs.existsSync(hdPath)) return hdPath;
@@ -838,18 +848,26 @@ export class MediaService {
     let deleted = 0;
     let mediaFiles = 0;
     try {
-      const oldMessages = await prisma.message.findMany({
-        where: { tenant_id: tenantId, created_at: { lt: cutoff } },
-        select: { payload_raw: true },
-        take: 5000,
-      });
-      for (const m of oldMessages) {
-        const media = (m.payload_raw as any)?.media;
-        for (const u of [media?.hdUrl, media?.url, media?.thumbUrl]) {
-          if (typeof u === 'string' && u.startsWith('/media/')) {
-            if (this.deleteFile(u)) mediaFiles++;
+      // P3-5: paginasi mediaFiles (take:5000 per batch) → hitung semua, bukan 5000 pertama saja
+      let skip = 0;
+      while (true) {
+        const batch = await prisma.message.findMany({
+          where: { tenant_id: tenantId, created_at: { lt: cutoff } },
+          select: { payload_raw: true },
+          take: 5000,
+          skip,
+        });
+        if (batch.length === 0) break;
+        for (const m of batch) {
+          const media = (m.payload_raw as any)?.media;
+          for (const u of [media?.hdUrl, media?.url, media?.thumbUrl]) {
+            if (typeof u === 'string' && u.startsWith('/media/')) {
+              if (this.deleteFile(u)) mediaFiles++;
+            }
           }
         }
+        if (batch.length < 5000) break;
+        skip += 5000;
       }
       const res = await prisma.message.deleteMany({
         where: { tenant_id: tenantId, created_at: { lt: cutoff } },
