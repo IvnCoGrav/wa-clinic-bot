@@ -24,8 +24,11 @@ export function isDummyOrTestContact(
   // Nama test simulator
   if (nm && /^(?:Bunda\s+Test|Test|Dummy|Sandbox|Spammer|Simulator)$/i.test(nm)) return true;
 
-  // Bukan format telepon seluler Indonesia yang valid (harus 628 atau 08, 9-14 digit)
-  if (!/^(?:628|08)\d{7,12}$/.test(ph)) return true;
+  // Nomor internasional / format lain: jangan otomatis dummy — hanya tandai bila jelas bukan telepon
+  // (terlalu pendek/panjang atau mengandung @ seperti JID LID). Biarkan downstream (tenant-config) yang putuskan.
+  const digits = ph.replace(/\D/g, '');
+  if (digits.length > 0 && (digits.length < 8 || digits.length > 16)) return true;
+  if (ph.includes('@')) return true;
 
   return false;
 }
