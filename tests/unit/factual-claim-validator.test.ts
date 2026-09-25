@@ -252,4 +252,34 @@ describe('Factual claim validator', () => {
       expect(ok.isValid).toBe(true);
     });
   });
+
+  // D3 boundary: anjuran pemilihan paket katalog (dengan nama resmi) BUKAN SOP medis.
+  describe('D3: treatment-selection advisory lolos; SOP rumahan tetap ditolak', () => {
+    const catalog = (names: string[]) => [{
+      name: 'get_catalog_and_price',
+      args: {},
+      result: { success: true, treatments: names.map((n) => ({ name: n, durationMinutes: 40 })) },
+    }];
+    it('sebaiknya diambil dua-duanya + nama katalog → valid (Turn 7 sesi afc5d511)', () => {
+      const tools = catalog(['Kala Baby – Pijat Pulih Ceria', 'Kala Baby – Pijat Lahap']);
+      const ok = validateFactualClaims(
+        'Kalau dari keluhan yang Bunda sampaikan, grok-grok dan susah makan, sebaiknya diambil dua-duanya ya Bunda: *Kala Baby – Pijat Pulih Ceria* dan *Kala Baby – Pijat Lahap*. Keduanya menangani hal yang berbeda dan saling melengkapi.',
+        tools, [], {}
+      );
+      expect(ok.isValid).toBe(true);
+    });
+    it('disarankan pilih + nama katalog → valid', () => {
+      const tools = catalog(['Kala Baby – Pijat Lahap']);
+      const ok = validateFactualClaims('Untuk nafsu makannya, disarankan pilih *Kala Baby – Pijat Lahap* ya Bunda karena fokus stimulasi pencernaan.', tools, [], {});
+      expect(ok.isValid).toBe(true);
+    });
+    it('Sebaiknya dimandikan air hangat tiap hari (tanpa nama katalog) → tetap invalid', () => {
+      const bad = validateFactualClaims('Sebaiknya bayi dimandikan dengan air hangat setiap hari agar tidak rewel dan tidurnya nyenyak ya Bunda', [], [], {});
+      expect(bad.isValid).toBe(false);
+    });
+    it('Sebaiknya dijemur 30 menit (tanpa nama katalog) → tetap invalid', () => {
+      const bad = validateFactualClaims('Sebaiknya si kecil dijemur setiap pagi selama 30 menit agar tulangnya kuat ya Bunda', [], [], {});
+      expect(bad.isValid).toBe(false);
+    });
+  });
 });

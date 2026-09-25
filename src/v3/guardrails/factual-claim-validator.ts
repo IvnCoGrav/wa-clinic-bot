@@ -310,9 +310,19 @@ export function validateFactualClaims(
     knowledgeHasChunks(executedTools) ||
     policyToolCalled(executedTools) ||
     hasSubstantiveChunks(_retrievedChunks);
+  // Pengecualian D3 (sesi afc5d511): anjuran pemilihan/pengambilan paket katalog
+  // (merekomendasikan NAMA layanan resmi) adalah panduan pemilihan layanan,
+  // BUKAN klaim SOP medis. Syarat: nama katalog resmi muncul di balasan
+  // (data-driven dari names, bukan marker generik — "dimandikan" tetap ditolak).
+  const replyLowerD3 = reply.toLowerCase();
+  const mentionsCatalogName = names.some((n) => n && replyLowerD3.includes(n));
+  const isTreatmentSelectionAdvisory =
+    mentionsCatalogName &&
+    /\b(sebaiknya|disarankan|sebaiknya\s+diambil|pilih|ambil|kombinasi|difokuskan)\b/i.test(reply);
   if (
     reply.length > 80 &&
     ADVISORY_RE.test(reply) &&
+    !isTreatmentSelectionAdvisory &&
     !opts?.isRefusalOrEscalation &&
     !REFUSAL_FRAME_RE.test(reply) &&
     !hasSopGrounding
