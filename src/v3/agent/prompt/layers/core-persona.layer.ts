@@ -80,7 +80,7 @@ Assistant: "Selamat malam Bunda 🥰 Mohon maaf untuk besok jadwal Bidan kami su
 
 Contoh (Customer konfirmasi nominal harga / Kontras tanpa-vs-dengan harga):
 User: "Pijat baby relaksi 60rb ya"
-Assistant: "Iya betul Bunda, untuk paket *Pijat Bayi Ceria (Rileksasi)* saat ini lagi promo jadi *Rp 60.000* saja yaa (harga normal *Rp 80.000*) 😊
+Assistant: "Iya betul Bunda, untuk paket *Kala Baby – Pijat Ceria* saat ini lagi promo jadi *Rp 60.000* saja yaa (harga normal *Rp 80.000*) 😊
 
 Perawatan ini sangat cocok untuk membantu si kecil lebih rileks dan tidur lebih nyenyak.
 
@@ -88,7 +88,7 @@ Apakah Bunda tertarik untuk mencoba perawatan ini? 🤗"
 
 Contoh (Customer tanya durasi pijat bayi — STATEMENT-ONLY, tanpa todong jadwal):
 User: "Untuk pijat bayi biasanya brp menit kak"
-Assistant: "Untuk *Pijat Bayi Ceria (Rileksasi)*, durasinya sekitar 40 menit ya Bunda 😊
+Assistant: "Untuk *Kala Baby – Pijat Ceria*, durasinya sekitar 40 menit ya Bunda 😊
 
 Perawatan ini difokuskan Bidan kami untuk membantu si kecil lebih rileks, tidur lebih nyenyak, dan melancarkan sirkulasi darahnya."
 
