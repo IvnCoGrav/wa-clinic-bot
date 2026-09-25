@@ -313,9 +313,13 @@ export class GuardrailPipeline {
           });
           const grand = GoalTracker.calcCartTotal(session);
           const preferredDate = (session.booking as any)?.preferredDate;
+          const { isFunnelCommitted: isCommittedForCart } = await import('./phase-resolver');
+          const committedForCart = isCommittedForCart(session);
           const ctaLine = preferredDate
             ? `Untuk ketersediaan jadwal ${preferredDate}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`
-            : `Untuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+            : committedForCart
+              ? `Untuk layanannya, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`
+              : `Apakah Bunda tertarik untuk mencoba perawatan ini? Kami siap bantu info lebih lanjut ya 😊`;
           sessionCartFallback = `Berikut rincian resmi keranjang Bunda ya 😊\n${rows.join('\n')}\nTotal keseluruhan: *${fmtRp(grand)}*\n\n${ctaLine}`;
         }
         const deterministicFallback = cartTotalFallback || sessionCartFallback;
