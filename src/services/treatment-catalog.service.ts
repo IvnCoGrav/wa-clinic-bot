@@ -1695,76 +1695,37 @@ export class TreatmentCatalogService {
     pool = pool.filter((s) => s.isActive);
     if (pool.length === 0) return undefined;
 
-    const CORE_COMPLAINT_NOUNS = new Set([
-      'makan', 'lahap', 'gtm', 'asi', 'menyusu',
-      'bab', 'sembelit', 'feses', 'konstipasi',
-      'batuk', 'pilek', 'bapil', 'flu', 'dahak', 'lendir', 'grok',
-      'kembung', 'kolik', 'begah', 'gas',
-      'tidur', 'rewel', 'begadang', 'terjaga',
-      'pegal', 'relaksasi', 'lelah', 'capek',
-    ]);
-    const CLINICAL_MODIFIERS = new Set([
-      'susah', 'kurang', 'tidak', 'sering', 'jarang', 'agak', 'mulai', 'berat',
-    ]);
-
     let best: ClinicServiceItem | undefined;
     let bestScore = 0;
+    // Data-driven phrase bonus: any bigram from rawText that appears in haystack
+    const normTextForPhrase = rawText.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const bigrams = tokens.length >= 2 ? tokens.slice(0, -1).map((_, i) => `${tokens[i]} ${tokens[i + 1]}`) : [];
     for (const item of pool) {
       const nameLower = item.name.toLowerCase();
       const descLower = (item.description || '').toLowerCase();
       const haystack = `${nameLower} ${descLower}`;
+      const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
       let score = 0;
 
       for (const tok of tokens) {
-        // Generic "anak" DILARANG membajak skor usia spesifik bila usia belum diketahui
         if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
         if (nameLower.includes(tok)) score += 4;
         else if (descLower.includes(tok)) score += 2;
+        else if (haystack.includes(tok)) score += 2;
       }
 
-      for (const tok of tokens) {
-        if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
-        if (CORE_COMPLAINT_NOUNS.has(tok)) {
-          if (haystack.includes(tok)) score += 4;
-        } else if (!CLINICAL_MODIFIERS.has(tok)) {
-          if (haystack.includes(tok)) score += 3;
-        } else {
-          if (haystack.includes(tok)) score += 1;
-        }
+      for (const bg of bigrams) {
+        if (normTextForPhrase.includes(bg) && normHaystack.includes(bg)) score += 8;
       }
+      // Single-token GTM bonus (bigram tak ada untuk 1 token, tapi GTM tetap harus menang)
+      if (tokens.length === 1 && normHaystack.includes(tokens[0])) score += 4;
 
-      const phrasePatterns = [
-        'susah makan', 'sulit makan', 'gtm', 'anak gtm',
-        'susah bab', 'nafsu makan', 'tidak nafsu makan',
-        'susah tidur', 'kembung perut', 'batuk pilek', 'batuk dahak',
-        'rewel menangis', 'pegal lelah', 'pilek flu',
-      ];
-      // Audit simulator (Bapil -> Cukur Selapan): normalisasi tanda baca agar
-      // "batuk, pilek" (koma di deskripsi katalog) tetap cocok dengan frasa
-      // "batuk pilek". Normalisasi teknis tanda baca, bukan hafalan semantik.
-      const normText = rawText.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      for (const phrase of phrasePatterns) {
-        if (normText.includes(phrase) && normHaystack.includes(phrase)) {
-          score += 8;
-        }
-      }
-
-      // Clinical dominance (keputusan user): keluhan medis MURNI tanpa indikasi
-      // cukur/rambut/tindik/paket → terapi tunggal WAJIB menang atas kombo.
-      // Paket kombo (BUNDLE) didenda; terapi tunggal penanda-terapi dibonus —
-      // keduanya murni dari metadata katalog (category/nama), tanpa daftar nama.
-      const wantsShaveOrBundle = /(cukur|rambut|gundul|tindik|paket|selapan)/.test(normText);
-      const isBundleService = (item.category || '').toUpperCase() === 'BUNDLE'
-        || /paket|\+/.test(nameLower);
-      if (!wantsShaveOrBundle && isBundleService) {
-        score -= 10;
-      }
-      const isSingleTherapy = (item.category === 'BABY' || item.category === 'KIDS')
-        && /terapi|pulih/.test(nameLower);
-      if (isSingleTherapy && tokens.some((t) => CORE_COMPLAINT_NOUNS.has(t) && normHaystack.includes(t))) {
-        score += 5;
-      }
+      // Clinical dominance: keluhan medis tanpa indikasi cukur/paket → bundle didenda, terapi tunggal dibonus
+      const wantsShaveOrBundle = /(cukur|rambut|gundul|tindik|paket|selapan)/.test(normTextForPhrase);
+      const isBundleService = (item.category || '').toUpperCase() === 'BUNDLE' || /paket|\+/.test(nameLower);
+      if (!wantsShaveOrBundle && isBundleService) score -= 10;
+      const isSingleTherapy = (item.category === 'BABY' || item.category === 'KIDS') && /terapi|pulih/.test(nameLower);
+      if (isSingleTherapy && tokens.some((t) => normHaystack.includes(t))) score += 5;
 
       if (score > bestScore) { bestScore = score; best = item; }
       else if (score === bestScore && score > 0 && best) {
