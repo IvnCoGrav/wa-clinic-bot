@@ -386,11 +386,12 @@ export class ToolExecutionPipeline {
                 ongkirNormal: session.location.ongkirNormal,
                 ongkirStatus: session.ongkirStatus,
                 knownSymptoms: pipeKnownSymptoms,
+                incomingText: cleanIncomingText,
                 ...pipeAudienceCtx,
               }
             : (pipeKnownSymptoms.length > 0 || pipeDiscussed.length > 0 || pipeTargetAudience
-              ? { knownSymptoms: pipeKnownSymptoms, ...pipeAudienceCtx }
-              : undefined);
+              ? { knownSymptoms: pipeKnownSymptoms, incomingText: cleanIncomingText, ...pipeAudienceCtx }
+              : { incomingText: cleanIncomingText } as any);
           toolResult = await withTimeout(
             executeToolByName(fnName, validation.data, toolContext),
             TOOL_TIMEOUT_MS,

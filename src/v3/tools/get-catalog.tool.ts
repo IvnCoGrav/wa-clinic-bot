@@ -128,6 +128,7 @@ export interface GetCatalogOutput {
  * dan testable; diisi agent-runner via tool-registry dari session terbaru.
  */
 export interface CatalogSessionContext {
+  incomingText?: string;
   kelurahan?: string;
   ongkirPromo?: number | null;
   ongkirNormal?: number | null;
@@ -238,6 +239,13 @@ export async function executeGetCatalog(
   if (category === 'KIDS' && (childAgeMonths == null || childAgeMonths === undefined)) {
     category = undefined as any;
   }
+  // Multi-kategori: Baby+Kids eksplisit (mis. "baby ceria dan kids lahap") → longgarkan BABY agar kedua target masuk pool
+  const rawInputForMulti = (sessionCtx as any)?.incomingText || '';
+  const hasKidsSignal = /\bkids\b/i.test(rawInputForMulti);
+  const hasBabySignal = /\bbaby\b|\bbayi\b/i.test(rawInputForMulti);
+  if (category === 'BABY' && hasKidsSignal && hasBabySignal) {
+    category = undefined as any;
+  }
   // Fase 4' (anti-kaset rusak): gabung keluhan argumen LLM dengan keluhan
   // yang SUDAH diketahui sesi (dedupe). Isolasi pasien: bila target MOMS,
   // gejala anak (bapil/kembung) di knownSymptoms DILARANG mencemari query ibu.
@@ -245,8 +253,21 @@ export async function executeGetCatalog(
   const inheritedSymptoms: string[] = isTargetingMoms
     ? [] // momStage GENERAL/BOTH: jangan wariskan keluhan anak; hanya gejala eksplisit di turn ini
     : ((sessionCtx?.knownSymptoms || []) as string[]);
-  const effectiveSymptoms: string[] = [...(symptoms || []), ...inheritedSymptoms]
+  let effectiveSymptoms: string[] = [...(symptoms || []), ...inheritedSymptoms]
     .filter((s, i, arr) => arr.indexOf(s) === i);
+  // Anti-halusinasi gejala saat tanya durasi: token yang merupakan substring nama katalog (lahap/sulit makan dari "Lahap Juara") bukan gejala
+  if (asksDuration && (symptoms || []).length > 0 && (sessionCtx as any)?.incomingText) {
+    try {
+      const { treatmentCatalogService: tcs } = await import('../../services/treatment-catalog.service');
+      const allNames = tcs.getAllServices(true, tenantId).map((s) => s.name.toLowerCase());
+      effectiveSymptoms = effectiveSymptoms.filter((sym) => {
+        const sLower = String(sym || '').toLowerCase().trim();
+        if (!sLower) return false;
+        const isNameToken = allNames.some((nm) => nm.includes(sLower));
+        return !isNameToken;
+      });
+    } catch {}
+  }
   const hasKnownSymptoms = effectiveSymptoms.length > 0;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).

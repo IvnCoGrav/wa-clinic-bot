@@ -372,7 +372,18 @@ export class GuardrailPipeline {
       let factRepromptOk = false;
       const factRepromptStartedAt = Date.now();
       try {
-        const correctionNote = `KOREKSI FAKTUAL — tulis ulang SELURUH balasan HANYA dari data tool resmi turn ini (katalog, knowledge, kebijakan). LARANGAN:\n- ${factCheck.violations.join('\n- ')}\nJika data tidak ada, JANGAN mengarang — jawab jujur bahwa info pastinya akan dicek tim kami.`;
+        const { catalogNames: getCatalogNames, catalogDurations: getCatalogDurations } = await import('../../guardrails/factual-claim-validator');
+        const availableNames = getCatalogNames(executedTools).map((n) => `*${n}*`).join(', ');
+        const durationGrounded = getCatalogDurations(executedTools);
+        let factInstructions = `KOREKSI FAKTUAL — tulis ulang SELURUH balasan HANYA dari data tool resmi turn ini.\nLARANGAN:\n- ${factCheck.violations.join('\n- ')}`;
+        if (availableNames) {
+          factInstructions += `\nNama resmi yang TERSEDIA di katalog turn ini: ${availableNames}. Gunakan nama-nama resmi tersebut untuk merujuk perawatan.`;
+        }
+        if (durationGrounded.length > 0) {
+          factInstructions += `\nFAKTA DURASI RESMI: ${durationGrounded.join(' / ')} menit. Tetap sampaikan durasi resmi ini kepada customer secara ramah (jangan membatalkan info durasi).`;
+        }
+        factInstructions += `\nJika data benar-benar tidak ada di tool, baru sampaikan jujur bahwa info pastinya akan dicek tim Bidan kami.`;
+        const correctionNote = factInstructions;
         const factRetryData = await input.executeChat({
           payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, correctionNote), temperature: 0.3 },
           tenantId,

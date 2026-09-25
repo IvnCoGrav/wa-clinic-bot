@@ -99,11 +99,12 @@ export interface FactualValidationOptions {
   extraCatalogNames?: string[];
 }
 
-/** Kata generik satu-kata yang boleh di-bold tanpa padanan katalog. */
+/** Kata generik/deskriptor yang boleh di-bold tanpa padanan katalog (safety-boundary: Premium tetap invalid). */
 const GENERIC_BOLD_WORDS = new Set([
   'pijat', 'bayi', 'baby', 'bunda', 'bund', 'moms', 'mom', 'spa', 'treatment',
   'perawatan', 'layanan', 'homecare', 'promo', 'diskon', 'jadwal', 'ongkir',
   'paket', 'harga', 'gratis', 'bayar', 'jadwalkan', 'ayah', 'bapak', 'ibu',
+  'juara', 'relaksasi', 'rileksasi', 'terapi', 'lengkap', 'newborn', 'kids', 'anak',
 ]);
 
 /** Penanda bahwa teks bold/quoted merujuk nama layanan (baru dicek ke katalog). */
@@ -132,7 +133,7 @@ function significantTokens(s: string): string[] {
     .filter((t) => t.length > 2 && !GENERIC_BOLD_WORDS.has(t));
 }
 
-function catalogNames(tools: ToolExec[]): string[] {
+export function catalogNames(tools: ToolExec[]): string[] {
   const names: string[] = [];
   for (const t of tools) {
     if (t?.name === 'get_catalog_and_price' && Array.isArray(t?.result?.treatments)) {
@@ -159,7 +160,7 @@ function mergedCatalogNames(tools: ToolExec[], extra?: string[]): string[] {
   return [...set];
 }
 
-function catalogDurations(tools: ToolExec[]): number[] {
+export function catalogDurations(tools: ToolExec[]): number[] {
   const out: number[] = [];
   for (const t of tools) {
     if (t?.name === 'get_catalog_and_price' && Array.isArray(t?.result?.treatments)) {
@@ -276,10 +277,9 @@ export function validateFactualClaims(
       const lower = span.toLowerCase();
       if (!TREATMENT_MARKER_RE.test(span)) continue;
       if (GENERIC_BOLD_WORDS.has(lower)) continue;
-      // Token-subset ketat: semua token signifikan span harus tercakup SATU
-      // nama katalog (setelah buang kata generik). "Pijat Laktasi Premium"
-      // vs katalog "Pijat Laktasi" → token "premium" tak tercakup → invalid.
-      const spanTokens = significantTokens(span);
+      // Normalisasi deskriptor tanda kurung: "(Rileksasi)" adalah keterangan, bukan nama pokok
+      const baseSpan = span.replace(/\([^)]*\)/g, ' ').trim();
+      const spanTokens = significantTokens(baseSpan || span);
       const matched = names.some((n) => {
         const nameTokens = significantTokens(n);
         return spanTokens.length > 0 && spanTokens.every((t) => nameTokens.includes(t));
