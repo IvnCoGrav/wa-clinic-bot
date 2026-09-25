@@ -55,6 +55,79 @@ export interface ChatVideoData {
 const MEDIA_PLACEHOLDER_REGEX = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i;
 
 /**
+ * maskPhoneInTextClient — mirror frontend dari src/utils/pii-masker.ts maskPhoneInText.
+ * Defense-in-depth untuk optimistic update & SSE race sebelum backend sanitasi tiba.
+ * Parity dijaga via vektor uji identik di tests/unit/staff-chat-pii-masker.test.ts.
+ * Standar: sensor 5 digit terakhir (prefix + *****), preservasi separator prefix.
+ */
+export function maskPhoneInTextClient(text: string): string {
+  if (!text || typeof text !== 'string') return text ?? '';
+  let out = text;
+  const maskSegment = (segment: string): string => {
+    let prefixLiteral = '';
+    let numericPart = segment;
+    const waPrefix = segment.match(/^wa\.me\//i);
+    if (waPrefix) {
+      prefixLiteral = waPrefix[0];
+      numericPart = segment.slice(prefixLiteral.length);
+    }
+    let domain = '';
+    const atIdx = numericPart.indexOf('@');
+    if (atIdx !== -1) {
+      domain = numericPart.slice(atIdx);
+      numericPart = numericPart.slice(0, atIdx);
+    }
+    numericPart = numericPart.replace(/^\/+/, '');
+    const digitsOnly = numericPart.replace(/\D/g, '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) return segment;
+    if (digitsOnly.startsWith('0')) {
+      if (digitsOnly[1] !== '8') return segment;
+    } else if (digitsOnly.startsWith('62')) {
+      if (digitsOnly[2] !== '8') return segment;
+    } else {
+      return segment;
+    }
+    const keepDigits = digitsOnly.length - 5;
+    let digitCount = 0;
+    let prefixStr = '';
+    let plusIncluded = false;
+    for (let i = 0; i < numericPart.length; i++) {
+      const ch = numericPart[i];
+      if (ch === '+' && digitCount === 0 && !plusIncluded) {
+        prefixStr += ch;
+        plusIncluded = true;
+        continue;
+      }
+      if (/\d/.test(ch)) {
+        digitCount++;
+        if (digitCount <= keepDigits) prefixStr += ch;
+        else break;
+      } else {
+        if (digitCount < keepDigits) prefixStr += ch;
+      }
+    }
+    if (numericPart.trim().startsWith('+') && !prefixStr.startsWith('+')) prefixStr = '+' + prefixStr;
+    return prefixLiteral + prefixStr + '*****' + domain;
+  };
+  out = out.replace(/\+?\d[\d\s\-\.\(\)]*\d@(?:c\.us|s\.whatsapp\.net|lid)/gi, (m) => maskSegment(m));
+  out = out.replace(/(?:https?:\/\/)?wa\.me\/\+?[\d\s\-\.\(\)]{7,}\d/gi, (m) => {
+    const schemeMatch = m.match(/^(https?:\/\/)/i);
+    const scheme = schemeMatch ? schemeMatch[1] : '';
+    const rest = scheme ? m.slice(scheme.length) : m;
+    return scheme + maskSegment(rest);
+  });
+  out = out.replace(/(?:\+62|62|0)[\d\s\-\.\(\)]{7,}\d/g, (m) => {
+    const digits = m.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) return m;
+    if (digits.startsWith('0') && digits[1] !== '8') return m;
+    if (digits.startsWith('62') && digits[2] !== '8') return m;
+    if (!digits.startsWith('0') && !digits.startsWith('62')) return m;
+    return maskSegment(m);
+  });
+  return out;
+}
+
+/**
  * Ekstraksi caption gambar dari konten teks kanonis `[IMAGE: caption]` (WAHA/WA inbound).
  * Mengembalikan `null` bila konten bukan caption gambar.
  */
@@ -85,10 +158,11 @@ export function resolveMessageDisplayText(msg: { content?: string | null; media?
   const raw = (msg?.content || '').trim();
   const caption = (msg?.media?.caption || '').trim();
   const extracted = extractImageCaption(raw);
-  if (extracted) return extracted;
-  if (MEDIA_PLACEHOLDER_REGEX.test(raw)) return caption || null;
-  if (raw && caption && raw === caption) return caption;
-  return raw || caption || null;
+  if (extracted) return maskPhoneInTextClient(extracted);
+  if (MEDIA_PLACEHOLDER_REGEX.test(raw)) return caption ? maskPhoneInTextClient(caption) : null;
+  if (raw && caption && raw === caption) return maskPhoneInTextClient(caption);
+  const combined = raw || caption || null;
+  return combined ? maskPhoneInTextClient(combined) : null;
 }
 
 export function extractMedia(msg: any): ChatMediaData | undefined {
@@ -310,19 +384,24 @@ export function extractContact(msg: any): ChatContactData | null {
 
   if (msg.contact) {
     const name = msg.contact.name || msg.contact.displayName || 'Kontak';
-    const phone = msg.contact.phone || msg.contact.phoneNumber;
-    return { name, phone, displayName: name, phoneNumber: phone };
+    const rawPhone = msg.contact.phone || msg.contact.phoneNumber;
+    const phone = rawPhone ? maskPhoneInTextClient(String(rawPhone)) : rawPhone;
+    const phoneNumber = msg.contact.phoneNumber ? maskPhoneInTextClient(String(msg.contact.phoneNumber)) : phone;
+    return { name, phone, displayName: name, phoneNumber };
   }
   if (pr?.contact) {
     const name = pr.contact.name || pr.contact.displayName || 'Kontak';
-    const phone = pr.contact.phone || pr.contact.phoneNumber;
-    return { name, phone, displayName: name, phoneNumber: phone };
+    const rawPhone = pr.contact.phone || pr.contact.phoneNumber;
+    const phone = rawPhone ? maskPhoneInTextClient(String(rawPhone)) : rawPhone;
+    const phoneNumber = pr.contact.phoneNumber ? maskPhoneInTextClient(String(pr.contact.phoneNumber)) : phone;
+    return { name, phone, displayName: name, phoneNumber };
   }
 
   const match = c.match(/^\[CONTACT:\s*([^|\]]+)(?:\s*\|\s*([^\]]+))?\]$/);
   if (match) {
     const name = match[1].trim();
-    const phone = match[2] ? match[2].trim() : undefined;
+    const rawPhone = match[2] ? match[2].trim() : undefined;
+    const phone = rawPhone ? maskPhoneInTextClient(rawPhone) : undefined;
     return {
       name,
       phone,
