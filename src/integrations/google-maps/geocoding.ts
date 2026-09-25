@@ -836,12 +836,12 @@ export class GeocodingService {
         };
       }
     } catch {}
-    // Di luar coverage: teruskan koordinat murni tanpa nama wilayah fiktif.
+    // Di luar coverage: koordinat murni tanpa nama — isPrecise false (kontrak tipe)
     return {
-      isPrecise: true,
+      isPrecise: false,
       lat,
       lng,
-    };
+    } as any;
   }
 
   /**
@@ -1139,19 +1139,17 @@ OUTPUT JSON:
         }
       }
 
-      // Fallback: cari berdasarkan kecamatan saja
+      // Fallback: cari berdasarkan kecamatan saja — isPrecise false TANPA koordinat (kontrak tipe)
       if (kecamatan) {
         const kecLower = kecamatan.toLowerCase();
-        const match = data.find((d: any) => d.Kecamatan.toLowerCase() === kecLower);
-        if (match) {
-          const coords = match.Koordinat.split(',');
+        const matches = data.filter((d: any) => d.Kecamatan.toLowerCase() === kecLower);
+        if (matches.length > 0) {
           return {
             isPrecise: false,
-            kecamatan: match.Kecamatan,
-            kota: match.Kabupaten_Kota,
-            lat: parseFloat(coords[0].trim()),
-            lng: parseFloat(coords[1].trim()),
-            formattedAddress: `${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            kecamatan: matches[0].Kecamatan,
+            kota: matches[0].Kabupaten_Kota,
+            formattedAddress: `${matches[0].Kecamatan}, ${matches[0].Kabupaten_Kota}`,
+            ambiguityResults: matches.length > 1 ? matches : undefined,
           };
         }
       }
