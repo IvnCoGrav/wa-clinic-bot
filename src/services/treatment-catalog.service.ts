@@ -97,7 +97,10 @@ function getTenantCatalog(tenantId: string = DEFAULT_TENANT_ID): Map<string, Cli
 // Backwards-compat: alias untuk default tenant (dipakai legacy code tanpa tenantId)
 const serviceCatalog: Map<string, ClinicServiceItem> = getTenantCatalog(DEFAULT_TENANT_ID);
 
-// Default data catalog
+// Default data katalog — SEED-ONLY (bukan sumber kebenaran runtime).
+// Sumber kebenaran runtime: tabel `clinic_services` per-tenant via loadServicesFromDb().
+// DEFAULT dipakai hanya saat DB kosong (fresh deploy) atau offline/test fallback.
+// Perubahan harga/nama produksi WAJIB lewat DB/admin API, bukan edit array ini.
 export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     "id": "baby-cukur",
@@ -260,7 +263,23 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 100000,
     "promoPrice": 75000,
-    "description": "Terapi khusus batuk, pilek, flu, rewel, susah BAB, kembung/kolik dengan double aromaterapi & titik akupresur.",
+      "description": "Terapi khusus batuk, pilek (bapil), flu, rewel, susah BAB, kembung/kolik dengan double aromaterapi & titik akupresur.",
+    "isActive": true
+  },
+  {
+    "id": "baby-massage-pulih-ceria-newborn",
+    "name": "Kala Baby – Pijat Pulih Ceria Newborn",
+    "category": "BABY",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 6,
+      "label": "0 - 6 Bulan"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 100000,
+    "promoPrice": 75000,
+      "description": "Terapi khusus batuk, pilek (bapil), flu, rewel, susah BAB, kembung/kolik pada bayi newborn 0-6 bulan dengan double aromaterapi & titik akupresur lembut.",
     "isActive": true
   },
   {
@@ -276,7 +295,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 100000,
     "promoPrice": 75000,
-    "description": "Pijat stimulasi pencernaan untuk membantu meningkatkan nafsu makan dan kebugaran tubuh si kecil.",
+    "description": "Pijat stimulasi pencernaan dan nafsu makan untuk membantu mengatasi anak GTM (Gerakan Tutup Mulut), sulit makan, susah makan, dan meningkatkan kebugaran tubuh si kecil.",
     "isActive": true
   },
   {
@@ -356,7 +375,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 110000,
     "promoPrice": 80000,
-    "description": "Pijat stimulasi pencernaan & titik akupresur penambah nafsu makan untuk anak usia di atas 2 tahun.",
+    "description": "Pijat stimulasi pencernaan & titik akupresur penambah nafsu makan untuk membantu mengatasi anak GTM (Gerakan Tutup Mulut), sulit makan, susah makan, pada anak usia di atas 2 tahun.",
     "isActive": true
   },
   {
@@ -772,7 +791,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 20,
     "originalPrice": 45000,
     "promoPrice": 35000,
-    "description": "[ADDON] Terapi inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
+      "description": "[ADDON] Terapi uap inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
     "isActive": true,
     "isAddon": true
   },
@@ -789,7 +808,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 20,
     "originalPrice": 60000,
     "promoPrice": 50000,
-    "description": "[ADDON] Terapi inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
+      "description": "[ADDON] Terapi uap inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
     "isActive": true,
     "isAddon": true
   }
@@ -894,11 +913,25 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     }
 
     // Tidak ada data di DB -> seed dari file/default lalu simpan
-    const source = Array.from(targetCatalog.values());
+    let source: ClinicServiceItem[] = [];
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const filePath = path.join(process.cwd(), 'services_custom.json');
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const fileData = JSON.parse(raw) as ClinicServiceItem[];
+        if (Array.isArray(fileData) && fileData.length > 0) {
+          source = fileData;
+          console.warn(`[SEED] Catalog kosong untuk tenant ${tenantId}; seeding dari file services_custom.json (${source.length} layanan).`);
+        }
+      }
+    } catch {}
     if (source.length === 0) {
-      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${DEFAULT_CLINIC_SERVICES.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
-      DEFAULT_CLINIC_SERVICES.forEach((item) => targetCatalog.set(item.id, item));
+      source = [...DEFAULT_CLINIC_SERVICES];
+      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${source.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
     }
+    source.forEach((item) => targetCatalog.set(item.id, item));
     await saveServicesToDb(tenantId);
   } catch (err) {
     console.warn('[TREATMENT CATALOG] DB unavailable, using file/default:', (err as Error).message);
@@ -1678,75 +1711,37 @@ export class TreatmentCatalogService {
     pool = pool.filter((s) => s.isActive);
     if (pool.length === 0) return undefined;
 
-    const CORE_COMPLAINT_NOUNS = new Set([
-      'makan', 'lahap', 'gtm', 'asi', 'menyusu',
-      'bab', 'sembelit', 'feses', 'konstipasi',
-      'batuk', 'pilek', 'bapil', 'flu', 'dahak', 'lendir', 'grok',
-      'kembung', 'kolik', 'begah', 'gas',
-      'tidur', 'rewel', 'begadang', 'terjaga',
-      'pegal', 'relaksasi', 'lelah', 'capek',
-    ]);
-    const CLINICAL_MODIFIERS = new Set([
-      'susah', 'kurang', 'tidak', 'sering', 'jarang', 'agak', 'mulai', 'berat',
-    ]);
-
     let best: ClinicServiceItem | undefined;
     let bestScore = 0;
+    // Data-driven phrase bonus: any bigram from rawText that appears in haystack
+    const normTextForPhrase = rawText.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const bigrams = tokens.length >= 2 ? tokens.slice(0, -1).map((_, i) => `${tokens[i]} ${tokens[i + 1]}`) : [];
     for (const item of pool) {
       const nameLower = item.name.toLowerCase();
       const descLower = (item.description || '').toLowerCase();
       const haystack = `${nameLower} ${descLower}`;
+      const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
       let score = 0;
 
       for (const tok of tokens) {
-        // Generic "anak" DILARANG membajak skor usia spesifik bila usia belum diketahui
         if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
         if (nameLower.includes(tok)) score += 4;
         else if (descLower.includes(tok)) score += 2;
+        else if (haystack.includes(tok)) score += 2;
       }
 
-      for (const tok of tokens) {
-        if (tok === 'anak' && (ageMonths == null || ageMonths <= 0)) continue;
-        if (CORE_COMPLAINT_NOUNS.has(tok)) {
-          if (haystack.includes(tok)) score += 4;
-        } else if (!CLINICAL_MODIFIERS.has(tok)) {
-          if (haystack.includes(tok)) score += 3;
-        } else {
-          if (haystack.includes(tok)) score += 1;
-        }
+      for (const bg of bigrams) {
+        if (normTextForPhrase.includes(bg) && normHaystack.includes(bg)) score += 8;
       }
+      // Single-token GTM bonus (bigram tak ada untuk 1 token, tapi GTM tetap harus menang)
+      if (tokens.length === 1 && normHaystack.includes(tokens[0])) score += 4;
 
-      const phrasePatterns = [
-        'susah makan', 'susah bab', 'nafsu makan', 'tidak nafsu makan',
-        'susah tidur', 'kembung perut', 'batuk pilek', 'batuk dahak',
-        'rewel menangis', 'pegal lelah', 'pilek flu',
-      ];
-      // Audit simulator (Bapil -> Cukur Selapan): normalisasi tanda baca agar
-      // "batuk, pilek" (koma di deskripsi katalog) tetap cocok dengan frasa
-      // "batuk pilek". Normalisasi teknis tanda baca, bukan hafalan semantik.
-      const normText = rawText.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      for (const phrase of phrasePatterns) {
-        if (normText.includes(phrase) && normHaystack.includes(phrase)) {
-          score += 8;
-        }
-      }
-
-      // Clinical dominance (keputusan user): keluhan medis MURNI tanpa indikasi
-      // cukur/rambut/tindik/paket → terapi tunggal WAJIB menang atas kombo.
-      // Paket kombo (BUNDLE) didenda; terapi tunggal penanda-terapi dibonus —
-      // keduanya murni dari metadata katalog (category/nama), tanpa daftar nama.
-      const wantsShaveOrBundle = /(cukur|rambut|gundul|tindik|paket|selapan)/.test(normText);
-      const isBundleService = (item.category || '').toUpperCase() === 'BUNDLE'
-        || /paket|\+/.test(nameLower);
-      if (!wantsShaveOrBundle && isBundleService) {
-        score -= 10;
-      }
-      const isSingleTherapy = (item.category === 'BABY' || item.category === 'KIDS')
-        && /terapi|pulih/.test(nameLower);
-      if (isSingleTherapy && tokens.some((t) => CORE_COMPLAINT_NOUNS.has(t) && normHaystack.includes(t))) {
-        score += 5;
-      }
+      // Clinical dominance: keluhan medis tanpa indikasi cukur/paket → bundle didenda, terapi tunggal dibonus
+      const wantsShaveOrBundle = /(cukur|rambut|gundul|tindik|paket|selapan)/.test(normTextForPhrase);
+      const isBundleService = (item.category || '').toUpperCase() === 'BUNDLE' || /paket|\+/.test(nameLower);
+      if (!wantsShaveOrBundle && isBundleService) score -= 10;
+      const isSingleTherapy = (item.category === 'BABY' || item.category === 'KIDS') && /terapi|pulih/.test(nameLower);
+      if (isSingleTherapy && tokens.some((t) => normHaystack.includes(t))) score += 5;
 
       if (score > bestScore) { bestScore = score; best = item; }
       else if (score === bestScore && score > 0 && best) {
@@ -2056,6 +2051,10 @@ export class TreatmentCatalogService {
       'juga', 'saja', 'aja', 'semua', 'daftar', 'list', 'please',
       'pijat', // generic, semua treatment ada kata "pijat" → skip dari scoring
       'kala',
+      // Unit waktu/usia BUKAN diskriminator layanan — df kecilnya (mis. 'hari' df=1 dari
+      // 'menjelang hari persalinan') memberi bobot IDF raksasa dan menenggelamkan kata kunci
+      // niat ('newborn care' kalah oleh bundle pra-kelahiran). Test: treatment-catalog-search#15.
+      'hari', 'bulan', 'bln', 'tahun', 'thn', 'minggu', 'mgg', 'jam', 'menit', 'usia', 'umur',
     ]);
     const keywords = q
       .split(/\s+/)

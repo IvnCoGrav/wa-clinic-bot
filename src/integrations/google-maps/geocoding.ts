@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { getStringSimilarity } from '../../utils/similarity';
+import { isTypoAtMostOne } from '../../utils/typo-match';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
@@ -87,7 +88,7 @@ export class GeocodingService {
   /**
    * Mengambil koordinat & informasi administratif dari input teks.
    * LOCAL-FIRST ARCHITECTURE:
-   * Tier 1: Periksa database gazetteer resmi (3.748 kelurahan/desa Surabaya & Sidoarjo) -> 0ms, 100% akurat.
+   * Tier 1: Periksa database gazetteer resmi (573 kelurahan/desa Surabaya & Sidoarjo) -> 0ms, 100% akurat.
    * Tier 2: Fallback ke Google Maps Geocoding API jika input berupa nama jalan/perumahan spesifik.
    */
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {
@@ -244,8 +245,10 @@ export class GeocodingService {
         } else {
           const similarity = getStringSimilarity(lowerSpan, kecName);
           const dynamicKecThreshold = kecName.length <= 4 ? 0.85 : 0.75;
-          if (similarity >= dynamicKecThreshold) {
-            const cand = { item: entry, score: similarity, level: 'kecamatan' as const, matchedSpan: span };
+          const isKecTypo = (lowerSpan.length >= 5 || kecName.length >= 5) && isTypoAtMostOne(lowerSpan, kecName);
+          if (similarity >= dynamicKecThreshold || isKecTypo) {
+            const score = isKecTypo ? Math.max(similarity, 0.85) : similarity;
+            const cand = { item: entry, score, level: 'kecamatan' as const, matchedSpan: span };
             if (this.isBetterMatch(cand, bestMatch)) {
               bestMatch = cand;
             }
@@ -260,8 +263,10 @@ export class GeocodingService {
           }
         } else {
           const similarity = getStringSimilarity(lowerSpan, kelName);
-          if (similarity >= kelurahanThreshold) {
-            const cand = { item: entry, score: similarity, level: 'kelurahan' as const, matchedSpan: span };
+          const isKelTypo = (lowerSpan.length >= 5 || kelName.length >= 5) && isTypoAtMostOne(lowerSpan, kelName);
+          if (similarity >= kelurahanThreshold || isKelTypo) {
+            const score = isKelTypo ? Math.max(similarity, 0.85) : similarity;
+            const cand = { item: entry, score, level: 'kelurahan' as const, matchedSpan: span };
             if (this.isBetterMatch(cand, bestMatch)) {
               bestMatch = cand;
             }
@@ -831,12 +836,12 @@ export class GeocodingService {
         };
       }
     } catch {}
-    // Di luar coverage: teruskan koordinat murni tanpa nama wilayah fiktif.
+    // Di luar coverage: koordinat murni tanpa nama — isPrecise false (kontrak tipe)
     return {
-      isPrecise: true,
+      isPrecise: false,
       lat,
       lng,
-    };
+    } as any;
   }
 
   /**
@@ -881,6 +886,17 @@ export class GeocodingService {
     const fillerPatterns = /^(gtau\s*ah?|ga\s+tau|gak\s+tau|tidak\s+tau|ntau|sana|sini|gitu|gini|gtw|tauh?|ah|eh|oh|ih|uh|ya|iy|ok|oke|ga|gk|g|gitu\s+deh|ya\s+gitu\s+deh|lah|udah|dah|gapaham|gatau|nggak\s*tahu)$/i;
     if (normalizedForCheck.length < 2 || fillerPatterns.test(normalizedForCheck)) {
       return null;
+    }
+
+    // F-04: skip LLM untuk token tunggal tak dikenal (tanpa street marker, tanpa hit gazetteer)
+    // Contoh: "Wonodoro" fiktif (halusinasi router) → tanpa manggil LLM 12s. "wdoro" sudah
+    // di-handle lokal via typo (findBestGazetteerMatch) sebelum sampai sini.
+    const singleToks = normalizedForCheck.split(/\s+/).filter(Boolean);
+    if (singleToks.length === 1) {
+      const tok = singleToks[0].toLowerCase();
+      if (tok.length >= 4 && tok.length <= 12 && !hasStreetAddressDetail(locationText) && !hasResolvableSpecificity(locationText)) {
+        return null;
+      }
     }
 
     try {
@@ -942,7 +958,7 @@ OUTPUT JSON:
             apiKey,
             model,
             fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_GEOCODE_MS || process.env.LLM_TIMEOUT_NLU_MS || 120000),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_GEOCODE_MS || process.env.LLM_TIMEOUT_NLU_MS || 8000),
             payload: {
               temperature: 0.1,
               max_tokens: 512,
@@ -1013,6 +1029,31 @@ OUTPUT JSON:
       const parsed = JSON.parse(content);
       if (!parsed.kelurahan && !parsed.kecamatan) {
         return null;
+      }
+
+      // F-07: tolak tebakan LLM yang tak punya irisan dengan teks asli (mis. Wonokromo untuk wdoro)
+      {
+        const locLower = locationText.toLowerCase();
+        const kelLower = (parsed.kelurahan || '').toLowerCase().trim();
+        const kecLower = (parsed.kecamatan || '').toLowerCase().trim();
+        const hasOverlap = (s: string): boolean => {
+          if (!s) return false;
+          if (locLower.includes(s)) return true;
+          if (s.length >= 5) {
+            const toks = locLower.split(/[^a-z0-9]+/).filter((t: string) => t.length >= 4);
+            for (const tok of toks) {
+              if (isTypoAtMostOne(tok, s)) return true;
+            }
+          }
+          return false;
+        };
+        if (kelLower && kecLower) {
+          if (!hasOverlap(kelLower) && !hasOverlap(kecLower)) return null;
+        } else if (kelLower) {
+          if (!hasOverlap(kelLower)) return null;
+        } else if (kecLower) {
+          if (!hasOverlap(kecLower)) return null;
+        }
       }
 
       console.log(`[LLM GEOCODE] Resolved "${locationText}" → ${JSON.stringify(parsed)}`);
@@ -1098,19 +1139,17 @@ OUTPUT JSON:
         }
       }
 
-      // Fallback: cari berdasarkan kecamatan saja
+      // Fallback: cari berdasarkan kecamatan saja — isPrecise false TANPA koordinat (kontrak tipe)
       if (kecamatan) {
         const kecLower = kecamatan.toLowerCase();
-        const match = data.find((d: any) => d.Kecamatan.toLowerCase() === kecLower);
-        if (match) {
-          const coords = match.Koordinat.split(',');
+        const matches = data.filter((d: any) => d.Kecamatan.toLowerCase() === kecLower);
+        if (matches.length > 0) {
           return {
             isPrecise: false,
-            kecamatan: match.Kecamatan,
-            kota: match.Kabupaten_Kota,
-            lat: parseFloat(coords[0].trim()),
-            lng: parseFloat(coords[1].trim()),
-            formattedAddress: `${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            kecamatan: matches[0].Kecamatan,
+            kota: matches[0].Kabupaten_Kota,
+            formattedAddress: `${matches[0].Kecamatan}, ${matches[0].Kabupaten_Kota}`,
+            ambiguityResults: matches.length > 1 ? matches : undefined,
           };
         }
       }

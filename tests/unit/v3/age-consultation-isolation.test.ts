@@ -15,10 +15,10 @@ describe('Clinical Age Consultation Isolation (Plan 7)', () => {
     expect(result.treatments.length).toBeGreaterThan(0);
     console.log('Treatments for age 17:', result.treatments.map(t => t.name));
 
-    // Layanan teratas harus Pijat Bayi Ceria (relaksasi) atau Lahap Juara (nutrisi)
+    // Layanan teratas harus Ceria (relaksasi) atau Lahap (nutrisi) — tahan rebrand Kala.
     const topTreatment = result.treatments[0];
     expect(topTreatment.name).not.toContain('Pulih Ceria');
-    expect(['Pijat Bayi Ceria', 'Pijat Bayi Ceria (Rileksasi)', 'Pijat Bayi Lahap Juara']).toContain(topTreatment.name);
+    expect(topTreatment.name.includes('Ceria') || topTreatment.name.includes('Lahap')).toBe(true);
 
     // Pulih Ceria (terapi bapil/kembung) tidak boleh menempati posisi teratas bila tanpa keluhan sakit
     const pulihIndex = result.treatments.findIndex((t) => t.name.includes('Pulih Ceria'));

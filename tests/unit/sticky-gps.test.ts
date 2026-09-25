@@ -51,7 +51,9 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
       TENANT,
     );
 
-    expect(updateMock).toHaveBeenCalledTimes(1);
+    // Fire-and-forget google-contacts sync (customer.service.ts:241-247) dapat menambah panggilan
+    // prisma.customer.update di background — assert invarian pada call PERTAMA (update lokasi), bukan hitungan eksak.
+    expect(updateMock.mock.calls.length).toBeGreaterThanOrEqual(1);
     const data = updateMock.mock.calls[0][0].data;
     expect(data.lat).toBeCloseTo(-7.393858, 6);
     expect(data.lng).toBeCloseTo(112.745941, 6);

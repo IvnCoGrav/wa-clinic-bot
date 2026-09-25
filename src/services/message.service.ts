@@ -181,29 +181,25 @@ export class MessageService {
       shortId !== waMessageId ? `${tenantId}:${shortId}` : null,
     ].filter(Boolean) as string[];
 
-    // 1. Cek memory store dulu
-    for (const key of keysToCheck) {
-      if (memoryWaMessageIds.has(key)) {
-        return true;
-      }
-    }
-
-    // Tambahkan kedua key ke memory store sebagai lock in-flight agar request paralel tertahan
-    for (const key of keysToCheck) {
-      memoryWaMessageIds.add(key);
-    }
-
     try {
-      // 2. Query ke DB via Repository (PLAN 8 FASE 5c).
+      // 1. Cek DB dulu — otoritas lintas-instance (bukan Set memori).
       const { getMessageRepository } = await import('../repositories/message.repository');
       const exists = await getMessageRepository().existsByWaId(waMessageId, shortId, tenantId);
       if (exists) {
+        // sinkronkan ke memori untuk dedup in-flight berikutnya
+        for (const key of keysToCheck) memoryWaMessageIds.add(key);
         return true;
       }
     } catch (error) {
-      // Jika DB connection error dalam testing environment, gunakan fallback memory store
+      // DB offline → fallback ke memori
+      for (const key of keysToCheck) {
+        if (memoryWaMessageIds.has(key)) return true;
+      }
+      return false;
     }
 
+    // 2. Belum ada di DB → kunci in-flight di memori untuk request paralel di proses yang sama
+    for (const key of keysToCheck) memoryWaMessageIds.add(key);
     return false;
   }
 

@@ -418,7 +418,9 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     expect(cat1[0].result.treatments.length).toBeGreaterThan(0);
     const nonAddon1 = cat1[0].result.treatments.filter((t: any) => t.category !== 'ADD_ON' && !t.isAddon);
     expect(nonAddon1.every((t: any) => t.category === 'KIDS' || t.category === 'BOTH')).toBe(true);
-    expect(cat1[0].result.treatments[0]?.name).toBe('Pijat Kids Pulih Ceria (2 - 4 Tahun)');
+    // Tahan rebrand Kala ('Kala Kids – Pijat Pulih Ceria'): verifikasi via ID kanonis + token Pulih.
+    expect(cat1[0].result.treatments[0]?.id).toBe('kids-pulih-2-4th');
+    expect(String(cat1[0].result.treatments[0]?.name)).toContain('Pulih');
     lastTopTreatment = cat1[0].result.treatments[0]?.name;
     // Sapaan resmi Turn-0 ditempel deterministik oleh generation-stage.
     expect(r1).toMatch(/^Halo Bunda!/);

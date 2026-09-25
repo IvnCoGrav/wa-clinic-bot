@@ -4,6 +4,7 @@ import { getStringSimilarity } from '../utils/similarity';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
 import { parsePositiveInt } from '../utils/env-numeric';
+import { decryptSecretCompat } from '../utils/encryption';
 
 export interface DailyReportData {
   reportDateStr: string;
@@ -89,7 +90,8 @@ export class DailyReportService {
         severity: AlertSeverity.INFO,
         message: markdownMessage,
         rawMessage: true,
-        botToken: tenant?.telegram_bot_token || undefined,
+        // SEC-AUDIT-11: decrypt token terenkripsi (fallback plaintext legacy).
+        botToken: tenant?.telegram_bot_token ? decryptSecretCompat(tenant.telegram_bot_token) : undefined,
         chatId: tenant?.telegram_chat_id || undefined,
         metadata: reportData
       });
@@ -135,7 +137,7 @@ export class DailyReportService {
       select: { name: true, telegram_bot_token: true, telegram_chat_id: true }
     });
 
-    const botToken = overrideCredentials?.botToken?.trim() || tenant?.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+    const botToken = overrideCredentials?.botToken?.trim() || (tenant?.telegram_bot_token ? decryptSecretCompat(tenant.telegram_bot_token) : '') || process.env.TELEGRAM_BOT_TOKEN;
     const chatId = overrideCredentials?.chatId?.trim() || tenant?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
 
     if (!botToken || !chatId) {

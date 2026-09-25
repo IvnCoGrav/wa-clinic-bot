@@ -41,6 +41,10 @@ describe('Database Backup & Restore Suite', () => {
       expect(() => sanitizeBackupFileName('malicious.exe')).toThrow();
     });
 
+    it('rejects raw .sql (SEC-AUDIT-06: hanya .sql.gz / .json.gz)', () => {
+      expect(() => sanitizeBackupFileName('dump.sql')).toThrow();
+    });
+
     it('detects valid gzip header magic bytes (0x1F, 0x8B)', () => {
       // Buat file gzip valid
       const content = Buffer.from('TEST DATA DUMP');
@@ -106,6 +110,18 @@ describe('Database Backup & Restore Suite', () => {
       const restoreResult = await backupService.restoreDatabaseFromDump(testFilePath, 'test-tenant');
       expect(restoreResult.success).toBe(true);
       expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(1);
+    });
+
+    it('SEC-AUDIT-06: menolak restore dump SQL mentah (anti arbitrary SQL)', async () => {
+      const sqlPath = path.join(BACKUP_STORAGE_DIR, 'raw_dump.sql.gz');
+      fs.writeFileSync(sqlPath, zlib.gzipSync(Buffer.from('DROP TABLE customers;')));
+      try {
+        await expect(backupService.restoreDatabaseFromDump(sqlPath, 'test-tenant')).rejects.toThrow(
+          /Format backup tidak didukung/i
+        );
+      } finally {
+        if (fs.existsSync(sqlPath)) fs.unlinkSync(sqlPath);
+      }
     });
   });
 

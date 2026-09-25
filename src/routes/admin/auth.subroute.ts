@@ -64,7 +64,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     if (adminKey && inputKey && safeCompare(inputKey, adminKey)) {
       loginAttemptsMap.delete(ip);
 
-      const session = AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
+      const session = await AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
       const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
@@ -190,7 +190,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
         .trim() === 'https';
 
     // 1. Coba sebagai sesi admin
-    const adminSession = AdminSessionService.validateSession(token);
+    const adminSession = await AdminSessionService.validateSession(token);
     if (adminSession) {
       const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
@@ -241,9 +241,8 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     const cookieHeader = request.headers['cookie'] || '';
     const adminSessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
     const staffSessionCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
-
     if (adminSessionCookie) {
-      AdminSessionService.destroySession(adminSessionCookie);
+      await AdminSessionService.destroySession(adminSessionCookie);
     }
     if (staffSessionCookie) {
       await StaffAuthService.logout(staffSessionCookie);
@@ -301,7 +300,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
     // 1c. Cek cookie admin_session
     if (adminSessionCookie) {
-      const session = AdminSessionService.validateSession(adminSessionCookie);
+      const session = await AdminSessionService.validateSession(adminSessionCookie);
       if (session) {
         return reply.status(200).send({
           success: true,

@@ -130,16 +130,17 @@ describe('ADVERSARIAL SUITE 1: Ketahanan Spatial Nearest-Neighbor Geocoding', ()
   });
 
   it('Edge Case 1.5: Fallback reverseGeocode tidak pernah menyuntikkan Gubeng/Surabaya palsu untuk koordinat non-Surabaya', async () => {
-    // Jakarta Monas
+    // Jakarta Monas — di luar coverage gazetteer SBY/SDA: kontrak mockReverseGeocode (geocoding.ts:839-844)
+    // isPrecise false + tanpa nama (anti-fake Gubeng). Test lama expect true = salah.
     const jakarta = await geocodingService.reverseGeocode(-6.1754, 106.8272);
-    expect(jakarta.isPrecise).toBe(true);
+    expect(jakarta.isPrecise).toBe(false);
     expect(jakarta.kecamatan).toBeUndefined();
     expect(jakarta.kota).toBeUndefined();
     expect(jakarta.kelurahan).toBeUndefined();
 
     // Luar negeri (Singapura)
     const singapore = await geocodingService.reverseGeocode(1.3521, 103.8198);
-    expect(singapore.isPrecise).toBe(true);
+    expect(singapore.isPrecise).toBe(false);
     expect(singapore.kecamatan).toBeUndefined();
     expect(singapore.kota).toBeUndefined();
   });

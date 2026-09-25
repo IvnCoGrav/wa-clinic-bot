@@ -55,6 +55,17 @@ export function buildApp() {
     }
   }
 
+  // SEC-AUDIT-01: Telegram webhook kini fail-closed (menolak bila secret kosong),
+  // sehingga secret WAJIB ada di production — sejajar dengan WAHA_WEBHOOK_SECRET.
+  const telegramSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!telegramSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Critical Security Configuration Missing: TELEGRAM_WEBHOOK_SECRET must be defined in production environment.');
+    } else {
+      console.warn('\n⚠️ [SECURITY WARNING] TELEGRAM_WEBHOOK_SECRET environment variable is not defined. Telegram webhook endpoint will reject ALL requests (fail-closed) until it is configured.\n');
+    }
+  }
+
   const app = Fastify({
     logger: {
       level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
@@ -87,29 +98,27 @@ export function buildApp() {
   app.register(rateLimit, {
     max: process.env.NODE_ENV === 'test' ? 100 : 1000,
     timeWindow: '1 minute',
+    // SEC-AUDIT-13: sebelumnya hampir semua rute dikecualikan total (allowList
+    // return true) → flood webhook/SSE/API admin tanpa batas. Kini hanya request
+    // yang benar-benar tidak boleh di-throttle (SSE long-lived) yang di-skip;
+    // webhook & API admin tetap dibatasi dengan kuota tinggi agar tidak DoS.
     allowList: (request) => {
       const url = request.url || '';
-      // Webhooks WAHA/WABA mengirim ratusan event bertubi-tubi saat WA connect/sync
-      if (url.startsWith('/webhook') || url.startsWith('/api/webhook')) {
-        return true;
-      }
-      // SSE Real-time stream events
+      // SSE Real-time stream: koneksi long-lived, jangan dihitung per-event.
       if (url.includes('/events') || url.includes('/stream')) {
-        return true;
-      }
-      // Static assets & SPA
-      if (url.startsWith('/admin') || url.startsWith('/assets') || url.startsWith('/landing')) {
-        return true;
-      }
-      // Internal Admin Dashboard API endpoints (termasuk reservasi, customer, dan live chat)
-      if (url.startsWith('/api/admin')) {
         return true;
       }
       return false;
     },
     keyGenerator: (request) => {
-      const apiKey = request.headers['x-api-key'] as string;
+      const url = request.url || '';
       const clientIp = request.ip;
+      // Webhook WAHA/WABA mengirim ratusan event bertubi-tubi saat connect/sync:
+      // kuota tinggi khusus webhook (bukan bebas tanpa batas).
+      if (url.startsWith('/webhook') || url.startsWith('/api/webhook')) {
+        return `webhook:${clientIp}`;
+      }
+      const apiKey = request.headers['x-api-key'] as string;
       if (apiKey) {
         return `${apiKey}-${clientIp}`;
       }

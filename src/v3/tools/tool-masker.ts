@@ -81,16 +81,16 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
       if (n && n.length >= 4 && lower.includes(n.toLowerCase())) return true;
     }
   } catch {}
-  // Typo-tolerant 1-huruf terpusat (shared utils/typo-match): token ≥6 agar "waru/sby" pendek tidak false-positive
+  // Typo-tolerant 1-huruf terpusat (shared utils/typo-match): token ≥5 agar "sedti"(5)→"sedati"(6) tertangani, tetap aman vs "waru"(4)/"sby"(3) yang tertahan ≥5
   try {
-    const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length >= 6);
+    const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length >= 5);
     if (toks.length > 0) {
       for (const [areaLower] of getGazetteerAreas().entries()) {
-        if (areaLower.length >= 6 && toks.some((t) => isTypoAtMostOne(t, areaLower))) return true;
+        if (areaLower.length >= 5 && toks.some((t) => isTypoAtMostOne(t, areaLower))) return true;
       }
       for (const n of getGazetteerKecamatanNames() || []) {
         const nl = String(n || '').toLowerCase();
-        if (nl.length >= 6 && toks.some((t) => isTypoAtMostOne(t, nl))) return true;
+        if (nl.length >= 5 && toks.some((t) => isTypoAtMostOne(t, nl))) return true;
       }
     }
   } catch {}

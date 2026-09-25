@@ -23,8 +23,11 @@ describe('Cart consultation gate (Fase 3)', () => {
   // Nama REAL dari katalog (anti-rapuh ejaan): bundle paket ibu.
   const OKSITOSIN_NAME = all.find((s) => s.id === 'moms-laktasi-oksitosin-full')?.name
     ?? 'Breast + Oksitosin Fullbody Massage';
-  const PULIH_NAME = 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
-  const CERIA_NAME = 'Pijat Bayi Ceria (Rileksasi)';
+  // Tahan rebrand Kala: ambil dari katalog via ID kanonis (dulu hardcode nama lama).
+  const PULIH_NAME = all.find((s) => s.id === 'baby-massage-pulih-ceria')?.name
+    ?? 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
+  const CERIA_NAME = all.find((s) => s.id === 'baby-massage-ceria')?.name
+    ?? 'Pijat Bayi Ceria (Rileksasi)';
 
   it('tanya khasiat oksitosin → cart kosong, tercatat di discussedTreatments', () => {
     const session: any = { cartItems: [], children: [] };
@@ -71,12 +74,12 @@ describe('Cart consultation gate (Fase 3)', () => {
   it('afirmasi "boleh" atas tawaran tunggal → komitmen aktif, masuk cart', () => {
     const session: any = { cartItems: [], children: [] };
     const history = [
-      { role: 'assistant', content: 'Kami tawarkan Pijat Bayi Ceria (Rileksasi) ya Bunda' },
+      { role: 'assistant', content: `Kami tawarkan ${CERIA_NAME} ya Bunda` },
       { role: 'user', content: 'boleh' },
     ];
     const cart = GoalTracker.syncCartItems(session, history, catalog);
     expect(cart.length).toBe(1);
-    expect(cart[0].name).toContain('Pijat Bayi Ceria');
+    expect(cart[0].name).toBe(CERIA_NAME);
   });
 
   it('perbandingan bertanda tanya + tawaran multi-opsi asisten + "sabtu bisa ?" → TIDAK ada paket terkunci (perbandingan ≠ konfirmasi)', () => {

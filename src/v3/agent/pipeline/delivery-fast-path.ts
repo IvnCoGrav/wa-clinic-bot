@@ -57,6 +57,10 @@ export class DeliveryFastPath {
     } catch {
       return true;
     }
+    // Kupas prefix brand rebrand ('Kala Baby/Kids/Mom/Bundle/Terapi/Newborn –') agar heuristik
+    // frasa tetap bekerja pada inti nama ('Laktasi & Breast Care', bukan 'Kala Mom').
+    const unbrand = (n: string): string =>
+      n.toLowerCase().trim().replace(/^kala\s+(?:baby|kids|mom|bundle|terapi|newborn)\s*[–-]\s*/i, '').trim();
     for (const raw of names) {
       const full = raw.toLowerCase().trim();
       const clean = full.replace(/\s*\([^)]*\)\s*$/g, '').trim();
@@ -67,8 +71,21 @@ export class DeliveryFastPath {
       if (alias.length >= 4 && q.includes(alias)) return true;
       // Frasa 2-kata pembuka nama katalog (cermin scorer katalog:
       // "paket laktasi" ∈ "Paket Laktasi Booster") — sebutan paket eksplisit.
-      const firstTwo = clean.split(/\s+/).slice(0, 2).join(' ');
+      // Dihitung dari nama TANPA brand agar rebrand tak membutakannya.
+      const firstTwo = unbrand(clean).split(/\s+/).slice(0, 2).join(' ');
       if (firstTwo.length >= 6 && q.includes(firstTwo)) return true;
+    }
+    // Jaring pengaman token langka: token katalog (len≥6) yang muncul di ≤3 nama
+    // ('laktasi', 'selapan', 'prenatal') disebut eksplisit → fail-open. Token umum
+    // ('massage', 'pijat') dikecualikan via ambang frekuensi agar lokasi murni tak ikut.
+    const freq = new Map<string, number>();
+    for (const raw of names) {
+      const toks = new Set(unbrand(raw).split(/[^a-z0-9]+/).filter((t) => t.length >= 6));
+      for (const t of toks) freq.set(t, (freq.get(t) || 0) + 1);
+    }
+    const qToks = new Set(q.split(/[^a-z0-9]+/));
+    for (const [t, c] of freq) {
+      if (c <= 3 && qToks.has(t)) return true;
     }
     return false;
   }

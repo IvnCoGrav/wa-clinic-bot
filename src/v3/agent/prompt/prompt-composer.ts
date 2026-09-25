@@ -49,6 +49,7 @@ import {
   SCHEDULE_NEG_CONSTRAINTS_RULE21,
   SCHEDULE_NEG_CONSTRAINTS_TAIL,
   TOOL_GUIDANCE_BLOCK,
+  buildToolGuidanceBlock,
 } from './phases/scheduling.phase';
 import { isFunnelCommitted } from '../pipeline/phase-resolver';
 import {
@@ -120,11 +121,14 @@ export interface RouterPromptOpts {
    * status ringkas. Tidak disetel/false → teks kanonis byte-identik.
    */
   isSaveReservationMasked?: boolean;
+  isCalculateDeliveryMasked?: boolean;
 }
 
 export interface SystemPromptOpts {
   history?: Array<{ role: string; content: string }>;
   askedLocationRecently?: boolean;
+  isCalculateDeliveryMasked?: boolean;
+  isSaveReservationMasked?: boolean;
   /**
    * Fase 3.5 — injeksi fase operasional dinamis (OPT-IN).
    * Tidak disetel → rakitan penuh identik eksisting (safe-mode, byte-identik).
@@ -215,7 +219,7 @@ export function composeRouterPrompt(
 
   return `Kamu adalah Bidan Yusi, asisten AI konsultan resmi dari "${brand.businessName}" (layanan homecare treatment ibu dan bayi di area Surabaya dan Sidoarjo).
 
-${buildRouterToolRoutingBlock({ isSaveReservationMasked: opts?.isSaveReservationMasked })}
+${buildRouterToolRoutingBlock({ isSaveReservationMasked: opts?.isSaveReservationMasked, isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked })}
 ${buildRouterDirectReplyBlock(session, isFollowUp, brand.businessName)}
 
 ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirective ? `${opts.phaseDirective}\n\n` : ''}${goalSummary}${temporalSuffix}`;
@@ -243,6 +247,7 @@ export async function composeRouterPromptAsync(
     history: opts?.history,
     askedLocationRecently: opts?.askedLocationRecently,
     isSaveReservationMasked: opts?.isSaveReservationMasked,
+    isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked,
   });
 
   const [dbPrompt, brand] = await Promise.all([
@@ -295,7 +300,7 @@ ${OVERCLAIM_BLOCK}
 
   ${negConstraints}
 
-${TOOL_GUIDANCE_BLOCK}
+${buildToolGuidanceBlock({ isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked, isSaveReservationMasked: opts?.isSaveReservationMasked })}
 
 ${STABLE_PREFIX_MARKER}
 ${goalSummary}${focusSuffix}

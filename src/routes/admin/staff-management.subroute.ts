@@ -11,9 +11,10 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
    * Mengambil daftar staff (terapis) untuk keperluan manajemen dan dropdown penugasan.
    */
   fastify.get('/api/admin/staff', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
     try {
       const staffList = await prisma.staff.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID },
+        where: { tenant_id: tenantId },
         select: {
           id: true,
           tenant_id: true,
@@ -63,6 +64,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { name, phone, password, role = 'THERAPIST' } = request.body || {};
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
 
       if (!name || !phone || !password) {
         return reply.status(400).send({
@@ -78,8 +80,8 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         const existing = await prisma.staff.findFirst({
           where: {
             OR: [
-              { phone: cleanPhone, tenant_id: DEFAULT_TENANT_ID },
-              { phone: phone.trim(), tenant_id: DEFAULT_TENANT_ID },
+              { phone: cleanPhone, tenant_id: tenantId },
+              { phone: phone.trim(), tenant_id: tenantId },
             ],
           },
         });
@@ -95,7 +97,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
 
         const newStaff = await prisma.staff.create({
           data: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             name: name.trim(),
             phone: cleanPhone,
             password_hash,
@@ -121,7 +123,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           targetId: newStaff.id,
           payload: { name: newStaff.name, phone: newStaff.phone, role: newStaff.role },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(201).send({ success: true, data: newStaff });
@@ -157,10 +159,11 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { name, phone, password, role, active } = request.body || {};
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
 
       try {
         const existing = await prisma.staff.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
 
         if (!existing) {
@@ -204,7 +207,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { changes: Object.keys(updateData) },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(200).send({ success: true, data: updatedStaff });
@@ -227,10 +230,10 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/staff/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
         const existing = await prisma.staff.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
 
         if (!existing) {
@@ -252,7 +255,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { name: existing.name, phone: existing.phone, role: existing.role },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -318,7 +321,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
       const targetDate = request.body?.date ? new Date(request.body.date) : new Date();
 
       try {
@@ -345,6 +348,19 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/staff/:id/telegram-pairing',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      // SEC-AUDIT-03: object-level check deterministik — token pairing adalah kredensial.
+      // Staf non-SUPER_ADMIN hanya boleh membaca miliknya sendiri; guard method-GET di
+      // admin.route.ts tidak cukup (ia meloloskan semua GET /api/admin/staff*).
+      const requesterRole = (request as any).staffRole as string | undefined;
+      const requesterId = (request as any).staffId as string | undefined;
+      if (requesterRole && requesterRole !== 'SUPER_ADMIN' && requesterId !== id) {
+        console.warn(`[RBAC GUARD] Blocked cross-staff telegram-pairing read by role '${requesterRole}' (${requesterId}) for staff ${id}`);
+        return reply.status(403).send({
+          success: false,
+          error: 'Forbidden: hanya pemilik akun atau Super Admin yang boleh melihat token pairing ini.',
+          code: 'FORBIDDEN_STAFF_PAIRING',
+        });
+      }
       try {
         const { staffNotificationService } = await import('../../services/staff-notification.service');
         const info = await staffNotificationService.getStaffPairingInfo(id);

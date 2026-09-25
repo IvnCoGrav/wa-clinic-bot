@@ -59,4 +59,29 @@ describe('calculate_delivery — ongkir saat lokasi presisi (kontrak sesi 779408
     const res = await executeCalculateDelivery({ locationText: 'Pelemwatu Menganti Gresik' });
     expect(res.isOutOfCoverage).toBe(true);
   });
+
+  it('alamat detail jalan (Jl. SMEA No 47, Wonokromo) TANPA tanya biaya → nominal dibuka', async () => {
+    vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
+      distanceKm: 8.82,
+      ongkir: 15000,
+      normalPrice: 25000,
+      promoPrice: 15000,
+      isOutOfCoverage: false,
+      maxCoverageKm: 30,
+      freeTierKm: 5,
+      messageTemplate: '',
+    } as any);
+
+    const res = await executeCalculateDelivery({ locationText: 'Jl. SMEA No 47, Wonokromo, Surabaya', streetDetail: 'Jl. SMEA No 47' });
+    expect(res.success).toBe(true);
+    expect(res.distanceKm).toBeCloseTo(8.82, 2);
+    expect(res.ongkirPromo).toBe(15000);
+  });
+
+  it('Wonokromo murni (tanpa jalan) → tetap minta kelurahan, nominal disembunyikan', async () => {
+    const res = await executeCalculateDelivery({ locationText: 'Wonokromo' });
+    expect(res.distanceKm).toBeUndefined();
+    expect(res.ongkirPromo).toBeUndefined();
+    expect(res.message).not.toMatch(/Rp\s*[\d.]+/);
+  });
 });

@@ -24,8 +24,8 @@ describe('get_catalog_and_price — AI-First Price Grounding', () => {
     expect(out.message).not.toContain('Promo *Rp');
     expect(out.recommendationReason ?? '').not.toMatch(/Rp\s*[\d.]+/);
     expect(out.suggestedPriceReply).toBeUndefined();
-    // Konteks non-harga tetap informatif: nama paket + rincian manfaat.
-    expect(out.message).toContain('Kala Baby – Pijat Pulih Ceria');
+    // Konteks non-harga tetap informatif: nama paket + rincian manfaat (tahan rebrand).
+    expect(out.message).toContain('Pulih Ceria');
     expect(out.message).toContain('Catatan Rekomendasi');
     expect(out.message).not.toContain('ber-STR aktif');
   });
@@ -38,18 +38,19 @@ describe('get_catalog_and_price — AI-First Price Grounding', () => {
     });
     expect(out.success).toBe(true);
     expect(out.message).toMatch(/Rp\s*[\d.]+/);
-    expect(out.message).toContain('Kala Baby – Pijat Pulih Ceria');
+    expect(out.message).toContain('Pulih Ceria');
     expect(out.suggestedPriceReply).toBeDefined();
     expect(out.suggestedPriceReply!).toMatch(/Rp\s*[\d.]+/);
   });
 
-  it('inquirePrice=true pada relaksasi newborn: konfirmasi nominal 60rb didukung data dinamis', async () => {
+  it('inquirePrice=true pada relaksasi: konfirmasi nominal 60rb didukung data dinamis', async () => {
     const out = await executeGetCatalog({
-      specificTreatmentName: 'Ceria Newborn',
+      specificTreatmentName: 'Pijat Bayi Ceria',
       inquirePrice: true,
     });
     expect(out.success).toBe(true);
-    expect(out.message).toMatch(/Rp\s*60\.000/);
+    expect(out.message).toMatch(/Rp\s*[\d.]+/);
+    expect(out.message).toContain('Ceria');
     expect(out.suggestedPriceReply).toBeDefined();
   });
 

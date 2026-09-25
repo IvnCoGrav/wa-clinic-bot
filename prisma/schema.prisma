@@ -73,6 +73,9 @@ model Customer {
   ongkir                  Int?
   is_out_of_coverage      Boolean        @default(false)
   location_source         LocationSource?
+  // DEPRECATED (Fase 1b): pending_* adalah state episodik per-conversation, bukan profil permanen.
+  // Sumber kebenaran baru: Conversation.session_data.pendingLocation (JSON). Kolom ini dipertahankan
+  // untuk dual-read/backfill dan akan di-drop setelah migrasi (Confirmation Gate, butuh backfill script).
   pending_kelurahan       String?
   pending_kecamatan       String?
   pending_kota            String?
@@ -83,6 +86,10 @@ model Customer {
   status                  String         @default("active")
   block_reason            String?
   blocked_at              DateTime?
+  // SEC-AUDIT-14: soft-delete untuk command /reset (arsip, bukan DELETE fisik).
+  // Data tetap ada & dapat dipulihkan admin; getOrCreateCustomer revive saat
+  // nomor yang sama mengirim pesan baru.
+  deleted_at              DateTime?
   created_at              DateTime       @default(now())
   updated_at              DateTime       @updatedAt
   conversations           Conversation[]
@@ -91,6 +98,9 @@ model Customer {
   follow_ups              FollowUp[]
   children                Child[]
   adClick                 AdClick?
+  // DEPRECATED (Fase 1b): pricelist_sent/share_location_sent/mql_bubble_count adalah state sesi/kuota,
+  // idealnya di Conversation.session_data atau tabel kuota terpisah. Dipertahankan untuk kompatibilitas,
+  // akan dimigrasi staged (dual-read → backfill → drop) setelah Fase 1b.
   pricelist_sent          Boolean        @default(false)
   share_location_sent     Boolean        @default(false)
   is_sandbox_test         Boolean        @default(false)
@@ -123,6 +133,7 @@ model Customer {
   @@index([tenant_id, is_sandbox_test])
   @@index([tenant_id, is_mql])
   @@index([tenant_id, is_sandbox_test, created_at])
+  @@index([tenant_id, deleted_at])
   @@index([ltv_cache])
   @@unique([tenant_id, phone])
   @@map("customers")
@@ -785,6 +796,36 @@ model StaffSession {
   @@index([staff_id])
   @@index([token_hash])
   @@map("staff_sessions")
+}
+
+// SEC-AUDIT-02: sesi Super Admin — hanya hash token (pola StaffSession),
+// menggantikan storage/admin_sessions.json plaintext.
+model AdminSession {
+  id             String    @id @default(uuid())
+  token_hash     String    @unique
+  admin_identity String    @default("System Admin")
+  created_at     DateTime  @default(now())
+  expires_at     DateTime
+  revoked_at     DateTime?
+
+  @@index([token_hash])
+  @@map("admin_sessions")
+}
+
+// SEC-AUDIT-04: pemetaan frontend-path peran → prefix API yang boleh diakses.
+// Enforcement default-deny HANYA untuk role yang punya baris (managed);
+// role tanpa baris = legacy (perilaku lama) hingga Fase 2b.
+model RoleApiScope {
+  id         String   @id @default(uuid())
+  tenant_id  String   @default("default-tenant")
+  role_key   String
+  api_prefix String
+  methods    String   @default("*")
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@unique([tenant_id, role_key, api_prefix])
+  @@map("role_api_scopes")
 }
 
 model Label {

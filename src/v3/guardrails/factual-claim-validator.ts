@@ -51,6 +51,48 @@ const DOMICILE_ATTR_RE =
 const HOMEBASE_EXEMPT_RE = /homebase\s+(kami|klinik)|klinik\s+kami\s+di/i;
 
 /**
+ * D10 — pola tanya-keluhan generik (cermin ASKING_LOCATION_RE D9).
+ * Hanya dicocokkan bila symptomsKnown=true di call-site.
+ */
+export const ASKING_SYMPTOM_RE =
+  /\b(apakah\s+(?:saat\s+ini\s+)?si\s+kecil\s+ada\s+keluhan|boleh\s+(?:di)?bagikan\s+keluhan|ada\s+keluhan\s+apa|keluhan\s+atau\s+kondisi\s+si\s+kecil|apakah\s+ada\s+keluhan\s+tertentu|bagikan\s+keluhan\s+atau\s+kondisi)/i;
+
+/**
+ * D9 — pola tanya-domisili generik (cermin D10). Hanya dicocokkan bila
+ * locationKnown=true. Diekspor agar gerbang deterministik pasca-reprompt
+ * (guardrail-pipeline) memakai otoritas pola yang SAMA (information hiding).
+ */
+export const ASKING_LOCATION_RE =
+  /\b(rumah(?:nya)?\s+(?:bunda\s+)?di\s+(?:daerah|wilayah|kelurahan|kecamatan|mana)|daerah\s+mana\s+ya\s+bunda|lokasi(?:nya)?\s+di\s+mana|biar\s+sekalian\s+kami\s+pastikan\s+jangkauan|biar\s+sekalian\s+kami\s+bantu\s+cekkan\s+jangkauan)/i;
+
+/**
+ * Gerbang deterministik anti-amnesia (Fase 2, audit 25-09): buang KALIMAT
+ * yang menanyakan ulang data yang sudah diketahui (lokasi/keluhan). Dipakai
+ * setelah reprompt kognitif (usia/jam/shareloc/pronoun) yang output-nya belum
+ * tervalidasi D9/D10. Level KALIMAT (anti-mutilasi kata); kalimat substansi
+ * dipertahankan. Bila semua kalimat terbuang → kembalikan string kosong agar
+ * fallback hilir (anti-silent-drop) mengambil alih.
+ */
+export function stripAmnesiaQuestions(
+  reply: string,
+  opts: { locationKnown?: boolean; symptomsKnown?: boolean }
+): string {
+  if (!reply || typeof reply !== 'string') return reply;
+  const patterns: RegExp[] = [];
+  if (opts.locationKnown === true) patterns.push(ASKING_LOCATION_RE);
+  if (opts.symptomsKnown === true) patterns.push(ASKING_SYMPTOM_RE);
+  if (patterns.length === 0) return reply;
+  const lines = reply.split('\n');
+  const keptLines = lines.map((line) => {
+    if (!line.trim()) return line;
+    const parts = line.split(/(?<=[.!?])\s+/);
+    const kept = parts.filter((s) => !patterns.some((re) => re.test(s)));
+    return kept.join(' ').trim();
+  });
+  return keptLines.join('\n').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+/**
  * Pencocokan frasa kata-utuh (sliding window token): "warung" DILARANG
  * membebaskan klaim "waru"; "ke kenjeran berapa ya" membebaskan "kenjeran".
  * Tokenisasi teknis, bukan hafalan kalimat.
@@ -68,6 +110,8 @@ function mentionsPhrase(haystack: string, phrase: string): boolean {
 export interface FactualValidationOptions {
   /** True bila sesi sudah memuat kelurahan/kecamatan customer. */
   locationKnown?: boolean;
+  /** True bila keluhan fisik/symptoms sudah diketahui di sesi atau tool turn ini. */
+  symptomsKnown?: boolean;
   /**
    * Plan regresi Fase 1 (Sesi 580976): pesan customer turn ini. Kecamatan
    * yang DISEBUT CUSTOMER atau DIKEMBALIKAN tool calculate_delivery adalah
@@ -90,11 +134,12 @@ export interface FactualValidationOptions {
   extraCatalogNames?: string[];
 }
 
-/** Kata generik satu-kata yang boleh di-bold tanpa padanan katalog. */
+/** Kata generik/deskriptor yang boleh di-bold tanpa padanan katalog (safety-boundary: Premium tetap invalid). */
 const GENERIC_BOLD_WORDS = new Set([
   'pijat', 'bayi', 'baby', 'bunda', 'bund', 'moms', 'mom', 'spa', 'treatment',
   'perawatan', 'layanan', 'homecare', 'promo', 'diskon', 'jadwal', 'ongkir',
   'paket', 'harga', 'gratis', 'bayar', 'jadwalkan', 'ayah', 'bapak', 'ibu',
+  'juara', 'relaksasi', 'rileksasi', 'terapi', 'lengkap', 'newborn', 'kids', 'anak',
 ]);
 
 /** Penanda bahwa teks bold/quoted merujuk nama layanan (baru dicek ke katalog). */
@@ -123,7 +168,48 @@ function significantTokens(s: string): string[] {
     .filter((t) => t.length > 2 && !GENERIC_BOLD_WORDS.has(t));
 }
 
-function catalogNames(tools: ToolExec[]): string[] {
+/**
+ * Bentuk pencocokan nama katalog (Fase 3.2, audit 25-09). Format nama di DB
+ * memakai prefix brand + pemisah " - " (mis. "Kala Baby - Pijat Pulih Ceria").
+ * Balasan customer-facing sah menyebut NAMA POKOK tanpa prefix ("Pijat Pulih
+ * Ceria"). Data-driven dari format nama katalog, BUKAN hafalan brand tertentu.
+ * Varian tanda kurung dibuang (keterangan, bukan nama pokok).
+ */
+function catalogNameMatchForms(name: string): string[] {
+  const lower = name.toLowerCase().trim();
+  const forms = new Set<string>();
+  const add = (v: string): void => {
+    const t = v.replace(/\([^)]*\)/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    if (t) forms.add(t);
+  };
+  add(lower);
+  const segs = lower.split(/\s+-\s+/).map((s) => s.trim()).filter(Boolean);
+  if (segs.length > 1) add(segs[segs.length - 1]);
+  return [...forms];
+}
+
+/**
+ * D3 (Fase 3.2): apakah balasan menyebut nama layanan katalog resmi? Cocokkan
+ * bentuk lengkap ATAU nama pokok (substring), dan sebagai toleransi variasi
+ * alami (mis. "Pijat Bayi Pulih Ceria") cocokkan token-subset bila nama pokok
+ * cukup diskriminatif (≥2 token signifikan) — cegah false-positive token
+ * tunggal generik.
+ */
+function replyMentionsCatalogName(names: string[], reply: string): boolean {
+  const replyLower = (reply || '').toLowerCase();
+  const replyTokens = new Set(replyLower.split(/[^a-z]+/).filter(Boolean));
+  return names.some((n) => {
+    if (!n) return false;
+    for (const form of catalogNameMatchForms(n)) {
+      if (replyLower.includes(form)) return true;
+      const formToks = significantTokens(form);
+      if (formToks.length >= 2 && formToks.every((t) => replyTokens.has(t))) return true;
+    }
+    return false;
+  });
+}
+
+export function catalogNames(tools: ToolExec[]): string[] {
   const names: string[] = [];
   for (const t of tools) {
     if (t?.name === 'get_catalog_and_price' && Array.isArray(t?.result?.treatments)) {
@@ -150,7 +236,7 @@ function mergedCatalogNames(tools: ToolExec[], extra?: string[]): string[] {
   return [...set];
 }
 
-function catalogDurations(tools: ToolExec[]): number[] {
+export function catalogDurations(tools: ToolExec[]): number[] {
   const out: number[] = [];
   for (const t of tools) {
     if (t?.name === 'get_catalog_and_price' && Array.isArray(t?.result?.treatments)) {
@@ -267,10 +353,9 @@ export function validateFactualClaims(
       const lower = span.toLowerCase();
       if (!TREATMENT_MARKER_RE.test(span)) continue;
       if (GENERIC_BOLD_WORDS.has(lower)) continue;
-      // Token-subset ketat: semua token signifikan span harus tercakup SATU
-      // nama katalog (setelah buang kata generik). "Pijat Laktasi Premium"
-      // vs katalog "Pijat Laktasi" → token "premium" tak tercakup → invalid.
-      const spanTokens = significantTokens(span);
+      // Normalisasi deskriptor tanda kurung: "(Rileksasi)" adalah keterangan, bukan nama pokok
+      const baseSpan = span.replace(/\([^)]*\)/g, ' ').trim();
+      const spanTokens = significantTokens(baseSpan || span);
       const matched = names.some((n) => {
         const nameTokens = significantTokens(n);
         return spanTokens.length > 0 && spanTokens.every((t) => nameTokens.includes(t));
@@ -301,9 +386,18 @@ export function validateFactualClaims(
     knowledgeHasChunks(executedTools) ||
     policyToolCalled(executedTools) ||
     hasSubstantiveChunks(_retrievedChunks);
+  // Pengecualian D3 (sesi afc5d511): anjuran pemilihan/pengambilan paket katalog
+  // (merekomendasikan NAMA layanan resmi) adalah panduan pemilihan layanan,
+  // BUKAN klaim SOP medis. Syarat: nama katalog resmi muncul di balasan
+  // (data-driven dari names, bukan marker generik — "dimandikan" tetap ditolak).
+  const mentionsCatalogName = replyMentionsCatalogName(names, reply);
+  const isTreatmentSelectionAdvisory =
+    mentionsCatalogName &&
+    /\b(sebaiknya|disarankan|sebaiknya\s+diambil|pilih|ambil|kombinasi|difokuskan)\b/i.test(reply);
   if (
     reply.length > 80 &&
     ADVISORY_RE.test(reply) &&
+    !isTreatmentSelectionAdvisory &&
     !opts?.isRefusalOrEscalation &&
     !REFUSAL_FRAME_RE.test(reply) &&
     !hasSopGrounding
@@ -313,10 +407,17 @@ export function validateFactualClaims(
 
   // D9 — Anti-Amnesia Lokasi: bila lokasi SUDAH diketahui, DILARANG menanyakan domisili lagi.
   if (opts?.locationKnown === true) {
-    const ASKING_LOCATION_RE =
-      /\b(rumah(?:nya)?\s+(?:bunda\s+)?di\s+(?:daerah|wilayah|kelurahan|kecamatan|mana)|daerah\s+mana\s+ya\s+bunda|lokasi(?:nya)?\s+di\s+mana|biar\s+sekalian\s+kami\s+pastikan\s+jangkauan|biar\s+sekalian\s+kami\s+bantu\s+cekkan\s+jangkauan)/i;
     if (ASKING_LOCATION_RE.test(reply) && !HOMEBASE_EXEMPT_RE.test(reply)) {
       violations.push('D9_LOCATION_AMNESIA: Lokasi sudah diketahui di sesi, DILARANG bertanya alamat/daerah lagi. Ganti dengan konfirmasi pengecekan jadwal atau tawaran perawatan.');
+    }
+  }
+
+  // D10 — Anti-Amnesia Keluhan: bila keluhan fisik/symptoms SUDAH diketahui
+  // di sesi atau tool turn ini, DILARANG menanyakan keluhan lagi.
+  // Cermin D9 (state-gated, pola generik — bukan hafalan kalimat).
+  if (opts?.symptomsKnown === true) {
+    if (ASKING_SYMPTOM_RE.test(reply)) {
+      violations.push('D10_SYMPTOM_AMNESIA: Keluhan si kecil sudah diketahui di sesi/percakapan, DILARANG menanyakan keluhan/kondisi lagi. Ganti dengan konfirmasi empati atau penawaran perawatan.');
     }
   }
 

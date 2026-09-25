@@ -622,7 +622,16 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // Kontrak 779408: nominal ongkir dibuka bila customer menanya biaya ATAU
     // lokasi terverifikasi PRESISI (bukan centroid estimasi) & dalam jangkauan.
     const resolvedIsPrecise = resolved.isPrecise || Boolean(resolved.kelurahan);
-    const showFeeNominal = askedFee || (resolvedIsPrecise && !centroidActive && !isOutOfCoverage);
+    const hasSpecificAddress = hasSpecificAddressDetail(compositeQuery, streetDetail);
+    // Buka nominal ongkir bila: customer bertanya biaya, ATAU lokasi presisi kelurahan,
+    // ATAU field streetDetail TERSTRUKTUR terisi (sinyal kuat alamat spesifik, cc56c1fd).
+    // Centroid + detail area DALAM query ('Jambangan Persada', kasus #26) TETAP sembunyi:
+    // jarak centroid kasar DILARANG bocor ke LLM (kontrak 779408 "bukan centroid estimasi").
+    // hasSpecificAddress (termasuk detail query) tetap dipakai aktivasi centroid di atas — bukan di sini.
+    const hasStructuredStreetDetail = Boolean(streetDetail && streetDetail.trim().length > 0);
+    const showFeeNominal = askedFee
+      || (resolvedIsPrecise && !centroidActive && !isOutOfCoverage)
+      || (hasStructuredStreetDetail && !isOutOfCoverage);
     const baseTemplateReply = isOutOfCoverage
       ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
       : showFeeNominal

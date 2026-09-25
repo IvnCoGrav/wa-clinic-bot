@@ -28,8 +28,11 @@ describe('Cart declarative-consultation gate (A-BUG-P1-10)', () => {
     bundleItemIds: (s as any).bundleItemIds,
     isAddon: (treatmentCatalogService as any).isAddonService(s),
   }));
-  const PULIH_NAME = 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
-  const CERIA_NAME = 'Pijat Bayi Ceria (Rileksasi)';
+  // Tahan rebrand Kala: ambil dari katalog via ID kanonis.
+  const PULIH_NAME = all.find((s) => s.id === 'baby-massage-pulih-ceria')?.name
+    ?? 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
+  const CERIA_NAME = all.find((s) => s.id === 'baby-massage-ceria')?.name
+    ?? 'Pijat Bayi Ceria (Rileksasi)';
 
   // --- Kasus yang HARUS tetap konsultasi (cart kosong setelah veto EXPLORING) ---
   it('cerita keluhan + sebut layanan (EXPLORING) → cart kosong setelah veto', () => {
@@ -68,7 +71,7 @@ describe('Cart declarative-consultation gate (A-BUG-P1-10)', () => {
     ];
     const cart = GoalTracker.syncCartItems(session, history, catalog);
     expect(cart.length).toBe(1);
-    expect(cart[0].name).toContain('Pijat Bayi Ceria');
+    expect(cart[0].name).toBe(CERIA_NAME);
   });
 
   it('afirmasi + nama layanan + penerima ("boleh deh bunda, pijat ceria buat adek") → KOMITMEN', () => {
@@ -79,6 +82,6 @@ describe('Cart declarative-consultation gate (A-BUG-P1-10)', () => {
     ];
     const cart = GoalTracker.syncCartItems(session, history, catalog);
     expect(cart.length).toBe(1);
-    expect(cart[0].name).toContain('Pijat Bayi Ceria');
+    expect(cart[0].name).toBe(CERIA_NAME);
   });
 });

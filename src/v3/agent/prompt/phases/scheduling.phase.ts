@@ -61,23 +61,34 @@ export const SCHEDULE_NEG_CONSTRAINTS_RULE21 = `21. DILARANG MENODONG NAMA/ALAMA
 export const SCHEDULE_NEG_CONSTRAINTS_TAIL = `${SCHEDULE_NEG_CONSTRAINTS_RULE20}\n${SCHEDULE_NEG_CONSTRAINTS_RULE21}`;
 
 /** Kontrak penggunaan tools (termasuk gating save_reservation). */
-export const TOOL_GUIDANCE_BLOCK = `[PANDUAN PENGGUNAAN TOOLS]
-1. calculate_delivery:
+export const TOOL_GUIDANCE_BLOCK = buildToolGuidanceBlock();
+
+export function buildToolGuidanceBlock(opts?: { isCalculateDeliveryMasked?: boolean; isSaveReservationMasked?: boolean }): string {
+  const calcBlock = opts?.isCalculateDeliveryMasked
+    ? `1. calculate_delivery: SAAT INI DISEMBUNYIKAN dari daftar tool (tidak ada entitas lokasi baru pada pesan saat ini) — JANGAN meminta atau memanggil tool ini; jawab dari konteks yang ada.`
+    : `1. calculate_delivery:
    - MANDAT WAJIB: SELALU panggil tool ini KETIKA customer menyebutkan nama lokasi apa pun (nama kelurahan, desa, perumahan, patokan, alamat jalan, kecamatan, atau kota seperti Surabaya, Sidoarjo, Gresik, Menganti, dll).
    - DILARANG menebak jangkauan sendiri, DILARANG menanyakan jarak ke customer, dan DILARANG menolak sebelum memanggil tool ini. Tool ini otomatis mengecek koordinat peta, rute jalan, dan menentukan apakah jarak <= 30 km (promo ongkir) atau > 30 km (template penolakan resmi).
-   - Jika customer HANYA menyebut nama kecamatan luas tanpa detail (misal "Sedati", "Candi", "Rungkut"), tool ini akan menginfokan bahwa kecamatan masih luas sehingga bot bisa menanyakan kelurahan/perumahan.
-2. get_catalog_and_price:
-   - Panggil tool ini KETIKA customer menanyakan harga, promo, pricelist, rincian treatment, atau menyebut keluhan fisik / usia anak.
-3. get_clinic_policy_faq:
-   - Panggil tool ini KETIKA customer menanyakan informasi kebijakan, asal/lokasi klinik, kualifikasi bidan, pembayaran, ongkir multi anak, vaksin, atau operasional.
-4. save_reservation (ALUR KONFIRMASI RESERVASI HOMECARE):
+   - Jika customer HANYA menyebut nama kecamatan luas tanpa detail (misal "Sedati", "Candi", "Rungkut"), tool ini akan menginfokan bahwa kecamatan masih luas sehingga bot bisa menanyakan kelurahan/perumahan.`;
+  const saveBlock = opts?.isSaveReservationMasked
+    ? `4. save_reservation: SAAT INI DISEMBUNYIKAN dari daftar tool (prasyarat treatment/lokasi/tanggal final belum lengkap) — JANGAN meminta atau mensimulasikan pemanggilannya.`
+    : `4. save_reservation (ALUR KONFIRMASI RESERVASI HOMECARE):
    - ALUR PEMESANAN (positif): Bidan kami memverifikasi layanan, lokasi, dan tanggal pilihan Bunda terlebih dahulu. Pemanggilan reservasi sistem hanya dilakukan setelah hari/tanggal dan layanan disepakati bersama Bunda.
    - SYARAT MUTLAK (audit 833178 & 173235):
      • LOKASI WAJIB SUDAH DIKETAHUI: Tool ini DILARANG KERAS dipanggil jika status lokasi customer BELUM DIKETAHUI (alamat/kelurahan kosong)! Layanan homecare klinik bergantung pada rute perjalanan dan jangkauan wilayah. Jika customer menanyakan jadwal saat lokasi belum diketahui, tanyakan lokasi terlebih dahulu (Aturan 5a).
      • HARI/TANGGAL WAJIB EKSPLISIT: Tool ini HANYA BOLEH dipanggil KETIKA customer SUDAH EKSPLISIT MENYEBUTKAN HARI/TANGGAL kunjungan di chat (misal: "hari ini", "besok", "sabtu", "minggu")! DILARANG KERAS memanggil tool ini jika customer HANYA menyetujui paket treatment (misal "saya ambil treatment nya", "iya bu saya mau") tetapi BELUM menyebutkan hari! DILARANG KERAS memanggil tool ini jika customer hanya merespons persetujuan menunggu pengecekan jadwal (misal "siap", "baik", "oke", "siap bund") — jawab LANGSUNG bahwa pengecekan slot sedang diproses! DILARANG KERAS menebak atau mengarang hari (misal mengarang "Besok" sepihak) — tool memverifikasi jejak hari di riwayat dan MENOLAK pemanggilan tanpa bukti!
-   - Panggil tool ini KETIKA detail hari/tanggal dan treatment sudah disepakati (nama Bunda dan alamat detail jalan TIDAK wajib di tahap chat — dilengkapi via form reservasi yang ditangani Admin; lihat aturan 21).
+   - Panggil tool ini KETIKA detail hari/tanggal dan treatment sudah disepakati (nama Bunda dan alamat detail jalan TIDAK wajib di tahap chat — dilengkapi via form reservasi yang ditangani Admin; lihat aturan 21).`;
+
+  return `[PANDUAN PENGGUNAAN TOOLS]
+${calcBlock}
+2. get_catalog_and_price:
+   - Panggil tool ini KETIKA customer menanyakan harga, promo, pricelist, rincian treatment, atau menyebut keluhan fisik / usia anak.
+3. get_clinic_policy_faq:
+   - Panggil tool ini KETIKA customer menanyakan informasi kebijakan, asal/lokasi klinik, kualifikasi bidan, pembayaran, ongkir multi anak, vaksin, atau operasional.
+${saveBlock}
 5. escalate_to_human:
    - Panggil tool ini KETIKA ada kondisi darurat medis berat, komplain keras, permintaan bicara manusia, atau pembatalan/reschedule reservasi.
 6. search_knowledge_faq:
    - Panggil tool ini KETIKA customer menanyakan hal medis/SOP di luar paket dasar: tumbuh gigi, pijat sebelum/sesudah mandi, pijat saat demam/batuk/pilek, keamanan newborn, ASI/laktasi, atau pertanyaan "apakah boleh ...". PENGECUALIAN: pertanyaan WAKTU pijat vs imunisasi/vaksin → panggil get_clinic_policy_faq (topic post_vaccine_rules), JANGAN search_knowledge_faq (mencegah tercatutnya artikel mandi!).
    - JANGAN panggil untuk sapaan, harga, jadwal, atau lokasi (itu ranah get_catalog_and_price / calculate_delivery).`;
+}
