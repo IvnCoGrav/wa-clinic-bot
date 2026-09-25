@@ -158,18 +158,20 @@ export class V3AgentRunner {
     // tak membahas pemanggilan tool yang di-mask. Evaluasi penuh diulang di
     // generation-stage dengan data yang sama (deterministik, tanpa drift).
     let isSaveReservationMasked = false;
+    let isCalculateDeliveryMasked = false;
     try {
       const { evaluateToolMasking } = await import('../tools/tool-masker');
       const { ALL_V3_TOOLS } = await import('../tools/tool-registry');
-      isSaveReservationMasked = !evaluateToolMasking(
-        ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory
-      ).isSaveReservationAllowed;
+      const maskEval = evaluateToolMasking(ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory);
+      isSaveReservationMasked = !maskEval.isSaveReservationAllowed;
+      isCalculateDeliveryMasked = maskEval.maskedToolNames.includes('calculate_delivery');
     } catch {}
     const routerPrompt = await PersonaPromptBuilder.buildRouterPromptAsync(session, isFollowUp, {
       contextSummary,
       phaseDirective: lastPhaseDirective,
       tenantId,
       isSaveReservationMasked,
+      isCalculateDeliveryMasked,
     });
     const currentSystemPrompt = routerPrompt;
     const fewShotExemplars: any[] = [];

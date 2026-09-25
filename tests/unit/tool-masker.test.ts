@@ -283,5 +283,18 @@ describe('Tool Masker Engine (Fase 2)', () => {
       expect(result.maskedToolNames).not.toContain('calculate_delivery');
       expect(result.availableTools.some((t) => t.function?.name === 'calculate_delivery')).toBe(true);
     });
+
+    it('typo 1-huruf ≥5 (bngurasih/sedti/kenjern/bungurasi) → hasNewLocationEntity true', () => {
+      expect(hasNewLocationEntity('bngurasih berapa kak')).toBe(true);
+      expect(hasNewLocationEntity('sedti')).toBe(true);
+      expect(hasNewLocationEntity('kenjern')).toBe(true);
+      expect(hasNewLocationEntity('bungurasi')).toBe(true);
+    });
+
+    it('non-lokasi tetap false (berapa harga pijat, kuota hari ini) meski gate 5', () => {
+      expect(hasNewLocationEntity('berapa harga pijat')).toBe(false);
+      expect(hasNewLocationEntity('kuota hari ini')).toBe(false);
+      expect(hasNewLocationEntity('Harganya berapa ya?')).toBe(false);
+    });
   });
 });

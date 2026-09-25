@@ -95,24 +95,24 @@ export class V3ConversationSummarizer {
           : ageMonths != null
             ? treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths })
             : allServices;
-        const suggested = session.targetAudience === 'MOMS'
-          ? (candidates[0]?.name || 'treatment ibu sesuai katalog')
-          : (treatmentCatalogService.recommendServiceBySymptoms(
-              activeSymptoms,
-              ageMonths,
-              undefined
-            )?.name || candidates[0]?.name || 'treatment sesuai katalog');
+        const matchedService = session.targetAudience === 'MOMS'
+          ? treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, 'MOMS')?.name
+          : treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, undefined)?.name;
+        const suggested = matchedService || undefined;
         if (session.targetAudience === 'MOMS') {
-          sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')}`);
           janganDiulang.push('Menanyakan ulang keluhan Bunda');
         } else if (session.targetAudience === 'BOTH') {
           const parts: string[] = [];
           if (momComplaints.length > 0) parts.push(`Bunda: ${momComplaints.join(', ')}`);
           if (symptoms.length > 0) parts.push(`Si kecil: ${symptoms.join(', ')}`);
-          sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')}`);
           janganDiulang.push('Menanyakan ulang keluhan Bunda maupun si kecil');
         } else {
-          sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')}`);
           janganDiulang.push('Menanyakan ulang keluhan si kecil');
         }
       }
