@@ -79,9 +79,10 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
     // --- STATUS WEBHOOKS (sent/delivered/read/failed) ---
     // Diproses lebih dulu; update status pesan by wa_message_id.
+    // JANGAN return dini — satu body Meta bisa berisi statuses + messages bersamaan.
     const statuses = normalizeWabaStatuses(body);
+    let processedStatuses = 0;
     if (statuses.length > 0) {
-      let processedStatuses = 0;
       for (const st of statuses) {
         const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(st.phoneNumberId);
         const errCode = st.errors?.[0]?.code ? String(st.errors[0].code) : null;
@@ -113,11 +114,13 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         }
         processedStatuses++;
       }
-      return reply.status(200).send({ status: 'STATUS_PROCESSED', count: processedStatuses });
     }
 
     const normalizedMessages = normalizeWabaPayload(body, DEFAULT_TENANT_ID);
     if (normalizedMessages.length === 0) {
+      if (processedStatuses > 0) {
+        return reply.status(200).send({ status: 'STATUS_PROCESSED', count: processedStatuses });
+      }
       return reply.status(200).send({ status: 'NO_MESSAGES' });
     }
 
@@ -399,6 +402,12 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       processed++;
     }
 
+    if (processedStatuses > 0 && processed === 0) {
+      return reply.status(200).send({ status: 'STATUS_PROCESSED', count: processedStatuses });
+    }
+    if (processedStatuses > 0) {
+      return reply.status(200).send({ status: 'PROCESSED', count: processed, statuses: processedStatuses });
+    }
     return reply.status(200).send({ status: 'PROCESSED', count: processed });
     });
   });
