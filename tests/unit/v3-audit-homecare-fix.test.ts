@@ -20,7 +20,14 @@ import {
   isGenericCustomerName,
 } from '../../src/v3/tools/save-reservation.tool';
 import { reservationCoreService } from '../../src/services/reservation-core.service';
+import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 import { GoalTracker } from '../../src/v3/state/goal-tracker';
+
+// Nama katalog dinamis (tahan rebrand Kala) — matcher resolveTreatmentCategory/calcBookedSubtotal
+// mencocokkan exact/substring ke katalog aktif, jadi fixture WAJIB pakai nama kini.
+const OKSI_FULLBODY = treatmentCatalogService.getServiceById('moms-oksitosin-fullbody')?.name || 'Oksitosin Massage Fullbody';
+const KIDS_CERIA = treatmentCatalogService.getServiceById('kids-massage-2-4th')?.name || 'Pijat Kids Ceria';
+const BABY_CERIA = treatmentCatalogService.getServiceById('baby-massage-ceria')?.name || 'Pijat Bayi Ceria';
 import { normalizeWhatsAppFormat } from '../../src/utils/whatsapp-format';
 import { PersonaPromptBuilder } from '../../src/v3/agent/persona';
 
@@ -47,7 +54,7 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Oksitosin Massage Fullbody',
+      treatmentName: OKSI_FULLBODY,
       bookingDate: futureDate(),
       gestationalWeeks: 38,
       momStage: 'PREGNANT',
@@ -58,16 +65,16 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
   });
 
   it('paket anak → BABY; paket kids → KIDS', () => {
-    expect(resolveTreatmentCategory(['Pijat Bayi Ceria'])).toBe('BABY');
-    expect(resolveTreatmentCategory(['Pijat Kids Ceria'])).toBe('KIDS');
+    expect(resolveTreatmentCategory([BABY_CERIA])).toBe('BABY');
+    expect(resolveTreatmentCategory([KIDS_CERIA])).toBe('KIDS');
   });
 
   it('multi Mom + Baby → BOTH', async () => {
     const res = await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Oksitosin Massage Fullbody',
-      additionalTreatments: ['Pijat Bayi Ceria'],
+      treatmentName: OKSI_FULLBODY,
+      additionalTreatments: [BABY_CERIA],
       bookingDate: futureDate(),
       gestationalWeeks: 38,
       children: [{ ageMonths: 2 }],
@@ -81,18 +88,18 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     await executeSaveReservation({
       customerId: 'cust-1',
       chatId: '6281@c.us',
-      treatmentName: 'Oksitosin Massage Fullbody',
+      treatmentName: OKSI_FULLBODY,
       bookingDate: futureDate(),
     } as any);
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
-    // Promo katalog Oksitosin Massage Fullbody = Rp 105.000
-    expect(called.purchaseValue).toBe(105000);
+    // Promo katalog moms-oksitosin-fullbody = Rp 105.000 (data-driven)
+    expect(called.purchaseValue).toBe(treatmentCatalogService.getServiceById('moms-oksitosin-fullbody')?.promoPrice);
   });
 
   it('calcBookedSubtotal cocok exact & substring ("oksitosin massage fullbody")', () => {
-    const r = calcBookedSubtotal(['Oksitosin Massage Fullbody']);
+    const r = calcBookedSubtotal([OKSI_FULLBODY]);
     expect(r.matched).toBe(1);
-    expect(r.subtotalPromo).toBe(105000);
+    expect(r.subtotalPromo).toBe(treatmentCatalogService.getServiceById('moms-oksitosin-fullbody')?.promoPrice);
   });
 });
 

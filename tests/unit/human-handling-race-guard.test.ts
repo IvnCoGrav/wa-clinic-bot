@@ -15,10 +15,11 @@ describe('Human Handling & Anti-Race Guards (Case #1155 & #319)', () => {
 
   describe('1. Auto-Release Exemption (Case #1155 Bunda Inez)', () => {
     it('MUST NOT auto-release conversations escalated via manual_reply (WhatsApp HP)', () => {
+      // P3-2: manual = sewa 12 jam (conversation.service.ts:266-277), bukan abadi — 6h < 12h → belum release.
       const mockConv = {
         id: 'conv_1155',
         is_human_handling: true,
-        human_handling_since: new Date(Date.now() - 20 * 60 * 60 * 1000), // 20 hours ago
+        human_handling_since: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 hours ago (<12h lease)
         escalation_reason: 'manual_reply',
         previous_state: 'INITIAL',
         current_state: 'HUMAN_HANDLING',
@@ -31,10 +32,11 @@ describe('Human Handling & Anti-Race Guards (Case #1155 & #319)', () => {
     });
 
     it('MUST NOT auto-release conversations escalated via manual_takeover / admin_takeover (Dashboard)', () => {
+      // P3-2: 8h < 12h lease → belum release.
       const mockConv = {
         id: 'conv_dashboard',
         is_human_handling: true,
-        human_handling_since: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24 hours ago
+        human_handling_since: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago (<12h lease)
         escalation_reason: 'manual_takeover',
         previous_state: 'INITIAL',
         current_state: 'HUMAN_HANDLING',
@@ -46,10 +48,11 @@ describe('Human Handling & Anti-Race Guards (Case #1155 & #319)', () => {
     });
 
     it('MUST NOT auto-release conversations escalated with any manual_ prefix', () => {
+      // P3-2: 10h < 12h lease → belum release.
       const mockConv = {
         id: 'conv_manual_custom',
         is_human_handling: true,
-        human_handling_since: new Date(Date.now() - 30 * 60 * 60 * 1000),
+        human_handling_since: new Date(Date.now() - 10 * 60 * 60 * 1000),
         escalation_reason: 'manual_cs_hold',
         previous_state: 'INITIAL',
         current_state: 'HUMAN_HANDLING',

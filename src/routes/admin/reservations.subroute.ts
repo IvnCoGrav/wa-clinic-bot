@@ -18,15 +18,24 @@ import { memoryReservations } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { wibDayRangeToUtc } from '../../utils/time-wib';
 
+/**
+ * Harga fallback — fondasional: WAJIB dari katalog DB/seed, bukan angka magic 60000.
+ * Throw bila katalog kosong/harga hilang agar fail-fast + alert, bukan diam-diam 60rb.
+ */
 function getCatalogFallbackPrice(): number {
-  try {
-    const all = treatmentCatalogService.getAllServices();
-    const baby = all.find((s: any) => s.category === 'BABY' && s.isActive !== false);
-    if (baby) return Number((baby as any).promoPrice ?? (baby as any).originalPrice ?? 60000);
-    const any = all.find((s: any) => s.isActive !== false);
-    if (any) return Number((any as any).promoPrice ?? (any as any).originalPrice ?? 60000);
-  } catch {}
-  return 60000;
+  const all = treatmentCatalogService.getAllServices();
+  if (all.length === 0) throw new Error('CATALOG_EMPTY: tidak ada layanan di katalog — seed DB atau isi via admin API');
+  const baby = all.find((s: any) => s.category === 'BABY' && s.isActive !== false);
+  if (baby) {
+    const p = (baby as any).promoPrice ?? (baby as any).originalPrice;
+    if (p != null) return Number(p);
+  }
+  const any = all.find((s: any) => s.isActive !== false);
+  if (any) {
+    const p2 = (any as any).promoPrice ?? (any as any).originalPrice;
+    if (p2 != null) return Number(p2);
+  }
+  throw new Error('CATALOG_PRICE_MISSING: katalog ada tapi tanpa harga promo/original');
 }
 import { responseCacheService } from '../../services/response-cache.service';
 
@@ -38,6 +47,15 @@ function sanitizeDurationMinutes(value: unknown): number | null {
   const n = Number(value);
   if (!isFinite(n) || n <= 0) return null;
   return Math.min(480, Math.max(15, Math.round(n)));
+}
+
+/**
+ * SEC-AUDIT-07: resolusi tenant dari sesi terautentikasi (diisi middleware
+ * admin.route.ts dari `staff.tenant_id`). Fallback DEFAULT_TENANT_ID hanya untuk
+ * super-admin API-key / mode single-tenant.
+ */
+function tenantOf(request: FastifyRequest): string {
+  return (request as any).tenantId || DEFAULT_TENANT_ID;
 }
 
 export async function reservationAdminRoutes(fastify: FastifyInstance) {
@@ -58,7 +76,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/reservations/count
    */
   fastify.get('/api/admin/reservations/count', async (request: FastifyRequest, reply: FastifyReply) => {
-    const cacheKey = `reservations:count:${DEFAULT_TENANT_ID}`;
+    const tenantId = tenantOf(request);
+    const cacheKey = `reservations:count:${tenantId}`;
     const cached = responseCacheService.get<number>(cacheKey);
     if (cached !== null && cached !== undefined) {
       return reply
@@ -69,7 +88,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
     try {
       const count = await prisma.reservation.count({
-        where: { tenant_id: DEFAULT_TENANT_ID },
+        where: { tenant_id: tenantId },
       });
       responseCacheService.set(cacheKey, count, 15);
       return reply
@@ -95,6 +114,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const dateStr = (request.query?.date || '').trim();
+      const tenantId = tenantOf(request);
       // R2: deterministik WIB via wibDayRangeToUtc (Asia/Jakarta), bukan server-local
       let dayStart: Date;
       let dayEnd: Date;
@@ -123,7 +143,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const staffList = await prisma.staff.findMany({
-          where: { tenant_id: DEFAULT_TENANT_ID, active: true },
+          where: { tenant_id: tenantId, active: true },
         });
         // Filter therapist role if exists
         const therapists = staffList.filter((s: any) => !s.role || s.role === 'THERAPIST' || String(s.role).toLowerCase().includes('therapist'));
@@ -132,7 +152,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         const reservations = await prisma.reservation.findMany({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             booking_date: { gte: dayStart, lte: dayEnd },
             status: { in: ['confirmed', 'hold'] },
           },
@@ -187,7 +207,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (err: any) {
         console.error(JSON.stringify({
           event: 'AVAILABILITY_QUERY_FAILED',
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
           error: err?.message, timestamp: new Date().toISOString(),
         }));
         return reply.status(503).send({
@@ -235,7 +255,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const overdueThreshold = new Date(Date.now() - 3 * 3600 * 1000);
 
-      const where: any = { tenant_id: DEFAULT_TENANT_ID };
+      const tenantId = tenantOf(request);
+      const where: any = { tenant_id: tenantId };
 
       // Status filter
       if (statusParam && statusParam !== 'all') {
@@ -331,8 +352,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const tenantBaseWhere = { tenant_id: DEFAULT_TENANT_ID };
-        const cacheKeyStats = `reservations:stats:${DEFAULT_TENANT_ID}`;
+        const tenantBaseWhere = { tenant_id: tenantId };
+        const cacheKeyStats = `reservations:stats:${tenantId}`;
         let stats = responseCacheService.get<any>(cacheKeyStats);
 
         let rows: any[];
@@ -603,6 +624,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/reservation/parse',
     async (request: FastifyRequest<{ Body: { customerId: string; rawText: string; force?: boolean } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { customerId, rawText, force } = request.body || {};
       if (!customerId || !rawText) {
         return reply.status(400).send({ error: 'customerId and rawText are required' });
@@ -623,10 +645,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         let reservation: any;
         try {
           const result = await reservationCoreService.saveReservation({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: tenantId,
             customerId,
-            chatId: (await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID))?.phone
-              ? `${(await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID))?.phone}@c.us`
+            chatId: (await customerService.getCustomerById(customerId, tenantId))?.phone
+              ? `${(await customerService.getCustomerById(customerId, tenantId))?.phone}@c.us`
               : '',
             bookingDate: parsed.bookingDate,
             treatmentCategory: parsed.treatmentCategory,
@@ -670,7 +692,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error) {
         const mockReservation = {
           id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           customer_id: customerId,
           treatment_category: parsed.treatmentCategory,
           treatment_detail: parsed.treatmentDetail,
@@ -713,6 +735,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const {
         customerId: reqCustomerId,
         customerPhone,
@@ -739,10 +762,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       if (!customerId && customerPhone) {
         const cleanPhone = customerPhone.replace(/\D/g, '');
         const targetPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
-        const cust = await customerService.getOrCreateCustomer(targetPhone, customerName, DEFAULT_TENANT_ID);
+        const cust = await customerService.getOrCreateCustomer(targetPhone, customerName, tenantId);
         customerId = cust.id;
       } else if (customerId && customerName) {
-        await customerService.updateCustomerName(customerId, customerName, DEFAULT_TENANT_ID).catch(() => {});
+        await customerService.updateCustomerName(customerId, customerName, tenantId).catch(() => {});
       }
 
       if (!customerId) {
@@ -762,7 +785,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         let coreResult: any;
         try {
           coreResult = await reservationCoreService.saveReservation({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: tenantId,
             customerId,
             bookingDate: parsedDate,
             treatmentCategory: dbCategory,
@@ -814,7 +837,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error: any) {
         const mockReservation = {
           id: `res_hold_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           customer_id: customerId,
           treatment_category: dbCategory,
           treatment_detail: treatmentDetail,
@@ -906,6 +929,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
       const force = (request.body as any)?.force === true;
@@ -917,7 +941,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'treatmentCategory tidak valid.' });
       }
 
-      const customer = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+      const customer = await customerService.getCustomerById(customerId, tenantId);
       if (!customer) {
         return reply.status(404).send({ error: 'Customer tidak ditemukan.' });
       }
@@ -965,7 +989,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         let coreResult: any;
         try {
           coreResult = await reservationCoreService.saveReservation({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: tenantId,
             customerId,
             chatId: `${customer.phone}@c.us`,
             bookingDate: parsedDate,
@@ -1041,7 +1065,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error: any) {
         const mockReservation = {
           id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           customer_id: customerId,
           treatment_category: dbCategory,
           treatment_detail: treatmentDetail,
@@ -1067,9 +1091,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/reservation/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       try {
         const reservation = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: {
             customer: {
               include: {
@@ -1130,10 +1155,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/api/admin/reservation/:id/confirm',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: {
             customer: {
               include: {
@@ -1170,7 +1196,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               customerId: existing.customer_id,
               bookingDate: existing.booking_date,
               treatmentCategory: existing.treatment_category,
-              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+              tenantId: existing.tenant_id || tenantId,
             });
           } catch (fuErr: any) {
             console.warn('[Admin API] Failed to schedule follow-ups on confirmation:', fuErr.message);
@@ -1194,7 +1220,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
           try {
             const pendingLabel = await prisma.label.findFirst({
-              where: { tenant_id: DEFAULT_TENANT_ID, name: 'Pending Payment' },
+              where: { tenant_id: tenantId, name: 'Pending Payment' },
             });
             if (pendingLabel && existing.customer_id) {
               await prisma.customerLabel.deleteMany({
@@ -1209,7 +1235,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           mock.status = 'confirmed';
           mock.google_calendar_event_id = `mock_cal_event_${Date.now()}`;
           mock.updated_at = new Date();
@@ -1221,7 +1247,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
             try {
               const pendingLabel = await prisma.label.findFirst({
-                where: { tenant_id: DEFAULT_TENANT_ID, name: 'Pending Payment' },
+                where: { tenant_id: tenantId, name: 'Pending Payment' },
               });
               const mockCustomerId = (mock as any).customer_id;
               if (pendingLabel && mockCustomerId) {
@@ -1251,10 +1277,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/api/admin/reservation/:id/complete',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
         if (!existing) {
           throw new Error('Reservation not found');
@@ -1276,18 +1303,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               reservationId: id,
               bookingDate: existing.booking_date,
               treatmentCategory: existing.treatment_category,
-              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+              tenantId: existing.tenant_id || tenantId,
             });
           } else {
             // Tanpa booking_date: tetap reset sesi V3
             const activeConv = await prisma.conversation.findFirst({
-              where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || DEFAULT_TENANT_ID },
+              where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || tenantId },
               orderBy: { updated_at: 'desc' },
               select: { id: true },
             });
             if (activeConv?.id) {
               const { GoalTracker } = await import('../../v3/state/goal-tracker');
-              await GoalTracker.updateGoalSession(activeConv.id, { cartItems: [], selectedTreatment: undefined, booking: undefined, discussedTreatments: [], priceDiscussed: undefined, bookingCommitConfirmed: undefined, lastCommitment: undefined, ongkirStatus: undefined, totalPrice: undefined } as any, existing.tenant_id || DEFAULT_TENANT_ID);
+              await GoalTracker.updateGoalSession(activeConv.id, { cartItems: [], selectedTreatment: undefined, booking: undefined, discussedTreatments: [], priceDiscussed: undefined, bookingCommitConfirmed: undefined, lastCommitment: undefined, ongkirStatus: undefined, totalPrice: undefined } as any, existing.tenant_id || tenantId);
             }
           }
         } catch (fuErr: any) {
@@ -1306,7 +1333,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           mock.status = 'completed';
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1350,6 +1377,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const body = request.body || {};
       const {
@@ -1376,7 +1404,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       let existing: any = null;
       try {
         existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: { customer: { include: { children: true } } },
         });
       } catch (dbErr: any) {
@@ -1395,7 +1423,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       if (!existing) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
           if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
@@ -1506,7 +1534,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 customerId: existing.customer_id,
                 bookingDate: targetBookingDate,
                 treatmentCategory: updated.treatment_category,
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId: tenantId,
               });
             } catch (fuErr: any) {
               console.warn('[Admin API] Failed to schedule follow-ups on becoming confirmed:', fuErr.message);
@@ -1536,7 +1564,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 reservationId: id,
                 bookingDate: targetBookingDate,
                 treatmentCategory: updated.treatment_category,
-                tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+                tenantId: existing.tenant_id || tenantId,
               });
             } catch (fuErr: any) {
               console.warn('[Admin API] Failed to sync follow-ups on becoming completed:', fuErr.message);
@@ -1546,7 +1574,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (isBecomingCancelled) {
           try {
             const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+            await followUpService.onReservationCancelled(id, existing.tenant_id || tenantId);
           } catch (fuErr: any) {
             console.warn('[Admin API] Failed to cancel follow-ups on becoming cancelled:', fuErr.message);
           }
@@ -1627,7 +1655,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             } else {
               await prisma.child.create({
                 data: {
-                  tenant_id: DEFAULT_TENANT_ID,
+                  tenant_id: tenantId,
                   customer_id: existing.customer_id,
                   name: b.name,
                   raw_age_text: b.ageText || '',
@@ -1651,7 +1679,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (parsedBookingDate) {
           try {
             const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.onReservationRescheduled(id, parsedBookingDate, existing.tenant_id || DEFAULT_TENANT_ID);
+            await followUpService.onReservationRescheduled(id, parsedBookingDate, existing.tenant_id || tenantId);
           } catch (fuErr: any) {
             console.warn('[Admin API] Failed to reschedule follow-ups on reservation edit:', fuErr.message);
           }
@@ -1670,7 +1698,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (purchaseValue !== undefined || status !== undefined) {
           try {
             const { customerService } = await import('../../services/customer.service');
-            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID);
+            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId);
           } catch (ltvErr: any) {
             console.warn('[Admin API] Failed to recalculate ltv_cache on reservation edit:', ltvErr.message);
           }
@@ -1706,6 +1734,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const { status } = request.body || {};
 
@@ -1715,7 +1744,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
         if (!existing) {
           throw new Error('Reservation not found');
@@ -1734,7 +1763,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               customerId: existing.customer_id,
               bookingDate: existing.booking_date,
               treatmentCategory: existing.treatment_category,
-              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+              tenantId: existing.tenant_id || tenantId,
             });
           } else if (status === 'completed' && existing.booking_date) {
             const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
@@ -1743,10 +1772,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               reservationId: id,
               bookingDate: existing.booking_date,
               treatmentCategory: existing.treatment_category,
-              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+              tenantId: existing.tenant_id || tenantId,
             });
           } else if (status === 'cancelled') {
-            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+            await followUpService.onReservationCancelled(id, existing.tenant_id || tenantId);
             if (existing.assigned_staff_id) {
               const cancelReason = (request.body as any)?.cancelReason || (request.body as any)?.reason || undefined;
               import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
@@ -1773,7 +1802,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (status === 'cancelled' || existing.status === 'cancelled') {
           try {
             const { customerService } = await import('../../services/customer.service');
-            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID);
+            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId);
           } catch (ltvErr: any) {
             console.warn('[Admin API] Failed to recalculate ltv_cache on status change:', ltvErr.message);
           }
@@ -1782,7 +1811,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           mock.status = status;
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1802,6 +1831,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: { bookingDate: string } }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const { bookingDate } = request.body || {};
       if (!bookingDate) {
@@ -1815,7 +1845,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: { customer: true },
         });
         if (!existing) {
@@ -1829,7 +1859,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         try {
           const { followUpService } = await import('../../services/follow-up.service');
-          await followUpService.onReservationRescheduled(id, parsedDate, existing.tenant_id || DEFAULT_TENANT_ID);
+          await followUpService.onReservationRescheduled(id, parsedDate, existing.tenant_id || tenantId);
         } catch (fuErr: any) {
           console.warn('[Admin API] Failed to reschedule follow-ups on date update:', fuErr.message);
         }
@@ -1855,7 +1885,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           mock.booking_date = parsedDate;
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1882,12 +1912,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const { imageB64, mimeType, fileName, remove } = request.body || {};
 
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
         if (!existing) {
           throw new Error('Reservation not found');
@@ -1899,7 +1930,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
           const saved = await mediaService.saveOutboundMedia({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: tenantId,
             imageB64: resized.toString('base64'),
             mimeType: mimeType && mimeType !== 'application/octet-stream' ? mimeType : 'image/jpeg',
             fileName: fileName || `proof-${id}.jpg`,
@@ -1924,7 +1955,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: updated });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           mock.proof_url = remove ? null : mock.proof_url;
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1945,12 +1976,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: { assigned_staff_id?: string | null } }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const { assigned_staff_id } = request.body || {};
 
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: { customer: true },
         });
         if (!existing) {
@@ -1960,7 +1992,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         let staffName: string | null = null;
         if (assigned_staff_id) {
           const staff = await prisma.staff.findFirst({
-            where: { id: assigned_staff_id, tenant_id: DEFAULT_TENANT_ID },
+            where: { id: assigned_staff_id, tenant_id: tenantId },
             select: { id: true, name: true },
           });
           if (!staff) {
@@ -1993,7 +2025,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { assigned_staff_id, staffName },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
         });
 
         return reply.status(200).send({ success: true, data: reservation });
@@ -2017,11 +2049,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       const isHardDelete = request.query?.hard === 'true';
       try {
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: { customer: true },
         });
         if (!existing) {
@@ -2042,7 +2075,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           // reservation_id sehingga tidak bisa lagi dicocokkan setelah delete).
           try {
             const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+            await followUpService.onReservationCancelled(id, existing.tenant_id || tenantId);
           } catch (_) {}
 
           // Unlink child relation jika ada
@@ -2055,7 +2088,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             where: { id },
           });
 
-          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
 
           if (existing.assigned_staff_id) {
             import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
@@ -2086,7 +2119,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         // reservasi yang dibatalkan (sebelumnya hanya membuat NO_PURCHASE baru).
         try {
           const { followUpService } = await import('../../services/follow-up.service');
-          await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+          await followUpService.onReservationCancelled(id, existing.tenant_id || tenantId);
         } catch (_) {}
 
         if (existing.assigned_staff_id) {
@@ -2098,21 +2131,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }).catch(() => {});
         }
 
-        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
 
         const activeNoPurchaseFollowUps = await prisma.followUp.findFirst({
           where: {
             customer_id: existing.customer_id,
             type: 'NO_PURCHASE',
             status: { in: ['PENDING', 'QUEUED'] },
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
           },
         });
 
         if (!activeNoPurchaseFollowUps) {
           const stages = [1, 2, 3];
           const days = [3, 7, 14];
-          const targetTenantId = existing.tenant_id || DEFAULT_TENANT_ID;
+          const targetTenantId = existing.tenant_id || tenantId;
           const followUpRecords = stages.map((stage, idx) => {
             const scheduledAt = new Date();
             scheduledAt.setDate(scheduledAt.getDate() + days[idx]);
@@ -2140,16 +2173,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+        if (mock && mock.tenant_id === tenantId) {
           if (isHardDelete) {
             memoryReservations.delete(id);
-            await customerService.recalculateCustomerLtv(mock.customer_id, DEFAULT_TENANT_ID).catch(() => {});
+            await customerService.recalculateCustomerLtv(mock.customer_id, tenantId).catch(() => {});
             return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen (memory).' });
           }
           mock.status = 'cancelled';
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
-          await customerService.recalculateCustomerLtv(mock.customer_id, DEFAULT_TENANT_ID).catch(() => {});
+          await customerService.recalculateCustomerLtv(mock.customer_id, tenantId).catch(() => {});
           return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
         }
         return reply.status(404).send({ success: false, error: 'Reservation not found' });
@@ -2173,12 +2206,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/reservation/:id/approve-purchase',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
         if (id.startsWith('lead_')) {
           const customerId = id.replace('lead_', '');
           const customer = await prisma.customer.findFirst({
-            where: { id: customerId, tenant_id: DEFAULT_TENANT_ID },
+            where: { id: customerId, tenant_id: tenantId },
             include: { adClick: true },
           });
           if (!customer) {
@@ -2191,7 +2225,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             eventName: 'Lead',
             customer,
             adClick: customer.adClick || undefined,
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: tenantId,
             eventTime: Math.floor(occurredAt.getTime() / 1000),
             customData: {
               source: 'ADMIN_MODERATION_APPROVE_LEAD',
@@ -2221,7 +2255,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
 
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: {
             customer: {
               include: { adClick: true },
@@ -2251,7 +2285,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const body = (request.body || {}) as { customPayload?: any };
         const customPayload = body.customPayload;
 
-      const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+      const formats = await getTenantCapiFormats(tenantId);
         
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
         if (!autoResolvedVal) {
@@ -2306,7 +2340,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
                 const formattedName = `Bunda ${cleanName}`.trim();
                 const { customerService } = await import('../../services/customer.service');
-                await customerService.updateCustomerName(existing.customer.id, formattedName, DEFAULT_TENANT_ID).catch(() => {});
+                await customerService.updateCustomerName(existing.customer.id, formattedName, tenantId).catch(() => {});
                 existing.customer.name = formattedName;
               }
             }
@@ -2320,7 +2354,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           adClick: existing.customer?.adClick || undefined,
           value: resolvedVal,
           currency: customPayload?.custom_data?.currency || 'IDR',
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
           eventTime,
           customData,
           customUserData: customPayload?.user_data,
@@ -2347,7 +2381,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -2364,7 +2398,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         // Fallback in-memory hanya untuk dev/test — di production harus fail agar UI tidak tampil success palsu
         if (process.env.NODE_ENV !== 'production') {
           const mock = memoryReservations.get(id);
-          if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          if (mock && mock.tenant_id === tenantId) {
             mock.purchase_review_status = 'approved';
             mock.purchase_event_sent_at = new Date();
             mock.updated_at = new Date();
@@ -2388,6 +2422,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/reservation/:id/reject-purchase',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
         if (id.startsWith('lead_')) {
@@ -2405,7 +2440,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
 
         const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: {
             customer: {
               include: { adClick: true },
@@ -2441,7 +2476,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         console.error('[CAPI REJECT ERROR]', (error as Error).message);
         if (process.env.NODE_ENV !== 'production') {
           const mock = memoryReservations.get(id);
-          if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          if (mock && mock.tenant_id === tenantId) {
             mock.purchase_review_status = 'ignored_outlier';
             mock.updated_at = new Date();
             memoryReservations.set(id, mock);
@@ -2460,13 +2495,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
    * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi & lead yang masuk ke sistem
    * beserta data atribusi (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
    */
-  fastify.get('/api/admin/capi-queue', async (_request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/capi-queue', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = tenantOf(request);
     reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
     reply.header('Pragma', 'no-cache');
     try {
       const rows = await prisma.reservation.findMany({
         where: {
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           status: { not: 'cancelled' },
           // Isolasi sandbox (lapis query): customer QA test tidak masuk antrean CAPI.
           customer: { is_sandbox_test: false },
@@ -2491,7 +2527,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         (r: (typeof rows)[number]) => !shouldExcludeFromCapiQueue(r.customer?.phone, r.customer?.name, (r.customer as any)?.is_sandbox_test)
       );
 
-      const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+      const formats = await getTenantCapiFormats(tenantId);
       const now = Date.now();
 
       let tenantLandingDomain = '';
@@ -2499,7 +2535,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         // Select eksplisit: kolom tenants.settings belum ada di sebagian DB
         // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) — select-* memicu P2022.
         const tenant = await prisma.tenant.findUnique({
-          where: { id: DEFAULT_TENANT_ID },
+          where: { id: tenantId },
           select: { id: true, landing_domain: true },
         });
         if ((tenant as any)?.landing_domain) {
@@ -2525,7 +2561,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         try {
           const confirmedRows = await prisma.reservation.findMany({
             where: {
-              tenant_id: DEFAULT_TENANT_ID,
+              tenant_id: tenantId,
               customer_id: { in: customerIds },
               status: { in: ['confirmed', 'completed'] },
             },
@@ -2656,7 +2692,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       try {
         const leadAuditLogs = await prisma.auditLog.findMany({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             action: { in: ['MQL_LEAD_EVENT_SENT', 'MQL_LEAD_EVENT_REJECTED'] },
           },
           select: { target_id: true, action: true, created_at: true },
@@ -2670,7 +2706,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         const unsentMqlCustomers = await prisma.customer.findMany({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             is_sandbox_test: false,
             phone: { not: { startsWith: '6289999' } },
             OR: [
@@ -2731,7 +2767,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (processedCustomerIds.length > 0) {
           try {
             const processedCustomers = await prisma.customer.findMany({
-              where: { tenant_id: DEFAULT_TENANT_ID, id: { in: processedCustomerIds.slice(0, 50) } },
+              where: { tenant_id: tenantId, id: { in: processedCustomerIds.slice(0, 50) } },
               include: { adClick: true },
             });
             for (const c of processedCustomers as any[]) {
@@ -2823,6 +2859,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions } =
         request.body || {};
 
@@ -2834,7 +2871,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const series = await reservationSeriesService.createSeries(
           { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions },
-          DEFAULT_TENANT_ID
+          tenantId
         );
 
         await auditService.logAdminAction({
@@ -2860,9 +2897,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/reservation-series/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
-        const series = await reservationSeriesService.getSeries(request.params.id, DEFAULT_TENANT_ID);
+        const series = await reservationSeriesService.getSeries(request.params.id, tenantId);
         if (!series) return reply.status(404).send({ success: false, error: 'Series tidak ditemukan.' });
         return reply.status(200).send({ success: true, data: series });
       } catch (err: any) {
@@ -2878,9 +2916,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/reservation-series/customer/:customerId',
     async (request: FastifyRequest<{ Params: { customerId: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
-        const series = await reservationSeriesService.getCustomerSeries(request.params.customerId, DEFAULT_TENANT_ID);
+        const series = await reservationSeriesService.getCustomerSeries(request.params.customerId, tenantId);
         return reply.status(200).send({ success: true, data: series });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -2895,9 +2934,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/api/admin/reservation-series/:id/pause',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
-        const result = await reservationSeriesService.pauseSeries(request.params.id, DEFAULT_TENANT_ID);
+        const result = await reservationSeriesService.pauseSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -2920,9 +2960,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/api/admin/reservation-series/:id/resume',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
-        const result = await reservationSeriesService.resumeSeries(request.params.id, DEFAULT_TENANT_ID);
+        const result = await reservationSeriesService.resumeSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -2945,9 +2986,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/api/admin/reservation-series/:id/cancel',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
-        const result = await reservationSeriesService.cancelSeries(request.params.id, DEFAULT_TENANT_ID);
+        const result = await reservationSeriesService.cancelSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -2976,16 +3018,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = tenantOf(request);
       const { bookingDate, assignedStaffId, status } = request.body || {};
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const updated = await reservationSeriesService.updateSession(
           request.params.reservationId,
           { bookingDate, assignedStaffId, status },
-          DEFAULT_TENANT_ID
+          tenantId
         );
         // Auto-check if series is now complete
-        await reservationSeriesService.checkAndCompleteSeries(request.params.id, DEFAULT_TENANT_ID);
+        await reservationSeriesService.checkAndCompleteSeries(request.params.id, tenantId);
         return reply.status(200).send({ success: true, data: updated });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });

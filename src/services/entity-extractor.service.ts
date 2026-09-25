@@ -363,15 +363,26 @@ export class EntityExtractor {
       }
     }
 
-    // 6. Deteksi Kombinasi Treatment atau Treatment Spesifik
+    // 6. Deteksi Kombinasi Treatment atau Treatment Spesifik — data-driven via katalog (anti hardcode nama brand).
+    // Nama spesifik diambil dari katalog runtime bila tersedia, fallback ke token generik agar tahan rebrand Kala.
+    const resolveCatalogName = (id: string, fallback: string): string => {
+      try {
+        const { treatmentCatalogService } = require('./treatment-catalog.service');
+        return treatmentCatalogService.getServiceById(id)?.name || fallback;
+      } catch { return fallback; }
+    };
     if (/\bpijat\s+(?:bayi\s+)?ceria\b/i.test(lower) && /\bcukur\b/i.test(lower)) {
-      result.treatmentReferenced = 'Pijat Bayi Ceria + Cukur Rambut Bayi';
+      const ceria = resolveCatalogName('baby-massage-ceria', 'Pijat Ceria');
+      const cukur = resolveCatalogName('baby-cukur', 'Cukur Rambut Bayi');
+      result.treatmentReferenced = `${ceria} + ${cukur}`;
       result.intents = result.intents || [];
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
       }
     } else if (/\bpijat\s+(?:bayi\s+)?pulih\s+ceria\b/i.test(lower) && /\bsinar\b/i.test(lower)) {
-      result.treatmentReferenced = 'Pijat Bayi Pulih Ceria + Sinar Moksa';
+      const pulih = resolveCatalogName('baby-massage-pulih-ceria', 'Pijat Pulih Ceria');
+      const moksa = resolveCatalogName('add-on-sinar-moksa', 'Sinar Moksa');
+      result.treatmentReferenced = `${pulih} + ${moksa}`;
       result.intents = result.intents || [];
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
@@ -386,13 +397,13 @@ export class EntityExtractor {
         result.intents.push('select_treatment');
       }
     } else if (/\b(?:pijat\s*nifas|perawatan\s*nifas|relaksasi\s*nifas)\b/i.test(lower)) {
-      result.treatmentReferenced = 'Oksitosin Massage Fullbody';
+      result.treatmentReferenced = resolveCatalogName('moms-oksitosin-fullbody', 'Oksitosin Massage Fullbody');
       result.intents = result.intents || [];
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
       }
     } else if (/\b(?:pijat\s*laktasi|paket\s*laktasi|pijat\s*asi|breast\s*massage)\b/i.test(lower)) {
-      result.treatmentReferenced = 'Paket Laktasi (Breast Massage)';
+      result.treatmentReferenced = resolveCatalogName('moms-paket-laktasi', 'Paket Laktasi (Breast Massage)');
       result.intents = result.intents || [];
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');

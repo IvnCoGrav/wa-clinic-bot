@@ -31,7 +31,7 @@ export async function staffRoutes(fastify: FastifyInstance) {
     let session = staffCookie ? await StaffAuthService.validateSession(staffCookie) : null;
 
     if (!session && adminCookie) {
-      const adminSession = AdminSessionService.validateSession(adminCookie);
+      const adminSession = await AdminSessionService.validateSession(adminCookie);
       if (adminSession) {
         session = {
           token: adminCookie,

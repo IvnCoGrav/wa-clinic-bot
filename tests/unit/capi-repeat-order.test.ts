@@ -106,8 +106,9 @@ describe('Reservation is_repeat_order otomasi (root cause: sebelumnya di-set ole
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({ id: 'existing-1', is_repeat_order: true } as any);
     vi.mocked(prisma.reservation.count).mockResolvedValueOnce(3);
 
+    // P2-4: merge idempoten hanya bila treatment SAMA (slot+treatment key) — test lama pakai 'baru' vs 'lama' (beda) sehingga tidak merge.
     const res = await reservationCoreService.saveReservation({
-      ...base, source: 'WEBHOOK', bookingDate: slot, treatmentDetail: 'baru',
+      ...base, source: 'WEBHOOK', bookingDate: slot, treatmentDetail: 'lama',
     });
 
     expect(res.isUpdate).toBe(true);

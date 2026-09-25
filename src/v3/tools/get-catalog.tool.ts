@@ -408,7 +408,18 @@ export async function executeGetCatalog(
     let nameFilterApplied = false;
     if (specificTreatmentName && specificTreatmentName.trim()) {
       const query = specificTreatmentName.toLowerCase();
-      const matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
+      let matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
+      // Fallback token-based via matchCatalogItem terpusat (tahan rebrand: 'Pijat Bayi Pulih Ceria'
+      // vs 'Kala Baby – Pijat Pulih Ceria', alias Baby/Bayi) bila substring gagal — dibatasi pool terfilter.
+      if (matched.length === 0) {
+        try {
+          const tokenHit = treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId);
+          if (tokenHit) {
+            const inPool = filtered.filter((s) => s.id === (tokenHit as ClinicServiceItem).id);
+            if (inPool.length > 0) matched = inPool;
+          }
+        } catch { /* abaikan, pakai pool apa adanya */ }
+      }
       const evictsClinical = clinicalRecommendation != null
         && matched.length > 0
         && !matched.some((s) => s.id === (clinicalRecommendation as ClinicServiceItem).id);
@@ -872,8 +883,10 @@ export async function executeGetCatalog(
     // kunci tier spesifik — tanya usia netral bulan/tahun dulu.
     const needsAgeClarification = childAgeMonths == null && hasClinicalMatch
       && (() => {
+        // Rebrand Kala memakai 'Baby' (Inggris) sementara regex hanya strip 'bayi' — tanpa
+        // 'baby', varian BABY vs KIDS tak pernah se-basis dan deteksi multi-tier mati (SESI 783810).
         const normalizeFam = (name: string): string =>
-          name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+          name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|baby|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
         const famBase = normalizeFam(clinicalRecommendation!.name);
         const hasBabyVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'BABY' || s.ageTier?.label?.toLowerCase().includes('bayi')));
         const hasKidsVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'KIDS' || s.ageTier?.label?.toLowerCase().includes('kids')));
@@ -924,7 +937,7 @@ export async function executeGetCatalog(
       CLINICAL_PROBE: needsAgeClarification
         ? (() => {
             const fmtTitle = (raw: string): string => raw.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            const normFam = (name: string): string => name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+            const normFam = (name: string): string => name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|baby|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
             const famName = clinicalRecommendation ? fmtTitle(normFam(clinicalRecommendation.name)) : 'Pijat Pulih Ceria';
             return `Keluhan (${effectiveSymptoms.join(', ')}) dapat dibantu dengan terapi *${famName}*. Karena layanan ini memiliki varian paket berdasarkan usia (Bayi vs Anak) dan usia si kecil belum diketahui di sesi, SEBUTKAN rekomendasi terapi *${famName}* beserta manfaatnya secara ringkas, lalu TANYAKAN USIA netral: "Kalau boleh tahu, saat ini si kecil usianya berapa bulan atau berapa tahun ya Bunda? Biar kami bantu sesuaikan perawatannya 🤗" (DILARANG menodong hanya "berapa tahun").`;
           })()

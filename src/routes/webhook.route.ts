@@ -83,7 +83,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
    * Webhook handler untuk event pesan masuk dari WAHA (WhatsApp HTTP API).
    * Termasuk IDEMPOTENCY CHECK (`wa_message_id`) & EXPLICIT GUARD CLAUSE for HUMAN HANDLING.
    */
-  fastify.post('/webhook', async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
+  fastify.post('/webhook', {
+    // SEC-AUDIT-13: kuota tinggi (bukan tanpa batas) agar burst sync WAHA tetap
+    // lolos namun flooding CPU/memori tetap terkendali.
+    config: { rateLimit: { max: 5000, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
     const startTime = Date.now();
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {

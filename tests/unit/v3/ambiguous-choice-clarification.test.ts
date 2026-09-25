@@ -51,9 +51,12 @@ describe('Ambiguous Choice Clarification (sesi 834128)', () => {
   });
 
   it('tawaran tunggal + afirmasi ("boleh") -> perilaku lama dipertahankan', () => {
+    // Tahan rebrand Kala: nama rekomendasi asisten WAJIB dari katalog kini agar resolusi anaphoric sah.
+    const pulihName = treatmentCatalogService.getServiceById('baby-massage-pulih-ceria')?.name
+      ?? 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
     const history = [
       { role: 'user', content: 'anak batuk pilek, treatment apa ya?' },
-      { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* ya Bunda' },
+      { role: 'assistant', content: `Bisa dibantu dengan *${pulihName}* ya Bunda` },
       { role: 'user', content: 'boleh' },
     ];
     const cart = GoalTracker.syncCartItems({ cartItems: [] } as any, history, catalog);

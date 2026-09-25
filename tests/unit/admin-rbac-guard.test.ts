@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
 import { StaffAuthService } from '../../src/services/staff-auth.service';
+import { clearScopeCache } from '../../src/services/role-scope.service';
+import { prisma } from '../../src/db/client';
 
 describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
   const app = buildApp();
@@ -9,6 +11,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.ADMIN_API_KEY = superAdminKey;
+    clearScopeCache();
   });
 
   describe('1. Super Admin Access via X-API-KEY', () => {
@@ -64,6 +67,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         url: '/api/admin/backup/list',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
       });
 
@@ -77,6 +81,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         url: '/api/admin/sandbox/chat',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
         payload: {
           message: 'Halo saya mau tanya jadwal',
@@ -93,6 +98,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         url: '/api/admin/ai-models/CHAT_REPLY',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
         payload: {
           model_name: 'gpt-4o',
@@ -109,6 +115,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         url: '/api/admin/staff',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
         payload: {
           name: 'Hacker Staff',
@@ -122,27 +129,71 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.json().code).toBe('FORBIDDEN_STAFF_MANAGEMENT');
     });
 
-    it('allows staff to access permitted operational endpoints (reservations, customers, livechat, roles listing)', async () => {
+    // SEC-AUDIT-04 (kontrak baru): tanpa scope baris (DB offline → fail-closed),
+    // staf THERAPIST ditolak di seluruh /api/admin operasional.
+    it('denies staff without scope rows on operational endpoints (reservations, roles listing)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/admin/reservations',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
       });
 
-      // Should not be 403 Forbidden
-      expect(res.statusCode).not.toBe(403);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
 
       const rolesRes = await app.inject({
         method: 'GET',
         url: '/api/admin/roles',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
       });
-      expect(rolesRes.statusCode).toBe(200);
-      expect(rolesRes.json().success).toBe(true);
+      expect(rolesRes.statusCode).toBe(403);
+      expect(rolesRes.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
+    });
+
+    // Jalur allow: role berbaris scope yang cocok → lolos guard.
+    it('allows staff when a matching scope row exists (data-driven allow)', async () => {
+      (prisma as any).roleApiScope = {
+        findMany: vi.fn().mockResolvedValue([
+          { api_prefix: '/api/admin/reservations', methods: 'GET' },
+        ]),
+      };
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/reservations?limit=1',
+        headers: {
+          cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+      });
+
+      expect(res.statusCode).not.toBe(403);
+      expect(res.json().code).not.toBe('FORBIDDEN_ROLE_SCOPE');
+    });
+
+    it('denies staff when method is outside the scope row (GET-only row vs POST)', async () => {
+      (prisma as any).roleApiScope = {
+        findMany: vi.fn().mockResolvedValue([
+          { api_prefix: '/api/admin/reservation/parse', methods: 'GET' },
+        ]),
+      };
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/reservation/parse',
+        headers: {
+          cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        payload: { customerId: 'cust-1', rawText: 'pijat besok jam 9' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
     });
 
     it('strictly blocks staff from creating or modifying custom roles', async () => {
@@ -151,6 +202,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         url: '/api/admin/roles',
         headers: {
           cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
         },
         payload: {
           key: 'UNAUTHORIZED_ROLE',

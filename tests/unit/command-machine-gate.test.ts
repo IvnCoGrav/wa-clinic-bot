@@ -21,6 +21,11 @@ describe('State Machine — Command Gate (/reset, /state, /mulai)', () => {
     process.env.ORS_API_KEY = '';
     process.env.AI_MODEL_ROUTER = '';
     (prisma.customer as any).delete = vi.fn().mockResolvedValue({ id: 'deleted' });
+    (prisma.customer as any).update = vi.fn().mockResolvedValue({});
+    (prisma.conversation as any).create = vi.fn().mockResolvedValue({
+      id: `conv_new_${Date.now()}`,
+      current_state: ConversationState.INITIAL,
+    });
     (prisma.medicalFaqStaging as any).deleteMany = vi.fn().mockResolvedValue({ count: 0 });
     (prisma.generalFaqStaging as any).deleteMany = vi.fn().mockResolvedValue({ count: 0 });
     (prisma.reservation as any).findMany = vi.fn().mockResolvedValue([]);
@@ -67,7 +72,7 @@ describe('State Machine — Command Gate (/reset, /state, /mulai)', () => {
     );
   });
 
-  it('2. Konfirmasi "ya" → hard wipe dijalankan (prisma.customer.delete dipanggil)', async () => {
+  it('2. Konfirmasi "ya" → soft-delete (arsip) dijalankan, bukan hard delete', async () => {
     const phone = `62888${Date.now()}`;
     const { customer, conversation } = await setupCustomer(phone);
 
@@ -84,7 +89,6 @@ describe('State Machine — Command Gate (/reset, /state, /mulai)', () => {
       },
     });
 
-    // Refresh snapshot (objek yang sama dipakai; delete memanggil id customer)
     await stateMachine.processMessage({
       tenantId,
       customer,
@@ -98,6 +102,10 @@ describe('State Machine — Command Gate (/reset, /state, /mulai)', () => {
       },
     });
 
-    expect(prisma.customer.delete).toHaveBeenCalledWith({ where: { id: customer.id } });
+    // SEC-AUDIT-14: arsip via update(deleted_at), BUKAN delete fisik.
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: customer.id }, data: expect.objectContaining({ deleted_at: expect.any(Date) }) })
+    );
+    expect(prisma.customer.delete).not.toHaveBeenCalled();
   });
 });

@@ -11,7 +11,7 @@ describe('Toddler Bridge Catalog (KIDS 17mo)', () => {
     expect(out.success).toBe(true);
     expect(out.treatments.length).toBeGreaterThan(1);
     const top2 = out.treatments.slice(0, 2).map((t) => t.name);
-    expect(top2.some((n) => n.includes('Pijat Bayi Ceria') || n.includes('Lahap Juara'))).toBe(true);
+    expect(top2.some((n) => n.includes('Ceria') || n.includes('Lahap'))).toBe(true);
     const bubbleIdx = out.treatments.findIndex((t) => t.id === 'custom-kids-spa');
     const ceriaIdx = out.treatments.findIndex((t) => t.id === 'baby-massage-ceria');
     expect(ceriaIdx).toBeGreaterThanOrEqual(0);

@@ -10,9 +10,13 @@ import path from 'path';
 describe('Telegram Webhook & 1-Click Pairing Integration', () => {
   let app: FastifyInstance;
   let tempCleanDir: string;
+  let prevTelegramSecret: string | undefined;
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    // Kontrak fail-closed (SEC-AUDIT-01): webhook wajib secret; test menyetelnya eksplisit.
+    prevTelegramSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'test_telegram_secret_xyz';
     tempCleanDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-test-'));
     process.env.CLEAN_STORAGE_DIR = tempCleanDir;
     process.env.CLEAN_POLL_MS = '20';
@@ -26,13 +30,16 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
     delete process.env.CLEAN_STORAGE_DIR;
     delete process.env.CLEAN_POLL_MS;
     delete process.env.CLEAN_POLL_TIMEOUT_MS;
+    if (prevTelegramSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = prevTelegramSecret;
     fs.rmSync(tempCleanDir, { recursive: true, force: true });
   });
 
   it('GET /api/webhook/telegram should return healthy status', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
     });
     expect(res.statusCode).toBe(200);
     const json = JSON.parse(res.payload);
@@ -52,7 +59,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 1,
         message: {
@@ -95,7 +103,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 2,
         message: {
@@ -139,7 +148,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 3,
         message: {
@@ -183,7 +193,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 4,
         message: {
@@ -207,7 +218,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 5,
         message: {
@@ -233,7 +245,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 6,
         message: {
@@ -266,7 +279,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 7,
         message: {
@@ -320,7 +334,8 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/webhook/telegram',
+        url: '/api/webhook/telegram',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_telegram_secret_xyz' },
       payload: {
         update_id: 8,
         message: {

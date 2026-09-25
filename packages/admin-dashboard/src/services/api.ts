@@ -231,6 +231,13 @@ export async function apiRequest<T = any>(
     ...(options.headers as Record<string, string> | undefined),
   };
 
+  // SEC-AUDIT-09: header anti-CSRF wajib untuk request state-changing berbasis
+  // cookie. Cross-site form tidak bisa menetapkan header ini; fetch lintas-origin
+  // memicu preflight CORS yang ditolak server.
+  if (!isGet && !headers['X-Requested-With'] && !headers['x-requested-with']) {
+    headers['X-Requested-With'] = 'XMLHttpRequest';
+  }
+
   let body = options.body;
   if (needsJsonBody && body === undefined && !headers['Content-Type']) {
     body = JSON.stringify({});

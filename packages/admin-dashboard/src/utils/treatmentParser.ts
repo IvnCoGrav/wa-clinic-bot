@@ -15,6 +15,7 @@ export const DEFAULT_CLINIC_SERVICES_FALLBACK: ClinicServiceItem[] = [
   { id: 'baby-massage-ceria', name: 'Kala Baby – Pijat Ceria', category: 'BABY', durationMinutes: 40, originalPrice: 80000, promoPrice: 70000, description: 'Pijat relaksasi tubuh bayi', isActive: true },
   { id: 'baby-massage-ceria-newborn', name: 'Kala Baby – Pijat Ceria Newborn', category: 'BABY', durationMinutes: 40, originalPrice: 80000, promoPrice: 60000, description: 'Pijat relaksasi bayi newborn', isActive: true },
   { id: 'baby-massage-pulih-ceria', name: 'Kala Baby – Pijat Pulih Ceria', category: 'BABY', durationMinutes: 40, originalPrice: 100000, promoPrice: 75000, description: 'Terapi bapil dan kembung', isActive: true },
+  { id: 'baby-massage-pulih-ceria-newborn', name: 'Kala Baby – Pijat Pulih Ceria Newborn', category: 'BABY', durationMinutes: 40, originalPrice: 100000, promoPrice: 75000, description: 'Terapi bapil dan kembung newborn 0-6 bulan', isActive: true },
   { id: 'baby-massage-lahap-juara', name: 'Kala Baby – Pijat Lahap', category: 'BABY', durationMinutes: 40, originalPrice: 100000, promoPrice: 75000, description: 'Pijat nafsu makan', isActive: true },
   { id: 'baby-cukur', name: 'Kala Baby – Cukur Rambut', category: 'BABY', durationMinutes: 15, originalPrice: 35000, promoPrice: 25000, description: 'Cukur rambut bayi', isActive: true },
   { id: 'baby-mandi', name: 'Kala Baby – Memandikan Bayi', category: 'BABY', durationMinutes: 25, originalPrice: 40000, promoPrice: 30000, description: 'Memandikan bayi higienis', isActive: true },

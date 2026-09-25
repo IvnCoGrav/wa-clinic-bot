@@ -30,7 +30,10 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     return reply.status(403).send({ error: 'Forbidden: verification token mismatch' });
   });
 
-  fastify.post('/api/webhook/waba', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/api/webhook/waba', {
+    // SEC-AUDIT-13: kuota tinggi (bukan tanpa batas) untuk burst event Meta.
+    config: { rateLimit: { max: 5000, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {
 

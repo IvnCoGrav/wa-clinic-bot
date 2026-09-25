@@ -272,8 +272,18 @@ export class BackupService {
     let tablesRestored = 0;
     const restoredSummary: string[] = [];
 
-    // Cek apakah file berupa JSON dump programatik
-    if (decompressed.trim().startsWith('{') && decompressed.includes('"tables"')) {
+    // SEC-AUDIT-06: HANYA format dump JSON internal (per-entitas via Prisma ORM)
+    // yang boleh direstore. Dump SQL mentah DITOLAK — $executeRawUnsafe atas file
+    // upload = eksekusi SQL sewenang-wenang (DROP/credential theft).
+    const isProgrammaticJson = decompressed.trim().startsWith('{') && decompressed.includes('"tables"');
+    if (!isProgrammaticJson) {
+      throw new Error(
+        'Format backup tidak didukung untuk restore. Hanya dump JSON internal (.json.gz) yang diizinkan; ' +
+          'dump SQL mentah (.sql/.sql.gz) harus dipulihkan manual via pg_restore oleh operator.'
+      );
+    }
+
+    {
       try {
         const parsed = JSON.parse(decompressed);
         const tables = parsed.tables || {};
@@ -550,15 +560,6 @@ export class BackupService {
         }
       } catch (err: any) {
         console.warn('[BackupService] Partial error during JSON restore:', err?.message);
-      }
-    } else {
-      // Jika berupa SQL Dump mentah, jalankan eksekusi query
-      try {
-        await prisma.$executeRawUnsafe(decompressed);
-        tablesRestored = 1;
-        restoredSummary.push('SQL script eksekusi');
-      } catch (err: any) {
-        console.warn('[BackupService] Raw SQL restore partial error:', err?.message);
       }
     }
 

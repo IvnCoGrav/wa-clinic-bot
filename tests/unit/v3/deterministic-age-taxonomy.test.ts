@@ -62,6 +62,7 @@ describe('Anti-Menu Brosur (consultation supply trim)', () => {
       inquirePrice: false,
     });
     expect(out.success).toBe(true);
-    expect(out.treatments.some((t) => t.name.includes('Pijat Bayi Ceria'))).toBe(true);
+    // Tahan rebrand Kala ('Kala Baby – Pijat Ceria'): token Ceria sebagai sinyal item spesifik tidak terpangkas.
+    expect(out.treatments.some((t) => t.name.includes('Ceria'))).toBe(true);
   });
 });

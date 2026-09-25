@@ -21,6 +21,9 @@ export function isTypoAtMostOne(a: string, b: string): boolean {
 export const GEO_TOKEN_SKIPLIST = new Set([
   'kota', 'desa', 'jawa', 'timur', 'kecamatan', 'kabupaten',
   'surabaya', 'sidoarjo', 'gresik', 'sby', 'sda',
+  // Kata benda generik area — DILARANG di-typo-match ke nama asli (mis. 'kawasan' 1-edit dari 'kapasan'
+  // menghalusinasi 'Kawasan Tak Dikenal XYZ' → Kapasan; google-contacts.test.ts TC-08b).
+  'kawasan', 'wilayah', 'daerah', 'area',
 ]);
 
 export function isSkippedGeoToken(t: string): boolean {

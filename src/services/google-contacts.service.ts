@@ -11,6 +11,7 @@ import {
   CustomerContactContext,
 } from './google-contacts-formatter';
 import { getGazetteerCoordinates, getGazetteerKecamatanNames } from '../utils/gazetteer';
+import { encryptSecretIfPossible } from '../utils/encryption';
 
 /**
  * Klasifikasi tag wilayah hasil belahan nama impor komposit ("Nama - Wilayah").
@@ -112,8 +113,9 @@ export class GoogleContactsService {
         tenant_id: tenantId,
         is_enabled: true,
         connected_email: tokens.email,
-        refresh_token: tokens.refreshToken,
-        access_token: tokens.accessToken,
+        // SEC-AUDIT-11: token Google disimpan terenkripsi (AES-256-GCM).
+        refresh_token: tokens.refreshToken ? encryptSecretIfPossible(tokens.refreshToken) : null,
+        access_token: tokens.accessToken ? encryptSecretIfPossible(tokens.accessToken) : null,
         token_expiry: tokens.expiryDate ? new Date(tokens.expiryDate) : null,
         auto_sync_on_chat: true,
         auto_sync_on_reserve: true,
@@ -123,8 +125,8 @@ export class GoogleContactsService {
       update: {
         is_enabled: true,
         connected_email: tokens.email || undefined,
-        refresh_token: tokens.refreshToken || undefined,
-        access_token: tokens.accessToken || undefined,
+        refresh_token: tokens.refreshToken ? encryptSecretIfPossible(tokens.refreshToken) : undefined,
+        access_token: tokens.accessToken ? encryptSecretIfPossible(tokens.accessToken) : undefined,
         token_expiry: tokens.expiryDate ? new Date(tokens.expiryDate) : undefined,
       },
     });

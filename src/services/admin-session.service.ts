@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { prisma } from '../db/client';
 
 export interface AdminSession {
   id: string;
+  /** Token mentah — hanya diisi saat create/validate, TIDAK PERNAH dipersist. */
   token: string;
   adminIdentity: string;
   createdAt: Date;
@@ -12,126 +14,147 @@ export interface AdminSession {
 
 // 30-day TTL for stable sessions (prevents unexpected logouts)
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
-const STORAGE_FILE = path.join(process.cwd(), 'storage', 'admin_sessions.json');
 
-const adminSessionStore = new Map<string, AdminSession>();
+// SEC-AUDIT-02: hanya hash yang disimpan (DB `admin_sessions` / fallback memori).
+// Berkas plaintext legacy `storage/admin_sessions.json` tidak lagi dibaca/ditulis.
+const LEGACY_STORAGE_FILE = path.join(process.cwd(), 'storage', 'admin_sessions.json');
 
-// Load persisted sessions on boot
-function loadPersistedSessions() {
-  try {
-    if (fs.existsSync(STORAGE_FILE)) {
-      const raw = fs.readFileSync(STORAGE_FILE, 'utf-8');
-      const data = JSON.parse(raw);
-      const now = new Date();
-      if (Array.isArray(data)) {
-        for (const item of data) {
-          const expiresAt = new Date(item.expiresAt);
-          if (expiresAt > now) {
-            adminSessionStore.set(item.token, {
-              ...item,
-              createdAt: new Date(item.createdAt),
-              expiresAt,
-            });
-          }
-        }
-      }
-    }
-  } catch (err) {
-    // Silently ignore corrupted cache
-  }
+export function hashAdminToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function savePersistedSessions() {
-  try {
-    const dir = path.dirname(STORAGE_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const list = Array.from(adminSessionStore.values());
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(list), 'utf-8');
-  } catch (err) {
-    // Silently ignore write failures
-  }
+interface MemoryEntry {
+  id: string;
+  adminIdentity: string;
+  createdAt: Date;
+  expiresAt: Date;
 }
 
-loadPersistedSessions();
+// Fallback keyed by token HASH (bukan token mentah), untuk mode DB-offline/test.
+// Ephemeral (memori proses) — tidak ada rahasia yang mendarat di disk.
+const memoryFallback = new Map<string, MemoryEntry>();
+
+function readMemory(hash: string, token: string): AdminSession | null {
+  const entry = memoryFallback.get(hash);
+  if (!entry) return null;
+  if (new Date() > entry.expiresAt) {
+    memoryFallback.delete(hash);
+    return null;
+  }
+  return { ...entry, token };
+}
+
+// Hapus sisa file plaintext legacy sekali saat boot (best-effort, sekali jalan).
+try {
+  if (fs.existsSync(LEGACY_STORAGE_FILE)) {
+    fs.unlinkSync(LEGACY_STORAGE_FILE);
+    console.log('[ADMIN SESSION] Legacy plaintext storage/admin_sessions.json removed.');
+  }
+} catch {
+  // Abaikan — file akan ditimpa alur baru (tidak dibaca lagi).
+}
 
 export class AdminSessionService {
   /**
-   * Generates a cryptographically secure random session token (32 bytes = 64 hex chars)
+   * Generates a cryptographically secure random session token (32 bytes = 64 hex chars).
+   * Hanya SHA-256 hash yang dipersist ke database; token mentah hanya dikembalikan sekali ke caller.
    */
-  static createSession(adminIdentity = 'System Admin'): AdminSession {
+  static async createSession(adminIdentity = 'System Admin'): Promise<AdminSession> {
     const token = crypto.randomBytes(32).toString('hex');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
 
-    const session: AdminSession = {
-      id: crypto.randomUUID(),
-      token,
-      adminIdentity,
-      createdAt: now,
-      expiresAt,
-    };
-
-    adminSessionStore.set(token, session);
-    savePersistedSessions();
-    console.log(`[ADMIN SESSION CREATED] Session token issued for ${adminIdentity}. Expires: ${expiresAt.toISOString()}`);
-    return session;
+    try {
+      const created = await prisma.adminSession.create({
+        data: {
+          token_hash: hashAdminToken(token),
+          admin_identity: adminIdentity,
+          expires_at: expiresAt,
+        },
+      });
+      console.log(`[ADMIN SESSION CREATED] Session issued for ${adminIdentity}. Expires: ${expiresAt.toISOString()}`);
+      return {
+        id: created.id,
+        token,
+        adminIdentity: created.admin_identity,
+        createdAt: created.created_at,
+        expiresAt: created.expires_at,
+      };
+    } catch (err) {
+      // DB offline (dev/test) → sesi ephemeral di memori, tetap tanpa jejak plaintext di disk.
+      const entry: MemoryEntry = { id: crypto.randomUUID(), adminIdentity, createdAt: now, expiresAt };
+      memoryFallback.set(hashAdminToken(token), entry);
+      console.log(`[ADMIN SESSION CREATED] (memory fallback, DB offline) Session issued for ${adminIdentity}.`);
+      return { ...entry, token };
+    }
   }
 
   /**
-   * Validates a session token. Returns the session if valid, or null if expired/invalid.
+   * Validates a session token by hash lookup. Returns the session if valid, or null if expired/invalid.
    */
-  static validateSession(token: string): AdminSession | null {
+  static async validateSession(token: string): Promise<AdminSession | null> {
     if (!token || typeof token !== 'string') return null;
+    const hash = hashAdminToken(token);
 
-    const session = adminSessionStore.get(token);
-    if (!session) return null;
-
-    // Check expiration
-    if (new Date() > session.expiresAt) {
-      console.log(`[ADMIN SESSION EXPIRED] Token ${token.substring(0, 8)}... has expired. Removing.`);
-      adminSessionStore.delete(token);
-      savePersistedSessions();
-      return null;
+    try {
+      const session = await prisma.adminSession.findUnique({ where: { token_hash: hash } });
+      if (session && !session.revoked_at && session.expires_at > new Date()) {
+        return {
+          id: session.id,
+          token,
+          adminIdentity: session.admin_identity,
+          createdAt: session.created_at,
+          expiresAt: session.expires_at,
+        };
+      }
+      if (session) {
+        // Kedaluwarsa/direvoke → bersihkan best-effort.
+        await prisma.adminSession.delete({ where: { token_hash: hash } }).catch(() => {});
+        return null;
+      }
+    } catch {
+      // DB offline → jatuh ke fallback memori di bawah.
     }
-
-    return session;
+    return readMemory(hash, token);
   }
 
   /**
    * Destroys an active session (Logout)
    */
-  static destroySession(token: string): boolean {
+  static async destroySession(token: string): Promise<boolean> {
     if (!token) return false;
-    const deleted = adminSessionStore.delete(token);
-    if (deleted) {
-      savePersistedSessions();
-      console.log(`[ADMIN SESSION DESTROYED] Session token ${token.substring(0, 8)}... logged out.`);
+    const hash = hashAdminToken(token);
+    let revoked = false;
+    try {
+      await prisma.adminSession.delete({ where: { token_hash: hash } });
+      revoked = true;
+    } catch {
+      // Baris tidak ada / DB offline — lanjut ke fallback memori.
     }
-    return deleted;
+    if (memoryFallback.delete(hash)) revoked = true;
+    if (revoked) {
+      console.log(`[ADMIN SESSION DESTROYED] Session ${token.substring(0, 8)}... logged out.`);
+    }
+    return revoked;
   }
 
   /**
    * Cleans up expired sessions periodically
    */
-  static cleanupExpiredSessions() {
-    const now = new Date();
-    let hasChanges = false;
-    for (const [token, session] of adminSessionStore.entries()) {
-      if (now > session.expiresAt) {
-        adminSessionStore.delete(token);
-        hasChanges = true;
-      }
+  static async cleanupExpiredSessions(): Promise<void> {
+    try {
+      await prisma.adminSession.deleteMany({ where: { expires_at: { lt: new Date() } } });
+    } catch {
+      // DB offline — hanya bersihkan fallback memori.
     }
-    if (hasChanges) {
-      savePersistedSessions();
+    const now = new Date();
+    for (const [hash, entry] of memoryFallback.entries()) {
+      if (now > entry.expiresAt) memoryFallback.delete(hash);
     }
   }
 }
 
 // Periodically clean up expired sessions every hour
 setInterval(() => {
-  AdminSessionService.cleanupExpiredSessions();
+  AdminSessionService.cleanupExpiredSessions().catch(() => {});
 }, 60 * 60 * 1000);
-

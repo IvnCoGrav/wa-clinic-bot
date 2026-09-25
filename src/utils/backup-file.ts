@@ -30,12 +30,14 @@ export function generateBackupFileName(prefix = 'wa_clinic_backup'): string {
 }
 
 /**
- * Memvalidasi apakah file aman dari path traversal dan berakhiran .sql.gz
+ * Memvalidasi apakah file aman dari path traversal dan berakhiran .sql.gz / .json.gz.
+ * SEC-AUDIT-06: `.sql` mentah tidak lagi diterima — hanya `.json.gz` (dump JSON
+ * internal, direstore via ORM) dan `.sql.gz` (arsip/unduh/manual pg_restore).
  */
 export function sanitizeBackupFileName(fileName: string): string {
   const safeName = path.basename(fileName);
-  if (!safeName.endsWith('.sql.gz') && !safeName.endsWith('.sql') && !safeName.endsWith('.json.gz')) {
-    throw new Error('Ekstensi file backup tidak valid. Harus .sql.gz atau .sql');
+  if (!safeName.endsWith('.sql.gz') && !safeName.endsWith('.json.gz')) {
+    throw new Error('Ekstensi file backup tidak valid. Harus .sql.gz atau .json.gz');
   }
   return safeName;
 }

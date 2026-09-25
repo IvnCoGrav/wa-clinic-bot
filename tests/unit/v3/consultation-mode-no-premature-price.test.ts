@@ -9,13 +9,14 @@ import { GoalTracker } from '../../../src/v3/state/goal-tracker';
  */
 describe('Consultation Mode (no premature price/schedule)', () => {
   it('tool !inquirePrice -> consultation reply tanpa nominal & tanpa todong jadwal', async () => {
-    const out = await executeGetCatalog({ specificTreatmentName: 'Lahap Juara', inquirePrice: false });
+    // Tahan rebrand Kala: token legacy 'juara' tak ada di katalog kini — pakai frasa katalog ('Pijat Lahap').
+    const out = await executeGetCatalog({ specificTreatmentName: 'Pijat Lahap', inquirePrice: false });
     expect(out.success).toBe(true);
     expect(out.suggestedPriceReply).toBeUndefined();
     expect(out.suggestedConsultationReply).toBeDefined();
     expect(out.suggestedConsultationReply!).not.toMatch(/Rp/i);
     expect(out.suggestedConsultationReply!).not.toMatch(/jadwalkan di hari apa/i);
-    expect(out.suggestedConsultationReply!).toMatch(/Lahap Juara/);
+    expect(out.suggestedConsultationReply!).toMatch(/Lahap/);
     expect(out.message).toContain('Mode Konsultasi');
   });
 

@@ -32,12 +32,13 @@ const RESET_PENDING_TTL_MS = 5 * 60 * 1000; // 5 menit
 const CONFIRM_KEYWORDS = new Set(['ya', 'y', 'yes', 'konfirmasi', 'konfirm', 'setuju', 'iya', 'ya reset', 'iya reset']);
 
 const RESET_CONFIRM_REPLY =
-  'Bunda, perintah ini akan menghapus *seluruh riwayat chat & data reservasi* nomor ini ' +
-  'secara permanen. Balas *YA* untuk mengonfirmasi, atau ketik pesan lain untuk membatalkan.';
+  'Bunda, perintah ini akan mengarsipkan riwayat chat & data reservasi nomor ini ' +
+  '(data tidak dihapus permanen dan masih dapat dipulihkan oleh admin). ' +
+  'Balas *YA* untuk mengonfirmasi, atau ketik pesan lain untuk membatalkan.';
 
 const RESET_DONE_REPLY =
-  'Perintah dijalankan. Seluruh riwayat chat dan data reservasi nomor ini sudah dihapus. ' +
-  'Silakan mulai dari awal — ketik *Halo* untuk memulai percakapan baru. 😊';
+  'Perintah dijalankan. Riwayat chat dan data reservasi nomor ini telah diarsipkan ' +
+  'dan percakapan dimulai dari awal. Silakan ketik *Halo* untuk memulai percakapan baru. 😊';
 
 const START_OVER_FALLBACK =
   'Baik Bunda, kita mulai dari awal. Silakan ketik *Halo* untuk memulai percakapan baru. 😊';
@@ -84,6 +85,12 @@ export class CommandService {
         return { replyText: RESET_CONFIRM_REPLY, conversationId: conversation.id };
 
       case '/state':
+        // SEC-AUDIT-14: /state membocorkan state machine internal. Hanya
+        // diizinkan untuk nomor yang ditandai admin (is_admin_labeled) atau di
+        // luar produksi (dev/CLI). Selain itu → diabaikan sebagai pesan biasa.
+        if (process.env.NODE_ENV === 'production' && !customer.is_admin_labeled) {
+          return null;
+        }
         return { replyText: this.buildStateInfo(customer, conversation), conversationId: conversation.id };
 
       case '/mulai':
@@ -96,14 +103,15 @@ export class CommandService {
   }
 
   /**
-   * HARD WIPE: menghapus seluruh data milik customer ini (chat+reservasi+child+follow-up)
-   * lewat cascade delete. Best-effort untuk side-effect eksternal (Google Calendar, staging,
-   * label WAHA, memory store) supaya tidak meninggalkan orphan.
+   * SOFT WIPE (SEC-AUDIT-14): mengarsipkan data customer ini dengan menandai
+   * `deleted_at` — TIDAK ada DELETE fisik. Riwayat chat/reservasi/anak tetap
+   * tersimpan (dapat dipulihkan admin), lalu sesi dimulai ulang dengan
+   * percakapan baru. Side-effect eksternal (Google Calendar, staging, memory)
+   * tetap dibersihkan best-effort.
    */
   private async hardWipe(customer: any, conversation: any, tenantId: string): Promise<string> {
     const phone = customer.phone;
     const name = customer.name;
-    const wasSandbox = !!customer.is_sandbox_test;
 
     // 1. Cancel event Google Calendar milik reservasi (cegah orphan).
     try {
@@ -121,7 +129,7 @@ export class CommandService {
       console.warn('[COMMAND /reset] Gagal cancel Google Calendar event:', err.message);
     }
 
-    // 2. Hapus staging yang tersangkut di conversation ini (tidak punya relasi FK).
+    // 2. Hapus staging yang tersangkut di conversation ini (data sementara, bukan medis).
     try {
       await prisma.medicalFaqStaging.deleteMany({ where: { conversation_id: conversation.id } });
     } catch (err: any) {
@@ -133,11 +141,14 @@ export class CommandService {
       console.warn('[COMMAND /reset] Gagal hapus GeneralFaqStaging:', err.message);
     }
 
-    // 3. Hard-delete customer → cascade bereskan Conversation/Message/Reservation/Child/FollowUp.
+    // 3. SOFT-DELETE: tandai arsip, BUKAN delete. Data medis tetap utuh.
     try {
-      await prisma.customer.delete({ where: { id: customer.id } });
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { deleted_at: new Date(), status: 'archived' },
+      });
     } catch (err: any) {
-      console.warn('[COMMAND /reset] Hard-delete customer gagal (DB offline?):', err.message);
+      console.warn('[COMMAND /reset] Soft-delete customer gagal (DB offline?):', err.message);
     }
 
     // 4. Bersihkan snapshot di memory fallback store.
@@ -148,22 +159,27 @@ export class CommandService {
     // 5. Mandat Anti-Label WAHA: label lifecycle di-reset via DB internal, zero WAHA label mutation
     console.log(`[COMMAND /reset] DB-only label lifecycle reset, zero WAHA label mutation.`);
 
-    // 6. Re-create customer + conversation sebagai rumah bagi balasan konfirmasi.
-    // Propagasikan flag is_sandbox_test agar jalur test tidak mencemari data asli.
-    const newCustomer = await customerService.getOrCreateCustomer(phone, name, tenantId);
-    if (wasSandbox && !newCustomer.is_sandbox_test) {
-      try {
-        await prisma.customer.update({
-          where: { id: newCustomer.id },
-          data: { is_sandbox_test: true },
-        });
-        newCustomer.is_sandbox_test = true;
-      } catch (err: any) {
-        console.warn('[COMMAND /reset] Propagasi is_sandbox_test gagal:', err.message);
-      }
+    // 6. Percakapan BARU sebagai rumah bagi balasan konfirmasi (yang lama tetap
+    //    terarsip di DB). Dibuat eksplisit agar tidak menyambung percakapan lama.
+    let newConversationId: string;
+    try {
+      const created = await prisma.conversation.create({
+        data: {
+          tenant_id: tenantId,
+          customer_id: customer.id,
+          current_state: ConversationState.INITIAL,
+          is_human_handling: false,
+          is_pinned: false,
+          is_manual_unread: false,
+        },
+      });
+      newConversationId = created.id;
+      conversationService.clearConversationMemory(customer.id);
+    } catch {
+      const fallback = await conversationService.getOrCreateConversation(customer.id, tenantId);
+      newConversationId = fallback.id;
     }
-    const newConversation = await conversationService.getOrCreateConversation(newCustomer.id, tenantId);
-    return newConversation.id;
+    return newConversationId;
   }
 
   /** /mulai — restart percakapan ke state awal (tanpa menghapus data) + tampilkan greeting persona. */

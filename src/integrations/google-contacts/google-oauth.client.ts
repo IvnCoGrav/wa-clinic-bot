@@ -1,12 +1,18 @@
 import { google, Auth } from 'googleapis';
+import crypto from 'crypto';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { safeCompare } from '../../utils/auth';
+import { decryptSecretCompat, encryptSecretIfPossible } from '../../utils/encryption';
 
 const GOOGLE_CONTACTS_SCOPES = [
   'https://www.googleapis.com/auth/contacts',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/drive.file',
 ];
+
+// SEC-AUDIT-10: umur maksimum state OAuth (batas jendela replay Login CSRF).
+const STATE_TTL_MS = 15 * 60 * 1000;
 
 export interface GoogleOAuthTokens {
   accessToken: string | null;
@@ -45,6 +51,14 @@ export class GoogleOAuthClientManager {
   }
 
   /**
+   * Secret penandatangan state OAuth (anti-CSRF / anti-tamper).
+   * Deterministik dari env, tanpa dependency baru.
+   */
+  private stateSecret(): string {
+    return process.env.GOOGLE_OAUTH_STATE_SECRET || process.env.ADMIN_API_KEY || '';
+  }
+
+  /**
    * Generate URL Login Google OAuth untuk tenant tertentu
    */
   public generateAuthUrl(tenantId: string = DEFAULT_TENANT_ID): string {
@@ -53,11 +67,24 @@ export class GoogleOAuthClientManager {
         'Google OAuth platform credentials belum dikonfigurasi di environment (GOOGLE_OAUTH_CLIENT_ID / SECRET / REDIRECT_URI)'
       );
     }
+    const secret = this.stateSecret();
+    if (!secret) {
+      throw new Error(
+        'Google OAuth state secret belum dikonfigurasi (GOOGLE_OAUTH_STATE_SECRET / ADMIN_API_KEY)'
+      );
+    }
 
     const oauth2Client = this.createOAuth2Client();
-    const statePayload = Buffer.from(
-      JSON.stringify({ tenantId, timestamp: Date.now() })
-    ).toString('base64');
+    // SEC-AUDIT-10: state = payload.base64url + HMAC-SHA256 (nonce anti-replay).
+    // Tanpa signature, penyerang bisa memalsukan tenantId (Login CSRF lintas-tenant).
+    const payload = {
+      tenantId,
+      timestamp: Date.now(),
+      nonce: crypto.randomBytes(8).toString('hex'),
+    };
+    const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const sig = crypto.createHmac('sha256', secret).update(encoded).digest('hex');
+    const statePayload = `${encoded}.${sig}`;
 
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
@@ -68,19 +95,43 @@ export class GoogleOAuthClientManager {
   }
 
   /**
-   * Verifikasi & ekstrak state tenant dari callback
+   * Verifikasi & ekstrak state tenant dari callback — fail-closed.
+   * State tak bertanda tangan / kadaluarsa / rusak → throw (caller redirect error).
    */
   public parseState(stateString?: string): { tenantId: string } {
     if (!stateString) {
-      return { tenantId: DEFAULT_TENANT_ID };
+      throw new Error('Missing OAuth state');
     }
+    const secret = this.stateSecret();
+    if (!secret) {
+      throw new Error('OAuth state secret not configured');
+    }
+    const dot = stateString.lastIndexOf('.');
+    if (dot <= 0) {
+      throw new Error('Invalid OAuth state format');
+    }
+    const encoded = stateString.slice(0, dot);
+    const sig = stateString.slice(dot + 1);
+    const expected = crypto.createHmac('sha256', secret).update(encoded).digest('hex');
+    if (!sig || !safeCompare(sig, expected)) {
+      throw new Error('Invalid OAuth state signature');
+    }
+    let parsed: any;
     try {
-      const decoded = Buffer.from(stateString, 'base64').toString('utf-8');
-      const parsed = JSON.parse(decoded);
-      return { tenantId: parsed.tenantId || DEFAULT_TENANT_ID };
+      parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
     } catch {
-      return { tenantId: DEFAULT_TENANT_ID };
+      throw new Error('Invalid OAuth state payload');
     }
+    if (
+      !parsed ||
+      typeof parsed.tenantId !== 'string' ||
+      !parsed.tenantId ||
+      typeof parsed.timestamp !== 'number' ||
+      Date.now() - parsed.timestamp > STATE_TTL_MS
+    ) {
+      throw new Error('Expired or invalid OAuth state');
+    }
+    return { tenantId: parsed.tenantId };
   }
 
   /**
@@ -134,9 +185,10 @@ export class GoogleOAuthClientManager {
     }
 
     const oauth2Client = this.createOAuth2Client();
+    // SEC-AUDIT-11: dual-read — decrypt bila terenkripsi, fallback plaintext legacy.
     oauth2Client.setCredentials({
-      refresh_token: integration.refresh_token,
-      access_token: integration.access_token || undefined,
+      refresh_token: decryptSecretCompat(integration.refresh_token) || undefined,
+      access_token: decryptSecretCompat(integration.access_token) || undefined,
       expiry_date: integration.token_expiry ? integration.token_expiry.getTime() : undefined,
     });
 
@@ -146,8 +198,8 @@ export class GoogleOAuthClientManager {
         await prisma.tenantGoogleIntegration.update({
           where: { tenant_id: tenantId },
           data: {
-            access_token: newTokens.access_token || undefined,
-            refresh_token: newTokens.refresh_token || undefined,
+            access_token: newTokens.access_token ? encryptSecretIfPossible(newTokens.access_token) : undefined,
+            refresh_token: newTokens.refresh_token ? encryptSecretIfPossible(newTokens.refresh_token) : undefined,
             token_expiry: newTokens.expiry_date ? new Date(newTokens.expiry_date) : undefined,
           },
         });
@@ -174,7 +226,8 @@ export class GoogleOAuthClientManager {
     if (integration.access_token || integration.refresh_token) {
       try {
         const oauth2Client = this.createOAuth2Client();
-        const tokenToRevoke = integration.access_token || integration.refresh_token;
+        // SEC-AUDIT-11: revoke memakai token plaintext hasil decrypt.
+        const tokenToRevoke = decryptSecretCompat(integration.access_token) || decryptSecretCompat(integration.refresh_token);
         if (tokenToRevoke) {
           await oauth2Client.revokeToken(tokenToRevoke);
         }
