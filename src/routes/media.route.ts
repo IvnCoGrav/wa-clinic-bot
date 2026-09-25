@@ -31,14 +31,14 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
   const queryToken = (request.query as any)?.token;
 
   const { AdminSessionService } = await import('../services/admin-session.service');
-  if (sessionCookie && AdminSessionService.validateSession(sessionCookie)) return true;
+  if (sessionCookie && (await AdminSessionService.validateSession(sessionCookie))) return true;
   if (staffCookie) {
     const { StaffAuthService } = await import('../services/staff-auth.service');
     const staff = await StaffAuthService.validateSession(staffCookie);
     if (staff) return true;
   }
   if (queryToken) {
-    if (AdminSessionService.validateSession(queryToken)) return true;
+    if (await AdminSessionService.validateSession(queryToken)) return true;
     const { StaffAuthService } = await import('../services/staff-auth.service');
     const staff = await StaffAuthService.validateSession(queryToken);
     if (staff) return true;
@@ -178,7 +178,11 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   fastify.get('/media/avatar/:customerId', async (request: FastifyRequest<{
     Params: { customerId: string };
   }>, reply: FastifyReply) => {
-    const rawId = request.params.customerId.replace(/\.(jpg|jpeg|png|webp|svg)$/i, '');
+    // SEC-AUDIT-05: kunci path traversal di level path resolver (stdlib path,
+    // bukan pencocokan string). basename membuang segmen direktori; resolve+
+    // startsWith memastikan file tetap di dalam avatarDir apa pun inputnya.
+    const rawParam = request.params.customerId.replace(/\.(jpg|jpeg|png|webp|svg)$/i, '');
+    const rawId = path.basename(rawParam);
     const { prisma } = await import('../db/client');
     const { customerService } = await import('../services/customer.service');
     const axios = (await import('axios')).default;
@@ -192,7 +196,11 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     } catch {}
 
     const avatarDir = path.join(process.cwd(), 'storage', 'media', 'avatars');
-    const localAvatarPath = path.join(avatarDir, `${rawId}.jpg`);
+    const resolvedDir = path.resolve(avatarDir);
+    const localAvatarPath = path.resolve(avatarDir, `${rawId}.jpg`);
+    if (!localAvatarPath.startsWith(resolvedDir + path.sep)) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
 
     // 1. Ambil dari cache lokal jika sudah ada
     if (fs.existsSync(localAvatarPath) && fs.statSync(localAvatarPath).isFile()) {
@@ -209,6 +217,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           responseType: 'arraybuffer',
           timeout: 4000,
           maxContentLength: 2 * 1024 * 1024, // Max 2MB
+          // SEC-AUDIT-08: jangan ikuti redirect — server penyerang bisa 302 ke IP internal.
+          maxRedirects: 0,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },

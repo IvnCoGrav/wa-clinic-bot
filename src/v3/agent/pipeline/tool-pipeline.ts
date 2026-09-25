@@ -187,6 +187,63 @@ export class ToolExecutionPipeline {
       // `extractFastIntents` (satu sumber kebenaran intent ask_price/ongkir).
       const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
       if (fnName === 'calculate_delivery') {
+        // Verbatim Gate (wdoro→Wonodoro): tolak halusinasi elongasi LLM.
+        // Jika locationText LLM tak punya irisan token dengan cleanIncomingText,
+        // cari entitas gazetteer verbatim di teks asli customer dan pakai itu.
+        // WAJIB sebelum stale-strip agar prefiks basi tidak mengaburkan cek overlap.
+        if (typeof fnArgs.locationText === 'string' && typeof cleanIncomingText === 'string') {
+          const origLower = cleanIncomingText.toLowerCase();
+          const origToks = new Set(origLower.split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2));
+          const locToks = (fnArgs.locationText || '').toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 2);
+          // P1-5: hasOverlap hanya untuk token entitas (bukan token generik kak/berapa)
+          // + toleransi typo 1-huruf, agar "wdoro" vs "wedoro" dianggap overlap
+          const genericChat = new Set(['berapa','berapaan','harga','tarif','ongkir','kak','bunda','bund','min','mas','mbak','gan','sis','kakak','ya','kok','sih','dong','aja','saja']);
+          const plausibleOrigToks = Array.from(origToks).filter((t) => t.length >= 4 && !genericChat.has(t));
+          let hasOverlap = false;
+          try {
+            const { isTypoAtMostOne } = require('../../../utils/typo-match');
+            for (const lt of locToks) {
+              for (const ot of plausibleOrigToks) {
+                if (lt === ot) { hasOverlap = true; break; }
+                if (lt.length >= 5 && ot.length >= 5 && isTypoAtMostOne(lt, ot)) { hasOverlap = true; break; }
+              }
+              if (hasOverlap) break;
+            }
+          } catch {
+            hasOverlap = locToks.some((t: string) => (plausibleOrigToks as any).includes(t));
+          }
+          if (!hasOverlap && locToks.length > 0) {
+            try {
+              const { getGazetteerData } = await import('../../../utils/gazetteer');
+              const { isTypoAtMostOne } = await import('../../../utils/typo-match');
+              const data = getGazetteerData();
+              const cleanLower = cleanIncomingText.toLowerCase();
+              const cleanToks = cleanLower.split(/[^a-z0-9]+/).filter((t: string) => t.length >= 3);
+              let verbatim: string | null = null;
+              for (const d of data) {
+                const kel = (d.Kelurahan_Desa || '').toLowerCase();
+                if (!kel || kel.length < 4) continue;
+                if (cleanLower.includes(kel)) { verbatim = d.Kelurahan_Desa; break; }
+                for (const ct of cleanToks) {
+                  if (ct.length >= 5 && (kel.length >= 5) && isTypoAtMostOne(ct, kel)) { verbatim = d.Kelurahan_Desa; break; }
+                }
+                if (verbatim) break;
+              }
+              if (!verbatim) {
+                for (const d of data) {
+                  const kec = (d.Kecamatan || '').toLowerCase();
+                  if (!kec || kec.length < 4) continue;
+                  if (cleanLower.includes(kec)) { verbatim = d.Kecamatan; break; }
+                  for (const ct of cleanToks) {
+                    if (ct.length >= 5 && kec.length >= 5 && isTypoAtMostOne(ct, kec)) { verbatim = d.Kecamatan; break; }
+                  }
+                  if (verbatim) break;
+                }
+              }
+              if (verbatim) fnArgs.locationText = verbatim;
+            } catch {}
+          }
+        }
         // RC-4 (sesi 535222): router Call 1 dapat menggabungkan wilayah BASI
         // (kecamatan yang sudah dikenal sesi) dengan entitas BARU ("Buduran
         // Bungurasih"). Guard deterministik membuang prefiks basi agar hanya
@@ -216,6 +273,18 @@ export class ToolExecutionPipeline {
         fnArgs.asksDeliveryFee = priceIntent.asksPrice || carryOver;
       }
       if (fnName === 'get_catalog_and_price') {
+        // P1-3: gate specificTreatmentName — hanya teruskan bila muncul di pesan user turn ini
+        if (typeof fnArgs.specificTreatmentName === 'string' && fnArgs.specificTreatmentName.trim()) {
+          const needle = fnArgs.specificTreatmentName.toLowerCase().trim();
+          const hay = (cleanIncomingText || '').toLowerCase();
+          // normalisasi: hilangkan tanda baca, spasi ganda
+          const normHay = hay.replace(/[^a-z0-9]+/g, ' ').trim();
+          const normNeedle = needle.replace(/[^a-z0-9]+/g, ' ').trim();
+          const appears = normHay.includes(normNeedle) || normNeedle.split(' ').some((tok: string) => tok.length >= 4 && normHay.includes(tok));
+          if (!appears) {
+            delete fnArgs.specificTreatmentName;
+          }
+        }
         fnArgs.inquirePrice = priceIntent.asksPrice;
         if (!priceIntent.mentionsNominal) {
           delete fnArgs.targetPrice;
@@ -317,11 +386,12 @@ export class ToolExecutionPipeline {
                 ongkirNormal: session.location.ongkirNormal,
                 ongkirStatus: session.ongkirStatus,
                 knownSymptoms: pipeKnownSymptoms,
+                incomingText: cleanIncomingText,
                 ...pipeAudienceCtx,
               }
             : (pipeKnownSymptoms.length > 0 || pipeDiscussed.length > 0 || pipeTargetAudience
-              ? { knownSymptoms: pipeKnownSymptoms, ...pipeAudienceCtx }
-              : undefined);
+              ? { knownSymptoms: pipeKnownSymptoms, incomingText: cleanIncomingText, ...pipeAudienceCtx }
+              : { incomingText: cleanIncomingText } as any);
           toolResult = await withTimeout(
             executeToolByName(fnName, validation.data, toolContext),
             TOOL_TIMEOUT_MS,

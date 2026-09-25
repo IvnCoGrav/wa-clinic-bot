@@ -313,16 +313,17 @@ export class DeliveryService {
     // Hitung promoPrice dengan diskon
     const promoPrice = Math.max(0, normalPrice - promoDiscount);
 
-    // 5. Construct message template (angka dinamis dari tier, bukan hardcode)
+    // 5. Construct message template (angka dinamis dari tier, bukan hardcode; brand dari config)
     let messageTemplate = '';
+    const clinicName = (clinicConfig as any).name || 'klinik kami';
     const freeTierKm = tiers.find((t) => t.fee === 0)?.maxDist;
     const maxCoverageKm = tiers.length > 0 ? Math.max(...tiers.map((t) => t.maxDist)) : clinicConfig.maxDeliveryDistanceKm;
     if (freeTierKm !== undefined && distanceKm <= freeTierKm) {
-      messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami (masih dalam jangkauan gratis ongkir hingga ${freeTierKm} km), sehingga layanan kami GRATIS ongkir!`;
+      messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari ${clinicName} (masih dalam jangkauan gratis ongkir hingga ${freeTierKm} km), sehingga layanan kami GRATIS ongkir!`;
     } else if (!isOutOfCoverage) {
-      messageTemplate = `Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp${normalPrice.toLocaleString('id-ID')} (Promo: Rp${promoPrice.toLocaleString('id-ID')}).`;
+      messageTemplate = `Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari ${clinicName}. Biaya ongkir normal untuk area ini adalah Rp${normalPrice.toLocaleString('id-ID')} (Promo: Rp${promoPrice.toLocaleString('id-ID')}).`;
     } else {
-      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${maxCoverageKm} km).`;
+      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari ${clinicName}. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${maxCoverageKm} km).`;
     }
 
     return {

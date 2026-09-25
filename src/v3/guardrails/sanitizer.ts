@@ -13,8 +13,8 @@ export class OutputSanitizer {
    */
   public static stripVagueTeamDeferral(text: string): string {
     if (!text || typeof text !== 'string') return text;
-    // Frasa defleksi keraguan (bukan klaim jadwal normal).
-    const DEFERRAL = /(cek|konfirmasi|tanyakan|pastikan)\s+(dulu\s+)?(ke|kepada|sama|dengan)?\s*(tim|team|admin|rekan)\b|informasinya akan kami cek|akan kami cekkan ke tim|belum bisa kami pastikan|nanti kami cek dulu/i;
+    // Frasa defleksi keraguan (bukan klaim jadwal normal) — generik, bukan hafalan kalimat.
+    const DEFERRAL = /(cek|konfirmasi|tanyakan|pastikan)\s+(dulu\s+)?(ke|kepada|sama|dengan)?\s*(tim|team|admin|rekan)\b|informasinya akan kami cek|akan kami cekkan ke tim|belum bisa kami pastikan|nanti kami cek dulu|karena\s+data.*belum\s+tersedia|data\s*faq.*belum\s*(tersedia|ada)|informasi.*belum.*(tersedia|ada)|kami\s+cekkan\s+(dari\s+)?katalog|kami\s+cekkan\s+ke\s+sistem/i;
     // Jangan sentuh kalimat yang memang soal JADWAL (itu sah: "kami cekkan ketersediaan jadwal").
     const SCHEDULE = /jadwal|slot|ketersediaan|hari|tanggal|kedatangan/i;
     // Pertahankan STRUKTUR baris (jangan gabung dengan spasi) agar sanitizer
@@ -31,7 +31,36 @@ export class OutputSanitizer {
       return kept.join(' ').trim();
     });
     const out = keptLines.join('\n').replace(/[ \t]{2,}/g, ' ').trim();
-    return out.length > 0 ? out : text;
+    // Anti-bocor (sesi 25-09): bila SELURUH balasan adalah frasa defleksi teknis,
+    // JANGAN kembalikan teks mentah (itu yang membocorkan string instruksi
+    // sistem RAG ke customer). Kembalikan kosong agar fallback hilir (recovery
+    // grounded / anti-silent-drop di guardrail-pipeline) mengambil alih.
+    return out;
+  }
+
+  /**
+   * Pembersih artefak instruksi internal sistem yang bocor ke draf (audit
+   * 25-09): LLM kadang menyalin isi `message` tool (mis. "Tidak ditemukan
+   * artikel FAQ spesifik...", "Panduan Bidan:", "DILARANG MENAMBAHKAN
+   * PERTANYAAN JADWAL (Aturan Emas 6)"). Ini artefak MESIN non-semantik —
+   * dibuang di level KALIMAT (anti-mutilasi kata), bukan hafalan kalimat.
+   * Kalimat dengan substansi nyata tidak tersentuh.
+   */
+  public static stripInternalInstructionArtifacts(text: string): string {
+    if (!text || typeof text !== 'string') return text;
+    // Penanda struktural kosakata instruksi-sistem (bukan frasa customer).
+    // Sengaja SPESIFIK (bukan "dilarang..." generik) agar kalimat customer-
+    // facing yang memakai kata umum tidak ikut terbuang.
+    const INTERNAL = /\btidak\s+ditemukan\s+artikel\b|\bpanduan\s+bidan\s*:|\bdilarang\s+(?:menambahkan\s+pertanyaan|mengarang\s+fakta|menebak\s+(?:aturan|fakta))|\baturan\s+emas\s*\d+|\bgunakan\s+informasi\s+resmi\b|\bberikan\s+penjelasan\s+edukatif\b|\bhanya\s+tawarkan\s+bantuan\s+eskalasi\b|\bvia\s+tool\s+[a-z_]+\b|\bquery\s*["“]|\bgunakan\s+(?:data|informasi)\s+tool\b|\bberdasarkan\s+data\s+tool\b/i;
+    if (!INTERNAL.test(text)) return text; // fast-path: tak ada artefak → tak disentuh
+    const lines = text.split('\n');
+    const keptLines = lines.map((line) => {
+      if (!line.trim()) return line;
+      const parts = line.split(/(?<=[.!?])\s+/);
+      const kept = parts.filter((s) => !INTERNAL.test(s));
+      return kept.join(' ').trim();
+    });
+    return keptLines.join('\n').replace(/[ \t]{2,}/g, ' ').trim();
   }
 
   /**
@@ -74,19 +103,38 @@ export class OutputSanitizer {
 
     let text = rawText;
 
+    // 1. Hapus tag <think>...</think> BESERTA ISINYA dulu — SEBELUM strip HTML generik.
+    // (Bug: strip generik di bawah menghancurkan <think>/</think> jadi spasi sehingga isi bocor.)
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    text = text.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/gi, '');
+
+    // 0a. Bersihkan tag HTML mentah non-semantik (<br>) sebelum deferral — teknis, bukan mutilasi kalimat
+    // Fast-path: hanya bila ada '<' untuk hindari regex tak perlu
+    if (text.includes('<')) {
+      text = text.replace(/<br\s*\/?>/gi, '\n');
+      // Hapus tag HTML sisa generik (mis. <div>, </p>) tanpa menyentuh "<3" atau "< ASI" yang bukan tag
+      // Hanya tag yang diawali huruf, untuk cegah mutilasi emotikon/angka.
+      // Kecualikan think (sudah ditangani di atas beserta isinya).
+      if (/<\/?[a-z][a-z0-9]*[^>]*>/i.test(text)) {
+        text = text.replace(/<\/?(?!think\b)[a-z][a-z0-9]*[^>]*>/gi, ' ');
+      }
+    }
+
     // 0a. Fixing D1/Fase 3 (sesi 767713): buang kalimat "melempar ke tim" yang
     // dihasilkan AI saat ragu (bukan konteks jadwal). Deterministik, level
     // kalimat — hanya kalimat defleksi murni yang dibuang; kalimat valid tetap.
     text = OutputSanitizer.stripVagueTeamDeferral(text);
 
+    // 0a-bis. Anti-bocor artefak instruksi internal (audit 25-09): LLM kadang
+    // menyalin isi `message` tool RAG ke draf ("Tidak ditemukan artikel FAQ...",
+    // "Panduan Bidan:", "DILARANG..."). Artefak mesin non-semantik — dibuang
+    // level kalimat. Sisa kosong dipulihkan recovery grounded hilir.
+    text = OutputSanitizer.stripInternalInstructionArtifacts(text);
+
     // 0. Anti-bocor placeholder sistem (audit 310995): LLM dilarang menyalin
     // token template bertanda kurung siku (mis. "*Rp [total]*", "[Harga]")
     // ke balasan customer. Kendali gaya deterministik post-generasi.
     text = OutputSanitizer.stripSystemPlaceholders(text);
-
-    // 1. Hapus tag <think>...</think> dan [THINKING]...[/THINKING]
-    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    text = text.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/gi, '');
 
     // 1b. Hapus artefak native tool-calling LLM (DeepSeek DSML, XML tool
     // call, result tags — audit DeepSeek Flash): model via gateway
@@ -537,9 +585,15 @@ export class OutputSanitizer {
    */
   public static trimToMaxSentences(text: string, maxSentences: number = 3): string {
     if (!text || maxSentences <= 0) return text;
-    const ends: number[] = [];
+    // Sesi 25-09 (bug trimmer): loop punct/emoji/bullet berjalan BERURUTAN,
+    // sehingga indeks batas kalimat bisa datang tidak berurutan (mis. emoji di
+    // paragraf 1 setelah titik di paragraf 2). Guard monotonik lama membuang
+    // batas yang datang terlambat walau posisinya valid → kalimat terhitung
+    // kurang → trimmer tak menyala. Kumpulkan unik via Set, sort numerik di
+    // bawah (anti duplikasi, urutan-independen).
+    const endsSet = new Set<number>();
     const pushEnd = (idx: number): void => {
-      if (idx >= 0 && (ends.length === 0 || idx > ends[ends.length - 1])) ends.push(idx);
+      if (idx >= 0) endsSet.add(idx);
     };
     const punctRe = /[.!?]/g;
     let m: RegExpExecArray | null;
@@ -563,9 +617,17 @@ export class OutputSanitizer {
       }
       pushEnd(idx);
     }
-    const emojiRe = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+(?=\s|\n|$)/gu;
+    // Emoji penutup: batas kalimat HANYA bila emoji mengakhiri baris/teks
+    // (bukan emoji dekoratif di tengah kalimat "Sidoarjo 😊 Layanan ..."),
+    // dan tidak didahului tanda baca akhir (mis. "Halo Bunda! ✨" → '!' sudah
+    // batas; ✨ dekorasi, bukan batas baru). Mencegah over-trim.
+    const emojiRe = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+(?=[ \t]*(?:\n|$))/gu;
     let em: RegExpExecArray | null;
     while ((em = emojiRe.exec(text)) !== null) {
+      let p = em.index - 1;
+      while (p >= 0 && /[ \t]/.test(text[p])) p--;
+      const prev = p >= 0 ? text[p] : '';
+      if (prev === '.' || prev === '!' || prev === '?') continue;
       pushEnd(em.index + em[0].length - 1);
     }
     // Bullet list naratif: setiap baris bullet dianggap batas kalimat
@@ -574,7 +636,7 @@ export class OutputSanitizer {
     while ((bm = bulletRe.exec(text)) !== null) {
       pushEnd(bm.index);
     }
-    ends.sort((a, b) => a - b);
+    const ends = Array.from(endsSet).sort((a, b) => a - b);
     if (ends.length <= maxSentences) return text;
     return text.slice(0, ends[maxSentences - 1] + 1).trimEnd();
   }

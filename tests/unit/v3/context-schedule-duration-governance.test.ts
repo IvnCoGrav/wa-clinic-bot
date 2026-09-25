@@ -87,12 +87,14 @@ describe('Context Schedule & Duration Governance (TAHAP 2)', () => {
 
   describe('Anti-amnesia & cool-off', () => {
     it('lokasi baru ditanya assistant (keyword "rumahnya dimana") → cool-off terpicu, ada larangan tanya ulang', () => {
+      // Cool-off (conversation-summarizer.ts:206) hanya untuk user yang BELUM menjawab lokasi
+      // (userAnsweredLocation → skip by-design, fokus lanjut ke kelurahan). Skenario: user alihkan ke harga.
       const summary = ContextGrounder.buildContextSummary(
         baseSession,
-        'Di Waru aja kak',
+        'Harganya berapa kak',
         [
           { role: 'assistant', content: 'Kalau boleh tahu rumahnya dimana ya Bunda?' },
-          { role: 'user', content: 'Di Waru aja kak' },
+          { role: 'user', content: 'Harganya berapa kak' },
         ]
       );
       // Cool-off terpicu → ada larangan tanya ulang lokasi di janganDiulang

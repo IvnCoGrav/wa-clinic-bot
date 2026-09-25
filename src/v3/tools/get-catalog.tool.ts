@@ -128,6 +128,7 @@ export interface GetCatalogOutput {
  * dan testable; diisi agent-runner via tool-registry dari session terbaru.
  */
 export interface CatalogSessionContext {
+  incomingText?: string;
   kelurahan?: string;
   ongkirPromo?: number | null;
   ongkirNormal?: number | null;
@@ -238,6 +239,13 @@ export async function executeGetCatalog(
   if (category === 'KIDS' && (childAgeMonths == null || childAgeMonths === undefined)) {
     category = undefined as any;
   }
+  // Multi-kategori: Baby+Kids eksplisit (mis. "baby ceria dan kids lahap") → longgarkan BABY agar kedua target masuk pool
+  const rawInputForMulti = (sessionCtx as any)?.incomingText || '';
+  const hasKidsSignal = /\bkids\b/i.test(rawInputForMulti);
+  const hasBabySignal = /\bbaby\b|\bbayi\b/i.test(rawInputForMulti);
+  if (category === 'BABY' && hasKidsSignal && hasBabySignal) {
+    category = undefined as any;
+  }
   // Fase 4' (anti-kaset rusak): gabung keluhan argumen LLM dengan keluhan
   // yang SUDAH diketahui sesi (dedupe). Isolasi pasien: bila target MOMS,
   // gejala anak (bapil/kembung) di knownSymptoms DILARANG mencemari query ibu.
@@ -245,8 +253,21 @@ export async function executeGetCatalog(
   const inheritedSymptoms: string[] = isTargetingMoms
     ? [] // momStage GENERAL/BOTH: jangan wariskan keluhan anak; hanya gejala eksplisit di turn ini
     : ((sessionCtx?.knownSymptoms || []) as string[]);
-  const effectiveSymptoms: string[] = [...(symptoms || []), ...inheritedSymptoms]
+  let effectiveSymptoms: string[] = [...(symptoms || []), ...inheritedSymptoms]
     .filter((s, i, arr) => arr.indexOf(s) === i);
+  // Anti-halusinasi gejala saat tanya durasi: token yang merupakan substring nama katalog (lahap/sulit makan dari "Lahap Juara") bukan gejala
+  if (asksDuration && (symptoms || []).length > 0 && (sessionCtx as any)?.incomingText) {
+    try {
+      const { treatmentCatalogService: tcs } = await import('../../services/treatment-catalog.service');
+      const allNames = tcs.getAllServices(true, tenantId).map((s) => s.name.toLowerCase());
+      effectiveSymptoms = effectiveSymptoms.filter((sym) => {
+        const sLower = String(sym || '').toLowerCase().trim();
+        if (!sLower) return false;
+        const isNameToken = allNames.some((nm) => nm.includes(sLower));
+        return !isNameToken;
+      });
+    } catch {}
+  }
   const hasKnownSymptoms = effectiveSymptoms.length > 0;
   // AI-First price grounding: nominal rupiah HANYA mengalir ke prompt LLM
   // bila LLM menilai customer butuh rincian harga (inquirePrice === true).
@@ -387,7 +408,18 @@ export async function executeGetCatalog(
     let nameFilterApplied = false;
     if (specificTreatmentName && specificTreatmentName.trim()) {
       const query = specificTreatmentName.toLowerCase();
-      const matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
+      let matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
+      // Fallback token-based via matchCatalogItem terpusat (tahan rebrand: 'Pijat Bayi Pulih Ceria'
+      // vs 'Kala Baby – Pijat Pulih Ceria', alias Baby/Bayi) bila substring gagal — dibatasi pool terfilter.
+      if (matched.length === 0) {
+        try {
+          const tokenHit = treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId);
+          if (tokenHit) {
+            const inPool = filtered.filter((s) => s.id === (tokenHit as ClinicServiceItem).id);
+            if (inPool.length > 0) matched = inPool;
+          }
+        } catch { /* abaikan, pakai pool apa adanya */ }
+      }
       const evictsClinical = clinicalRecommendation != null
         && matched.length > 0
         && !matched.some((s) => s.id === (clinicalRecommendation as ClinicServiceItem).id);
@@ -851,8 +883,10 @@ export async function executeGetCatalog(
     // kunci tier spesifik — tanya usia netral bulan/tahun dulu.
     const needsAgeClarification = childAgeMonths == null && hasClinicalMatch
       && (() => {
+        // Rebrand Kala memakai 'Baby' (Inggris) sementara regex hanya strip 'bayi' — tanpa
+        // 'baby', varian BABY vs KIDS tak pernah se-basis dan deteksi multi-tier mati (SESI 783810).
         const normalizeFam = (name: string): string =>
-          name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+          name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|baby|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
         const famBase = normalizeFam(clinicalRecommendation!.name);
         const hasBabyVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'BABY' || s.ageTier?.label?.toLowerCase().includes('bayi')));
         const hasKidsVariant = allServices.some(s => normalizeFam(s.name) === famBase && (s.category === 'KIDS' || s.ageTier?.label?.toLowerCase().includes('kids')));
@@ -903,7 +937,7 @@ export async function executeGetCatalog(
       CLINICAL_PROBE: needsAgeClarification
         ? (() => {
             const fmtTitle = (raw: string): string => raw.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            const normFam = (name: string): string => name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
+            const normFam = (name: string): string => name.toLowerCase().replace(/\s*\([^)]*\)\s*$/g, '').replace(/\b(bayi|baby|kids|anak)\b/gi, '').replace(/\s+/g, ' ').trim();
             const famName = clinicalRecommendation ? fmtTitle(normFam(clinicalRecommendation.name)) : 'Pijat Pulih Ceria';
             return `Keluhan (${effectiveSymptoms.join(', ')}) dapat dibantu dengan terapi *${famName}*. Karena layanan ini memiliki varian paket berdasarkan usia (Bayi vs Anak) dan usia si kecil belum diketahui di sesi, SEBUTKAN rekomendasi terapi *${famName}* beserta manfaatnya secara ringkas, lalu TANYAKAN USIA netral: "Kalau boleh tahu, saat ini si kecil usianya berapa bulan atau berapa tahun ya Bunda? Biar kami bantu sesuaikan perawatannya 🤗" (DILARANG menodong hanya "berapa tahun").`;
           })()

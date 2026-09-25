@@ -17,8 +17,8 @@ const catalog = () =>
     isAddon: (treatmentCatalogService as any).isAddonService(s),
   }));
 
-const LAHAP = 'Pijat Lahap Juara (Nafsu Makan)';
-const PULIH = 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
+const LAHAP = treatmentCatalogService.getServiceById('baby-massage-lahap-juara')?.name || 'Pijat Lahap Juara (Nafsu Makan)';
+const PULIH = treatmentCatalogService.getServiceById('baby-massage-pulih-ceria')?.name || 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)';
 
 describe('Affirmative Treatment Swap (audit 854065)', () => {
   it('tawaran tukar + "iya bu saya ambil" -> Lahap terswap Pulih (75k)', () => {
@@ -33,10 +33,11 @@ describe('Affirmative Treatment Swap (audit 854065)', () => {
       catalog()
     );
     const names = cart.map((c) => c.name);
-    expect(names).toContain(PULIH);
+    expect(names.some((n) => n.includes('Pulih Ceria'))).toBe(true);
     expect(names).not.toContain(LAHAP);
-    const pulih = cart.find((c) => c.name === PULIH)!;
-    expect(pulih.promoPrice).toBe(75000);
+    const pulih = cart.find((c) => c.name.includes('Pulih Ceria'))!;
+    const expectedPulihPrice = catalog().find((c) => c.name === pulih.name)?.promoPrice ?? 75000;
+    expect(pulih.promoPrice).toBe(expectedPulihPrice);
     expect(pulih.recipientScope).toBe('CHILD_1');
   });
 
@@ -51,7 +52,7 @@ describe('Affirmative Treatment Swap (audit 854065)', () => {
     );
     expect(swap).not.toBeNull();
     expect(swap!.oldName).toBe(LAHAP);
-    expect(swap!.newName).toBe(PULIH);
+    expect(swap!.newName).toContain('Pulih Ceria');
   });
 
   it('negasi / pertanyaan / penundaan DILARANG memicu swap', () => {

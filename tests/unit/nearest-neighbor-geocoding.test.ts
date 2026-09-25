@@ -27,7 +27,8 @@ describe('Nearest-Neighbor Reverse Geocoding Lokal (Anti-Gubeng Fiktif)', () => 
   it('koordinat tengah Samudra Hindia tanpa kecamatan/kota palsu', async () => {
     expect(findNearestSubdistrict(-15.0, 110.0)).toBeNull();
     const res = await geocodingService.reverseGeocode(-15.0, 110.0);
-    expect(res.isPrecise).toBe(true);
+    // Kontrak mockReverseGeocode (geocoding.ts:839-844): luar coverage = isPrecise false + koordinat murni.
+    expect(res.isPrecise).toBe(false);
     expect(res.kecamatan).toBeUndefined();
     expect(res.kota).toBeUndefined();
     expect(res.kelurahan).toBeUndefined();

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
 import {
   formatContactName,
   normalizePhoneForGoogle,
@@ -272,18 +273,52 @@ describe('Google Contacts Integration Suite', () => {
     });
   });
 
-  describe('OAuth Client Manager', () => {
-    it('parses base64 state parameter correctly', () => {
-      const payload = { tenantId: 'tenant-abc', timestamp: 12345678 };
-      const stateStr = Buffer.from(JSON.stringify(payload)).toString('base64');
-
-      const parsed = googleOAuthClientManager.parseState(stateStr);
-      expect(parsed.tenantId).toBe('tenant-abc');
+  describe('OAuth Client Manager (SEC-AUDIT-10: HMAC state, fail-closed)', () => {
+    beforeEach(() => {
+      process.env.GOOGLE_OAUTH_CLIENT_ID = 'test-client-id';
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'test-client-secret';
+      process.env.GOOGLE_OAUTH_REDIRECT_URI = 'https://klinik.test/oauth/callback';
+      process.env.GOOGLE_OAUTH_STATE_SECRET = 'test_state_secret_10';
+      process.env.ADMIN_API_KEY = 'test_admin_key_oauth';
     });
 
-    it('falls back to default tenant when state is invalid', () => {
-      const parsed = googleOAuthClientManager.parseState('invalid_base64_%%%');
-      expect(parsed.tenantId).toBe('default-tenant');
+    it('roundtrip generateAuthUrl → parseState mengembalikan tenantId', () => {
+      const url = googleOAuthClientManager.generateAuthUrl('tenant-abc');
+      const state = new URL(url).searchParams.get('state')!;
+      expect(state).toContain('.');
+      expect(googleOAuthClientManager.parseState(state)).toEqual({ tenantId: 'tenant-abc' });
+    });
+
+    it('state format lama tanpa signature DITOLAK (bukan fallback)', () => {
+      const legacy = Buffer.from(JSON.stringify({ tenantId: 'tenant-abc', timestamp: 12345678 })).toString('base64');
+      expect(() => googleOAuthClientManager.parseState(legacy)).toThrow(/state/i);
+    });
+
+    it('state dengan tenantId yang diutak-atik DITOLAK (signature mismatch)', () => {
+      const url = googleOAuthClientManager.generateAuthUrl('tenant-abc');
+      const state = new URL(url).searchParams.get('state')!;
+      const [encoded] = state.split('.');
+      const forgedPayload = Buffer.from(
+        JSON.stringify({ tenantId: 'tenant-korban', timestamp: Date.now(), nonce: 'x' })
+      ).toString('base64url');
+      // Serang dengan signature asli tapi payload palsu
+      const forged = `${forgedPayload}.${state.split('.')[1]}`;
+      expect(encoded).toBeTruthy();
+      expect(() => googleOAuthClientManager.parseState(forged)).toThrow(/signature/i);
+    });
+
+    it('state kadaluarsa DITOLAK', () => {
+      const secret = 'test_state_secret_10';
+      const old = Buffer.from(
+        JSON.stringify({ tenantId: 'tenant-abc', timestamp: Date.now() - 60 * 60 * 1000, nonce: 'y' })
+      ).toString('base64url');
+      const sig = crypto.createHmac('sha256', secret).update(old).digest('hex');
+      expect(() => googleOAuthClientManager.parseState(`${old}.${sig}`)).toThrow(/expir/i);
+    });
+
+    it('state kosong / sampah DITOLAK', () => {
+      expect(() => googleOAuthClientManager.parseState(undefined)).toThrow();
+      expect(() => googleOAuthClientManager.parseState('invalid_base64_%%%')).toThrow();
     });
   });
 

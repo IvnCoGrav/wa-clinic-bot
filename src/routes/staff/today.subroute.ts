@@ -6,6 +6,7 @@ import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
 import { isStaffSupervisorRole } from '../staff.route';
+import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
@@ -162,7 +163,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       const allMessages = await liveChatService.getConversationMessages(id, tenantId);
-      const messages = Array.isArray(allMessages) ? allMessages.slice(-30) : [];
+      const messages = Array.isArray(allMessages) ? allMessages.slice(-30).map((m) => sanitizeMessageForStaff(m)) : [];
       return reply.status(200).send({ success: true, data: messages });
     }
   );
@@ -248,7 +249,9 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         tenantId,
       });
 
-      return reply.status(200).send({ success: true, data: result });
+      // Sanitizer: jangan bocorkan payload mentah ke UI staff (result tidak punya .data, sanitize langsung)
+      const sanitizedResult = result ? sanitizeStaffHubPayload(result as any, 'message.created') : result;
+      return reply.status(200).send({ success: true, data: sanitizedResult });
     }
   );
 
@@ -813,8 +816,15 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         );
         if (!isOwned) return;
 
-        const data = JSON.stringify(event.payload || {});
-        reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+        // Zero Metadata Leak: sanitasi payload sebelum pancar ke browser terapis
+        let payloadToSend: any = event.payload || {};
+        if (event.type === 'message.created' || event.type === 'message.updated') {
+          payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type);
+        }
+        // P3-3: id monoton untuk Last-Event-ID replay (gap-tolerant)
+        const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const data = JSON.stringify(payloadToSend);
+        reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {
         console.error('[STAFF LIVE CHAT SSE] Error sending event:', err.message);
       }

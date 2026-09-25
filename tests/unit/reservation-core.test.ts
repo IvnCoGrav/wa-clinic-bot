@@ -54,12 +54,13 @@ describe('reservation-core.service (kanonis)', () => {
   });
 
   it('idempotent upsert pada jalur WEBHOOK (update, bukan row ganda)', async () => {
+    // P2-4: merge mensyaratkan treatment SAMA (slot+treatment key).
     vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
       { id: 'existing-1', booking_date: slot, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'lama', purchase_value: 160000, assigned_staff_id: null } as any,
     ]);
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({ id: 'existing-1' } as any);
     const res = await reservationCoreService.saveReservation({
-      ...base, source: 'WEBHOOK', bookingDate: slot, treatmentDetail: 'baru',
+      ...base, source: 'WEBHOOK', bookingDate: slot, treatmentDetail: 'lama',
     });
     expect(res.isUpdate).toBe(true);
     expect(res.reservation.id).toBe('existing-1');
@@ -67,9 +68,10 @@ describe('reservation-core.service (kanonis)', () => {
   });
 
   it('auto-konsolidasi: duplikat kedua di-cancel', async () => {
+    // P2-4: entri tanpa treatment_detail tak memenuhi kunci merge → samakan treatment.
     vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
-      { id: 'keep', booking_date: slot, duration_minutes: 60, treatment_category: 'BABY', purchase_value: 160000, assigned_staff_id: null } as any,
-      { id: 'dup', booking_date: slot, duration_minutes: 60, treatment_category: 'BABY', purchase_value: 160000, assigned_staff_id: null } as any,
+      { id: 'keep', booking_date: slot, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Bayi Ceria', purchase_value: 160000, assigned_staff_id: null } as any,
+      { id: 'dup', booking_date: slot, duration_minutes: 60, treatment_category: 'BABY', treatment_detail: 'Pijat Bayi Ceria', purchase_value: 160000, assigned_staff_id: null } as any,
     ]);
     vi.mocked(prisma.reservation.update)
       .mockResolvedValueOnce({ id: 'keep' } as any)

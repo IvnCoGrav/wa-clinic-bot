@@ -78,10 +78,14 @@ describe('V3 Native Agent Tools Suite', () => {
       });
 
       expect(result.success).toBe(true);
-      const ceria = result.treatments.find(t => t.name.includes('Pijat Bayi Ceria'));
+      // Tahan rebrand Kala: harga WAJIB sama dengan katalog resmi untuk item yang dikembalikan (anti-halusinasi nominal).
+      const { treatmentCatalogService: _tcs } = await import('../../src/services/treatment-catalog.service');
+      const ceria = result.treatments.find((t: any) => t.name.includes('Ceria'));
       expect(ceria).toBeDefined();
-      expect(ceria?.promoPrice).toBe(60000);
-      expect(ceria?.originalPrice).toBe(80000);
+      const ref = _tcs.getAllServices(true).find((s) => s.name === ceria!.name);
+      expect(ref).toBeDefined();
+      expect(ceria?.promoPrice).toBe(ref?.promoPrice);
+      expect(ceria?.originalPrice).toBe(ref?.originalPrice);
     });
   });
 

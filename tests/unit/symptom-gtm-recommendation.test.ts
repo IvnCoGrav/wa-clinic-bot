@@ -38,4 +38,20 @@ describe('Symptom GTM Recommendation (sesi 138207)', () => {
     // Kebijakan default usia tanpa data: tier BABY (< 2 thn), bukan KIDS (> 2 thn).
     expect((rec?.category || '').toUpperCase()).toBe('BABY');
   });
+
+  it("gejala ['gtm'] telanjang (token 3 huruf) -> Lahap via phrase 'gtm' (bukan Cukur)", () => {
+    const rec = treatmentCatalogService.recommendServiceBySymptoms(['gtm'], null, undefined);
+    expect(rec?.name).toContain('Lahap');
+    expect(rec?.name).not.toContain('Cukur');
+    // Summarizer juga tidak jatuh ke Cukur saat hanya GTM
+    const session = { genderGreeting: 'Bunda', targetAudience: 'CHILD', childProfile: { ageMonths: null, symptoms: ['gtm'] }, children: [] } as any;
+    const summary = V3ConversationSummarizer.summarize(session, 'anak gtm susah makan');
+    expect(summary).toContain('Lahap');
+    expect(summary).not.toContain('Cukur');
+  });
+
+  it("frasa 'sulit makan' -> Lahap (phrasePatterns baru)", () => {
+    const rec = treatmentCatalogService.recommendServiceBySymptoms(['sulit makan'], null, undefined);
+    expect(rec?.name).toContain('Lahap');
+  });
 });

@@ -20,7 +20,8 @@ describe('V3 pre-grounding katalog (deterministik, Zero-Code)', () => {
       childProfile: { ageMonths: 6, symptoms: ['susah makan', 'makan'] },
       children: [{ ageMonths: 6, symptoms: ['susah makan', 'makan'], roleLabel: 'Si Kecil' }],
     } as any);
-    expect(text).toContain('Lahap Juara');
+    // Tahan rebrand Kala ('Kala Baby – Pijat Lahap'): token Lahap sebagai sinyal lini benar.
+    expect(text).toContain('Lahap');
     expect(text).toContain('MANDAT WAJIB');
   });
 
@@ -78,6 +79,7 @@ describe('V3 pre-grounding katalog (deterministik, Zero-Code)', () => {
     const a1Idx = prompt.indexOf('KONDISI A.1');
     const a1Slice = prompt.slice(a1Idx, a1Idx + 800);
     expect(a1Slice).not.toContain('Pulih Ceria');
-    expect(a1Slice).toContain('Pijat Bayi Ceria (Relaksasi)');
+    // Tahan rebrand Kala ('Kala Baby – Pijat Ceria'): frasa inti Pijat Ceria sebagai sinyal.
+    expect(a1Slice).toContain('Pijat Ceria');
   });
 });

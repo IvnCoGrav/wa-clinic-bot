@@ -48,3 +48,33 @@ export function decryptSecret(payload: string): string {
 export function generateEncryptionKey(): string {
   return crypto.randomBytes(32).toString('hex');
 }
+
+/**
+ * SEC-AUDIT-11: baca kredensial yang mungkin sudah terenkripsi (AES-256-GCM)
+ * atau masih plaintext legacy. Decrypt gagal / kunci tak tersedia → anggap
+ * plaintext apa adanya. Dual-read agar migrasi bertahap tanpa downtime.
+ */
+export function decryptSecretCompat(raw: string | null | undefined): string {
+  if (!raw) return '';
+  try {
+    const decrypted = decryptSecret(raw);
+    // Payload terenkripsi valid → selalu hasil decrypt (walau kebetulan mirip plaintext).
+    return decrypted;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * SEC-AUDIT-11: enkripsi bila kunci tersedia; bila tidak (mis. test/dev tanpa
+ * key), kembalikan apa adanya agar tidak crash. Caller tetap aman karena
+ * decryptSecretCompat membaca keduanya.
+ */
+export function encryptSecretIfPossible(plainText: string): string {
+  if (!plainText) return '';
+  try {
+    return encryptSecret(plainText);
+  } catch {
+    return plainText;
+  }
+}

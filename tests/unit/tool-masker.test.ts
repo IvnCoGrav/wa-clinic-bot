@@ -9,6 +9,13 @@ import {
 } from '../../src/v3/tools/tool-masker';
 import { CustomerGoalSession } from '../../src/v3/domain/types';
 import * as dateConfirmationModule from '../../src/utils/date-confirmation';
+import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
+
+// Nama katalog dinamis (tahan rebrand Kala) — fixture asisten WAJIB pakai nama kini karena
+// resolveCandidateTreatment mencocokkan teks bold asisten ke katalog aktif (exact/norm/substring).
+const LAHAP_NAME = treatmentCatalogService.getServiceById('baby-massage-lahap-juara')?.name || 'Pijat Lahap Juara';
+const TINDIK_NAME = treatmentCatalogService.getServiceById('baby-tindik')?.name || 'Tindik Telinga Bayi';
+const CUKUR_NAME = treatmentCatalogService.getServiceById('baby-cukur')?.name || 'Cukur Rambut Bayi';
 
 describe('Tool Masker Engine (Fase 2)', () => {
   const baseSession: CustomerGoalSession = {
@@ -197,30 +204,30 @@ describe('Tool Masker Engine (Fase 2)', () => {
     it('komitmen anaphoric + rekomendasi asisten ber-bold → kandidat sah', () => {
       const history = [
         { role: 'user', content: 'Anak GTM susah makan usia 2 tahun' },
-        { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },
+        { role: 'assistant', content: `Bisa dibantu dengan *${LAHAP_NAME}* ya Bunda.` },
       ];
       expect(resolveCandidateTreatment(emptySession, 'Oke jadwalkan besok lusa ya mbak', history)).toBe(
-        'Pijat Lahap Juara (Nafsu Makan)'
+        LAHAP_NAME
       );
     });
 
     it('komitmen anaphoric untuk layanan non-pijat (Tindik/Memandikan/Cukur) → kandidat sah dari DB', () => {
       const history = [
         { role: 'user', content: 'Mau tindik telinga anak' },
-        { role: 'assistant', content: 'Untuk tindik telinga si kecil ada *Tindik Telinga Bayi* ya Bunda.' },
+        { role: 'assistant', content: `Untuk tindik telinga si kecil ada *${TINDIK_NAME}* ya Bunda.` },
       ];
       // Cari nama layanan yang cocok di katalog
       const res = resolveCandidateTreatment(emptySession, 'Boleh deh yang itu besok ya', history);
-      expect(res).toBe('Tindik Telinga Bayi');
+      expect(res).toBe(TINDIK_NAME);
     });
 
     it('komitmen anaphoric saat asisten tidak memakai format bold (fallback substring) → kandidat sah', () => {
       const history = [
         { role: 'user', content: 'Bisa cukur gundul bayi baru lahir?' },
-        { role: 'assistant', content: 'Tentu Bunda, kami ada layanan Cukur Rambut Bayi yang steril dan aman.' },
+        { role: 'assistant', content: `Tentu Bunda, kami ada layanan ${CUKUR_NAME} yang steril dan aman.` },
       ];
       const res = resolveCandidateTreatment(emptySession, 'Iya mau yang itu aja lusa', history);
-      expect(res).toBe('Cukur Rambut Bayi');
+      expect(res).toBe(CUKUR_NAME);
     });
 
     it('tanpa sinyal komitmen → undefined walau asisten menyebut paket (anti 973126-bypass)', () => {
@@ -235,7 +242,7 @@ describe('Tool Masker Engine (Fase 2)', () => {
     it('masker MEMBUKA save untuk komitmen anaphoric + lokasi + tanggal tegas', () => {
       const history = [
         { role: 'user', content: 'Anak GTM susah makan usia 2 tahun' },
-        { role: 'assistant', content: 'Bisa dibantu dengan *Pijat Lahap Juara (Nafsu Makan)* ya Bunda.' },
+        { role: 'assistant', content: `Bisa dibantu dengan *${LAHAP_NAME}* ya Bunda.` },
       ];
       const session: CustomerGoalSession = {
         ...emptySession,
@@ -282,6 +289,19 @@ describe('Tool Masker Engine (Fase 2)', () => {
       );
       expect(result.maskedToolNames).not.toContain('calculate_delivery');
       expect(result.availableTools.some((t) => t.function?.name === 'calculate_delivery')).toBe(true);
+    });
+
+    it('typo 1-huruf ≥5 (bngurasih/sedti/kenjern/bungurasi) → hasNewLocationEntity true', () => {
+      expect(hasNewLocationEntity('bngurasih berapa kak')).toBe(true);
+      expect(hasNewLocationEntity('sedti')).toBe(true);
+      expect(hasNewLocationEntity('kenjern')).toBe(true);
+      expect(hasNewLocationEntity('bungurasi')).toBe(true);
+    });
+
+    it('non-lokasi tetap false (berapa harga pijat, kuota hari ini) meski gate 5', () => {
+      expect(hasNewLocationEntity('berapa harga pijat')).toBe(false);
+      expect(hasNewLocationEntity('kuota hari ini')).toBe(false);
+      expect(hasNewLocationEntity('Harganya berapa ya?')).toBe(false);
     });
   });
 });

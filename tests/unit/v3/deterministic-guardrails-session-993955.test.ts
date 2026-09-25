@@ -58,10 +58,11 @@ describe('A1. Otoritas klinis DB — kembung DILARANG dibajak specificTreatmentN
   });
 
   it('tanpa keluhan: filter nama spesifik eksplisit TETAP berlaku (intent sempit menang)', async () => {
+    // Tahan rebrand Kala: token legacy 'juara' tak ada di katalog kini (hanya 'Lahap') — debt alias legacy di KNOWN_ISSUES.
     const out = await executeGetCatalog({
       category: 'KIDS',
       childAgeMonths: 36,
-      specificTreatmentName: 'Lahap Juara',
+      specificTreatmentName: 'Pijat Lahap',
       inquirePrice: false,
     });
     expect(out.success).toBe(true);

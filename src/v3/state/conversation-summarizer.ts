@@ -1,7 +1,8 @@
-import { CustomerGoalSession } from './goal-tracker';
+import type { CustomerGoalSession } from '../domain/types';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { getCoverageCities } from '../../config/coverage';
 import type { ExtractedEntities } from '../../types/nlu';
+import { isAskedLocationRecently } from './location-helpers';
 
 export interface V3SummaryOptions {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -95,24 +96,24 @@ export class V3ConversationSummarizer {
           : ageMonths != null
             ? treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths })
             : allServices;
-        const suggested = session.targetAudience === 'MOMS'
-          ? (candidates[0]?.name || 'treatment ibu sesuai katalog')
-          : (treatmentCatalogService.recommendServiceBySymptoms(
-              activeSymptoms,
-              ageMonths,
-              undefined
-            )?.name || candidates[0]?.name || 'treatment sesuai katalog');
+        const matchedService = session.targetAudience === 'MOMS'
+          ? treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, 'MOMS')?.name
+          : treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, undefined)?.name;
+        const suggested = matchedService || undefined;
         if (session.targetAudience === 'MOMS') {
-          sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')}`);
           janganDiulang.push('Menanyakan ulang keluhan Bunda');
         } else if (session.targetAudience === 'BOTH') {
           const parts: string[] = [];
           if (momComplaints.length > 0) parts.push(`Bunda: ${momComplaints.join(', ')}`);
           if (symptoms.length > 0) parts.push(`Si kecil: ${symptoms.join(', ')}`);
-          sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan Mom & Baby — ${parts.join('; ')}`);
           janganDiulang.push('Menanyakan ulang keluhan Bunda maupun si kecil');
         } else {
-          sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          if (suggested) sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
+          else sudahDibahas.push(`Keluhan si kecil: ${symptoms.join(', ')}`);
           janganDiulang.push('Menanyakan ulang keluhan si kecil');
         }
       }
@@ -347,22 +348,7 @@ ${janganDiulangStr}`;
 
 /**
  * Mendeteksi apakah bot/asisten baru saja menanyakan domisili / alamat pada 1-2 turn terakhir.
- * Digunakan untuk cool-off penodongan lokasi (anti-kaset rusak).
+ * Dipindah ke location-helpers.ts (pure, anti-circular) — re-export untuk kompatibilitas.
  */
-export function isAskedLocationRecently(history: Array<{ role: string; content: string }>): boolean {
-  const recentAssistantMsgs = (history || []).filter((h) => h.role === 'assistant').slice(-2);
-  return recentAssistantMsgs.some((m) => {
-    const c = (m.content || '').toLowerCase();
-    return c.includes('daerah atau kelurahan')
-      || c.includes('kelurahan mana')
-      || c.includes('rumahnya dimana')
-      || c.includes('rumah bunda dimana')
-      || c.includes('daerah mana')
-      || c.includes('lokasi rumah')
-      || c.includes('alamat rumah')
-      || c.includes('tinggal dimana')
-      || c.includes('posisi rumah')
-      || c.includes('alamat lengkap');
-  });
-}
+export { isAskedLocationRecently } from './location-helpers';
 

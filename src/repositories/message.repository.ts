@@ -35,25 +35,36 @@ export interface MessageRepository {
 
 export class PostgresMessageRepository implements MessageRepository {
   async create(data: MessageCreateData): Promise<any> {
-    const saved = await prisma.message.create({
-      data: {
-        tenant_id: data.tenant_id,
-        conversation_id: data.conversation_id,
-        direction: data.direction,
-        content: data.content,
-        wa_message_id: data.wa_message_id || null,
-        payload_raw: data.payload_raw ?? undefined,
-        sender_type: data.sender_type ?? undefined,
-        sender_name: data.sender_name ?? undefined,
-        delivery_status: data.delivery_status ?? undefined,
-        meta_error_code: data.meta_error_code ?? undefined,
-        meta_error_desc: data.meta_error_desc ?? undefined,
-        created_at: data.created_at || undefined,
-        read_at: data.read_at ?? undefined,
-      },
-    });
-    if (!saved) throw new Error('Prisma create returned null/undefined (DB offline)');
-    return saved;
+    try {
+      const saved = await prisma.message.create({
+        data: {
+          tenant_id: data.tenant_id,
+          conversation_id: data.conversation_id,
+          direction: data.direction,
+          content: data.content,
+          wa_message_id: data.wa_message_id || null,
+          payload_raw: data.payload_raw ?? undefined,
+          sender_type: data.sender_type ?? undefined,
+          sender_name: data.sender_name ?? undefined,
+          delivery_status: data.delivery_status ?? undefined,
+          meta_error_code: data.meta_error_code ?? undefined,
+          meta_error_desc: data.meta_error_desc ?? undefined,
+          created_at: data.created_at || undefined,
+          read_at: data.read_at ?? undefined,
+        },
+      });
+      if (!saved) throw new Error('Prisma create returned null/undefined (DB offline)');
+      return saved;
+    } catch (err: any) {
+      // P2002: unique violation (tenant_id, wa_message_id) → idempoten, kembalikan baris yang sudah ada
+      if (err?.code === 'P2002' && data.wa_message_id) {
+        const existing = await prisma.message.findFirst({
+          where: { tenant_id: data.tenant_id, wa_message_id: data.wa_message_id },
+        });
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
 
   async existsByWaId(waMessageId: string, shortId: string | null, tenantId: string): Promise<boolean> {

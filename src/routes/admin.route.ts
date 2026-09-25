@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { safeCompare } from '../utils/auth';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 // Re-export stores and helpers for backwards compatibility with tests and external modules
 export {
@@ -105,7 +106,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       isAuthenticated = true;
       identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
     } else if (sessionCookie) {
-      const validSession = AdminSessionService.validateSession(sessionCookie);
+      const validSession = await AdminSessionService.validateSession(sessionCookie);
       if (validSession) {
         isAuthenticated = true;
         identity = validSession.adminIdentity;
@@ -120,6 +121,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
         (request as any).staffId = staffSession.staff.id;
         (request as any).staffSession = staffSession;
         (request as any).staffTenantId = staffSession.staff.tenant_id;
+        // SEC-AUDIT-07: isi `tenantId` dari sesi staff — sebelumnya field ini
+        // dibaca di banyak subroute (`request.tenantId || DEFAULT_TENANT_ID`)
+        // tapi TIDAK PERNAH ditulis, sehingga selalu jatuh ke default-tenant.
+        (request as any).tenantId = staffSession.staff.tenant_id;
       }
     }
 
@@ -131,6 +136,24 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     (request as any).adminKeyUsed = clientKey || 'COOKIE_SESSION';
     (request as any).adminIdentity = identity;
+
+    // SEC-AUDIT-09: CSRF guard untuk request state-changing yang diautentikasi
+    // via COOKIE. Cookie SameSite=Lax saja tidak cukup (subdomain takeover/XSS).
+    // Wajibkan custom header non-sederhana — form lintas-situs tidak bisa
+    // menetapkannya, dan fetch lintas-origin memicu preflight CORS yang ditolak.
+    // Auth via X-API-KEY (header eksplisit) sudah imun → dikecualikan.
+    const method = request.method.toUpperCase();
+    const isStateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+    if (isStateChanging && !clientKey) {
+      const csrfHeader = String(request.headers['x-requested-with'] || '').toLowerCase();
+      if (csrfHeader !== 'xmlhttprequest') {
+        console.warn(`[CSRF GUARD] Blocked cookie-authenticated ${method} ${request.url} without X-Requested-With header.`);
+        return reply.status(403).send({
+          error: 'Forbidden: Missing anti-CSRF header (X-Requested-With: XMLHttpRequest).',
+          code: 'FORBIDDEN_CSRF',
+        });
+      }
+    }
 
     // 4. Role-Based Access Control (RBAC) Guard for Staff Sessions (SEC-01 Fix)
     const staffRole = (request as any).staffRole;
@@ -149,7 +172,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
         '/api/admin/migration',
         '/api/admin/persona',
         '/api/admin/export',
-        '/api/admin/google',
+        // SEC-AUDIT-10: prefix lama '/api/admin/google' tidak pernah cocok dengan
+        // rute riil '/api/admin/integrations/google/*' (mismatch = semua staf bisa akses).
+        '/api/admin/integrations/google',
         '/api/admin/waba',
       ];
 
@@ -181,6 +206,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
             code: 'FORBIDDEN_STAFF_MANAGEMENT',
           });
         }
+      }
+
+      // SEC-AUDIT-04: scope enforcement data-driven (tabel role_api_scopes).
+      // Role yang punya baris = managed → default-deny kecuali (prefix, method)
+      // cocok. Role tanpa baris = legacy (guards di atas yang berlaku).
+      const { isApiScopeAllowed, normalizeRoleKey } = await import('../services/role-scope.service');
+      const staffTenant = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      const scope = await isApiScopeAllowed(staffTenant, normalizeRoleKey(staffRole), urlPath, request.method);
+      if (!scope.allowed) {
+        console.warn(`[RBAC SCOPE GUARD] Blocked '${staffRole}' on ${request.method} ${urlPath} (no matching role_api_scopes row)`);
+        return reply.status(403).send({
+          error: 'Forbidden: Peran Anda tidak memiliki hak akses ke resource ini.',
+          code: 'FORBIDDEN_ROLE_SCOPE',
+        });
       }
     }
   });
