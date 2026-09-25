@@ -12,7 +12,9 @@ export type LiveChatHubEventType =
   | 'sync.progress'
   | 'bot.cutoff_changed'
   | 'staff.task_assigned'
-  | 'staff.task_cancelled';
+  | 'staff.task_cancelled'
+  | 'customer.location_updated'
+  | 'staff.task_completed';
 
 /**
  * Event real-time yang dipublikasikan ke Live Chat Panel admin.

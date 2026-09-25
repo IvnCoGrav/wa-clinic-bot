@@ -139,6 +139,8 @@ function openShared() {
     sharedEs.addEventListener('conversation.updated', (e) => handleEvent('conversation.updated', e));
     sharedEs.addEventListener('bot.cutoff_changed', (e) => handleEvent('bot.cutoff_changed', e));
     sharedEs.addEventListener('BOT_CUTOFF_CHANGED', (e) => handleEvent('bot.cutoff_changed', e));
+    sharedEs.addEventListener('customer.location_updated', (e) => handleEvent('customer.location_updated', e));
+    sharedEs.addEventListener('staff.task_completed', (e) => handleEvent('staff.task_completed', e));
     sharedEs.addEventListener('ping', () => resetWatchdog());
     sharedEs.addEventListener('open', () => resetWatchdog());
 

@@ -1704,12 +1704,47 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Hydrated relation parity: re-fetch with customer.children + assigned_staff
+        let reservationResponse: any = {
+          ...updated,
+          notes: extractNotesFromRawText(updated.raw_text),
+        };
+        try {
+          const full = await prisma.reservation.findFirst({
+            where: { id, tenant_id: tenantId },
+            include: {
+              customer: { include: { children: true } },
+              assigned_staff: { select: { id: true, name: true, phone: true } },
+            },
+          });
+          if (full) {
+            reservationResponse = {
+              ...full,
+              notes: extractNotesFromRawText(full.raw_text),
+            };
+          } else {
+            // Fallback R7: re-fetch gagal → tempel existing.customer (sudah include children dari line 1408)
+            if (existing?.customer) {
+              reservationResponse = {
+                ...reservationResponse,
+                customer: existing.customer,
+              };
+            }
+          }
+        } catch (err: any) {
+          console.warn('[Admin API] Failed to re-fetch full relations on reservation patch:', err.message);
+          // Fallback R7: re-fetch gagal → tempel existing.customer (sudah include children dari line 1408)
+          if (existing?.customer) {
+            reservationResponse = {
+              ...reservationResponse,
+              customer: existing.customer,
+            };
+          }
+        }
+
         return reply.status(200).send({
           success: true,
-          data: {
-            ...updated,
-            notes: extractNotesFromRawText(updated.raw_text),
-          },
+          data: reservationResponse,
         });
       } catch (error: any) {
         console.error(`[Admin API] Failed to update reservation ${id}:`, error);
@@ -2855,12 +2890,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             bookingDate: string;
             assignedStaffId?: string;
           }>;
+          babies?: Array<{ name: string; ageText?: string }>;
         };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
-      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions } =
+      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions, babies } =
         request.body || {};
 
       if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
@@ -2870,7 +2906,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const series = await reservationSeriesService.createSeries(
-          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions },
+          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions, babies },
           tenantId
         );
 

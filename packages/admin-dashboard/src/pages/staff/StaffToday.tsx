@@ -1098,6 +1098,62 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         }
       });
 
+      // Listen to customer location updated event (real-time GPS from field staff)
+      es.addEventListener('customer.location_updated', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const staffId = currentStaffRef.current?.id;
+          const isSpv = isSupervisorRef.current;
+          if (!isSpv && payload.staffId && payload.staffId !== staffId) return;
+
+          const { reservationId, lat, lng, distanceKm, ongkir, landmark, housePhotoUrl, diverged, diffKm } = payload;
+          const updateTaskLocation = (t: StaffTask): StaffTask => {
+            if (t.reservationId !== reservationId) return t;
+            return {
+              ...t,
+              address: {
+                ...t.address,
+                ...(lat != null && { lat }),
+                ...(lng != null && { lng }),
+                ...(distanceKm != null && { distanceKm }),
+                ...(ongkir != null && { ongkir }),
+                ...(landmark && { landmark }),
+                ...(housePhotoUrl && { housePhotoUrl }),
+                ...(diverged && diffKm != null && { landmark: `${t.address.landmark || ''} [GPS Lapangan +${diffKm}km]` }),
+              },
+            };
+          };
+          setTasks((prev) => prev.map(updateTaskLocation));
+          setUpcomingTasks((prev) => prev.map(updateTaskLocation));
+          if (selectedTaskRef.current?.reservationId === reservationId) {
+            setSelectedTask((prev) => (prev ? updateTaskLocation(prev) : null));
+          }
+        } catch (e) {
+          console.warn('[SSE] customer.location_updated error:', e);
+        }
+      });
+
+      // Listen to staff task completed event
+      es.addEventListener('staff.task_completed', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const staffId = currentStaffRef.current?.id;
+          const isSpv = isSupervisorRef.current;
+          if (!isSpv && payload.staffId && payload.staffId !== staffId) return;
+
+          const { reservationId } = payload;
+          const updateTaskCompleted = (t: StaffTask): StaffTask =>
+            t.reservationId === reservationId ? { ...t, status: 'completed' as const } : t;
+          setTasks((prev) => prev.map(updateTaskCompleted));
+          setUpcomingTasks((prev) => prev.map(updateTaskCompleted));
+          if (selectedTaskRef.current?.reservationId === reservationId) {
+            setSelectedTask((prev) => (prev ? updateTaskCompleted(prev) : null));
+          }
+        } catch (e) {
+          console.warn('[SSE] staff.task_completed error:', e);
+        }
+      });
+
       es.onerror = () => {
         setSseConnected(false);
         if (es) {
@@ -1969,12 +2025,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     return totalMins > 0 ? totalMins : 60;
   };
 
-  const isOverdueSchedule = (t: StaffTask) => {
-    if (!t.bookingDate) return false;
+  const isScheduleOngoing = (t: StaffTask): boolean => {
+    if (!t.bookingDate || isTrulyCompleted(t)) return false;
     const startTime = new Date(t.bookingDate).getTime();
     if (isNaN(startTime)) return false;
-    const durationMinutes = extractTreatmentMinutes(t.treatmentDetail);
-    const endTime = startTime + durationMinutes * 60 * 1000;
+    const endTime = startTime + extractTreatmentMinutes(t.treatmentDetail) * 60 * 1000;
+    const now = Date.now();
+    if (t.arrivedAt) return now < endTime + 30 * 60 * 1000;
+    return now >= startTime && now < endTime;
+  };
+
+  const isScheduleOverdue = (t: StaffTask): boolean => {
+    if (!t.bookingDate || isTrulyCompleted(t)) return false;
+    if (isScheduleOngoing(t)) return false;
+    const startTime = new Date(t.bookingDate).getTime();
+    if (isNaN(startTime)) return false;
+    const endTime = startTime + extractTreatmentMinutes(t.treatmentDetail) * 60 * 1000;
     return Date.now() >= endTime;
   };
 
@@ -2442,9 +2508,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <span>🛵</span>
                                 <span>OTW</span>
                               </span>
-                            ) : isOverdueSchedule(task) ? (
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-300">
-                                Berlangsung
+                            ) : isScheduleOngoing(task) ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping" />
+                                <span>Berlangsung</span>
+                              </span>
+                            ) : isScheduleOverdue(task) ? (
+                              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
+                                <AlertCircle size={10} />
+                                <span>Perlu Selesai</span>
                               </span>
                             ) : null}
                             <div className="flex items-center space-x-1 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-md whitespace-nowrap border border-[#00a884]/30">
@@ -2628,12 +2700,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
 
                           {/* 3-State Operational Action: Infokan OTW -> Sudah Sampai -> Selesai Tindakan */}
+                          {/* Anti-OTW Trap: jika jadwal sudah terlewat (overdue), bypass langsung ke tombol Selesai */}
                           {task.status === 'completed' ? (
                             <div className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
                               <CheckCircle2 size={15} />
                               <span>Selesai</span>
                             </div>
-                          ) : task.arrivedAt ? (
+                          ) : task.arrivedAt || isScheduleOverdue(task) ? (
                             <button
                               type="button"
                               disabled={completingVisitId === task.reservationId}
@@ -2814,51 +2887,52 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         <CreditCard size={16} />
                       </button>
 
-                      {/* Dynamic Transit Progress Button in Chat Drawer */}
-                      {selectedTask.status === 'completed' ? (
-                        <div
-                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs"
-                          title="Kunjungan telah selesai"
-                        >
-                          <CheckCircle2 size={16} />
-                        </div>
-                      ) : selectedTask.arrivedAt ? (
-                        <button
-                          onClick={() => handleCompleteVisit(selectedTask)}
-                          disabled={completingVisitId === selectedTask.reservationId}
-                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
-                          title="Tandai Tindakan Selesai"
-                        >
-                          {completingVisitId === selectedTask.reservationId ? (
-                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          ) : (
-                            <CheckCircle2 size={16} />
-                          )}
-                        </button>
-                      ) : selectedTask.otwSentAt ? (
-                        <button
-                          onClick={() => handleRecordArrival(selectedTask)}
-                          disabled={sendingArrivalId === selectedTask.reservationId}
-                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
-                          title="Tandai Sudah Sampai di Lokasi"
-                        >
-                          {sendingArrivalId === selectedTask.reservationId ? (
-                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          ) : (
-                            <MapPin size={16} />
-                          )}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (!isOtwAllowed(selectedTask)) {
-                              toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
-                              return;
-                            }
-                            handleSendOtw(selectedTask);
-                          }}
-                          disabled={sendingOtwId === selectedTask.reservationId}
-                          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
+{/* Dynamic Transit Progress Button in Chat Drawer */}
+                       {/* Anti-OTW Trap: jika jadwal sudah terlewat (overdue), bypass langsung ke tombol Selesai */}
+                       {selectedTask.status === 'completed' ? (
+                         <div
+                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs"
+                           title="Kunjungan telah selesai"
+                         >
+                           <CheckCircle2 size={16} />
+                         </div>
+                       ) : selectedTask.arrivedAt || isScheduleOverdue(selectedTask) ? (
+                         <button
+                           onClick={() => handleCompleteVisit(selectedTask)}
+                           disabled={completingVisitId === selectedTask.reservationId}
+                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                           title="Tandai Tindakan Selesai"
+                         >
+                           {completingVisitId === selectedTask.reservationId ? (
+                             <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                           ) : (
+                             <CheckCircle2 size={16} />
+                           )}
+                         </button>
+                       ) : selectedTask.otwSentAt ? (
+                         <button
+                           onClick={() => handleRecordArrival(selectedTask)}
+                           disabled={sendingArrivalId === selectedTask.reservationId}
+                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                           title="Tandai Sudah Sampai di Lokasi"
+                         >
+                           {sendingArrivalId === selectedTask.reservationId ? (
+                             <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                           ) : (
+                             <MapPin size={16} />
+                           )}
+                         </button>
+                       ) : (
+                         <button
+                           onClick={() => {
+                             if (!isOtwAllowed(selectedTask)) {
+                               toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
+                               return;
+                             }
+                             handleSendOtw(selectedTask);
+                           }}
+                           disabled={sendingOtwId === selectedTask.reservationId}
+                           className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
                             isOtwAllowed(selectedTask)
                               ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border-[#00a884]/30'
                               : 'bg-[#f0f2f5] text-[#667781] border-[#e9edef]'

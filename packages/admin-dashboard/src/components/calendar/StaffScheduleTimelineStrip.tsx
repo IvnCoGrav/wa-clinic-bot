@@ -197,7 +197,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                 key={s.id}
                 type="button"
                 onClick={() => onSelectStaff?.(s.id)}
-                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer active:scale-97"
+                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer active:scale-95"
               >
                 {s.name}
               </button>
@@ -299,7 +299,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                   key={time}
                   type="button"
                   onClick={() => onSelectTimeSlot(time)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-97 cursor-pointer border ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-95 cursor-pointer border ${
                     isSelected
                       ? 'bg-[#008069] text-white border-[#008069] shadow-sm ring-2 ring-[#008069]/40 font-extrabold scale-105'
                       : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40'

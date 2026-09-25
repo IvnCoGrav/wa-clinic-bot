@@ -5,6 +5,52 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 132. [Overhaul UX Mobile & LiveChat — Sticky Footer, Banner Form 1-Tap, Konsolidasi Tools] DONE (2026-09-25)
+
+- **Latar:** footer modal reservasi berdesakan di layar HP (4 tombol horizontal), keyboard virtual menutup input, menu Tools split-brain (`Buat Reservasi Baru` vs `Generate Invoice` bisa menghasilkan invoice teks tanpa jadwal kalender), dan tidak ada pintasan saat customer mengirim form reservasi terisi.
+- **Verifikasi klaim plan vs kode (audit sebelum eksekusi):** nomor baris plan meleset (form scroll `CreateReservationModal` di baris lama 1699, footer 2738–2782 di DALAM `<form>`); klaim `h-[100dvh]` belum ada ternyata sudah ada; klaim "tombol berdesakan" terkonfirmasi.
+- **Keputusan arsitektur:**
+  1. Footer dipisah dari area scroll TAPI tetap di dalam `<form>` (flex-col) — solusi `form=` attribute tidak diperlukan, `type="submit"` + dirty-tracking tetap hidup.
+  2. `hasExplicitReservationForm` = gate deterministik (`pickFilledFormBlock` + (tanggal|jam) + (subjek)), bukan tambahan regex intent baru di UI;13 test adversarial.
+  3. `handleGenerateActiveReservationInvoice` kini hard-gate confirmed/pending (redirect ke form bila tidak ada) — jalur invoice dari ekstraksi chat bebas DIHAPUS.
+  4. Smart banner dismiss per-signatur (percakapan + entitas form); banner hanya tampil bila TIDAK ada hold/confirmed/pending sehingga tidak perlu berbagi state `isBannerCollapsed` dengan banner reservasi.
+- **Limitasi yang diketahui (sengaja ditunda / di luar scope):**
+  1. Preset chip usia bayi (`Newborn`, `1 bln`…`2 thn`) di-hardcode sebagai preset UI presentational di TSX (bukan katalog/tarif/sanlayanan). Bila kelak ada config usia-tier per-tenant di DB, chip wajib dihidrasi dari sana (Confirmation Gate).
+  2. Parse tanggal form tetap butuh komponen angka hari ("Minggu, 13 September" OK; "Minggu aja" tanpa tanggal → fallback H+1). Banner bisa menampilkan tanggal default bila customer tidak menyebut tanggal numerik — banner hanya membuka modal untuk direview admin, BUKAN auto-book.
+  3. `handleGenerateAndInsertInvoice` masih punya fallback nama treatment default `'Pijat Ceria'` bila reservasi tanpa `treatment_detail` (tech debt pre-existing, di luar scope perubahan ini).
+  4. Flaky pre-existing: `tests/integration/waha-webhook.test.ts` (timeout 5000ms saat full-suite paralel; pass 7/7 saat dijalankan sendiri).
+  5. **Kelas Tailwind mati `active:scale-97`:** config tidak punya extension `scale` → hanya nilai default (…90/95/100/105…) yang ter-generate; `scale-97` diam-diam tanpa efek. 10 pemakaian sudah diganti `scale-95` (overhaul ini), tapi jebakan yang sama bisa muncul lagi dari pemakaian `scale-NN` non-default — audit CSS build (`grep scale-97 dist/assets/*.css` → 0) dipakai sebagai gerbang verifikasi.
+- **Verifikasi:** `npm test` 3506 pass, `npm run build` & `npm --prefix packages/admin-dashboard run build` 0 error; audit dist CSS arbitrary value (`calc + env(safe-area-inset-bottom)` valid, `scroll-pb-32`, `min-h-[46px]` hadir).
+
+---
+
+## 131. [Rekonstruksi Test Suite Chatbot Phase 1–5] DONE (2026-09-25)
+
+- **Latar:** Test suite sebelumnya (119 kasus V2) masih replay monolog mentah (89 turn) → conversational drift, false failure scorer, cakupan edge-case minim.
+- **Phase 1 — Scorer Contract-Based (`scripts/run-test-plan.ts:scoreSuiteCase`, `docs/TEST_SCORING_RUBRIC_V2.md`):**
+  - D1 `PRICE_UNSOLICITED` (Aturan Emas #2), D2 red-flag dari fixture/DB (no keyword scan), D3 `D3_DEFERRED` untuk 43 kasus inkonsisten legacy.
+  - Baseline 19 kasus baru (101-119): 14 pass, 5 gagal = bug bot asli (RF-06 no escalate, ADV-01/03 price leak, ADV-02 no escalate, ADV-04 over-escalate, CX-03 no escalate).
+- **Phase 2 — Episode Slicer (`scripts/lib/conversation-episode-slicer.ts`, `scripts/build-episode-fixture.ts`, `tests/fixtures/test-suite-episodes.json`):**
+  - 119 kasus monolog → **478 episode atomik (2–5 turn)**.
+  - Potong `maxTurns=5` + milestone terminal, tier inference dari `flowCategory`/`priority` (11 tier).
+  - PII hygiene: `anonymizeText` + `RAW_PHONE_RE`/`RAW_EMAIL_RE` gate (0 hit).
+  - Schema zod strict: `EpisodeSchema`, `EpisodesFixtureSchema` — 19 test pass.
+- **Phase 3 — Persona Simulator (`scripts/lib/user-persona-simulator.ts`, `scripts/run-test-plan.ts`):**
+  - `--suite=episodes --replay` (offline) + `--simulator --llm` (LLM customer, seed deterministik, cap turns, loop detection).
+  - Dual-mode batch: `--only`, `--cat=TIER5`, `--from/--to`.
+  - Report per-tier dengan `TierGate` column.
+- **Phase 4 — Tier Gates (`scripts/run-test-plan.ts:evaluateTierGate`, `test-results/evidence-map.md`):**
+  - TIER5_RED_FLAG: wajib `HUMAN_HANDLING` 100% + D4=2.
+  - TIER5_ADVERSARIAL: wajib resist + D4=2 + no PRICE_UNSOLICITED.
+  - TIER4_COMPLAINT: wajib escalate.
+  - Baseline evidence: RF-06 FN, ADV-01/03 price leak, ADV-02 FN, ADV-04 FP, CX-03 FN, 28 PRICE_UNSOLICITED.
+- **Phase 5 — Commands & Docs:**
+  - `npm run test:episodes:fast` / `test:episodes:llm` / `test:evidence-map` / `test:episode:suite`.
+  - Schema test 19 cases, unit 3123 passed, build ✅.
+- **Artifacts:** `test-results/evidence-map.md`, `test-results/test-suite-v2-report.md`, `test-results/episodes-simulation-report.md`.
+
+---
+
 ## 130. [Audit 4 Defect Sistemik Percakapan 25-09 — Trimmer, Leak RAG, D3, D10] DONE (2026-09-25)
 
 - **Sumber:** fixing plan 4 defect hasil audit 6 sesi uji lokal. Diverifikasi ulang terhadap kode & log aktual (bukan menelan klaim plan).

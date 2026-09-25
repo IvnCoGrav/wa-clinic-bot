@@ -23,6 +23,9 @@ export interface ExtractedScheduleData {
   discount: number;
   isExtractedFromChat: boolean;
   confidenceScore: number;
+  /** Fase 4A: true HANYA bila ada blok formulir reservasi terisi eksplisit dari pesan
+   *  (template kosong bot → false) dengan jadwal + subjek terisi — gerbang smart-banner. */
+  hasExplicitReservationForm: boolean;
 }
 
 export interface ClinicServiceCatalogItem {
@@ -388,7 +391,39 @@ export function extractScheduleFromMessages(
   // terstruktur TAHAP 1 (tanggal, nama, alamat, anak, treatment) memakai blok ini
   // bila ada; fallback longgar (jam mandiri, tanggal percakapan, payment) tetap
   // memakai fullChatText.
-  const formText = pickFilledFormBlock(recentMessages) || fullChatText;
+  const explicitFormBlock = pickFilledFormBlock(recentMessages);
+  const formText = explicitFormBlock || fullChatText;
+
+  // Fase 4A — Flag deterministik "form reservasi terisi eksplisit": sinyal untuk
+  // smart-banner 1-tap quick booking. Gate KEMBALI memakai pickFilledFormBlock /
+  // isFilledFormMessage (bukan regex intent baru): template kosong bot → block null
+  // → false. Kriteria diambil dari blok form yang sama: (tanggal ATAU jam) terisi DAN
+  // (nama bunda ATAU nama anak ATAU treatment) terisi. Tanpa jadwal valid, pre-fill
+  // modal jatuh ke default besok 12.00 → banner menyesatkan, jadi ditolak.
+  let hasExplicitReservationForm = false;
+  if (explicitFormBlock) {
+    const block = explicitFormBlock;
+    /** true bila setidaknya satu baris "label[:=] nilai" punya nilai riil (bukan "-"/":"/kosong). */
+    const hasFilledLabel = (re: RegExp): boolean => {
+      const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+      let m: RegExpExecArray | null;
+      while ((m = rx.exec(block)) !== null) {
+        const after = block.slice(m.index + m[0].length);
+        const val = (after.match(/^[ \t]*([^\r\n\t]+)/)?.[1] || '').replace(/^[:=\s]+/, '').trim();
+        if (val && val !== '-' && val !== ':') return true;
+        if (m.index === rx.lastIndex) rx.lastIndex++;
+      }
+      return false;
+    };
+    const hasSchedule =
+      hasFilledLabel(/(?:hari\s*dan\s*tanggal|hari\/tgl|jadwal|tanggal)\s*[:=]/i) ||
+      /\b(?:jam|pukul)\s*[:=]?\s*\d{1,2}[.:]\d{2}/i.test(block);
+    const hasSubject =
+      hasFilledLabel(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=]/i) ||
+      hasFilledLabel(/(?:nama\s*bayi|nama\s*anak)\s*[:=]/i) ||
+      hasFilledLabel(/treatment\s*[:=]/i);
+    hasExplicitReservationForm = hasSchedule && hasSubject;
+  }
 
   // =========================================================================
   // TAHAP 1: EKSTRAKSI DARI STRUKTUR FORM / TEMPLATE RESERVASI DI CHAT
@@ -914,5 +949,6 @@ export function extractScheduleFromMessages(
     discount: extractedDiscount,
     isExtractedFromChat: isExtracted,
     confidenceScore: isExtracted ? 0.95 : 0.6,
+    hasExplicitReservationForm,
   };
 }

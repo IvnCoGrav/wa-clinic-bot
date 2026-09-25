@@ -17,7 +17,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
+import { extractLatLngFromMapsUrl, getCurrentDeviceLocation } from '../../utils/geoUtils';
 import { apiRequest } from '../../services/api';
 import { RefreshCw } from 'lucide-react';
 
@@ -93,6 +93,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
   // Smart Coordinate Assistant states
   const [mapsUrlInput, setMapsUrlInput] = useState('');
+  const [mapsUrlResolving, setMapsUrlResolving] = useState(false);
   const [gettingGps, setGettingGps] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
@@ -155,11 +156,12 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
     setChildren((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Smart Maps URL Parser
-  const handlePasteMapsUrl = (val: string) => {
+  // Smart Maps URL Parser - calls backend to resolve Google Maps URL (shortlink + coordinate + geocode fallback)
+  const handlePasteMapsUrl = async (val: string) => {
     setMapsUrlInput(val);
     if (!val || val.trim().length < 5) return;
 
+    // First try local regex extraction for immediate feedback (works for URLs with explicit coords)
     const parsed = extractLatLngFromMapsUrl(val);
     if (parsed) {
       setFormData((prev) => ({
@@ -169,6 +171,35 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
       }));
       setGpsAccuracy(null);
       toast('✓ Koordinat berhasil diekstrak dari link Google Maps! 📍', 'success');
+      return;
+    }
+
+    // If no coords in URL, call backend to resolve shortlink + geocode fallback
+    setMapsUrlResolving(true);
+    try {
+      const res: any = await apiRequest('/api/admin/customers/resolve-location', {
+        method: 'POST',
+        body: JSON.stringify({ url: val }),
+      });
+      if (res?.success && res?.data) {
+        const d = res.data;
+        setFormData((prev) => ({
+          ...prev,
+          lat: String(d.lat),
+          lng: String(d.lng),
+          kelurahan: d.kelurahan || prev.kelurahan,
+          kecamatan: d.kecamatan || prev.kecamatan,
+          kota: d.kota || prev.kota,
+        }));
+        setGpsAccuracy(null);
+        toast('✓ Alamat & koordinat berhasil diambil dari Google Maps! 📍', 'success');
+      } else {
+        toast(res?.error || 'Gagal resolve link Google Maps', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal resolve link Google Maps', 'error');
+    } finally {
+      setMapsUrlResolving(false);
     }
   };
 
@@ -217,7 +248,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
     }
   };
 
-  // Cari Koordinat dari Alamat via Geocoding
+  // Cari Koordinat dari Alamat via Backend Geocoding (gazetteer + Google Maps)
   const handleGeocodeFromAddress = async () => {
     const addressQuery = [formData.address, formData.kelurahan, formData.kecamatan, formData.kota]
       .filter(Boolean)
@@ -229,20 +260,27 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
     setGeocoding(true);
     try {
-      const res = await geocodeAddressWithNominatim(addressQuery);
-      if (res) {
+      const res: any = await apiRequest('/api/admin/customers/resolve-location', {
+        method: 'POST',
+        body: JSON.stringify({ text: addressQuery }),
+      });
+      if (res?.success && res?.data) {
+        const d = res.data;
         setFormData((prev) => ({
           ...prev,
-          lat: res.lat.toFixed(6),
-          lng: res.lng.toFixed(6),
+          lat: String(d.lat),
+          lng: String(d.lng),
+          kelurahan: d.kelurahan || prev.kelurahan,
+          kecamatan: d.kecamatan || prev.kecamatan,
+          kota: d.kota || prev.kota,
         }));
         setGpsAccuracy(null);
         toast(`✓ Titik koordinat ditemukan untuk ${formData.kelurahan || formData.kecamatan}! 📍`, 'success');
       } else {
-        toast('Titik tidak ditemukan untuk alamat ini. Coba tempel link Google Maps.', 'info');
+        toast(res?.error || 'Titik tidak ditemukan untuk alamat ini. Coba tempel link Google Maps.', 'info');
       }
-    } catch {
-      toast('Gagal mencari titik alamat.', 'error');
+    } catch (err: any) {
+      toast(err?.message || 'Gagal mencari titik alamat.', 'error');
     } finally {
       setGeocoding(false);
     }

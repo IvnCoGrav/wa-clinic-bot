@@ -9,6 +9,10 @@ import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.
 import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
 
+function tenantOf(request: FastifyRequest): string {
+  return (request as any).tenantId || DEFAULT_TENANT_ID;
+}
+
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
   fastify.addHook('onResponse', async (request) => {
@@ -1210,6 +1214,73 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         });
       } catch (err: any) {
         console.error('[ADMIN CUSTOMER] Error updating location:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/customers/resolve-location
+   * Resolve Google Maps URL or geocode address text to coordinates + delivery info.
+   * Body: { url?: string; text?: string }
+   * Returns: { success, lat, lng, kelurahan, kecamatan, kota, distanceKm, ongkir, isOutOfCoverage, formattedAddress, addressQueryUsed }
+   */
+  fastify.post(
+    '/api/admin/customers/resolve-location',
+    async (
+      request: FastifyRequest<{
+        Body: { url?: string; text?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      const { url, text } = request.body || {};
+
+      if (!url && !text) {
+        return reply.status(400).send({ success: false, error: 'url atau text wajib diisi' });
+      }
+
+      try {
+        let result: any = null;
+
+        if (url) {
+          const { resolveLocationFromUrl } = await import('../../services/location-resolver.service');
+          result = await resolveLocationFromUrl(url, tenantId);
+        } else if (text) {
+          const { geocodingService } = await import('../../integrations/google-maps/geocoding');
+          const { deliveryService } = await import('../../services/delivery.service');
+          const geo = await geocodingService.geocodeText(text);
+          if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+            const delivery = await deliveryService.calculateDelivery(
+              { lat: geo.lat, lng: geo.lng },
+              undefined,
+              tenantId
+            );
+            result = {
+              success: true,
+              source: 'geocoding',
+              sourceLabel: '📍 Geocoding Teks',
+              lat: geo.lat,
+              lng: geo.lng,
+              kelurahan: geo.kelurahan,
+              kecamatan: geo.kecamatan,
+              kota: geo.kota,
+              distanceKm: delivery.distanceKm,
+              ongkir: delivery.ongkir,
+              isOutOfCoverage: delivery.isOutOfCoverage,
+              zipcode: geo.zipcode,
+              formattedAddress: geo.formattedAddress,
+            };
+          }
+        }
+
+        if (!result?.success) {
+          return reply.status(400).send({ success: false, error: result?.error || 'Gagal resolve lokasi' });
+        }
+
+        return reply.status(200).send({ success: true, data: result });
+      } catch (err: any) {
+        console.error('[ADMIN CUSTOMER] Error resolve-location:', err.message);
         return reply.status(500).send({ success: false, error: err.message });
       }
     }

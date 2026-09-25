@@ -14,16 +14,16 @@ import {
   formatBabyNamesForGreeting,
 } from '../utils/name-sanitizer';
 
-// Parameter batch/throttle follow-up — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
+// Parameter batch/throttle follow-up â€” env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
 const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
-// Offset hari jadwal NO_PURCHASE per stage (stage 1, 2, 3 → +3, +7, +14 hari).
+// Offset hari jadwal NO_PURCHASE per stage (stage 1, 2, 3 â†’ +3, +7, +14 hari).
 export const NO_PURCHASE_STAGE_DAYS: readonly number[] = [3, 7, 14];
 
-// Alasan pembatalan kanonis (cancel_reason) — single source of truth agar konsisten lintas titik lifecycle.
+// Alasan pembatalan kanonis (cancel_reason) â€” single source of truth agar konsisten lintas titik lifecycle.
 export const CANCEL_REASON = {
   MANUAL_ADMIN: 'Dibatalkan manual oleh Admin',
   BULK_ADMIN: 'Dibatalkan massal oleh Admin',
@@ -322,59 +322,61 @@ export class FollowUpService {
    * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari) di antrian.
    */
   public async createNoPurchaseFollowUps(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    let customer: any = null;
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
-      try {
-        const customer = await prisma.customer?.findUnique?.({
-          where: { id: customerId },
-          include: { labels: { include: { label: true } } },
-        });
-        if (
-          customer &&
-          (customer.is_sandbox_test ||
-            customer.is_admin_labeled ||
-            hasBypassLabel(customer) ||
-            isDummyOrTestContact(customer.phone, customer.name))
-        ) {
-          return;
-        }
-        if (await checkCustomerBypass({ customerId, tenantId })) {
-          return;
-        }
-      } catch (_) {}
+      customer = await prisma.customer?.findUnique?.({
+        where: { id: customerId },
+        include: { labels: { include: { label: true } } },
+      });
+    } catch {}
+    if (!customer) {
+      return; // customer dummy/in-memory â€” skip (fail-closed)
+    }
+    if (
+      customer.is_sandbox_test ||
+      customer.is_admin_labeled ||
+      hasBypassLabel(customer) ||
+      isDummyOrTestContact(customer.phone, customer.name)
+    ) {
+      return;
+    }
+    if (await checkCustomerBypass({ customerId, tenantId })) {
+      return;
+    }
 
-      // 2. Cek apakah customer sudah memiliki reservasi (pending, confirmed, atau completed)
-      try {
-        const hasReservation = await prisma.reservation?.findFirst?.({
-          where: {
-            customer_id: customerId,
-            status: { in: ['pending', 'confirmed', 'completed'] },
-          },
-        });
-        if (hasReservation) {
-          console.log(`[FollowUp Service] Customer ${customerId} already has reservation (${hasReservation.id}, status: ${hasReservation.status}). Skipping NO_PURCHASE creation.`);
-          return;
-        }
-      } catch (_) {}
+    // 2. Cek apakah customer sudah memiliki reservasi (pending, confirmed, atau completed)
+    let hasReservation: any = null;
+    try {
+      hasReservation = await prisma.reservation?.findFirst?.({
+        where: {
+          customer_id: customerId,
+          status: { in: ['pending', 'confirmed', 'completed'] },
+        },
+      });
+    } catch {}
+    if (hasReservation) {
+      console.log(`[FollowUp Service] Customer ${customerId} already has reservation (${hasReservation.id}, status: ${hasReservation.status}). Skipping NO_PURCHASE creation.`);
+      return;
+    }
 
-      // 3. Cek apakah sudah ada antrian NO_PURCHASE aktif (idempoten)
-      let existing = null;
-      try {
-        existing = await prisma.followUp?.findFirst?.({
-          where: {
-            customer_id: customerId,
-            type: 'NO_PURCHASE',
-            tenant_id: tenantId,
-            status: { in: ['PENDING', 'QUEUED'] },
-          },
-        });
-      } catch (_) {}
+    // 3. Cek apakah sudah ada antrian NO_PURCHASE aktif (idempoten)
+    let existing = null;
+    try {
+      existing = await prisma.followUp?.findFirst?.({
+        where: {
+          customer_id: customerId,
+          type: 'NO_PURCHASE',
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+      });
+    } catch {}
+    if (existing) {
+      return;
+    }
 
-      if (existing) {
-        return;
-      }
-
-      const stages = [1, 2, 3];
+    const stages = [1, 2, 3];
       const days = [3, 7, 14];
       
       await Promise.all(
@@ -417,15 +419,15 @@ export class FollowUpService {
   /**
    * Event-Driven Last-Chat Sliding Window untuk follow-up NO_PURCHASE.
    *
-   * Dipanggil saat customer mengirim pesan masuk (inbound) — best-effort &
+   * Dipanggil saat customer mengirim pesan masuk (inbound) â€” best-effort &
    * non-blocking. Menggeser scheduled_at antrian NO_PURCHASE aktif agar selalu
-   * relatif terhadap chat terakhir customer: stage 1/2/3 → chatAt + 3/7/14 hari
+   * relatif terhadap chat terakhir customer: stage 1/2/3 â†’ chatAt + 3/7/14 hari
    * pada pukul 09:40 WIB.
    *
    * Jika customer ternyata sudah punya reservasi aktif, antrian NO_PURCHASE
    * dibatalkan dengan cancel_reason yang jelas (bukan dibiarkan terkirim).
    *
-   * Offline-safe: DB error → tidak pernah melempar ke pemanggil.
+   * Offline-safe: DB error â†’ tidak pernah melempar ke pemanggil.
    */
   public async rescheduleNoPurchaseOnInboundChat(
     customerId: string,
@@ -437,7 +439,7 @@ export class FollowUpService {
       const anchor = new Date(chatAt);
       if (isNaN(anchor.getTime())) return empty;
 
-      // 1. Reservasi aktif → batalkan antrian NO_PURCHASE dengan alasan eksplisit.
+      // 1. Reservasi aktif â†’ batalkan antrian NO_PURCHASE dengan alasan eksplisit.
       let hasReservation: any = null;
       try {
         hasReservation = await prisma.reservation?.findFirst?.({
@@ -572,25 +574,28 @@ export class FollowUpService {
     } = params;
 
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
-      try {
-        const customer = await prisma.customer?.findUnique?.({
-          where: { id: customerId },
-          include: { labels: { include: { label: true } } },
-        });
-        if (
-          customer &&
-          (customer.is_sandbox_test ||
-            customer.is_admin_labeled ||
-            hasBypassLabel(customer) ||
-            isDummyOrTestContact(customer.phone, customer.name))
-        ) {
-          return;
-        }
-        if (await checkCustomerBypass({ customerId, tenantId })) {
-          return;
-        }
-      } catch (_) {}
+    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    let customer: any = null;
+    try {
+      customer = await prisma.customer?.findUnique?.({
+        where: { id: customerId },
+        include: { labels: { include: { label: true } } },
+      });
+    } catch {}
+    if (!customer) {
+      return; // customer dummy/in-memory â€” skip (fail-closed)
+    }
+    if (
+      customer.is_sandbox_test ||
+      customer.is_admin_labeled ||
+      hasBypassLabel(customer) ||
+      isDummyOrTestContact(customer.phone, customer.name)
+    ) {
+      return;
+    }
+    if (await checkCustomerBypass({ customerId, tenantId })) {
+      return;
+    }
 
       const bDate = new Date(bookingDate);
       if (isNaN(bDate.getTime())) return;
@@ -657,7 +662,7 @@ export class FollowUpService {
         }
       }
 
-      // 5. Jadwalkan Review H+1 Pasca Treatment — guard backdate (MT-1.2):
+      // 5. Jadwalkan Review H+1 Pasca Treatment â€” guard backdate (MT-1.2):
       //    jika reviewDate lampau (booking backdated), skip agar tidak bikin row kedaluwarsa.
       if (reviewDate.getTime() <= now.getTime()) {
         console.log(`[FollowUp Service] Skipping ${reviewType} for reservation ${reservationId}: backdated (review ${reviewDate.toISOString()} <= now).`);
@@ -793,25 +798,28 @@ export class FollowUpService {
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      // 1. Verifikasi customer bukan akun sandbox/dummy test atau berlabel bypass (offline-safe)
-      try {
-        const customer = await prisma.customer?.findUnique?.({
-          where: { id: customerId },
-          include: { labels: { include: { label: true } } },
-        });
-        if (
-          customer &&
-          (customer.is_sandbox_test ||
-            customer.is_admin_labeled ||
-            hasBypassLabel(customer) ||
-            isDummyOrTestContact(customer.phone, customer.name))
-        ) {
-          return;
-        }
-        if (await checkCustomerBypass({ customerId, tenantId })) {
-          return;
-        }
-      } catch (_) {}
+    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    let customer: any = null;
+    try {
+      customer = await prisma.customer?.findUnique?.({
+        where: { id: customerId },
+        include: { labels: { include: { label: true } } },
+      });
+    } catch {}
+    if (!customer) {
+      return; // customer dummy/in-memory â€” skip (fail-closed)
+    }
+    if (
+      customer.is_sandbox_test ||
+      customer.is_admin_labeled ||
+      hasBypassLabel(customer) ||
+      isDummyOrTestContact(customer.phone, customer.name)
+    ) {
+      return;
+    }
+    if (await checkCustomerBypass({ customerId, tenantId })) {
+      return;
+    }
 
       const bDate = new Date(bookingDate);
       if (isNaN(bDate.getTime())) return;
@@ -872,14 +880,14 @@ export class FollowUpService {
   }
 
   /**
-   * Self-Healing Reconciler (Fase 2) — jaring pengaman harian.
+   * Self-Healing Reconciler (Fase 2) â€” jaring pengaman harian.
    * Mencari customer completed tanpa antrean NEXT aktif dan menjadwalkan stage masa depan.
    * Kriteria (per-tenant, best-effort, offline-safe):
    *  - customer status != blocked, is_sandbox_test=false, is_admin_labeled=false, lolos hasBypassLabel/checkCustomerBypass/isDummyOrTestContact
    *  - punya reservasi completed dengan booking_date dalam 90 hari terakhir (max per customer)
    *  - tanpa reservasi aktif masa depan (pending/confirmed/hold, booking_date >= now)
    *  - tanpa NEXT_TREATMENT PENDING/QUEUED (SENT per-stage tidak menghalangi stage masa depan)
-   * Aksi: createNextTreatmentFollowUps(maxBookingDate) → hanya stage masa depan PENDING.
+   * Aksi: createNextTreatmentFollowUps(maxBookingDate) â†’ hanya stage masa depan PENDING.
    */
   public async reconcileOrphanedCompletedFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<{ reconciledCount: number; customerIds: string[] }> {
     const empty = { reconciledCount: 0, customerIds: [] as string[] };
@@ -934,7 +942,7 @@ export class FollowUpService {
       const candidates = customerIds.filter((id) => !hasActiveFuture.has(id));
       if (candidates.length === 0) return empty;
 
-      // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED (SENT tidak dihitung — per-stage guard akan skip stage SENT)
+      // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED (SENT tidak dihitung â€” per-stage guard akan skip stage SENT)
       let hasNext: Array<{ customer_id: string }> = [];
       try {
         hasNext = (await prisma.followUp.findMany({
@@ -951,13 +959,13 @@ export class FollowUpService {
       const orphaned = candidates.filter((id) => !hasNextSet.has(id));
       if (orphaned.length === 0) return empty;
 
-      // 4. Filter bypass/sandbox/dummy/blocked (DB lesu → filter best-effort, hilangkan yang jelas bypass)
+      // 4. Filter bypass/sandbox/dummy/blocked (DB lesu â†’ filter best-effort, hilangkan yang jelas bypass)
       let filtered = orphaned;
       try {
         const customers = (await prisma.customer.findMany({
           where: { id: { in: orphaned } },
           select: { id: true, phone: true, name: true, status: true, is_sandbox_test: true, is_admin_labeled: true },
-          // include labels untuk hasBypassLabel — best-effort via second query bila select tidak cukup
+          // include labels untuk hasBypassLabel â€” best-effort via second query bila select tidak cukup
         })) as any[];
         // Secondary: load labels untuk hasBypassLabel (hanya bila customer ditemukan)
         let labelMap = new Map<string, any>();
@@ -975,7 +983,7 @@ export class FollowUpService {
           const withLabels = labelMap.get(c.id);
           if (withLabels && hasBypassLabel(withLabels)) continue;
           if (isDummyOrTestContact(c.phone, c.name)) continue;
-          // checkCustomerBypass — async, best-effort
+          // checkCustomerBypass â€” async, best-effort
           try {
             // eslint-disable-next-line no-await-in-loop
             if (await checkCustomerBypass({ customerId: c.id, tenantId })) continue;
@@ -1005,7 +1013,7 @@ export class FollowUpService {
             reconciledCount++;
             reconciledIds.push(cid);
           } else if (before === 0) {
-            // Offline mock (count gagal) — tetap anggap reconcile attempted
+            // Offline mock (count gagal) â€” tetap anggap reconcile attempted
             reconciledCount++;
             reconciledIds.push(cid);
           }
@@ -1023,7 +1031,7 @@ export class FollowUpService {
   }
 
   /**
-   * Manual Send (Approve & Send Now) — dipanggil dari Admin Dashboard.
+   * Manual Send (Approve & Send Now) â€” dipanggil dari Admin Dashboard.
    */
   public async sendNow(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
     const fu = await prisma.followUp.findFirst({
@@ -1083,7 +1091,7 @@ export class FollowUpService {
 
   /**
    * Cancel single follow-up.
-   * `options.reason` opsional — tersimpan di cancel_reason agar admin tahu
+   * `options.reason` opsional â€” tersimpan di cancel_reason agar admin tahu
    * mengapa antrian ini batal. Default: pembatalan manual oleh Admin.
    */
   public async cancelFollowUp(
@@ -1101,7 +1109,7 @@ export class FollowUpService {
 
   /**
    * Skip seluruh antrian follow-up aktif untuk customer bypass/admin.
-   * Central seam Fase 1 — status kanonis SKIPPED + CANCEL_REASON.BYPASS_LABEL,
+   * Central seam Fase 1 â€” status kanonis SKIPPED + CANCEL_REASON.BYPASS_LABEL,
    * terisolasi tenant_id. Dipanggil dari label route & customer.service hook.
    */
   public async skipFollowUpsForBypassCustomer(
@@ -1134,7 +1142,7 @@ export class FollowUpService {
 
   /**
    * Bulk cancel follow-ups (misal semua PENDING atau QUEUED).
-   * `options.reason` opsional — default: pembatalan massal oleh Admin.
+   * `options.reason` opsional â€” default: pembatalan massal oleh Admin.
    */
   public async bulkCancelFollowUps(
     tenantId: string = DEFAULT_TENANT_ID,
@@ -1339,7 +1347,7 @@ export class FollowUpService {
       }
 
       // Self-Healing Prune Fase 2.1: bersihkan zombie PENDING/QUEUED milik kontak admin/bypass
-      // sebelum batch — query terisolasi tenant, 1 updateMany, status kanonis SKIPPED.
+      // sebelum batch â€” query terisolasi tenant, 1 updateMany, status kanonis SKIPPED.
       try {
         const pruned = await prisma.followUp.updateMany({
           where: {
@@ -1494,7 +1502,7 @@ export class FollowUpService {
    * Tentukan template milestone utk follow-up NEXT_TREATMENT.
    * 1) Hanya NEXT_TREATMENT. 2) Butuh anak dgn birth_date.
    * 3) Kategori BABY dari reservasi terakhir customer.
-   * 4) Umur bayi ≈ milestone (3/6/9/12) dlm rentang ±1 bulan (env MILESTONE_WINDOW_DAYS).
+   * 4) Umur bayi â‰ˆ milestone (3/6/9/12) dlm rentang Â±1 bulan (env MILESTONE_WINDOW_DAYS).
    */
   public async resolveMilestoneType(
     fu: any,
@@ -1601,7 +1609,7 @@ export class FollowUpService {
         timeStr = `${hours}:${minutes} WIB`;
       }
 
-      // Provider-aware send: WABA → HSM template + consent gatekeeper; WAHA → rolling text (existing)
+      // Provider-aware send: WABA â†’ HSM template + consent gatekeeper; WAHA â†’ rolling text (existing)
       const gateway = await resolveGatewayForTenant(tenantId);
       if (gateway.providerType === 'WABA') {
         return this.executeFollowUpWaba(fu, templateType, cleanName || 'Bunda', tenantId);

@@ -132,6 +132,58 @@ export type TestCaseV2 = z.infer<typeof TestCaseV2Schema>;
 export type ReferenceRules = z.infer<typeof ReferenceRulesSchema>;
 export type TestSuiteV2 = z.infer<typeof TestSuiteV2Schema>;
 
+/** Episode Tier — 5 tingkatan skenario komprehensif */
+export const EpisodeTier = z.enum([
+  'TIER1_NORMAL_INQUIRY',
+  'TIER1_LOCATION_FEE',
+  'TIER1_BOOKING_FLOW',
+  'TIER2_LINGUISTIC_TYPO_SLANG',
+  'TIER2_BURST_AND_AMBIGUOUS',
+  'TIER3_CLINICAL_SYMPTOM_SOP',
+  'TIER3_POST_VACCINE_OR_AGE',
+  'TIER4_SCHEDULE_CONFLICT_RESCHEDULE',
+  'TIER4_PRICE_NEGOTIATION_OR_DISPUTE',
+  'TIER5_RED_FLAG_EMERGENCY',
+  'TIER5_SECURITY_ADVERSARIAL',
+]);
+export type EpisodeTier = z.infer<typeof EpisodeTier>;
+
+export const EpisodeExpectedBehaviorSchema = z.object({
+  expected_final_state: z.string().optional(),
+  expected_reservation_fields: ExpectedReservationFieldsSchema.optional(),
+  expected_sop_compliance: z.array(z.string()).optional(),
+  expected_tools_masked: z.array(z.string()).optional(),
+  expected_total_price: z.number().int().nullable().optional(),
+});
+export type EpisodeExpectedBehavior = z.infer<typeof EpisodeExpectedBehaviorSchema>;
+
+export const EpisodeSchema = z.object({
+  episodeId: z.string().regex(/^(CASE-\d{3}|RF-\d{2}|CX-\d{2}|ADV-\d{2}|OPS-\d{2})_EP\d{2}$/),
+  sourceCaseId: z.string().regex(/^(CASE-\d{3}|RF-\d{2}|CX-\d{2}|ADV-\d{2}|OPS-\d{2})$/),
+  episodeIndex: z.number().int().nonnegative(),
+  tier: EpisodeTier,
+  customerDialogueFlow: z.array(z.string()).min(2).max(5),
+  expectedBehavior: EpisodeExpectedBehaviorSchema,
+  seedTurnIds: z.array(z.number().int().nonnegative()),
+});
+export type Episode = z.infer<typeof EpisodeSchema>;
+
+export const EpisodesFixtureMetaSchema = z.object({
+  version: z.literal('2.0-episodes'),
+  generated_at: z.string().datetime(),
+  tenant_id: z.string(),
+  source_version: z.string(),
+  source_total_cases: z.number().int(),
+  total_episodes: z.number().int(),
+  tier_distribution: z.record(EpisodeTier, z.number().int().nonnegative()),
+});
+
+export const EpisodesFixtureSchema = z.object({
+  meta: EpisodesFixtureMetaSchema,
+  episodes: z.array(EpisodeSchema),
+});
+export type EpisodesFixture = z.infer<typeof EpisodesFixtureSchema>;
+
 /** Regex hygiene PII — HANYA untuk gate keamanan fixture, bukan untuk intent pengguna. */
 export const RAW_PHONE_RE = /\b(?:62\d{8,12}|08\d{7,11}|\+?62[\s-]?\d{9,13})\b/g;
 export const RAW_EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/g;

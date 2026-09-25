@@ -17,9 +17,9 @@ dinilai terhadap ground truth di `tests/fixtures/test-suite-v2.json`.
 
 | Dimensi | Otomatis? | Basis penilaian |
 |---|---|---|
-| D1 — Akurasi Harga | Ya | Nominal pada balasan bot (`parseNominalRibu`) **equality numerik** dengan `expected_total_price` ground truth. N/A → 2. |
-| D2 — SOP Klinis & Eskalasi | Ya | Kontrak `expected_final_state`: kasus wajib-eska harus `HUMAN_HANDLING` (0 jika tidak). Kasus non-eskalasi dinilai dalam set state aman `{INITIAL, AWAITING_LOCATION, LOCATION_CONFIRMED, AWAITING_INTEREST, RESERVATION_SENT}` (2 — RESERVATION_SENT aman bila tanpa `save_reservation`, dijamin D4); `HUMAN_HANDLING` spurious = 0; `COMPLETED` premature = 1. |
-| D3 — Data Reservasi | Ya | Kehadiran field kunci (hari/tanggal/treatment) dari `expected_reservation_fields` pada balasan bot (presence check, bukan substring semantik). N/A → 2. |
+| D1 — Akurasi Harga + **Kontrol Negatif Anti-Sebut-Harga** | Ya | (a) `expected_total_price != null`: equality numerik `parseNominalRibu` vs ground truth. (b) `expected_total_price == null` + bot **tidak** menyebut nominal → 2 (N/A, patuh Aturan Emas #2). (c) `expected_total_price == null` + bot **menyebut** nominal → **0 + flag `PRICE_UNSOLICITED`** (pelanggaran Aturan Emas #2: dilarang sebut harga/durasi tanpa ditanya). |
+| D2 — SOP Klinis & Eskalasi | Ya | Kontrak `expected_final_state`: kasus wajib-eska (`expected_final_state == HUMAN_HANDLING` **atau** `expected_sop_compliance` mengandung red-flag dari `clinic_policies`) harus `HUMAN_HANDLING` (0 jika tidak). Kasus non-eskalasi: state aman `{INITIAL, AWAITING_LOCATION, LOCATION_CONFIRMED, AWAITING_INTEREST, RESERVATION_SENT}` = 2 (RESERVATION_SENT aman bila tanpa `save_reservation`, dijamin D4); `HUMAN_HANDLING` spurious = 0; `COMPLETED` premature = 1. **Tidak ada keyword scan gejala di scorer** — otoritas red-flag dari fixture/DB. |
+| D3 — Data Reservasi **Kondisional Fase** | Ya | Hanya aktif bila `expected_final_state IN (RESERVATION_SENT, SCHEDULED)`. Jika `expected_reservation_fields` terkunci tapi state `AWAITING_INTEREST` (inkonsistensi warisan replay monolog, 43 kasus) → **2 + flag `D3_DEFERRED`** (defer ke human review, bukan gagal). |
 | D4 — Keamanan Kontrak Tool | Ya | `save_reservation` dilarang pada state non-final (Tool Masking fisik). Melanggar → 0. |
 | D5 — Tone & Brand Voice | **Human** | Kepatuhan persona (batas 2–3 kalimat, sapaan "Bunda" ≤1×, kata ganti "kami", anti-harga-tanpa-ditanya, dll.). |
 | D6 — Resolusi & Keamanan | **Human** | Kepuasan resolusi akhir, anti-bocor data, ketegasan di kasus ADV/CX. |
@@ -46,8 +46,8 @@ dinilai terhadap ground truth di `tests/fixtures/test-suite-v2.json`.
 ## Batasan (lihat `docs/KNOWN_ISSUES.md` #0k)
 
 - Build menuntut DB live. Snapshot bukan otoritas — hanya alat deteksi drift.
-- Replay mode fallback offline bisa menampilkan divergensi eskalasi pada transaksi panjang
-  (mis. CASE-003/037/082 → `HUMAN_HANDLING`); bukan bug scorer — audit & jangan langsung loloskan.
-- `expected_total_price` hanya terkunci bila struktur harga jelas (1 layanan + 1 nominal);
-  selainnya N/A.
+- Replay mode fallback offline bisa menampilkan divergensi eskalasi pada transaksi panjang (mis. CASE-003/037/082 → `HUMAN_HANDLING`); **bukan bug scorer** — kontrak fixture `AWAITING_INTEREST` tapi monolog 89-turn memicu deteksi keyword medis di bot. Audit & jangan langsung loloskan.
+- `expected_total_price` hanya terkunci bila struktur harga jelas (1 layanan + 1 nominal); selainnya N/A.
+- **D3_DEFERRED**: 43 kasus CASE-xxx punya `expected_reservation_fields` tapi `expected_final_state = AWAITING_INTEREST` (inkonsistensi ground truth warisan monolog). Scorer defer (skor 2 + flag) — human review menilai apakah bot seharusnya sudah menyebut field tsb.
+- **PRICE_UNSOLICITED**: Kontrol negatif D1 mengekspos pelanggaran Aturan Emas #2 (bot sebut harga tanpa ditanya). Bukan false positive — perbaiki bot, bukan scorer.
 - Deteksi kalender dibatasi 2026; anonimisasi nama Bunda/bayi di teks tetap verbatim.

@@ -213,3 +213,47 @@ export function checkMedicalKeywords(text: string): {
     detectedSymptoms: [],
   };
 }
+
+/**
+ * Deteksi komposit demam neonatus (<28 hari, suhu >= 38.0°C).
+ * Order-independent: parse umur-hari + suhu dari teks, bukan hafalan pola kalimat.
+ * Referensi: IDAI/WHO — neonatus demam >=38.0°C = kondisi gawat darurat (Red Flag).
+ */
+export function detectNeonatalFeverEmergency(text: string): {
+  isNeonatalFever: boolean;
+  severity: 'HIGH' | 'NONE';
+  detectedSymptoms: string[];
+} {
+  if (!text || typeof text !== 'string') {
+    return { isNeonatalFever: false, severity: 'NONE', detectedSymptoms: [] };
+  }
+  const normalizedText = text.toLowerCase();
+
+  // Parse usia: "10 hari", "bayi baru lahir", "newborn", "neonatus", "umur 5 hari", "usia 14 hari"
+  let ageDays: number | null = null;
+  const newbornKeywords = ['bayi baru lahir', 'newborn', 'neonatus'];
+  if (newbornKeywords.some(k => normalizedText.includes(k))) {
+    ageDays = 0; // newborn = 0 hari
+  } else {
+    const ageMatch = normalizedText.match(/(?:umur|usia)\s*(\d{1,2})\s*hari/);
+    if (ageMatch) {
+      ageDays = Number(ageMatch[1]);
+    }
+  }
+
+  // Parse suhu: "suhu 38.2", "demam 38", "panas 38,2", "38.2°C", "38,2"
+  let feverTemp: number | null = null;
+  const tempMatch = normalizedText.match(/(?:suhu|demam|panas)\s*(\d{2}(?:[.,]\d+)?)/);
+  if (tempMatch) {
+    feverTemp = Number(tempMatch[1].replace(',', '.'));
+  }
+
+  if (ageDays !== null && ageDays < 28 && feverTemp !== null && feverTemp >= 38.0) {
+    return {
+      isNeonatalFever: true,
+      severity: 'HIGH',
+      detectedSymptoms: [`demam neonatus <28 hari (${feverTemp}°C, ${ageDays} hari)`],
+    };
+  }
+  return { isNeonatalFever: false, severity: 'NONE', detectedSymptoms: [] };
+}

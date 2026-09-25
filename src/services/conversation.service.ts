@@ -131,10 +131,10 @@ export class ConversationService {
         tenant_id: tenantId,
         messages: { some: {} },
       };
-      if (process.env.NODE_ENV === 'production') {
+      if (mode === 'sandbox') {
+        where.customer = { is_sandbox_test: true };
+      } else if (mode === 'real' || (process.env.NODE_ENV === 'production' && mode === 'all')) {
         where.customer = { is_sandbox_test: false };
-      } else if (mode !== 'all') {
-        where.customer = { is_sandbox_test: mode === 'sandbox' };
       }
       if (search && search.trim()) {
         const query = search.trim();
@@ -182,14 +182,18 @@ export class ConversationService {
           if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
           return new Date(b.last_message_at || b.updated_at).getTime() - new Date(a.last_message_at || a.updated_at).getTime();
         });
-      const filtered = mode === 'all' ? all : [];
-      if (mode !== 'all') {
+      const isProd = process.env.NODE_ENV === 'production';
+      const effectiveFilterMode = isProd && mode === 'all' ? 'real' : mode;
+      const filtered: any[] = [];
+      if (effectiveFilterMode === 'all') {
+        filtered.push(...all);
+      } else {
         for (const c of all) {
           try {
             const cust = await customerService.getCustomerById(c.customer_id, tenantId);
-            if (cust && !!cust.is_sandbox_test === (mode === 'sandbox')) filtered.push(c);
+            if (cust && !!cust.is_sandbox_test === (effectiveFilterMode === 'sandbox')) filtered.push(c);
           } catch (e) {
-            if (mode === 'real') filtered.push(c);
+            if (effectiveFilterMode === 'real') filtered.push(c);
           }
         }
       }
