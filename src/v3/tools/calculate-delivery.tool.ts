@@ -622,7 +622,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // Kontrak 779408: nominal ongkir dibuka bila customer menanya biaya ATAU
     // lokasi terverifikasi PRESISI (bukan centroid estimasi) & dalam jangkauan.
     const resolvedIsPrecise = resolved.isPrecise || Boolean(resolved.kelurahan);
-    const showFeeNominal = askedFee || (resolvedIsPrecise && !centroidActive && !isOutOfCoverage);
+    const hasSpecificAddress = hasSpecificAddressDetail(compositeQuery, streetDetail);
+    // Buka nominal ongkir bila: customer bertanya biaya, ATAU lokasi presisi kelurahan,
+    // ATAU customer memberikan detail jalan/nomor spesifik dalam jangkauan
+    const showFeeNominal = askedFee || ((resolvedIsPrecise || hasSpecificAddress) && !isOutOfCoverage);
     const baseTemplateReply = isOutOfCoverage
       ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
       : showFeeNominal
