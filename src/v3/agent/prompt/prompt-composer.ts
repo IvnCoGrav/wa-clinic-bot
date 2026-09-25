@@ -49,6 +49,7 @@ import {
   SCHEDULE_NEG_CONSTRAINTS_RULE21,
   SCHEDULE_NEG_CONSTRAINTS_TAIL,
   TOOL_GUIDANCE_BLOCK,
+  buildToolGuidanceBlock,
 } from './phases/scheduling.phase';
 import { isFunnelCommitted } from '../pipeline/phase-resolver';
 import {
@@ -126,6 +127,8 @@ export interface RouterPromptOpts {
 export interface SystemPromptOpts {
   history?: Array<{ role: string; content: string }>;
   askedLocationRecently?: boolean;
+  isCalculateDeliveryMasked?: boolean;
+  isSaveReservationMasked?: boolean;
   /**
    * Fase 3.5 — injeksi fase operasional dinamis (OPT-IN).
    * Tidak disetel → rakitan penuh identik eksisting (safe-mode, byte-identik).
@@ -297,7 +300,7 @@ ${OVERCLAIM_BLOCK}
 
   ${negConstraints}
 
-${TOOL_GUIDANCE_BLOCK}
+${buildToolGuidanceBlock({ isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked, isSaveReservationMasked: opts?.isSaveReservationMasked })}
 
 ${STABLE_PREFIX_MARKER}
 ${goalSummary}${focusSuffix}

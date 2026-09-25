@@ -165,6 +165,8 @@ export interface TurnState {
   generatorApiKey?: string;
   turnStartedAt: number;
   correlationId: string;
+  /** Single masking eval pasca-latch (P1-1) — di-threading dari agent-runner. */
+  maskingEval?: any;
   /** ID kanonis turn inbound (aditif, opsional). */
   turnId?: string;
   /** Provider asal pesan (aditif, opsional). */
@@ -510,10 +512,13 @@ export class GenerationStage {
       dynamicToolChoice = { type: 'function', function: { name: 'get_catalog_and_price' } };
     }
 
-    // Tool-Masking Evaluation (FASE 2, SHADOW MODE)
-    const { evaluateToolMasking } = await import('../../tools/tool-masker');
+    // Tool-Masking Evaluation — P1-1 single source (threaded dari agent-runner pasca-latch)
     const { isToolMaskingEnforced } = await import('../../../config/feature-flags');
-    const maskingEval = evaluateToolMasking(ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory);
+    let maskingEval: any = (turn as any).maskingEval;
+    if (!maskingEval) {
+      const { evaluateToolMasking } = await import('../../tools/tool-masker');
+      maskingEval = evaluateToolMasking(ALL_V3_TOOLS, session, cleanIncomingText, conversationHistory);
+    }
 
     // Tool Schema Filtering untuk Call 1:
     // Jika di-forcing ke 1 tool spesifik, kirim HANYA tool tersebut (hemat ~1.500 token).
