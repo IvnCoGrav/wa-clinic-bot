@@ -161,9 +161,12 @@ export function sanitizePayloadRawForStaff(payloadRaw: any): any {
     payloadRaw.message?.liveLocationMessage ||
     payloadRaw._data?.location;
   if (locCandidate && typeof locCandidate === 'object') {
-    const lat = (locCandidate as any).degreesLatitude ?? (locCandidate as any).latitude ?? (locCandidate as any).lat;
-    const lng = (locCandidate as any).degreesLongitude ?? (locCandidate as any).longitude ?? (locCandidate as any).lng;
-    if (typeof lat === 'number' && typeof lng === 'number' && !(lat === 0 && lng === 0) && !isNaN(lat) && !isNaN(lng)) {
+    const latRaw = (locCandidate as any).degreesLatitude ?? (locCandidate as any).latitude ?? (locCandidate as any).lat;
+    const lngRaw = (locCandidate as any).degreesLongitude ?? (locCandidate as any).longitude ?? (locCandidate as any).lng;
+    if (typeof latRaw === 'number' && typeof lngRaw === 'number' && !(latRaw === 0 && lngRaw === 0) && !isNaN(latRaw) && !isNaN(lngRaw)) {
+      // P3-4: grid lat/lng untuk terapis (±1km, 2 desimal) — jangan kirim 6 desimal presisi rumah
+      const lat = Math.round(latRaw * 100) / 100;
+      const lng = Math.round(lngRaw * 100) / 100;
       const locFiltered: any = {
         latitude: lat,
         longitude: lng,
@@ -174,7 +177,7 @@ export function sanitizePayloadRawForStaff(payloadRaw: any): any {
       };
       if ((locCandidate as any).isLive !== undefined) locFiltered.isLive = !!(locCandidate as any).isLive;
       else if (payloadRaw._data?.message?.liveLocationMessage || payloadRaw.message?.liveLocationMessage) locFiltered.isLive = true;
-      if (typeof (locCandidate as any).address === 'string') locFiltered.address = maskPhoneInText((locCandidate as any).address);
+      if (typeof (locCandidate as any).address === 'string') locFiltered.address = maskAddress(maskPhoneInText((locCandidate as any).address));
       else if ((locCandidate as any).address) locFiltered.address = (locCandidate as any).address;
       if (typeof (locCandidate as any).name === 'string') locFiltered.name = maskPhoneInText((locCandidate as any).name);
       else if ((locCandidate as any).name) locFiltered.name = (locCandidate as any).name;
