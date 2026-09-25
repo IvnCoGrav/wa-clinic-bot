@@ -235,32 +235,29 @@ export class HumanBackgroundEnrichmentService {
 
       // 2. DETEKSI LINK GOOGLE MAPS DI DALAM CHAT ATAU ALAMAT (maps.app.goo.gl / goo.gl/maps)
       if (incomingText && incomingText.trim()) {
-        const mapsUrls = extractGoogleMapsUrls(incomingText);
-        if (mapsUrls.length > 0) {
-          const resolvedUrlCoords = await resolveGoogleMapsUrl(mapsUrls[0]);
-          if (resolvedUrlCoords.success && resolvedUrlCoords.lat != null && resolvedUrlCoords.lng != null) {
-            const { geocodingService } = await import('../integrations/google-maps/geocoding');
-            const { deliveryService } = await import('./delivery.service');
-            const { customerService } = await import('./customer.service');
-            const resolved = await geocodingService.reverseGeocode(resolvedUrlCoords.lat, resolvedUrlCoords.lng);
-            const delivery = await deliveryService.calculateDelivery({ lat: resolvedUrlCoords.lat, lng: resolvedUrlCoords.lng }, undefined, tid);
+        try {
+          const { resolveLocationFromUrl } = await import('./location-resolver.service');
+          const { customerService } = await import('./customer.service');
+          const res = await resolveLocationFromUrl(incomingText, tid);
+          if (res.success && res.lat != null && res.lng != null) {
+            // Use the resolver result directly - it already has kelurahan/kecamatan/kota/distance/ongkir
             await customerService.updateCustomerLocation(customer.id, {
-              kelurahan: resolved.kelurahan,
-              kecamatan: resolved.kecamatan,
-              kota: resolved.kota,
-              lat: resolvedUrlCoords.lat,
-              lng: resolvedUrlCoords.lng,
-              distanceKm: delivery.distanceKm,
-              ongkir: delivery.ongkir,
-              isOutOfCoverage: delivery.isOutOfCoverage,
-              zipcode: resolved.zipcode,
-              isNativePin: true,
+              kelurahan: res.kelurahan,
+              kecamatan: res.kecamatan,
+              kota: res.kota,
+              lat: res.lat,
+              lng: res.lng,
+              distanceKm: res.distanceKm,
+              ongkir: res.ongkir,
+              isOutOfCoverage: res.isOutOfCoverage,
+              zipcode: res.zipcode,
+              // isNativePin: false - URL-resolved is NOT a native GPS pin
             }, tid);
-            await customerService.markShareLocationSent(customer.id, tid);
-            console.log(`[HUMAN ENRICH] Google Maps link resolved for ${customer.phone}: ${delivery.distanceKm}km ongkir ${delivery.ongkir}`);
+            // Do NOT mark share_location_sent for URL-resolved (not native GPS)
+            console.log(`[HUMAN ENRICH] Google Maps link resolved for ${customer.phone}: ${res.distanceKm}km ongkir ${res.ongkir} (source: ${res.source})`);
             return { enriched: true, reason: 'google_maps_url' };
           }
-        }
+        } catch {}
       }
 
       // 3. DETEKSI FORMULIR RESERVASI WHATSAPP

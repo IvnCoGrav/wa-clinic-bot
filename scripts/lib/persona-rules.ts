@@ -71,8 +71,9 @@ export function buildAutoFlags(opts: {
   finalState: string;
   reply: string;
   abuseBlocked: boolean;
+  isSuiteMode?: boolean;
 }): AutoFlag[] {
-  const { no, category, finalState, reply, abuseBlocked } = opts;
+  const { no, category, finalState, reply, abuseBlocked, isSuiteMode = false } = opts;
   const flags: AutoFlag[] = [];
 
   // 1. Aturan keras persona: frasa terlarang.
@@ -96,9 +97,9 @@ export function buildAutoFlags(opts: {
     });
   }
 
-  // 2. Bahasa asing mencolok (skenario #25 bahasa Inggris).
-  const eng = isEnglishHeavy(reply);
-  if (no === 25) {
+  // 2. Bahasa asing mencolok (legacy skenario #25 bahasa Inggris) — hanya non-suite mode.
+  if (!isSuiteMode && no === 25) {
+    const eng = isEnglishHeavy(reply);
     if (eng.heavy) {
       flags.push({
         pass: false,
@@ -123,8 +124,8 @@ export function buildAutoFlags(opts: {
     }
   }
 
-  // 4. Skenario #41 (asking_schedule): jangan janji slot tanpa eskalasi.
-  if (no === 41) {
+  // 4. Skenario legacy #41 (asking_schedule): jangan janji slot tanpa eskalasi — hanya non-suite mode.
+  if (!isSuiteMode && no === 41) {
     const promised = isSchedulePromise(reply);
     if (finalState !== 'HUMAN_HANDLING' && promised) {
       flags.push({
@@ -143,8 +144,8 @@ export function buildAutoFlags(opts: {
     }
   }
 
-  // 5. Skenario #49 (uninvited link): customer WAJIB ter-block.
-  if (no === 49) {
+  // 5. Skenario legacy #49 (uninvited link): customer WAJIB ter-block — hanya non-suite mode.
+  if (!isSuiteMode && no === 49) {
     if (!abuseBlocked) {
       flags.push({
         pass: false,

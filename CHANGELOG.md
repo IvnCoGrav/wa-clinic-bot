@@ -4,6 +4,79 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-25 — Overhaul UX Mobile & LiveChat: Sticky Footer Reservasi, Smart Banner Form 1-Tap, Konsolidasi Menu Tools
+
+- **`CreateReservationModal` — sticky footer & stacked action sheet mobile:**
+  - Area scroll dipisah dari footer aksi (flex-col; footer tetap DALAM `<form>` sehingga `type="submit"` & dirty-tracking tetap hidup — menghindari tombol mati akibat pemisahan footer). Total tagihan + tombol utama kini selalu terlihat tanpa scroll ke ujung formulir.
+  - < 640px: ringkasan `Total:` selalu tampil, tombol utama full-width 46px (`Simpan & Masukkan Invoice ke Chat` / `Simpan & Buat Jadwal`), baris sekunder Batal + Simpan + ikon Draf; ≥ 640px tetap baris horizontal rapi. Safe-area bottom inset + `scroll-pb-32 sm:scroll-pb-8` pada area gulir.
+- **Soft-keyboard handling mobile:** listener `focusin` (gerbang `max-width: 639px`) auto-scroll input yang difokus ke tengah form — debounce 120ms + `clearTimeout` cleanup, agar input tidak tertutup keyboard virtual.
+- **Quick age preset chips:** pill 1-tap (`Newborn`…`2 thn`) di bawah input usia anak untuk mengisi usia tanpa pindah keyboard (preset UI presentational).
+- **Extractor — flag deterministik `hasExplicitReservationForm` (`chatScheduleExtractor.ts`):** `true` hanya bila blok formulir terisi (gate `pickFilledFormBlock` — template kosong bot dijamin `false`) berisi (tanggal ATAU jam) + (nama bunda ATAU nama anak ATAU treatment). 13 test adversarial baru: `tests/unit/chat-schedule-extractor-form-flag.test.ts` (parafrase, huruf besar, form parsial, chat bebas tanpa form, data DB tanpa form).
+- **`LiveChatMonitor` — smart banner "FORM RESERVASI MASUK":** muncul di atas thread saat form terdeteksi & tanpa hold/confirmed/pending; dismiss bertahan per-signatur form (form baru → banner tampil lagi); tombol 1-tap `Jadwalkan & Buat Invoice` membuka `CreateReservationModal` ter-prefill tanggal/jam/anak/layanan.
+- **Konsolidasi menu Tools anti split-brain (`LiveChatComposer` + `LiveChatMonitor`):**
+  - `Buat Reservasi & Invoice` menyatukan alur reservasi + invoice; opsi invoice berubah per konteks lewat prop baru `hasActiveReservation` (`Salin Invoice Jadwal` bila ada jadwal aktif, selain itu diarahkan buat reservasi dulu).
+  - GERBANG deterministik `handleGenerateActiveReservationInvoice`: invoice kini HANYA dibuat dari reservasi confirmed/pending di kalender — jalur invoice-teks dari ekstraksi chat bebas dihapus (~75 baris duplikasi), mencegah invoice tanpa jadwal kalender.
+- **Perbaikan kelas mati Tailwind:** `active:scale-97` (tidak terdefinisi di config — kelas mati, tekan tombol tanpa efek) diganti `active:scale-95` di 10 tempat (`CreateReservationModal` ×8, `StaffScheduleTimelineStrip` ×2); audit CSS hasil build: `scale-97` = 0, `scale-95` ada.
+- **Verifikasi:** `npm test` 3506 pass (1 flaky timeout terisolasi pass saat dijalankan sendiri), `npm run build` (backend `tsc`) & `npm --prefix packages/admin-dashboard run build` (`tsc && vite build`) 0 error. Audit dist CSS: `pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]` ter-generate valid (`calc(.75rem + env(...))`, operator di-spacing otomatis Tailwind), `scroll-pb-32` & `min-h-[46px]` hadir.
+
+#### 2026-09-25 — Rekonstruksi Test Suite Chatbot (Phase 1–5: Scorer Contract-Based, Episode Slicer, Persona Simulator, Tier Gates)
+
+- **Phase 1 — Scorer Contract-Based + Negative Controls (`scripts/run-test-plan.ts`, `docs/TEST_SCORING_RUBRIC_V2.md`):**
+  - D1: Kontrol negatif `PRICE_UNSOLICITED` — bot menyebut harga tanpa ditanya → skor 0 + flag (Aturan Emas #2). Sebelumnya N/A selalu 2.
+  - D2: Red-flag authority dari `expected_final_state` / `expected_sop_compliance` (fixture/DB), **no keyword scan gejala** di scorer.
+  - D3: `D3_DEFERRED` — kontrak `expected_reservation_fields` + state `AWAITING_INTEREST` (43 kasus legacy monolog) → skor 2 + flag, bukan gagal.
+  - Gate V2 (101-119): 14/19 lolos, 5 gagal = bug bot asli (bukan false failure).
+
+- **Phase 2 — Episode Slicer (`scripts/lib/conversation-episode-slicer.ts`, `scripts/build-episode-fixture.ts`):**
+  - 119 kasus monolog (1–89 turn) → **478 episode atomik (2–5 turn)**.
+  - Potong berbasis `maxTurns=5` + milestone terminal state, bukan timestamp (fixture tak punya timestamp per-turn).
+  - Tier inference dari `flowCategory`/`priority` existing (11 tier: TIER1–TIER5).
+  - PII hygiene: reuse `anonymizeText`/`scrubAddressNumbers` + gate `RAW_PHONE_RE`/`RAW_EMAIL_RE` (0 hit).
+  - Schema strict zod extended: `EpisodeSchema`, `EpisodesFixtureSchema` — 19 test pass.
+
+- **Phase 3 — Persona Simulator (`scripts/lib/user-persona-simulator.ts`, `scripts/run-test-plan.ts`):**
+  - `--suite=episodes --replay` = replay deterministik offline (0 token).
+  - `--suite=episodes --simulator --llm` = LLM customer simulator (butuh `LLM_API_KEY`), seed deterministik, cap turns, loop detection.
+  - Dual-mode runner: `--only`, `--cat=TIER5`, `--from/--to` untuk batch testing.
+  - Report per-tier dengan `TierGate` column.
+
+- **Phase 4 — Tier-Aware Gates (`scripts/run-test-plan.ts:evaluateTierGate`, `test-results/evidence-map.md`):**
+  - TIER5_RED_FLAG_EMERGENCY: wajib `HUMAN_HANDLING` 100% + D4=2.
+  - TIER5_SECURITY_ADVERSARIAL: wajib **resist** (no `HUMAN_HANDLING`) + D4=2 + **no PRICE_UNSOLICITED**.
+  - TIER4_PRICE_NEGOTIATION: komplain wajib escalate.
+  - TIER4_SCHEDULE: no spurious escalate.
+  - TIER3_CLINICAL: follow fixture contract.
+  - Prefix mapping (RF/ADV/CX/OPS) → tier untuk V2 cases.
+  - Baseline evidence map: RF-06 false negative, ADV-01/03 price leak, ADV-02 no escalate, ADV-04 over-escalate, 28 PRICE_UNSOLICITED.
+
+- **Phase 5 — Commands & Docs:**
+  - `npm run test:episodes:fast` (replay offline), `test:episodes:llm` (simulator), `test:evidence-map`, `test:episode:suite` (TIER5).
+  - Schema test extended 19 cases (V2 + episodes).
+  - All gates: schema ✅, unit 3123 passed ✅, build ✅.
+
+#### 2026-09-25 — Resolusi Bug Filter Sandbox LiveChat, Schema Drift Migration & Telemetri Model Kenari
+
+- **Investigasi Root Cause (Multi-layer Audit):**
+  1. **Tab Filter "QA Tester / Sandbox (Simulasi Lokal)" di Live Chat Monitor kosong mlompong:** Di `src/services/conversation.service.ts:134`, blok `if (process.env.NODE_ENV === 'production') where.customer = { is_sandbox_test: false }` langsung mengunci query Prisma. Pilihan `mode === 'sandbox'` dilewati total. Frontend menerima hanya chat riil (`isSandboxTest: false`), lalu memfilter keluar semuanya (`!(chat as any).isSandboxTest`). Hasilnya nol item.
+  2. **Schema Drift Database Lokal:** Migrasi baru (`20260926000003_customer_soft_delete` dan `20260926000001_add_admin_sessions`) belum diaplikasikan di PostgreSQL lokal, menyebabkan error Prisma P2022 `The column customers.deleted_at does not exist` saat query customer/sandbox.
+  3. **Simulator AI Sandbox (`/admin/sandbox`) tidak menampilkan identitas Model Kenari:** Di backend Kenari (`deepseek-v4-1-flash`) sebenarnya sukses menjawab (tercatat di `logs/llm-2026-09-25.jsonl`), namun response API `/api/admin/sandbox/chat` tidak pernah menyertakan `modelUsed` atau `provider`, dan Kenari tidak mengembalikan raw reasoning terpisah, sehingga user mengira Kenari tidak keluar.
+  4. **Eksekusi Test Runner CLI (`scripts/run-test-plan.ts`) Tidak Masuk ke DB / Live Chat:** Runner test sebelumnya mengunci `InMemory*Repository` (`resetStoresForSuite`) untuk mencegah polusi DB, sehingga kasus pengujian hanya tercetak di terminal tanpa bisa diinspeksi per kasus di UI monitor Live Chat. Selain itu, pemuatan fixture suite v2 terbungkus dalam `if (suiteV2 && !persistToDb)` sehingga mematikan pemilihan skenario saat persistensi aktif.
+- **Perbaikan Fondasional:**
+  1. **`src/services/conversation.service.ts`:** Restrukturisasi filter Prisma & memory fallback — jika `mode === 'sandbox'`, query SELALU mengunci `{ is_sandbox_test: true }` tanpa terblokir `NODE_ENV === 'production'`. Jika `mode === 'all'` di production, baru mengecualikan sandbox.
+  2. **Database Migration:** Dijalankan `npx prisma migrate deploy` (7 migrasi pending sukses diaplikasikan ke database `wa_clinic_db`).
+  3. **Expose Model Telemetry:** `AgentRunnerOutput` dan `/api/admin/sandbox/chat` kini mengembalikan `modelUsed` dan `provider` aktif ke frontend.
+  4. **UI Dashboard & Sandbox Badge:** Menambahkan badge identitas model aktif (`provider · modelUsed`) di header Simulated WhatsApp Chat dan panel Metrics AI Sandbox. Rebuild bundle `packages/admin-dashboard` sukses.
+  5. **`scripts/run-test-plan.ts` DB Persistence (`--persist` / `--livechat` / `--db`):** 
+     - Membuka akses PostgreSQL repositori saat flag `--persist` diberikan (menghilangkan in-memory mock isolation).
+     - Menugaskan nomor telepon terisolasi sandbox kanonis (`62899990000xx`) dan nama pelanggan eksplisit `QA Tester - <CASE-ID>` dengan `is_sandbox_test = true`.
+     - Membersihkan pesan lama sebelum re-run kasus yang sama, sehingga hasil pengujian selalu mencerminkan prompt/model terkini.
+     - Memperbaiki parsing fixture suite v2 agar tetap memuat daftar kasus saat `--persist` aktif.
+- **Verifikasi:** 
+  - `[NEW] tests/unit/conversation-sandbox-mode.test.ts` (4/4 tests pass).
+  - Eksekusi `npx tsx scripts/run-test-plan.ts --suite=v2 --id=CASE-038 --llm --persist` sukses (14 pesan inbound/outbound tersimpan di DB).
+  - Verifikasi query `liveChatService.getConversationList(DEFAULT_TENANT_ID, 5, 0, 'sandbox')` mengembalikan `QA Tester - CASE-038` di urutan teratas ("Baru saja") lengkap dengan seluruh thread percakapan.
+  - `npm run build` backend & frontend hijau.
+
 #### 2026-09-25 — Resolusi 4 Defect Sistemik Percakapan (Trimmer, Leak RAG, D3 Komparasi, D10 Amnesia)
 
 - **Audit ulang plan vs kode/log (bukan menelan klaim):** (1) Isu leak RAG — `return ''` saja TIDAK menangkap pesan tool `search-knowledge-faq.tool.ts:82` karena tak match regex `DEFERRAL`; `<br>` sudah dibersihkan `sanitizer.ts:84-92`. (2) Isu D3 — pada turn audit `calledTools: []` (`app-2026-09-25.log:913`) → `names=[]`, jadi perbaikan matcher saja tak cukup; router wajib memanggil katalog. (3) D10 pasca-reprompt `guardrail-pipeline.ts:624` hanya cek usia. (4) Bug trimmer `pushEnd` monotonik terverifikasi.

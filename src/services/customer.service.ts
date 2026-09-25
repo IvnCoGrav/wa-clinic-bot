@@ -826,6 +826,61 @@ export class CustomerService {
         .catch(() => {});
 
       const finalCustomer = await this.getCustomerById(customerId, tenantId);
+
+      // Auto-recalculate distance_km & ongkir if lat/lng or address components changed
+      const shouldRecalculate =
+        data.lat != null && data.lng != null ||
+        data.kelurahan !== undefined || data.kecamatan !== undefined || data.kota !== undefined;
+
+      if (shouldRecalculate && finalCustomer) {
+        try {
+          let recalcLat: number | null = finalCustomer.lat;
+          let recalcLng: number | null = finalCustomer.lng;
+
+          if (data.lat != null && data.lng != null) {
+            recalcLat = data.lat;
+            recalcLng = data.lng;
+          } else if (!recalcLat || !recalcLng) {
+            // No coords - geocode from address components
+            const kel = data.kelurahan !== undefined ? data.kelurahan : finalCustomer.kelurahan;
+            const kec = data.kecamatan !== undefined ? data.kecamatan : finalCustomer.kecamatan;
+            const kot = data.kota !== undefined ? data.kota : finalCustomer.kota;
+            const query = [kel, kec, kot].filter(Boolean).join(', ');
+            if (query) {
+              const { geocodingService } = await import('../integrations/google-maps/geocoding');
+              const geo = await geocodingService.geocodeText(query);
+              if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+                recalcLat = geo.lat;
+                recalcLng = geo.lng;
+              }
+            }
+          }
+
+          if (recalcLat != null && recalcLng != null) {
+            const { deliveryService } = await import('./delivery.service');
+            const delivery = await deliveryService.calculateDelivery(
+              { lat: recalcLat, lng: recalcLng },
+              undefined,
+              tenantId
+            );
+            await prisma.customer.update({
+              where: { id: customerId },
+              data: {
+                lat: recalcLat,
+                lng: recalcLng,
+                distance_km: delivery.distanceKm,
+                ongkir: delivery.ongkir,
+                is_out_of_coverage: delivery.isOutOfCoverage,
+                location_source: LocationSource.manual_staff,
+              },
+            });
+            console.log(`[CUSTOMER UPDATE] Auto-recalculated distance for ${customerId}: ${delivery.distanceKm} km, ongkir: ${delivery.ongkir}`);
+          }
+        } catch (err: any) {
+          console.warn('[CUSTOMER UPDATE] Auto-recalculate distance failed:', err.message);
+        }
+      }
+
       return finalCustomer || updated;
     } catch (error) {
       // Memory fallback update
@@ -1579,7 +1634,7 @@ export class CustomerService {
     success: boolean;
     data?: {
       customerId: string;
-      source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding';
+      source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded';
       sourceLabel: string;
       lat: number;
       lng: number;
@@ -1672,12 +1727,14 @@ export class CustomerService {
         // Try async shortlink resolve if still no coords but contains google maps url
         if (!coords && content && /maps\.app\.goo\.gl|google\.[a-z.]+\/maps/i.test(content)) {
           try {
-            const { extractGoogleMapsUrls, resolveGoogleMapsUrl } = await import('../utils/google-maps-url-resolver');
+            const { extractGoogleMapsUrls, resolveLocationFromUrl } = await import('./location-resolver.service');
             const urls = extractGoogleMapsUrls(content);
             for (const u of urls) {
-              const res = await resolveGoogleMapsUrl(u);
+              const res = await resolveLocationFromUrl(u, tenantId);
               if (res.success && res.lat != null && res.lng != null) {
                 coords = { lat: res.lat, lng: res.lng, detail: `resolved ${u.slice(0, 40)}` };
+                // Store the resolver result for later use (kelurahan, kecamatan, kota, etc.)
+                (coords as any).resolverResult = res;
                 break;
               }
             }
@@ -1697,7 +1754,7 @@ export class CustomerService {
         if (tier1Candidate && tier2Candidate) break;
       }
 
-      let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding'; sourceLabel: string; detail: string } | null = null;
+      let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded'; sourceLabel: string; detail: string } | null = null;
 
       if (tier1Candidate) {
         chosen = { lat: tier1Candidate.lat, lng: tier1Candidate.lng, source: 'bidan_shareloc', sourceLabel: '📍 Terverifikasi Bidan (Paling Valid)', detail: tier1Candidate.detail };
@@ -1735,11 +1792,24 @@ export class CustomerService {
       const { deliveryService } = await import('./delivery.service');
       const delivery = await deliveryService.calculateDelivery({ lat: chosen.lat, lng: chosen.lng }, undefined, tenantId);
 
+      // If chosen has resolverResult (from URL resolution), use its kelurahan/kecamatan/kota directly
+      // to avoid reverse geocode and preserve provenance (don't mark as gps_pin)
       let resolvedAdmin: any = {};
-      try {
-        const { geocodingService } = await import('../integrations/google-maps/geocoding');
-        resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng);
-      } catch {}
+      const resolverResult = (chosen as any).resolverResult;
+      if (resolverResult && (resolverResult.kelurahan || resolverResult.kecamatan || resolverResult.kota)) {
+        resolvedAdmin = {
+          kelurahan: resolverResult.kelurahan,
+          kecamatan: resolverResult.kecamatan,
+          kota: resolverResult.kota,
+          zipcode: resolverResult.zipcode,
+          formattedAddress: resolverResult.formattedAddress,
+        };
+      } else {
+        try {
+          const { geocodingService } = await import('../integrations/google-maps/geocoding');
+          resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng);
+        } catch {}
+      }
 
       const nowIso = new Date().toISOString();
       const existingPrefs = (customer.preferences as any) || {};
@@ -1770,7 +1840,7 @@ export class CustomerService {
             location_source:
               chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
                 ? LocationSource.gps_pin
-                : chosen.source === 'geocoding'
+                : chosen.source === 'geocoding' || chosen.source === 'url_coords' || chosen.source === 'url_text_geocoded'
                   ? LocationSource.estimated_area
                   : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
             kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
@@ -1820,7 +1890,7 @@ export class CustomerService {
           mem.location_source =
             chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
               ? LocationSource.gps_pin
-              : chosen.source === 'geocoding'
+              : chosen.source === 'geocoding' || chosen.source === 'url_coords' || chosen.source === 'url_text_geocoded'
                 ? LocationSource.estimated_area
                 : mem.location_source ?? LocationSource.estimated_area;
         }

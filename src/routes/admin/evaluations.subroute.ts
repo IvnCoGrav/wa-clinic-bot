@@ -264,6 +264,8 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               reasoning: v3Result.reasoning || null,
               tokens: v3Result.tokens || { prompt: 0, completion: 0, total: 0 },
               costIdr: v3Result.costIdr || 0,
+              modelUsed: v3Result.modelUsed || null,
+              provider: v3Result.provider || null,
               query: combinedRawText,
               burstCount: rawTextList.length,
               timestamp: new Date(),

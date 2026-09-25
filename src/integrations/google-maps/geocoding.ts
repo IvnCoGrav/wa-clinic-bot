@@ -308,7 +308,7 @@ export class GeocodingService {
     // 0. Cek Landmark / Apartemen / Mall Populer terlebih dahulu
     const landmark = findPopularLandmark(locationText);
     if (landmark) {
-      const gazetteerMatch = this.crossCheckGazetteer(landmark.kelurahan, landmark.kecamatan, landmark.kota);
+      const gazetteerMatch = this.crossCheckGazetteer(landmark.kelurahan, landmark.kecamatan, landmark.kota, cityScope);
       if (gazetteerMatch) {
         return {
           ...gazetteerMatch,
@@ -1059,7 +1059,7 @@ OUTPUT JSON:
       console.log(`[LLM GEOCODE] Resolved "${locationText}" → ${JSON.stringify(parsed)}`);
 
       // Cross-check ke gazetteer untuk ambil koordinat
-      const gazetteerResult = this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota);
+      const gazetteerResult = this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota, cityScope);
       if (gazetteerResult) {
         gazetteerResult.isLlmResolved = true;
       }
@@ -1076,7 +1076,8 @@ OUTPUT JSON:
   private crossCheckGazetteer(
     kelurahan?: string | null,
     kecamatan?: string | null,
-    kota?: string | null
+    kota?: string | null,
+    cityScope?: string | null
   ): ResolvedLocation | null {
     try {
       const data = getGazetteerData();
@@ -1092,16 +1093,38 @@ OUTPUT JSON:
         });
 
         // Kota eksplisit dari LLM = otoritas pemutus sebelum fallback kecamatan.
-        if (kota) {
-          const kotaLower = kota.toLowerCase();
+        // Jika kota tidak ada, gunakan cityScope (dari extractCityScope) sebagai filter.
+        const effectiveKota = kota || cityScope;
+        if (effectiveKota) {
+          const kotaLower = effectiveKota.toLowerCase();
           const kotaMatches = matches.filter((m: any) => (m.Kabupaten_Kota || '').toLowerCase() === kotaLower);
           if (kotaMatches.length > 0) {
             matches.splice(0, matches.length, ...kotaMatches);
+          } else if (matches.length > 0) {
+            // Kota disebut tapi tidak cocok dengan hasil -> ambiguity, jangan return precise
+            return {
+              isPrecise: false,
+              ambiguityResults: matches,
+              matchedSpan: kelurahan,
+            };
           }
         }
 
         if (matches.length === 1) {
           const match = matches[0];
+          // Dual-admin check: kelurahan name == kecamatan name (e.g., Wonocolo)
+          // If so, and the kecamatan has multiple kelurahan, return ambiguity instead of precise
+          const isDualAdmin = match.Kelurahan_Desa.toLowerCase().trim() === match.Kecamatan.toLowerCase().trim();
+          if (isDualAdmin) {
+            const subdistricts = data.filter((d: any) => d.Kecamatan === match.Kecamatan && d.Kabupaten_Kota === match.Kabupaten_Kota);
+            if (subdistricts.length > 1) {
+              return {
+                isPrecise: false,
+                ambiguityResults: subdistricts,
+                matchedSpan: kelurahan,
+              };
+            }
+          }
           const coords = match.Koordinat.split(',');
           return {
             isPrecise: true,
@@ -1142,7 +1165,13 @@ OUTPUT JSON:
       // Fallback: cari berdasarkan kecamatan saja — isPrecise false TANPA koordinat (kontrak tipe)
       if (kecamatan) {
         const kecLower = kecamatan.toLowerCase();
-        const matches = data.filter((d: any) => d.Kecamatan.toLowerCase() === kecLower);
+        // Respect cityScope/kota if provided
+        const effectiveKota = kota || cityScope;
+        let matches = data.filter((d: any) => d.Kecamatan.toLowerCase() === kecLower);
+        if (effectiveKota) {
+          const kotaLower = effectiveKota.toLowerCase();
+          matches = matches.filter((m: any) => (m.Kabupaten_Kota || '').toLowerCase() === kotaLower);
+        }
         if (matches.length > 0) {
           return {
             isPrecise: false,

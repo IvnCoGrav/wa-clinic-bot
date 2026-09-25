@@ -775,6 +775,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     const ALLOWED_STAFF_EVENTS = new Set([
       'staff.task_assigned',
       'staff.task_cancelled',
+      'customer.location_updated',
+      'staff.task_completed',
       'message.created',
       'message.updated',
       'message.status_updated',
@@ -788,8 +790,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Event penugasan & pembatalan reservasi staff internal
-        if (event.type === 'staff.task_assigned' || event.type === 'staff.task_cancelled') {
+        // Event penugasan, pembatalan, lokasi, & penyelesaian reservasi staff internal
+        if (event.type === 'staff.task_assigned' || event.type === 'staff.task_cancelled' || event.type === 'customer.location_updated' || event.type === 'staff.task_completed') {
           if (!isSupervisor && event.payload?.staffId && event.payload.staffId !== staffId) {
             return;
           }

@@ -87,6 +87,8 @@ export interface AgentRunnerOutput {
   costIdr: number;
   nextState?: ConversationState;
   contextSummary?: string;
+  modelUsed?: string;
+  provider?: string;
 }
 export class V3AgentRunner {
   public static async processMessage(input: AgentRunnerInput): Promise<AgentRunnerOutput> {
@@ -407,6 +409,8 @@ export class V3AgentRunner {
           ? ConversationState.HUMAN_HANDLING
           : ContextGrounder.deriveConversationState(session, extractFastIntents(cleanIncomingText)),
         contextSummary: lastContextSummary || undefined,
+        modelUsed: turn.selectedModel,
+        provider: turn.provider || generatorModelConfig?.provider || AiModelConfigService.getActiveProvider(tenantId),
       };
     } catch (err: any) {
       // Outage LLM total (Fase B): TANPA balasan generik — eskalasi sunyi.

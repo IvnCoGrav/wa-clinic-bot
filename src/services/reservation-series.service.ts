@@ -15,6 +15,7 @@ export interface CreateSeriesParams {
     bookingDate: Date | string;
     assignedStaffId?: string;
   }>;
+  babies?: Array<{ name: string; ageText?: string }>;
 }
 
 export interface SeriesWithReservations {
@@ -153,6 +154,35 @@ class ReservationSeriesService {
         })),
       };
     });
+
+    // Sync babies if provided (same upsert logic as single reservation edit)
+    if (params.babies && params.babies.length > 0) {
+      for (const b of params.babies) {
+        if (!b.name) continue;
+        try {
+          const existingChild = await prisma.child.findFirst({
+            where: { customer_id: customerId, name: { equals: b.name, mode: 'insensitive' } },
+          });
+          if (existingChild) {
+            await prisma.child.update({
+              where: { id: existingChild.id },
+              data: { raw_age_text: b.ageText || existingChild.raw_age_text },
+            });
+          } else {
+            await prisma.child.create({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                name: b.name,
+                raw_age_text: b.ageText || '',
+              },
+            });
+          }
+        } catch (e: any) {
+          console.warn('[RESERVATION SERIES] Failed to sync baby:', e.message);
+        }
+      }
+    }
 
     // Sync customer LTV cache after series reservations are created
     try {

@@ -69,6 +69,9 @@ export interface LiveChatComposerProps {
   onOpenQuickHold?: () => void;
   onOpenQuickReservation?: () => void;
   onGenerateInvoice?: () => void;
+  /** Fase 5: true bila percakapan punya reservasi aktif (confirmed/pending) di kalender —
+   *  menentukan label & perilaku aksi invoice (salin vs diarahkan buat reservasi dulu). */
+  hasActiveReservation?: boolean;
   onRequestScrollToBottom?: () => void;
 }
 
@@ -228,6 +231,7 @@ const LiveChatComposerInner = (
     onOpenQuickHold,
     onOpenQuickReservation,
     onGenerateInvoice,
+    hasActiveReservation,
     onRequestScrollToBottom,
   } = props;
 
@@ -599,7 +603,7 @@ const LiveChatComposerInner = (
           </button>
 
           {toolsMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
+            <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
               <button
                 type="button"
                 onClick={() => {
@@ -669,8 +673,8 @@ const LiveChatComposerInner = (
                   <CalendarPlus size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-[12px] truncate">Buat Reservasi Baru</p>
-                  <p className="text-[10px] text-[#667781] truncate">Auto-fill data pasien & anak</p>
+                  <p className="font-bold text-[12px] truncate">Buat Reservasi & Invoice</p>
+                  <p className="text-[10px] text-[#667781] truncate">Kunci jadwal & invoice ke chat</p>
                 </div>
               </button>
 
@@ -681,14 +685,21 @@ const LiveChatComposerInner = (
                   onGenerateInvoice?.();
                 }}
                 disabled={sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-sky-50/80 hover:text-sky-700 transition text-left group disabled:opacity-50"
+                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] transition text-left group disabled:opacity-50 ${
+                  hasActiveReservation ? 'hover:bg-sky-50/80 hover:text-sky-700' : 'hover:bg-[#e8f5f2] hover:text-[#008069]'
+                }`}
+                title={hasActiveReservation
+                  ? 'Salin format invoice dari reservasi yang sudah tercatat di kalender'
+                  : 'Belum ada jadwal aktif — akan membuka form reservasi agar invoice tercatat di kalender'}
               >
-                <div className="w-7 h-7 rounded-lg bg-sky-100/80 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                  hasActiveReservation ? 'bg-sky-100/80 text-sky-600' : 'bg-[#e8f5f2] text-[#008069]'
+                }`}>
                   <Receipt size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-[12px] truncate">Generate Invoice / Payment</p>
-                  <p className="text-[10px] text-[#667781] truncate">Isi format rincian ke chat</p>
+                  <p className="font-bold text-[12px] truncate">{hasActiveReservation ? 'Salin Invoice Jadwal' : 'Generate Invoice'}</p>
+                  <p className="text-[10px] text-[#667781] truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal — buat dulu'}</p>
                 </div>
               </button>
 

@@ -38,6 +38,8 @@ interface ChatMessage {
     goalSession?: any;
     contextSummary?: string;
     conversationState?: string;
+    modelUsed?: string | null;
+    provider?: string | null;
   } | null;
 }
 
@@ -382,6 +384,8 @@ export const AiSandbox: React.FC = () => {
         costIdr: data.costIdr || 0,
         latencyMs: endTime - startTime,
         error: data.llmError || null,
+        modelUsed: data.modelUsed || null,
+        provider: data.provider || null,
       };
 
       if (data.sentBubbles && Array.isArray(data.sentBubbles) && data.sentBubbles.length > 0) {
@@ -508,10 +512,18 @@ export const AiSandbox: React.FC = () => {
         {/* Chat Simulator panel */}
         <div className="bg-white border border-[#e9edef] rounded-2xl p-5 flex flex-col h-[560px] justify-between shadow-xs">
           <div className="flex items-center justify-between pb-3 border-b border-[#e9edef] mb-3">
-            <span className="text-xs font-bold text-[#111b21] uppercase flex items-center space-x-1.5">
-              <Sparkles size={14} className="text-[#008069]" />
-              <span>Simulated WhatsApp Chat</span>
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-[#111b21] uppercase flex items-center space-x-1.5">
+                <Sparkles size={14} className="text-[#008069]" />
+                <span>Simulated WhatsApp Chat</span>
+              </span>
+              {inspectorData.modelUsed && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs" title="Model AI yang membalas giliran chat ini">
+                  <Cpu size={10} className="mr-1" />
+                  {inspectorData.provider ? `${inspectorData.provider}: ` : ''}{inspectorData.modelUsed}
+                </span>
+              )}
+            </div>
 
             <div className="flex items-center space-x-2">
               {/* Burst Mode Toggle Pill */}
@@ -1114,8 +1126,14 @@ export const AiSandbox: React.FC = () => {
                 </div>
 
                 {/* Token & cost metrics */}
-                {(inspectorData.tokens || inspectorData.costIdr) && (
+                {(inspectorData.tokens || inspectorData.costIdr || inspectorData.modelUsed) && (
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                    {inspectorData.modelUsed && (
+                      <span className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1">
+                        <Cpu size={11} />
+                        <span>{inspectorData.provider ? `${inspectorData.provider} · ` : ''}{inspectorData.modelUsed}</span>
+                      </span>
+                    )}
                     {typeof inspectorData.tokens?.prompt === 'number' && (
                       <span className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f]">in: {inspectorData.tokens.prompt}</span>
                     )}

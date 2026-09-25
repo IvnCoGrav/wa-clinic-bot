@@ -455,6 +455,32 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
   }, [isOpen, mode]);
 
+  // Fase 2 — Soft-keyboard handling (mobile): saat input menerima fokus, gulir ke
+  // tengah area form agar tidak tertutup keyboard virtual. Gerbang deterministik:
+  // HANYA viewport < 640px (desktop keyboard-fisik tidak perlu auto-scroll janky).
+  useEffect(() => {
+    if (!isOpen) return;
+    const container = formDirtyContainerRef.current;
+    if (!container) return;
+    if (typeof window.matchMedia === 'function' && !window.matchMedia('(max-width: 639px)').matches) return;
+    let scrollTimer: number | undefined;
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName?.toLowerCase();
+      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+      window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 120);
+    };
+    container.addEventListener('focusin', handleFocusIn);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      container.removeEventListener('focusin', handleFocusIn);
+    };
+  }, [isOpen]);
+
   // Load clinic services catalog with auto-repair
   useEffect(() => {
     async function loadCatalog() {
@@ -1373,6 +1399,20 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
   };
 
+  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net)
+  const enrichResWithFormState = (savedRes: any) => {
+    const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), age: b.ageText.trim() }));
+    const enriched = {
+      ...savedRes,
+      babies: formBabies,
+      customer: savedRes?.customer || selectedCustomerInfo || undefined,
+      ongkir: Number(ongkir) || 0,
+      // CATATAN: discount TIDAK disertakan — purchaseValue sudah net (subtotal - discount).
+      // Formatter param `discount` = potongan TAMBAHAN yg BELUM masuk purchaseValue. Form-driven selalu 0.
+    };
+    return enriched;
+  };
+
   const handleForceCreate = async () => {
     setSubmitting(true);
     try {
@@ -1385,7 +1425,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setShowConflictModal(false);
       setConflictInfo(null);
       discardDraft(true);
-      onSuccess(res?.reservation || res?.data || res);
+      const savedRes = res?.reservation || res?.data || res;
+      const enrichedRes = enrichResWithFormState(savedRes);
+      onSuccess(enrichedRes);
       onClose();
     } catch (err: any) {
       toast(`Gagal menyimpan dengan force: ${err.message || 'Terjadi kesalahan'}`, 'error');
@@ -1475,9 +1517,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           toast('Perubahan reservasi berhasil disimpan!', 'success');
           discardDraft(true);
           const savedRes = res?.reservation || res?.data || res || initialReservation;
-          onSuccess(savedRes);
-          if (withInvoice && onSuccessAndInvoice && savedRes) {
-            onSuccessAndInvoice(savedRes);
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
           }
           onClose();
         } catch (editErr: any) {
@@ -1496,8 +1539,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           throw editErr;
         }
       } else if (isMultiSession && multiSessionSchedule.length > 0) {
-        // Multi-Session Series Creation
+        // Multi-Session Series Creation (R3: tambahkan babies ke payload)
         const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
+        const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), ageText: b.ageText.trim() }));
         const res = await apiRequest('/api/admin/reservation-series', {
           method: 'POST',
           body: JSON.stringify({
@@ -1508,6 +1552,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
             assignedStaffId: assignedStaffId || undefined,
             notes: notes.trim() || undefined,
+            babies: formBabies,
             sessions: multiSessionSchedule.map((s) => ({
               sessionNumber: s.sessionNumber,
               bookingDate: new Date(`${s.date}T${s.time}:00`).toISOString(),
@@ -1519,9 +1564,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         toast(`Paket ${multiSessionTotal} sesi berhasil dibuat!`, 'success');
         discardDraft(true);
         const savedRes = res?.data || res;
-        onSuccess(savedRes);
-        if (withInvoice && onSuccessAndInvoice && savedRes) {
-          onSuccessAndInvoice(savedRes);
+        const enrichedRes = enrichResWithFormState(savedRes);
+        onSuccess(enrichedRes);
+        if (withInvoice && onSuccessAndInvoice) {
+          onSuccessAndInvoice(enrichedRes);
         }
         onClose();
       } else {
@@ -1534,9 +1580,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
           discardDraft(true);
           const savedRes = res?.reservation || res?.data || res;
-          onSuccess(savedRes);
-          if (withInvoice && onSuccessAndInvoice && savedRes) {
-            onSuccessAndInvoice(savedRes);
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
           }
           onClose();
          } catch (createErr: any) {
@@ -1674,8 +1721,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           </div>
         )}
 
-        {/* Scrollable Form Body */}
-        <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+        {/* Scrollable Form Body — footer aksi dipisah KE LUAR area gulir tetapi tetap
+            DI DALAM <form> (type="submit" & dirty-tracking tetap hidup — anti tombol mati) */}
+        <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
+          <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
           {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
           {mode !== 'edit' && hasDraft && (
             <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
@@ -1857,7 +1906,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <button
                   type="button"
                   onClick={handleAddBaby}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs flex items-center space-x-1 cursor-pointer active:scale-97"
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs flex items-center space-x-1 cursor-pointer active:scale-95"
                 >
                   <Plus size={12} />
                   <span>+ Tambah Anak</span>
@@ -1900,6 +1949,24 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
                         />
                       </div>
+                      {/* Quick Age Preset Chips — 1-tap ramah jempol mobile (preset UI presentational, bukan katalog/tarif) */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-[#8696a0] font-semibold">Pilih Cepat:</span>
+                        {['Newborn', '1 bln', '2 bln', '3 bln', '6 bln', '1 thn', '2 thn'].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => handleUpdateBaby(idx, 'ageText', preset)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors cursor-pointer active:scale-95 ${
+                              b.ageText?.trim().toLowerCase() === preset.toLowerCase()
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white dark:bg-[#1c272e] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-emerald-50 hover:text-emerald-700'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
 
@@ -1909,7 +1976,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
-                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2 active:scale-97"
+                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2 active:scale-95"
                       >
                         + Duplikat Layanan
                       </button>
@@ -2273,7 +2340,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setAssignedStaffId(user.id)}
-                      className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-97"
+                      className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-95"
                     >
                       <span>⚡ Saya</span>
                     </button>
@@ -2324,7 +2391,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowBookedSlotsModal(true)}
-                    className="p-2 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs transition cursor-pointer active:scale-97"
+                    className="p-2 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs transition cursor-pointer active:scale-95"
                     title="Lihat Jadwal Terisi Hari Ini"
                   >
                     <CalendarDays size={16} />
@@ -2384,7 +2451,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <button
                 type="button"
                 onClick={handleGenerateRecommendations}
-                className="text-xs text-[#008069] dark:text-[#00a884] font-bold hover:underline flex items-center space-x-1.5 cursor-pointer bg-white dark:bg-[#111b21] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-2xs active:scale-97"
+                className="text-xs text-[#008069] dark:text-[#00a884] font-bold hover:underline flex items-center space-x-1.5 cursor-pointer bg-white dark:bg-[#111b21] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-2xs active:scale-95"
               >
                 <Zap size={13} className="text-amber-500 fill-amber-500" />
                 <span>Rekomendasikan Jam</span>
@@ -2714,49 +2781,117 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             />
           </div>
 
-          {/* Footer Actions — safe-area Home Bar */}
-          <div className="pt-3 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between">
-            {mode !== 'edit' ? (
-              <button
-                type="button"
-                onClick={saveDraftManually}
-                className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-                title="Simpan draf lokal selama 1 jam"
-              >
-                <BookmarkPlus size={14} className="text-amber-600" />
-                <span>Simpan Draf</span>
-              </button>
-            ) : (
-              <div />
-            )}
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => void handleSafeClose()}
-                className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-97"
-              >
-                Batal
-              </button>
-              {onSuccessAndInvoice && (
+          </div>
+
+          {/* Footer Actions — pinned di bawah layar (flex-col, di luar area gulir,
+              masih DALAM <form>): total & tombol utama selalu terlihat tanpa scroll ke ujung */}
+          <div className="shrink-0 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] space-y-2">
+            {/* Mobile: ringkasan total selalu terbaca */}
+            <div className="sm:hidden flex items-center justify-between text-xs px-0.5">
+              <span className="text-[#667781] dark:text-[#8696a0]">Total:</span>
+              <span className="font-extrabold text-[#008069] font-mono text-sm">
+                Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            {/* Mobile (< 640px): hierarki stacked — tombol utama full-width 46px */}
+            <div className="sm:hidden space-y-2">
+              {onSuccessAndInvoice ? (
                 <button
                   type="button"
                   disabled={submitting}
                   onClick={handleSubmitWithInvoice}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-97 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
+                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
                   title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
                 >
-                  <Receipt size={14} />
+                  <Receipt size={16} />
                   <span>Simpan & Masukkan Invoice ke Chat</span>
                 </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
+                >
+                  <Check size={16} />
+                  <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
+                </button>
               )}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-97 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Check size={14} />
-                <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSafeClose()}
+                  className="flex-1 min-h-[42px] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95 text-center"
+                >
+                  Batal
+                </button>
+                {onSuccessAndInvoice && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-[2] min-h-[42px] px-3 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Check size={14} />
+                    <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan' : isMultiSession ? `Paket ${multiSessionTotal} Sesi` : 'Simpan Jadwal Saja')}</span>
+                  </button>
+                )}
+                {mode !== 'edit' && (
+                  <button
+                    type="button"
+                    onClick={saveDraftManually}
+                    className="min-h-[42px] w-[42px] shrink-0 rounded-xl bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95"
+                    title="Simpan draf lokal"
+                  >
+                    <BookmarkPlus size={16} className="text-amber-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop (>= 640px): baris horizontal rapi */}
+            <div className="hidden sm:flex items-center justify-between">
+              {mode !== 'edit' ? (
+                <button
+                  type="button"
+                  onClick={saveDraftManually}
+                  className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                  title="Simpan draf lokal selama 1 jam"
+                >
+                  <BookmarkPlus size={14} className="text-amber-600" />
+                  <span>Simpan Draf</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSafeClose()}
+                  className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95"
+                >
+                  Batal
+                </button>
+                {onSuccessAndInvoice && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={handleSubmitWithInvoice}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
+                    title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
+                  >
+                    <Receipt size={14} />
+                    <span>Simpan & Masukkan Invoice ke Chat</span>
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Check size={14} />
+                  <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
+                </button>
+              </div>
             </div>
           </div>
         </form>

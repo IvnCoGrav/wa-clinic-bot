@@ -1379,6 +1379,39 @@ export class StaffReservationService {
       });
 
       const coordsUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;
+
+      // Auto-sync Google Contacts (fire-and-forget)
+      try {
+        const { googleContactsService } = await import('./google-contacts.service');
+        googleContactsService.syncCustomer(tenantId, customer.id, { trigger: 'chat' }).catch(() => {});
+      } catch {}
+
+      // Real-time SSE Broadcast ke Admin Dashboard & Rekan Staf
+      try {
+        const { getLiveChatHub } = await import('./live-chat-hub.service');
+        getLiveChatHub().publish({
+          type: 'customer.location_updated',
+          tenantId,
+          payload: {
+            customerId: updatedCustomer.id,
+            reservationId,
+            staffId,
+            staffName,
+            lat: updatedCustomer.lat,
+            lng: updatedCustomer.lng,
+            submittedLat: lat,
+            submittedLng: lng,
+            coordsUpdated,
+            diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
+            diffKm: diffFromOriginalKm != null ? Number(diffFromOriginalKm.toFixed(2)) : null,
+            distanceKm: updatedCustomer.distance_km,
+            ongkir: updatedCustomer.ongkir,
+            landmark: finalLandmark,
+            housePhotoUrl,
+            updatedAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      } catch {}
       return {
         success: true,
         data: {
@@ -1630,6 +1663,22 @@ export class StaffReservationService {
         targetId: reservationId,
         tenantId,
       });
+
+      // Real-time SSE Broadcast: tugas selesai
+      try {
+        const { getLiveChatHub } = await import('./live-chat-hub.service');
+        getLiveChatHub().publish({
+          type: 'staff.task_completed',
+          tenantId,
+          payload: {
+            reservationId,
+            staffId,
+            staffName,
+            customerId: reservation.customer_id,
+            completedAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      } catch {}
 
       return { success: true, data: updated };
     } catch (err: any) {

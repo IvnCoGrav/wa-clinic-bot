@@ -409,6 +409,9 @@ export const LiveChatMonitor: React.FC = () => {
   const manualExpandRef = useRef(false);
   const [quickBookingTargetSlot, setQuickBookingTargetSlot] = useState<any>(null);
   const [quickBookingExtracted, setQuickBookingExtracted] = useState<ExtractedScheduleData | null>(null);
+  // Fase 4B: dismiss smart-banner "FORM RESERVASI MASUK" — kunci per-signatur form
+  // (percakapan + entitas), sehingga form BARU (konten beda) bisa muncul kembali.
+  const [dismissedFormBanner, setDismissedFormBanner] = useState<string | null>(null);
   const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -2120,6 +2123,37 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               loadChats(true);
             }
           }
+        } else if (type === 'customer.location_updated') {
+          const { reservationId, lat, lng, distanceKm, ongkir, landmark, housePhotoUrl } = payload;
+          if (selectedIdRef.current) {
+            setSelectedReservation((prev: any) => {
+              if (!prev) return prev;
+              const needsUpdate = prev.reservationId === reservationId;
+              if (!needsUpdate) return prev;
+              return {
+                ...prev,
+                lat: lat ?? prev.lat,
+                lng: lng ?? prev.lng,
+                distanceKm: distanceKm ?? prev.distanceKm,
+                ongkir: ongkir ?? prev.ongkir,
+                landmark: landmark ?? prev.landmark,
+                housePhotoUrl: housePhotoUrl ?? prev.housePhotoUrl,
+              };
+            });
+          }
+        } else if (type === 'staff.task_completed') {
+          const { reservationId, staffId, staffName, completedAt } = payload;
+          if (selectedIdRef.current) {
+            setSelectedReservation((prev: any) => {
+              if (!prev || prev.reservationId !== reservationId) return prev;
+              return {
+                ...prev,
+                reservationStatus: 'completed',
+                completedAt,
+                completedBy: staffName,
+              };
+            });
+          }
         }
       },
     });
@@ -2859,6 +2893,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     manualExpandRef.current = true;
   };
 
+  // Fase 4B — Ekstraksi form terisi untuk smart-banner. useMemo terpisah dari state
+  // `quickBookingExtracted` (alur prefill quick-booking) agar snapshot prefill modal
+  // tidak tertimpa saat katalog/wilayah dimuat ulang. Gerbang banner: flag deterministik
+  // dari extractor (bukan regex baru di UI) + TIDAK ada reservasi hold/confirmed/pending.
+  const formBannerExtracted = useMemo(() => {
+    if (!messages || messages.length === 0) return null;
+    try {
+      return extractScheduleFromMessages(messages, customerDetailData, clinicServices, null);
+    } catch {
+      return null;
+    }
+  }, [messages, customerDetailData, clinicServices]);
+
+  // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
+  // form BARU (konten beda) otomatis tampil lagi.
+  const formBannerKey =
+    formBannerExtracted?.hasExplicitReservationForm && selectedChat
+      ? `${selectedChat.conversationId}|${formBannerExtracted.dateDisplay}|${formBannerExtracted.timeDisplay}|${formBannerExtracted.treatmentName}`
+      : null;
+
+  const showFormReservasiBanner = Boolean(
+    formBannerKey &&
+      formBannerKey !== dismissedFormBanner &&
+      !activeHoldReservation &&
+      !activeConfirmedReservation &&
+      !activePendingReservation
+  );
+
   const handleInsertInvoiceToChat = (text: string) => {
     composerRef.current?.setText(text);
     replyTextRef.current = text;
@@ -2904,6 +2966,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     } catch {}
 
+    // R5: chain babies dari resItem.babies / resItem.children sebelum jatuh ke custData.children[0]
+    const babySource = resItem?.babies || resItem?.children || custData?.children || [];
+    const firstBaby = Array.isArray(babySource) && babySource.length > 0 ? babySource[0] : null;
+
     const mappedData: ExtractedScheduleData = {
       bookingDate: !isNaN(bookingD.getTime()) ? bookingD : new Date(),
       dateDisplay: formatIndonesianDate(bookingD),
@@ -2911,8 +2977,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'Pijat Ceria',
       treatmentPrice: Number(resItem?.purchase_value ?? resItem?.treatment_price ?? 0) || 0,
       treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? 'MOMS' : 'BABY',
-      childName: resItem?.child_name || custData?.children?.[0]?.name || '',
-      childAge: resItem?.child_age || custData?.children?.[0]?.raw_age_text || custData?.children?.[0]?.current_age || '',
+      childName: firstBaby?.name || resItem?.child_name || '',
+      childAge: firstBaby?.age || firstBaby?.ageText || firstBaby?.raw_age_text || firstBaby?.current_age || resItem?.child_age || '',
       bundaName: cleanBundaName(custData?.name || selectedChat?.customerName || '', custData?.kecamatan, custData?.kota),
       phone: custData?.phone || selectedChat?.customerPhone || '',
       address: custData?.address || custData?.preferences?.address || custData?.kelurahan || '',
@@ -2923,6 +2989,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       discount: 0,
       isExtractedFromChat: false,
       confidenceScore: 1.0,
+      hasExplicitReservationForm: false,
     };
 
     setInvoiceModalData(mappedData);
@@ -2935,82 +3002,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       toast('Pilih percakapan customer terlebih dahulu.', 'info');
       return;
     }
-
-    let currentServices = clinicServices;
-    if (currentServices.length === 0) {
-      try {
-        const sRes = await apiRequest('/api/admin/services');
-        if (sRes?.data && Array.isArray(sRes.data)) {
-          currentServices = sRes.data;
-          setClinicServices(sRes.data);
-        } else if (Array.isArray(sRes)) {
-          currentServices = sRes;
-          setClinicServices(sRes);
-        }
-      } catch {}
+    // GERBANG ANTI-INVOICE-HANTU (Fase 5 — konsolidasi menu Tools): format invoice
+    // HANYA boleh dibuat dari reservasi yang tercatat di kalender (confirmed/pending).
+    // Tanpa jadwal aktif, admin diarahkan membuat reservasi dulu — mencegah invoice
+    // teks yang tidak punya jadwal di kalender klinik (eliminasi split-brain).
+    const activeRes = activeConfirmedReservation || activePendingReservation;
+    if (!activeRes) {
+      toast('Belum ada jadwal reservasi aktif di percakapan ini — buat reservasi dulu agar invoice tercatat di kalender.', 'info');
+      void handleOpenQuickReservation();
+      return;
     }
-
-    let custData = customerDetailData;
-    if (!custData && selectedChat?.customerId) {
-      try {
-        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) {
-          custData = res.data;
-          setCustomerDetailData(res.data);
-        }
-      } catch {}
-    }
-
-    if (!custData && selectedChat) {
-      custData = {
-        id: selectedChat.customerId,
-        name: selectedChat.customerName,
-        phone: selectedChat.customerPhone,
-        address: (selectedChat as any).address || '',
-        kelurahan: (selectedChat as any).kelurahan || null,
-        kecamatan: (selectedChat as any).kecamatan || null,
-        kota: (selectedChat as any).kota || null,
-        children: (selectedChat as any).children || [],
-        ongkir: (selectedChat as any).ongkir ?? 0,
-        distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-      };
-    }
-
-    // Ekstraksi pintar jadwal & rincian dari obrolan chat
-    // (referensi wilayah backend agar Kec/Kota kosong tetap terisi dari teks alamat)
-    let wilayahRef: WilayahReference | null = null;
-    try { wilayahRef = await getWilayahRef(); } catch {}
-    let extracted = extractScheduleFromMessages(messages, custData, currentServices, wilayahRef);
-
-    // STAGE 2 FIX: Jika ada pesan shareloc terbaru di thread, pakai jarak/ongkir profil terkini (sudah di-sync webhook GPS pin)
-    try {
-      const locMsg = [...messages].reverse().find((m: any) => {
-        const c = String(m.content || '');
-        return c.includes('[LOCATION') || (m.payload_raw?.location?.latitude != null) || (m as any).location?.latitude != null;
-      });
-      if (locMsg) {
-        // Ambil jarak/ongkir terkini dari profil customer yang sudah di-sync via enrichSync (is_native_pin=true)
-        const freshDistance = Number(custData?.distance_km ?? custData?.distanceKm ?? (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km ?? extracted.distanceKm);
-        const freshOngkir = Number(custData?.ongkir ?? (selectedChat as any)?.ongkir ?? extracted.ongkir);
-        if (!isNaN(freshDistance) && freshDistance > 0) extracted.distanceKm = freshDistance;
-        if (!isNaN(freshOngkir) && freshOngkir >= 0) extracted.ongkir = freshOngkir;
-        // Jika message mengandung koordinat eksplisit, simpan sebagai alamat shareloc raw untuk verifikasi
-        const locContent = String((locMsg as any).content || '');
-        const latMatch = locContent.match(/Lat\s*([-\d.]+)/i);
-        const lngMatch = locContent.match(/Lng\s*([-\d.]+)/i);
-        if (latMatch && lngMatch) {
-          const lat = parseFloat(latMatch[1]);
-          const lng = parseFloat(lngMatch[1]);
-          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-            // Koordinat shareloc asli — pastikan tidak tertimpa centroid alamat teks
-            // (distance/ongkir sudah di-override di atas)
-          }
-        }
-      }
-    } catch {}
-    setInvoiceModalData(extracted);
-    setShowInvoiceModal(true);
-    pushModalHistory('invoice');
+    await handleGenerateAndInsertInvoice(activeRes);
   };
 
   // Fase A v3: teks balasan dipasok LiveChatComposer (sudah clear DOM-nya sendiri).
@@ -4433,6 +4435,44 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
                 )}
 
+                {/* Fase 4B — Smart Action Banner: form reservasi terdeteksi dari chat
+                    (1-tap booking). Gerbang: flag deterministik extractor + tanpa
+                    reservasi aktif; punya tombol dismiss sendiri per-signatur form. */}
+                {showFormReservasiBanner && formBannerExtracted && (
+                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                          FORM RESERVASI MASUK
+                        </span>
+                        <span className="font-semibold truncate text-[11px]">
+                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • 👶 {formBannerExtracted.childName || 'Anak'} • {formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenQuickReservation()}
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-[#008069] hover:bg-[#00a884] active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        title="Buka form reservasi dengan data chat yang sudah terisi"
+                      >
+                        <CalendarPlus size={14} />
+                        <span>Jadwalkan & Buat Invoice</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDismissedFormBanner(formBannerKey)}
+                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
+                        title="Abaikan banner form ini"
+                      >
+                        <X size={14} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* In-chat search toolbar (terpisah dari pencarian daftar kiri) */}
                 {inChatSearchOpen && (
                   <div className="mx-1 mb-1 p-1.5 bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
@@ -5067,6 +5107,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onOpenQuickHold={handleOpenQuickHold}
                         onOpenQuickReservation={handleOpenQuickReservation}
                         onGenerateInvoice={handleGenerateActiveReservationInvoice}
+                        hasActiveReservation={Boolean(activeConfirmedReservation || activePendingReservation)}
                         onRequestScrollToBottom={() => scrollToBottom(true, false)}
                       />
                     )}
@@ -5489,16 +5530,24 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             }
           }}
           onSuccessAndInvoice={(newRes) => {
-            const customerObj = (customerDetailData && customerDetailData.id === selectedChat?.customerId)
+            const rawCust = (customerDetailData && customerDetailData.id === selectedChat?.customerId)
               ? customerDetailData
               : (selectedChat ? {
                   name: selectedChat.customerName,
                   phone: selectedChat.customerPhone,
+                  address: (selectedChat as any).address || (selectedChat as any).preferences?.address || '',
                   kelurahan: (selectedChat as any).kelurahan || null,
                   kecamatan: (selectedChat as any).kecamatan || null,
                   kota: (selectedChat as any).kota || null,
                   ongkir: (selectedChat as any).ongkir ?? 0,
+                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
+                  preferences: (selectedChat as any).preferences || {},
                 } : null);
+            // Merge babies: prioritas newRes.babies (form enrichment) > rawCust.children
+            const mergedChildren = (newRes?.babies && Array.isArray(newRes.babies) && newRes.babies.length > 0)
+              ? newRes.babies.map((b: any) => ({ name: b.name, raw_age_text: b.age, current_age: b.age }))
+              : (rawCust?.children || []);
+            const customerObj = rawCust ? { ...rawCust, children: mergedChildren } : null;
             const invoiceText = generateReservationInvoiceText({
               reservation: newRes,
               customer: customerObj as any,
