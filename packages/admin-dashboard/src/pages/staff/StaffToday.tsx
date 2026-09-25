@@ -59,6 +59,7 @@ import {
   extractAudio,
   extractImageCaption,
   resolveMessageDisplayText,
+  maskPhoneInTextClient,
   ChatLocationData,
   ChatAudioData,
 } from '../../utils/mediaExtractor';
@@ -151,10 +152,16 @@ function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
 }
 
-// Helper: ekstraksi quoted_message dari berbagai bentuk payload_raw
+// Helper: ekstraksi quoted_message dari berbagai bentuk payload_raw — dengan sanitasi PII terapis (maskPhoneInTextClient)
 function extractQuotedMessage(msg: ChatMessage): NonNullable<ChatMessage['quoted_message']> | null {
   const direct = (msg as any).quoted_message;
-  if (direct && (direct.content || direct.media)) return direct;
+  if (direct && (direct.content || direct.media)) {
+    const sanitized: any = { ...direct };
+    if (typeof sanitized.content === 'string' && sanitized.content) sanitized.content = maskPhoneInTextClient(sanitized.content);
+    if (typeof sanitized.sender_name === 'string' && sanitized.sender_name) sanitized.sender_name = maskPhoneInTextClient(sanitized.sender_name);
+    if (sanitized.media && typeof sanitized.media.caption === 'string') sanitized.media = { ...sanitized.media, caption: maskPhoneInTextClient(sanitized.media.caption) };
+    return sanitized;
+  }
   const pr = (msg as any).payload_raw;
   if (!pr) return null;
   const q = pr.quoted_message || pr.quotedMessage || pr.quoted || pr.reply_to_message || pr.quotedMsg;
@@ -162,11 +169,11 @@ function extractQuotedMessage(msg: ChatMessage): NonNullable<ChatMessage['quoted
     return {
       id: q.id || q.wa_message_id || q.waMessageId,
       wa_message_id: q.wa_message_id || q.waMessageId || q.id,
-      sender_name: q.sender_name || q.senderName || q.sender || null,
+      sender_name: q.sender_name || q.senderName || q.sender ? maskPhoneInTextClient(String(q.sender_name || q.senderName || q.sender)) : null,
       sender_type: q.sender_type || q.senderType || null,
       direction: q.direction || q.dir || undefined,
-      content: q.content || q.text || q.caption || '',
-      media: q.media || undefined,
+      content: maskPhoneInTextClient(q.content || q.text || q.caption || ''),
+      media: q.media ? { ...q.media, caption: q.media.caption ? maskPhoneInTextClient(String(q.media.caption)) : undefined } : undefined,
     };
   }
   return null;
@@ -704,7 +711,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     try {
       const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
       if (res.success && Array.isArray(res.data)) {
-        setMessages(res.data.slice(-30));
+        const sanitized = res.data.slice(-30).map((m: any) => ({
+          ...m,
+          content: typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
+          sender_name: typeof m.sender_name === 'string' ? maskPhoneInTextClient(m.sender_name) : m.sender_name,
+          senderName: typeof m.senderName === 'string' ? maskPhoneInTextClient(m.senderName) : m.senderName,
+        }));
+        setMessages(sanitized);
         isNearBottomRef.current = true;
         scrollToBottom(true);
       }
@@ -901,18 +914,32 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           const payload = JSON.parse((event as MessageEvent).data);
           const convId = payload.conversationId || payload.conversation_id;
           const msg: ChatMessage = {
-            id: payload.messageId || payload.id || `sse_${Date.now()}`,
+            id: maskPhoneInTextClient(String(payload.messageId || payload.id || `sse_${Date.now()}`)),
             direction: payload.direction,
-            content: payload.content || '',
+            content: maskPhoneInTextClient(payload.content || ''),
             sender_type: payload.senderType || payload.sender_type || null,
-            sender_name: payload.senderName || payload.sender_name || null,
+            sender_name: payload.senderName || payload.sender_name ? maskPhoneInTextClient(String(payload.senderName || payload.sender_name)) : null,
             created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
-            media: extractMedia(payload),
+            media: (() => {
+              const m = extractMedia(payload);
+              if (m && typeof (m as any).caption === 'string') (m as any).caption = maskPhoneInTextClient((m as any).caption);
+              return m;
+            })(),
             delivery_status: payload.delivery_status || payload.deliveryStatus || null,
             delivered_at: payload.deliveredAt || payload.delivered_at || null,
             read_at: payload.readAt || payload.read_at || null,
             is_revoked: payload.isRevoked ?? payload.is_revoked ?? false,
-            quoted_message: payload.quoted_message || payload.quotedMessage || payload.payloadRaw?.quoted_message || payload.payload_raw?.quoted_message || null,
+            quoted_message: (() => {
+              const q = payload.quoted_message || payload.quotedMessage || payload.payloadRaw?.quoted_message || payload.payload_raw?.quoted_message || null;
+              if (q && typeof q === 'object') {
+                const qc: any = { ...q };
+                if (typeof qc.content === 'string') qc.content = maskPhoneInTextClient(qc.content);
+                if (typeof qc.sender_name === 'string') qc.sender_name = maskPhoneInTextClient(qc.sender_name);
+                if (typeof qc.senderName === 'string') qc.senderName = maskPhoneInTextClient(qc.senderName);
+                return qc;
+              }
+              return q;
+            })(),
             payload_raw: payload.payloadRaw || payload.payload_raw || payload.payload_raw || undefined,
           };
 
@@ -994,7 +1021,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             setMessages((prev) =>
               prev.map((m) =>
                 matchesUpdated(m)
-                  ? { ...m, content: content ?? m.content, is_revoked: isRevoked ?? m.is_revoked, is_edited: isEdited ?? m.is_edited, payload_raw: { ...(m.payload_raw || {}), is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked, is_edited: isEdited ?? (m.payload_raw as any)?.is_edited } }
+                  ? { ...m, content: content != null ? maskPhoneInTextClient(String(content)) : m.content, is_revoked: isRevoked ?? m.is_revoked, is_edited: isEdited ?? m.is_edited, payload_raw: { ...(m.payload_raw || {}), is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked, is_edited: isEdited ?? (m.payload_raw as any)?.is_edited } }
                   : m
               )
             );
