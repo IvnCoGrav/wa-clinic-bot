@@ -821,9 +821,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         if (event.type === 'message.created' || event.type === 'message.updated') {
           payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type);
         }
-        // message.status_updated & conversation.updated tidak membawa PII chat — tidak perlu maskir
+        // P3-3: id monoton untuk Last-Event-ID replay (gap-tolerant)
+        const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const data = JSON.stringify(payloadToSend);
-        reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+        reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {
         console.error('[STAFF LIVE CHAT SSE] Error sending event:', err.message);
       }
