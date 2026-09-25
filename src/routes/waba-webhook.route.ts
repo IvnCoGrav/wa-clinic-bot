@@ -318,6 +318,16 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
       const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
+      // P0-5: abuse-detection simetris WABA (sebelumnya hanya WAHA)
+      try {
+        const { abuseDetectionService } = await import('../services/abuse-detection.service');
+        const abuseRes = await abuseDetectionService.checkAndProcessAbuse(customer, conversation, msg.text || '', tenantId);
+        if (abuseRes?.blocked) {
+          console.warn(`[WABA ABUSE] Blocked ${msg.fromNumber} tenant ${tenantId}: ${abuseRes.reason}`);
+          continue;
+        }
+      } catch {}
+
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
       const scopeGate = await enforceAiScopeGate({
         customer,

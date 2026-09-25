@@ -194,7 +194,29 @@ export class BurstCoalesceService {
       _provider: last._provider,
     };
 
-    const payload: QueuePayload = { tenantId, customerId, phone, incomingMessage: mergedMessage };
+    // P0-3: persist turn ledger sebelum enqueue (durability) + pakai turnId yang benar
+    const inboundMessageId = String(last.id || `merged_${Date.now()}`);
+    const provider = (last as any)._provider || 'WAHA';
+    try {
+      const { turnRepository } = await import('../repositories/turn.repository');
+      await turnRepository.persistInbound({
+        tenantId,
+        provider,
+        inboundMessageId,
+        customerId,
+        conversationId: buf.conversationId,
+        payload: { tenantId, customerId, phone, incomingMessage: mergedMessage },
+      });
+    } catch {}
+    const payload: QueuePayload = {
+      tenantId,
+      customerId,
+      phone,
+      incomingMessage: mergedMessage,
+      turnId: `${tenantId}:${provider}:${inboundMessageId}`,
+      provider,
+      inboundMessageId,
+    } as any;
     try {
       await queueService.enqueueMessage(payload);
     } catch (err: any) {
