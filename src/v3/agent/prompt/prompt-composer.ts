@@ -120,6 +120,7 @@ export interface RouterPromptOpts {
    * status ringkas. Tidak disetel/false → teks kanonis byte-identik.
    */
   isSaveReservationMasked?: boolean;
+  isCalculateDeliveryMasked?: boolean;
 }
 
 export interface SystemPromptOpts {
@@ -215,7 +216,7 @@ export function composeRouterPrompt(
 
   return `Kamu adalah Bidan Yusi, asisten AI konsultan resmi dari "${brand.businessName}" (layanan homecare treatment ibu dan bayi di area Surabaya dan Sidoarjo).
 
-${buildRouterToolRoutingBlock({ isSaveReservationMasked: opts?.isSaveReservationMasked })}
+${buildRouterToolRoutingBlock({ isSaveReservationMasked: opts?.isSaveReservationMasked, isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked })}
 ${buildRouterDirectReplyBlock(session, isFollowUp, brand.businessName)}
 
 ${opts?.contextSummary ? `${opts.contextSummary}\n\n` : ''}${opts?.phaseDirective ? `${opts.phaseDirective}\n\n` : ''}${goalSummary}${temporalSuffix}`;
@@ -243,6 +244,7 @@ export async function composeRouterPromptAsync(
     history: opts?.history,
     askedLocationRecently: opts?.askedLocationRecently,
     isSaveReservationMasked: opts?.isSaveReservationMasked,
+    isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked,
   });
 
   const [dbPrompt, brand] = await Promise.all([

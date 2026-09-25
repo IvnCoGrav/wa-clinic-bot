@@ -276,7 +276,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 100000,
     "promoPrice": 75000,
-    "description": "Pijat stimulasi pencernaan untuk membantu meningkatkan nafsu makan dan kebugaran tubuh si kecil.",
+    "description": "Pijat stimulasi pencernaan dan nafsu makan untuk membantu mengatasi anak GTM (Gerakan Tutup Mulut), sulit makan, susah makan, dan meningkatkan kebugaran tubuh si kecil.",
     "isActive": true
   },
   {
@@ -356,7 +356,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 40,
     "originalPrice": 110000,
     "promoPrice": 80000,
-    "description": "Pijat stimulasi pencernaan & titik akupresur penambah nafsu makan untuk anak usia di atas 2 tahun.",
+    "description": "Pijat stimulasi pencernaan & titik akupresur penambah nafsu makan untuk membantu mengatasi anak GTM (Gerakan Tutup Mulut), sulit makan, susah makan, pada anak usia di atas 2 tahun.",
     "isActive": true
   },
   {
@@ -1717,7 +1717,8 @@ export class TreatmentCatalogService {
       }
 
       const phrasePatterns = [
-        'susah makan', 'susah bab', 'nafsu makan', 'tidak nafsu makan',
+        'susah makan', 'sulit makan', 'gtm', 'anak gtm',
+        'susah bab', 'nafsu makan', 'tidak nafsu makan',
         'susah tidur', 'kembung perut', 'batuk pilek', 'batuk dahak',
         'rewel menangis', 'pegal lelah', 'pilek flu',
       ];

@@ -13,8 +13,8 @@ export class OutputSanitizer {
    */
   public static stripVagueTeamDeferral(text: string): string {
     if (!text || typeof text !== 'string') return text;
-    // Frasa defleksi keraguan (bukan klaim jadwal normal).
-    const DEFERRAL = /(cek|konfirmasi|tanyakan|pastikan)\s+(dulu\s+)?(ke|kepada|sama|dengan)?\s*(tim|team|admin|rekan)\b|informasinya akan kami cek|akan kami cekkan ke tim|belum bisa kami pastikan|nanti kami cek dulu/i;
+    // Frasa defleksi keraguan (bukan klaim jadwal normal) — generik, bukan hafalan kalimat.
+    const DEFERRAL = /(cek|konfirmasi|tanyakan|pastikan)\s+(dulu\s+)?(ke|kepada|sama|dengan)?\s*(tim|team|admin|rekan)\b|informasinya akan kami cek|akan kami cekkan ke tim|belum bisa kami pastikan|nanti kami cek dulu|karena\s+data.*belum\s+tersedia|data\s*faq.*belum\s*(tersedia|ada)|informasi.*belum.*(tersedia|ada)|kami\s+cekkan\s+(dari\s+)?katalog|kami\s+cekkan\s+ke\s+sistem/i;
     // Jangan sentuh kalimat yang memang soal JADWAL (itu sah: "kami cekkan ketersediaan jadwal").
     const SCHEDULE = /jadwal|slot|ketersediaan|hari|tanggal|kedatangan/i;
     // Pertahankan STRUKTUR baris (jangan gabung dengan spasi) agar sanitizer
@@ -73,6 +73,17 @@ export class OutputSanitizer {
     if (!rawText || typeof rawText !== 'string') return '';
 
     let text = rawText;
+
+    // 0a. Bersihkan tag HTML mentah non-semantik (<br>) sebelum deferral — teknis, bukan mutilasi kalimat
+    // Fast-path: hanya bila ada '<' untuk hindari regex tak perlu
+    if (text.includes('<')) {
+      text = text.replace(/<br\s*\/?>/gi, '\n');
+      // Hapus tag HTML sisa generik (mis. <div>, </p>) tanpa menyentuh "<3" atau "< ASI" yang bukan tag
+      // Hanya tag yang diawali huruf, untuk cegah mutilasi emotikon/angka
+      if (/<\/?[a-z][a-z0-9]*[^>]*>/i.test(text)) {
+        text = text.replace(/<\/?[a-z][a-z0-9]*[^>]*>/gi, ' ');
+      }
+    }
 
     // 0a. Fixing D1/Fase 3 (sesi 767713): buang kalimat "melempar ke tim" yang
     // dihasilkan AI saat ragu (bukan konteks jadwal). Deterministik, level

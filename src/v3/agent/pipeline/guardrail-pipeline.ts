@@ -735,7 +735,13 @@ export class GuardrailPipeline {
       const discussedService = discussedName
         ? (await import('../../../services/treatment-catalog.service')).treatmentCatalogService.searchCatalogItems(discussedName)[0]
         : undefined;
-      if (catalogTool && (catalogTool as any).result?.treatments?.[0]) {
+      const hasExplicitCatalogIntent = Boolean(
+        (catalogTool as any)?.args?.specificTreatmentName?.trim() ||
+        ((catalogTool as any)?.args?.symptoms && Array.isArray((catalogTool as any).args.symptoms) && (catalogTool as any).args.symptoms.length > 0) ||
+        (catalogTool as any)?.args?.targetPrice != null ||
+        (catalogTool as any)?.args?.inquirePrice
+      );
+      if (catalogTool && hasExplicitCatalogIntent && (catalogTool as any).result?.treatments?.[0]) {
         const top: any = (catalogTool as any).result.treatments[0];
         const isMoms = top.category === 'MOMS';
         const { isFunnelCommitted } = await import('./phase-resolver');
@@ -745,7 +751,7 @@ export class GuardrailPipeline {
         } else {
           finalReply = `Untuk ${isMoms ? 'Bunda' : 'si kecil'}, kami sarankan *${top.name}* ya Bunda 😊\n\n${top.description}\n\nApakah Bunda tertarik untuk mencoba perawatan ini untuk si kecil? 🤗`;
         }
-        console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, funnelCommitted: committed, timestamp: new Date().toISOString() }));
+        console.warn(JSON.stringify({ event: 'CATALOG_RECOVERY_APPLIED', topService: top.name, funnelCommitted: committed, hasExplicitCatalogIntent, timestamp: new Date().toISOString() }));
       } else if (discussedService) {
         const { isFunnelCommitted } = await import('./phase-resolver');
         const committed = isFunnelCommitted(session);
