@@ -618,7 +618,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * Server-Sent Events: stream real-time Live Chat (message.created & conversation.updated).
    */
   fastify.get('/api/admin/live-chat/events', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = DEFAULT_TENANT_ID;
+    const tenantId = (request as any).adminSession?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
 
     reply.hijack();
 
@@ -636,8 +636,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const sendEvent = (event: any) => {
       if (closed) return;
       try {
+        const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const data = JSON.stringify(event.payload || {});
-        reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+        reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {
         console.error('[LIVE CHAT SSE] Failed to serialize event:', err.message);
       }
