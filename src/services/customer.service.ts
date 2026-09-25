@@ -5,8 +5,13 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 
-// In-Memory store fallback jika DB offline
+// In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
+// Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
+// Seluruh catch yang menulis ke memoryCustomers WAJIB guard isTestRuntime().
 const memoryCustomers = new Map<string, any>();
+function isTestRuntime(): boolean {
+  return Boolean(process.env.VITEST) || process.env.NODE_ENV === 'test';
+}
 
 export class CustomerService {
   public getMemoryCustomers(): Map<string, any> {
@@ -48,8 +53,11 @@ export class CustomerService {
           labels_synced_at: new Date(),
         },
       });
-    } catch {
-      // Memory fallback untuk offline/mock mode
+    } catch (e) {
+      if (!isTestRuntime()) {
+        console.error('[CustomerService] setChatLabelFlag DB failed (fail-fast, no memory fallback in prod):', (e as Error)?.message);
+        throw e;
+      }
       for (const fmt of formats) {
         if (memoryCustomers.has(fmt)) {
           const cust = memoryCustomers.get(fmt);
@@ -237,6 +245,44 @@ export class CustomerService {
         },
       });
 
+      // P2-5: seam atomik — tulis history + audit (jangan campur nama-teks + koordinat-GPS parsial)
+      try {
+        const prevPrefs = (existing.preferences as any) || {};
+        const hist: any[] = Array.isArray(prevPrefs.location_history) ? prevPrefs.location_history : [];
+        const entry = {
+          kelurahan: data.kelurahan ?? existing.kelurahan,
+          kecamatan: data.kecamatan ?? existing.kecamatan,
+          kota: data.kota ?? existing.kota,
+          lat: effectiveLat,
+          lng: effectiveLng,
+          distance_km: effectiveDistance,
+          ongkir: effectiveOngkir,
+          source: effectiveSource || existing.location_source || null,
+          timestamp: new Date().toISOString(),
+        };
+        await prisma.customer.update({
+          where: { id: customerId },
+          data: {
+            preferences: {
+              ...prevPrefs,
+              location_history: [...hist.slice(-9), entry],
+              location_updated_at: new Date().toISOString(),
+            } as any,
+          },
+        });
+      } catch {}
+      try {
+        const { auditService } = await import('./audit.service');
+        await auditService.logAdminAction({
+          apiKey: 'SYSTEM',
+          adminIdentity: 'SYSTEM_LOCATION_SEAM',
+          action: 'CUSTOMER_LOCATION_UPDATE',
+          targetId: customerId,
+          payload: { kelurahan: data.kelurahan, kecamatan: data.kecamatan, lat: effectiveLat, lng: effectiveLng },
+          tenantId,
+        } as any).catch(() => {});
+      } catch {}
+
       // Auto-sync Google Contacts jika kelurahan / kecamatan diperbarui
       if (data.kelurahan || data.kecamatan) {
         import('./google-contacts.service')
@@ -248,7 +294,10 @@ export class CustomerService {
 
       return updated;
     } catch (error) {
-      // Memory fallback update — hormati GPS pin priority (isNativePin true = override)
+      if (!isTestRuntime()) {
+        console.error('[CustomerService] updateCustomerLocation DB failed (fail-fast):', (error as Error)?.message);
+        throw error;
+      }
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
           const preserveGps = cust.share_location_sent && !data.isNativePin && cust.lat != null && cust.lng != null;
