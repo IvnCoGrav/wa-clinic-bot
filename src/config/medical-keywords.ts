@@ -235,7 +235,7 @@ export function detectNeonatalFeverEmergency(text: string): {
   if (newbornKeywords.some(k => normalizedText.includes(k))) {
     ageDays = 0; // newborn = 0 hari
   } else {
-    const ageMatch = normalizedText.match(/(?:umur|usia)\s*(\d{1,2})\s*hari/);
+    const ageMatch = normalizedText.match(/(?:umur|usia|bayi)\s*(\d{1,2})\s*hari/);
     if (ageMatch) {
       ageDays = Number(ageMatch[1]);
     }
