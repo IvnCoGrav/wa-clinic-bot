@@ -5,6 +5,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 136. [Meta Summary — Kebocoran All-Time ke Kartu Rentang (CAPI 104 > Klik 92)] FIXED Fase 1 (2026-09-26)
+
+- **Gejala live:** dashboard Meta Click Catcher: `Total Page View 6`, `Klik CTA 92` (CTR 1533%), `CAPI Events Delivered 104 = Contact 4 + Purchase 100` — CAPI melebihi total klik, mustahil bila semua angka satu rentang.
+- **Akar (diverifikasi kode, bukan klaim):** `src/routes/admin/meta-attribution.subroute.ts` menghitung `views/clicks/matched` DENGAN `dateRange`, tetapi `customer(is_mql)` & `reservation(pending/approved/ignored)` TANPA `dateRange` (all-time) → `capiEventsDelivered = matched(4) + approvedAllTime(100) = 104`. Komentar endpoint (`:189-193`) sudah mengklaim "pada rentang tanggal" tapi kode tidak melakukannya. Funnel `step3_mqlLeads` & `step5_approvedPurchases` ikut tercampur all-time.
+- **Revisi desain vs plan awal:** plan awal memakai `dateRange.createdAt` generik; diverifikasi ke schema bahwa field event yang benar adalah `Customer.mql_triggered_at` (schema:111) dan `Reservation.purchase_event_sent_at` (schema:273). `pendingPurchases`/`ignoredOutliers` adalah status antrai POINT-IN-TIME (bukan event rentang) → sengaja TANPA dateRange (didokumentasikan di kontrak endpoint).
+- **Fix (Fase 1, tanpa migrasi):** `meta-attribution.subroute.ts` — `mqlWhere`/`approvedWhere` terikat `mql_triggered_at`/`purchase_event_sent_at` pada rentang; semua count digabung 1 `Promise.all` (9 count); response baru `mqlLeadsAllTime`, `purchaseEventsAllTime`; `capiNote` kini menjelaskan definisi in-range + angka all-time bila berbeda; komentar kontrak endpoint ditulis ulang.
+- **Test seam (TDD red→green):** `tests/unit/meta-summary-daterange.test.ts` (5 test, jalur DB ONLINE via mock count yang membedakan in-range/all-time dari keberadaan filter tanggal) — sebelum fix 4 gagal (purchaseEvents=100≠3, CAPI=104≠7, capiNote basi), sesudah fix hijau. Catatan: mock global `tests/setup.ts` tidak punya `adClick.count` & `landingPageView` — test menambahkannya lokal.
+- **Verifikasi:** full suite `459 files / 3544 tests` hijau (+5), `npm run build` exit 0.
+- **Sisa (belum dieksekusi, staged-phase):** Fase 2 migrasi `landing_page_views.eventId/source` + UNIQUE dedup + fix drift `ad_clicks` tanpa CREATE TABLE; Fase 3 beacon `external-tracker.js` kirim `tenantId` + fallback `PageView source=cta-fallback` di `GET /cta` + rate-limit `/cta`; Fase 4 rekonsiliasi Meta API/CSV (ganti inject `backfill-pageviews-from-meta.ts` yang synthetic & tidak idempoten); Fase 5 UI dual-kolom + dokumentasi web-side vs server-side.
+- **Konteks audit PageView 6 < Klik 92:** coverage gap by-design (issue #119) — `landing_page_views` = subset beacon server-side; Meta Pixel/Ads Manager = web-side browser→Meta langsung, TIDAK pernah 1:1 tanpa Fase 4. `external-tracker.js:227-240` tidak kirim `tenantId` (jatuh `default-tenant`) & `POST /pageview` tanpa origin-check — dibahas Fase 3.
+
+---
+
 ## 134. [Kebocoran Password SSH Server Live di `docs/LIVE_SERVER_DEPLOY.md` + `test-results/` Masih Ter-Track] DONE (2026-09-26)
 
 - **Latar:** audit higienitas repo vs server live (VPS). Pertanyaan user: apakah file test/docs/scripts ikut ke server live.
@@ -27,7 +40,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 134. [Ops] `TELEGRAM_WEBHOOK_SECRET` WAJIB di `.env` produksi — gate boot baru (SEC-AUDIT-01) sempat mematikan app saat deploy (2026-09-26)
+## 137. [Ops] `TELEGRAM_WEBHOOK_SECRET` WAJIB di `.env` produksi — gate boot baru (SEC-AUDIT-01) sempat mematikan app saat deploy (2026-09-26)
 
 - **Gejala saat deploy:** container `app` `Exited (1)` — `Error: Critical Security Configuration Missing: TELEGRAM_WEBHOOK_SECRET must be defined in production environment.` (`src/app.ts:60-67`).
 - **Sebab:** commit `def10c0e` (remediasi audit siber) menaikkan `TELEGRAM_WEBHOOK_SECRET` menjadi gate boot wajib di produksi (sejajar `WAHA_WEBHOOK_SECRET`), tetapi `.env` server belum pernah memuatnya dan belum terdokumentasi di `.env.example`.
