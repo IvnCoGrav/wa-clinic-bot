@@ -48,6 +48,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Baseline diverifikasi:** `7c94b58` (commit live saat itu) HIJAU untuk 4 file test yang sama → 14 kegagalan adalah regresi nyata, bukan flaky.
 - **Verifikasi:** `tsc --noEmit` 0 error, `npm run build` hijau, full suite 458 file / 3539 test lulus / 0 gagal.
 - **Pelajaran:** commit yang mengklaim "unit 3123 passed, build ✅" pada `f5c70ade` tidak pernah tervalidasi `tsc`; gate CI typecheck wajib sebelum push (tech debt: belum ada CI).
+## 135. [Insiden 502 `/cta?divisi=iklan-utama` saat recreate container app — 26 Sep 2026] MITIGATED (2026-09-26)
+
+- **Gejala:** `GET https://app.kalababyspa.online/cta?divisi=iklan-utama` (dan `/assets/*`, `/api/admin/*`) mengembalikan **502** selama ±3 menit (07:58–08:01 WIB, 26 Sep 2026). Landing `kalababyspa.online/reservasionline` (Scalev eksternal) TIDAK error — hanya tombol CTA yang mengarah ke `app.*` yang gagal. Setelah itu pulih sendiri (200 + redirect `wa.me/6285794210526`).
+- **Bukti log (server live, `docker compose logs caddy`):** rentetan `status:502` dengan `msg: "dial tcp: lookup app on 127.0.0.11:53: server misbehaving"` untuk `uri: /cta?divisi=iklan-utama` (ts `1790384377`–`1790384469`), `uri: /assets/external-tracker.js`, dan `/api/admin/*`. `docker compose ps` sesudahnya: `app Up 23 seconds` (`StartedAt 2026-09-26T01:01:18Z`), sementara caddy/postgres/redis/waha `Up 46 hours`.
+- **Sebaran historis (audit full log):** 217 kejadian 502 DNS serupa sejak 2 Sep 2026, tapi 2–25 Sep semuanya sporadis (1–11 butir/jam, single failed request) — satu-satunya burst outage adalah 26 Sep (33 butir beruntun).
+- **Akar masalah (fondasional, bukan bug kode `/cta` — `src/routes/landing.route.ts:135` tak tersentuh):**
+  1. Prosedur deploy (`build` + `up -d --no-deps app`) me-recreate container `app` → nama DNS Docker `app` hilang selama build/start → Caddy gagal dial → 502 untuk SEMUA route (bukan spesifik `/cta`).
+  2. Service `app` di `docker-compose.yml` tidak punya `healthcheck` dan tidak punya `restart:` policy (redis/postgres/caddy/waha semuanya `restart: always`) — tidak ada readiness gate dan tidak ada auto-restart bila crash.
+  3. `Caddyfile` tidak punya retry saat upstream dial gagal (`lb_try_duration`/`lb_try_interval`) — kegagalan sesaat langsung 502 ke klien iklan.
+- **Mitigasi (2026-09-26):** `docker-compose.yml` tambah `restart: unless-stopped` + `healthcheck` liveness `GET /health` (Node built-in `fetch`, tanpa dep baru; `start_period: 60s` untuk inisialisasi tenant); `Caddyfile` tambah `lb_try_duration 30s` + `lb_try_interval 2s` di kedua blok `reverse_proxy` agar jeda dial saat recreate di-retry, bukan langsung 502; runbook deploy + watchdog di `deploy_config.txt`.
+- **Sisa risiko / debt jujur:** retry Caddy hanya menutup jeda ≤30 dtk; recreate penuh (build image + boot Node + init tenant) bisa >30 dtk → 502 masih mungkin pada deploy siang hari. Deploy tetap dianjurkan di jam sepi + cek pasca-deploy `curl /health` & `/cta?divisi=iklan-utama`. Blue-green sejati (2 replika app) belum ada — butuh port mapping + strategi cutover, ditunda via Confirmation Gate.
+- **Sampingan teramati (bukan penyebab 502):** log `app` memuat `Unique constraint failed (trackingCode)` di `adClick.create` (fallback in-memory menutupnya, CTA tetap 200). Error `admin_sessions does not exist` tidak lagi muncul — `migrate status` server = up to date (77 migrasi).
+- **Follow-up:** watchdog host-level `scripts/server-watchdog.sh` + installer (`*/2 mnt`, flap-proof, DOWN sekali + RECOVERY) — status install menyusul di entri deploy.
 
 ---
 

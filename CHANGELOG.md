@@ -12,6 +12,22 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 - **Regresi enrichment — shareloc link Maps kehilangan provenance GPS (1 test).** Refactor `resolveLocationFromUrl` mencabut `isNativePin` + `markShareLocationSent` dari cabang URL, padahal invarian `sticky-gps.test.ts` menyatakan "shareloc / **link Maps**" berstatus VERIFIED_GPS. Fix: `url_coords` (koordinat presisi dari URL) → `isNativePin: true` + `markShareLocationSent`; `url_text_geocoded` (teks tempat di-geocode) tetap area perkiraan.
 - **Verifikasi:** `npx tsc --noEmit` 0 error, `npm run build` hijau, full suite **458 file / 3539 test lulus, 0 gagal** (baseline `7c94b58` diverifikasi hijau untuk 4 file yang sama sebelum fix).
 
+#### 2026-09-26 — Watchdog server-DOWN via Telegram (follow-up insiden #135)
+
+- **Masalah:** seluruh monitoring dalam aplikasi (`AlertService`, waha-monitor, cron) ikut mati saat container `app` down — 502 `/cta` 26 Sep tanpa ada yang memberi tahu.
+- **Solusi (level HOST, bukan container):** `scripts/server-watchdog.sh` (cron */2 menit) + `scripts/install-server-watchdog.sh`. Cek berlapis container + `GET /health` publik (tanpa tulis DB); anti-flap 2x gagal beruntun; DOWN sekali, pengingat 60 mnt, RECOVERY + durasi. Kredensial dari `.env` → tenant DB (decrypt via container app), disimpan `chmod 600` `.watchdog.env`. Tanpa dep baru (bash+curl+docker+flock host).
+- **Verifikasi:** `bash -n` kedua skrip OK; simulasi stub docker/curl di server 6 run hijau (gagal-1x sunyi, gagal-2x DOWN 1 pesan, masih-down tanpa resend, pulih RECOVERY, jalur container-hilang sama). Jejak simulasi dibersihkan (`/tmp/wd-test`).
+
+#### 2026-09-26 — Mitigasi 502 `/cta` saat recreate container app (insiden #135)
+
+- **Insiden:** `GET /cta?divisi=iklan-utama` (plus `/assets/*`, `/api/admin/*`) 502 selama ±3 menit (07:58–08:01 WIB). Penyebab fondasional: prosedur deploy (`build` + `up -d --no-deps app`) me-recreate container `app` → DNS Docker `app` hilang sesaat → Caddy `dial tcp: lookup app ... server misbehaving` → 502 semua route. Bukan bug kode `/cta` (`src/routes/landing.route.ts` tak tersentuh). Detail: `docs/KNOWN_ISSUES.md` #135.
+- **Mitigasi (tanpa ubah kode runtime, tanpa dep baru):**
+  - `docker-compose.yml`: service `app` tambah `restart: unless-stopped` + `healthcheck` liveness `GET /health` via `fetch` bawaan Node 20 (`start_period: 60s` untuk init tenant).
+  - `Caddyfile`: kedua blok `reverse_proxy` tambah `lb_try_duration 30s` + `lb_try_interval 2s` agar jeda dial di-retry, bukan langsung 502.
+  - `deploy_config.txt`: runbook deploy aman + runbook watchdog host-level.
+- **Verifikasi:** `docker compose config` exit 0; `curl` pasca-pulih `/cta?divisi=iklan-utama` → 200 + redirect `wa.me`. Rebase di atas hotfix build remote (build sudah hijau di `origin/master`) sebelum deploy.
+- **Batasan jujur:** retry 30 dtk tidak menutup recreate penuh yang lebih lama — deploy tetap di jam sepi; blue-green 2-replika ditunda (Confirmation Gate).
+
 #### 2026-09-25 — Overhaul UX Mobile & LiveChat: Sticky Footer Reservasi, Smart Banner Form 1-Tap, Konsolidasi Menu Tools
 
 - **`CreateReservationModal` — sticky footer & stacked action sheet mobile:**

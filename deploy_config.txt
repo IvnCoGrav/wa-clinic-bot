@@ -30,6 +30,37 @@ Fitur observasi router (`AI_ROUTER_ENABLED=true` + `AI_ROUTER_SHADOW_MODE=true`)
 5.  **Jangan pernah pakai `prisma generate --no-engine`** untuk workaround dll terkunci — hasilnya client
     Accelerate-only (`P6001`, URL harus `prisma://`). Matikan proses yang lock engine dulu, generate penuh.
 
+## Watchdog Server-DOWN via Telegram (2026-09-26, follow-up #135)
+
+Monitoring dalam aplikasi ikut mati saat container `app` down → pasang pengawas
+level HOST (cron, bukan container): `scripts/server-watchdog.sh` + installer
+`scripts/install-server-watchdog.sh`.
+- Cek berlapis tiap 2 menit: container app (running+health) + GET /health publik
+  (liveness tanpa tulis DB → tidak mengotori AdClick).
+- Anti-flap: DOWN setelah 2x gagal beruntun (alert ≤4 menit), kirim SEKALI,
+  pengingat per 60 menit opsional, RECOVERY sekali + durasi downtime.
+- Kredensial: prioritas `.env` server → baris tenant DB (decrypt via container
+  app bila terenkripsi); disimpan `chmod 600` di `.watchdog.env` (di-ignore git).
+- Install (DI SERVER): `bash scripts/install-server-watchdog.sh`
+  (pasang cron idempoten + 1 pesan uji). Uninstall: hapus baris cron
+  `server-watchdog.sh` + `rm .watchdog.env`.
+
+## Safe Redeploy App — Anti-502 /cta (2026-09-26, insiden #135)
+
+Recreate container `app` (`up -d --no-deps app`) membuat nama DNS Docker `app`
+hilang sesaat → Caddy 502 (`lookup app ... server misbehaving`) untuk SEMUA
+route termasuk `/cta`, `/assets/*`, `/api/*`. Mitigasi di repo: `healthcheck`
+liveness `GET /health` + `restart: unless-stopped` (compose) dan
+`lb_try_duration 30s` / `lb_try_interval 2s` (Caddyfile).
+Prosedur aman tetap berlaku:
+1. Deploy di jam sepi (iklan aktif → setiap 502 = klik terbuang).
+2. `docker compose build app` dulu, baru `docker compose up -d --no-deps app`.
+3. Tunggu `docker compose ps` = `healthy`, lalu verifikasi:
+   `curl -s -o /dev/null -w "%{http_code}\n" https://app.kalababyspa.online/health`
+   `curl -s -o /dev/null -w "%{http_code}\n" "https://app.kalababyspa.online/cta?divisi=iklan-utama"`
+4. Bila 502 >30 dtk, cek `docker compose logs app --tail 50` (boot/init tenant)
+   dan `docker compose logs caddy --tail 50` (`lookup app` = app belum listen).
+
 ## Live Chat Panel (SSE) — Deployment Notes (2026-08-03)
 Endpoint real-time: `GET /api/admin/live-chat/events` (Server-Sent Events, satu kanal per tenant `livechat:{tenantId}` via Redis pub/sub).
 1.  **Reverse proxy (nginx/Caddy):** WAJIB matikan buffering agar event sampai real-time — nginx:

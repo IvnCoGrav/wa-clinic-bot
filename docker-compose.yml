@@ -8,6 +8,16 @@ services:
         VITE_CARTO_API_KEY: ${VITE_CARTO_API_KEY:-}
     expose:
       - "3000"
+    restart: unless-stopped
+    # Liveness probe anti-502-buta: /health tidak menyentuh DB/WAHA (murah & cepat),
+    # sehingga recreate/deploy yang lama boot terdeteksi sebagai starting, bukan healthy.
+    # Memakai fetch bawaan Node 20 — tanpa dependency baru.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     volumes:
       - ./storage:/app/storage
     # Forward SEMUA var dari .env server ke container app (LLM/ORS/Redis/admin keys dll).
