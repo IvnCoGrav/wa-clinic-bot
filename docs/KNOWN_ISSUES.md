@@ -19,6 +19,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 134. [Ops] `TELEGRAM_WEBHOOK_SECRET` WAJIB di `.env` produksi — gate boot baru (SEC-AUDIT-01) sempat mematikan app saat deploy (2026-09-26)
+
+- **Gejala saat deploy:** container `app` `Exited (1)` — `Error: Critical Security Configuration Missing: TELEGRAM_WEBHOOK_SECRET must be defined in production environment.` (`src/app.ts:60-67`).
+- **Sebab:** commit `def10c0e` (remediasi audit siber) menaikkan `TELEGRAM_WEBHOOK_SECRET` menjadi gate boot wajib di produksi (sejajar `WAHA_WEBHOOK_SECRET`), tetapi `.env` server belum pernah memuatnya dan belum terdokumentasi di `.env.example`.
+- **Remediasi (dilakukan):** backup `.env` → tambah `TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)` → recreate `app` → `setWebhook` ulang ke `https://app.kalababyspa.online/api/webhook/telegram` dengan `secret_token` yang sama (tanpa ini Telegram di-403 fail-closed). Verifikasi: POST tanpa token → 403, dengan token → 200.
+- **Wajib ditindaklanjuti:** tambahkan `TELEGRAM_WEBHOOK_SECRET` ke `.env.example` + dokumentasi runbook deploy (tech debt: gate boot baru tidak diumumkan ke operator). Env lain dari audit yang juga belum ada di `.env.example`: `GOOGLE_OAUTH_STATE_SECRET`.
+
+---
+
 ## 133. [Build Blocker + 3 Regresi Pasca `f5c70ade` — Deploy `origin/master` Sempat Mustahil] DONE (2026-09-26)
 
 - **Temuan saat update live server:** server live berada di `7c94b58` (29 commit di belakang `origin/master`); `docker compose build app` GAGAL di `npm run build`.
