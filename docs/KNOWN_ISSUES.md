@@ -5,6 +5,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 133. [Build Blocker + 3 Regresi Pasca `f5c70ade` — Deploy `origin/master` Sempat Mustahil] DONE (2026-09-26)
+
+- **Temuan saat update live server:** server live berada di `7c94b58` (29 commit di belakang `origin/master`); `docker compose build app` GAGAL di `npm run build`.
+- **Root cause (multi-layer, diverifikasi baca kode + log, bukan menelan klaim commit):**
+  1. **BLOCKER parse:** `src/services/follow-up.service.ts` — `f5c70ade` menghapus `try {` level-metode di `createNoPurchaseFollowUps` namun meninggalkan `} catch (err) {` yatim (baris 402) → selisih kurung −1 → 557 error TS kaskade (seluruh file). Klaim commit "build ✅" tidak akurat.
+  2. **Regresi geocoding:** `crossCheckGazetteer` (guard `isDualAdmin` + city-mismatch) ikut diterapkan ke lookup otoritatif kamus landmark → apartemen mapan (`Grand Sungkono Lagoon`/Dukuh Pakis, `Mulyorejo`, `Tenggilis Mejoyo`) turun ke `isPrecise:false` tanpa kelurahan/lat/lng.
+  3. **Regresi follow-up:** guard `if (!customer) return` menyamakan DB-offline (query melempar) dengan customer-absent → follow-up tidak pernah dibuat pada harness offline.
+  4. **Regresi enrichment:** cabang shareloc URL kehilangan `isNativePin` + `markShareLocationSent`, melanggar invarian VERIFIED_GPS.
+- **Fix fondasional (bukan tambal-sulam):** pisahkan kontrak lookup `authoritative` vs inferensi; pulihkan semantik guard follow-up ke baseline (keberadaan customer bukan gerbang — FK ditegakkan DB + insert ter-catch); provenance `url_coords` vs `url_text_geocoded` untuk pin GPS.
+- **Baseline diverifikasi:** `7c94b58` (commit live saat itu) HIJAU untuk 4 file test yang sama → 14 kegagalan adalah regresi nyata, bukan flaky.
+- **Verifikasi:** `tsc --noEmit` 0 error, `npm run build` hijau, full suite 458 file / 3539 test lulus / 0 gagal.
+- **Pelajaran:** commit yang mengklaim "unit 3123 passed, build ✅" pada `f5c70ade` tidak pernah tervalidasi `tsc`; gate CI typecheck wajib sebelum push (tech debt: belum ada CI).
+
+---
+
 ## 132. [Overhaul UX Mobile & LiveChat — Sticky Footer, Banner Form 1-Tap, Konsolidasi Tools] DONE (2026-09-25)
 
 - **Latar:** footer modal reservasi berdesakan di layar HP (4 tombol horizontal), keyboard virtual menutup input, menu Tools split-brain (`Buat Reservasi Baru` vs `Generate Invoice` bisa menghasilkan invoice teks tanpa jadwal kalender), dan tidak ada pintasan saat customer mengirim form reservasi terisi.
