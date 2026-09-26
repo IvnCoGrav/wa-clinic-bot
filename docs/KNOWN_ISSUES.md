@@ -5,7 +5,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 134. [Kebocoran Password SSH Server Live di `docs/LIVE_SERVER_DEPLOY.md` + `test-results/` Masih Ter-Track] PARTIAL (2026-09-26)
+## 134. [Kebocoran Password SSH Server Live di `docs/LIVE_SERVER_DEPLOY.md` + `test-results/` Masih Ter-Track] DONE (2026-09-26)
 
 - **Latar:** audit higienitas repo vs server live (VPS). Pertanyaan user: apakah file test/docs/scripts ikut ke server live.
 - **Temuan 1 (KRITIS) — password SSH server live ter-commit:** `docs/LIVE_SERVER_DEPLOY.md` baris 12–15 memuat Host, user `ubuntu`, port `1403`, dan **password plaintext** server produksi. Repo ini **publik**, dan server live menariknya via `git pull origin master` (docs/LIVE_SERVER_DEPLOY.md:79) → kredensial sampai ke VPS & GitHub.
@@ -18,8 +18,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Force-push `--all --tags` ke `origin`. Branch basi `plan/livechat-wa-sync` (masih memuat password) **terhapus** dari remote.
   4. VPS `/opt/wa-clinic-bot`: `git fetch --prune` + `reset --hard origin/master` + `reflog expire` + `gc --prune=now` → semua ref VPS bersih.
   5. Verifikasi: `git log -S '<password>' --all` **kosong** di lokal, origin, dan VPS. Container `waha` tetap `Up 46 hours` (sesi WA tidak putus).
-- **Belum selesai (WAJIB, di luar kode):**
-  1. **Rotasi password SSH** server live (`passwd ubuntu` + `PasswordAuthentication no`) — password lama harus dianggap bocor (purge tidak menarik balik data yang mungkin sudah di-scrape). Belum dirotasi.
+- **Aksi selesai (rotasi + matikan password auth, 2026-09-26):**
+  1. **Root cause ditemukan:** `PasswordAuthentication no` sudah ada di `/etc/ssh/sshd_config:123`, TAPI **dikalahkan** oleh drop-in `/etc/ssh/sshd_config.d/50-cloud-init.conf` yang berisi `PasswordAuthentication yes` (OpenSSH memakai nilai pertama yang terbaca; drop-in di-include lebih awal). Jadi password auth sebenarnya **masih aktif** meski baris 123 tampak `no`.
+  2. Password `ubuntu` dirotasi via `chpasswd` (48-char hex, umur password ter-reset 2026-09-26).
+  3. Drop-in `50-cloud-init.conf` diubah → `PasswordAuthentication no` (backup `.bak.<ts>` disimpan). `sshd -t` = valid, `sshd -T` = `passwordauthentication no`.
+  4. `systemctl reload ssh` (tanpa memutus sesi). Login via key (`PreferredAuthentications=publickey`) = OK; login password (`PubkeyAuthentication=no`) = `Permission denied (publickey)` → **password auth terbukti mati**.
 - **Catatan:** IP host `43.157.197.148` masih tersebar di 13+ file (`scripts/*.js`, `CHANGELOG.md`, `docs/*`). Dibiarkan karena tidak setara password (butuh key), tapi idealnya dipindah ke env `DEPLOY_HOST`.
 
 ---
