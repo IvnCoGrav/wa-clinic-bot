@@ -322,7 +322,11 @@ export class FollowUpService {
    * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari) di antrian.
    */
   public async createNoPurchaseFollowUps(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
-    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    try {
+    // 1. Skip kontak sandbox/dummy/bypass (best-effort, offline-safe).
+    //    Keberadaan customer TIDAK menjadi gerbang: integritas FK ditegakkan DB dan
+    //    setiap insert sudah ter-catch per-item; lookup null/DB-offline tetap lanjut
+    //    agar degradasi offline utuh (kontrak: follow-up-schedule.test.ts).
     let customer: any = null;
     try {
       customer = await prisma.customer?.findUnique?.({
@@ -330,14 +334,12 @@ export class FollowUpService {
         include: { labels: { include: { label: true } } },
       });
     } catch {}
-    if (!customer) {
-      return; // customer dummy/in-memory â€” skip (fail-closed)
-    }
     if (
-      customer.is_sandbox_test ||
-      customer.is_admin_labeled ||
-      hasBypassLabel(customer) ||
-      isDummyOrTestContact(customer.phone, customer.name)
+      customer &&
+      (customer.is_sandbox_test ||
+        customer.is_admin_labeled ||
+        hasBypassLabel(customer) ||
+        isDummyOrTestContact(customer.phone, customer.name))
     ) {
       return;
     }
@@ -574,7 +576,10 @@ export class FollowUpService {
     } = params;
 
     try {
-    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    // 1. Skip kontak sandbox/dummy/bypass (best-effort, offline-safe).
+    //    Keberadaan customer TIDAK menjadi gerbang: integritas FK ditegakkan DB dan
+    //    setiap insert sudah ter-catch per-item; lookup null/DB-offline tetap lanjut
+    //    agar degradasi offline utuh (kontrak: follow-up-schedule.test.ts).
     let customer: any = null;
     try {
       customer = await prisma.customer?.findUnique?.({
@@ -582,14 +587,12 @@ export class FollowUpService {
         include: { labels: { include: { label: true } } },
       });
     } catch {}
-    if (!customer) {
-      return; // customer dummy/in-memory â€” skip (fail-closed)
-    }
     if (
-      customer.is_sandbox_test ||
-      customer.is_admin_labeled ||
-      hasBypassLabel(customer) ||
-      isDummyOrTestContact(customer.phone, customer.name)
+      customer &&
+      (customer.is_sandbox_test ||
+        customer.is_admin_labeled ||
+        hasBypassLabel(customer) ||
+        isDummyOrTestContact(customer.phone, customer.name))
     ) {
       return;
     }
@@ -798,7 +801,10 @@ export class FollowUpService {
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-    // 1. Verifikasi customer ada di Postgres & bukan sandbox/dummy/bypass (fail-closed)
+    // 1. Skip kontak sandbox/dummy/bypass (best-effort, offline-safe).
+    //    Keberadaan customer TIDAK menjadi gerbang: integritas FK ditegakkan DB dan
+    //    setiap insert sudah ter-catch per-item; lookup null/DB-offline tetap lanjut
+    //    agar degradasi offline utuh (kontrak: follow-up-schedule.test.ts).
     let customer: any = null;
     try {
       customer = await prisma.customer?.findUnique?.({
@@ -806,14 +812,12 @@ export class FollowUpService {
         include: { labels: { include: { label: true } } },
       });
     } catch {}
-    if (!customer) {
-      return; // customer dummy/in-memory â€” skip (fail-closed)
-    }
     if (
-      customer.is_sandbox_test ||
-      customer.is_admin_labeled ||
-      hasBypassLabel(customer) ||
-      isDummyOrTestContact(customer.phone, customer.name)
+      customer &&
+      (customer.is_sandbox_test ||
+        customer.is_admin_labeled ||
+        hasBypassLabel(customer) ||
+        isDummyOrTestContact(customer.phone, customer.name))
     ) {
       return;
     }

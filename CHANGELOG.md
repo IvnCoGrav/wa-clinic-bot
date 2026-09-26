@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-26 — Hotfix build & regresi pasca `f5c70ade` (deploy blocker)
+
+- **BLOCKER — `origin/master` tidak dapat di-build (`npm run build` / Docker build gagal).** Commit `f5c70ade` (rekonstruksi test suite V2) menghapus `try {` level-metode di `createNoPurchaseFollowUps` tetapi meninggalkan `} catch (err) {` yatim di baris 402 → selisih kurung −1 → 557 error parse TS. Klaim commit "build ✅" tidak akurat. Diperbaiki dengan memulihkan `try {`.
+- **Regresi geocoding — landmark/apartemen mapan turun ke `isPrecise:false` (6 test).** Guard `isDualAdmin` + city-mismatch baru di `crossCheckGazetteer` ikut berlaku pada lookup **otoritatif** (kamus landmark), sehingga `Grand Sungkono Lagoon`→Dukuh Pakis, `Mulyorejo`, `Tenggilis Mejoyo` kehilangan kelurahan/lat/lng. Fix fondasional: parameter `authoritative` memisahkan kontrak lookup kamus (otoritatif) dari cross-check inferensi LLM; heuristik ambiguitas hanya berlaku pada jalur inferensi.
+- **Regresi follow-up — guard "fail-closed" membunuh degradasi offline (7 test).** Guard `if (!customer) return` menyamakan **DB-offline (query melempar)** dengan **customer benar-benar tidak ada**. Kontrak `follow-up-schedule.test.ts:116` (mock `findUnique→null`, tetap harap 3 follow-up) menegaskan keberadaan customer bukan gerbang; integritas FK sudah ditegakkan DB + tiap insert ter-catch. Fix: pulihkan semantik baseline — skip hanya untuk kontak sandbox/dummy/bypass.
+- **Regresi enrichment — shareloc link Maps kehilangan provenance GPS (1 test).** Refactor `resolveLocationFromUrl` mencabut `isNativePin` + `markShareLocationSent` dari cabang URL, padahal invarian `sticky-gps.test.ts` menyatakan "shareloc / **link Maps**" berstatus VERIFIED_GPS. Fix: `url_coords` (koordinat presisi dari URL) → `isNativePin: true` + `markShareLocationSent`; `url_text_geocoded` (teks tempat di-geocode) tetap area perkiraan.
+- **Verifikasi:** `npx tsc --noEmit` 0 error, `npm run build` hijau, full suite **458 file / 3539 test lulus, 0 gagal** (baseline `7c94b58` diverifikasi hijau untuk 4 file yang sama sebelum fix).
+
 #### 2026-09-25 — Overhaul UX Mobile & LiveChat: Sticky Footer Reservasi, Smart Banner Form 1-Tap, Konsolidasi Menu Tools
 
 - **`CreateReservationModal` — sticky footer & stacked action sheet mobile:**

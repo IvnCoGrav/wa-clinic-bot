@@ -308,7 +308,7 @@ export class GeocodingService {
     // 0. Cek Landmark / Apartemen / Mall Populer terlebih dahulu
     const landmark = findPopularLandmark(locationText);
     if (landmark) {
-      const gazetteerMatch = this.crossCheckGazetteer(landmark.kelurahan, landmark.kecamatan, landmark.kota, cityScope);
+      const gazetteerMatch = this.crossCheckGazetteer(landmark.kelurahan, landmark.kecamatan, landmark.kota, cityScope, true);
       if (gazetteerMatch) {
         return {
           ...gazetteerMatch,
@@ -1077,7 +1077,8 @@ OUTPUT JSON:
     kelurahan?: string | null,
     kecamatan?: string | null,
     kota?: string | null,
-    cityScope?: string | null
+    cityScope?: string | null,
+    authoritative = false
   ): ResolvedLocation | null {
     try {
       const data = getGazetteerData();
@@ -1100,7 +1101,7 @@ OUTPUT JSON:
           const kotaMatches = matches.filter((m: any) => (m.Kabupaten_Kota || '').toLowerCase() === kotaLower);
           if (kotaMatches.length > 0) {
             matches.splice(0, matches.length, ...kotaMatches);
-          } else if (matches.length > 0) {
+          } else if (matches.length > 0 && !authoritative) {
             // Kota disebut tapi tidak cocok dengan hasil -> ambiguity, jangan return precise
             return {
               isPrecise: false,
@@ -1115,7 +1116,7 @@ OUTPUT JSON:
           // Dual-admin check: kelurahan name == kecamatan name (e.g., Wonocolo)
           // If so, and the kecamatan has multiple kelurahan, return ambiguity instead of precise
           const isDualAdmin = match.Kelurahan_Desa.toLowerCase().trim() === match.Kecamatan.toLowerCase().trim();
-          if (isDualAdmin) {
+          if (isDualAdmin && !authoritative) {
             const subdistricts = data.filter((d: any) => d.Kecamatan === match.Kecamatan && d.Kabupaten_Kota === match.Kabupaten_Kota);
             if (subdistricts.length > 1) {
               return {

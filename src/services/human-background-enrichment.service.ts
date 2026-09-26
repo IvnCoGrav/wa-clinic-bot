@@ -240,7 +240,11 @@ export class HumanBackgroundEnrichmentService {
           const { customerService } = await import('./customer.service');
           const res = await resolveLocationFromUrl(incomingText, tid);
           if (res.success && res.lat != null && res.lng != null) {
-            // Use the resolver result directly - it already has kelurahan/kecamatan/kota/distance/ongkir
+            // Provenance: koordinat presisi langsung dari URL (`url_coords`) = pin GPS asli
+            // (invarian sticky-gps: "shareloc / link Maps" berstatus VERIFIED_GPS) → kunci GPS
+            // + tandai share_location_sent. Teks tempat dari URL yang di-geocode
+            // (`url_text_geocoded`) hanyalah area perkiraan → TIDAK dikunci sebagai GPS.
+            const isNativePin = res.source === 'url_coords';
             await customerService.updateCustomerLocation(customer.id, {
               kelurahan: res.kelurahan,
               kecamatan: res.kecamatan,
@@ -251,9 +255,11 @@ export class HumanBackgroundEnrichmentService {
               ongkir: res.ongkir,
               isOutOfCoverage: res.isOutOfCoverage,
               zipcode: res.zipcode,
-              // isNativePin: false - URL-resolved is NOT a native GPS pin
+              isNativePin,
             }, tid);
-            // Do NOT mark share_location_sent for URL-resolved (not native GPS)
+            if (isNativePin) {
+              await customerService.markShareLocationSent(customer.id, tid);
+            }
             console.log(`[HUMAN ENRICH] Google Maps link resolved for ${customer.phone}: ${res.distanceKm}km ongkir ${res.ongkir} (source: ${res.source})`);
             return { enriched: true, reason: 'google_maps_url' };
           }
