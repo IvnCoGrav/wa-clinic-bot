@@ -39,6 +39,15 @@ Sebanyak 13 script di `scripts/*.js` memuat hardcoded:
 - Path root server: `/opt/wa-clinic-bot`
 - Container name: `wa-clinic-bot-app-1`, `wa-clinic-bot-postgres-1`, `wa-clinic-bot-waha-1`
 
+**Tambahan (audit 2026-09-26):** `docs/LIVE_SERVER_DEPLOY.md` (baris 12–15 sebelum
+sanitasi) juga memuat **password SSH login** server live secara plaintext
+(`ubuntu` / `<REDACTED>`). Password tersebut:
+1. Sudah dihapus dari working tree (diganti alias SSH `klinik-server`), TAPI
+   masih ada di **histori git** (commit lama) → wajib masuk Tahap 4 purge.
+2. **WAJIB dianggap bocor & dirotasi** di server (`passwd ubuntu` + matikan
+   `PasswordAuthentication`) — password statis tanpa expiry adalah risiko
+   tertinggi, melebihi kebocoran key karena bisa dipakai dari mana saja.
+
 ### Vektor D: Kredensial Historis di Blob Git
 | # | Secret / File | Lokasi Bocor | Status Nilai |
 |---|---|---|---|
@@ -212,6 +221,20 @@ Lakukan rotasi bertahap di server produksi via SSH.
     --path scratch/route_analysis.js \
     --force
   ```
+- [ ] **4.2b Redaksi Password SSH di Histori (`--replace-text`)**:
+  `docs/LIVE_SERVER_DEPLOY.md` tetap dibutuhkan (dokumen runbook), jadi TIDAK
+  dihapus dari histori — cukup ganti string password lamanya di SEMUA commit.
+  Buat file `replacements.txt` (JANGAN commit file ini) berisi nilai password
+  lama (ambil dari password manager tim, JANGAN dari dokumen ini), format
+  `literal==>***REDACTED***`:
+  ```text
+  <PASSWORD_LAMA>==>***REDACTED***
+  ```
+  Lalu jalankan:
+  ```bash
+  git filter-repo --replace-text replacements.txt --force
+  ```
+  Verifikasi: `git log -S '<PASSWORD_LAMA>' --all` harus kosong.
 - [ ] **4.3 Force Push ke GitHub**:
   ```bash
   git push --force --all origin
@@ -224,6 +247,12 @@ Lakukan rotasi bertahap di server produksi via SSH.
 
 ### Tahap 5 — Verifikasi Akhir & Monitoring
 
+- [ ] 5.0 **Rotasi password SSH server** (jalur terpisah dari kode, paling urgent):
+  ```bash
+  ssh klinik-server "sudo passwd ubuntu"
+  # lalu set PasswordAuthentication no di /etc/ssh/sshd_config && sudo systemctl reload sshd
+  ```
+  Pastikan login SSH key (`klinik-server`) tetap bekerja sebelum menutup sesi.
 - [ ] 5.1 Smoke test end-to-end pesan WA masuk -> balasan AI bot.
 - [ ] 5.2 Verifikasi login Admin Dashboard dengan key baru.
 - [ ] 5.3 Cek histori GitHub via browser (`/commits/master`) untuk memastikan file `.env`, `db_customers.json`, dan `spreadsheet_booking_data.tsv` sudah 100% hilang dari riwayat commit.
