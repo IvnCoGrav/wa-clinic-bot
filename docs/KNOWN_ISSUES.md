@@ -5,6 +5,44 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 143. [Observability] Tidak ada access-log status 401/503 untuk endpoint auth (2026-09-26) — OPEN
+
+- **Gejala:** saat investigasi live insiden logout (Fase 0), `docker compose logs caddy/app` tidak memuat satu pun baris status untuk `/api/admin/auth/me` & `/restore` (Caddy access log tidak mencatat, Fastify handler diam) — forensic "berapa kali 401 vs 503 dalam 24 jam" mustahil dilakukan.
+- **Akibat:** frekuensi logout ambigu tak bisa diukur pasca-deploy; regresi kontrak 503-vs-401 hanya terdeteksi oleh test, bukan monitoring.
+- **Rencana (DITUNDA):** log ringkas terstruktur (JSON) pada jalur auth: `path, status, latency, session_hash_prefix8, signal(401|503)` dengan redaksi token penuh; opsional counter in-memory per jam untuk alert.
+- **Status:** OPEN — di luar blast radius fix anti-logout (tidak memengaruhi perilaku).
+
+---
+
+## 142. [Tests] 2 test timeout flaky di full-suite paralel — `waha-webhook` (gambar inbound) & `media.service` (`runMediaCleanup`) (2026-09-26) — OPEN
+
+- **Gejala:** `npm test` (470 file, paralel) kadang menjatuhkan `waha-webhook.test.ts` (gambar inbound) dan/atau `media.service.test.ts` `runMediaCleanup` dengan `Test timed out in 5000ms`; keduanya **hijau saat diisolasi** (`npx vitest run <file>` → lulus) dan hijau di run suite penuh lainnya.
+- **Bukti (bukan regresi):** run baseline dengan `git stash push` (tanpa perubahan sesi anti-logout): `waha-webhook` tetap gagal → pre-existing; `media.service` lolos. Run suite penuh SESUDAH fix: run 1–2 gagal (2 flake saat mesin sibuk — sesi paralel aktif), run 3 & 4 **0 gagal**. Test yang gagal sama persis dengan sebelum fix.
+- **Akar:** timeout 5 dtk ketat + cold-import `cron.service`/I/O file saat worker kelebihan beban — murni scheduling, bukan perilaku kode.
+- **Rencana (DITUNDA):** naikkan `testTimeout` khusus 2 file itu (opsi per-test timeout arg) atau `maxWorkers` berbasis beban; bukan prioritas karena hijau di sebagian besar run.
+- **Status:** OPEN — dampak: sinyal suite jadi berisik, bukan regresi fungsional.
+
+---
+
+## 141. [Auth] `StaffAuthService.validateSession` belum punya kontrak 503 seperti admin (2026-09-26) — OPEN
+
+- **Gejala:** perbaikan anti-logout-paksa (CHANGELOG 2026-09-26) membedakan 503 (DB mati) vs 401 (token invalid) hanya untuk **sesi admin** (`AdminSessionService`). Jalur staff (`staff-auth.service.ts`) masih menelan error DB → `null` → 401 ambigu di `/api/staff/auth/*` & preHandler `staff.route.ts` (cabang cookie staff).
+- **Dampak saat ini:** frontend staff sudah dilindungi dari penghapusan token (helper `sessionRestore.ts` memperlakukan timeout/5xx sebagai `'network'`), tetapi DB-error yang termanifestasi sebagai 401 dari jalur staff murni (tanpa cookie admin) masih bisa mengakhiri sesi lebih agresif dari seharusnya.
+- **Rencana (DITUNDA):** seragamkan `StaffAuthService.validateSession` ke pola sama (`SessionStoreUnavailable` + tombstone + hot cache keyed-hash) dan pemetaan 503 di `staff.route.ts` cabang staff + `staff/auth.subroute.ts`; unit test kontrak serupa.
+- **Status:** OPEN — sengaja dipisah agar fix admin (yang menutup insiden live) tidak melebar blast radius-nya.
+
+---
+
+## 140. [Tests] Mismatch ground truth fixture suite v2 — `expected_final_state=AWAITING_INTEREST` vs eskalasi sah di tengah transkrip monolog (2026-09-26) — OPEN
+
+- **Gejala:** replay `npx tsx scripts/run-test-plan.ts --suite=v2` menandai Gate FAIL (D2_SOP < 2) pada kasus `CASE-010, 012, 013, 014, 015, 016, 018, 019, 020` (dan potensi lebih). Bot justru `HUMAN_HANDLING` — padahal transkrip (warisan monolog WhatsApp asli, 20-40 turn) memang memuat pemicu eskalasi sah di tengah alur (mis. `CASE-020` turn 16 "posisinya kurang pas" → komplain tindik benar dieskalasi).
+- **Akar:** fixture di-generate dari transkrip mentah (`scripts/build-test-suite-v2.ts`); `expected_final_state` yang terkunci hanya menangkap **state akhir** percakapan, bukan aksi eskalasi yang sah di tengah. Harness sendiri sudah mengakui "inkonsistensi ground truth warisan monolog" (catatan `D3_DEFERRED` di `run-test-plan.ts`).
+- **Dampak:** bukan bug bot; menurunkan sinyal auto-gate suite v2 (false negative) dan menyulitkan mendeteksi regresi SOP yang sebenarnya.
+- **Rencana (belum dikerjakan, DITUNDA):** revisi `scripts/build-test-suite-v2.ts` agar `expected_behavior` memperhitungkan eskalasi mid-transcript (mis. `expected_final_state` per-fase atau toleransi transisi HUMAN_HANDLING yang sah) + regenerasi 119 kasus + review manusia. Di luar blast radius fix crash CASE-011.
+- **Status:** OPEN — sengaja dipisah; lihat `CHANGELOG.md` 2026-09-26 (Fix crash `session.children` sparse array).
+
+---
+
 ## 139. [Tests] 3 test `lead-greeting-preservation.test.ts` gagal akibat modifikasi working-tree pre-existing `src/utils/lead-greeting-detector.ts` (2026-09-26) — RESOLVED
 
 - **Gejala:** full suite `npm test` → 3 gagal (16/16 file itu sendiri juga gagal, bukan flake): detektor `isPureLeadGreeting('Promo[b8]…')` mengembalikan `false`; gate V3 jatuh ke LLM (di-mock reject) → balasan fallback "Mohon maaf Bunda, koneksi sistem kami…"; audit teks mentah `undefined`.

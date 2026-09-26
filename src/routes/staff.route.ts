@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { StaffAuthService } from '../services/staff-auth.service';
-import { AdminSessionService } from '../services/admin-session.service';
+import { AdminSessionService, SessionStoreUnavailable } from '../services/admin-session.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { staffAuthRoutes } from './staff/auth.subroute';
 import { staffTodayRoutes } from './staff/today.subroute';
@@ -31,7 +31,20 @@ export async function staffRoutes(fastify: FastifyInstance) {
     let session = staffCookie ? await StaffAuthService.validateSession(staffCookie) : null;
 
     if (!session && adminCookie) {
-      const adminSession = await AdminSessionService.validateSession(adminCookie);
+      let adminSession: Awaited<ReturnType<typeof AdminSessionService.validateSession>>;
+      try {
+        adminSession = await AdminSessionService.validateSession(adminCookie);
+      } catch (err) {
+        // Kontrak sinyal: DB sesi tak tersedia → 503, jangan jatuh ke 401
+        // (401 ambigu memicu penghapusan token cadangan di frontend).
+        if (err instanceof SessionStoreUnavailable) {
+          return reply.status(503).send({
+            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+            code: 'SESSION_STORE_UNAVAILABLE',
+          });
+        }
+        throw err;
+      }
       if (adminSession) {
         session = {
           token: adminCookie,
