@@ -49,7 +49,7 @@ export function clearAdminStaticCache() {
 }
 
 export async function adminRoutes(fastify: FastifyInstance) {
-  const { AdminSessionService } = await import('../services/admin-session.service');
+  const { AdminSessionService, SessionStoreUnavailable } = await import('../services/admin-session.service');
 
   // --- REVISI SECURITY: Origin Isolation & Dual Auth Middleware (X-API-KEY or HttpOnly Cookie Session) ---
   fastify.addHook('preHandler', async (request, reply) => {
@@ -106,10 +106,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
       isAuthenticated = true;
       identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
     } else if (sessionCookie) {
-      const validSession = await AdminSessionService.validateSession(sessionCookie);
-      if (validSession) {
-        isAuthenticated = true;
-        identity = validSession.adminIdentity;
+      // Kontrak sinyal: DB sesi tak tersedia → 503 (bukan 401 ambigu yang
+      // memicu penghapusan token cadangan di frontend).
+      try {
+        const validSession = await AdminSessionService.validateSession(sessionCookie);
+        if (validSession) {
+          isAuthenticated = true;
+          identity = validSession.adminIdentity;
+        }
+      } catch (err) {
+        if (err instanceof SessionStoreUnavailable) {
+          return reply.status(503).send({
+            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+            code: 'SESSION_STORE_UNAVAILABLE',
+          });
+        }
+        throw err;
       }
     } else if (staffCookie) {
       const { StaffAuthService } = await import('../services/staff-auth.service');

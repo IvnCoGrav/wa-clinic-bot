@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
+import { restoreSessionToken } from '../services/sessionRestore';
 import { emitBootPhase, setBootMessage } from '../lib/bootProgress';
 
 export interface StaffUser {
@@ -31,19 +32,9 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState(true);
 
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) return 'invalid';
-    try {
-      const res = await apiRequest('/api/staff/auth/restore', {
-        method: 'POST',
-        body: JSON.stringify({ token }),
-        timeoutMs: 3000,
-      });
-      return res && res.success ? 'ok' : 'invalid';
-    } catch {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      return 'invalid';
-    }
+    // Pola sama dengan AuthContext admin: hanya 401/403/400 tegas yang menghapus
+    // token cadangan; timeout & 5xx → 'network' (token dipertahankan + retry).
+    return restoreSessionToken('/api/staff/auth/restore', TOKEN_STORAGE_KEY);
   }
 
   // Check auth session on mount
@@ -132,6 +123,18 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             retryTimer = setTimeout(checkAuth, 300);
             return;
           }
+          if (restoreResult === 'network') {
+            // Server tak terjangkau / sesi sedang tidak tersedia: token dipertahankan,
+            // retry backoff terbatas, loading dilepas agar tidak stuck spinner.
+            clearPendingRetry();
+            clearTimeout(hardSafetyTimer);
+            attempts = Math.max(attempts, 1);
+            setLoading(false);
+            emitBootPhase('auth');
+            scheduleRetry(RETRY_BACKOFF_MS[Math.min(attempts, RETRY_BACKOFF_MS.length - 1)]);
+            return;
+          }
+          // 'invalid' — penolakan tegas dari server: logout bersih.
           clearPendingRetry();
           clearTimeout(hardSafetyTimer);
           localStorage.removeItem(TOKEN_STORAGE_KEY);

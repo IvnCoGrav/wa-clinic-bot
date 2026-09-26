@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { apiRequest } from '../services/api';
+import { restoreSessionToken } from '../services/sessionRestore';
 import { getDefaultRedirect, fetchRolesFromApi } from '../config/rolePermissions';
 import { emitBootPhase, setBootMessage } from '../lib/bootProgress';
 
@@ -57,19 +58,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) return 'invalid';
-    try {
-      const res = await apiRequest('/api/admin/auth/restore', {
-        method: 'POST',
-        body: JSON.stringify({ token }),
-        timeoutMs: 3000,
-      });
-      return res && res.success ? 'ok' : 'invalid';
-    } catch {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      return 'invalid';
-    }
+    // Token cadangan hanya dihapus oleh caller bila hasilnya 'invalid' tegas
+    // (401/403/400). Timeout & 503 = 'network' → token dipertahankan + retry.
+    return restoreSessionToken('/api/admin/auth/restore', TOKEN_STORAGE_KEY);
   }
 
   // Check auth session on mount
@@ -170,6 +161,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             retryTimer = setTimeout(checkAuth, 300);
             return;
           }
+          if (restoreResult === 'network') {
+            // Server tak terjangkau / penyimpanan sesi sedang 503: token cadangan
+            // TIDAK dihapus — retry dengan backoff; begitu pulih, sesi dinormalisasi
+            // oleh /me. Attempts dibatasi agar tidak loop tanpa henti.
+            clearPendingRetry();
+            clearTimeout(hardSafetyTimer);
+            attempts = Math.max(attempts, 1);
+            setLoading(false);
+            emitBootPhase('auth');
+            scheduleRetry(RETRY_BACKOFF_MS[Math.min(attempts, RETRY_BACKOFF_MS.length - 1)]);
+            return;
+          }
+          // 'invalid' — penolakan tegas dari server (401/403/400): logout bersih.
           clearPendingRetry();
           clearTimeout(hardSafetyTimer);
           localStorage.removeItem(TOKEN_STORAGE_KEY);

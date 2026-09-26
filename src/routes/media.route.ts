@@ -30,15 +30,25 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
   const authHeader = request.headers['authorization'];
   const queryToken = (request.query as any)?.token;
 
-  const { AdminSessionService } = await import('../services/admin-session.service');
-  if (sessionCookie && (await AdminSessionService.validateSession(sessionCookie))) return true;
+  const { AdminSessionService, SessionStoreUnavailable } = await import('../services/admin-session.service');
+  // DB sesi tak tersedia → dianggap belum terotentikasi di lapis media (deny aman,
+  // bukan 500). Media bukan jalur logout; fallback lain (staff/API key) tetap dicoba.
+  const adminSessionValid = async (t: string): Promise<boolean> => {
+    try {
+      return !!(await AdminSessionService.validateSession(t));
+    } catch (err) {
+      if (err instanceof SessionStoreUnavailable) return false;
+      throw err;
+    }
+  };
+  if (sessionCookie && (await adminSessionValid(sessionCookie))) return true;
   if (staffCookie) {
     const { StaffAuthService } = await import('../services/staff-auth.service');
     const staff = await StaffAuthService.validateSession(staffCookie);
     if (staff) return true;
   }
   if (queryToken) {
-    if (await AdminSessionService.validateSession(queryToken)) return true;
+    if (await adminSessionValid(queryToken)) return true;
     const { StaffAuthService } = await import('../services/staff-auth.service');
     const staff = await StaffAuthService.validateSession(queryToken);
     if (staff) return true;

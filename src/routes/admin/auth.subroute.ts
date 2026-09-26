@@ -7,7 +7,34 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 export async function authAdminRoutes(fastify: FastifyInstance) {
-  const { AdminSessionService } = await import('../../services/admin-session.service');
+  const { AdminSessionService, SessionStoreUnavailable } = await import(
+    '../../services/admin-session.service'
+  );
+
+  // Kontrak sinyal sesi (anti-logout-paksa):
+  // - 'unavailable' (SessionStoreUnavailable) → route WAJIB membalas 503
+  // - 'invalid' (null)                        → 401 jujur (token mati/kedaluwarsa)
+  type AdminValidateOutcome =
+    | { status: 'valid'; session: NonNullable<Awaited<ReturnType<typeof AdminSessionService.validateSession>>> }
+    | { status: 'invalid' }
+    | { status: 'unavailable' };
+
+  async function validateAdminSession(token: string): Promise<AdminValidateOutcome> {
+    try {
+      const session = await AdminSessionService.validateSession(token);
+      return session ? { status: 'valid', session } : { status: 'invalid' };
+    } catch (err) {
+      if (err instanceof SessionStoreUnavailable) return { status: 'unavailable' };
+      throw err;
+    }
+  }
+
+  function sendSessionUnavailable(reply: import('fastify').FastifyReply) {
+    return reply.status(503).send({
+      error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+      code: 'SESSION_STORE_UNAVAILABLE',
+    });
+  }
 
   /**
    * POST /api/admin/auth/login
@@ -190,8 +217,10 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
         .trim() === 'https';
 
     // 1. Coba sebagai sesi admin
-    const adminSession = await AdminSessionService.validateSession(token);
-    if (adminSession) {
+    const adminOutcome = await validateAdminSession(token);
+    if (adminOutcome.status === 'unavailable') return sendSessionUnavailable(reply);
+    if (adminOutcome.status === 'valid') {
+      const adminSession = adminOutcome.session;
       const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
@@ -300,8 +329,10 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
     // 1c. Cek cookie admin_session
     if (adminSessionCookie) {
-      const session = await AdminSessionService.validateSession(adminSessionCookie);
-      if (session) {
+      const outcome = await validateAdminSession(adminSessionCookie);
+      if (outcome.status === 'unavailable') return sendSessionUnavailable(reply);
+      if (outcome.status === 'valid') {
+        const session = outcome.session;
         return reply.status(200).send({
           success: true,
           authenticated: true,
