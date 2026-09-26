@@ -17,6 +17,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
 - **Masalah:** seluruh monitoring dalam aplikasi (`AlertService`, waha-monitor, cron) ikut mati saat container `app` down — 502 `/cta` 26 Sep tanpa ada yang memberi tahu.
 - **Solusi (level HOST, bukan container):** `scripts/server-watchdog.sh` (cron */2 menit) + `scripts/install-server-watchdog.sh`. Cek berlapis container + `GET /health` publik (tanpa tulis DB); anti-flap 2x gagal beruntun; DOWN sekali, pengingat 60 mnt, RECOVERY + durasi. Kredensial dari `.env` → tenant DB (decrypt via container app), disimpan `chmod 600` `.watchdog.env`. Tanpa dep baru (bash+curl+docker+flock host).
 - **Verifikasi:** `bash -n` kedua skrip OK; simulasi stub docker/curl di server 6 run hijau (gagal-1x sunyi, gagal-2x DOWN 1 pesan, masih-down tanpa resend, pulih RECOVERY, jalur container-hilang sama). Jejak simulasi dibersihkan (`/tmp/wd-test`).
+- **Deployed 2026-09-26 ±09:22 (waktu server):** installer dieksekusi — kredensial dari tenant DB (token 46 char plaintext), cron `*/2` aktif, pesan uji http 200, run perdana `STATE=OK`.
 
 #### 2026-09-26 — Mitigasi 502 `/cta` saat recreate container app (insiden #135)
 

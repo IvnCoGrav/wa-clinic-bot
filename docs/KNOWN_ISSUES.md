@@ -74,6 +74,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Sisa risiko / debt jujur:** retry Caddy hanya menutup jeda ≤30 dtk; recreate penuh (build image + boot Node + init tenant) bisa >30 dtk → 502 masih mungkin pada deploy siang hari. Deploy tetap dianjurkan di jam sepi + cek pasca-deploy `curl /health` & `/cta?divisi=iklan-utama`. Blue-green sejati (2 replika app) belum ada — butuh port mapping + strategi cutover, ditunda via Confirmation Gate.
 - **Sampingan teramati (bukan penyebab 502):** log `app` memuat `Unique constraint failed (trackingCode)` di `adClick.create` (fallback in-memory menutupnya, CTA tetap 200). Error `admin_sessions does not exist` tidak lagi muncul — `migrate status` server = up to date (77 migrasi).
 - **Follow-up:** watchdog host-level `scripts/server-watchdog.sh` + installer (`*/2 mnt`, flap-proof, DOWN sekali + RECOVERY) — status install menyusul di entri deploy.
+- **DEPLOYED 2026-09-26 ±09:22 (waktu server):** `git pull` (a7c475e4) + `build` + `caddy reload` (zero-downtime, config valid) + `up -d --no-deps app`. Hasil: `app healthy` ≤20 dtk, 1x 502 sesaat pada detik ke-10 (di dalam jendela recreate; retry 30 dtk tidak menutup seluruhnya — deploy jam sepi tetap berlaku). WAHA `Up 46h` tak tersentuh. Watchdog ter-install (cron aktif, `.watchdog.env 600`, pesan uji http 200, run perdana `STATE=OK`). `migrate status` = up to date (77 migrasi, tanpa deploy tambahan). Verifikasi: `/health`, `/cta?divisi=iklan-utama`, `/go` = 200; trafik WA live (MESSAGE ACK) jalan.
 
 ---
 
