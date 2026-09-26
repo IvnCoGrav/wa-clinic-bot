@@ -7,22 +7,30 @@ WhatsApp (WAHA) terputus.
 
 ## 🔑 Akses Server
 
+> ⚠️ **Kredensial TIDAK boleh ditulis di repo ini.** Host, user, dan port
+> disimpan di luar repo (SSH config / password manager tim). Placeholder di
+> bawah memakai alias SSH `klinik-server`.
+
 | Item        | Nilai                                   |
 | ----------- | --------------------------------------- |
-| **IP / Host** | `43.157.197.148`                        |
-| **SSH User**  | `ubuntu`                                |
+| **IP / Host** | dari alias SSH `klinik-server` (lihat `~/.ssh/config`) |
+| **SSH User**  | `ubuntu` (tertanam di alias)            |
 | **SSH Port**  | `1403` (bukan 22; 22 dibatasi firewall) |
-| **Password**  | `***REDACTED***`                   |
+| **Password**  | ❌ tidak dipakai — gunakan SSH key      |
 | **App Path**  | `/opt/wa-clinic-bot`                    |
 | **Docker Compose** | `/opt/wa-clinic-bot/docker-compose.yml` |
 | **Session WAHA** | `default` (volume `waha_sessions`)   |
 
 > ✅ **STATUS KEAMANAN (TER-UPDATE)**
 >
-> Server kini telah dikonfigurasi menggunakan **SSH Key Authentication** yang jauh lebih aman (Password tidak lagi digunakan untuk akses utama). 
+> Server kini telah dikonfigurasi menggunakan **SSH Key Authentication** yang jauh lebih aman (Password tidak lagi digunakan untuk akses utama).
 > Kunci telah dipasang di `~/.ssh/id_ed25519_klinik` pada komputer lokal dengan alias SSH `klinik-server`.
-> 
+>
 > *(Opsional)* Jika Anda ingin menonaktifkan total login menggunakan password, Anda bisa mengubah `PasswordAuthentication no` di `/etc/ssh/sshd_config` server.
+>
+> 📌 **Catatan keamanan:** password SSH lama pernah ter-commit ke repo (sejak dihapus).
+> Password itu **WAJIB dianggap bocor** dan harus segera dirotasi di server
+> (lihat `docs/plans/SECRET_ROTATION_PLAN.md`).
 
 ---
 
@@ -40,14 +48,14 @@ WhatsApp (WAHA) terputus.
 
 ### Opsi A — SSH langsung (PC Windows / Linux)
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148
+ssh klinik-server
 # lalu masuk ke folder app
 cd /opt/wa-clinic-bot
 ```
 
 ### Opsi B — SSH sekali jalan (remote command)
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "cd /opt/wa-clinic-bot && docker compose ps"
+ssh klinik-server "cd /opt/wa-clinic-bot && docker compose ps"
 ```
 
 ### Opsi C — Otomatisasi dari PC (misal via Node.js ssh2 / plink)
@@ -62,20 +70,20 @@ Sesuai pola yang dipakai tim saat deploy otomatis: jalankan perintah berikut
 
 ### 1. Cek status saat ini
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "docker ps; cd /opt/wa-clinic-bot && git status && git log -1 --oneline"
+ssh klinik-server "docker ps; cd /opt/wa-clinic-bot && git status && git log -1 --oneline"
 ```
 Pastikan `waha` berstatus `Up` (bukan `Restarting`).
 
 ### 2. Tarik kode terbaru dari GitHub
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "cd /opt/wa-clinic-bot && git pull origin master"
+ssh klinik-server "cd /opt/wa-clinic-bot && git pull origin master"
 ```
 Verifikasi commit terbaru (misal `2c1be62`).
 
 ### 3. Jalankan migrasi database (PENTING: sebelum app naik)
 Di dalam container `app` yang **lama** (masih jalan) jalankan:
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "cd /opt/wa-clinic-bot && docker compose exec -T app npx prisma migrate deploy"
+ssh klinik-server "cd /opt/wa-clinic-bot && docker compose exec -T app npx prisma migrate deploy"
 ```
 > Jika muncul `P3009` / `relation ... already exists`:
 > **JANGAN drop tabel.** Tandai migration yang sebenarnya sudah pernah diterapkan:
@@ -90,15 +98,15 @@ ssh -p 1403 ubuntu@43.157.197.148 "cd /opt/wa-clinic-bot && docker compose exec 
 
 ### 4. Rebuild HANYA container app
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "cd /opt/wa-clinic-bot && docker compose build app && docker compose up -d --no-deps app"
+ssh klinik-server "cd /opt/wa-clinic-bot && docker compose build app && docker compose up -d --no-deps app"
 ```
 - `--no-deps` → tidak menyentuh postgres/waha/caddy.
 - WAHA tetap `Up` & sesi tetap aktif.
 
 ### 5. Verifikasi
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148 "docker ps"
-ssh -p 1403 ubuntu@43.157.197.148 "docker logs --tail 30 wa-clinic-bot-app-1"
+ssh klinik-server "docker ps"
+ssh klinik-server "docker logs --tail 30 wa-clinic-bot-app-1"
 ```
 Checklist sukses:
 - [ ] `wa-clinic-bot-waha-1` → `Up X hours` (angka jam **tidak** kembali ke 0).
@@ -128,9 +136,9 @@ docker compose up -d --no-deps app
 
 | Tujuan | Perintah |
 | ------ | -------- |
-| Lihat container | `ssh -p 1403 ubuntu@43.157.197.148 "docker ps"` |
-| Lihat log app | `ssh -p 1403 ubuntu@43.157.197.148 "docker logs --tail 50 wa-clinic-bot-app-1"` |
-| Lihat log waha | `ssh -p 1403 ubuntu@43.157.197.148 "docker logs --tail 50 wa-clinic-bot-waha-1"` |
+| Lihat container | `ssh klinik-server "docker ps"` |
+| Lihat log app | `ssh klinik-server "docker logs --tail 50 wa-clinic-bot-app-1"` |
+| Lihat log waha | `ssh klinik-server "docker logs --tail 50 wa-clinic-bot-waha-1"` |
 | Rebuild app saja | `cd /opt/wa-clinic-bot && docker compose build app && docker compose up -d --no-deps app` |
 | Migrasi DB | `cd /opt/wa-clinic-bot && docker compose exec -T app npx prisma migrate deploy` |
 | Sync skema cepat | `cd /opt/wa-clinic-bot && docker compose exec -T app npx prisma db push` |

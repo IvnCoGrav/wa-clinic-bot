@@ -5,6 +5,20 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 134. [Kebocoran Password SSH Server Live di `docs/LIVE_SERVER_DEPLOY.md` + `test-results/` Masih Ter-Track] PARTIAL (2026-09-26)
+
+- **Latar:** audit higienitas repo vs server live (VPS). Pertanyaan user: apakah file test/docs/scripts ikut ke server live.
+- **Temuan 1 (KRITIS) — password SSH server live ter-commit:** `docs/LIVE_SERVER_DEPLOY.md` baris 12–15 memuat Host, user `ubuntu`, port `1403`, dan **password plaintext** server produksi. Repo ini **publik**, dan server live menariknya via `git pull origin master` (docs/LIVE_SERVER_DEPLOY.md:79) → kredensial sampai ke VPS & GitHub.
+- **Temuan 2 — `test-results/` masih ter-track:** 27 file (0.8 MB) ter-commit padahal `.gitignore:33` sudah mengabaikannya; ikut ter-`git pull` ke VPS tiap deploy.
+- **Konteks arsitektur (bukan bug):** image container produksi sudah BERSIH — `Dockerfile` multi-stage stage `runner` hanya menyalin `dist/`, `prisma/`, `assets/`, JSON config, dan `node_modules` prod; `tests/docs/scripts` tidak pernah masuk image. Jadi sampah ini murni soal isi filesystem VPS & build context, bukan runtime.
+- **Aksi selesai (working tree):** `git rm -r --cached test-results` (file fisik tetap ada); redaksi kredensial di `docs/LIVE_SERVER_DEPLOY.md` → placeholder + alias SSH `klinik-server`; tambah Vektor C + langkah `--replace-text` + rotasi password di `docs/plans/SECRET_ROTATION_PLAN.md`.
+- **Belum selesai (WAJIB, di luar kode):**
+  1. **Rotasi password SSH** server live (`passwd ubuntu` + `PasswordAuthentication no`) — password lama harus dianggap bocor. Belum ada bukti dirotasi.
+  2. **Purge histori git**: password masih ada di commit lama → jalankan Tahap 4 `git filter-repo --replace-text` (lihat SECRET_ROTATION_PLAN) + force push + re-sync VPS.
+- **Catatan:** IP host `43.157.197.148` masih tersebar di 13+ file (`scripts/*.js`, `CHANGELOG.md`, `docs/*`). Dibiarkan karena tidak setara password (butuh key), tapi idealnya dipindah ke env `DEPLOY_HOST`.
+
+---
+
 ## 133. [Build Blocker + 3 Regresi Pasca `f5c70ade` — Deploy `origin/master` Sempat Mustahil] DONE (2026-09-26)
 
 - **Temuan saat update live server:** server live berada di `7c94b58` (29 commit di belakang `origin/master`); `docker compose build app` GAGAL di `npm run build`.
