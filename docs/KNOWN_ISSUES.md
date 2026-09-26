@@ -12,9 +12,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Temuan 2 — `test-results/` masih ter-track:** 27 file (0.8 MB) ter-commit padahal `.gitignore:33` sudah mengabaikannya; ikut ter-`git pull` ke VPS tiap deploy.
 - **Konteks arsitektur (bukan bug):** image container produksi sudah BERSIH — `Dockerfile` multi-stage stage `runner` hanya menyalin `dist/`, `prisma/`, `assets/`, JSON config, dan `node_modules` prod; `tests/docs/scripts` tidak pernah masuk image. Jadi sampah ini murni soal isi filesystem VPS & build context, bukan runtime.
 - **Aksi selesai (working tree):** `git rm -r --cached test-results` (file fisik tetap ada); redaksi kredensial di `docs/LIVE_SERVER_DEPLOY.md` → placeholder + alias SSH `klinik-server`; tambah Vektor C + langkah `--replace-text` + rotasi password di `docs/plans/SECRET_ROTATION_PLAN.md`.
+- **Aksi selesai (purge histori, 2026-09-26):**
+  1. Backup mirror: `.../Temp/opencode/wa-clinic-bot-mirror-bak` (50 MB, HEAD `4dcd0c96`).
+  2. `git filter-repo --replace-text` mengganti literal password → `***REDACTED***` di 696 commit; histori ditulis ulang (`4dcd0c96` → `406211c0`), remote origin di-re-add.
+  3. Force-push `--all --tags` ke `origin`. Branch basi `plan/livechat-wa-sync` (masih memuat password) **terhapus** dari remote.
+  4. VPS `/opt/wa-clinic-bot`: `git fetch --prune` + `reset --hard origin/master` + `reflog expire` + `gc --prune=now` → semua ref VPS bersih.
+  5. Verifikasi: `git log -S '<password>' --all` **kosong** di lokal, origin, dan VPS. Container `waha` tetap `Up 46 hours` (sesi WA tidak putus).
 - **Belum selesai (WAJIB, di luar kode):**
-  1. **Rotasi password SSH** server live (`passwd ubuntu` + `PasswordAuthentication no`) — password lama harus dianggap bocor. Belum ada bukti dirotasi.
-  2. **Purge histori git**: password masih ada di commit lama → jalankan Tahap 4 `git filter-repo --replace-text` (lihat SECRET_ROTATION_PLAN) + force push + re-sync VPS.
+  1. **Rotasi password SSH** server live (`passwd ubuntu` + `PasswordAuthentication no`) — password lama harus dianggap bocor (purge tidak menarik balik data yang mungkin sudah di-scrape). Belum dirotasi.
 - **Catatan:** IP host `43.157.197.148` masih tersebar di 13+ file (`scripts/*.js`, `CHANGELOG.md`, `docs/*`). Dibiarkan karena tidak setara password (butuh key), tapi idealnya dipindah ke env `DEPLOY_HOST`.
 
 ---
