@@ -76,6 +76,9 @@ interface MetaSummary {
   ctrNote?: string;
   coverage?: { pageViewSources: string[]; note: string };
   coverageNote?: string;
+  // Fase 5a (issue #136): rincian sumber PageView server { source: count }.
+  // Absen bila kolom `source` belum termigrasi di DB — panel rincian disembunyikan.
+  pageViewsBySource?: Record<string, number>;
   capiHealth: {
     pixelIdConfigured: boolean;
     tokenConfigured: boolean;
@@ -192,6 +195,19 @@ function MetaTiny({ label, value }: { label: string; value?: string | null }) {
 }
 
 const fmtPct = (v: number) => `${v.toFixed(2)}%`;
+
+/**
+ * Label ramah untuk `source` baris landing_page_views (Fase 5b, issue #136).
+ * Kunci tak dikenal ditampilkan mentah (data-driven, bukan di-drop).
+ */
+const PAGEVIEW_SOURCE_LABELS: Record<string, string> = {
+  beacon: 'Beacon tracker (eksternal + internal)',
+  'cta-fallback': 'Fallback klik CTA (tanpa beacon)',
+  'meta-reconciliation': 'Rekonsiliasi Meta API/CSV',
+  'backfill-synthetic': 'Backfill synthetic (deprecated)',
+  '(tanpa label)': 'Pra-Fase 2 (tanpa label)',
+};
+const pageViewSourceLabel = (source: string) => PAGEVIEW_SOURCE_LABELS[source] ?? source;
 
 // -------------------------------------------------------------------------------- Page
 export const MetaClickCatcher: React.FC = () => {
@@ -499,6 +515,39 @@ export const MetaClickCatcher: React.FC = () => {
           sub={`Contact ${summary?.matchedChats ?? 0} + Purchase ${summary?.purchaseEvents ?? 0}`}
         />
       </section>
+
+      {/* ---------------- 1b. Dual-kolom Web-side vs Server-side (Fase 5b) ---------------- */}
+      {summary?.pageViewsBySource && (
+        <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
+          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+            <Eye size={16} className="text-[#008069]" />
+            <span>Rincian Sumber PageView Server</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1">
+              <p className="font-bold text-[#111b21]">Kolom Web-side (browser → Meta)</p>
+              <p className="text-[#5b6b73]">
+                Angka di Meta Ads Manager / Events Manager: <span className="font-semibold">superset</span> —
+                setiap kunjungan menembak Pixel langsung, termasuk yang tracker server lewatkan.
+                Tidak pernah 1:1 dengan angka server tanpa rekonsiliasi.
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 space-y-1.5">
+              <p className="font-bold text-[#111b21]">
+                Kolom Server-side (subset, total {summary?.totalPageViews ?? 0})
+              </p>
+              <ul className="space-y-1">
+                {Object.entries(summary.pageViewsBySource).map(([source, count]) => (
+                  <li key={source} className="flex items-center justify-between gap-2">
+                    <span className="text-[#5b6b73]">{pageViewSourceLabel(source)}</span>
+                    <span className="font-mono font-bold text-[#111b21]">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ---------------- 2. Filter Bar ---------------- */}
       <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">

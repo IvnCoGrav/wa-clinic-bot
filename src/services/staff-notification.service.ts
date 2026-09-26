@@ -1,7 +1,5 @@
 import { prisma } from '../db/client';
 import { telegramService } from './telegram.service';
-import { calculateHaversineDistance } from '../utils/haversine';
-import { clinicConfig } from '../config/clinic';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { webPushService } from './web-push.service';
 import { getLiveChatHub } from './live-chat-hub.service';
@@ -162,11 +160,18 @@ export class StaffNotificationService {
           ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
           : 'https://maps.google.com';
 
-      // 5. Jarak Tempuh
+      // 5. Jarak Tempuh — Fase 4 (RC-6, KNOWN_ISSUES #138 G5): sumber resmi jarak klinik→pasien
+      // adalah deliveryService.calculateDelivery (tenant-aware: ORS + fallback + tier DB), sehingga
+      // angka konsisten dengan pipeline chatbot/refresh. Rumus lokal Haversine×1.6 dihapus.
       let distanceKm = cust?.distance_km ?? null;
       if (distanceKm == null && typeof lat === 'number' && typeof lng === 'number') {
-        const straight = calculateHaversineDistance({ lat: clinicConfig.lat, lng: clinicConfig.lng }, { lat, lng });
-        distanceKm = parseFloat((straight * 1.6).toFixed(1));
+        try {
+          const { deliveryService } = await import('./delivery.service');
+          const calc = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
+          distanceKm = calc?.distanceKm ?? null;
+        } catch (_) {
+          distanceKm = null;
+        }
       }
       const distanceStr = distanceKm != null ? `${distanceKm} km` : null;
 

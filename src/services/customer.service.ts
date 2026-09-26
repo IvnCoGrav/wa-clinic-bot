@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
+import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -1756,9 +1757,22 @@ export class CustomerService {
 
       let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded'; sourceLabel: string; detail: string } | null = null;
 
+      // Hierarki tier diputus oleh pickGpsTier BERSAMA (location-ingest.service) —
+      // otoritas tunggal dipakai refresh, choke point webhook, dan enrich GPS
+      // (Mikro 2.3 plan). Loop scan newest→oldest + capture pertama-per-tier tetap
+      // utuh → perilaku identik dengan if/else tier lama.
+      const tierCandidates: GpsCandidate[] = [];
       if (tier1Candidate) {
+        tierCandidates.push({ source: 'bidan_shareloc', lat: tier1Candidate.lat, lng: tier1Candidate.lng, at: String(tier1Candidate.msg?.created_at ?? '') });
+      }
+      if (tier2Candidate) {
+        tierCandidates.push({ source: 'customer_shareloc', lat: tier2Candidate.lat, lng: tier2Candidate.lng, at: String(tier2Candidate.msg?.created_at ?? '') });
+      }
+      const pickedTier = pickGpsTier(tierCandidates);
+
+      if (pickedTier?.source === 'bidan_shareloc' && tier1Candidate) {
         chosen = { lat: tier1Candidate.lat, lng: tier1Candidate.lng, source: 'bidan_shareloc', sourceLabel: '📍 Terverifikasi Bidan (Paling Valid)', detail: tier1Candidate.detail };
-      } else if (tier2Candidate) {
+      } else if (pickedTier?.source === 'customer_shareloc' && tier2Candidate) {
         chosen = { lat: tier2Candidate.lat, lng: tier2Candidate.lng, source: 'customer_shareloc', sourceLabel: '🔵 Shareloc Customer', detail: tier2Candidate.detail };
       } else if (customer.lat != null && customer.lng != null) {
         chosen = { lat: Number(customer.lat), lng: Number(customer.lng), source: 'db_coords', sourceLabel: '🟡 Koordinat Tersimpan', detail: 'DB lat/lng' };

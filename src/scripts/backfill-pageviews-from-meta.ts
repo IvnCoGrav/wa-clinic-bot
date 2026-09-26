@@ -1,13 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * Backfill landing_page_views dari rekap Meta Ads (synthetic).
- * Penggunaan:
- *   npx tsx src/scripts/backfill-pageviews-from-meta.ts --count 679 --start 2026-09-01 --end 2026-09-23 --landingUrl https://kalababyspa.online/reservasionline --utmCampaign promo-a --dry-run
- *   npx tsx src/scripts/backfill-pageviews-from-meta.ts --count 679 --execute
- *   npx tsx src/scripts/backfill-pageviews-from-meta.ts --file data.json --dry-run
+ * @deprecated SINCE 2026-09-26 (Fase 4, issue #136).
+ * Script ini menyuntik PageView SYNTHETIC (fbclid/fbp/fbc=null, jam acak, tidak idempoten).
+ * DIGANTIKAN OLEH: `src/scripts/reconcile-meta-pageviews.ts` — rekonsiliasi Meta Ads Insights API / CSV.
  *
- * Format file JSON: [{date:"2026-09-01", count:30, landingUrl, utmCampaign, utmSource, utmMedium}, ...]
- * Jika --count dipakai, distribusi merata per hari dalam rentang start..end (jam 08-20 WIB acak).
+ * Penggunaan LEGACY (hanya dry-run, --execute DITOLAK):
+ *   npx tsx src/scripts/backfill-pageviews-from-meta.ts --count 679 --start 2026-09-01 --end 2026-09-23 --dry-run
+ *
+ * MIGRASI KE SCRIPT BARU:
+ *   npx tsx src/scripts/reconcile-meta-pageviews.ts --start 2026-09-01 --end 2026-09-23 --tenantId tenant-x --dry-run
+ *   npx tsx src/scripts/reconcile-meta-pageviews.ts --file meta-insights.csv --execute
  */
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
@@ -18,7 +20,7 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--dry-run') out.dryRun = true;
-    else if (a === '--execute') out.dryRun = false;
+    else if (a === '--execute') { console.error('[DEPRECATED] --execute DITOLAK. Gunakan script baru: reconcile-meta-pageviews.ts'); process.exit(1); }
     else if (a === '--count') out.count = parseInt(args[++i], 10);
     else if (a === '--start') out.start = args[++i];
     else if (a === '--end') out.end = args[++i];
@@ -28,6 +30,7 @@ function parseArgs() {
     else if (a === '--utmMedium') out.utmMedium = args[++i];
     else if (a === '--tenantId') out.tenantId = args[++i];
     else if (a === '--file') out.file = args[++i];
+    else if (a === '--allow-synthetic') { console.error('[DEPRECATED] --allow-synthetic DITOLAK. Data synthetic tidak valid untuk produksi.'); process.exit(1); }
   }
   return out;
 }
@@ -118,6 +121,15 @@ async function main() {
     return;
   }
 
+  // Guard: baris synthetic (tanpa fbclid/fbp/fbc, jam acak, tidak idempoten per-event)
+  // tidak boleh masuk tanpa consent eksplisit — jalur normal adalah Meta API/CSV (Fase 4).
+  if (!opts.allowSynthetic) {
+    console.error('[TOLAK] Script ini menyuntik PageView SYNTHETIC (identity null, jam acak, bukan event nyata).');
+    console.error('Tambahkan flag --allow-synthetic bila memang ingin menyuntik data perkiraan;');
+    console.error('jalur yang disarankan: rekonsiliasi Meta API/CSV (Fase 4, issue #136).');
+    process.exit(1);
+  }
+
   // Insert batch 500
   let inserted = 0;
   for (const r of rows) {
@@ -140,6 +152,8 @@ async function main() {
         fbc: null,
         ipAddress: null,
         userAgent: 'Mozilla/5.0 (backfill synthetic)',
+        source: 'backfill-synthetic',
+        referrer: null,
         createdAt: d,
       });
     }

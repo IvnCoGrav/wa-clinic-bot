@@ -412,12 +412,15 @@ describe('Staff Auth & Reservation Services', () => {
         tenant_id: 'default-tenant',
       });
 
-      (prisma.reservation.findFirst as any).mockResolvedValue({ id: 'res-1' });
+      // Jadwal 1 jam dari sekarang -> berada dalam jendela akses chat (H-3 jam).
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        { id: 'res-1', booking_date: new Date(Date.now() + 60 * 60 * 1000), status: 'confirmed', purchase_occurred_at: null, updated_at: new Date() },
+      ]);
 
       const isOwned = await StaffReservationService.assertConversationOwnedByStaffToday('conv-1', 'staff-1', 'default-tenant');
       expect(isOwned).toBe(true);
 
-      (prisma.reservation.findFirst as any).mockResolvedValue(null);
+      (prisma.reservation.findMany as any).mockResolvedValue([]);
       const isNotOwned = await StaffReservationService.assertConversationOwnedByStaffToday('conv-1', 'staff-2', 'default-tenant');
       expect(isNotOwned).toBe(false);
     });

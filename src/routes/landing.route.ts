@@ -132,7 +132,21 @@ export async function landingRoutes(fastify: FastifyInstance) {
   });
 
   // /cta — lightweight redirect ke WhatsApp dengan Meta Pixel & tracking code
-  fastify.get('/cta', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get(
+    '/cta',
+    {
+      // Fase 3c (issue #136): endpoint publik yang membuat baris AdClick +
+      // fallback PageView — tanpa batas, 1 IP bisa membanjiri data atribusi.
+      // Sejajar /api/tracking/click (60/menit/IP); lebih → 429 + Retry-After.
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => req.ip,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query || {}) as Record<string, string>;
     const tenantSlug = query.slug || 'default';
     const content = (await resolveLandingContent(tenantSlug)) || defaultLandingContent(tenantSlug);
@@ -151,9 +165,19 @@ export async function landingRoutes(fastify: FastifyInstance) {
     
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
-      const { prisma } = await import('../db/client');
-      const tenantRec = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
-      rawMsg = (tenantRec as any)?.greetings_text || tenantRec?.format_visit || 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
+      // Fail-open (bug pre-existing #136): query greetings tanpa try/catch membuat
+      // GET /cta 500 "Database offline" saat DB down — padahal kontrak route ini
+      // selalu 200 + redirect (test lama luput karena mock di-override per-test).
+      try {
+        const { prisma } = await import('../db/client');
+        const tenantRec = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
+        rawMsg = (tenantRec as any)?.greetings_text || tenantRec?.format_visit || '';
+      } catch (greetErr: any) {
+        request.log.warn(`[CTA GREETING LOOKUP] Gagal ambil greeting tenant (fail-open): ${greetErr.message}`);
+      }
+      if (!rawMsg) {
+        rawMsg = 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
+      }
     }
 
     // Capture attribution & generate tracking code if needed (BOT diabaikan kecuali test eksplisit)
@@ -251,6 +275,68 @@ export async function landingRoutes(fastify: FastifyInstance) {
           };
           trackingCode = tc;
           memoryAdClicks.set(trackingCode, clickRecord);
+        }
+
+        // Fase 3b (issue #136): fallback PageView — klik CTA tanpa beacon tercatat
+        // tidak boleh membuat views = 0. Gate deterministik berbasis data-state:
+        // tracker SELALU menstempel `landing_url` ke link /cta yang diprosesnya
+        // (dan beacon PageView ikut terkirim saat boot) → klik TANPA `landing_url`
+        // = LP tanpa tracker / link manual → sintesis view `source='cta-fallback'`.
+        // Klik DENGAN `landing_url` = tracker aktif → beacon sudah ada → jangan sintesis.
+        // Dedup: fbclid sama sudah tercatat (race klik-dini) → jangan baris kedua.
+        // Tanpa fbclid tidak ada kunci dedup andal (IP semua visitor = IP proxy di
+        // belakang Caddy, KNOWN_ISSUES #129) → langsung sintesis.
+        // Mode test tidak menyintesis (anti-polusi data).
+        if (!query.landing_url && !isTest) {
+          try {
+            const { prisma } = await import('../db/client');
+            const fbclidQ = query.fbclid || null;
+            let alreadyTracked = false;
+            if (fbclidQ) {
+              const existingView = await (prisma as any).landingPageView.findFirst({
+                where: { tenant_id: content.tenant_id, fbclid: fbclidQ },
+              });
+              alreadyTracked = !!existingView; // beacon sudah ada → jangan sintesis
+            }
+            if (!alreadyTracked) {
+              const viewData = {
+                tenant_id: content.tenant_id,
+                landingUrl: fullLandingUrl,
+                fbclid: fbclidQ,
+                fbp: query.fbp || null,
+                fbc: query.fbc || null,
+                ipAddress: request.ip || null,
+                userAgent: ua,
+                utmSource: isTest ? (query.utm_source || 'test') : (query.utm_source || query.divisi || null),
+                utmMedium: query.utm_medium || null,
+                utmCampaign: query.utm_campaign || null,
+                utmContent: query.utm_content || null,
+                utmTerm: query.utm_term || null,
+                utmId: query.utm_id || null,
+                eventId: null, // klik tidak punya eventID kembar — baris murni sintesis
+                referrer: null,
+                source: 'cta-fallback',
+              };
+              await (prisma as any).landingPageView.create({ data: viewData });
+            }
+          } catch (fbErr: any) {
+            if (fbErr?.code === 'P2002') {
+              // Duplikat (retry/race) → dedup, bukan error
+            } else {
+              // DB offline → fail-open ke memory (paritas dengan beacon)
+              try {
+                const { memoryPageViews, pruneMemoryMap } = await import('./tracking.route');
+                pruneMemoryMap(memoryPageViews, 2000);
+                memoryPageViews.set(`cta_${Date.now()}_${Math.random().toString(36).substring(7)}`, {
+                  source: 'cta-fallback',
+                  tenant_id: content.tenant_id,
+                  landingUrl: fullLandingUrl,
+                  fbclid: query.fbclid || null,
+                  createdAt: new Date(),
+                });
+              } catch {}
+            }
+          }
         }
       }
     } catch (err: any) {

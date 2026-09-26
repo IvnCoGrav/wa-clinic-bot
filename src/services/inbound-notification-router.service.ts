@@ -1,7 +1,11 @@
 import { prisma } from '../db/client';
 import { webPushService } from './web-push.service';
-import { StaffReservationService } from './staff-reservation.service';
+import {
+  StaffReservationService,
+  evaluateChatWindowForBooking,
+} from './staff-reservation.service';
 import { getStaffChatNotificationConfig, isWithinWibHourRange } from '../config/staff-chat-config';
+import { getStaffChatWindowConfig } from '../config/staff-chat-window-config';
 
 export interface InboundMessageNotificationContext {
   tenantId: string;
@@ -90,8 +94,14 @@ export class InboundNotificationRouter {
 
       const { startOfDay, endOfDay } = StaffReservationService.getWibDateRange();
 
+      const chatWindowConfig = await getStaffChatWindowConfig(ctx.tenantId);
+
       let assignedReservation: {
         assigned_staff_id: string | null;
+        booking_date: Date | null;
+        status: string;
+        purchase_occurred_at: Date | null;
+        updated_at: Date;
         assigned_staff: { id: string; name: string; active: boolean } | null;
       } | null = null;
 
@@ -106,6 +116,10 @@ export class InboundNotificationRouter {
           },
           select: {
             assigned_staff_id: true,
+            booking_date: true,
+            status: true,
+            purchase_occurred_at: true,
+            updated_at: true,
             assigned_staff: {
               select: { id: true, name: true, active: true },
             },
@@ -119,6 +133,26 @@ export class InboundNotificationRouter {
 
       if (!assignedReservation?.assigned_staff_id || !assignedReservation.assigned_staff?.active) {
         // Tidak ada jadwal aktif hari ini yang ditugaskan ke staf aktif -> jangan kirim ke staf
+        return;
+      }
+
+      // Gate jendela akses chat per-jadwal (H-3 jam s/d +3 jam selesai, tutup saat ganti hari).
+      // Pesan tetap aman masuk ke Admin CRM (push admin dikirim lebih awal tanpa syarat).
+      const isCompleted = ['completed', 'selesai'].includes(
+        (assignedReservation.status || '').toLowerCase()
+      );
+      const completedAt = isCompleted
+        ? assignedReservation.purchase_occurred_at || assignedReservation.updated_at || null
+        : null;
+      const chatWindow = evaluateChatWindowForBooking(assignedReservation.booking_date, {
+        isSupervisor: false,
+        completedAt,
+        config: chatWindowConfig,
+      });
+      if (!chatWindow.open) {
+        console.log(
+          `[INBOUND NOTIFICATION ROUTER] Staff push skipped for '${assignedReservation.assigned_staff_id}': chat window closed (${chatWindow.reason}).`
+        );
         return;
       }
 

@@ -554,10 +554,17 @@ model LandingPageView {
   utmContent  String?
   utmTerm     String?
   utmId       String?
+  /// eventID kembar browser (fbq) ↔ server (CAPI) — UNIQUE untuk dedup & join.
+  /// Baris historis/backfill tanpa eventID = NULL (Postgres izinkan banyak NULL).
+  eventId     String?  @unique
+  /// Asal baris: beacon | cta-fallback | backfill-synthetic (tanpa enum DB agar tanpa lock).
+  source      String?  @default("beacon")
+  referrer    String?
   createdAt   DateTime @default(now())
 
   @@index([tenant_id])
   @@index([tenant_id, createdAt])
+  @@index([tenant_id, utmCampaign])
   @@map("landing_page_views")
 }
 

@@ -319,6 +319,78 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     expect(enqueueSpy).not.toHaveBeenCalled();
   });
 
+  it('POST /api/webhook/waba: GPS location diingest via choke point sebelum semua return path (#138)', async () => {
+    // WABA dulu TIDAK punya sinkron GPS sama sekali (bypass/blocked/scope-gate
+    // silence/queue normal semuanya membuang koordinat) — choke point tunggal
+    // location-ingest.service kini berlaku untuk seluruh return path.
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: 'e1',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '6281234', phone_number_id: 'PNID_GPS' },
+            contacts: [{ profile: { name: 'Bunda GPS' }, wa_id: '628999111222' }],
+            messages: [{
+              id: `wamid.gps_${Date.now()}`,
+              from: '628999111222',
+              timestamp: String(Math.floor(Date.now() / 1000)),
+              type: 'location',
+              location: { latitude: -7.3564516847907635, longitude: 112.78985794633627, address: 'Jl. Rungkut' },
+            }],
+          },
+        }],
+      }],
+    });
+
+    vi.spyOn(wabaTenantService, 'resolveTenantByPhoneNumberId').mockResolvedValue('tenant-gps');
+    vi.spyOn(messageService, 'isDuplicateMessage').mockResolvedValue(false);
+    vi.spyOn(customerService, 'getCustomerByPhone').mockResolvedValue({
+      id: 'cust-gps',
+      phone: '628999111222',
+      status: 'active',
+      lat: -7.35,
+      lng: 112.78,
+      distance_km: 5.1,
+      ongkir: 5000,
+      share_location_sent: true,
+    } as any);
+    vi.spyOn(conversationService, 'getOrCreateConversation').mockResolvedValue({ id: 'conv-gps' } as any);
+
+    const ingestMod = await import('../../src/services/location-ingest.service');
+    const ingestSpy = vi
+      .spyOn(ingestMod.locationIngestService, 'ingestGpsPin')
+      .mockResolvedValue({ status: 'saved', reason: 'gps_pin' });
+
+    const enqueueSpy = vi.fn().mockResolvedValue(undefined);
+    const queueMod = await import('../../src/services/queue.service');
+    (queueMod.queueService as any).enqueueMessage = enqueueSpy;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/waba',
+      payload: body,
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).status).toBe('PROCESSED');
+    expect(ingestSpy).toHaveBeenCalledTimes(1);
+    expect(ingestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-gps',
+        customer: expect.objectContaining({ id: 'cust-gps' }),
+        incomingMessage: expect.objectContaining({
+          type: 'location',
+          location: expect.objectContaining({ latitude: -7.3564516847907635 }),
+        }),
+      })
+    );
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('POST routes image message and resolves media URL (token encrypted)', async () => {
     const body = JSON.stringify({
       object: 'whatsapp_business_account',

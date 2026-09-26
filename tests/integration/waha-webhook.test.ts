@@ -334,4 +334,51 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
 
     spy.mockRestore();
   });
+
+  it('POST /webhook: GPS shareloc tetap diingest via choke point meski chat berlabel bypass (insiden #138)', async () => {
+    // Kasus G1/G2 (KNOWN_ISSUES #138): dulu path bypass ADMIN mengembalikan
+    // IGNORED_ADMIN TANPA sinkron GPS sama sekali — koordinat hilang diam-diam.
+    // Choke point kini mengingest SEBELUM semua return path (bypass/blocked/scope/human).
+    const phone = `628555${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'GPS Choke Bypass', DEFAULT_TENANT_ID);
+    await customerService.setLabelFlags(phone, { isAdminLabeled: true, isHoldLabeled: false }, DEFAULT_TENANT_ID);
+
+    const ingestMod = await import('../../src/services/location-ingest.service');
+    const ingestSpy = vi
+      .spyOn(ingestMod.locationIngestService, 'ingestGpsPin')
+      .mockResolvedValue({ status: 'saved', reason: 'gps_pin' });
+
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_gps_choke_${Date.now()}`,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: '',
+        type: 'location',
+        location: { latitude: -7.3564516847907635, longitude: 112.78985794633627, address: 'Jl. Rungkut No. 1' },
+        _data: { notifyName: 'GPS Choke Bypass' },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_ADMIN' });
+    expect(ingestSpy).toHaveBeenCalledTimes(1);
+    expect(ingestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: DEFAULT_TENANT_ID,
+        customer: expect.objectContaining({ id: customer.id }),
+        incomingMessage: {
+          type: 'location',
+          location: { latitude: -7.3564516847907635, longitude: 112.78985794633627 },
+        },
+      })
+    );
+
+    ingestSpy.mockRestore();
+  });
 });

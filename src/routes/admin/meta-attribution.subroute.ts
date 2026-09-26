@@ -233,6 +233,10 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let ignoredOutliers = 0;
       let purchaseEvents = 0;
       let purchaseEventsAllTime = 0;
+      // Fase 5a (issue #136): rincian sumber PageView server (beacon /
+      // cta-fallback / meta-reconciliation / backfill-synthetic) — where
+      // IDENTIK dengan totalPageViews agar jumlahnya konsisten.
+      let pageViewsBySource: Record<string, number> | undefined;
 
       try {
         const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
@@ -259,6 +263,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           approvedAllCount,
           pendingCount,
           rejectedCount,
+          viewsBySourceRows,
         ] = await Promise.all([
           (prisma as any).landingPageView.count({ where: pageViewWhere }).catch(() => 0),
           prisma.adClick.count({ where: adClickWhere }),
@@ -270,6 +275,18 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           // pending & ignored_outlier = antrian point-in-time (by design tanpa dateRange)
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
+          // Rincian sumber: catch-per-query (bukan Promise.all fatal) agar DB live
+          // yang BELUM menjalankan migrasi kolom `source` tetap mengembalikan
+          // total — UI menyembunyikan rincian bila field absen.
+          // Guard typeof: pemanggilan method yang tidak ada melempar SINKRON
+          // (catch promise tidak terpasang) — harus dicek sebelum dipanggil.
+          (typeof (prisma as any).landingPageView?.groupBy === 'function'
+            ? (prisma as any).landingPageView.groupBy({
+                by: ['source'],
+                where: pageViewWhere,
+                _count: { _all: true },
+              }).catch(() => null)
+            : Promise.resolve(null)),
         ]);
         totalClicks = clicks;
         // Hapus masking kosmetik: views murni (tanpa fallback ke clicks) agar dashboard jujur
@@ -282,6 +299,14 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         ignoredOutliers = rejectedCount;
         purchaseEvents = approvedCount;
         purchaseEventsAllTime = approvedAllCount;
+        if (Array.isArray(viewsBySourceRows)) {
+          pageViewsBySource = {};
+          for (const r of viewsBySourceRows as any[]) {
+            // source NULL = baris pra-Fase 2 — label jujur, bukan ditebak.
+            const key = (r?.source as string) || '(tanpa label)';
+            pageViewsBySource[key] = (pageViewsBySource[key] || 0) + (r?._count?._all ?? 0);
+          }
+        }
       } catch (err: any) {
         dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
         // Fallback in-memory saat DB offline — agar npm test offline deterministik
@@ -355,6 +380,9 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           matchedChats,
           unmatchedDrain,
           conversionRate: Math.round(conversionRate * 100) / 100,
+          // Fase 5a: absen bila groupBy gagal (kolom `source` belum termigrasi)
+          // — UI menyembunyikan panel rincian, total tidak terpengaruh.
+          ...(pageViewsBySource ? { pageViewsBySource } : {}),
           purchaseEvents,
           purchaseEventsAllTime,
           pendingPurchases,

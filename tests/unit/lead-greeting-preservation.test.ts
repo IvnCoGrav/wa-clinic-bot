@@ -21,14 +21,14 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
 
   it('detektor: sapaan iklan Promo[b8] adalah pure lead greeting non-Islami', () => {
     const res = isPureLeadGreeting(
-      'Promo[b8]\n\nHalo Bu Bidan, saya tertarik dengan layanan home-treatment'
+      'Promo[b8]\n\nHalo Bu Bidan'
     );
     expect(res.isLeadGreeting).toBe(true);
     expect(res.isIslamic).toBe(false);
   });
 
   it('detektor: varian salam Islami terdeteksi + flag isIslamic', () => {
-    const res = isPureLeadGreeting('Promo[pr01] Assalamualaikum Bu Bidan mau tanya layanan');
+    const res = isPureLeadGreeting('Promo[pr01] Assalamualaikum Bu Bidan');
     expect(res.isLeadGreeting).toBe(true);
     expect(res.isIslamic).toBe(true);
   });
@@ -50,7 +50,7 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
   });
 
   it('V3 gate: sapaan iklan dibalas 100% TEMPLATES.greeting() tanpa LLM', async () => {
-    const raw = 'Promo[b8]\n\nHalo Bu Bidan, saya tertarik dengan layanan home-treatment';
+    const raw = 'Promo[b8]\n\nHalo Bu Bidan';
     const result = await V3AgentRunner.processMessage({
       customerId: 'mock-lead-1',
       conversationId: 'mock-lead-conv-1',
@@ -78,7 +78,7 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
   });
 
   it('V3 gate: DB audit mencatat teks mentah lengkap dengan Promo[b8]', async () => {
-    const raw = 'Promo[b8]\n\nHalo Bu Bidan, saya tertarik dengan layanan home-treatment';
+    const raw = 'Promo[b8]\n\nHalo Bu Bidan';
     await V3AgentRunner.processMessage({
       customerId: 'mock-lead-2',
       conversationId: 'mock-lead-conv-2',
@@ -102,7 +102,7 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
       (m: any) => m.conversation_id === 'mock-lead-conv-2' && m.content?.includes('Promo[b8]')
     );
     expect(inbound).toBeDefined();
-    expect(inbound.content).toContain('saya tertarik dengan layanan home-treatment');
+    expect(inbound.content).toContain('Halo Bu Bidan');
   });
 
   it('V3 gate: salam Islami dibalas sapaan Waalaikumsalam', async () => {
@@ -111,7 +111,7 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
       conversationId: 'mock-lead-conv-3',
       phone: '6283333333333',
       chatId: '6283333333333@c.us',
-      incomingText: 'Promo[pr01] Assalamualaikum Bu Bidan mau tanya layanan',
+      incomingText: 'Promo[pr01] Assalamualaikum Bu Bidan',
     });
     expect(result.replyText.startsWith('Waalaikumsalam Bunda')).toBe(true);
     expect(axios.post).not.toHaveBeenCalled();

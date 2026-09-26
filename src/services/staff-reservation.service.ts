@@ -3,6 +3,10 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { resolveTreatmentValue } from './capi.service';
+import {
+  getStaffChatWindowConfig,
+  StaffChatWindowConfig,
+} from '../config/staff-chat-window-config';
 
 export interface StaffTaskChild {
   name: string;
@@ -55,6 +59,16 @@ export interface StaffTaskItem {
     totalTreatments: number;
     ltv: number;
   };
+  /**
+   * Status jendela akses chat (server-driven, sumber kebenaran tunggal).
+   * Frontend hanya merender; keputusan waktu tidak dihitung ulang di klien.
+   */
+  chatWindow?: {
+    open: boolean;
+    reason: ChatWindowReason;
+    opensAt?: string | null;
+    closesAt?: string | null;
+  };
 }
 
 function buildAddressText(c: {
@@ -94,6 +108,85 @@ function buildShareText(
   lines.push(`💰 Total Bayar: Rp ${pricing.totalFee.toLocaleString('id-ID')} (${pricing.paymentStatusLabel})`);
   if (mapsUrl) lines.push(`🗺️ Google Maps: ${mapsUrl}`);
   return lines.join('\n');
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Titik awal hari (00:00 WIB) untuk sebuah instant, dikembalikan sebagai Date UTC.
+ * Dipakai sebagai batas absolut "ganti hari" (pergantian hari WIB).
+ */
+export function getWibStartOfDay(instant: Date = new Date()): Date {
+  const wib = new Date(instant.getTime() + 7 * HOUR_MS);
+  const y = wib.getUTCFullYear();
+  const m = wib.getUTCMonth();
+  const d = wib.getUTCDate();
+  return new Date(Date.UTC(y, m, d, -7, 0, 0, 0));
+}
+
+export type ChatWindowReason =
+  | 'SUPERVISOR'
+  | 'OPEN'
+  | 'NOT_YET_OPEN'
+  | 'CLOSED_AFTER_COMPLETE'
+  | 'PREVIOUS_DAY'
+  | 'NO_ACTIVE_BOOKING';
+
+export interface ChatWindowStatus {
+  open: boolean;
+  reason: ChatWindowReason;
+  opensAt?: Date | null;
+  closesAt?: Date | null;
+}
+
+/**
+ * Evaluasi deterministik jendela akses chat untuk SATU jadwal (pure function).
+ *
+ * - Non-supervisor: terbuka mulai `openHoursBefore` jam sebelum jam treatment,
+ *   tertutup `closeHoursAfter` jam setelah treatment diselesaikan, dan tertutup
+ *   total saat pergantian hari WIB (00:00) — batas ganti hari menang atas +N jam.
+ * - Supervisor: selalu terbuka (override).
+ *
+ * Sengaja bebas regex / pencocokan string; keputusan murni dari state waktu & jadwal.
+ */
+export function evaluateChatWindowForBooking(
+  bookingDate: Date | string | null | undefined,
+  options: {
+    now?: Date;
+    isSupervisor?: boolean;
+    completedAt?: Date | string | null;
+    config?: StaffChatWindowConfig;
+  } = {}
+): ChatWindowStatus {
+  const now = options.now ? new Date(options.now) : new Date();
+  if (options.isSupervisor) return { open: true, reason: 'SUPERVISOR' };
+
+  const config = options.config || { openHoursBefore: 3, closeHoursAfter: 3 };
+
+  if (!bookingDate) return { open: false, reason: 'NO_ACTIVE_BOOKING' };
+  const booking = new Date(bookingDate);
+  if (isNaN(booking.getTime())) return { open: false, reason: 'NO_ACTIVE_BOOKING' };
+
+  // Batas ganti hari: jadwal dari hari sebelum hari ini WIB ditutup total.
+  if (getWibStartOfDay(booking).getTime() < getWibStartOfDay(now).getTime()) {
+    return { open: false, reason: 'PREVIOUS_DAY' };
+  }
+
+  const opensAt = new Date(booking.getTime() - config.openHoursBefore * HOUR_MS);
+  if (now.getTime() < opensAt.getTime()) {
+    return { open: false, reason: 'NOT_YET_OPEN', opensAt };
+  }
+
+  const completedAt = options.completedAt ? new Date(options.completedAt) : null;
+  if (completedAt && !isNaN(completedAt.getTime())) {
+    const closesAt = new Date(completedAt.getTime() + config.closeHoursAfter * HOUR_MS);
+    if (now.getTime() > closesAt.getTime()) {
+      return { open: false, reason: 'CLOSED_AFTER_COMPLETE', closesAt };
+    }
+    return { open: true, reason: 'OPEN', opensAt, closesAt };
+  }
+
+  return { open: true, reason: 'OPEN', opensAt };
 }
 
 export class StaffReservationService {
@@ -168,6 +261,8 @@ export class StaffReservationService {
     if (!staffId) return [];
 
     const { startOfDay, endOfDay } = this.getWibDateRange(targetDateParam);
+    const now = new Date();
+    const chatWindowConfig = await getStaffChatWindowConfig(tenantId);
 
     try {
       const whereCondition: any = {
@@ -191,6 +286,7 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          updated_at: true,
           otw_sent_at: true,
           arrived_at: true,
           assigned_staff: {
@@ -367,6 +463,15 @@ export class StaffReservationService {
             totalTreatments: 1,
             ltv: (cust as any)?.ltv_cache > 0 ? (cust as any).ltv_cache : pricing.totalFee,
           },
+          chatWindow: this.buildChatWindowForTask(
+            r.booking_date,
+            r.status,
+            r.purchase_occurred_at,
+            (r as any).updated_at,
+            isSupervisor,
+            chatWindowConfig,
+            now
+          ),
         };
       })
       );
@@ -374,6 +479,35 @@ export class StaffReservationService {
       console.error('[STAFF RESERVATION] Error fetching today tasks:', err.message);
       return [];
     }
+  }
+
+  /**
+   * Serialisasi status jendela chat untuk payload task (server-driven).
+   * Supervisor selalu 'open' agar UI tidak menonaktifkan tombol bagi pengawas.
+   */
+  private static buildChatWindowForTask(
+    bookingDate: Date | null,
+    status: string | null,
+    purchaseOccurredAt: Date | null,
+    updatedAt: Date | null,
+    isSupervisor: boolean,
+    config: StaffChatWindowConfig,
+    now: Date
+  ): StaffTaskItem['chatWindow'] {
+    const isCompleted = ['completed', 'selesai'].includes((status || '').toLowerCase());
+    const completedAt = isCompleted ? purchaseOccurredAt || updatedAt || null : null;
+    const s = evaluateChatWindowForBooking(bookingDate, {
+      now,
+      isSupervisor,
+      completedAt,
+      config,
+    });
+    return {
+      open: s.open,
+      reason: s.reason,
+      opensAt: s.opensAt ? s.opensAt.toISOString() : null,
+      closesAt: s.closesAt ? s.closesAt.toISOString() : null,
+    };
   }
 
   /**
@@ -578,6 +712,8 @@ export class StaffReservationService {
 
     const { startOfDay } = this.getWibDateRange('today');
     const minDate = new Date(startOfDay.getTime() - daysPast * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const chatWindowConfig = await getStaffChatWindowConfig(tenantId);
 
     try {
       const rows = await prisma.reservation.findMany({
@@ -605,6 +741,7 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          updated_at: true,
           otw_sent_at: true,
           arrived_at: true,
           payment_method: true,
@@ -723,6 +860,15 @@ export class StaffReservationService {
           pricing,
           shareLocationText: null,
           customerProfilePictureUrl: cust?.profile_picture_url || null,
+          chatWindow: this.buildChatWindowForTask(
+            r.booking_date,
+            r.status,
+            r.purchase_occurred_at,
+            (r as any).updated_at,
+            false,
+            chatWindowConfig,
+            now
+          ),
         };
       })
       );
@@ -1000,7 +1146,7 @@ export class StaffReservationService {
   ): Promise<boolean> {
     if (!conversationId || !staffId) return false;
 
-    const { startOfDay, endOfDay } = this.getWibDateRange();
+    const now = new Date();
 
     try {
       const conv = await prisma.conversation.findUnique({
@@ -1010,31 +1156,55 @@ export class StaffReservationService {
 
       if (!conv || conv.tenant_id !== tenantId) return false;
 
-      const UPCOMING_DAYS = 30;
-      const upcomingEnd = new Date(endOfDay.getTime() + UPCOMING_DAYS * 24 * 60 * 60 * 1000);
-      const twoDaysAgo = new Date(startOfDay.getTime() - 48 * 60 * 60 * 1000);
+      // Supervisor: akses penuh (override) selama percakapan milik tenant yang sama.
+      if (isSupervisor) return true;
 
-      const whereCondition: any = {
-        tenant_id: tenantId,
-        customer_id: conv.customer_id,
-        status: { notIn: ['cancelled', 'rejected'] },
-        OR: [
-          { booking_date: { gte: startOfDay, lte: endOfDay } },
-          { booking_date: { gt: endOfDay, lte: upcomingEnd } },
-          { booking_date: { gte: twoDaysAgo, lt: startOfDay } },
-        ],
-      };
+      // Ambil seluruh reservasi kandidat customer ini pada rentang relevan
+      // (hari ini + N jam ke depan + hari lampau dekat), lalu evaluasi jendela
+      // chat per-jadwal secara deterministik. Keputusan berbasis state waktu,
+      // bukan pencocokan string.
+      const config = await getStaffChatWindowConfig(tenantId);
+      const lookaheadEnd = new Date(
+        now.getTime() + Math.max(config.openHoursBefore, 1) * HOUR_MS + 24 * HOUR_MS
+      );
+      const lookbackStart = new Date(now.getTime() - (config.closeHoursAfter + 24) * HOUR_MS);
 
-      if (!isSupervisor) {
-        whereCondition.assigned_staff_id = staffId;
-      }
-
-      const owns = await prisma.reservation.findFirst({
-        where: whereCondition,
-        select: { id: true },
+      const candidates = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          customer_id: conv.customer_id,
+          assigned_staff_id: staffId,
+          status: { notIn: ['cancelled', 'rejected'] },
+          booking_date: { gte: lookbackStart, lte: lookaheadEnd },
+        },
+        select: {
+          id: true,
+          booking_date: true,
+          status: true,
+          purchase_occurred_at: true,
+          updated_at: true,
+        },
+        orderBy: { booking_date: 'asc' },
       });
 
-      return !!owns;
+      if (!Array.isArray(candidates) || candidates.length === 0) return false;
+
+      const isCompleted = (status: string | null | undefined) =>
+        ['completed', 'selesai'].includes((status || '').toLowerCase());
+
+      return candidates.some((r: any) => {
+        // Waktu selesai: purchase_occurred_at (di-set atomik oleh recordPayment
+        // bersama status='completed'); fallback updated_at bila null.
+        const completedAt = isCompleted(r.status)
+          ? r.purchase_occurred_at || r.updated_at || null
+          : null;
+        return evaluateChatWindowForBooking(r.booking_date, {
+          now,
+          isSupervisor: false,
+          completedAt,
+          config,
+        }).open;
+      });
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error asserting conversation ownership:', err.message);
       return false;

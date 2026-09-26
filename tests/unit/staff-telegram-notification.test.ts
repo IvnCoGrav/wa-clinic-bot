@@ -98,6 +98,58 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
     expect(text).not.toContain('wa.me');
   });
 
+  it('Fase 4 (RC-6): distance_km null → jarak notifikasi diambil dari deliveryService.calculateDelivery, bukan rumus Haversine lokal', async () => {
+    const { deliveryService } = await import('../../src/services/delivery.service');
+    const calcSpy = vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
+      distanceKm: 6.9,
+      ongkir: 15000,
+      isOutOfCoverage: false,
+    } as any);
+    const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
+
+    vi.mocked(prisma.staff.findUnique).mockResolvedValue({
+      id: 'staff-rina-1',
+      name: 'Bidan Rina',
+      telegram_chat_id: '99887766',
+      tenant_id: 'default-tenant',
+    } as any);
+
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      id: 'res-f4',
+      treatment_detail: 'Pijat Bayi',
+      booking_date: new Date('2026-09-26T10:00:00.000+07:00'),
+      status: 'CONFIRMED',
+      purchase_value: 100000,
+      customer: {
+        id: 'cust-f4',
+        name: 'Bunda F4',
+        phone: '628111111111',
+        kelurahan: 'Kebraon',
+        kecamatan: 'Karangpilang',
+        kota: 'Surabaya',
+        lat: -7.332,
+        lng: 112.788,
+        distance_km: null,
+        ongkir: null,
+        preferences: {},
+        children: [],
+      },
+      children: [],
+    } as any);
+
+    const result = await staffNotificationService.sendReservationAssignmentNotification('res-f4', 'staff-rina-1');
+
+    try {
+      expect(result.sent).toBe(true);
+      // Satu penulis jarak klinik→pasien: hitung resmi tenant-aware (bukan straight×1.6 manual)
+      expect(calcSpy).toHaveBeenCalledWith({ lat: -7.332, lng: 112.788 }, undefined, 'default-tenant');
+      const text = sendSpy.mock.calls[0][0].text;
+      expect(text).toContain('6.9 km');
+    } finally {
+      calcSpy.mockRestore();
+    }
+  });
+
   it('sendReservationAssignmentNotification: should skip gracefully if staff has not paired Telegram', async () => {
     const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
 

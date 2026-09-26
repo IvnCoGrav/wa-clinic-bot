@@ -173,23 +173,85 @@ export class HumanBackgroundEnrichmentService {
         });
       }
 
+      // FASE 3 — RC-4 "estimasi admin ≠ fakta" (KNOWN_ISSUES #138 G3, tanpa migrasi DB):
+      // - Customer dengan koordinat GPS presisi (share_location_sent + lat/lng) → jarak resmi
+      //   dihitung ULANG dari koordinat via calculateDelivery; angka chat admin DIABAIKAN.
+      // - Tanpa koordinat presisi → angka chat admin hanya ESTIMATE → disimpan di
+      //   preferences.distance_estimate, kolom distance_km/ongkir resmi TIDAK disentuh.
+      const hasPreciseGps =
+        customer.share_location_sent === true && customer.lat != null && customer.lng != null;
+
+      let distanceKm: number | undefined;
+      let ongkir: number | undefined;
+      let isOutOfCoverage: boolean;
+      let isNativePin: boolean | undefined;
+
+      if (hasPreciseGps) {
+        let delivery: Awaited<ReturnType<typeof deliveryService.calculateDelivery>> | null = null;
+        try {
+          delivery = await deliveryService.calculateDelivery(
+            { lat: Number(customer.lat), lng: Number(customer.lng) },
+            undefined,
+            tenantId
+          );
+        } catch (_) {}
+        distanceKm = delivery?.distanceKm;
+        ongkir = delivery?.ongkir;
+        isOutOfCoverage = delivery?.isOutOfCoverage ?? customer.is_out_of_coverage ?? false;
+        // isNativePin=true → loloskan penulisan jarak hasil-hitung-dari-koordinat melewati guard
+        // preserveExactGps (jarak memang konsisten dengan koordinat GPS yang dipertahankan);
+        // lat/lng TIDAK ikut dikirim sehingga koordinat presisi tetap utuh.
+        isNativePin = true;
+      } else {
+        distanceKm = undefined;
+        ongkir = undefined;
+        // Chat admin bukan sumber fakta coverage → pertahankan flag yang sudah tercatat
+        isOutOfCoverage = customer.is_out_of_coverage ?? false;
+        const estimate = {
+          km: parsed.distanceKm,
+          ongkir: effectiveOngkir,
+          by: 'admin_chat',
+          at: new Date().toISOString(),
+        };
+        try {
+          const { prisma } = await import('../db/client');
+          const prefs = (customer.preferences as any) || {};
+          await prisma.customer.update({
+            where: { id: customerId },
+            data: { preferences: { ...prefs, distance_estimate: estimate } } as any,
+          });
+        } catch (e: any) {
+          console.warn('[ADMIN DISTANCE ESTIMATE] gagal simpan preferences:', e?.message || e);
+        }
+        console.log(
+          `[ADMIN DISTANCE ESTIMATE] ${customer.phone}: km=${estimate.km}, ongkir=${estimate.ongkir} (angka chat admin, bukan fakta resmi)`
+        );
+      }
+
       await customerService.updateCustomerLocation(
         customerId,
         {
           kelurahan: resolvedLoc?.kelurahan || customer.kelurahan || undefined,
           kecamatan: resolvedLoc?.kecamatan || customer.kecamatan || undefined,
           kota: resolvedLoc?.kota || customer.kota || undefined,
-          lat: resolvedLoc?.lat !== undefined ? resolvedLoc.lat : (customer.lat ?? undefined),
-          lng: resolvedLoc?.lng !== undefined ? resolvedLoc.lng : (customer.lng ?? undefined),
-          distanceKm: parsed.distanceKm !== null ? parsed.distanceKm : (customer.distance_km ?? undefined),
-          ongkir: effectiveOngkir !== null ? effectiveOngkir : (customer.ongkir ?? undefined),
+          // Otoritas koordinat: customer GPS tidak menerima lat/lng hasil geocode teks admin
+          ...(hasPreciseGps
+            ? {}
+            : {
+                lat: resolvedLoc?.lat !== undefined ? resolvedLoc.lat : (customer.lat ?? undefined),
+                lng: resolvedLoc?.lng !== undefined ? resolvedLoc.lng : (customer.lng ?? undefined),
+              }),
+          distanceKm,
+          ongkir,
+          isOutOfCoverage,
+          ...(isNativePin !== undefined ? { isNativePin } : {}),
           zipcode: adminGazZip || resolvedLoc?.zipcode || undefined,
         },
         tenantId
       );
 
       console.log(
-        `[ADMIN OUTBOUND ENRICH] Captured distance/ongkir for ${customer.phone}: distance=${parsed.distanceKm}km, ongkir=${effectiveOngkir}, location=${resolvedLoc?.kelurahan || customer.kelurahan || '-'}${adminGazZip ? ` zip=${adminGazZip}` : ''}`
+        `[ADMIN OUTBOUND ENRICH] Captured distance/ongkir for ${customer.phone}: distance=${parsed.distanceKm}km, ongkir=${effectiveOngkir}, location=${resolvedLoc?.kelurahan || customer.kelurahan || '-'}${adminGazZip ? ` zip=${adminGazZip}` : ''}, mode=${hasPreciseGps ? 'gps_recompute' : 'estimate'}`
       );
       return { enriched: true, reason: 'admin_chat_captured' };
     } catch (err: any) {
@@ -205,32 +267,17 @@ export class HumanBackgroundEnrichmentService {
     const tid = tenantId || customer?.tenant_id || DEFAULT_TENANT_ID;
 
     try {
-      // 1. PIN LOKASI ASLI WHATSAPP (type: 'location')
-      if (incomingMessage?.type === 'location' && incomingMessage.location) {
-        const lat = Number(incomingMessage.location.latitude);
-        const lng = Number(incomingMessage.location.longitude);
-        if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
-          const { geocodingService } = await import('../integrations/google-maps/geocoding');
-          const { deliveryService } = await import('./delivery.service');
-          const { customerService } = await import('./customer.service');
-          const resolved = await geocodingService.reverseGeocode(lat, lng);
-          const delivery = await deliveryService.calculateDelivery({ lat, lng }, undefined, tid);
-          await customerService.updateCustomerLocation(customer.id, {
-            kelurahan: resolved.kelurahan,
-            kecamatan: resolved.kecamatan,
-            kota: resolved.kota,
-            lat,
-            lng,
-            distanceKm: delivery.distanceKm,
-            ongkir: delivery.ongkir,
-            isOutOfCoverage: delivery.isOutOfCoverage,
-            zipcode: resolved.zipcode,
-            isNativePin: true,
-          }, tid);
-          await customerService.markShareLocationSent(customer.id, tid);
-          console.log(`[HUMAN ENRICH] GPS pin saved for ${customer.phone}: ${delivery.distanceKm}km ongkir ${delivery.ongkir}`);
-          return { enriched: true, reason: 'gps_pin' };
-        }
+      // 1. PIN LOKASI ASLI WHATSAPP (type: 'location') — didelegasikan ke kontrak
+      //    tunggal location-ingest.service: idempoten (retry/choke point ganda aman)
+      //    dan kegagalan tulis meninggalkan audit LOCATION_INGEST_FAILED persisten
+      //    (KNOWN_ISSUES #138 — kasus Bunda Agatha yang dulu ditelan console.warn).
+      const { locationIngestService } = await import('./location-ingest.service');
+      if (locationIngestService.isIncomingGpsPin(incomingMessage)) {
+        const res = await locationIngestService.ingestGpsPin({ customer, incomingMessage, tenantId: tid });
+        if (res.status === 'saved') return { enriched: true, reason: res.reason };
+        if (res.status === 'error') return { enriched: false, reason: res.reason };
+        if (res.reason !== 'invalid_coords') return { enriched: false, reason: res.reason };
+        // invalid_coords → jatuh ke jalur teks berikutnya (kompatibilitas perilaku lama)
       }
 
       // 2. DETEKSI LINK GOOGLE MAPS DI DALAM CHAT ATAU ALAMAT (maps.app.goo.gl / goo.gl/maps)

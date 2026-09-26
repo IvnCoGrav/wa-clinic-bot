@@ -62,8 +62,13 @@ describe('InboundNotificationRouter — Routing Notifikasi Chat Inbound', () => 
     const staffPushSpy = vi.spyOn(webPushService, 'sendPushToStaff').mockResolvedValue({ sent: 1, failed: 0 });
 
     // Mock reservasi aktif hari ini ditugaskan ke staff_hanifah
+    // booking_date dalam jendela H-3 jam (1 jam dari sekarang) agar gate chat terbuka.
     (prisma.reservation.findFirst as any).mockResolvedValueOnce({
       assigned_staff_id: 'staff_hanifah',
+      booking_date: new Date(Date.now() + 60 * 60 * 1000),
+      status: 'confirmed',
+      purchase_occurred_at: null,
+      updated_at: new Date(),
       assigned_staff: {
         id: 'staff_hanifah',
         name: 'Bidan Hanifah',
