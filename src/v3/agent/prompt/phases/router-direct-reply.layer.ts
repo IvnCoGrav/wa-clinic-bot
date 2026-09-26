@@ -28,25 +28,42 @@ export function locationLabel(session: { location?: { kelurahan?: string; kecama
 }
 
 /**
- * Hierarki jadwal & lokasi dengan STATE-GATED PRUNING (audit 993955):
+ * Hierarki jadwal & lokasi dengan STATE-GATED PRUNING (audit 993955 + F4):
  * cabang 5a ("LOKASI BELUM DIKETAHUI") dan cabang lokasi-diketahui TIDAK
  * PERNAH dikirim bersamaan. Bila sesi sudah mencatat lokasi, 5a dicabut total
  * (information hiding) sehingga LLM secara fisik tak punya instruksi/contoh
  * yang menyuruhnya menanyakan alamat.
+ * F4: Bila ada rekomendasi baru (discussedTreatments/cartItems), prune cabang
+ * "tanyakan rencana perawatan yang diinginkan" dan ganti dengan referensi
+ * ke paket yang baru direkomendasikan (anti-amnesia).
  */
+export interface ScheduleHierarchySession {
+  location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string };
+  discussedTreatments?: string[];
+  cartItems?: Array<{ name: string }>;
+}
+
 export function buildScheduleHierarchyBlock(
-  session: { location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } } | null | undefined
+  session: ScheduleHierarchySession | null | undefined
 ): string {
   const knownRule = `• ATURAN JADWAL (LOKASI SUDAH DIKETAHUI: ${locationLabel(session) || 'tercatat di sistem'}): DILARANG KERAS menanyakan lokasi/daerah rumah lagi! Sampaikan ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. Jika customer menanyakan jadwal hari ini / same-day, sampaikan kemungkinan jadwal hari ini penuh dan akan dicekkan terlebih dahulu.`;
   const unknownRule = `• 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): Jika status lokasi customer BELUM diketahui (belum ada kelurahan/kecamatan): ABAIKAN pola "cekkan/infokan" dan aturan 5b SEPENUHNYA pada turn ini. Bila customer menanyakan ketersediaan jadwal/slot, WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute perjalanan tanpa mengetahui daerah rumah. DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!`;
-  const sharedRules = `• 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG KERAS menggunakan kata "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan! Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.
-   • 5c. (AKUI JAM KUNJUNGAN, sesi 180166): bila customer menyebut preferensi jam/waktu (mis. "jam 10 pagi") dan treatment belum dipilih — akui dan catat preferensi jam tersebut dengan ramah terlebih dahulu ("Baik Bunda, untuk estimasi jam 10 pagi kami catat terlebih dahulu ya..."), DILARANG keras mengabaikan jam yang baru disampaikan customer! Baru kemudian tanyakan rencana perawatan yang diinginkan.`;
+  
+  // F4: Get last recommended treatment from discussedTreatments or cartItems
+  const lastRecommended = session?.discussedTreatments?.[session.discussedTreatments.length - 1]
+    || session?.cartItems?.[0]?.name;
+  const treatmentRef = lastRecommended
+    ? ` untuk perawatan *${lastRecommended}* yang tadi kami infokan`
+    : '';
+  
+  const sharedRules = `• 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI, sesi 310843): DILARANG KERAS menggunakan kata "Tentu bisa" sepihak — sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. DILARANG KERAS menanyakan lokasi/daerah rumah lagi bila grounding sudah mencantumkan kelurahan/kecamatan!${treatmentRef ? ` Konfirmasikan pengecekan jadwal hari tersebut${treatmentRef}.` : ` Bila treatment belum dipilih, konfirmasikan pengecekan jadwal hari tersebut lalu tanyakan rencana perawatan yang diinginkan.`}
+   • 5c. (AKUI JAM KUNJUNGAN, sesi 180166): bila customer menyebut preferensi jam/waktu (mis. "jam 10 pagi") dan treatment belum dipilih — akui dan catat preferensi jam tersebut dengan ramah terlebih dahulu ("Baik Bunda, untuk estimasi jam 10 pagi kami catat terlebih dahulu ya..."), DILARANG keras mengabaikan jam yang baru disampaikan customer!${treatmentRef ? ` Konfirmasikan pengecekan jadwal${treatmentRef}.` : ` Baru kemudian tanyakan rencana perawatan yang diinginkan.`}`;
   const gatedRule = hasKnownLocation(session) ? knownRule : unknownRule;
   return `ATURAN HIERARKI JADWAL & LOKASI (ANTI-HALUSINASI DOMISILI):\n   ${gatedRule}\n   ${sharedRules}`;
 }
 
 export function buildRouterDirectReplyBlock(
-  session: { genderGreeting: string; location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string } },
+  session: { genderGreeting: string; location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string }; discussedTreatments?: string[]; cartItems?: Array<{ name: string }> },
   isFollowUp: boolean,
   brandBusinessName: string
 ): string {

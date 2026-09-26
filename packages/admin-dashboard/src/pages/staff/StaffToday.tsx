@@ -68,7 +68,8 @@ import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
-import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime } from '../../utils/dateWib';
+import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
+import { ThemeToggle } from '../../components/common/ThemeToggle';
 
 interface StaffTaskChild {
   name: string;
@@ -117,6 +118,13 @@ interface StaffTask {
   shareLocationText: string | null;
   customerProfilePictureUrl?: string | null;
   assignedStaff?: { id: string; name: string; role?: string } | null;
+  /** Status jendela akses chat (server-driven, sumber kebenaran tunggal). */
+  chatWindow?: {
+    open: boolean;
+    reason: 'SUPERVISOR' | 'OPEN' | 'NOT_YET_OPEN' | 'CLOSED_AFTER_COMPLETE' | 'PREVIOUS_DAY' | 'NO_ACTIVE_BOOKING';
+    opensAt?: string | null;
+    closesAt?: string | null;
+  };
 }
 
 interface ChatMessage {
@@ -476,6 +484,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const isOtwAllowed = (task: StaffTask) => {
     if (!task.bookingDate) return false;
     return Date.now() >= new Date(task.bookingDate).getTime() - 2 * 60 * 60 * 1000;
+  };
+
+  // Jendela akses chat: server-driven (chatWindow) dengan fallback aman bila field belum ada.
+  const isChatWindowOpen = (task: StaffTask): boolean => {
+    if (task.chatWindow) return task.chatWindow.open;
+    // Fallback: jadwal bukan hari lampau + belum melewati batas (server tetap jadi penentu akhir).
+    if (!task.bookingDate) return false;
+    return getWibDateKey(task.bookingDate) >= getTodayWibDateKey();
+  };
+
+  // Pesan alasan tombol chat nonaktif (ditampilkan sebagai tooltip).
+  const chatLockedTitle = (task: StaffTask): string => {
+    switch (task.chatWindow?.reason) {
+      case 'NOT_YET_OPEN':
+        return `Chat aktif H-3 jam sebelum jadwal (${formatTime(task.bookingDate)})`;
+      case 'CLOSED_AFTER_COMPLETE':
+        return 'Chat sudah ditutup (3 jam setelah treatment selesai)';
+      case 'PREVIOUS_DAY':
+        return 'Chat riwayat kunjungan lampau tidak dapat dibuka';
+      case 'NO_ACTIVE_BOOKING':
+        return 'Tidak ada jadwal aktif untuk chat ini';
+      default:
+        return 'Chat sedang tidak dapat dibuka';
+    }
   };
 
   // Format full date in Indonesian locale (e.g. "Sabtu, 15 Agustus 2026")
@@ -2217,31 +2249,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               />
             </div>
 
-            {/* Notification Status & Activation Button (iOS WebKit User Gesture) */}
-            {pushStatus === 'granted' ? (
-              <button
-                type="button"
-                onClick={handleSyncPush}
-                disabled={pushSyncing}
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-semibold border border-emerald-200 transition active:scale-95 shadow-2xs cursor-pointer"
-                title="Notifikasi perangkat aktif. Klik untuk uji coba bunyi & banner."
-              >
-                <Bell size={13} className={pushSyncing ? 'animate-bounce text-emerald-600' : 'text-emerald-600'} />
-                <span className="hidden sm:inline">Notif Aktif</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSyncPush}
-                disabled={pushSyncing}
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 transition active:scale-95 animate-pulse shadow-2xs cursor-pointer"
-                title="Klik untuk mengaktifkan notifikasi penugasan di perangkat ini"
-              >
-                <BellRing size={13} className="text-amber-600" />
-                <span>Aktifkan Notif</span>
-              </button>
-            )}
-
             {/* Refresh Tasks Button */}
             <button
               onClick={() => fetchTasks(false)}
@@ -2527,7 +2534,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         </div>
 
                         {/* Area Bawah: Alamat, Foto Rumah, & Tombol Chat (KLIK KE BAWAH = CHAT / AKSI) */}
-                        <div onClick={() => handleOpenChat(task)} className="cursor-pointer">
+                        <div
+                          onClick={() => {
+                            if (isChatWindowOpen(task)) handleOpenChat(task);
+                          }}
+                          className={isChatWindowOpen(task) ? 'cursor-pointer' : 'cursor-default'}
+                        >
                           {/* Alamat & Jarak dari Klinik */}
                           <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
                             <div className="flex items-start gap-1.5">
@@ -2668,18 +2680,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                         {/* Quick Action Buttons: Chat, Navigasi, Infokan OTW */}
                         <div className="grid grid-cols-3 gap-2 pt-2 mt-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenChat(task);
-                            }}
-                            className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
-                            title="Buka Ruang Percakapan WhatsApp Pasien"
-                          >
-                            <MessageSquare size={15} className="text-[#008069]" />
-                            <span>Chat</span>
-                          </button>
+                          {isChatWindowOpen(task) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenChat(task);
+                              }}
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                              title="Buka Ruang Percakapan WhatsApp Pasien"
+                            >
+                              <MessageSquare size={15} className="text-[#008069]" />
+                              <span>Chat</span>
+                            </button>
+                          ) : (
+                            <div
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#8696a0] bg-[#f0f2f5] rounded-xl border border-[#e9edef] cursor-not-allowed"
+                              title={chatLockedTitle(task)}
+                            >
+                              <MessageSquare size={15} className="text-[#8696a0]" />
+                              <span>Chat Terkunci</span>
+                            </div>
+                          )}
 
                           {task.navigationUrl || task.mapsUrl ? (
                             <a
@@ -2711,7 +2733,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               type="button"
                               disabled={completingVisitId === task.reservationId}
                               onClick={(e) => handleCompleteVisit(task, e)}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50 ${
+                                completingVisitId === task.reservationId ? '' : 'animate-action-pulse'
+                              }`}
                               title="Tandai tindakan selesai dan kunjungan tuntas"
                             >
                               {completingVisitId === task.reservationId ? (
@@ -2900,7 +2924,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                          <button
                            onClick={() => handleCompleteVisit(selectedTask)}
                            disabled={completingVisitId === selectedTask.reservationId}
-                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                           className={`h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50 ${
+                             completingVisitId === selectedTask.reservationId ? '' : 'animate-action-pulse'
+                           }`}
                            title="Tandai Tindakan Selesai"
                          >
                            {completingVisitId === selectedTask.reservationId ? (
@@ -3768,7 +3794,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              {item.conversationId && (
+                              {item.conversationId && isChatWindowOpen(item) && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -3823,14 +3849,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setShowMenuDrawer(false)}
         />
 
-        {/* Drawer Body (Maks 50% layar mobile) */}
+        {/* Drawer Body (Notch-safe, lebar optimal mobile) */}
         <div
-          className={`relative w-[50vw] sm:w-[280px] max-w-[50vw] sm:max-w-[280px] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
+          className={`relative w-[75vw] sm:w-[280px] max-w-[300px] sm:max-w-[280px] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
             showMenuDrawer ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
-            {/* Drawer Header */}
-            <div className="p-3 bg-[#008069] text-white flex items-center justify-between shadow-xs">
+            {/* Drawer Header — safe-area atas agar tidak tertutup notch / Dynamic Island */}
+            <div className="px-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 bg-[#008069] text-white flex items-center justify-between shadow-xs">
               <div className="flex items-center space-x-2 min-w-0">
                 <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-white border border-white/30 flex-shrink-0">
                   <UserCheck size={16} />
@@ -3969,8 +3995,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </button>
             </div>
 
-            {/* Drawer Footer Actions */}
-            <div className="p-3 border-t border-[#e9edef] bg-[#f0f2f5] space-y-1.5">
+            {/* Drawer Footer Actions — safe-area bawah untuk home indicator iPhone */}
+            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] bg-[#f0f2f5] space-y-1.5">
               {isSupervisor && (
                 <button
                   type="button"
@@ -3996,6 +4022,52 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <Info size={13} className="text-[#008069] flex-shrink-0" />
                 <span className="truncate">Profil Akun</span>
               </button>
+
+              {/* Seksi Preferensi & Pengaturan: Notifikasi + Mode Terang/Gelap */}
+              <div className="pt-2 mt-1 border-t border-[#e9edef]">
+                <div className="px-1.5 pb-1.5 text-[10px] font-bold text-[#667781] uppercase tracking-wider">
+                  Preferensi & Pengaturan
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSyncPush}
+                  disabled={pushSyncing}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl border transition-all active:scale-95 shadow-xs disabled:opacity-60 ${
+                    pushStatus === 'granted'
+                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                  }`}
+                  title={
+                    pushStatus === 'granted'
+                      ? 'Notifikasi perangkat aktif. Klik untuk uji coba bunyi & banner.'
+                      : 'Klik untuk mengaktifkan notifikasi penugasan di perangkat ini'
+                  }
+                >
+                  <span className="flex items-center space-x-2 min-w-0">
+                    {pushStatus === 'granted' ? (
+                      <Bell size={14} className={pushSyncing ? 'animate-bounce' : ''} />
+                    ) : (
+                      <BellRing size={14} />
+                    )}
+                    <span className="text-[11px] font-semibold truncate">
+                      {pushStatus === 'granted' ? 'Notifikasi Aktif' : 'Aktifkan Notifikasi'}
+                    </span>
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                    pushStatus === 'granted' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                  }`}>
+                    {pushStatus === 'granted' ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+
+                <div className="mt-1.5 flex items-center justify-between p-2 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
+                  <span className="flex items-center space-x-2 min-w-0 text-[#111b21]">
+                    <span className="text-[11px] font-semibold truncate">Mode Terang / Gelap</span>
+                  </span>
+                  <ThemeToggle size={15} />
+                </div>
+              </div>
 
               <button
                 type="button"
@@ -4342,7 +4414,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Modal Actions */}
             <div className="pt-1 flex space-x-2">
-              {detailModalTask.conversationId && (
+              {detailModalTask.conversationId && isChatWindowOpen(detailModalTask) && (
                 <button
                   type="button"
                   onClick={() => {

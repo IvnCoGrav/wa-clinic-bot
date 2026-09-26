@@ -63,6 +63,7 @@ export interface CatalogTreatmentDetail {
 export type CatalogClosingIntent =
   | 'SAFETY_NO_MATCH'
   | 'STATEMENT_ONLY_DURATION'
+  | 'STATEMENT_ONLY_PRICE'
   | 'ASK_DOMICILE'
   | 'ASK_SCHEDULE'
   | 'PRICE_SUBJECT_CLARIFY'
@@ -901,6 +902,10 @@ export async function executeGetCatalog(
       closingIntent = 'STATEMENT_ONLY_DURATION';
     } else if (priceClarification) {
       closingIntent = 'PRICE_SUBJECT_CLARIFY';
+    } else if (showPrices || pricingBreakdown != null || cartRecapBreakdown != null) {
+      // F3: Mode harga (transaksional) → JANGAN probe klinis.
+      // Tutup dengan total resmi + tawaran bantu jadwal/domisili sesuai status lokasi.
+      closingIntent = locationKnown ? 'ASK_SCHEDULE' : 'ASK_DOMICILE';
     } else if (needsAgeClarification) {
       // Sesi 783810: klarifikasi usia multi-tier DILETAKKAN DI ATAS
       // ASK_SCHEDULE/ASK_DOMICILE — usia menentukan paket yang tepat (Bayi vs
@@ -922,6 +927,7 @@ export async function executeGetCatalog(
     const closingDirectives: Record<CatalogClosingIntent, string> = {
       SAFETY_NO_MATCH: `Keluhan (${effectiveSymptoms.join(', ')}) TIDAK terdaftar dalam katalog terapi klinik. Jelaskan secara ramah bahwa layanan kami difokuskan pada perawatan kebidanan komplementer untuk ibu dan anak sehat (seperti bapil, kembung, nafsu makan, relaksasi). DILARANG mengklaim bisa menyembuhkan keluhan tersebut. Bila ada tanda bahaya (demam tinggi, kejang, sesak, lemas tak merespons), arahkan segera periksa ke dokter/faskes.`,
       STATEMENT_ONLY_DURATION: `Customer menanyakan DURASI. Sampaikan durasi resmi paket di atas secara ramah, lalu TUTUP DENGAN PERNYATAAN RAMAH TANPA PERTANYAAN — DILARANG menodong hari/jadwal kunjungan.`,
+      STATEMENT_ONLY_PRICE: `Customer menanyakan TOTAL BIAYA. Sampaikan total resmi (cartRecapBreakdown/pricingBreakdown) persis apa adanya, lalu TUTUP dengan penawaran santun bantu siapkan jadwal kunjungan. DILARANG mengulang pertanyaan keluhan/relaksasi.`,
       ASK_DOMICILE: `Lokasi/domisili customer BELUM DIKETAHUI. Jelaskan rekomendasi perawatan di atas secara hangat (maksimal 2-3 kalimat), lalu TANYAKAN DOMISILI/KECAMATAN RUMAH BUNDA. DILARANG menodong hari/jadwal kunjungan sebelum lokasi diketahui.`,
       ASK_SCHEDULE: `Keluhan (${effectiveSymptoms.join(', ')}) SUDAH disampaikan customer — DILARANG mengulang skrining keluhan generik. Jelaskan hangat bagaimana layanan di atas membantu keluhan tersebut, lalu ajak konfirmasi preferensi hari kunjungan.`,
       PRICE_SUBJECT_CLARIFY: hasUnmatchedTargetPrice

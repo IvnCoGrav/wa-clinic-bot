@@ -100,6 +100,23 @@ sebelum tombol CTA diklik, `external-tracker.js` menyisipkan `fbclid`,
 `utm_source`, `utm_campaign` (serta param atribusi lain yang ada) ke link `/cta`
 secara otomatis.
 
+### Resolusi tenant untuk sinyal PageView (opsional, multi-tenant)
+
+Beacon PageView (`POST /api/tracking/pageview`) butuh tahu tenant pemilik LP.
+Server menentukannya berurutan (semua gagal → `default-tenant`, fail-open):
+
+1. **Param script tag** — pasang `?tenant=<tenantId|slug>` pada URL script:
+   ```html
+   <script src="https://bot.example.com/assets/external-tracker.js?tenant=SLUG_ANDA" defer></script>
+   ```
+   Nilai diverifikasi ke DB (id atau slug) — hint palsu ditolak (anti-spoof).
+2. **Otomatis via domain** — tanpa param di atas, server mencocokkan host
+   `landingUrl` ke field **Tenant → Landing Domain** di Admin Settings.
+   (Isi field ini agar LP eksternal tanpa `?tenant=` pun tetap terpetakan benar.)
+
+Kedua mekanisme diverifikasi ke DB; bila DB sedang offline, hint dari script
+tag dipertahankan apa adanya.
+
 ---
 
 ## 5. Instalasi per Platform

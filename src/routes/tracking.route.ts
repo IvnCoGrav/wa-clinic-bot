@@ -11,8 +11,33 @@ export const memoryAdClicks = new Map<string, any>();
  * SEC-AUDIT-15: cache singkat host landing terdaftar (60 dtk) agar guard origin
  * tidak menghantam DB setiap request. Sumber data = `Tenant.landing_domain`
  * (dikelola admin via settings) — bukan hardcode domain di kode.
+ * Fase 3a (issue #136): index diperkaya `host → tenant_id` sehingga dipakai bersama
+ * oleh origin-check DAN resolusi tenant PageView (satu query, dua konsumen).
  */
-let cachedLandingHosts: { at: number; hosts: Set<string> } | null = null;
+let cachedLandingHosts: { at: number; hosts: Set<string>; byHost: Map<string, string> } | null = null;
+
+async function getLandingHostIndex(): Promise<{ hosts: Set<string>; byHost: Map<string, string> }> {
+  const now = Date.now();
+  if (!cachedLandingHosts || now - cachedLandingHosts.at > 60_000) {
+    const tenants = await prisma.tenant.findMany({
+      where: { landing_domain: { not: null } },
+      select: { id: true, landing_domain: true },
+    });
+    const hosts = new Set<string>();
+    const byHost = new Map<string, string>();
+    for (const t of tenants as any[]) {
+      const d = String(t?.landing_domain || '').trim().toLowerCase().replace(/\/$/, '');
+      if (!d) continue;
+      try {
+        const h = new URL(d.includes('://') ? d : `https://${d}`).hostname;
+        hosts.add(h);
+        if (t?.id) byHost.set(h, t.id);
+      } catch {}
+    }
+    cachedLandingHosts = { at: now, hosts, byHost };
+  }
+  return cachedLandingHosts;
+}
 
 function originHostname(request: FastifyRequest): string | null {
   const origin = (request.headers['origin'] || request.headers['referer'] || '') as string;
@@ -35,23 +60,56 @@ async function isTrustedTrackingOrigin(request: FastifyRequest): Promise<boolean
   if (!host) return false;
   if (host === (request.hostname || '').toLowerCase()) return true;
   try {
-    const now = Date.now();
-    if (!cachedLandingHosts || now - cachedLandingHosts.at > 60_000) {
-      const tenants = await prisma.tenant.findMany({ select: { landing_domain: true } });
-      const hosts = new Set<string>();
-      for (const t of tenants as any[]) {
-        const d = String(t?.landing_domain || '').trim().toLowerCase().replace(/\/$/, '');
-        if (!d) continue;
-        try {
-          hosts.add(new URL(d.includes('://') ? d : `https://${d}`).hostname);
-        } catch {}
-      }
-      cachedLandingHosts = { at: now, hosts };
-    }
-    return cachedLandingHosts.hosts.has(host);
+    const { hosts } = await getLandingHostIndex();
+    return hosts.has(host);
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolusi tenant untuk baris PageView (Fase 3a, issue #136) — menggantikan
+ * hardcode `DEFAULT_TENANT_ID`. Otoritas berurutan (maksimal 1 query, fail-open):
+ *  1. Hint script-tag `external-tracker.js?tenant=<id|slug>` → TERVERIFIKASI ke DB;
+ *     hint tak dikenal → default-tenant (anti-spoof — hint tidak boleh dibutakan).
+ *  2. Tanpa hint → host `landingUrl` vs index `Tenant.landing_domain` (data-driven).
+ *  3. DB offline → hint apa adanya; tanpa hint → default-tenant.
+ */
+export async function resolveViewTenantId(
+  rawHint: unknown,
+  landingUrl: unknown,
+): Promise<string> {
+  const hint = typeof rawHint === 'string' && rawHint.trim() ? rawHint.trim() : null;
+  if (hint) {
+    try {
+      const t = (await prisma.tenant.findFirst({
+        where: { OR: [{ id: hint }, { slug: hint }] },
+        select: { id: true },
+      })) as any;
+      return t?.id || DEFAULT_TENANT_ID;
+    } catch {
+      return hint; // DB offline: pertahankan hint (fail-open)
+    }
+  }
+
+  const url = typeof landingUrl === 'string' && landingUrl ? landingUrl : null;
+  if (url) {
+    let host: string | null = null;
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      host = null;
+    }
+    if (host) {
+      try {
+        const { byHost } = await getLandingHostIndex();
+        return byHost.get(host) || DEFAULT_TENANT_ID;
+      } catch {
+        return DEFAULT_TENANT_ID; // DB offline & tanpa hint → default (fail-open)
+      }
+    }
+  }
+  return DEFAULT_TENANT_ID;
 }
 
 /**
@@ -338,7 +396,12 @@ export async function trackingRoutes(fastify: FastifyInstance) {
 
       // SEC-AUDIT-15: XFF dapat dispoof klien; socket peer (request.ip) otoritatif.
       const ipAddress = request.ip || null;
-      const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
+      // Fase 3a (issue #136): tenant diveresolusi (hint script-tag terverifikasi →
+      // host landing_domain → default), bukan lagi dibutakan ke default-tenant.
+      const tenant_id = await resolveViewTenantId(
+        body.tenantId ?? body.tenant_id ?? body.tenantSlug ?? body.tenant_slug,
+        body.landingUrl,
+      );
 
       const viewData = {
         tenant_id,
@@ -354,6 +417,12 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         utmContent: body.utm_content || body.utmContent || null,
         utmTerm: body.utm_term || body.utmTerm || null,
         utmId: body.utm_id || body.utmId || null,
+        // Fase 2 (issue #135): eventID kembar browser↔CAPI disimpan agar baris
+        // bisa di-join & didedup (sebelumnya hanya diteruskan ke CAPI);
+        // referrer dari external-tracker; source = asal baris (beacon).
+        eventId: body.eventID || null,
+        referrer: body.referrer || null,
+        source: 'beacon',
       };
 
       try {
@@ -361,9 +430,16 @@ export async function trackingRoutes(fastify: FastifyInstance) {
           data: viewData,
         });
       } catch (err: any) {
-        // Fallback in-memory jika DB offline
+        if (err?.code === 'P2002') {
+          // Dedup idempoten: eventID sudah pernah masuk (retry klien/ganda beacon)
+          // → SUKSES, bukan fallback. Jangan gorok memory agar tidak dobel.
+          return reply.status(200).send({ success: true, deduped: true });
+        }
+        // Fallback in-memory jika DB offline — key = eventId bila ada agar
+        // retry berikutnya bisa dicocokkan/diagnostik.
         pruneMemoryMap(memoryPageViews, 2000);
-        memoryPageViews.set(`view_${Date.now()}_${Math.random().toString(36).substring(7)}`, {
+        const memKey = viewData.eventId || `view_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        memoryPageViews.set(memKey, {
           ...viewData,
           createdAt: new Date(),
         });

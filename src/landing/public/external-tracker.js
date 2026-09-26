@@ -50,6 +50,18 @@
   }
 
   function getScriptPixelId() {
+    var p = getScriptQueryParam(['pixel', 'p', 'pixel_id']);
+    if (p && /^\d+$/.test(p)) return p;
+    return DEFAULT_PIXEL_ID;
+  }
+
+  // Param script tag `external-tracker.js?tenant=<id|slug>` — hint tenant untuk
+  // beacon PageView server-side (diverifikasi ulang oleh server ke DB, anti-spoof).
+  function getScriptTenant() {
+    return getScriptQueryParam(['tenant', 'tenant_id', 'tenantId']);
+  }
+
+  function getScriptQueryParam(names) {
     try {
       var currentScript = document.currentScript;
       if (!currentScript) {
@@ -65,12 +77,14 @@
         var qIdx = currentScript.src.indexOf('?');
         if (qIdx !== -1) {
           var sp = new URLSearchParams(currentScript.src.slice(qIdx + 1));
-          var p = sp.get('pixel') || sp.get('p') || sp.get('pixel_id');
-          if (p && /^\d+$/.test(p)) return p;
+          for (var j = 0; j < names.length; j++) {
+            var v = sp.get(names[j]);
+            if (v) return v;
+          }
         }
       }
     } catch (_) {}
-    return DEFAULT_PIXEL_ID;
+    return null;
   }
 
   function initMetaPixel(pvEventId) {
@@ -226,6 +240,7 @@
       var endpoint = baseUrl + '/api/tracking/pageview';
       var payload = {
         eventID: pvEventId,
+        tenantId: getScriptTenant(),
         landingUrl: window.location.href,
         referrer: document.referrer || null,
         fbclid: params.fbclid || null,

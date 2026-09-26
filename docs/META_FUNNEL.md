@@ -67,6 +67,34 @@ Dibaca lewat `getTenantCapiFormats(tenantId)` di [capi.service.ts] (fallback def
 
 ---
 
+## 3b. Dual-kolom PageView: Web-side vs Server-side (Fase 5, issue #136)
+
+Angka "Page View" di dashboard Meta Click Catcher **bukan** angka Meta Ads Manager.
+Keduanya benar — mengukur hal berbeda:
+
+| | Kolom Web-side (browser → Meta) | Kolom Server-side (DB `landing_page_views`) |
+|---|---|---|
+| Sumber | Pixel `fbq('track','PageView')` di LP + Events Manager | Beacon server, fallback, rekonsiliasi |
+| Cakupan | **Superset** — semua kunjungan | **Subset** — hanya LP terinstrumentasi |
+| Waktu | Real-time | Tertunda (klik CTA / rekonsiliasi harian) |
+| Kunci join | `eventID` kembar (browser ↔ CAPI) | `eventId` tersimpan (UNIQUE, dedup) |
+
+Rincian sumber baris server (`pageViewsBySource` di meta-summary, ditampilkan di dashboard):
+
+| `source` | Arti | Sejak |
+|---|---|---|
+| `beacon` | Beacon `POST /api/tracking/pageview` (external-tracker.js + LP internal) | Fase 1–2 |
+| `cta-fallback` | Sintesis saat klik CTA tanpa beacon tercatat (dedup via `fbclid`) | Fase 3b |
+| `meta-reconciliation` | Rekonsiliasi Meta Ads Insights API/CSV (`reconcile-meta-pageviews.ts`) | Fase 4 |
+| `backfill-synthetic` | Inject manual lama (**deprecated**, jangan dipakai) | pra-Fase 4 |
+| `(tanpa label)` | Baris pra-Fase 2 (`source` NULL) | historis |
+
+Aturan baca: bila Web-side ≫ Server-side, artinya sebagian traffic datang dari
+LP tanpa tracker / link langsung — pasang `external-tracker.js?tenant=` atau isi
+`Tenant.landing_domain` (lihat `docs/INTEGRASI_LANDING_EXTERNAL.md`), bukan bug hitung.
+
+---
+
 ## 4. Alur Deteksi "Payment" (anti false-positive)
 
 `purchase-detection.service.ts` → `maybeFirePurchaseEvent(...)`:

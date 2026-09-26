@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { humanBackgroundEnrichmentService } from '../../src/services/human-background-enrichment.service';
 import { customerService } from '../../src/services/customer.service';
+import { prisma } from '../../src/db/client';
 
 vi.mock('../../src/services/customer.service', () => ({
   customerService: {
@@ -132,13 +133,18 @@ describe('Human Background Enrichment Service', () => {
 
     expect(res.enriched).toBe(true);
     expect(res.reason).toBe('admin_chat_captured');
-    expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
-      'cust-3',
+    // Fase 3 (RC-4): angka chat admin = ESTIMATE → kolom resmi distance_km/ongkir TIDAK ditulis
+    const dataArg3 = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg3.distanceKm).toBeUndefined();
+    expect(dataArg3.ongkir).toBeUndefined();
+    expect(prisma.customer.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        distanceKm: 16,
-        ongkir: 20000,
-      }),
-      'default-tenant'
+        data: expect.objectContaining({
+          preferences: expect.objectContaining({
+            distance_estimate: expect.objectContaining({ km: 16, ongkir: 20000, by: 'admin_chat' }),
+          }),
+        }),
+      })
     );
   });
 
@@ -162,9 +168,21 @@ describe('Human Background Enrichment Service', () => {
       'cust-4',
       expect.objectContaining({
         kelurahan: 'Kebraon',
-        distanceKm: 6.8,
       }),
       'default-tenant'
+    );
+    // Fase 3 (RC-4): jarak admin = estimate, bukan fakta resmi
+    const dataArg4 = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg4.distanceKm).toBeUndefined();
+    expect(dataArg4.ongkir).toBeUndefined();
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          preferences: expect.objectContaining({
+            distance_estimate: expect.objectContaining({ km: 6.8 }),
+          }),
+        }),
+      })
     );
   });
 
@@ -190,12 +208,18 @@ describe('Human Background Enrichment Service', () => {
     expect(res.reason).toBe('admin_chat_captured');
     // Tidak ada geocode dari fragmen tanya; hanya update jarak/ongkir
     expect(geocodingService.geocodeText).not.toHaveBeenCalled();
-    expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
-      'cust-5',
+    // Fase 3 (RC-4): jarak admin = estimate, bukan fakta resmi
+    const dataArg5 = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg5.distanceKm).toBeUndefined();
+    expect(dataArg5.ongkir).toBeUndefined();
+    expect(prisma.customer.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        distanceKm: 6.8,
-      }),
-      'default-tenant'
+        data: expect.objectContaining({
+          preferences: expect.objectContaining({
+            distance_estimate: expect.objectContaining({ km: 6.8 }),
+          }),
+        }),
+      })
     );
   });
 
@@ -259,5 +283,153 @@ describe('Human Background Enrichment Service', () => {
     await humanBackgroundEnrichmentService.enrichSync(ctx, 'default-tenant');
 
     expect(EntityExtractor.extract).not.toHaveBeenCalled();
+  });
+
+  // === FASE 3 — RC-4 "estimasi admin ≠ fakta" (G3, tanpa migrasi DB) ===
+  it('Fase 3.1: belum punya koordinat presisi → distance_km/ongkir resmi TIDAK ditulis; angka jadi preferences.distance_estimate + log', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-f3a',
+      phone: '628111111111',
+      kelurahan: 'Kebraon',
+      lat: null,
+      lng: null,
+      distance_km: 5.1,
+      ongkir: 10000,
+      is_out_of_coverage: true,
+      share_location_sent: false,
+      preferences: { existing_key: 'kept' },
+    } as any);
+
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(
+      'Jika dilihat dari jaraknya kurang lebih 6.8 km dari klinik ya bunda.',
+      'cust-f3a',
+      'default-tenant'
+    );
+
+    expect(res.enriched).toBe(true);
+    // 1. Kolom fakta resmi TIDAK ditimpa (undefined → dipertahankan oleh updateCustomerLocation),
+    //    termasuk flag is_out_of_coverage yang sudah ada (tulis estimate tidak boleh membatalkan fakta).
+    const dataArg = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg.distanceKm).toBeUndefined();
+    expect(dataArg.ongkir).toBeUndefined();
+    expect(dataArg.isOutOfCoverage).toBe(true);
+    // 2. Angka admin disimpan sebagai ESTIMATE di preferences (merge, key lain tetap utuh)
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          preferences: expect.objectContaining({
+            existing_key: 'kept',
+            distance_estimate: expect.objectContaining({
+              km: 6.8,
+              ongkir: 20000, // tier fallback mock: 25000 - 5000
+              by: 'admin_chat',
+              at: expect.any(String),
+            }),
+          }),
+        }),
+      })
+    );
+    // 3. Gagal simpan estimate (DB offline di test = prisma reject) TIDAK mematikan enrich
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[ADMIN DISTANCE ESTIMATE]'));
+    logSpy.mockRestore();
+  });
+
+  it('Fase 3: sudah punya GPS presisi (share_location_sent) → jarak dihitung ULANG dari koordinat, angka chat admin DIABAIKAN, lat/lng tidak dikirim', async () => {
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-f3b',
+      phone: '628222222222',
+      kelurahan: 'Kebraon',
+      lat: -7.3488,
+      lng: 112.7516,
+      distance_km: 4.9,
+      ongkir: 15000,
+      is_out_of_coverage: false,
+      share_location_sent: true,
+      preferences: {},
+    } as any);
+
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(
+      'Jaraknya kurang lebih 6.8 km ya, ongkir 15.000 saja ya bunda.',
+      'cust-f3b',
+      'default-tenant'
+    );
+
+    expect(res.enriched).toBe(true);
+    const dataArg = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    // Nilai mock calculateDelivery (16/20000) — BUKAN angka chat (6.8/15000) BUKAN nilai lama (4.9/15000)
+    expect(dataArg.distanceKm).toBe(16);
+    expect(dataArg.ongkir).toBe(20000);
+    expect(dataArg.isOutOfCoverage).toBe(false);
+    // Otoritas koordinat: lat/lng tidak ikut dikirim (admin-geocode area pun tidak menimpa GPS)
+    expect(dataArg.lat).toBeUndefined();
+    expect(dataArg.lng).toBeUndefined();
+    expect(dataArg.isNativePin).toBe(true);
+    // Angka chat admin diabaikan total untuk customer GPS (tidak jadi estimate pun)
+    expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('Fase 3: GPS presisi tapi calculateDelivery gagal → kolom jarak tidak ditulis (nilai lama dipertahankan), enrich tetap sukses', async () => {
+    const { deliveryService } = await import('../../src/services/delivery.service');
+    vi.mocked(deliveryService.calculateDelivery).mockRejectedValueOnce(new Error('ORS down'));
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-f3c',
+      phone: '628333333333',
+      kelurahan: 'Kebraon',
+      lat: -7.3488,
+      lng: 112.7516,
+      distance_km: 4.9,
+      ongkir: 15000,
+      is_out_of_coverage: true,
+      share_location_sent: true,
+      preferences: {},
+    } as any);
+
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(
+      'Jaraknya kurang lebih 6.8 km ya dari klinik ya bunda.',
+      'cust-f3c',
+      'default-tenant'
+    );
+
+    expect(res.enriched).toBe(true);
+    const dataArg = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg.distanceKm).toBeUndefined();
+    expect(dataArg.ongkir).toBeUndefined();
+    expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('Fase 3 edge: chat admin hanya menyebut ongkir (tanpa jarak) → resmi tidak ditulis, estimate {km:null, ongkir:15000}', async () => {
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-f3d',
+      phone: '628444444444',
+      kelurahan: 'Kebraon',
+      lat: null,
+      lng: null,
+      distance_km: 5.1,
+      ongkir: 10000,
+      is_out_of_coverage: false,
+      share_location_sent: false,
+      preferences: {},
+    } as any);
+
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(
+      'Ongkir 15.000 saja ya bunda.',
+      'cust-f3d',
+      'default-tenant'
+    );
+
+    expect(res.enriched).toBe(true);
+    const dataArg = vi.mocked(customerService.updateCustomerLocation).mock.calls[0][1] as any;
+    expect(dataArg.distanceKm).toBeUndefined();
+    expect(dataArg.ongkir).toBeUndefined();
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          preferences: expect.objectContaining({
+            distance_estimate: expect.objectContaining({ km: null, ongkir: 15000 }),
+          }),
+        }),
+      })
+    );
   });
 });

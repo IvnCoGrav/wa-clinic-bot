@@ -24,13 +24,18 @@ export const SCHEDULE_NEG_CONSTRAINTS_HEAD = buildScheduleNegConstraintsHead();
 
 type ScheduleSession = {
   location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string };
+  discussedTreatments?: string[];
+  cartItems?: Array<{ name: string }>;
 } | null | undefined;
 
 /**
- * Aturan 5 dinamis dengan STATE-GATED PRUNING (audit 993955).
+ * Aturan 5 dinamis dengan STATE-GATED PRUNING (audit 993955 + F4).
  * Bila sesi sudah mencatat lokasi: Aturan 5a + instruksi tanya-domisili DIHILANGKAN
  * total, diganti penegasan status tersimpan (information hiding — LLM tak pernah
  * melihat cabang yang bertolak belakang). Bila belum ada lokasi: alur 5a utuh.
+ * F4: Bila ada rekomendasi baru (discussedTreatments/cartItems), prune cabang
+ * "tanyakan rencana perawatan yang diinginkan" dan ganti dengan referensi
+ * ke paket yang baru direkomendasikan (anti-amnesia).
  * Tanpa argumen → render kanonis lama (kompatibilitas).
  */
 export function buildScheduleNegConstraintsHead(session?: ScheduleSession): string {
@@ -40,13 +45,24 @@ export function buildScheduleNegConstraintsHead(session?: ScheduleSession): stri
   const branch5aUnknown = `   • 5a. (PRIORITAS 1 — LOKASI BELUM DIKETAHUI): bila grounding [STATUS DATA CUSTOMER SAAT INI] menyatakan lokasi belum diketahui (atau tidak mencantumkan kelurahan/kecamatan), ABAIKAN pola "cekkan/infokan" di 5b dan aturan 21 SEPENUHNYA pada turn ini. Bila customer bertanya ketersediaan jadwal/slot, WAJIB dahulukan menanyakan daerah rumah Bunda terlebih dahulu sebelum mengecek jadwal atau mereservasi! Bidan tidak bisa mengecek rute tanpa mengetahui daerah rumah. Satu-satunya respons yang benar adalah menanyakan domisili secara netral TANPA menyebut nama kecamatan/kota mana pun (contoh: "Kalau boleh tahu rumah Bunda di daerah mana ya? Agar kami bisa bantu cekkan ketersediaan jadwal dan jangkauan Bidan kami."). DILARANG berjanji mengecek jadwal sebelum domisili diketahui dan DILARANG memanggil save_reservation!`;
   const branchKnown = `   • ATURAN JADWAL (LOKASI SUDAH DIKETAHUI${label ? `: ${label}` : ''}): status lokasi Bunda SUDAH TERSIMPAN di sistem — DILARANG KERAS menanyakan lokasi/daerah rumah/alamat lagi dalam bentuk apa pun! Bila customer menanyakan ketersediaan jadwal/slot, sampaikan bahwa ketersediaan jadwal akan kami bantu cekkan terlebih dahulu. Jika menanyakan jadwal hari ini / same-day, sampaikan kemungkinan jadwal hari ini penuh dan akan dicekkan terlebih dahulu. DILARANG berjanji "Tentu bisa" sepihak.`;
   const gatedBranch = known ? branchKnown : branch5aUnknown;
+
+  // F4: Get last recommended treatment from discussedTreatments or cartItems
+  const lastRecommended = session?.discussedTreatments?.[session.discussedTreatments.length - 1]
+    || session?.cartItems?.[0]?.name;
+  const treatmentRef = lastRecommended
+    ? ` untuk perawatan *${lastRecommended}* yang tadi kami infokan`
+    : '';
+
   const askDomicileFallback = known
     ? ''
     : `\n   • Jika lokasi BELUM diketahui: baru tanyakan dengan santai daerah rumahnya agar bisa dicekkan jarak dan slot Bidan.`;
+
+  const rule5b = `   • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI): DILARANG KERAS menggunakan kata "Tentu bisa", "Bisa Bunda", "Pasti bisa", atau "Bisa kok" saat customer menanyakan ketersediaan hari/jadwal. Wajib infokan secara santun bahwa jadwal akan kami bantu cekkan terlebih dahulu.
+   • Jika lokasi SUDAH diketahui: sampaikan bahwa ketersediaan jadwal hari [hari/besok] akan kami bantu cekkan.${treatmentRef ? ` Konfirmasikan pengecekan jadwal hari tersebut${treatmentRef}.` : ` Konfirmasikan perawatan yang dipilih.`} DILARANG menanyakan lokasi lagi! DILARANG menanyakan jam (lihat aturan 20)!`;
+
   return `5. ANTI-AFIRMASI JADWAL (HIERARKI TAJAM — BERLAKU BERURUTAN, BERHENTI DI NOMOR PERTAMA YANG COCOK):
 ${gatedBranch}
-   • 5b. (PRIORITAS 2 — LOKASI SUDAH DIKETAHUI): DILARANG KERAS menggunakan kata "Tentu bisa", "Bisa Bunda", "Pasti bisa", atau "Bisa kok" saat customer menanyakan ketersediaan hari/jadwal. Wajib infokan secara santun bahwa jadwal akan kami bantu cekkan terlebih dahulu.
-   • Jika lokasi SUDAH diketahui: sampaikan bahwa ketersediaan jadwal hari [hari/besok] akan kami bantu cekkan. Konfirmasikan perawatan yang dipilih. DILARANG menanyakan lokasi lagi! DILARANG menanyakan jam (lihat aturan 20)!
+${rule5b}
    • PENUTUP JADWAL WAJIB (tanpa kata "saya"): contoh baku — "Untuk ketersediaan jadwal hari Jumat besok, kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda 😊🙏 Nanti segera kami infokan ya bund 🤗". DILARANG "Nanti saya kabari" — selalu "kami".
    • MANDAT POV FIRST PERSON KHUSUS PENUTUP JADWAL (ANTI-MELEMPAR TANGGUNG JAWAB, audit 337101): Kamu adalah Bidan Yusi bersama tim klinik — saat menutup topik pengecekan jadwal, bicara 100% orang pertama ("kami"). DILARANG pola resepsionis-melempar-ke-pihak-ketiga: "Nanti AKAN DIINFOKAN KEMBALI OLEH BIDAN KAMI", "nanti akan dihubungi oleh Bidan kami", "ketersediaan jadwal BIDAN YANG READY"! Ganti: "Untuk jadwal [hari/tanggal], kami bantu cekkan ketersediaan jadwalnya dulu ya Bunda 😊🙏 Nanti segera kami kabari ya bund 🤗". Khusus same-day ("sekarang"/"hari ini"): "Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏". LINGKUP: mandat ini KHUSUS penutup pengecekan jadwal — sebutan "Bidan kami" di konteks lain (identitas penangan treatment, kualifikasi, homecare) TETAP berlaku.${askDomicileFallback}`;
 }

@@ -912,6 +912,34 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // --- CHOKE POINT GPS PIN TUNGGAL (insiden #138 — Bunda Agatha, 25 Sep 2026) ---
+      // Satu-satunya ingest WAJIB untuk SEMUA inbound GPS, diletakkan SEBELUM semua
+      // return path: bypass admin (949), legacy scrape, blocked, AI scope gate,
+      // human handling, dan jalur normal queue. Menutup G1 (jalur normal & gate
+      // global_bot_disabled di machine.ts dulu membuang GPS begitu saja) dan G2
+      // (kegagalan tulis kini meninggalkan audit LOCATION_INGEST_FAILED persisten,
+      // bukan console.warn yang hangus bersama log container saat recreate).
+      if (hasRealLocation) {
+        try {
+          const { locationIngestService } = await import('../services/location-ingest.service');
+          const ingestCustomer =
+            existingCustomer ||
+            (await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, {
+              skipFollowUpScheduling: isBypassChat,
+            }));
+          const gpsResult = await locationIngestService.ingestGpsPin({
+            customer: ingestCustomer,
+            incomingMessage: { type: 'location', location: { latitude: rawLat, longitude: rawLng } },
+            tenantId: resolvedTenantId,
+          });
+          if (gpsResult.status !== 'skipped') {
+            console.log(`[LOCATION INGEST] choke point ${gpsResult.status}: ${gpsResult.reason} (${phone})`);
+          }
+        } catch (ingestErr: any) {
+          console.warn('[LOCATION INGEST] choke point error:', ingestErr?.message || ingestErr);
+        }
+      }
+
       // --- MEDIA BERAT (video/audio/document): unduh BACKGROUND fire-and-forget ---
       // Keputusan: image tetap sinkron (dipakai Live Chat), media berat TIDAK dirender
       // di Live Chat tapi tetap diarsipkan ke storage supaya tidak hilang. Webhook tidak

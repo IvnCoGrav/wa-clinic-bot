@@ -8,6 +8,8 @@
  * murni evaluasi teks + guard pertanyaan spesifik.
  */
 
+import { getGazetteerAreas, getGazetteerKecamatanNames } from '../utils/gazetteer';
+
 export interface LeadGreetingResult {
   isLeadGreeting: boolean;
   isIslamic: boolean;
@@ -47,12 +49,68 @@ export function hasIslamicSalutation(text: string): boolean {
   return ISLAMIC_RE.test(stripAdTags(text));
 }
 
+function hasPreciseLocationEntity(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (!lower.trim()) return false;
+  // Google Maps link
+  if (lower.includes('google.com/maps') || lower.includes('goo.gl') || lower.includes('share.google') || lower.includes('maps.app')) {
+    return true;
+  }
+  // Street markers (token utuh)
+  const stripEdge = (t: string): string => {
+    let s = t;
+    while (s.length > 0) {
+      const c = s.charCodeAt(0);
+      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
+      s = s.slice(1);
+    }
+    while (s.length > 0) {
+      const c = s.charCodeAt(s.length - 1);
+      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
+      s = s.slice(0, -1);
+    }
+    return s;
+  };
+  const STREET_MARKERS = new Set([
+    'jl', 'jln', 'jalan', 'gang', 'gg', 'perum', 'perumahan',
+    'komplek', 'kompleks', 'blok', 'cluster', 'ruko', 'patokan',
+  ]);
+  const toks = lower.split(' ').map(stripEdge).filter((t) => t.length > 0);
+  if (toks.some((t) => STREET_MARKERS.has(t))) return true;
+  // Explicit location phrases
+  const LOCATION_PHRASES = [
+    'alamat', 'domisili', 'tinggal di', 'rumah di', 'rumahnya di',
+    'lokasi rumah', 'kelurahan', 'kecamatan',
+  ];
+  if (LOCATION_PHRASES.some((p) => lower.includes(p))) return true;
+  // Known kelurahan/kecamatan as WHOLE words (not substrings)
+  try {
+    const areas = new Set<string>();
+    for (const [areaLower] of getGazetteerAreas().entries()) {
+      if (areaLower.length >= 4) areas.add(areaLower);
+    }
+    const kecNames = new Set<string>();
+    for (const n of getGazetteerKecamatanNames() || []) {
+      if (n && n.length >= 4) kecNames.add(n.toLowerCase());
+    }
+    const words = lower.split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+    for (const w of words) {
+      if (areas.has(w) || kecNames.has(w)) return true;
+    }
+  } catch {}
+  return false;
+}
+
 export function isPureLeadGreeting(text: string): LeadGreetingResult {
   const notIslamic = { isLeadGreeting: false, isIslamic: false };
   if (!text || typeof text !== 'string') return notIslamic;
 
   const cleanText = stripAdTags(text);
   if (!cleanText) return notIslamic;
+
+  // Guard: entitas lokasi presisi (jalan/perumahan/kelurahan/kecamatan/Google Maps/frasa alamat)
+  // → bukan sapaan murni, wajib diteruskan ke Geocoder & LLM
+  if (hasPreciseLocationEntity(cleanText)) return notIslamic;
 
   // Guard: ada pertanyaan spesifik (harga/klinik/gejala/jadwal/usia) → bukan sapaan murni
   if (SPECIFIC_QUESTION_RE.test(cleanText)) return notIslamic;
@@ -67,10 +125,7 @@ export function isPureLeadGreeting(text: string): LeadGreetingResult {
     new RegExp(
       `^${HONORIFICS}${TAIL_ELEMENT}\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}[!.\\s?~-]*$`,
       'i'
-    ).test(cleanText) ||
-    /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|home\s*service|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan|mau\s+reservasi|mau\s+booking|bisa\s+reservasi|bisa\s+booking|cara\s+reservasi|cara\s+booking|bagaimana\s+caranya|gimana\s+caranya|alur\s+reservasi|alur\s+booking|mau\s+pesan|cara\s+pesan|info\s+reservasi|mau\s+treatment|mau\s+pijat|mau\s+massage|layanan\s+apa\s*(?:aja|saja)|perawatan\s+apa\s*(?:aja|saja)|treatment\s+apa\s*(?:aja|saja)|ada\s+perawatan\s+apa|ada\s+treatment\s+apa|ada\s+layanan\s+apa|mau\s+tau\s+layanan|mau\s+tahu\s+layanan|mau\s+tau\s+treatment|mau\s+tahu\s+treatment)\b/i.test(
-      cleanText
-    );
+    ).test(cleanText);
 
   if (!isPureLeadOpener) return notIslamic;
   return { isLeadGreeting: true, isIslamic };

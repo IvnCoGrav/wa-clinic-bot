@@ -226,24 +226,31 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
           const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
           if (ageSeconds > maxAgeSeconds) {
-            console.log(`[WABA STALE MESSAGE GUARD] Message ${msg.messageId} from ${msg.fromNumber} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/CAPI.`);
-            const staleCustomer = await customerService.getOrCreateCustomer(
-              msg.fromNumber,
-              msg.contactName,
-              tenantId
-            );
-            const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, tenantId);
-            await messageService.logMessage({
-              tenantId,
-              conversationId: staleConversation.id,
-              direction: 'INBOUND',
-              content: wabaCanonicalContent,
-              waMessageId: msg.messageId,
-              payloadRaw: mergeWabaMedia(msg.rawPayload),
-              isHistorical: true,
-            });
-            processed++;
-            continue;
+            if (msg.location) {
+              // Mirip [STALE GUARD BYPASS] di webhook WAHA: sinyal GPS shareloc
+              // tidak boleh hilang karenakan timestamp telat — jatuh ke choke
+              // point ingest GPS di bawah (KNOWN_ISSUES #138).
+              console.log(`[WABA STALE GUARD BYPASS] GPS Shareloc dari ${msg.fromNumber} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke ingest GPS choke point.`);
+            } else {
+              console.log(`[WABA STALE MESSAGE GUARD] Message ${msg.messageId} from ${msg.fromNumber} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/CAPI.`);
+              const staleCustomer = await customerService.getOrCreateCustomer(
+                msg.fromNumber,
+                msg.contactName,
+                tenantId
+              );
+              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, tenantId);
+              await messageService.logMessage({
+                tenantId,
+                conversationId: staleConversation.id,
+                direction: 'INBOUND',
+                content: wabaCanonicalContent,
+                waMessageId: msg.messageId,
+                payloadRaw: mergeWabaMedia(msg.rawPayload),
+                isHistorical: true,
+              });
+              processed++;
+              continue;
+            }
           }
         }
       }
@@ -255,6 +262,36 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         existingCustomer?.is_admin_labeled === true ||
         hasBypassLabel(existingCustomer) ||
         (await checkCustomerBypass({ customerId: existingCustomer?.id, phone: msg.fromNumber, tenantId }));
+
+      // --- CHOKE POINT GPS PIN TUNGGAL (mirror WAHA — KNOWN_ISSUES #138) ---
+      // WABA sebelumnya TIDAK punya sinkron GPS sama sekali: bypass, blocked,
+      // abuse, scope-gate silence, dan jalur normal queue semuanya membuang
+      // koordinat begitu saja. Ingest di sini berlaku untuk SEMUA return path
+      // di bawah — kontrak tunggal location-ingest.service (idempoten + audit
+      // LOCATION_INGEST_FAILED saat kegagalan tulis).
+      if (msg.location) {
+        try {
+          const { locationIngestService } = await import('../services/location-ingest.service');
+          const ingestCustomer =
+            existingCustomer ||
+            (await customerService.getOrCreateCustomer(msg.fromNumber, msg.contactName, tenantId, {
+              skipFollowUpScheduling: isBypass,
+            }));
+          const gpsResult = await locationIngestService.ingestGpsPin({
+            customer: ingestCustomer,
+            incomingMessage: {
+              type: 'location',
+              location: { latitude: msg.location.latitude, longitude: msg.location.longitude },
+            },
+            tenantId,
+          });
+          if (gpsResult.status !== 'skipped') {
+            console.log(`[LOCATION INGEST] WABA choke point ${gpsResult.status}: ${gpsResult.reason} (${msg.fromNumber})`);
+          }
+        } catch (ingestErr: any) {
+          console.warn('[LOCATION INGEST] WABA choke point error:', ingestErr?.message || ingestErr);
+        }
+      }
 
       if (isBypass) {
         console.log(`[WABA BYPASS] Contact ${msg.fromNumber} has bypass/admin label (Skip / Admin CS). Dropping bot auto-reply.`);
