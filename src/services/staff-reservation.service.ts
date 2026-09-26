@@ -340,6 +340,30 @@ export class StaffReservationService {
       let prevOriginName = 'Klinik';
       let isFirstPatient = true;
 
+      // Fase 4 (RC-6/G5): fallback jarak Klinik→Pasien #1 memakai sumber resmi tenant-aware
+      // (deliveryService.calculateDelivery: ORS + tier DB), bukan rumus Haversine lokal.
+      // Haversine tetap last-resort bila API gagal. Precompute sekuensial SEBELUM Promise.all
+      // (await di dalam map akan merusak urutan mutasi prevCoords/isFirstPatient).
+      const clinicFallbackKm = new Map<string, number>();
+      {
+        const { deliveryService } = await import('./delivery.service');
+        let probeFirstPatient = true;
+        for (const r of rows) {
+          const c = r.customer;
+          if (typeof c?.lat === 'number' && typeof c?.lng === 'number') {
+            if (probeFirstPatient && c.distance_km == null) {
+              try {
+                const calc = await deliveryService.calculateDelivery({ lat: c.lat, lng: c.lng }, undefined, tenantId);
+                if (typeof calc?.distanceKm === 'number') clinicFallbackKm.set(r.id, calc.distanceKm);
+              } catch (e: any) {
+                console.warn(`[STAFF ITINERARY] calculateDelivery gagal untuk reservasi ${r.id}, pakai fallback Haversine: ${e?.message || e}`);
+              }
+            }
+            probeFirstPatient = false;
+          }
+        }
+      }
+
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
@@ -361,7 +385,7 @@ export class StaffReservationService {
           const currentCoords: Coordinates = { lat, lng };
           if (isFirstPatient) {
             // Pasien #1: Dari Klinik ke Pasien #1
-            distanceKm = cust?.distance_km ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
+            distanceKm = cust?.distance_km ?? clinicFallbackKm.get(r.id) ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
             distanceSource = 'CLINIC';
             originName = clinicConfig.name || 'Klinik';
           } else {
@@ -584,6 +608,35 @@ export class StaffReservationService {
       let prevOriginName = 'Klinik';
       let isFirstPatientOfDay = true;
 
+      // Fase 4 (RC-6/G5): fallback jarak Klinik→Pasien #1/hari memakai sumber resmi
+      // tenant-aware (deliveryService.calculateDelivery), bukan rumus Haversine lokal.
+      // Precompute sekuensial SEBELUM Promise.all; reset pasien-pertama per hari (dateKey).
+      const clinicFallbackKm = new Map<string, number>();
+      {
+        const { deliveryService } = await import('./delivery.service');
+        let probeLastDateKey = '';
+        let probeFirstOfDay = true;
+        for (const r of rows) {
+          const c = r.customer;
+          const probeDateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
+          if (probeDateKey !== probeLastDateKey) {
+            probeLastDateKey = probeDateKey;
+            probeFirstOfDay = true;
+          }
+          if (typeof c?.lat === 'number' && typeof c?.lng === 'number') {
+            if (probeFirstOfDay && c.distance_km == null) {
+              try {
+                const calc = await deliveryService.calculateDelivery({ lat: c.lat, lng: c.lng }, undefined, tenantId);
+                if (typeof calc?.distanceKm === 'number') clinicFallbackKm.set(r.id, calc.distanceKm);
+              } catch (e: any) {
+                console.warn(`[STAFF ITINERARY] calculateDelivery gagal untuk reservasi ${r.id}, pakai fallback Haversine: ${e?.message || e}`);
+              }
+            }
+            probeFirstOfDay = false;
+          }
+        }
+      }
+
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
@@ -612,7 +665,7 @@ export class StaffReservationService {
         if (typeof lat === 'number' && typeof lng === 'number') {
           const currentCoords: Coordinates = { lat, lng };
           if (isFirstPatientOfDay) {
-            distanceKm = cust?.distance_km ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
+            distanceKm = cust?.distance_km ?? clinicFallbackKm.get(r.id) ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
             distanceSource = 'CLINIC';
             originName = clinicConfig.name || 'Klinik';
           } else {

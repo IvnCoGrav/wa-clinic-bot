@@ -330,6 +330,51 @@ describe('Staff Auth & Reservation Services', () => {
       expect(tasks[1].address.estimatedMinutes).toBeGreaterThan(0);
     });
 
+    it('Fase 4 (RC-6): pasien #1 tanpa distance_km → jarak itinerary diambil dari deliveryService.calculateDelivery, bukan rumus Haversine lokal', async () => {
+      const { deliveryService } = await import('../../src/services/delivery.service');
+      const calcSpy = vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
+        distanceKm: 6.9,
+        ongkir: 15000,
+        isOutOfCoverage: false,
+      } as any);
+
+      const today = new Date();
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-f4-today',
+          treatment_detail: 'Pijat Bayi',
+          treatment_category: 'BABY',
+          booking_date: today,
+          status: 'confirmed',
+          purchase_value: 120000,
+          purchase_occurred_at: null,
+          customer: {
+            name: 'Bunda F4',
+            lat: -7.332,
+            lng: 112.788,
+            kelurahan: 'Kebraon',
+            kecamatan: 'Karangpilang',
+            kota: 'Surabaya',
+            distance_km: null,
+            ongkir: null,
+            children: [],
+            conversations: [{ id: 'conv-f4' }],
+          },
+          children: [],
+        },
+      ]);
+
+      try {
+        const tasks = await StaffReservationService.getTodayTasks('staff-1', 'default-tenant');
+        expect(tasks).toHaveLength(1);
+        // Satu penulis jarak klinik→pasien: sumber resmi tenant-aware, bukan straight×circuity lokal
+        expect(calcSpy).toHaveBeenCalledWith({ lat: -7.332, lng: 112.788 }, undefined, 'default-tenant');
+        expect(tasks[0].address.distanceKm).toBe(6.9);
+      } finally {
+        calcSpy.mockRestore();
+      }
+    });
+
     it('should fetch upcoming schedule without conversationId', async () => {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
