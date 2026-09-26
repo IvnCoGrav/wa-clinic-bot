@@ -20,6 +20,10 @@ app.kalababyspa.online {
     @sse path /api/admin/live-chat/events
     handle @sse {
         reverse_proxy app:3000 {
+            # Retry jeda dial saat container app di-recreate (insiden 502 /cta 26-09-2026, #135).
+            # Hanya menutup kegagalan koneksi awal; stream yang sudah jalan tidak di-retry.
+            lb_try_duration 30s
+            lb_try_interval 2s
             flush_interval -1
             transport http {
                 keepalive 300s
@@ -31,6 +35,9 @@ app.kalababyspa.online {
 
     handle {
         reverse_proxy app:3000 {
+            # Retry jeda dial saat container app di-recreate (insiden 502 /cta 26-09-2026, #135).
+            lb_try_duration 30s
+            lb_try_interval 2s
             transport http {
                 keepalive 60s
                 keepalive_idle_conns 100
