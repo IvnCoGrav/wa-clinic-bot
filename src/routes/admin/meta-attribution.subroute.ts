@@ -186,6 +186,19 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/debug/meta-summary
    * Agregasi KPI atribusi iklan Meta + status kesehatan CAPI.
    *
+   * Kontrak hitung (penting — jangan dicampur):
+   * - views / clicks / matched: berdasarkan rentang tanggal (dateRange).
+   * - mqlLeads: is_mql dengan `mql_triggered_at` pada rentang (all-time di
+   *   `mqlLeadsAllTime`) — inilah step3 funnel.
+   * - purchaseEvents/approvedPurchases: reservasi approved dengan
+   *   `purchase_event_sent_at` pada rentang (all-time di
+   *   `purchaseEventsAllTime`) — inilah yang masuk capiEventsDelivered.
+   * - pendingPurchases / ignoredOutliers: status antrian POINT-IN-TIME
+   *   (bukan event rentang) — dibiarkan tanpa dateRange by design.
+   * - capiEventsDelivered = matched(rentang) + approved(rentang). Tanpa
+   *   pembatasan rentang, angka ini bocor melebihi totalKlik (bug live
+   *   104 > 92 karena Purchase 100 all-time).
+   *
    * Catatan: tidak ada tabel log event CAPI, sehingga "capiEventsDelivered" adalah
    * estimasi transparan: Contact ≈ jumlah chat yang MATCHED (event Contact dikirim
    * saat tracking code berhasil di-link ke customer), Purchase = reservasi dengan
@@ -214,10 +227,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let totalClicks = 0;
       let matchedChats = 0;
       let mqlLeads = 0;
+      let mqlLeadsAllTime = 0;
       let pendingPurchases = 0;
       let approvedPurchases = 0;
       let ignoredOutliers = 0;
       let purchaseEvents = 0;
+      let purchaseEventsAllTime = 0;
 
       try {
         const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
@@ -227,13 +242,33 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         const pageViewWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
         if (utmCampaign) pageViewWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
 
-        const [views, clicks, matched, mqlCount, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+        // Hitungan BERBASIS EVENT wajib terikat dateRange, bukan all-time.
+        // (Bug live: approved all-time → capiEventsDelivered 104 > klik 92.)
+        const mqlWhere: any = { tenant_id: DEFAULT_TENANT_ID, is_mql: true };
+        if (dateRange.createdAt) mqlWhere.mql_triggered_at = dateRange.createdAt;
+        const approvedWhere: any = { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' };
+        if (dateRange.createdAt) approvedWhere.purchase_event_sent_at = dateRange.createdAt;
+
+        const [
+          views,
+          clicks,
+          matched,
+          mqlCount,
+          mqlAllCount,
+          approvedCount,
+          approvedAllCount,
+          pendingCount,
+          rejectedCount,
+        ] = await Promise.all([
           (prisma as any).landingPageView.count({ where: pageViewWhere }).catch(() => 0),
           prisma.adClick.count({ where: adClickWhere }),
           prisma.adClick.count({ where: { ...adClickWhere, matchedAt: { not: null } } }),
+          prisma.customer.count({ where: mqlWhere }),
           prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, is_mql: true } }),
-          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
+          prisma.reservation.count({ where: approvedWhere }),
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' } }),
+          // pending & ignored_outlier = antrian point-in-time (by design tanpa dateRange)
+          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
         ]);
         totalClicks = clicks;
@@ -241,10 +276,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         totalPageViews = views;
         matchedChats = matched;
         mqlLeads = mqlCount;
+        mqlLeadsAllTime = mqlAllCount;
         pendingPurchases = pendingCount;
         approvedPurchases = approvedCount;
         ignoredOutliers = rejectedCount;
         purchaseEvents = approvedCount;
+        purchaseEventsAllTime = approvedAllCount;
       } catch (err: any) {
         dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
         // Fallback in-memory saat DB offline — agar npm test offline deterministik
@@ -319,10 +356,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           unmatchedDrain,
           conversionRate: Math.round(conversionRate * 100) / 100,
           purchaseEvents,
+          purchaseEventsAllTime,
           pendingPurchases,
           approvedPurchases,
           ignoredOutliers,
           mqlLeads,
+          mqlLeadsAllTime,
           funnel: {
             step0_pageViews: totalPageViews,
             step1_adClicks: totalClicks,
@@ -333,7 +372,9 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             step5_outliersFiltered: ignoredOutliers,
           },
           capiEventsDelivered,
-          capiNote: 'Contact diestimasi dari jumlah klik yang MATCHED; Purchase dari reservasi ber-status approved.',
+          capiNote:
+            `Contact = klik MATCHED pada rentang; Purchase = reservasi approved dengan purchase_event_sent_at pada rentang`
+            + (purchaseEventsAllTime !== purchaseEvents ? ` (all-time: ${purchaseEventsAllTime}; di luar rentang tidak dihitung).` : '.'),
           isTrackingCodeFiltered,
           ctrNote,
           coverage,
