@@ -584,6 +584,27 @@ export class CronService {
   }
 
   /**
+   * Buffer penugasan terapis: kirim notifikasi yang sudah melewati jendela 5 menit.
+   * Persisten via kolom assignment_pending_at/assignment_notified_at.
+   */
+  public async runAssignmentNotificationSweep(): Promise<void> {
+    try {
+      const { staffNotificationService } = await import('./staff-notification.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let sent = 0;
+      for (const tenantId of tenants) {
+        sent += await staffNotificationService.sweepPendingAssignmentNotifications(tenantId);
+      }
+      if (sent > 0) {
+        console.log(`[Cron Service] Notifikasi penugasan terapis terkirim: ${sent}.`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running assignment notification sweep:', (err as Error).message);
+    }
+  }
+
+  /**
    * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
    */
   public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {

@@ -301,6 +301,16 @@ if (require.main === module) {
       }).catch(e => console.error('[PRE-VISIT BRIEF START ERROR]', e));
     }
 
+    // Buffer notifikasi penugasan terapis (5 menit). Default aktif; env 'false' menonaktifkan.
+    if (process.env.ENABLE_ASSIGNMENT_NOTIF_SWEEP !== 'false') {
+      const intervalMinutes = parseInt(process.env.ASSIGNMENT_NOTIF_SWEEP_INTERVAL_MINUTES || '2', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runAssignmentNotificationSweep(), intervalMinutes * 60 * 1000);
+        console.log(`🔔 Assignment notification sweep cron started (every ${intervalMinutes}m)`);
+      }).catch(e => console.error('[ASSIGNMENT NOTIF SWEEP START ERROR]', e));
+    }
+
     // Pulse alert (Fase 4): sapuan percakapan melewati SLA → tandai butuh respon segera.
     // Default aktif (ringan, read-only + update flag); nonaktifkan dengan env = 'false'.
     if (process.env.ENABLE_FRUSTRATION_SWEEP !== 'false') {

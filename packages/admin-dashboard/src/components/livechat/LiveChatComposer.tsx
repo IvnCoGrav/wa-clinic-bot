@@ -22,6 +22,7 @@ import {
   Reply,
   Lock,
   LockOpen,
+  StickyNote,
 } from 'lucide-react';
 
 /**
@@ -405,7 +406,17 @@ const LiveChatComposerInner = (
   const showQuickReplyPopover = quickReplyFilter !== null && filteredQuickReplies.length > 0;
 
   const handleInput = useCallback(() => {
-    const text = readText();
+    let text = readText();
+    // Auto-switch mode catatan internal bila admin mengetik prefix "/note" / "/notes"
+    // (deterministik, tanpa popover quick-reply) lalu bersihkan prefix tersebut.
+    const notePrefix = text.match(/^\s*\/(?:notes?)\s+/i);
+    if (notePrefix) {
+      text = text.slice(notePrefix[0].length);
+      if (inputRef.current && inputRef.current.innerText !== text) {
+        inputRef.current.innerText = text;
+      }
+      setIsInternalMode(true);
+    }
     saveDraft(convIdRef.current, text);
     const slash = detectSlashToken(text);
     if (slash !== null) {
@@ -707,6 +718,25 @@ const LiveChatComposerInner = (
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">{hasActiveReservation ? 'Salin Invoice Jadwal' : 'Generate Invoice'}</p>
                   <p className="text-[10px] text-[#667781] truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal — buat dulu'}</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolsMenuOpen(false);
+                  setIsInternalMode(true);
+                  inputRef.current?.focus();
+                }}
+                disabled={sending}
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-800 transition text-left group disabled:opacity-50"
+              >
+                <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <StickyNote size={15} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-[12px] truncate">Catatan Internal (Notes)</p>
+                  <p className="text-[10px] text-[#667781] truncate">Catatan khusus staf, tidak dikirim ke WhatsApp</p>
                 </div>
               </button>
 

@@ -4,6 +4,52 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Fix holistik audit Live Chat & Reservasi (katalog, waktu, alamat, notifikasi)
+
+- **Latar:** audit percakapan + sistem reservasi menemukan: (1) `cukur` salah cocok ke
+  Bundle Selapan 80k alih-alih Cukur Rambut 25k; (2) jam negosiasi customer kalah oleh
+  tawaran lama bot; (3) alamat jalan lengkap hilang jatuh ke kelurahan; (4) jam banner
+  tidak WIB-deterministik; (5) notifikasi penugasan terapis terkirim instan (salah pilih
+  langsung bocor); (6) reassign memicu notifikasi berisik ke terapis lama; (7) admin tak
+  bisa membedakan layanan ber-nama sama (usia beda); (8) pencarian tidak memprioritaskan
+  kontak; (9) tidak ada cara cepat salin teks bubble; (10) catatan internal terkubur di
+  command `/notes`.
+- **Fixed — Katalog & Matcher:**
+  - `treatmentStringParser.ts`: kata `cukur` dihapus dari `BUNDLE_MARKERS`; otoritas bundle
+    kini metadata DB (`category`/`serviceType === 'BUNDLE'`) via `isBundleCatalogItem`.
+  - `CreateReservationModal.tsx`: dua titik `.find()` substring diganti `matchCatalogService`
+    (prefill treatment + auto-repair price-0).
+- **Fixed — Ekstraksi jadwal:**
+  - `chatScheduleExtractor.ts`: ekstraksi jam mandiri pindai reverse-chronological
+    (terbaru → terlama), mempertahankan tiga cabang (range, jam:menit, kata pagi/siang/sore).
+  - `paymentInvoiceFormatter.ts` + `ReservationDetailModal.tsx`: alamat jalan lengkap
+    (`raw_text`) diprioritaskan sebelum fallback kelurahan/kecamatan.
+  - `LiveChatMonitor.tsx`: 5 titik `toLocaleTimeString` diberi `timeZone: 'Asia/Jakarta'`.
+- **Added — Buffer notifikasi penugasan terapis (persisten):**
+  - Skema `Reservation`: `assignment_pending_staff_id`, `assignment_pending_at`,
+    `assignment_notified_at` (migrasi `20260927140000_assignment_notification_buffer`).
+  - `staff-notification.service.ts`: `scheduleReservationAssignmentNotification`,
+    `cancelPendingAssignmentNotification`, `sweepPendingAssignmentNotifications`
+    (idempoten via `updateMany` claim). Sweep cron baru (`runAssignmentNotificationSweep`,
+    default tiap 2 menit, env `ENABLE_ASSIGNMENT_NOTIF_SWEEP`).
+  - `reservations.subroute.ts`: 3 call-site instan → scheduler buffer; reassign memakai
+    state-gate `assignment_notified_at` agar terapis lama hanya dinotifikasi bila
+    penugasan sebelumnya benar-benar sudah terkirim (senyap bila masih pending).
+- **Added — UI/UX LiveChat:**
+  - `CreateReservationModal.tsx`: badge usia (`ageTier.label`) pada kartu layanan.
+  - `LiveChatMonitor.tsx`: hierarki pencarian 2-Tier (kontak > isi pesan, lalu aktivitas);
+    hold 3 detik pada bubble menyalin teks (+ tombol salin di toolbar reaksi & klik-kanan)
+    dengan fallback `execCommand('copy')`.
+  - `LiveChatComposer.tsx`: tombol "Catatan Internal (Notes)" di menu `+` + auto-switch mode
+    internal saat mengetik prefix `/note` `/notes`.
+- **Tests:** `tests/unit/chat-schedule-extractor-negotiation.test.ts` (7 kasus adversarial
+  multi-frasa: negosiasi jam, anti-bundle `cukur`). Full suite 3742 passed (2 flake timeout
+  pre-existing #142 hijau saat diisolasi).
+- **Verifikasi:** root `tsc` 0 + dashboard `tsc` 0 + `vite build` 0. Migrasi perlu
+  `prisma migrate deploy` saat deploy.
+- **Tech debt:** delay 5 menit hardcode + `BUNDLE_MARKERS` fallback → `docs/KNOWN_ISSUES.md`
+  #147 & `docs/SAAS_READINESS_AUDIT.md` #24.
+
 #### 2026-09-27 — Fix tombol hide/unhide Copilot (breakpoint mismatch) + tema calm
 
 - **Laporan:** tombol hide/unhide panel Copilot "masih error".

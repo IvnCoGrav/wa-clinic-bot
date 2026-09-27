@@ -63,6 +63,7 @@ import {
   Volume2,
   Video,
   Lock,
+  Copy,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -461,6 +462,8 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
+  // Hold 3 detik pada bubble pesan untuk salin seluruh teks (timer per-bubble).
+  const bubbleHoldTimerRef = useRef<any>(null);
 
   // Press-and-Hold Tooltip for filter icons on mobile (tanpa getaran haptik)
   const [iconTooltip, setIconTooltip] = useState<string | null>(null);
@@ -2316,6 +2319,57 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const EXTRA_REACTIONS = ['🔥', '👏', '🎉', '💯', '✨', '🤝', '🌸', '💐', '👶', '🍼', '🤱', '💪'];
 
+  /**
+   * Salin teks dengan fallback aman: Clipboard API bisa ditolak di luar user-gesture
+   * (mis. setelah setTimeout hold), jadi fallback ke execCommand('copy') legacy.
+   */
+  const copyTextWithFallback = async (text: string): Promise<boolean> => {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // jatuh ke fallback di bawah
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyMessageText = async (content: string) => {
+    const ok = await copyTextWithFallback(content);
+    toast(ok ? '📋 Teks pesan berhasil disalin!' : 'Gagal menyalin teks pesan.', ok ? 'success' : 'error');
+  };
+
+  // Hold 3 detik pada bubble → salin seluruh teks pesan.
+  const handleBubblePointerDown = (content: string) => {
+    if (!content) return;
+    if (bubbleHoldTimerRef.current) clearTimeout(bubbleHoldTimerRef.current);
+    bubbleHoldTimerRef.current = setTimeout(() => {
+      bubbleHoldTimerRef.current = null;
+      void handleCopyMessageText(content);
+    }, 3000);
+  };
+
+  const handleBubblePointerUpOrLeave = () => {
+    if (bubbleHoldTimerRef.current) {
+      clearTimeout(bubbleHoldTimerRef.current);
+      bubbleHoldTimerRef.current = null;
+    }
+  };
+
   const handleToggleReaction = async (msg: ChatMessage, emoji: string) => {
     if (!selectedChat?.conversationId || !msg) return;
     setActiveReactionMsgId(null);
@@ -2968,7 +3022,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     let timeStr = '12.00-12.30';
     try {
       if (resItem?.booking_date && !isNaN(bookingD.getTime())) {
-        timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+        timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace(':', '.');
       }
     } catch {}
 
@@ -3257,6 +3311,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
     return true;
   }), [chats, labelFilter, searchQuery, sourceFilter, isSearching]);
+
+  // Hierarki pencarian 2-Tier: kontak (nama/telepon) lebih diprioritaskan daripada
+  // kecocokan isi pesan, lalu diurutkan berdasarkan aktivitas terakhir. Hanya menata
+  // ulang hasil filter existing — tidak membuang hasil pencarian server.
+  const sortedChats = useMemo(() => {
+    if (!searchQuery.trim()) return filteredChats;
+    const q = searchQuery.trim().toLowerCase();
+    const digitsOnly = q.replace(/\D/g, '');
+    const nameHits = (chat: LiveChatItem): boolean =>
+      (chat.customerName || '').toLowerCase().includes(q) ||
+      (digitsOnly.length >= 3 && (chat.customerPhone || '').replace(/\D/g, '').includes(digitsOnly));
+    return [...filteredChats].sort((a, b) => {
+      const an = nameHits(a);
+      const bn = nameHits(b);
+      if (an && !bn) return -1;
+      if (!an && bn) return 1;
+      return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
+    });
+  }, [filteredChats, searchQuery]);
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -3642,7 +3715,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               ) : (
                 <div className="space-y-1.5 pt-1.5">
-                {filteredChats.map((chat) => {
+                {sortedChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
                   const chatName = chat.customerName || 'Customer';
@@ -4238,7 +4311,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
                             if (!r?.booking_date) return '';
                             const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-                            const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                            const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
                             const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
                             return `${d} ${t}${dur}`;
                           })()}
@@ -4269,6 +4342,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
                                   hour: '2-digit',
                                   minute: '2-digit',
+                                  timeZone: 'Asia/Jakarta',
                                 })
                               : 'Slot belum ditentukan'}
                             {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
@@ -4345,10 +4419,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                    month: 'short',
                                  }) +
                                  ' ' +
-                                 new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
-                                   hour: '2-digit',
-                                   minute: '2-digit',
-                                 })
+                                  new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    timeZone: 'Asia/Jakarta',
+                                  })
                                : 'Jadwal terkonfirmasi'}
                              {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
                            </span>
@@ -4422,6 +4497,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
                                   hour: '2-digit',
                                   minute: '2-digit',
+                                  timeZone: 'Asia/Jakarta',
                                 })
                               : 'Menunggu konfirmasi jadwal'}
                             {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
@@ -4722,6 +4798,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 })}
                                 <button
                                   type="button"
+                                  onClick={() => handleCopyMessageText(msg.content || '')}
+                                  className="w-7 h-7 flex items-center justify-center text-[#54656f] rounded-full hover:bg-[#f0f2f5] transition"
+                                  title="Salin seluruh teks pesan"
+                                >
+                                  <Copy size={13} />
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
                                   className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-[#f0f2f5] transition ${
                                     customEmojiMsgId === msg.id ? 'bg-[#e8f5f2] text-[#008069]' : 'text-[#54656f]'
@@ -4759,6 +4843,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             )}
 
                             <div
+                              onPointerDown={() => handleBubblePointerDown(msg.content || '')}
+                              onPointerUp={handleBubblePointerUpOrLeave}
+                              onPointerLeave={handleBubblePointerUpOrLeave}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                void handleCopyMessageText(msg.content || '');
+                              }}
                               className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
                                 isInternalNote
                                   ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'

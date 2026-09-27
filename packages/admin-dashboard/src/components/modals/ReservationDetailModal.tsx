@@ -89,6 +89,22 @@ const getPaymentMethodLabel = (m?: string | null) => {
   return '-';
 };
 
+/**
+ * Ekstrak alamat jalan lengkap dari raw_text form reservasi ("Alamat & Shareloc : ...").
+ * Mengembalikan null bila tidak ada (biarkan UI fallback ke kelurahan/kecamatan).
+ */
+const getDetailedAddress = (res: Reservation): string | null => {
+  if (!res) return null;
+  const raw = (res as any).raw_text as string | undefined;
+  if (raw) {
+    const mt = raw.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
+    const val = mt?.[1]?.trim();
+    if (val && val !== '-' && val.length > 3) return val;
+  }
+  const prefDetail = (res.customer?.preferences as any)?.address_detail || (res.customer?.preferences as any)?.address;
+  return typeof prefDetail === 'string' && prefDetail.trim() ? prefDetail.trim() : null;
+};
+
 const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
   if (!dateStr) return '';
   try {
@@ -464,6 +480,16 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       </span>
                     </div>
                   )}
+                  {(() => {
+                    const detailAddr = getDetailedAddress(reservation);
+                    if (!detailAddr || detailAddr === displayReservation.customer?.kelurahan) return null;
+                    return (
+                      <div className="flex items-start space-x-2 text-[#111b21] text-[11px]">
+                        <MapPin size={13} className="text-[#008069] flex-shrink-0 mt-0.5" />
+                        <span className="break-words font-medium">{detailAddr}</span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Baby / Anak info */}
                   {getBabyRows(reservation).length > 0 && (

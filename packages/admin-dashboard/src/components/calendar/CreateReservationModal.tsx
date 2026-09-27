@@ -43,6 +43,7 @@ import {
   SelectedTreatmentItem 
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
+import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
@@ -498,11 +499,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           let changed = false;
           const next = prev.map((t) => {
             if (!t.price || t.price === 0) {
-              const normTarget = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const matched = finalList.find((s: ClinicServiceItem) => {
-                const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
-              });
+              const matched = matchCatalogService(t.name, finalList as any);
               if (matched) {
                 changed = true;
                 return {
@@ -881,11 +878,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     // 4. Auto-match treatment ke katalog dinamis database
     if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && services.length > 0) {
-      const normTarget = initialTreatmentName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const matched = services.find((s) => {
-        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
-      });
+      const matched = matchCatalogService(initialTreatmentName, services as any);
       if (matched) {
         prefillTreatmentMatchedRef.current = true;
         handleAddServiceInstance(matched);
@@ -2119,10 +2112,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           }`}
                         >
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="flex items-center space-x-1.5">
+                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                               <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] truncate">
                                 {srv.name}
                               </span>
+                              {(() => {
+                                const ageLabel = srv.ageTier?.label || (srv as any).age_label;
+                                if (!ageLabel) return null;
+                                return (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                                    🎯 {ageLabel}
+                                  </span>
+                                );
+                              })()}
                               <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
                                 isAddon
                                   ? 'bg-amber-100 text-amber-800'

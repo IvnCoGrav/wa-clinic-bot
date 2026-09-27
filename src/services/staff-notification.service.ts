@@ -18,6 +18,14 @@ export interface StaffTelegramPairingInfo {
   botUsername: string;
 }
 
+/**
+ * Buffer notifikasi penugasan terapis (menit). Admin dapat mengoreksi salah pilih
+ * terapis/jam dalam jendela ini sebelum Telegram benar-benar terkirim ke terapis.
+ * TODO(tenant-aware): pindahkan ke konfigurasi per-tenant (mis. TenantNotificationConfig)
+ * bila tenant berbeda butuh delay berbeda — lihat docs/SAAS_READINESS_AUDIT.md.
+ */
+const ASSIGNMENT_NOTIFICATION_DELAY_MINUTES = 5;
+
 export class StaffNotificationService {
   /**
    * Mengambil atau membuat token pairing Telegram unik untuk profil staf/terapis
@@ -474,6 +482,78 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
     return count;
   }
 
+  /**
+   * Buffer notifikasi penugasan: jadwalkan pengiriman notifikasi ke terapis setelah
+   * `ASSIGNMENT_NOTIFICATION_DELAY_MINUTES`. Idempoten terhadap perubahan beruntun —
+   * pemanggilan ulang untuk reservasi sama menimpa staff & waktu pending.
+   */
+  async scheduleReservationAssignmentNotification(reservationId: string, staffId: string): Promise<void> {
+    if (!reservationId || !staffId) return;
+    const runAt = new Date(Date.now() + ASSIGNMENT_NOTIFICATION_DELAY_MINUTES * 60 * 1000);
+    try {
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: {
+          assignment_pending_staff_id: staffId,
+          assignment_pending_at: runAt,
+          assignment_notified_at: null,
+        },
+      });
+    } catch (err: any) {
+      console.warn(`[StaffNotificationService] scheduleReservationAssignmentNotification error:`, err.message);
+    }
+  }
+
+  /** Batalkan notifikasi penugasan yang masih pending (belum terkirim ke terapis). */
+  async cancelPendingAssignmentNotification(reservationId: string): Promise<void> {
+    if (!reservationId) return;
+    try {
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: { assignment_pending_staff_id: null, assignment_pending_at: null },
+      });
+    } catch (err: any) {
+      console.warn(`[StaffNotificationService] cancelPendingAssignmentNotification error:`, err.message);
+    }
+  }
+
+  /**
+   * Sapuan notifikasi penugasan yang sudah melewati jendela buffer. Persisten:
+   * dipanggil cron berkala, aman lintas restart/multi-instance. Idempoten via
+   * `assignment_notified_at`.
+   */
+  async sweepPendingAssignmentNotifications(tenantId: string): Promise<number> {
+    let sent = 0;
+    try {
+      const now = new Date();
+      const rows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          assignment_pending_staff_id: { not: null },
+          assignment_pending_at: { lte: now },
+          assignment_notified_at: null,
+        },
+        select: { id: true, assignment_pending_staff_id: true },
+        take: 50,
+      });
+      for (const r of rows) {
+        const staffId = r.assignment_pending_staff_id;
+        if (!staffId) continue;
+        // Tandai notified lebih dulu (anti dobel kirim lintas instance) lalu kirim.
+        const claimed = await prisma.reservation.updateMany({
+          where: { id: r.id, assignment_notified_at: null, assignment_pending_staff_id: staffId },
+          data: { assignment_notified_at: new Date(), assignment_pending_staff_id: null, assignment_pending_at: null },
+        });
+        if (claimed.count === 0) continue;
+        const res = await this.sendReservationAssignmentNotification(r.id, staffId);
+        if (res.sent) sent++;
+      }
+    } catch (err: any) {
+      console.warn(`[StaffNotificationService] sweepPendingAssignmentNotifications error:`, err.message);
+    }
+    return sent;
+  }
+
   async sendReservationCancelledNotification(
     reservationId: string,
     staffId: string,
@@ -572,7 +652,8 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
   async sendTaskUnassignedNotification(
     reservationId: string,
     oldStaffId: string,
-    newStaffName?: string
+    newStaffName?: string,
+    notifyOldStaff: boolean = true
   ): Promise<{ sent: boolean; reason?: string }> {
     try {
       if (!oldStaffId || !reservationId) return { sent: false, reason: 'oldStaffId/reservationId kosong' };
@@ -612,22 +693,26 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         console.warn(`[StaffNotificationService] SSE task_cancelled broadcast error:`, hubErr.message);
       }
 
-      // 2. In-System Web Push PWA
-      try {
-        await webPushService.sendPushToStaff(oldStaffId, tenantId, {
-          title: 'Jadwal Dialihkan 🔄',
-          body: `Jadwal kunjungan ${custName} telah dialihkan${newStaffName ? ' ke ' + newStaffName : ''}.`,
-          url: '/admin/staff/today',
-          tag: `staff_task_reassign_${reservation.id}`,
-          icon: '/admin/icon-192.png',
-          badge: '/admin/favicon.ico',
-        });
-      } catch (pushErr: any) {
-        console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
+      // 2. In-System Web Push PWA — HANYA bila staf lama benar-benar sudah menerima
+      // notifikasi penugasan (state-gated). Reassign di dalam jendela buffer (pending
+      // dibatalkan) → senyap total ke staf lama, cukup SSE yang menyegarkan daftar.
+      if (notifyOldStaff) {
+        try {
+          await webPushService.sendPushToStaff(oldStaffId, tenantId, {
+            title: 'Jadwal Dialihkan 🔄',
+            body: `Jadwal kunjungan ${custName} telah dialihkan${newStaffName ? ' ke ' + newStaffName : ''}.`,
+            url: '/admin/staff/today',
+            tag: `staff_task_reassign_${reservation.id}`,
+            icon: '/admin/icon-192.png',
+            badge: '/admin/favicon.ico',
+          });
+        } catch (pushErr: any) {
+          console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
+        }
       }
 
-      // 3. Optional External Telegram
-      if (staff.telegram_chat_id) {
+      // 3. Optional External Telegram — gate yang sama dengan Web Push.
+      if (notifyOldStaff && staff.telegram_chat_id) {
         const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
         const dateStr = bookingDate
           ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })

@@ -67,6 +67,7 @@
 | 21 | Contact Labels | `src/services/google-contacts.service.ts:62` | `"${notifyName} (Kala Spa)"` | Low |
 | 22 | LegacyStaging | `prisma/schema.prisma:350` | `tenantId` camelCase beda dari `tenant_id` snake_case di model lain | Low |
 | 23 | Env Leaked | `.env`, `.env.example` | API key, password ada di file yang mungkin committed | Low |
+| 24 | Notification Buffer | `src/services/staff-notification.service.ts` | `ASSIGNMENT_NOTIFICATION_DELAY_MINUTES = 5` hardcode (buffer notifikasi penugasan terapis). Belum per-tenant — `TODO(tenant-aware)` terpasang. Pindahkan ke config DB per-tenant bila tenant butuh delay berbeda. | Low |
 
 ---
 

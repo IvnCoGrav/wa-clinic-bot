@@ -466,27 +466,35 @@ export function extractScheduleFromMessages(
   }
 
   // B. Ekstraksi Jam Mandiri jika belum didapat
+  // Prioritas reverse-chronological: pindai pesan dari TERBARU → TERLAMA agar
+  // kesepakatan jam terkini ("klo jam 10 gmna kak?") mengalahkan tawaran lama bot.
   if (!extractedTime) {
-    const rangeMatch = fullChatText.match(/(?:jam|pukul)?\s*([0-2]?\d)[.:]([0-5]\d)\s*[-–]\s*([0-2]?\d)[.:]([0-5]\d)/i);
-    if (rangeMatch) {
-      extractedTime = `${rangeMatch[1].padStart(2, '0')}.${rangeMatch[2]}-${rangeMatch[3].padStart(2, '0')}.${rangeMatch[4]}`;
-      isExtracted = true;
-    } else {
-      const singleTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-2]?\d)[.:]([0-5]\d)/i);
+    const reversedMessages = [...recentMessages].reverse();
+    for (const m of reversedMessages) {
+      const text = m.content || '';
+      if (!text) continue;
+      const rangeMatch = text.match(/(?:jam|pukul)?\s*([0-2]?\d)[.:]([0-5]\d)\s*[-–]\s*([0-2]?\d)[.:]([0-5]\d)/i);
+      if (rangeMatch) {
+        extractedTime = `${rangeMatch[1].padStart(2, '0')}.${rangeMatch[2]}-${rangeMatch[3].padStart(2, '0')}.${rangeMatch[4]}`;
+        isExtracted = true;
+        break;
+      }
+      const singleTimeMatch = text.match(/(?:jam|pukul)\s*([0-2]?\d)[.:]([0-5]\d)/i);
       if (singleTimeMatch) {
         extractedTime = `${singleTimeMatch[1].padStart(2, '0')}.${singleTimeMatch[2]}`;
         isExtracted = true;
-      } else {
-        const wordTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-1]?\d)\s*(pagi|siang|sore|malam)/i);
-        if (wordTimeMatch) {
-          let hour = parseInt(wordTimeMatch[1], 10);
-          const period = wordTimeMatch[2].toLowerCase();
-          if (period === 'siang' && hour < 12) hour += 12;
-          if (period === 'sore' && hour < 12) hour += 12;
-          if (period === 'malam' && hour < 12) hour += 12;
-          extractedTime = `${String(hour).padStart(2, '0')}.00`;
-          isExtracted = true;
-        }
+        break;
+      }
+      const wordTimeMatch = text.match(/(?:jam|pukul)\s*([0-1]?\d)\s*(pagi|siang|sore|malam)/i);
+      if (wordTimeMatch) {
+        let hour = parseInt(wordTimeMatch[1], 10);
+        const period = wordTimeMatch[2].toLowerCase();
+        if (period === 'siang' && hour < 12) hour += 12;
+        if (period === 'sore' && hour < 12) hour += 12;
+        if (period === 'malam' && hour < 12) hour += 12;
+        extractedTime = `${String(hour).padStart(2, '0')}.00`;
+        isExtracted = true;
+        break;
       }
     }
   }

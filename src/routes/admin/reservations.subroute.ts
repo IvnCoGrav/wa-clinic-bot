@@ -1036,8 +1036,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         if (assignedStaffId) {
           const { staffNotificationService } = await import('../../services/staff-notification.service');
-          staffNotificationService.sendReservationAssignmentNotification(reservation.id, assignedStaffId).catch((err) => {
-            console.error('[Admin API] Failed to send Telegram notification to assigned staff on create:', err.message);
+          staffNotificationService.scheduleReservationAssignmentNotification(reservation.id, assignedStaffId).catch((err) => {
+            console.error('[Admin API] Failed to schedule staff notification on create:', err.message);
           });
         }
 
@@ -1598,12 +1598,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (staffChanged && assignedStaffId) {
           try {
             const { staffNotificationService } = await import('../../services/staff-notification.service');
-            staffNotificationService.sendReservationAssignmentNotification(id, assignedStaffId).catch((err: any) => {
-              console.error('[Admin API] Failed to send Telegram notification to new staff on edit:', err.message);
+            // Buffer 5 menit: jadwalkan ulang (menimpa pending lama) — terapis baru
+            // baru menerima Telegram setelah jendela, agar koreksi admin tidak bocor.
+            staffNotificationService.scheduleReservationAssignmentNotification(id, assignedStaffId).catch((err: any) => {
+              console.error('[Admin API] Failed to schedule staff notification on edit:', err.message);
             });
             if (existing.assigned_staff_id && existing.assigned_staff_id !== assignedStaffId) {
               const newStaffName = (updated as any)?.assigned_staff?.name || undefined;
-              staffNotificationService.sendTaskUnassignedNotification(id, existing.assigned_staff_id, newStaffName).catch((err: any) => {
+              // State-gate: staf lama hanya dinotifikasi bila penugasan sebelumnya
+              // BENAR-BENAR sudah terkirim (bukan masih dalam buffer pending).
+              const oldStaffWasNotified = (existing as any).assignment_notified_at != null;
+              staffNotificationService.sendTaskUnassignedNotification(id, existing.assigned_staff_id, newStaffName, oldStaffWasNotified).catch((err: any) => {
                 console.warn('[Admin API] Failed to send unassigned notification to old staff:', err.message);
               });
             }
@@ -2048,8 +2053,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         if (assigned_staff_id) {
           const { staffNotificationService } = await import('../../services/staff-notification.service');
-          staffNotificationService.sendReservationAssignmentNotification(id, assigned_staff_id).catch((err) => {
-            console.error('[Admin API] Failed to send Telegram notification to assigned staff:', err.message);
+          staffNotificationService.scheduleReservationAssignmentNotification(id, assigned_staff_id).catch((err) => {
+            console.error('[Admin API] Failed to schedule staff notification on assign:', err.message);
           });
         }
 

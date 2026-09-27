@@ -295,6 +295,12 @@ model Reservation {
   // Fase 5r — Pre-Visit Brief: idempotensi kirim kartu ringkasan pasien ke bidan
   // (H-30 menit). Cegah kirim ganda dari cron + trigger same-day.
   pre_visit_brief_sent_at  DateTime?
+  // Buffer notifikasi penugasan terapis (5 menit): admin bisa salah pilih terapis/
+  // jam — notifikasi Telegram ke terapis baru ditunda, dibatalkan bila diubah dalam
+  // jendela. Persisten (bukan in-memory) agar survive restart/multi-instance.
+  assignment_pending_staff_id String?
+  assignment_pending_at    DateTime?
+  assignment_notified_at   DateTime?
   series_id                String?
   series                   ReservationSeries? @relation(fields: [series_id], references: [id], onDelete: SetNull)
   session_number           Int?

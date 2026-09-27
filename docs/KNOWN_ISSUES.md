@@ -5,6 +5,32 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 147. [LiveChat/Reservasi] Catatan sisa fix audit Live Chat & Reservasi (2026-09-27) — OPEN (sebagian by-design)
+
+- **Konteks:** fix holistik audit percakapan & reservasi (katalog `cukur`, negosiasi jam
+  reverse-scan, alamat `raw_text`, timezone WIB, buffer notifikasi penugasan 5 menit,
+  silent reassign, badge usia, hierarki search, salin hold 3 dtk, tombol Notes) SELESAI
+  di lokal; menunggu deploy.
+- **Delay notifikasi penugasan hardcode 5 menit:** `ASSIGNMENT_NOTIFICATION_DELAY_MINUTES`
+  di `src/services/staff-notification.service.ts` — belum per-tenant. `TODO(tenant-aware)`
+  terpasang + dicatat di `docs/SAAS_READINESS_AUDIT.md`. Bila tenant butuh delay berbeda,
+  pindahkan ke config DB per-tenant.
+- **Sweep assignment `take: 50`:** `sweepPendingAssignmentNotifications` membatasi 50 baris
+  per tenant per siklus. Bila ada >50 reassign tertunda dalam satu jendela, sisanya
+  diproses siklus berikutnya (aman, hanya delay tambahan). Naikkan bila perlu.
+- **`BUNDLE_MARKERS` masih ada sebagai fallback teks:** otoritas bundle kini metadata DB
+  (`category`/`serviceType === 'BUNDLE'`), tapi daftar kata ('paket','selapan',dst.) masih
+  dipakai bila katalog tidak menyertakan metadata. Migrasi penuh ke metadata DB disarankan
+  setelah semua sumber katalog dipastikan mengisi `category`/`serviceType`.
+- **Hold-3-detik salin:** Clipboard API bisa ditolak di luar user-gesture → disediakan
+  fallback `execCommand('copy')` + jalur primer klik-kanan/tombol salin di toolbar reaksi.
+  Bila browser memblokir keduanya, toast error muncul (tanpa crash).
+- **Search hierarki 2-Tier client-side:** hanya menata ulang hasil yang sudah difilter
+  server; belum memengaruhi ranking/pagination server untuk query panjang. Bila katalog
+  chat >1 halaman hasil, urutan nama-dulu bisa terpotong batas halaman.
+
+---
+
 ## 146. [Copilot] Sisa multi-step loop & tool stalled (2026-09-27) — OPEN (sebagian by-design)
 
 - **Konteks:** Fase A (multi-step loop), B1 (`query_stalled_inquiries`), UI-Mobile selesai &

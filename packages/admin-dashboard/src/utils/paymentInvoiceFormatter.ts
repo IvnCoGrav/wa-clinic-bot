@@ -152,6 +152,16 @@ function buildBabyDetails(reservation: GenerateInvoiceParams['reservation'], cus
 }
 
 function resolveAddress(customer: InvoiceCustomerData | null | undefined, reservation: GenerateInvoiceParams['reservation']): string {
+  // Prioritas 1: baris alamat eksplisit dari form mentah reservasi
+  // ("Alamat & Shareloc : perum. Shoji land, etsu garden blok EF-20").
+  // Mencegah kehilangan alamat jalan saat jatuh ke kelurahan (Karangtanjung/Mojo).
+  if (reservation?.raw_text) {
+    const mt = reservation.raw_text.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
+    if (mt && mt[1]?.trim() && mt[1].trim() !== '-' && mt[1].trim().length > 3) {
+      return mt[1].trim();
+    }
+  }
+  // Prioritas 2: profil customer / preferences (kanal resmi backend)
   return (
     customer?.address ||
     customer?.preferences?.address ||          // ← kanal resmi backend

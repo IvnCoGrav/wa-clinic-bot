@@ -62,11 +62,22 @@ export function isAddonServiceName(name: string): boolean {
 }
 
 /**
- * Penanda layanan bundle/paket — kandidat yang memuat kata ini HANYA dipilih bila
- * teks customer eksplisit memuat kata bundle yang sama ("selapan", "cukur", ...).
- * Mencegah "pijat ceria" salah cocok ke "Paket Selapan (Cukur + Pijat Ceria)".
+ * Penanda teks bundle/paket — HANYA dipakai sebagai FALLBACK bila katalog tidak
+ * menyediakan metadata `category`/`serviceType`. Otoritas utama penentuan bundle
+ * adalah data DB (`category === 'BUNDLE'` / `serviceType === 'BUNDLE'`), bukan
+ * daftar kata hafalan ini. Kata 'cukur' DIHAPUS — "cukur rambut" adalah layanan
+ * satuan (Kala Baby – Cukur Rambut), bukan penanda paket.
  */
-const BUNDLE_MARKERS = ['paket', 'selapan', 'cukur', 'bundle', 'bundling', 'hemat', 'komplit', 'lengkap'];
+const BUNDLE_MARKERS = ['paket', 'selapan', 'bundle', 'bundling', 'hemat', 'komplit', 'lengkap'];
+
+/**
+ * Otoritas bundle: metadata katalog DB lebih diutamakan daripada pencocokan nama.
+ * Fallback ke penanda teks hanya bila katalog tidak menyertakan category/serviceType.
+ */
+function isBundleCatalogItem(c: { name?: string; category?: string; serviceType?: string }): boolean {
+  if (c?.category === 'BUNDLE' || c?.serviceType === 'BUNDLE') return true;
+  return BUNDLE_MARKERS.some((m) => (c.name || '').toLowerCase().includes(m));
+}
 
 /**
  * Alias slang → token katalog ("oksifull" → oksitosin + full).
@@ -166,7 +177,7 @@ export function matchCatalogService(
       continue;
     }
 
-    const isBundleish = BUNDLE_MARKERS.some((m) => (c.name || '').toLowerCase().includes(m));
+    const isBundleish = isBundleCatalogItem(c as any);
     if (isBundleish && !qExplicitBundle) {
       if (!fallbackBundle) fallbackBundle = c;
       continue;
