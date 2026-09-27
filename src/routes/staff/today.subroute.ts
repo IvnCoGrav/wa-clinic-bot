@@ -163,7 +163,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       const allMessages = await liveChatService.getConversationMessages(id, tenantId);
-      const messages = Array.isArray(allMessages) ? allMessages.slice(-30).map((m) => sanitizeMessageForStaff(m)) : [];
+      // Masking nomor HP HANYA untuk staf terapis; CS/SPV/supervisor melihat nomor apa adanya.
+      const messages = Array.isArray(allMessages)
+        ? allMessages.slice(-30).map((m) => sanitizeMessageForStaff(m, { maskPhone: !isSupervisor }))
+        : [];
       return reply.status(200).send({ success: true, data: messages });
     }
   );
@@ -249,8 +252,9 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         tenantId,
       });
 
-      // Sanitizer: jangan bocorkan payload mentah ke UI staff (result tidak punya .data, sanitize langsung)
-      const sanitizedResult = result ? sanitizeStaffHubPayload(result as any, 'message.created') : result;
+      // Sanitizer: jangan bocorkan payload mentah ke UI staff (result tidak punya .data, sanitize langsung).
+      // Masking HP HANYA untuk terapis; supervisor (CS/SPV) melihat apa adanya.
+      const sanitizedResult = result ? sanitizeStaffHubPayload(result as any, 'message.created', { maskPhone: !isSupervisor }) : result;
       return reply.status(200).send({ success: true, data: sanitizedResult });
     }
   );
@@ -818,10 +822,11 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         );
         if (!isOwned) return;
 
-        // Zero Metadata Leak: sanitasi payload sebelum pancar ke browser terapis
+        // Zero Metadata Leak: sanitasi payload sebelum pancar ke browser.
+        // Masking HP HANYA untuk terapis; supervisor (CS/SPV) melihat apa adanya.
         let payloadToSend: any = event.payload || {};
         if (event.type === 'message.created' || event.type === 'message.updated') {
-          payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type);
+          payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type, { maskPhone: !isSupervisor });
         }
         // P3-3: id monoton untuk Last-Event-ID replay (gap-tolerant)
         const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

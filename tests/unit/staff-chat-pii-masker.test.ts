@@ -230,3 +230,43 @@ describe('sanitizeStaffHubPayload — SSE', () => {
     expect(JSON.stringify(out)).not.toContain('6281234567890@c.us');
   });
 });
+
+describe('maskPhone opt-out — CS/SPV melihat nomor apa adanya (terapis tetap disensor)', () => {
+  it('sanitizeMessageForStaff { maskPhone: false } → nomor UTUH, tapi payload_raw tetap di-allowlist (JID dibuang)', () => {
+    const msg = {
+      id: '1',
+      content: 'hub 081234567890',
+      sender_name: '081234567890',
+      payload_raw: {
+        from: '6281234567890@c.us',
+        media: { url: '/media/a.jpg', caption: 'hub 081234567890' },
+        type: 'image',
+      },
+    };
+    const out = sanitizeMessageForStaff(msg, { maskPhone: false });
+    expect(out.content).toBe('hub 081234567890');
+    expect(out.sender_name).toBe('081234567890');
+    expect(out.payload_raw.media.caption).toBe('hub 081234567890');
+    // Keamanan metadata tetap dijaga
+    expect(out.payload_raw.from).toBeUndefined();
+    expect(out.payload_raw.type).toBe('image');
+  });
+
+  it('sanitizeStaffHubPayload { maskPhone: false } → content UTUH, JID tetap dibuang', () => {
+    const payload = {
+      conversationId: 'c1',
+      content: 'hub 081234567890',
+      contact: { phone: '081234567890' },
+      payloadRaw: { from: '6281234567890@c.us' },
+    };
+    const out = sanitizeStaffHubPayload(payload, 'message.created', { maskPhone: false });
+    expect(out.content).toBe('hub 081234567890');
+    expect(out.contact.phone).toBe('081234567890');
+    expect(out.payloadRaw.from).toBeUndefined();
+  });
+
+  it('default (tanpa opts) tetap disensor — terapis aman', () => {
+    const msg = { id: '1', content: 'hub 081234567890' };
+    expect(sanitizeMessageForStaff(msg).content).toBe('hub 0812345*****');
+  });
+});

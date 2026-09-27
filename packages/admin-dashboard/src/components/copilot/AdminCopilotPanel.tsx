@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Loader, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sparkles, X, Send, Loader, ShieldCheck } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -8,6 +8,10 @@ import { useUiFeedback } from '../common/UiFeedback';
  *
  * Ditempatkan di dalam modul LiveChat (bukan drawer global Layout.tsx) sesuai
  * keputusan G3=B: scope sempit, lazy, tanpa beban bundle di semua halaman.
+ *
+ * Controlled optional: parent (LiveChatMonitor) dapat memiliki state `open` dan
+ * menampilkan tombol toggle di header/sidebar. Bila tidak diberikan, panel memakai
+ * state internal (backward-compatible).
  *
  * Jawaban grounded pada tool DB; bila kosong → "tidak ditemukan" (anti-halusinasi).
  */
@@ -19,17 +23,25 @@ interface CopilotMessage {
   grounded?: boolean;
 }
 
+interface AdminCopilotPanelProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
 const QUICK_PROMPTS = [
   'Chat siapa yang belum dibalas?',
   'Jadwal besok siapa saja?',
   'Jadwal hari ini status pending?',
 ];
 
-export const AdminCopilotPanel: React.FC = () => {
+export const AdminCopilotPanel: React.FC<AdminCopilotPanelProps> = ({ open: openProp, onOpenChange }) => {
   const { toast } = useUiFeedback();
-  const [open, setOpen] = useState(false);
-  // Mobile: floating button disembunyikan default; tab panah tepi kiri memunculkannya.
-  const [edgeOpen, setEdgeOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setInternalOpen(next);
+  };
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,40 +88,23 @@ export const AdminCopilotPanel: React.FC = () => {
 
   return (
     <>
-      {/* Mobile-only: tab tepi KANAN untuk memunculkan/menyembunyikan floating button.
-          Breakpoint `lg` (1024px) — disamakan dengan mode mobile/desktop LiveChatMonitor
-          (isDesktop = innerWidth >= 1024). Sebelumnya `md` (768px) menyebabkan mismatch:
-          di tablet 768–1023px tab hilang padahal halaman masih mobile.
-          Warna calm: brand emerald (#008069), bukan indigo pekat.
-          Saat panel terbuka tab disembunyikan (panel tinggi menutupi area tengah-kanan). */}
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setEdgeOpen((v) => !v)}
-          aria-expanded={edgeOpen}
-          aria-controls="copilot-fab"
-          aria-label={edgeOpen ? 'Sembunyikan tombol Copilot' : 'Tampilkan tombol Copilot'}
-          title={edgeOpen ? 'Sembunyikan Copilot' : 'Tampilkan Copilot'}
-          className="lg:hidden fixed right-0 top-1/2 -translate-y-1/2 z-40 min-w-[44px] h-16 rounded-l-xl bg-[#008069] hover:bg-[#00a884] text-white/95 shadow-md flex items-center justify-center active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 focus-visible:ring-offset-1 transition-colors duration-150"
-        >
-          {edgeOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      )}
-
-      {/* Floating trigger: mobile hanya muncul bila edgeOpen; desktop (lg+) selalu. */}
+      {/* Floating trigger: satu tombol tetap (semua breakpoint) untuk memunculkan /
+          menyembunyikan panel. Tab panah tepi kiri yang lama DIHAPUS (mengganggu). */}
       <button
         id="copilot-fab"
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`${edgeOpen ? 'flex' : 'hidden'} lg:flex fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-[#008069] hover:bg-[#00a884] text-white shadow-lg items-center justify-center active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 focus-visible:ring-offset-2 transition-colors duration-150`}
-        title="AI Clinic Copilot"
-        aria-label="Buka AI Clinic Copilot"
+        onClick={() => setOpen(!open)}
+        className="fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-[#008069] hover:bg-[#00a884] text-white shadow-lg flex items-center justify-center active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 focus-visible:ring-offset-2 transition-colors duration-150"
+        title={open ? 'Tutup AI Clinic Copilot' : 'Buka AI Clinic Copilot'}
+        aria-label={open ? 'Tutup AI Clinic Copilot' : 'Buka AI Clinic Copilot'}
+        aria-expanded={open}
+        aria-controls="copilot-panel"
       >
         {open ? <X size={20} /> : <Sparkles size={20} />}
       </button>
 
       {open && (
-        <div className="fixed bottom-40 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div id="copilot-panel" className="fixed bottom-40 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="px-3.5 py-2.5 bg-[#008069] text-white flex items-center justify-between shrink-0">
             <span className="text-xs font-bold flex items-center gap-1.5">
               <Sparkles size={14} /> AI Clinic Copilot

@@ -153,16 +153,24 @@ export function extractImageCaption(content?: string | null): string | null {
  * 2. Placeholder murni (`[IMAGE]`, `[MEDIA]`, ...) → pakai `media.caption` bila ada.
  * 3. Teks mentah yang identik dengan `media.caption` → tampil sekali (prioritas caption).
  * 4. Tidak ada teks & tidak ada caption → `null` (jangan render paragraf kosong).
+ *
+ * `opts.maskPhone` (default false): sensor nomor HP. HANYA diaktifkan pada
+ * konteks STAF TERAPIS (StaffToday) — CS/SPV/admin melihat nomor apa adanya.
  */
-export function resolveMessageDisplayText(msg: { content?: string | null; media?: ChatMediaData | null }): string | null {
+export function resolveMessageDisplayText(
+  msg: { content?: string | null; media?: ChatMediaData | null },
+  opts?: { maskPhone?: boolean }
+): string | null {
+  const mask = opts?.maskPhone === true;
+  const apply = (s: string): string => (mask ? maskPhoneInTextClient(s) : s);
   const raw = (msg?.content || '').trim();
   const caption = (msg?.media?.caption || '').trim();
   const extracted = extractImageCaption(raw);
-  if (extracted) return maskPhoneInTextClient(extracted);
-  if (MEDIA_PLACEHOLDER_REGEX.test(raw)) return caption ? maskPhoneInTextClient(caption) : null;
-  if (raw && caption && raw === caption) return maskPhoneInTextClient(caption);
+  if (extracted) return apply(extracted);
+  if (MEDIA_PLACEHOLDER_REGEX.test(raw)) return caption ? apply(caption) : null;
+  if (raw && caption && raw === caption) return apply(caption);
   const combined = raw || caption || null;
-  return combined ? maskPhoneInTextClient(combined) : null;
+  return combined ? apply(combined) : null;
 }
 
 export function extractMedia(msg: any): ChatMediaData | undefined {
@@ -375,25 +383,30 @@ export function extractDocument(msg: any): ChatDocumentData | null {
 }
 
 /**
- * Ekstraksi kontak vCard
+ * Ekstraksi kontak vCard.
+ *
+ * `opts.maskPhone` (default false): sensor nomor HP. HANYA diaktifkan pada
+ * konteks STAF TERAPIS — CS/SPV/admin melihat nomor apa adanya.
  */
-export function extractContact(msg: any): ChatContactData | null {
+export function extractContact(msg: any, opts?: { maskPhone?: boolean }): ChatContactData | null {
   if (!msg) return null;
+  const mask = opts?.maskPhone === true;
+  const apply = (s: string): string => (mask ? maskPhoneInTextClient(s) : s);
   const pr = msg.payload_raw || msg.payloadRaw;
   const c = typeof msg.content === 'string' ? msg.content.trim() : '';
 
   if (msg.contact) {
     const name = msg.contact.name || msg.contact.displayName || 'Kontak';
     const rawPhone = msg.contact.phone || msg.contact.phoneNumber;
-    const phone = rawPhone ? maskPhoneInTextClient(String(rawPhone)) : rawPhone;
-    const phoneNumber = msg.contact.phoneNumber ? maskPhoneInTextClient(String(msg.contact.phoneNumber)) : phone;
+    const phone = rawPhone ? apply(String(rawPhone)) : rawPhone;
+    const phoneNumber = msg.contact.phoneNumber ? apply(String(msg.contact.phoneNumber)) : phone;
     return { name, phone, displayName: name, phoneNumber };
   }
   if (pr?.contact) {
     const name = pr.contact.name || pr.contact.displayName || 'Kontak';
     const rawPhone = pr.contact.phone || pr.contact.phoneNumber;
-    const phone = rawPhone ? maskPhoneInTextClient(String(rawPhone)) : rawPhone;
-    const phoneNumber = pr.contact.phoneNumber ? maskPhoneInTextClient(String(pr.contact.phoneNumber)) : phone;
+    const phone = rawPhone ? apply(String(rawPhone)) : rawPhone;
+    const phoneNumber = pr.contact.phoneNumber ? apply(String(pr.contact.phoneNumber)) : phone;
     return { name, phone, displayName: name, phoneNumber };
   }
 
@@ -401,7 +414,7 @@ export function extractContact(msg: any): ChatContactData | null {
   if (match) {
     const name = match[1].trim();
     const rawPhone = match[2] ? match[2].trim() : undefined;
-    const phone = rawPhone ? maskPhoneInTextClient(rawPhone) : undefined;
+    const phone = rawPhone ? apply(rawPhone) : undefined;
     return {
       name,
       phone,

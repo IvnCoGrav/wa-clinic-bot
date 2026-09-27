@@ -436,6 +436,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
+  // AI Copilot panel — dikendalikan dari tombol toggle di header LiveChat.
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation' | 'sandbox'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -462,8 +464,6 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
-  // Hold 3 detik pada bubble pesan untuk salin seluruh teks (timer per-bubble).
-  const bubbleHoldTimerRef = useRef<any>(null);
 
   // Press-and-Hold Tooltip for filter icons on mobile (tanpa getaran haptik)
   const [iconTooltip, setIconTooltip] = useState<string | null>(null);
@@ -2353,23 +2353,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     toast(ok ? '📋 Teks pesan berhasil disalin!' : 'Gagal menyalin teks pesan.', ok ? 'success' : 'error');
   };
 
-  // Hold 3 detik pada bubble → salin seluruh teks pesan.
-  const handleBubblePointerDown = (content: string) => {
-    if (!content) return;
-    if (bubbleHoldTimerRef.current) clearTimeout(bubbleHoldTimerRef.current);
-    bubbleHoldTimerRef.current = setTimeout(() => {
-      bubbleHoldTimerRef.current = null;
-      void handleCopyMessageText(content);
-    }, 3000);
-  };
-
-  const handleBubblePointerUpOrLeave = () => {
-    if (bubbleHoldTimerRef.current) {
-      clearTimeout(bubbleHoldTimerRef.current);
-      bubbleHoldTimerRef.current = null;
-    }
-  };
-
   const handleToggleReaction = async (msg: ChatMessage, emoji: string) => {
     if (!selectedChat?.conversationId || !msg) return;
     setActiveReactionMsgId(null);
@@ -3414,6 +3397,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             title="Sinkronisasi Seluruh Chat WhatsApp (Background)"
           >
             <RefreshCw size={14} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={() => setCopilotOpen((v) => !v)}
+            className={`p-1.5 rounded-lg border shadow-2xs transition flex items-center justify-center cursor-pointer ${
+              copilotOpen
+                ? 'bg-[#008069] border-[#008069] text-white'
+                : 'bg-white border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069]'
+            }`}
+            title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Tampilkan AI Copilot'}
+            aria-expanded={copilotOpen}
+            aria-controls="copilot-panel"
+          >
+            <Sparkles size={14} />
           </button>
         </div>
       </div>
@@ -4798,14 +4794,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 })}
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyMessageText(msg.content || '')}
-                                  className="w-7 h-7 flex items-center justify-center text-[#54656f] rounded-full hover:bg-[#f0f2f5] transition"
-                                  title="Salin seluruh teks pesan"
-                                >
-                                  <Copy size={13} />
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
                                   className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-[#f0f2f5] transition ${
                                     customEmojiMsgId === msg.id ? 'bg-[#e8f5f2] text-[#008069]' : 'text-[#54656f]'
@@ -4843,13 +4831,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             )}
 
                             <div
-                              onPointerDown={() => handleBubblePointerDown(msg.content || '')}
-                              onPointerUp={handleBubblePointerUpOrLeave}
-                              onPointerLeave={handleBubblePointerUpOrLeave}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                void handleCopyMessageText(msg.content || '');
-                              }}
                               className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
                                 isInternalNote
                                   ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'
@@ -5099,6 +5080,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       <Check size={12} className="text-[#8696a0]" />
                                     )}
                                   </span>
+                                )}
+                                {!isRevoked && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleCopyMessageText(msg.content || '');
+                                    }}
+                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    title="Salin seluruh teks pesan"
+                                  >
+                                    <Copy size={11} />
+                                  </button>
                                 )}
                                 {!isRevoked && (
                                   <button
@@ -6204,7 +6198,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
         </div>
       )}
-      <AdminCopilotPanel />
+      <AdminCopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />
     </div>
   );
 };

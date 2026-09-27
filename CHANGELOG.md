@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — UX LiveChat: salin per-bubble, toggle Copilot, masking HP khusus terapis
+
+- **Changed — Salin teks bubble (deprecate hold 3 detik):**
+  - `LiveChatMonitor.tsx`: fitur tahan-3-detik (`handleBubblePointerDown/UpOrLeave`,
+    `bubbleHoldTimerRef`) DIHAPUS karena UX tidak cocok. Diganti ikon salin (`Copy`)
+    permanen di baris meta bawah setiap bubble + fallback `execCommand('copy')`.
+- **Changed — AI Copilot toggle:**
+  - `AdminCopilotPanel.tsx`: tab panah tepi kiri (ChevronLeft/Right, `edgeOpen`) DIHAPUS.
+    Panel kini controlled (`open`/`onOpenChange`) + satu FAB tetap di semua breakpoint.
+  - `LiveChatMonitor.tsx`: tombol toggle ikon `Sparkles` di header (menyatu dengan toolbar
+    BOT ON/OFF & Sync), state `copilotOpen` mengendalikan panel.
+- **Fixed — Masking nomor HP hanya untuk staf terapis:**
+  - `pii-masker.ts`: `sanitizeMessageForStaff`, `sanitizeStaffHubPayload`,
+    `sanitizePayloadRawForStaff` menerima `opts.maskPhone` (default true). Saat false,
+    nomor HP UTUH namun allowlist + strip JID tetap dijalankan (keamanan metadata).
+  - `src/routes/staff/today.subroute.ts`: masking digate `maskPhone: !isSupervisor`
+    (CS/SPV/supervisor melihat nomor apa adanya; terapis tetap disensor).
+  - `mediaExtractor.ts`: `resolveMessageDisplayText` & `extractContact` menerima
+    `opts.maskPhone` (default false). CS/SPV di LiveChatMonitor melihat nomor asli.
+  - `StaffToday.tsx`: masking fetch/SSE/render/quoted-message digate `!isSupervisor`.
+- **Tests:** `tests/unit/staff-chat-pii-masker.test.ts` +3 kasus opt-out (nomor utuh
+  untuk supervisor, JID tetap dibuang; default tetap disensor). Full suite 3747 passed.
+- **Verifikasi:** root `tsc` 0 + dashboard `tsc` 0 + `vite build` 0.
+
 #### 2026-09-27 — Fix holistik audit Live Chat & Reservasi (katalog, waktu, alamat, notifikasi)
 
 - **Latar:** audit percakapan + sistem reservasi menemukan: (1) `cukur` salah cocok ke
