@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Fix tombol hide/unhide Copilot (breakpoint mismatch) + tema calm
+
+- **Laporan:** tombol hide/unhide panel Copilot "masih error".
+- **Audit (read-only, 5 dimensi):**
+  - **Root cause #1 — mismatch breakpoint:** komponen memakai `md:` (768px) untuk
+    sembunyikan floating button + tampilkan tab, sedangkan LiveChatMonitor mendefinisikan
+    mobile sebagai `innerWidth < 1024` (`isDesktop`, `lg:`) → di tablet 768–1023px tombol
+    tersembunyi TAPI tab tak muncul (jalan buntu).
+  - **Root cause #2 — posisi tab di kiri menabrak tombol back mobile**
+    (`LiveChatMonitor.tsx:4058` `lg:hidden -ml-1`, kiri-atas) dan `animate-mobile-*-enter`
+    (will-change transform) pada wrapper.
+  - **Root cause #3 — tab menutupi panel** saat panel terbuka (panel tinggi
+    `bottom-40`+520px menutupi area tengah-kanan tempat tab berada).
+  - **Root cause #4 — warna:** indigo pekat (`#4f46e5`) di luar design token; tidak calm.
+- **Fix (fondasional, gerbang kode):**
+  - Breakpoint disamakan ke `lg:` (1024px) — satu sumber kebenaran dengan `isDesktop`.
+  - Tab dipindah ke **tepi KANAN** (`right-0 top-1/2`), tidak lagi menabrak tombol back.
+  - Tab disembunyikan saat panel terbuka (`!open`) → tidak ada overlap.
+  - Warna calm: brand emerald `#008069`/`#00a884` (semua elemen: tab, FAB, header panel,
+    bubble user, quick-prompt chip, tombol kirim) — konsisten design token Kala.
+  - A11y: `aria-expanded`/`aria-controls`/`aria-label`, `focus-visible:ring`, tap target
+    ≥44px (`min-w-[44px]`).
+- **Verifikasi:** dashboard `tsc` 0 + `vite build` 0; root `tsc` 0; full suite
+  **425 file / 3356 passed / 0 gagal**. Tanpa perubahan backend/skema.
+
 #### 2026-09-27 — Copilot multi-step loop + tool stalled inquiries + panel mobile collapsible
 
 - **Latar (bukti live):** audit `AI_COPILOT_CHAT` 7 hari menunjukkan single-tool-ceiling —

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Loader, ExternalLink, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sparkles, X, Send, Loader, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -76,24 +76,32 @@ export const AdminCopilotPanel: React.FC = () => {
 
   return (
     <>
-      {/* Mobile-only: tab panah tepi kiri untuk memunculkan floating button.
-          Desktop (md+) tidak menampilkan tab ini; button selalu tampil. */}
-      <button
-        type="button"
-        onClick={() => setEdgeOpen((v) => !v)}
-        aria-expanded={edgeOpen}
-        aria-label={edgeOpen ? 'Sembunyikan tombol Copilot' : 'Tampilkan tombol Copilot'}
-        title={edgeOpen ? 'Sembunyikan Copilot' : 'Tampilkan Copilot'}
-        className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 w-7 h-14 rounded-r-xl bg-indigo-600/90 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center active:scale-95 transition"
-      >
-        {edgeOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-      </button>
+      {/* Mobile-only: tab tepi KANAN untuk memunculkan/menyembunyikan floating button.
+          Breakpoint `lg` (1024px) — disamakan dengan mode mobile/desktop LiveChatMonitor
+          (isDesktop = innerWidth >= 1024). Sebelumnya `md` (768px) menyebabkan mismatch:
+          di tablet 768–1023px tab hilang padahal halaman masih mobile.
+          Warna calm: brand emerald (#008069), bukan indigo pekat.
+          Saat panel terbuka tab disembunyikan (panel tinggi menutupi area tengah-kanan). */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setEdgeOpen((v) => !v)}
+          aria-expanded={edgeOpen}
+          aria-controls="copilot-fab"
+          aria-label={edgeOpen ? 'Sembunyikan tombol Copilot' : 'Tampilkan tombol Copilot'}
+          title={edgeOpen ? 'Sembunyikan Copilot' : 'Tampilkan Copilot'}
+          className="lg:hidden fixed right-0 top-1/2 -translate-y-1/2 z-40 min-w-[44px] h-16 rounded-l-xl bg-[#008069] hover:bg-[#00a884] text-white/95 shadow-md flex items-center justify-center active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 focus-visible:ring-offset-1 transition-colors duration-150"
+        >
+          {edgeOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+      )}
 
-      {/* Floating trigger: di mobile hanya muncul bila edgeOpen; di desktop selalu. */}
+      {/* Floating trigger: mobile hanya muncul bila edgeOpen; desktop (lg+) selalu. */}
       <button
+        id="copilot-fab"
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`${edgeOpen ? 'flex' : 'hidden'} md:flex fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg items-center justify-center active:scale-95 transition`}
+        className={`${edgeOpen ? 'flex' : 'hidden'} lg:flex fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-[#008069] hover:bg-[#00a884] text-white shadow-lg items-center justify-center active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 focus-visible:ring-offset-2 transition-colors duration-150`}
         title="AI Clinic Copilot"
         aria-label="Buka AI Clinic Copilot"
       >
@@ -102,11 +110,16 @@ export const AdminCopilotPanel: React.FC = () => {
 
       {open && (
         <div className="fixed bottom-40 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="px-3.5 py-2.5 bg-indigo-600 text-white flex items-center justify-between shrink-0">
+          <div className="px-3.5 py-2.5 bg-[#008069] text-white flex items-center justify-between shrink-0">
             <span className="text-xs font-bold flex items-center gap-1.5">
               <Sparkles size={14} /> AI Clinic Copilot
             </span>
-            <button type="button" onClick={() => setOpen(false)} className="hover:bg-white/20 rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="hover:bg-white/15 rounded-lg p-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-colors"
+              aria-label="Tutup Copilot"
+            >
               <X size={14} />
             </button>
           </div>
@@ -123,7 +136,7 @@ export const AdminCopilotPanel: React.FC = () => {
                       key={q}
                       type="button"
                       onClick={() => send(q)}
-                      className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold border border-indigo-200"
+                      className="px-2.5 py-1.5 rounded-lg bg-[#e8f5f2] hover:bg-[#d9f0ea] text-[#00695c] text-[11px] font-semibold border border-[#c2e7e0] active:scale-[0.98] transition"
                     >
                       {q}
                     </button>
@@ -137,7 +150,7 @@ export const AdminCopilotPanel: React.FC = () => {
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap ${
                     m.role === 'user'
-                      ? 'bg-indigo-600 text-white rounded-tr-none'
+                      ? 'bg-[#008069] text-white rounded-tr-none'
                       : 'bg-[#f8fafc] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-tl-none'
                   }`}
                 >
@@ -168,13 +181,14 @@ export const AdminCopilotPanel: React.FC = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send(input); } }}
               placeholder="Tanya data klinik..."
-              className="flex-1 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-[12px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-indigo-500"
+              className="flex-1 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-[12px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]/30"
             />
             <button
               type="button"
               onClick={() => send(input)}
               disabled={loading || !input.trim()}
-              className="w-9 h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white flex items-center justify-center shrink-0"
+              className="w-9 h-9 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
+              aria-label="Kirim pertanyaan"
             >
               <Send size={14} />
             </button>
