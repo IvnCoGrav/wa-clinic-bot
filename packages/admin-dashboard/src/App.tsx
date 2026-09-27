@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { CopilotProvider } from './contexts/CopilotContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
@@ -98,6 +99,7 @@ export const App: React.FC = () => {
       <ThemeProvider>
       <AuthProvider>
         <UiFeedbackProvider>
+        <CopilotProvider>
         <BootProgress />
         <AppErrorBoundary scopeLabel="global">
         <Suspense fallback={
@@ -331,6 +333,7 @@ export const App: React.FC = () => {
           </Routes>
         </Suspense>
         </AppErrorBoundary>
+        </CopilotProvider>
         </UiFeedbackProvider>
       </AuthProvider>
       </ThemeProvider>

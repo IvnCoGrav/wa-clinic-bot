@@ -436,8 +436,6 @@ export const LiveChatMonitor: React.FC = () => {
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
-  // AI Copilot panel — dikendalikan dari tombol toggle di header LiveChat.
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation' | 'sandbox'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -3398,19 +3396,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           >
             <RefreshCw size={14} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
           </button>
-          <button
-            onClick={() => setCopilotOpen((v) => !v)}
-            className={`p-1.5 rounded-lg border shadow-2xs transition flex items-center justify-center cursor-pointer ${
-              copilotOpen
-                ? 'bg-[#008069] border-[#008069] text-white'
-                : 'bg-white border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069]'
-            }`}
-            title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Tampilkan AI Copilot'}
-            aria-expanded={copilotOpen}
-            aria-controls="copilot-panel"
-          >
-            <Sparkles size={14} />
-          </button>
         </div>
       </div>
 
@@ -6198,7 +6183,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
         </div>
       )}
-      <AdminCopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />
+      <AdminCopilotPanel />
     </div>
   );
 };

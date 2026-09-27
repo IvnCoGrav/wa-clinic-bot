@@ -51,10 +51,12 @@ import { useUiFeedback } from './UiFeedback';
 import { ThemeToggle } from './ThemeToggle';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { useCopilot } from '../../contexts/CopilotContext';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const { toast } = useUiFeedback();
+  const { open: copilotOpen, setOpen: setCopilotOpen } = useCopilot();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -746,6 +748,34 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             ));
           })()}
         </nav>
+
+        {/* AI Copilot On/Off — hanya tampil di halaman Live Chat (panel hidup di sana) */}
+        {isLiveChat && (
+          <div className="px-3 pt-3 pb-1 border-t border-[#e9edef] dark:border-[#2a3942]">
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#f8fafc] dark:bg-[#2a3942]/50 border border-[#e9edef] dark:border-[#374248]">
+              <span className="flex items-center space-x-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">
+                <Sparkles size={15} className={copilotOpen ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'} />
+                <span>AI Copilot</span>
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={copilotOpen}
+                aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Tampilkan AI Copilot'}
+                onClick={() => setCopilotOpen(!copilotOpen)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 ${
+                  copilotOpen ? 'bg-[#008069]' : 'bg-[#cbd5e1] dark:bg-[#374248]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    copilotOpen ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* User profile / Logout */}
         <div className="p-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">

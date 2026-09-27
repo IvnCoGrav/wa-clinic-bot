@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — AI Copilot on/off dipindah ke Sidebar (sesuai permintaan)
+
+- **Changed:** tombol toggle AI Copilot DIHAPUS dari header LiveChat dan FAB mengambang;
+  sekarang berupa **switch on/off di sidebar** (grup bawah, hanya tampil di halaman
+  Live Chat), sesuai permintaan user.
+- **Added:** `contexts/CopilotContext.tsx` — state `open`/`setOpen`/`toggle` terpusat +
+  persist ke `localStorage` (`wa_clinic_copilot_open`), diprovide di `App.tsx`.
+- `Layout.tsx`: switch `role="switch"` di sidebar memakai `useCopilot()`.
+- `AdminCopilotPanel.tsx`: konsumsi `useCopilot()` (bukan state internal); FAB dihapus;
+  panel hanya dirender saat `open`.
+- `LiveChatMonitor.tsx`: buang state lokal `copilotOpen` + tombol header `Sparkles`.
+- **Verifikasi:** dashboard `tsc` 0 + `vite build` 0.
+
 #### 2026-09-27 — UX LiveChat: salin per-bubble, toggle Copilot, masking HP khusus terapis
 
 - **Changed — Salin teks bubble (deprecate hold 3 detik):**
