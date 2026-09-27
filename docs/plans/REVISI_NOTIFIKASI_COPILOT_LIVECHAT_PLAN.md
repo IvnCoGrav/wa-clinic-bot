@@ -1,6 +1,9 @@
 # Revisi Plan: Notifikasi WhatsApp, AI Clinic Copilot & Operasional LiveChat
 
-> Dokumen ini **menggantikan** plan 6-fase awal (audit 2026-09-27). Status: PLAN, belum dieksekusi.
+> Dokumen ini **menggantikan** plan 6-fase awal (audit 2026-09-27).
+> **STATUS: SELESAI & TER-DEPLOY LIVE (2026-09-27, commit `755e7063`).**
+> Fase 1r, 2r, 3+4, 5r, 6r seluruhnya diimplementasikan, diuji, dan dideploy ke server produksi.
+> Sisa/limitasi tercatat di `docs/KNOWN_ISSUES.md` #144.
 > Bahasa: Indonesia. Semua data bisnis tetap dari DB (non-hardcode).
 
 ## 0. Keputusan Gate (TERKUNCI 2026-09-27)

@@ -5,6 +5,31 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 144. [Notif/Copilot/LiveChat] Catatan sisa Fase 1r–6r (2026-09-27) — OPEN (sebagian by-design)
+
+- **Konteks:** implementasi bertahap `docs/plans/REVISI_NOTIFIKASI_COPILOT_LIVECHAT_PLAN.md`
+  (Fase 1r, 2r, 3+4, 5r, 6r) SELESAI & ter-deploy live (commit `755e7063`).
+  Catatan berikut sengaja ditunda / batasan yang diketahui:
+- **Fase 2r — WA admin hanya WAHA:** kanal WA (`admin_whatsapp_numbers`) berfungsi hanya bila
+  provider tenant = WAHA. WABA proaktif di luar 24h window di-`SKIPPED` (butuh template HSM).
+  Ini by-design (keputusan G1), bukan bug. Bila kelak tenant WABA butuh laporan WA, wajib
+  bangun alur template HSM + approval Meta.
+- **Fase 4 — detektor frustrasi SLA-only:** sinyal murni state/SLA (default 15 mnt,
+  `FRUSTRATION_SLA_MINUTES`). TIDAK ada analisis sentimen teks (sengaja — mandat anti-keyword).
+  Konsekuensi: chat singkat yang belum lewat SLA tidak ditandai walau nada negatif. Bila perlu
+  sensitivitas lebih, tambahkan klasifier LLM `INTENT_CLASSIFICATION` (bukan keyword) sebagai
+  sinyal sekunder — saat ini belum.
+- **Fase 6r — Copilot 2 tool:** hanya `query_reservations_by_filter` + `query_unreplied_chats`.
+  `query_customer_offers` & `query_stalled_inquiries` DITUNDA (definisi "penawaran" belum
+  deterministik tanpa keyword). Panel kontekstual di LiveChat (G3=B); belum ada drawer global.
+- **Fase 1r — `idempotency_key` nullable:** notifikasi WA multi-nomor memakai key NULL (unique
+  nullable tidak membedakan nomor) → pengiriman per-nomor tidak idempoten; hanya cron Telegram
+  yang idempoten. Bila spam per-nomor jadi masalah, tambah komposit unik `(tenant, type, date, recipient)`.
+- **Flake paralel pre-existing (#142):** full suite kadang menandai 1–4 file timing-sensitive gagal
+  saat beban tinggi; hijau saat diisolasi / rerun. Bukan regresi Fase 1r–6r.
+
+---
+
 ## 143. [Observability] Tidak ada access-log status 401/503 untuk endpoint auth (2026-09-26) — OPEN
 
 - **Gejala:** saat investigasi live insiden logout (Fase 0), `docker compose logs caddy/app` tidak memuat satu pun baris status untuk `/api/admin/auth/me` & `/restore` (Caddy access log tidak mencatat, Fastify handler diam) — forensic "berapa kali 401 vs 503 dalam 24 jam" mustahil dilakukan.
