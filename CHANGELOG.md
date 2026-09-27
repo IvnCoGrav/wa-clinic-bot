@@ -4,6 +4,153 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Fase 6r: AI Clinic Copilot (2 tool, panel kontekstual, grounding kode)
+
+- **Konteks:** eksekusi plan Fase 6r (keputusan G3=B: panel kontekstual di modul LiveChat, bukan
+  drawer global; scope 2 tool dulu).
+- **Tools** `src/services/copilot/copilot-tools.ts` (read-only, tenant-scoped, `take:20`):
+  `query_reservations_by_filter` (tanggal/status/terapis) + `query_unreplied_chats`
+  (state-based: pesan nyata terakhir INBOUND). Whitelist `getCopilotTool()`.
+- **Service** `src/services/copilot/copilot.service.ts`: router LLM memilih tool (JSON via
+  `extractBalancedJson`) → eksekusi tool DB → LLM merangkum HASIL TOOL saja. **Gerbang grounding
+  kode**: tool kosong → jawaban "Tidak ditemukan data" (BUKAN halusinasi); validator
+  `validateGrounding()` memastikan nama pasien di jawaban ⊆ hasil tool. Cap history 10 turn,
+  budget `max_tokens`. LLM error → pesan ramah (tidak throw).
+- **API** `src/routes/admin/copilot.subroute.ts`: `POST /api/admin/copilot/chat` (auth admin +
+  tenant-scope + rate-limit global + audit `AI_COPILOT_CHAT`), didaftarkan di `admin.route.ts`.
+- **UI** `packages/admin-dashboard/src/components/copilot/AdminCopilotPanel.tsx`: floating trigger
+  + panel chat (pill pertanyaan cepat, badge "Terverifikasi dari data"), di-mount di
+  `LiveChatMonitor.tsx`. `useUiFeedback` untuk error.
+- **Test:** `tests/unit/copilot-grounding.test.ts` (8) — tool kosong → jujur, tanpa tool cocok,
+  tenant-scoped, validator grounding (ada/tidak ada nama), unreplied state-based, whitelist,
+  LLM error graceful.
+- **Verifikasi:** root `tsc` 0 error; dashboard `tsc` + `vite build` exit 0; full suite
+  **424 file / 3314 passed / 0 gagal** (23 skipped).
+
+#### 2026-09-27 — Fase 5r: Pre-Visit Brief bidan (H-30 menit, privasi minimal)
+
+- **Konteks:** eksekusi plan Fase 5r (keputusan G2=B: kartu minimal ke Telegram pribadi, nomor HP
+  & alamat lengkap disembunyikan; detail penuh hanya di portal terapis).
+- **Skema:** `Reservation.pre_visit_brief_sent_at` (idempotensi anti kirim ganda). Migrasi
+  `20260927130000_pre_visit_brief_sent` (idempoten `ADD COLUMN IF NOT EXISTS`); drift check empty.
+- **Service** (ekstensi `staff-notification.service.ts`, bukan service paralel):
+  - `sendPreVisitBrief(reservationId, tenantId)` — reuse `childService.getChildrenWithCurrentAge`
+    (fallback graceful "Usia belum tercatat"), kunjungan terakhir (tenant-aware), `admin_notes`
+    (catatan karakter). Distribusi Telegram pribadi bidan + Web Push in-system; TIDAK memuat nomor
+    HP pasien maupun alamat lengkap. Menandai `pre_visit_brief_sent_at` (idempoten).
+  - `sweepPreVisitBriefs(tenantId)` — jendela now+20..35 menit, `pre_visit_brief_sent_at: null`.
+  - `triggerPreVisitBriefIfImminent()` — booking dadakan (mulai ≤35 menit) kirim segera,
+    fire-and-forget, idempoten (dipanggil di alur assign staff).
+- **Scheduler:** `CronService.runPreVisitBriefSweep()` + `app.ts` (default tiap 10 mnt,
+  `ENABLE_PRE_VISIT_BRIEF`).
+- **DTO/UI:** `adminNotes` disertakan di 3 query tugas (`getTodayTasks`/`getUpcomingSchedule`) +
+  kartu "📋 Ringkasan Pasien — Catatan Khusus" di `StaffToday.tsx` (alamat penuh hanya di portal).
+- **Test:** `tests/unit/pre-visit-brief.test.ts` (9) — kirim + tandai terkirim, TIDAK bocorkan
+  nomor HP, idempoten, tanpa bidan, sandbox diblokir, anak tanpa birth_date tidak crash,
+  sweep filter, trigger same-day vs jauh.
+- **Verifikasi:** root `tsc` 0 error; dashboard `tsc` 0 error; full suite **423 file / 3306 passed /
+  0 gagal** (23 skipped).
+
+#### 2026-09-27 — Fase 2r: Nightly Watchdog (laporan malam 21:00 WIB) + Settings UI
+
+- **Konteks:** eksekusi plan Fase 2r (keputusan G1=A: ekstensi pipa Telegram, bukan sistem paralel).
+- **Service baru `src/services/nightly-watchdog.service.ts`:** agregasi 4 kategori **state-based**
+  (DILARANG keyword): jadwal terkonfirmasi besok (reservasi confirmed), tanya-jadwal-belum-booking
+  (bukti minat slot via `session_data`/`last_discussed_treatment`/reservasi pending-hold, tanpa
+  confirmed), chat belum dibalas (definisi kanonis: pesan NYATA terakhir INBOUND — `INTERNAL_NOTE`
+  diabaikan), ringkasan. `formatMessage()` mem-`mask` nomor HP (privasi) + link live-chat absolut.
+- **Scheduler** di `app.ts` (pola `trackInterval` 15 mnt + guard tanggal per-tenant): kirim via
+  `NotificationDeliveryService`; Telegram default, WA hanya bila channel aktif. Idempoten via
+  `idempotency_key` (`tenant:NIGHTLY_WATCHDOG:date`). WABA → WA di-`SKIPPED` (bukan gagal).
+- **API** `settings.subroute.ts`: `GET/PUT /api/admin/settings/notifications` (tenant-scoped,
+  normalisasi E.164, audit `UPDATE_NOTIFICATION_SETTINGS`), `POST .../test` (uji kanal, audit
+  `TEST_NOTIFICATION_SEND`), `GET .../logs` (riwayat `admin_notification_logs`).
+- **UI** `DailyReportPanel.tsx`: seksi Nightly Watchdog (toggle, jam WIB, kanal TELEGRAM/WHATSAPP,
+  chips nomor admin, tombol uji + simpan, tabel riwayat status SENT/SKIPPED/FAILED) — reuse panel,
+  tanpa halaman baru. `useUiFeedback` untuk notifikasi.
+- **Test:** `tests/unit/nightly-watchdog.test.ts` (7) — agregasi confirmed, unreplied state-based,
+  OUTBOUND tidak dianggap belum dibalas, stalled mengecualikan confirmed, stalled via session_data,
+  DB offline graceful, masking nomor + link.
+- **Verifikasi:** root `tsc` 0 error; dashboard `tsc` + `vite build` exit 0; full suite
+  **422 file / 3297 passed / 0 gagal** (23 skipped).
+
+#### 2026-09-27 — Fase 3+4: Catatan Internal `/notes` (anti-bocor) + Pulse Alert kekecewaan (state/SLA-based)
+
+- **Konteks:** eksekusi plan `docs/plans/REVISI_NOTIFIKASI_COPILOT_LIVECHAT_PLAN.md` Fase 3+4
+  (digabung: satu seam `sendAdminReply` + satu file UI `LiveChatMonitor.tsx`).
+- **Fase 3 — Catatan Internal `/notes` (GERBANG KODE DETERMINISTIK, bukan prompt AI):**
+  - `live-chat.service.ts`: helper murni `parseInternalNoteCommand(text, forceInternal)` —
+    mendeteksi `/notes` persis atau `/notes <isi>` (case-insensitive, toleran spasi depan),
+    MENOLAK `/notesX` (anti false-positive). Gate disisipkan **sebelum** resolusi customer/gateway:
+    bila terdeteksi → simpan via `logMessage(senderType:'INTERNAL_NOTE', skipMqlEvaluation:true)`
+    dan **RETURN tanpa memanggil gateway WhatsApp**. Parameter baru `isInternalNote` (toggle gembok).
+  - **Eksklusi konsumen:** `INTERNAL_NOTE` diabaikan oleh `isAwaitingReply` (tidak memadamkan
+    status menunggu-dibalas) dan dikeluarkan dari konteks `generateAiSuggestion` (anti-bocor
+    koordinasi staf ke draf balasan AI).
+  - Endpoint `PATCH /api/admin/customers/:id/notes` (sticky memory note, maks 2000 char, jejak
+    editor terakhir) + audit `UPDATE_CUSTOMER_NOTES`; reply route memisahkan audit
+    `INTERNAL_NOTE_CREATED` vs `LIVE_CHAT_ADMIN_REPLY`.
+  - UI: bubble amber putus-putus + badge 🔒 + footer "Hanya tim klinik • tidak dikirim ke WhatsApp";
+    toggle gembok di composer (`isInternalMode` **per-conversation**, reset saat pindah chat →
+    anti inverse-leak).
+- **Fase 4 — Pulse Alert (STATE/SLA, bukan keyword):**
+  - Service baru `frustration-signal.service.ts`: `computeFrustrationSignal()` murni deterministik
+    (INBOUND terakhir + melewati SLA `FRUSTRATION_SLA_MINUTES`, default 15 mnt) + `sweep()` per
+    tenant. DILARANG keyword ("lama banget", "kecewa") — rapuh terhadap parafrase.
+  - Reset: di `sendAdminReply` HANYA bila `logged.sender_type === 'ADMIN'` (balasan nyata terkirim);
+    `/notes` sudah return lebih awal, kegagalan kirim sudah return → tidak memadamkan pulse.
+  - DTO `LiveChatConversationItem.isFrustrated/frustratedAt/frustratedReason`; UI badge
+    "🚨 Butuh Respon Segera" + border rose + `animate-pulse` pada baris daftar (tanpa re-sort →
+    pagination aman).
+  - Cron `runFrustrationSweep()` di `app.ts` (default tiap 5 mnt, `ENABLE_FRUSTRATION_SWEEP`).
+- **Test (TDD, adversarial):** `tests/unit/livechat-notes-frustration.test.ts` (14) — deteksi
+  `/notes` (4 varian + tolak `/notesX`), anti-bocor (gateway TIDAK dipanggil), EMPTY_NOTE, toggle
+  gembok, teks biasa tetap terkirim, catatan tidak memadamkan awaiting-reply; `computeFrustrationSignal`
+  (SLA lewat/belum, OUTBOUND, null, bukan-keyword).
+- **Verifikasi:** root `tsc --noEmit` 0 error; dashboard `tsc --noEmit` 0 error + `vite build` exit 0;
+  full unit suite **421 file / 3290 passed / 0 gagal** (23 skipped).
+
+#### 2026-09-27 — Fase 1r: Fondasi notifikasi admin (AdminNotificationLog) + field LiveChat (notes & pulse)
+
+- **Konteks:** eksekusi bertahap plan `docs/plans/REVISI_NOTIFIKASI_COPILOT_LIVECHAT_PLAN.md`
+  (hasil audit 6-fase). Fase 1r = lapisan persistensi + delivery service tenant-aware.
+- **Skema (`prisma/schema.prisma`):**
+  - `AdminNotificationLog` (tabel `admin_notification_logs`) — log notifikasi admin generik
+    (channel WHATSAPP/TELEGRAM/SYSTEM), `idempotency_key String? @unique` (unique-nullable →
+    idempotensi cron anti-spam tanpa memblokir test/resend yang sah), index `(tenant_id, sent_at)`
+    & `(tenant_id, notification_type)`.
+  - `Tenant`: `admin_whatsapp_numbers String[]`, `nightly_report_enabled Boolean @default(false)`
+    (OFF agar tidak spam pasca-migrate), `nightly_report_hour/minute`, `notification_channels`.
+  - `Customer`: `admin_notes @db.Text`, `notes_updated_at`, `notes_updated_by` (sticky memory tag).
+  - `Conversation`: `is_frustrated`, `frustrated_at`, `frustrated_reason` +
+    `@@index([tenant_id, is_frustrated, last_message_at])`.
+  - `DailyReportLog` **tidak diubah** (unique-key legacy dipertahankan; blast radius minimal).
+- **Migrasi:** `prisma/migrations/20260927120000_notif_foundation/migration.sql` — ditulis manual
+  (shadow replay rusak oleh trap enum `FollowUpStatus`), semua statement idempoten
+  (`IF NOT EXISTS`). Diterapkan via `prisma migrate deploy` (BUKAN `db push`). Drift check
+  `migrate diff` = **"This is an empty migration."** `prisma generate` full engine.
+  Migrasi pending `20260927000000_pageview_eventid_source` (workstream paralel) ikut ter-apply lokal.
+- **Service baru `src/services/notification-delivery.service.ts`:**
+  - `send()` tenant-aware: normalisasi nomor WA via `normalizePhoneToE164` (reuse, tanpa regex baru);
+    WA hanya via `resolveGatewayForTenant` (tidak langsung WAHA).
+  - **WABA → `SKIPPED`** (bukan FAILED) untuk pesan proaktif di luar 24h window; tetap tercatat
+    di log (anti silent-drop), fallback Telegram/in-app.
+  - Idempotensi via `idempotency_key`; balapan cron (`P2002`) → diperlakukan "sudah tercatat".
+  - DB offline → memory fallback; **tidak pernah melempar** (cron-safe).
+  - Helper `formatReportDateWib()` (tanggal WIB, bukan UTC).
+- **Test (TDD, adversarial):** `tests/unit/notification-delivery.test.ts` (9 test) — normalisasi
+  4 format nomor, isolasi tenant (log tenant-a tidak menahan tenant-b), idempotensi anti-spam,
+  WABA→SKIPPED tercatat, gagal gateway→FAILED+error, DB offline→memory tanpa throw, balapan
+  P2002, SYSTEM tanpa panggilan eksternal, `formatReportDateWib` lintas tengah malam.
+  `tests/setup.ts` tambah mock `adminNotificationLog` (default offline).
+- **Verifikasi:** `npx tsc --noEmit` exit 0; `npx vitest run tests/unit` **3275 passed / 23 skipped**
+  (1 gagal = flake paralel `capi-tenant-isolation.test.ts` timeout 5s, hijau 8/8 saat diisolasi —
+  pre-existing KNOWN_ISSUES #142, bukan regresi). Kolom terverifikasi di DB live lokal via
+  `information_schema`.
+- **Belum dikerjakan (fase berikutnya):** Fase 3+4 (`/notes` gate + pulse), Fase 2r (watchdog),
+  Fase 5r (pre-visit brief), Fase 6r (copilot). Keputusan gate: G1=A (+B WAHA-only nanti),
+  G2=B minimal tanpa nomor, G3=B panel kontekstual.
+
 #### 2026-09-26 — Anti-logout paksa dashboard: kontrak sinyal 503 vs 401 sesi admin, hot cache, & token restore tahan gangguan
 
 - **Laporan:** dashboard admin/terapis sering "keluar sendiri" padahal sesi 30-hari di DB masih sah. Verifikasi live (Fase 0, read-only): 3 baris `admin_sessions` untuk `admin@kalamomsspa.com` valid hingga 26 Okt, `revoked_at` NULL — termasuk login 15:31 WIB (08:31 UTC) yang cocok dengan laporan; `pg_stat_activity` 12 idle/1 active tanpa saturasi pool. Sesi di DB sah + user tetap ditendang → mekanisme penghapusan token di frontend.

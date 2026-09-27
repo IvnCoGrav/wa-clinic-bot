@@ -387,12 +387,13 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           adminName?: string;
           acknowledgeOutsideWindow?: boolean;
           replyToMessageId?: string;
+          isInternalNote?: boolean;
         };
       }>,
       reply
     ) => {
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId } = request.body || {};
+      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote } = request.body || {};
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -405,6 +406,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         adminName,
         acknowledgeOutsideWindow,
         replyToMessageId,
+        isInternalNote,
       });
 
       if (!result.success) {
@@ -418,6 +420,19 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
             ? 404
             : 400;
         return reply.status(status).send({ success: false, error: result.error, data: result });
+      }
+
+      // Catatan internal tidak dicatat sebagai balasan ke WhatsApp (audit terpisah).
+      if (result.isInternal) {
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'INTERNAL_NOTE_CREATED',
+          targetId: id,
+          payload: { adminName, messageId: result.messageId },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, isInternal: true, message: 'Catatan internal disimpan (tidak dikirim ke WhatsApp).', data: result });
       }
 
       await auditService.logAdminAction({

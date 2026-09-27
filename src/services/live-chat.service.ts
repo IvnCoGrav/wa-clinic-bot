@@ -40,6 +40,10 @@ export interface LiveChatConversationItem {
   isPinned: boolean;
   pinnedAt: Date | null;
   isAwaitingReply: boolean;
+  /** Pulse alert (Fase 4): true bila percakapan butuh respon segera (SLA/SLA-breach). */
+  isFrustrated?: boolean;
+  frustratedAt?: Date | null;
+  frustratedReason?: string | null;
   matchedMessage?: {
     id: string;
     content: string;
@@ -101,7 +105,33 @@ export interface AdminReplyResult {
   id?: string;
   provider?: string;
   conversation?: any;
+  /** True bila balasan adalah CATATAN INTERNAL (/notes) — TIDAK dikirim ke WhatsApp. */
+  isInternal?: boolean;
   error?: { code: string; message?: string };
+}
+
+/**
+ * Deteksi perintah catatan internal `/notes` secara deterministik (bukan AI/regex hafalan).
+ * Berlaku bila: teks persis `/notes`, atau `/notes` diikuti whitespace.
+ * `/notesX` BUKAN perintah (dianggap teks biasa).
+ */
+export function parseInternalNoteCommand(
+  text: string | undefined | null,
+  forceInternal = false
+): { isInternal: boolean; cleanNote: string } {
+  const trimmed = (text || '').trim();
+  const lower = trimmed.toLowerCase();
+  const isNotesCmd =
+    lower === '/notes' || (lower.startsWith('/notes') && /\s/.test(lower.charAt(6)));
+
+  if (isNotesCmd) {
+    // Buang token perintah `/notes` (7 karakter termasuk pemisah) → sisa teks = isi catatan.
+    return { isInternal: true, cleanNote: trimmed.slice(6).trim() };
+  }
+  if (forceInternal) {
+    return { isInternal: true, cleanNote: trimmed };
+  }
+  return { isInternal: false, cleanNote: '' };
 }
 
 export class LiveChatService {
@@ -341,6 +371,12 @@ export class LiveChatService {
      * ID pesan yang dibalas (Reply/Quote). Bisa berupa UUID pesan lokal atau wa_message_id.
      */
     replyToMessageId?: string;
+    /**
+     * Paksa simpan sebagai CATATAN INTERNAL (hanya terlihat tim klinik), tanpa
+     * memanggil gateway WhatsApp. Dipakai tombol gembok di composer. Bila true,
+     * seluruh teks diperlakukan sebagai isi catatan (tanpa perlu prefix /notes).
+     */
+    isInternalNote?: boolean;
   }): Promise<AdminReplyResult> {
     const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId } = params;
 
@@ -362,6 +398,32 @@ export class LiveChatService {
     const conversation = await conversationService.getConversationById(conversationId, tenantId);
     if (!conversation) {
       return { success: false, error: { code: 'CONVERSATION_NOT_FOUND', message: `Conversation ${conversationId} tidak ditemukan.` } };
+    }
+
+    // ------------------------------------------------------------------
+    // GERBANG KODE DETERMINISTIK: Catatan Internal (/notes).
+    // DILARANG bergantung pada prompt AI untuk membedakan /notes.
+    // Pencegatan WAJIB di sini (sebelum resolusi customer/gateway): bila
+    // terdeteksi, gateway WhatsApp HARAM dipanggil. Hanya `/notes` persis atau
+    // `/notes <isi>` (bukan `/notesX`). Tidak butuh nomor HP customer.
+    // ------------------------------------------------------------------
+    const noteCmd = parseInternalNoteCommand(text, params.isInternalNote);
+    if (noteCmd.isInternal) {
+      if (!noteCmd.cleanNote) {
+        return { success: false, error: { code: 'EMPTY_NOTE', message: 'Catatan internal tidak boleh kosong.' } };
+      }
+      const savedNote = await messageService.logMessage({
+        tenantId,
+        conversationId,
+        direction: Direction.OUTBOUND,
+        content: noteCmd.cleanNote,
+        senderType: 'INTERNAL_NOTE',
+        senderName: adminName || 'Staff',
+        // Catatan internal BUKAN percakapan customer → jangan evaluasi MQL/follow-up.
+        skipMqlEvaluation: true,
+      });
+      // PENTING: langsung return TANPA memanggil gateway WhatsApp.
+      return { success: true, isInternal: true, messageId: savedNote?.id, id: savedNote?.id };
     }
 
     const customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
@@ -574,6 +636,19 @@ export class LiveChatService {
       await messageService.markConversationMessagesAsRead(conversationId, tenantId);
       await conversationService.setManualUnread(conversationId, tenantId, false);
     } catch (_) {}
+
+    // Pulse alert (Fase 4): PADAMKAN status frustrasi HANYA bila balasan nyata
+    // (sender_type=ADMIN) benar-benar terkirim ke WhatsApp. Catatan internal /notes
+    // sudah return lebih awal (tidak sampai sini), dan kegagalan kirim sudah return
+    // di atas → jadi di sini cukup pastikan tipe pengirim adalah ADMIN.
+    if (logged?.sender_type === 'ADMIN') {
+      try {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { is_frustrated: false, frustrated_at: null, frustrated_reason: null },
+        });
+      } catch (_) {}
+    }
 
     // Background enrichment jika pesan admin mengandung jarak / ongkir / info lokasi
     try {
@@ -956,12 +1031,17 @@ export class LiveChatService {
     const isManualUnread = !!c.is_manual_unread;
     const effectiveUnreadCount = isManualUnread ? Math.max(1, unreadCount) : unreadCount;
 
-    // Awaiting reply: unread = 0 (sudah dibaca), pesan terakhir dari customer (INBOUND), dan usia pesan <= 24 jam (86.400.000 ms)
+    // Awaiting reply: unread = 0 (sudah dibaca), pesan terakhir dari customer (INBOUND), dan usia pesan <= 24 jam (86.400.000 ms).
+    // Catatan internal (INTERNAL_NOTE) DIABAIKAN — bukan balasan ke customer, jadi tidak
+    // boleh memadamkan status "menunggu dibalas".
     let isAwaitingReply = false;
-    if (effectiveUnreadCount === 0 && !isManualUnread && lastMsg) {
-      const isLastInbound = lastMsg.direction === Direction.INBOUND || lastMsg.direction === 'INBOUND';
+    const lastRealMsg = (c.messages || [])
+      .filter((m: any) => m?.sender_type !== 'INTERNAL_NOTE')
+      .pop() || null;
+    if (effectiveUnreadCount === 0 && !isManualUnread && lastRealMsg) {
+      const isLastInbound = lastRealMsg.direction === Direction.INBOUND || lastRealMsg.direction === 'INBOUND';
       if (isLastInbound) {
-        const msgAgeMs = Date.now() - new Date(lastMsg.created_at).getTime();
+        const msgAgeMs = Date.now() - new Date(lastRealMsg.created_at).getTime();
         if (msgAgeMs <= 24 * 60 * 60 * 1000) {
           isAwaitingReply = true;
         }
@@ -1050,6 +1130,9 @@ export class LiveChatService {
       isPinned: !!c.is_pinned,
       pinnedAt: c.pinned_at || null,
       isAwaitingReply,
+      isFrustrated: !!c.is_frustrated,
+      frustratedAt: c.frustrated_at || null,
+      frustratedReason: c.frustrated_reason || null,
       hasActiveHold,
       hasUpcomingBooking,
       hasPendingBooking,
@@ -1084,7 +1167,10 @@ export class LiveChatService {
       const { getLlmEndpointConfig } = await import('../integrations/llm/llm-gateway');
       const { callChatCompletionsWithFallback } = await import('../integrations/llm/model-fallback');
       const recent = await messageService.getRecentMessages(conversationId, 6, tenantId);
-      const historyFormatted = recent.map((m) => `${m.direction === 'INBOUND' ? 'Customer' : 'Bidan'}: ${m.content}`).join('\n');
+      // Catatan internal (INTERNAL_NOTE) DIKECUALIKAN dari konteks AI — bukan bagian
+      // percakapan customer; mencegah koordinasi staf bocor ke draf balasan.
+      const recentReal = recent.filter((m: any) => m?.sender_type !== 'INTERNAL_NOTE');
+      const historyFormatted = recentReal.map((m) => `${m.direction === 'INBOUND' ? 'Customer' : 'Bidan'}: ${m.content}`).join('\n');
       const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
 
       const resp = await callChatCompletionsWithFallback({

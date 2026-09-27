@@ -116,6 +116,12 @@ model Customer {
   is_hold_labeled         Boolean        @default(false)
   labels_synced_at        DateTime?
   ai_override             AiOverride?
+  // LiveChat internal sticky note (Quick Customer Memory Tag) — koordinasi antar-shift.
+  // Catatan karakter pasien bebas-teks; BUKAN data medis terstruktur. Timpa-aman
+  // dengan jejak editor terakhir (multi-user race → last-writer + timestamp).
+  admin_notes             String?        @db.Text
+  notes_updated_at        DateTime?
+  notes_updated_by        String?
 
   preferences             Json?
   labels                  CustomerLabel[]
@@ -181,6 +187,12 @@ model Conversation {
   is_pinned                   Boolean            @default(false)
   pinned_at                   DateTime?
   is_manual_unread            Boolean            @default(false)
+  // Pulse alert kekecewaan pasien (Fase 4). Sumber sinyal = STATE/SLA (detik sejak
+  // inbound terakhir tanpa balasan ADMIN nyata), BUKAN pencocokan kata kunci.
+  // Padam HANYA saat balasan ADMIN benar-benar terkirim ke WhatsApp.
+  is_frustrated               Boolean            @default(false)
+  frustrated_at               DateTime?
+  frustrated_reason           String?
   created_at                  DateTime           @default(now())
   updated_at                  DateTime           @updatedAt
   messages                    Message[]
@@ -190,6 +202,7 @@ model Conversation {
   @@index([tenant_id, is_human_handling, last_message_at])
   @@index([tenant_id, escalation_reason])
   @@index([tenant_id, review_flagged])
+  @@index([tenant_id, is_frustrated, last_message_at])
   @@map("conversations")
 }
 
@@ -279,6 +292,9 @@ model Reservation {
   is_repeat_order          Boolean           @default(false)
   otw_sent_at              DateTime?
   arrived_at               DateTime?
+  // Fase 5r — Pre-Visit Brief: idempotensi kirim kartu ringkasan pasien ke bidan
+  // (H-30 menit). Cegah kirim ganda dari cron + trigger same-day.
+  pre_visit_brief_sent_at  DateTime?
   series_id                String?
   series                   ReservationSeries? @relation(fields: [series_id], references: [id], onDelete: SetNull)
   session_number           Int?
@@ -652,6 +668,14 @@ model Tenant {
   message_retention_days    Int              @default(120)
   daily_report_enabled      Boolean          @default(false)
   daily_report_hour         Int              @default(7)
+  // Fase 2r — Nightly Watchdog (laporan pengawasan malam 21:00 WIB).
+  // Default OFF agar tidak spam pasca-migrate; admin mengaktifkan dari Settings.
+  // admin_whatsapp_numbers = kanal Opsi B (WA) — hanya berlaku bila provider WAHA.
+  nightly_report_enabled    Boolean          @default(false)
+  nightly_report_hour       Int              @default(21)
+  nightly_report_minute     Int              @default(0)
+  admin_whatsapp_numbers    String[]         @default([])
+  notification_channels     String[]         @default(["TELEGRAM"])
   telegram_bot_token            String?
   telegram_chat_id              String?
   telegram_pairing_token        String?          @unique
@@ -739,6 +763,33 @@ model DailyReportLog {
   @@unique([tenant_id, report_date])
   @@index([tenant_id])
   @@map("daily_report_logs")
+}
+
+/// Fase 1r — Log pengiriman notifikasi admin generik (WAHA/Telegram/SYSTEM).
+/// Sumber tunggal idempotensi cron anti-spam (restart/redeploy tanggal sama)
+/// via `idempotency_key` unik-nullable. Notifikasi berulang sah (TEST_SIMULATION,
+/// resend FAILED) memakai key NULL → Postgres mengizinkan banyak NULL pada unique
+/// index, jadi tidak memblokir attempt sah.
+/// Terpisah dari DailyReportLog agar tidak mengubah unique-key laporan harian
+/// yang sudah dipakai (blast radius minimal).
+model AdminNotificationLog {
+  id                String   @id @default(uuid())
+  tenant_id         String   @default("default-tenant")
+  channel           String // "WHATSAPP" | "TELEGRAM" | "SYSTEM"
+  recipient         String // Nomor WA E.164 ("62812...") atau chat_id Telegram
+  notification_type String // "NIGHTLY_WATCHDOG" | "DAILY_BRIEFING" | "ALERT_URGENT" | "TEST_SIMULATION"
+  report_date       String // format "YYYY-MM-DD" (WIB) — untuk filter/tampilan
+  idempotency_key   String?  @unique // "${tenant}:${type}:${date}" untuk cron harian; NULL untuk test/resend
+  title             String
+  message_content   String   @db.Text
+  status            String   @default("SENT") // "SENT" | "FAILED" | "SKIPPED"
+  error_message     String?
+  metadata          Json?
+  sent_at           DateTime @default(now())
+
+  @@index([tenant_id, sent_at])
+  @@index([tenant_id, notification_type])
+  @@map("admin_notification_logs")
 }
 
 model LlmAuditLog {

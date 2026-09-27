@@ -62,9 +62,11 @@ import {
   Download,
   Volume2,
   Video,
+  Lock,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
+import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
 import { ChatExport } from './ChatExport';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import {
@@ -242,6 +244,10 @@ interface LiveChatItem {
   isPinned?: boolean;
   pinnedAt?: string | null;
   isAwaitingReply?: boolean;
+  /** Pulse alert (Fase 4): percakapan butuh respon segera (SLA-breach). */
+  isFrustrated?: boolean;
+  frustratedAt?: string | null;
+  frustratedReason?: string | null;
   hasActiveHold?: boolean;
   hasUpcomingBooking?: boolean;
   hasPendingBooking?: boolean;
@@ -3016,20 +3022,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   };
 
   // Fase A v3: teks balasan dipasok LiveChatComposer (sudah clear DOM-nya sendiri).
-  const handleSendReply = async (composerText?: string) => {
-    const image = selectedImage;
+  // isInternal=true → catatan internal (tidak dikirim ke WhatsApp).
+  const handleSendReply = async (composerText?: string, isInternal?: boolean) => {
+    const image = isInternal ? null : selectedImage;
     const text = (typeof composerText === 'string' ? composerText : replyTextRef.current || '').trim();
     if (!selectedId || (!text && !image)) return;
 
     notifyTyping(false);
 
-    const currentReplyingTo = replyingTo;
+    const currentReplyingTo = isInternal ? null : replyingTo;
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg: ChatMessage = {
       id: tempId,
       direction: 'OUTBOUND',
       content: text || (image ? '[IMAGE]' : ''),
-      sender_type: 'ADMIN',
+      sender_type: isInternal ? 'INTERNAL_NOTE' : 'ADMIN',
       sender_name: user?.email || 'Admin',
       created_at: new Date().toISOString(),
       delivery_status: 'sent',
@@ -3048,7 +3055,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     // 1. Instan tampil di thread pesan (0ms delay)
     setMessages((prev) => [...prev, optimisticMsg]);
 
-    // 2. Instan update preview teks di daftar chat list
+    // 2. Instan update preview teks di daftar chat list.
+    // Catatan internal TIDAK mengubah isAwaitingReply (bukan balasan ke customer).
     setChats((prev) => {
       const updated = prev.map((c) =>
         c.conversationId === selectedId
@@ -3056,7 +3064,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               ...c,
               lastMessageAt: optimisticMsg.created_at,
               lastMessages: [...(c.lastMessages || []), optimisticMsg].slice(-3),
-              isAwaitingReply: false,
+              isAwaitingReply: isInternal ? c.isAwaitingReply : false,
             }
           : c
       );
@@ -3083,6 +3091,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         adminName: user?.email || 'Admin',
       };
       if (text) body.text = text;
+      if (isInternal) body.isInternalNote = true;
       if (currentReplyingTo) {
         body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
       }
@@ -3738,7 +3747,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         WebkitTouchCallout: 'none',
                       }}
                       className={`bg-white dark:bg-[#111b21] rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
-                        isSelected
+                        chat.isFrustrated
+                          ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100/70 dark:hover:bg-rose-950/40 animate-pulse'
+                          : isSelected
                           ? `border-[#008069] dark:border-[#00a884] bg-[#e8f5f2]/80 dark:bg-[#00a884]/15 ${
                               (chat as any).hasActiveHold
                                 ? 'border-l-4 border-l-amber-500'
@@ -3781,6 +3792,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                             {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
                             <div className="flex flex-wrap items-center gap-1">
+                              {chat.isFrustrated && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-600 text-white ring-1 ring-rose-300 dark:ring-rose-400/60 shadow-xs">
+                                  🚨 Butuh Respon Segera
+                                </span>
+                              )}
                               {(chat.customerLabels || []).map((lbl) => (
                                 <span
                                   key={lbl.id}
@@ -4626,6 +4642,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const isCustomer = msg.direction === 'INBOUND';
                       const senderTypeUpper = (msg.sender_type || '').toUpperCase();
                       const isAdmin = msg.direction === 'OUTBOUND' && (senderTypeUpper === 'ADMIN' || senderTypeUpper === 'HUMAN' || senderTypeUpper === 'STAFF');
+                      const isInternalNote = senderTypeUpper === 'INTERNAL_NOTE';
                       const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
                       const isEdited = !!(msg as any).is_edited || !!(msg as any).payload_raw?.is_edited;
                       const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
@@ -4743,7 +4760,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                             <div
                               className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
-                                isRevoked
+                                isInternalNote
+                                  ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'
+                                  : isRevoked
                                   ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
                                   : isCustomer
                                     ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
@@ -4752,7 +4771,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                               }`}
                             >
-                              {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
+                              {isInternalNote && !isRevoked && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-amber-300">
+                                  <Lock size={10} />
+                                  <span>Catatan Internal — {msg.sender_name || 'Staf'}</span>
+                                </span>
+                              )}
+                              {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && !isInternalNote && (
                                 <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                                   isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
                                 }`}>
@@ -4955,7 +4980,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 <span>
                                   {msg.created_at ? formatWibTime(msg.created_at) : ''}
                                 </span>
-                                {!isCustomer && (
+                                {isInternalNote && !isRevoked && (
+                                  <span className="text-[9px] text-amber-700 dark:text-amber-300 italic ml-0.5">
+                                    Hanya tim klinik • tidak dikirim ke WhatsApp
+                                  </span>
+                                )}
+                                {!isCustomer && !isInternalNote && (
                                   <span
                                     className="inline-flex items-center ml-0.5"
                                     title={
@@ -6083,6 +6113,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
         </div>
       )}
+      <AdminCopilotPanel />
     </div>
   );
 };

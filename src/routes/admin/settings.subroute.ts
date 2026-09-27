@@ -1967,6 +1967,217 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/settings/notifications — konfigurasi Nightly Watchdog.
+   */
+  fastify.get('/api/admin/settings/notifications', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = resolveTenantId(request);
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          nightly_report_enabled: true,
+          nightly_report_hour: true,
+          nightly_report_minute: true,
+          admin_whatsapp_numbers: true,
+          notification_channels: true,
+          whatsapp_provider: true,
+        },
+      });
+      return reply.status(200).send({
+        success: true,
+        data: {
+          nightlyReportEnabled: tenant?.nightly_report_enabled ?? false,
+          nightlyReportHour: tenant?.nightly_report_hour ?? 21,
+          nightlyReportMinute: tenant?.nightly_report_minute ?? 0,
+          adminWhatsappNumbers: tenant?.admin_whatsapp_numbers || [],
+          notificationChannels: tenant?.notification_channels || ['TELEGRAM'],
+          whatsappProvider: tenant?.whatsapp_provider || 'WAHA',
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/notifications — simpan konfigurasi Nightly Watchdog.
+   */
+  fastify.put(
+    '/api/admin/settings/notifications',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          nightlyReportEnabled?: boolean;
+          nightlyReportHour?: number;
+          nightlyReportMinute?: number;
+          adminWhatsappNumbers?: string[];
+          notificationChannels?: string[];
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = resolveTenantId(request);
+      const {
+        nightlyReportEnabled,
+        nightlyReportHour,
+        nightlyReportMinute,
+        adminWhatsappNumbers,
+        notificationChannels,
+      } = request.body || {};
+
+      if (nightlyReportHour !== undefined && (typeof nightlyReportHour !== 'number' || nightlyReportHour < 0 || nightlyReportHour > 23)) {
+        return reply.status(400).send({ success: false, error: 'nightlyReportHour harus 0-23 (jam WIB).' });
+      }
+      if (nightlyReportMinute !== undefined && (typeof nightlyReportMinute !== 'number' || nightlyReportMinute < 0 || nightlyReportMinute > 59)) {
+        return reply.status(400).send({ success: false, error: 'nightlyReportMinute harus 0-59.' });
+      }
+      if (adminWhatsappNumbers !== undefined && !Array.isArray(adminWhatsappNumbers)) {
+        return reply.status(400).send({ success: false, error: 'adminWhatsappNumbers harus array nomor.' });
+      }
+
+      try {
+        const { normalizePhoneToE164 } = await import('../../services/capi.service');
+        const cleanNumbers = Array.isArray(adminWhatsappNumbers)
+          ? adminWhatsappNumbers
+              .map((n) => normalizePhoneToE164(String(n || '')))
+              .filter((n) => n.length >= 8)
+          : undefined;
+        const allowedChannels = ['TELEGRAM', 'WHATSAPP', 'SYSTEM'];
+        const cleanChannels = Array.isArray(notificationChannels)
+          ? notificationChannels.map((c) => String(c).toUpperCase()).filter((c) => allowedChannels.includes(c))
+          : undefined;
+
+        const updateData: any = {};
+        if (nightlyReportEnabled !== undefined) updateData.nightly_report_enabled = Boolean(nightlyReportEnabled);
+        if (nightlyReportHour !== undefined) updateData.nightly_report_hour = Math.floor(nightlyReportHour);
+        if (nightlyReportMinute !== undefined) updateData.nightly_report_minute = Math.floor(nightlyReportMinute);
+        if (cleanNumbers !== undefined) updateData.admin_whatsapp_numbers = cleanNumbers;
+        if (cleanChannels !== undefined) updateData.notification_channels = cleanChannels;
+
+        const updated = await prisma.tenant.upsert({
+          where: { id: tenantId },
+          create: { id: tenantId, slug: tenantId, name: 'Default Clinic', ...updateData },
+          update: updateData,
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_NOTIFICATION_SETTINGS',
+          targetId: tenantId,
+          payload: {
+            nightlyReportEnabled: updated.nightly_report_enabled,
+            nightlyReportHour: updated.nightly_report_hour,
+            numbersCount: (updated.admin_whatsapp_numbers || []).length,
+            channels: updated.notification_channels,
+          },
+          ipAddress: request.ip,
+          tenantId,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Pengaturan notifikasi berhasil disimpan.',
+          data: {
+            nightlyReportEnabled: updated.nightly_report_enabled,
+            nightlyReportHour: updated.nightly_report_hour,
+            nightlyReportMinute: updated.nightly_report_minute,
+            adminWhatsappNumbers: updated.admin_whatsapp_numbers || [],
+            notificationChannels: updated.notification_channels || [],
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/settings/notifications/test — kirim simulasi (data dummy) untuk verifikasi kanal.
+   */
+  fastify.post('/api/admin/settings/notifications/test', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = resolveTenantId(request);
+    try {
+      const { notificationDeliveryService } = await import('../../services/notification-delivery.service');
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, telegram_chat_id: true, admin_whatsapp_numbers: true, notification_channels: true },
+      });
+
+      const testMsg = `🧪 [TEST] Notifikasi Klinik\n\nIni pesan uji coba Nightly Watchdog (data dummy). Jika Anda menerima ini, kanal notifikasi aktif.\nWaktu: ${new Date().toISOString()}`;
+      const results: any[] = [];
+
+      const channels = tenant?.notification_channels || ['TELEGRAM'];
+      if (channels.includes('TELEGRAM') && tenant?.telegram_chat_id) {
+        const r = await notificationDeliveryService.send({
+          tenantId,
+          channel: 'TELEGRAM',
+          recipient: tenant.telegram_chat_id,
+          type: 'TEST_SIMULATION',
+          title: 'Test Notifikasi',
+          messageContent: testMsg,
+          metadata: { is_test: true },
+        });
+        results.push({ channel: 'TELEGRAM', logId: r.logId, status: r.status, success: r.success, error: r.error });
+      }
+      if (channels.includes('WHATSAPP')) {
+        for (const num of tenant?.admin_whatsapp_numbers || []) {
+          const r = await notificationDeliveryService.send({
+            tenantId,
+            channel: 'WHATSAPP',
+            recipient: num,
+            type: 'TEST_SIMULATION',
+            title: 'Test Notifikasi',
+            messageContent: testMsg,
+            metadata: { is_test: true },
+          });
+          results.push({ channel: 'WHATSAPP', recipient: num, logId: r.logId, status: r.status, success: r.success, error: r.error });
+        }
+      }
+
+      if (results.length === 0) {
+        return reply.status(200).send({ success: false, message: 'Tidak ada kanal terkonfigurasi untuk diuji. Isi Chat ID Telegram atau nomor WhatsApp admin.', data: results });
+      }
+
+      const anySent = results.some((r) => r.status === 'SENT');
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'TEST_NOTIFICATION_SEND',
+        targetId: tenantId,
+        payload: { results },
+        ipAddress: request.ip,
+        tenantId,
+      });
+
+      return reply.status(200).send({
+        success: anySent,
+        message: anySent ? 'Pesan uji coba terkirim.' : 'Pesan uji coba gagal/di-skip (lihat detail kanal).',
+        data: results,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/settings/notifications/logs — riwayat pengiriman notifikasi.
+   */
+  fastify.get('/api/admin/settings/notifications/logs', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = resolveTenantId(request);
+    try {
+      const rows = await prisma.adminNotificationLog.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: { sent_at: 'desc' },
+        take: 100,
+      });
+      return reply.status(200).send({ success: true, data: rows });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: [], note: `DB offline: ${err?.message}` });
+    }
+  });
+
+  /**
    * GET /api/admin/settings/clinic-policies — Ambil semua kebijakan SOP per-tenant
    */
   fastify.get('/api/admin/settings/clinic-policies', async (_request: FastifyRequest, reply: FastifyReply) => {

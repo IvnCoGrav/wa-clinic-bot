@@ -20,6 +20,8 @@ import {
   ImagePlus,
   Sparkles,
   Reply,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 
 /**
@@ -58,7 +60,8 @@ export interface LiveChatComposerProps {
   quickReplies?: ComposerQuickReply[];
   onTextChange?: (text: string, isNotEmpty: boolean) => void;
   onTyping?: (isTyping: boolean) => void;
-  onSend?: (text: string) => void;
+  /** onSend: isInternal=true bila mode catatan internal (gembok) aktif. */
+  onSend?: (text: string, isInternal?: boolean) => void;
   /** Interpolasi template di parent (butuh data customer); kembalikan teks final untuk disisipkan. */
   onApplyQuickReply?: (qr: ComposerQuickReply) => string;
   onPickImage?: () => void;
@@ -252,6 +255,9 @@ const LiveChatComposerInner = (
   });
   const [quickReplyFilter, setQuickReplyFilter] = useState<string | null>(null);
   const [quickReplyActiveIdx, setQuickReplyActiveIdx] = useState(0);
+  // Mode catatan internal (gembok) — per-conversation: reset saat pindah chat agar
+  // tidak ada "lock nyangkut" yang membuat balasan ke pasien lain jadi catatan internal.
+  const [isInternalMode, setIsInternalMode] = useState(false);
 
   const toolsMenuRef = useRef<HTMLDivElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
@@ -323,6 +329,7 @@ const LiveChatComposerInner = (
     setQuickReplyActiveIdx(0);
     setEmojiPickerOpen(false);
     setToolsMenuOpen(false);
+    setIsInternalMode(false); // reset gembok per-conversation (anti inverse-leak)
     const draft = loadDraft(conversationId);
     if (inputRef.current) {
       inputRef.current.innerText = draft;
@@ -475,8 +482,8 @@ const LiveChatComposerInner = (
     setQuickReplyFilter(null);
     setEmojiPickerOpen(false);
     setToolsMenuOpen(false);
-    onSend?.(text);
-  }, [readText, selectedImage, sending, stopTypingTimers, onSend]);
+    onSend?.(text, isInternalMode);
+  }, [readText, selectedImage, sending, stopTypingTimers, onSend, isInternalMode]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (showQuickReplyPopover) {
@@ -800,7 +807,7 @@ const LiveChatComposerInner = (
           autoCapitalize="sentences"
           autoCorrect="on"
           spellCheck={true}
-          data-placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
+          data-placeholder={isInternalMode ? 'Menulis catatan internal (hanya staf)...' : 'Tulis balasan... (Enter baris baru, klik Kirim)'}
           onFocus={() => {
             if (typeof window !== 'undefined') {
               window.scrollTo(0, 0);
@@ -812,9 +819,28 @@ const LiveChatComposerInner = (
           }}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          className="chat-contenteditable flex-1 w-full min-w-0 rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none"
+          className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none ${
+            isInternalMode
+              ? 'bg-amber-50 border-amber-300 focus:border-amber-400 focus:ring-1 focus:ring-amber-300 dark:bg-amber-950/30 dark:border-amber-700'
+              : 'bg-white border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069]'
+          }`}
           style={{ fontSize: '16px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
         />
+        <button
+          type="button"
+          onClick={() => setIsInternalMode((v) => !v)}
+          disabled={sending}
+          className={`w-10 h-10 sm:w-auto sm:px-3 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation disabled:opacity-40 cursor-pointer ${
+            isInternalMode
+              ? 'bg-amber-500 hover:bg-amber-600 text-white'
+              : 'bg-white border border-[#d1d7db] hover:border-amber-400 text-[#54656f] hover:text-amber-600'
+          }`}
+          title={isInternalMode ? 'Mode Catatan Internal AKTIF — tidak dikirim ke WhatsApp' : 'Aktifkan mode catatan internal (hanya staf)'}
+          aria-pressed={isInternalMode}
+        >
+          {isInternalMode ? <Lock size={15} /> : <LockOpen size={15} />}
+          <span className="hidden sm:inline">{isInternalMode ? 'Catatan' : 'Internal'}</span>
+        </button>
         <button
           onClick={handleSend}
           disabled={sendDisabled}

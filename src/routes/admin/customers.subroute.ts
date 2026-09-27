@@ -856,6 +856,75 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/customers/:id/notes
+   * Simpan "Sticky Memory Note" (catatan karakter pasien) untuk koordinasi antar-shift.
+   * Bebas-teks, bukan data medis terstruktur. Menyimpan jejak editor terakhir.
+   */
+  fastify.patch(
+    '/api/admin/customers/:id/notes',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { notes?: string | null };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { notes } = request.body || {};
+      const tenantId = tenantOf(request);
+
+      if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+        return reply.status(400).send({ success: false, error: 'notes harus berupa string atau null.' });
+      }
+      const cleanNotes = typeof notes === 'string' ? notes.trim() : '';
+      if (cleanNotes.length > 2000) {
+        return reply.status(400).send({ success: false, error: 'Catatan maksimal 2000 karakter.' });
+      }
+
+      const performedBy = (request as any).adminIdentity || (request as any).adminSession?.adminIdentity || 'Admin';
+
+      try {
+        const customer = await customerService.getCustomerById(id, tenantId);
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        const updated = await prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            admin_notes: cleanNotes || null,
+            notes_updated_at: new Date(),
+            notes_updated_by: performedBy,
+          },
+          select: { id: true, admin_notes: true, notes_updated_at: true, notes_updated_by: true },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: performedBy,
+          action: 'UPDATE_CUSTOMER_NOTES',
+          targetId: id,
+          payload: { length: cleanNotes.length },
+          ipAddress: request.ip,
+          tenantId,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Catatan pasien berhasil disimpan.',
+          data: {
+            adminNotes: updated.admin_notes,
+            notesUpdatedAt: updated.notes_updated_at,
+            notesUpdatedBy: updated.notes_updated_by,
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * PUT /api/admin/customers/:id & PATCH /api/admin/customers/:id
    * Update field dasar customer (nama, phone, alamat, koordinat, landmark, dan data anak).
    * Body: { name?, phone?, address?, kelurahan?, kecamatan?, kota?, zipcode?, landmark?, lat?, lng?, children? }

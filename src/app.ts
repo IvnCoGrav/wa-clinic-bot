@@ -291,9 +291,104 @@ if (require.main === module) {
     }, 24 * 60 * 60 * 1000);
     console.log('🧹 Staff session cleanup cron registered (every 24h)');
 
+    // Fase 5r: Pre-Visit Brief bidan (H-30 menit). Default aktif; env 'false' menonaktifkan.
+    if (process.env.ENABLE_PRE_VISIT_BRIEF !== 'false') {
+      const intervalMinutes = parseInt(process.env.PRE_VISIT_BRIEF_INTERVAL_MINUTES || '10', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runPreVisitBriefSweep(), intervalMinutes * 60 * 1000);
+        console.log(`📋 Pre-Visit Brief cron started (every ${intervalMinutes}m)`);
+      }).catch(e => console.error('[PRE-VISIT BRIEF START ERROR]', e));
+    }
+
+    // Pulse alert (Fase 4): sapuan percakapan melewati SLA → tandai butuh respon segera.
+    // Default aktif (ringan, read-only + update flag); nonaktifkan dengan env = 'false'.
+    if (process.env.ENABLE_FRUSTRATION_SWEEP !== 'false') {
+      const intervalMinutes = parseInt(process.env.FRUSTRATION_SWEEP_INTERVAL_MINUTES || '5', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runFrustrationSweep(), intervalMinutes * 60 * 1000);
+        console.log(`🚨 Frustration sweep cron started (every ${intervalMinutes}m)`);
+      }).catch(e => console.error('[FRUSTRATION SWEEP START ERROR]', e));
+    }
+
+    // Nightly Watchdog (Fase 2r): laporan pengawasan malam 21:00 WIB.
+    // Cek tiap 15 mnt + guard tanggal per-tenant (idempoten via AdminNotificationLog).
+    import('./services/nightly-watchdog.service').then(({ nightlyWatchdogService }) => {
+      import('./services/notification-delivery.service').then(({ notificationDeliveryService }) => {
+        import('./services/media.service').then(({ getAllTenantIds }) => {
+          import('./db/client').then(({ prisma }) => {
+          const lastNightlyRunDate = new Map<string, string>();
+          trackInterval(async () => {
+            try {
+              const nowUtc = new Date();
+              const wib = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+              const wibHour = wib.getUTCHours();
+              const wibMinute = wib.getUTCMinutes();
+              const todayStr = wib.toISOString().slice(0, 10);
+              const tenantIds = await getAllTenantIds();
+              for (const tId of tenantIds) {
+                const tenant = await prisma.tenant.findUnique({ where: { id: tId } }).catch(() => null);
+                if (!tenant || !tenant.nightly_report_enabled) continue;
+                const targetHour = tenant.nightly_report_hour ?? 21;
+                const targetMinute = tenant.nightly_report_minute ?? 0;
+                // Jalankan bila sudah lewat/tepat jam target (toleransi window 15 mnt).
+                const reached = wibHour > targetHour || (wibHour === targetHour && wibMinute >= targetMinute);
+                if (!reached) continue;
+                if (lastNightlyRunDate.get(tId) === todayStr) continue;
+                lastNightlyRunDate.set(tId, todayStr);
+
+                const data = await nightlyWatchdogService.generate(tId);
+                const dashboardUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000';
+                const message = nightlyWatchdogService.formatMessage(tenant.name || tId, data, dashboardUrl);
+
+                // Telegram default; WA (bila channel aktif & provider WAHA) — SKIPPED aman untuk WABA.
+                const channels = (tenant.notification_channels && tenant.notification_channels.length > 0)
+                  ? tenant.notification_channels
+                  : ['TELEGRAM'];
+
+                if (channels.includes('TELEGRAM') && tenant.telegram_chat_id) {
+                  await notificationDeliveryService.send({
+                    tenantId: tId,
+                    channel: 'TELEGRAM',
+                    recipient: tenant.telegram_chat_id,
+                    type: 'NIGHTLY_WATCHDOG',
+                    title: 'Laporan Malam Operasional',
+                    messageContent: message,
+                    reportDate: data.reportDateStr,
+                    idempotencyKey: `${tId}:NIGHTLY_WATCHDOG:${data.reportDateStr}`,
+                    metadata: { summary: data.summary },
+                  });
+                }
+
+                if (channels.includes('WHATSAPP')) {
+                  for (const num of tenant.admin_whatsapp_numbers || []) {
+                    await notificationDeliveryService.send({
+                      tenantId: tId,
+                      channel: 'WHATSAPP',
+                      recipient: num,
+                      type: 'NIGHTLY_WATCHDOG',
+                      title: 'Laporan Malam Operasional',
+                      messageContent: message,
+                      reportDate: data.reportDateStr,
+                      // Tanpa idempotencyKey per-nomor: unique nullable tidak membedakan nomor.
+                      metadata: { summary: data.summary, recipientNumber: num },
+                    });
+                  }
+                }
+              }
+            } catch (err: any) {
+              console.error('[NIGHTLY WATCHDOG CRON ERROR]', err?.message);
+            }
+          }, 15 * 60 * 1000);
+          console.log('🌙 Nightly Watchdog cron registered (checks every 15m, target 21:00 WIB)');
+          }).catch(() => {});
+        }).catch(() => {});
+      }).catch(() => {});
+    }).catch(e => console.error('[NIGHTLY WATCHDOG START ERROR]', e));
+
     // Start LLM-as-Judge AI quality evaluation cron (interval 6 jam default)
-    if (process.env.ENABLE_AI_EVAL_CRON === 'true') {
-      const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);
+    if (process.env.ENABLE_AI_EVAL_CRON === 'true') {      const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
         trackInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);

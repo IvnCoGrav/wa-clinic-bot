@@ -117,6 +117,8 @@ interface StaffTask {
   pricing: StaffTaskPricing;
   shareLocationText: string | null;
   customerProfilePictureUrl?: string | null;
+  /** Fase 5r: catatan karakter pasien (sticky memory note) dari LiveChat. */
+  adminNotes?: string | null;
   assignedStaff?: { id: string; name: string; role?: string } | null;
   /** Status jendela akses chat (server-driven, sumber kebenaran tunggal). */
   chatWindow?: {
@@ -4355,6 +4357,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </button>
               )}
             </div>
+
+            {/* Fase 5r — Ringkasan Pasien (catatan karakter dari LiveChat) */}
+            {detailModalTask.adminNotes && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block flex items-center gap-1">
+                  📋 Ringkasan Pasien — Catatan Khusus
+                </span>
+                <p className="text-xs text-amber-950 whitespace-pre-wrap leading-relaxed">{detailModalTask.adminNotes}</p>
+              </div>
+            )}
 
             {/* Data Anak */}
             {detailModalTask.children && detailModalTask.children.length > 0 && (

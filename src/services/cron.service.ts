@@ -541,6 +541,49 @@ export class CronService {
   }
 
   /**
+   * Pulse alert (Fase 4): sapuan periodik percakapan yang melewati SLA tanpa balasan
+   * admin nyata → tandai is_frustrated. Berbasis STATE/SLA (bukan keyword), mencakup
+   * semua provider (WAHA/WABA). Best-effort: DB offline → silent.
+   */
+  public async runFrustrationSweep(): Promise<void> {
+    try {
+      const { frustrationSignalService } = await import('./frustration-signal.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let flagged = 0;
+      for (const tenantId of tenants) {
+        flagged += await frustrationSignalService.sweep(tenantId);
+      }
+      if (flagged > 0) {
+        console.log(`[Cron Service] Frustration sweep: ${flagged} percakapan ditandai butuh respon segera.`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running frustration sweep:', (err as Error).message);
+    }
+  }
+
+  /**
+   * Fase 5r — Pre-Visit Brief: kirim kartu ringkasan pasien ke bidan H-30 menit.
+   * Berbasis jendela waktu (now+20..35 mnt) + idempoten via pre_visit_brief_sent_at.
+   */
+  public async runPreVisitBriefSweep(): Promise<void> {
+    try {
+      const { staffNotificationService } = await import('./staff-notification.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let sent = 0;
+      for (const tenantId of tenants) {
+        sent += await staffNotificationService.sweepPreVisitBriefs(tenantId);
+      }
+      if (sent > 0) {
+        console.log(`[Cron Service] Pre-visit brief terkirim: ${sent} kartu.`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running pre-visit brief sweep:', (err as Error).message);
+    }
+  }
+
+  /**
    * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
    */
   public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {

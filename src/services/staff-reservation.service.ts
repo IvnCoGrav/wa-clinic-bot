@@ -308,6 +308,7 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
+              admin_notes: true,
               children: {
                 select: {
                   name: true,
@@ -476,6 +477,7 @@ export class StaffReservationService {
             pricing
           ),
           customerProfilePictureUrl: cust?.profile_picture_url || null,
+          adminNotes: (cust as any)?.admin_notes || null,
           assignedStaff: (r as any).assigned_staff
             ? {
                 id: (r as any).assigned_staff.id,
@@ -582,6 +584,7 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
+              admin_notes: true,
               children: {
                 select: {
                   name: true,
@@ -811,6 +814,7 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
+              admin_notes: true,
               children: {
                 select: {
                   name: true,
@@ -1333,6 +1337,8 @@ export class StaffReservationService {
       try {
         const { staffNotificationService } = await import('./staff-notification.service');
         await staffNotificationService.sendReservationAssignmentNotification(reservationId, targetStaffId);
+        // Fase 5r: booking dadakan (mulai <=35 mnt) → kirim brief segera (idempoten).
+        staffNotificationService.triggerPreVisitBriefIfImminent(reservationId, currentRes.tenant_id || DEFAULT_TENANT_ID);
         if (oldAssignedStaffId && oldAssignedStaffId !== targetStaffId) {
           try { await staffNotificationService.sendTaskUnassignedNotification(reservationId, oldAssignedStaffId, targetStaff.name as string); } catch (_) {}
         }

@@ -22,6 +22,7 @@ import { reservationAdminRoutes } from './admin/reservations.subroute';
 import { knowledgeAdminRoutes } from './admin/knowledge.subroute';
 import { landingAdminRoutes } from './admin/landings.subroute';
 import { settingsAdminRoutes } from './admin/settings.subroute';
+import { copilotAdminRoutes } from './admin/copilot.subroute';
 import { wabaAdminRoutes } from './admin/waba.subroute';
 import { migrationAdminRoutes } from './admin/migration.subroute';
 import { evaluationsAdminRoutes } from './admin/evaluations.subroute';
@@ -244,6 +245,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(knowledgeAdminRoutes);
   fastify.register(landingAdminRoutes);
   fastify.register(settingsAdminRoutes);
+  fastify.register(copilotAdminRoutes);
   fastify.register(wabaAdminRoutes);
   fastify.register(migrationAdminRoutes);
   fastify.register(evaluationsAdminRoutes);
