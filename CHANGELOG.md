@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Copilot multi-step loop + tool stalled inquiries + panel mobile collapsible
+
+- **Latar (bukti live):** audit `AI_COPILOT_CHAT` 7 hari menunjukkan single-tool-ceiling —
+  "yang belum terjadwal dan minta besok?" dijawab `query_reservations_by_filter`
+  (`grounded:true` tapi salah semantik; validator nama tak menangkap karena nama memang dari tool).
+- **Fase A — Multi-step loop** (`copilot.service.ts`): router → eksekusi tool → umpan hasil ke
+  router berikutnya; berhenti pada `tool:null` / iterasi habis / tool+args identik (anti-loop).
+  **Budget kode:** `MAX_ITERATIONS=3`, `MAX_TOTAL_ROWS=40`; observabilitas `llmCalls` di hasil.
+  Summarize gabungan berlabel sumber; `validateGrounding` atas **union** semua hasil (halusinasi
+  silang-sumber). Defensif terhadap respons LLM kosong (`?.`).
+- **Fase B1 — Tool `query_stalled_inquiries`** (`copilot-tools.ts`): tanya-jadwal menggantung —
+  inbound ≤ `sinceDays` (default 7) + sinyal minat dari **state** (`session_data.inquiryDate/
+  cartItems`, `last_discussed_treatment`) + tanpa reservasi aktif + pesan terakhir INBOUND
+  (belum dibalas). Tenant-scoped, tanpa phone ke LLM, `conversationId` + `take≤20`.
+- **Fase B2 — mining:** hanya 1 entri `toolsUsed:[]` di 30 audit terakhir (sudah ditutup tool
+  prospek) → **tidak ada kelas dominan → berhenti di 1 tool** (sesuai aturan plan; tak spekulatif).
+- **Fase UI-Mobile** (`AdminCopilotPanel.tsx`): floating button disembunyikan di mobile; tab panah
+  tepi kiri (`md:hidden`) memunculkan/menyembunyikan. Desktop tidak berubah. Tanpa dep baru.
+- **Test:** `copilot-fixing.test.ts` +8 (loop komposit 2 tool, anti-loop, budget, union grounding,
+  stalled: confirmed/dibalas/tanpa-sinyal dikecualikan, tenant-scope) + update `copilot-grounding`
+  (semantik loop: 2 router).
+- **Verifikasi:** `tsc` 0 error (root+dashboard); dashboard `vite build` 0; full suite
+  **425 file / 3356 passed / 0 gagal** (23 skipped). Tanpa migrasi DB.
+
 #### 2026-09-27 — Copilot: tool `query_unscheduled_prospects` (jawaban "belum terjadwal")
 
 - **Laporan & bukti live:** pertanyaan "siapa saja yang belum terjadwal ya" dijawab template

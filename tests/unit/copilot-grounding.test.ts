@@ -40,13 +40,14 @@ describe('Copilot grounding (Fase 6r)', () => {
 
   it('tool kosong → jawaban jujur "tidak ditemukan", BUKAN halusinasi', async () => {
     h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_reservations_by_filter","args":{"date":"2026-09-28"}}'));
+    h.callChat.mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}')); // loop terminasi (data cukup)
     h.reservationFindMany.mockResolvedValue([]);
     const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'jadwal besok?' });
     expect(res.success).toBe(true);
     expect(res.answer).toContain('Tidak ditemukan');
     expect(res.grounded).toBe(true);
-    // Hanya 1 panggilan LLM (router); tidak ada call summarize karena kosong.
-    expect(h.callChat).toHaveBeenCalledTimes(1);
+    // 2 router (pilih tool → terminasi null); TIDAK ada call summarize karena rows kosong.
+    expect(h.callChat).toHaveBeenCalledTimes(2);
   });
 
   it('tidak ada tool cocok → jawaban sopan tanpa memanggil tool', async () => {
@@ -57,11 +58,13 @@ describe('Copilot grounding (Fase 6r)', () => {
   });
 
   it('tool dipanggil tenant-scoped (anti IDOR)', async () => {
-    h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_reservations_by_filter","args":{"date":"2026-09-28"}}'));
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_reservations_by_filter","args":{"date":"2026-09-28"}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}')) // loop terminasi
+      .mockResolvedValueOnce(llmReply('Ada 1 jadwal: Bunda Alin.')); // summarize
     h.reservationFindMany.mockResolvedValue([
-      { id: 'r1', customer: { id: 'c1', name: 'Bunda Alin' }, treatment_detail: 'Baby Massage', booking_date: new Date(), status: 'confirmed', assigned_staff: { name: 'Bidan Yusi' } },
+      { id: 'r1', customer: { id: 'c1', name: 'Bunda Alin', conversations: [] }, treatment_detail: 'Baby Massage', booking_date: new Date(), status: 'confirmed', assigned_staff: { name: 'Bidan Yusi' } },
     ]);
-    h.callChat.mockResolvedValueOnce(llmReply('Ada 1 jadwal: Bunda Alin.'));
     await copilotService.chat({ tenantId: 'tenant-a', message: 'jadwal besok?' });
     expect(h.reservationFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a' }) })

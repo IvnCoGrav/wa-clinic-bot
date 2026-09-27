@@ -23,25 +23,50 @@ export interface CopilotChatResult {
   answer: string;
   toolsUsed: string[];
   grounded: boolean;
+  /** Observabilitas: jumlah panggilan LLM (router + summarize) — untuk uji budget. */
+  llmCalls?: number;
   error?: string;
 }
 
 const MAX_HISTORY_TURNS = 10;
+/** Budget loop multi-step (gerbang kode, bukan imbauan): cegah biaya/latensi meledak. */
+export const MAX_ITERATIONS = 3;
+export const MAX_TOTAL_ROWS = 40;
+
+export interface RouterPriorStep {
+  tool: string;
+  count: number;
+  sample: any[];
+}
 
 /**
  * Bangun prompt router (murni — deterministik, mudah diuji).
  * Menyuntik jangkar waktu WIB (hari ini + besok) supaya LLM dapat menghitung
  * tanggal relatif ke format YYYY-MM-DD.
+ *
+ * `priorSteps` (opsional) = hasil tool sebelumnya pada loop multi-step; router
+ * diminta memutuskan apakah data cukup (return null) atau perlu tool berikutnya.
  */
 export function buildRouterPrompt(
   message: string,
   toolMenu: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  priorSteps: RouterPriorStep[] = []
 ): string {
   const todayStr = formatWibDateYYYYMMDD(now);
   const tomorrowStr = formatWibDateYYYYMMDD(wibDayBoundsUtc(1, now).start);
   const todayName = getWibDayName(now);
   const tomorrowName = getWibDayName(wibDayBoundsUtc(1, now).start);
+
+  const priorBlock = priorSteps.length
+    ? `\nHASIL SEJAUH INI (jangan ulangi tool yang sama):\n${priorSteps
+        .map(
+          (p) =>
+            `- ${p.tool}: ${p.count} baris` +
+            (p.sample.length ? ` | contoh: ${JSON.stringify(p.sample).slice(0, 800)}` : '')
+        )
+        .join('\n')}\nJika data sudah cukup untuk menjawab, kembalikan {"tool": null}. Jika masih kurang, pilih tool berikutnya.\n`
+    : '';
 
   return `Kamu adalah asisten internal klinik. Pilih SATU tool untuk menjawab pertanyaan admin.
 Konteks Waktu Server (WIB):
@@ -50,9 +75,9 @@ Konteks Waktu Server (WIB):
 Gunakan konteks ini untuk menghitung tanggal format YYYY-MM-DD bila admin menyebut kata relatif (mis. "hari ini", "besok", "lusa", "hari minggu depan").
 Tool tersedia:
 ${toolMenu}
-
+${priorBlock}
 Jawab HANYA dengan JSON: {"tool": "<nama>", "args": { ... }}.
-Jika tidak ada tool yang cocok, jawab {"tool": null, "args": {}}.
+Jika tidak ada tool yang cocok atau data sudah cukup, jawab {"tool": null, "args": {}}.
 Pertanyaan admin: "${message}"`;
 }
 
@@ -68,73 +93,104 @@ export class CopilotService {
 
       const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
 
-      // Langkah 1: LLM memilih tool + args (prompt murni + jangkar WIB).
       const toolMenu = COPILOT_TOOLS.map(
         (t) => `- ${t.name}: ${t.description}\n  args: ${JSON.stringify(t.parameters)}`
       ).join('\n');
-      const routerPrompt = buildRouterPrompt(message, toolMenu);
 
-      const routerResp = await callChatCompletionsWithFallback({
-        model: cfg.model,
-        fallbackModel: cfg.fallbackModel,
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        timeoutMs: cfg.timeoutMs,
-        payload: {
-          messages: [{ role: 'user', content: routerPrompt }],
-          temperature: 0,
-          max_tokens: 200,
-        },
-      });
+      // Langkah 1–2 (loop multi-step, budget ketat): router memilih tool → eksekusi →
+      // umpan balik hasil ke router berikutnya. Berhenti bila tool:null / iterasi habis /
+      // router mengulang tool+args identik. Semua hasil diakumulasi untuk summarize + grounding.
+      const collected: Array<{ tool: string; args: Record<string, any>; rows: any[] }> = [];
+      const seenSignatures = new Set<string>();
+      let llmCalls = 0;
+      let totalRows = 0;
 
-      const rawRouter = routerResp.data?.choices?.[0]?.message?.content || '';
-      const parsed = extractBalancedJson(rawRouter, 'tool');
-      let toolName: string | null = null;
-      let toolArgs: Record<string, any> = {};
-      if (parsed) {
-        try {
-          const obj = JSON.parse(parsed);
-          toolName = obj.tool || null;
-          toolArgs = obj.args || {};
-        } catch {
-          toolName = null;
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        const priorSteps: RouterPriorStep[] = collected.map((c) => ({
+          tool: c.tool,
+          count: c.rows.length,
+          sample: c.rows.slice(0, 3),
+        }));
+        const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps);
+
+        llmCalls++;
+        const routerResp = await callChatCompletionsWithFallback({
+          model: cfg.model,
+          fallbackModel: cfg.fallbackModel,
+          baseUrl: cfg.baseUrl,
+          apiKey: cfg.apiKey,
+          timeoutMs: cfg.timeoutMs,
+          payload: {
+            messages: [{ role: 'user', content: routerPrompt }],
+            temperature: 0,
+            max_tokens: 200,
+          },
+        });
+
+        const rawRouter = routerResp?.data?.choices?.[0]?.message?.content || '';
+        const parsed = extractBalancedJson(rawRouter, 'tool');
+        let toolName: string | null = null;
+        let toolArgs: Record<string, any> = {};
+        if (parsed) {
+          try {
+            const obj = JSON.parse(parsed);
+            toolName = obj.tool || null;
+            toolArgs = obj.args || {};
+          } catch {
+            toolName = null;
+          }
         }
+
+        if (!toolName) break; // data cukup / tak ada tool cocok → keluar loop
+
+        const tool = getCopilotTool(toolName);
+        if (!tool) {
+          // Tool tak dikenal (halusinasi nama tool) → hentikan loop, jangan lempar.
+          if (collected.length === 0) {
+            return { success: false, answer: 'Tool tidak dikenali.', toolsUsed: [], grounded: false, error: 'UNKNOWN_TOOL' };
+          }
+          break;
+        }
+
+        const signature = `${tool.name}:${JSON.stringify(toolArgs)}`;
+        if (seenSignatures.has(signature)) break; // anti-loop: tool+args identik
+        seenSignatures.add(signature);
+
+        const toolResult: CopilotToolResult = await tool.run(tenantId, toolArgs);
+        collected.push({ tool: tool.name, args: toolArgs, rows: toolResult.rows || [] });
+        totalRows += (toolResult.rows || []).length;
+
+        // Budget baris: hentikan loop bila kuota konteks habis.
+        if (totalRows >= MAX_TOTAL_ROWS) break;
       }
 
-      if (!toolName) {
+      const toolsUsed = collected.map((c) => c.tool);
+      const unionRows = collected.flatMap((c) => c.rows);
+
+      // Tak ada data terkumpul → jawab jujur (anti-halusinasi), jangan panggil summarize.
+      if (unionRows.length === 0) {
         return {
           success: true,
-          answer: 'Maaf, saya tidak menemukan data yang cocok untuk pertanyaan itu. Coba sebutkan tanggal atau nama pasien secara spesifik ya.',
-          toolsUsed: [],
+          answer:
+            toolsUsed.length > 0
+              ? 'Tidak ditemukan data untuk kriteria tersebut.'
+              : 'Maaf, saya tidak menemukan data yang cocok untuk pertanyaan itu. Coba sebutkan tanggal atau nama pasien secara spesifik ya.',
+          toolsUsed,
           grounded: true,
         };
       }
 
-      const tool = getCopilotTool(toolName);
-      if (!tool) {
-        return { success: false, answer: 'Tool tidak dikenali.', toolsUsed: [], grounded: false, error: 'UNKNOWN_TOOL' };
-      }
-
-      // Langkah 2: eksekusi tool (grounding DB).
-      const toolResult: CopilotToolResult = await tool.run(tenantId, toolArgs);
-
-      // Gerbang grounding: tool kosong → jawab jujur, jangan biarkan LLM mengarang.
-      if (!toolResult.rows || toolResult.rows.length === 0) {
-        return {
-          success: true,
-          answer: 'Tidak ditemukan data untuk kriteria tersebut.',
-          toolsUsed: [tool.name],
-          grounded: true,
-        };
-      }
-
-      // Langkah 3: LLM merangkum HASIL TOOL saja.
-      const summarizePrompt = `Berikut data riil dari database (JSON). Rangkum dalam bahasa Indonesia singkat untuk admin.
-DILARANG menambah nama, nomor, atau jadwal yang TIDAK ada di data.
+      // Langkah 3: LLM merangkum gabungan hasil tool (berlabel sumber).
+      const labeled = collected
+        .map((c) => `[${c.tool}] ${JSON.stringify(c.rows).slice(0, 3000)}`)
+        .join('\n');
+      const summarizePrompt = `Berikut data riil dari database (JSON) dari beberapa sumber. Rangkum dalam bahasa Indonesia singkat untuk admin.
+DILARANG menambah nama, nomor, atau jadwal yang TIDAK ada di data. Bila menyintesis lintas sumber, sebutkan sumbernya secara ringkas.
 Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan ke Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
 Data:
-${JSON.stringify(toolResult.rows).slice(0, 6000)}`;
+${labeled.slice(0, 8000)}`;
 
+      llmCalls++;
       const summaryResp = await callChatCompletionsWithFallback({
         model: cfg.model,
         fallbackModel: cfg.fallbackModel,
@@ -151,12 +207,12 @@ ${JSON.stringify(toolResult.rows).slice(0, 6000)}`;
         },
       });
 
-      const answer = summaryResp.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
+      const answer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
 
-      // Validator grounding: nama customer di jawaban WAJIB subset nama di hasil tool.
-      const grounded = this.validateGrounding(answer, toolResult.rows);
+      // Validator grounding atas UNION semua hasil tool (halusinasi silang-sumber).
+      const grounded = this.validateGrounding(answer, unionRows);
 
-      return { success: true, answer, toolsUsed: [tool.name], grounded };
+      return { success: true, answer, toolsUsed, grounded, llmCalls };
     } catch (err: any) {
       return {
         success: false,

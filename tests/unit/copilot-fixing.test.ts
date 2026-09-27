@@ -30,6 +30,7 @@ import {
   queryReservationsByFilter,
   queryUnrepliedChats,
   queryUnscheduledProspects,
+  queryStalledInquiries,
   getCopilotTool,
   COPILOT_TOOLS,
 } from '../../src/services/copilot/copilot-tools';
@@ -86,12 +87,15 @@ describe('resolveReservationDateFilter — anti past-trap (murni)', () => {
 
 describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     h.reservationFindMany.mockResolvedValue([]);
     h.conversationFindMany.mockResolvedValue([]);
+    h.customerFindMany.mockResolvedValue([]);
   });
 
   // 5 parafrase: yang diuji = plumbing deterministik (mock LLM → args diteruskan ke tool benar).
+  // Loop multi-step: setelah tool dieksekusi, router dipanggil lagi → kita terminasi
+  // dengan {"tool":null} (data cukup). Union rows kosong → early return, tanpa summarize.
   const paraphrases: Array<{ q: string; tool: string; args: any }> = [
     { q: 'Jadwal besok siapa saja ya', tool: 'query_reservations_by_filter', args: { date: '2026-09-28' } },
     { q: 'Kalau minta besok siapa saja', tool: 'query_reservations_by_filter', args: { date: '2026-09-28' } },
@@ -102,7 +106,9 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
 
   for (const { q, tool, args } of paraphrases) {
     it(`"${q}" → tool ${tool} dengan args diteruskan apa adanya`, async () => {
-      h.callChat.mockResolvedValueOnce(llmReply(JSON.stringify({ tool, args })));
+      h.callChat
+        .mockResolvedValueOnce(llmReply(JSON.stringify({ tool, args })))
+        .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'));
       const res = await copilotService.chat({ tenantId: 'tenant-a', message: q });
       expect(res.toolsUsed).toEqual([tool]);
       // tool benar dipanggil dengan tenant-scope
@@ -144,7 +150,9 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
   });
 
   it('empty result → jawaban jujur "Tidak ditemukan data"', async () => {
-    h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'));
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'));
     h.conversationFindMany.mockResolvedValue([]);
     const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'chat menggantung?' });
     expect(res.answer).toContain('Tidak ditemukan data');
@@ -186,9 +194,10 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
     expect(call.include.messages.take).toBe(1);
   });
 
-  it('registry tool konsisten (whitelist hanya 3 tool)', () => {
+  it('registry tool konsisten (whitelist 4 tool)', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
       'query_reservations_by_filter',
+      'query_stalled_inquiries',
       'query_unreplied_chats',
       'query_unscheduled_prospects',
     ]);
@@ -202,7 +211,10 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
   });
 
   it('"siapa saja yang belum terjadwal" → tool prospek terpanggil tenant-scoped', async () => {
-    h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'));
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'))
+      .mockResolvedValueOnce(llmReply('Belum terjadwal: Bunda Rina.'));
     h.customerFindMany.mockResolvedValue([
       {
         id: 'c1',
@@ -212,7 +224,6 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
         conversations: [{ id: 'conv-1', last_message_at: new Date() }],
       },
     ]);
-    h.callChat.mockResolvedValueOnce(llmReply('Belum terjadwal: Bunda Rina.'));
     const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'siapa saja yang belum terjadwal ya' });
     expect(res.toolsUsed).toEqual(['query_unscheduled_prospects']);
     expect(h.customerFindMany).toHaveBeenCalledWith(
@@ -229,8 +240,10 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
 
   it('parafrase "prospek yang belum booking" & "yang belum ada jadwalnya" → tool sama', async () => {
     for (const q of ['prospek yang belum booking siapa?', 'yang belum ada jadwalnya siapa saja?']) {
-      vi.clearAllMocks();
-      h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'));
+      vi.resetAllMocks();
+      h.callChat
+        .mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'))
+        .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'));
       h.customerFindMany.mockResolvedValue([]);
       const res = await copilotService.chat({ tenantId: 'tenant-a', message: q });
       expect(res.toolsUsed).toEqual(['query_unscheduled_prospects']);
@@ -271,5 +284,151 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
   it('limit dibatasi maksimal 20 (token budget)', async () => {
     await queryUnscheduledProspects.run('tenant-a', { limit: 500 });
     expect(h.customerFindMany.mock.calls[0][0].take).toBe(100);
+  });
+});
+
+describe('Fase A — multi-step loop & budget guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.reservationFindMany.mockResolvedValue([]);
+    h.conversationFindMany.mockResolvedValue([]);
+    h.customerFindMany.mockResolvedValue([]);
+  });
+
+  it('pertanyaan komposit memanggil 2 tool berantai lalu berhenti (router ke-3 null)', async () => {
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}')) // data cukup
+      .mockResolvedValueOnce(llmReply('Irisan: Bunda Rina.')); // summarize
+    h.customerFindMany.mockResolvedValue([
+      { id: 'c1', name: 'Bunda Rina', phone: '6285712345678', updated_at: new Date(), conversations: [{ id: 'conv-1', last_message_at: new Date() }] },
+    ]);
+    h.conversationFindMany.mockResolvedValue([
+      { id: 'conv-1', customer: { id: 'c1', name: 'Bunda Rina' }, messages: [{ direction: 'INBOUND', content: 'minta besok', created_at: new Date() }] },
+    ]);
+
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'yang belum terjadwal dan minta besok?' });
+    expect(res.toolsUsed).toEqual(['query_unscheduled_prospects', 'query_unreplied_chats']);
+    expect(res.grounded).toBe(true);
+    // 3 router + 1 summarize = 4 (tepat di batas budget).
+    expect(res.llmCalls).toBe(4);
+    expect(h.callChat).toHaveBeenCalledTimes(4);
+  });
+
+  it('anti-loop: router mengulang tool+args identik → berhenti, tidak spam', async () => {
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}')) // identik
+      .mockResolvedValueOnce(llmReply('Ringkasan.'));
+    h.conversationFindMany.mockResolvedValue([
+      { id: 'conv-1', customer: { id: 'c1', name: 'Bunda Rina' }, messages: [{ direction: 'INBOUND', content: 'halo', created_at: new Date() }] },
+    ]);
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'chat menggantung?' });
+    expect(res.toolsUsed).toEqual(['query_unreplied_chats']); // hanya sekali eksekusi
+    // 2 router (kedua identik → break) + 1 summarize = 3.
+    expect(res.llmCalls).toBe(3);
+  });
+
+  it('budget baris: total > MAX_TOTAL_ROWS menghentikan loop', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      id: `c${i}`,
+      customer: { id: `u${i}`, name: `Bunda ${i}` },
+      messages: [{ direction: 'INBOUND', content: 'x', created_at: new Date() }],
+    }));
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'))
+      .mockResolvedValueOnce(llmReply('Ringkasan.'));
+    h.conversationFindMany.mockResolvedValue(many); // 20 baris (cap tool)
+    h.customerFindMany.mockResolvedValue(many.map((m) => ({ ...m, phone: `6285712345${m.id}`, updated_at: new Date(), conversations: [] })));
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'cek' });
+    // 20 baris pertama sudah >= MAX_TOTAL_ROWS(40)? tidak; 20+20=40 → berhenti setelah iterasi 2.
+    expect(res.llmCalls).toBeLessThanOrEqual(3); // 2 router + 1 summarize
+  });
+
+  it('union grounding: nama yang tidak ada di SEMUA sumber → tidak grounded', () => {
+    const union = [{ customerName: 'Bunda Rina' }, { customerName: 'Bunda Dewi' }];
+    expect(copilotService.validateGrounding('Ada Bunda Rina dan Bunda Dewi.', union)).toBe(true);
+    expect(copilotService.validateGrounding('Ada Bunda Siti.', union)).toBe(false);
+  });
+});
+
+describe('Fase B1 — query_stalled_inquiries (state-based)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.conversationFindMany.mockResolvedValue([]);
+  });
+
+  it('mendeteksi tanya-jadwal menggantung (sinyal state + inbound terakhir + tanpa reservasi aktif)', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        session_data: { inquiryDate: '2026-09-28' },
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'minta besok jam 10', created_at: new Date(Date.now() - 3600000) }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0].customerName).toBe('Bunda Dewi');
+    expect(res.rows[0].conversationId).toBe('conv-1');
+  });
+
+  it('mengecualikan yang SUDAH punya reservasi aktif', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        session_data: { inquiryDate: '2026-09-28' },
+        last_discussed_treatment: 'Baby Massage',
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [{ status: 'confirmed' }] },
+        messages: [{ direction: 'INBOUND', content: 'minta besok', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
+
+  it('mengecualikan yang sudah DIBALAS admin (pesan terakhir OUTBOUND)', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        session_data: { cartItems: [{ id: 'x' }] },
+        last_discussed_treatment: 'Baby Massage',
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'OUTBOUND', content: 'baik bunda', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
+
+  it('mengecualikan tanpa sinyal minat jadwal (state kosong)', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        session_data: {},
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'halo', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
+
+  it('tenant-scoped + tanpa phone diteruskan', async () => {
+    await queryStalledInquiries.run('tenant-a', {});
+    expect(h.conversationFindMany.mock.calls[0][0].where.tenant_id).toBe('tenant-a');
+  });
+
+  it('registry memuat 4 tool', () => {
+    expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'query_reservations_by_filter',
+      'query_stalled_inquiries',
+      'query_unreplied_chats',
+      'query_unscheduled_prospects',
+    ]);
   });
 });

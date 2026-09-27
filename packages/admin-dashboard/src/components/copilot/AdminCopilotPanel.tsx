@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Loader, ExternalLink, ShieldCheck } from 'lucide-react';
+import { Sparkles, X, Send, Loader, ExternalLink, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -28,6 +28,8 @@ const QUICK_PROMPTS = [
 export const AdminCopilotPanel: React.FC = () => {
   const { toast } = useUiFeedback();
   const [open, setOpen] = useState(false);
+  // Mobile: floating button disembunyikan default; tab panah tepi kiri memunculkannya.
+  const [edgeOpen, setEdgeOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,11 +76,24 @@ export const AdminCopilotPanel: React.FC = () => {
 
   return (
     <>
-      {/* Floating trigger */}
+      {/* Mobile-only: tab panah tepi kiri untuk memunculkan floating button.
+          Desktop (md+) tidak menampilkan tab ini; button selalu tampil. */}
+      <button
+        type="button"
+        onClick={() => setEdgeOpen((v) => !v)}
+        aria-expanded={edgeOpen}
+        aria-label={edgeOpen ? 'Sembunyikan tombol Copilot' : 'Tampilkan tombol Copilot'}
+        title={edgeOpen ? 'Sembunyikan Copilot' : 'Tampilkan Copilot'}
+        className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 w-7 h-14 rounded-r-xl bg-indigo-600/90 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center active:scale-95 transition"
+      >
+        {edgeOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+      </button>
+
+      {/* Floating trigger: di mobile hanya muncul bila edgeOpen; di desktop selalu. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center active:scale-95 transition"
+        className={`${edgeOpen ? 'flex' : 'hidden'} md:flex fixed bottom-24 right-4 z-40 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg items-center justify-center active:scale-95 transition`}
         title="AI Clinic Copilot"
         aria-label="Buka AI Clinic Copilot"
       >

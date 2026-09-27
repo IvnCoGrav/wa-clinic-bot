@@ -215,10 +215,110 @@ export const queryUnscheduledProspects: CopilotTool = {
   },
 };
 
+/**
+ * Sinyal minat jadwal dari STATE sesi (bukan keyword pesan):
+ * inquiryDate (tanggal yang sedang dinegosiasikan) atau cartItems (layanan terkunci).
+ * `last_discussed_treatment` (kolom Conversation) juga dipakai sebagai bukti minat.
+ */
+export function hasScheduleIntentSignal(sessionData: any, lastDiscussedTreatment: string | null): boolean {
+  if (lastDiscussedTreatment && String(lastDiscussedTreatment).trim()) return true;
+  if (!sessionData || typeof sessionData !== 'object') return false;
+  if (sessionData.inquiryDate) return true;
+  if (Array.isArray(sessionData.cartItems) && sessionData.cartItems.length > 0) return true;
+  return false;
+}
+
+/**
+ * Tool 4: tanya jadwal yang belum booking (stalled inquiry).
+ *
+ * Definisi deterministik (state, bukan keyword):
+ * - ada pesan INBOUND dalam `sinceDays` hari terakhir,
+ * - ada sinyal minat jadwal dari state sesi (`inquiryDate`/`cartItems`/`last_discussed_treatment`),
+ * - TANPA reservasi aktif (confirmed/pending/hold),
+ * - TANPA balasan ADMIN setelah inbound terakhir (masih menggantung).
+ *
+ * Batas jujur: `session_data` JSON tak bisa diindeks DB → filter sinyal di aplikasi
+ * (setelah query inbound terbatas). Tenant-scoped, tanpa phone ke LLM.
+ */
+export const queryStalledInquiries: CopilotTool = {
+  name: 'query_stalled_inquiries',
+  description:
+    'Daftar pasien yang menanyakan/minta jadwal tapi BELUM booking (tanpa reservasi aktif, ' +
+    'belum dibalas admin setelah pesan terakhir). Gunakan untuk "yang minta dijadwalkan", ' +
+    '"belum terjadwal dan minta besok", "siapa yang tanya jadwal tapi belum booking".',
+  parameters: {
+    sinceDays: { type: 'number', description: 'Jendela hari ke belakang (default 7).' },
+    limit: { type: 'number', description: `Maksimum baris (default ${MAX_ROWS}).` },
+  },
+  run: async (tenantId, args) => {
+    const take = Math.min(Math.max(parseInt(String(args.limit || MAX_ROWS), 10) || MAX_ROWS, 1), MAX_ROWS);
+    const sinceDays = Math.min(Math.max(parseInt(String(args.sinceDays || 7), 10) || 7, 1), 90);
+    const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+
+    const convs = await prisma.conversation.findMany({
+      where: { tenant_id: tenantId, last_message_at: { gte: since } },
+      select: {
+        id: true,
+        session_data: true,
+        last_discussed_treatment: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            reservations: { select: { status: true } },
+          },
+        },
+        messages: {
+          where: { sender_type: { not: 'INTERNAL_NOTE' } },
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          select: { direction: true, content: true, created_at: true },
+        },
+      },
+      orderBy: { last_message_at: 'desc' },
+      take: 200,
+    });
+
+    const rows: any[] = [];
+    for (const c of convs) {
+      if (rows.length >= take) break;
+      const cust: any = c.customer;
+      if (!cust) continue;
+      if (isDummyOrTestContact(cust.phone, cust.name, false)) continue;
+
+      // Tanpa reservasi aktif → masih prospek.
+      const hasActive = (cust.reservations || []).some((r: any) =>
+        ACTIVE_RESERVATION_STATUSES.includes(r.status)
+      );
+      if (hasActive) continue;
+
+      // Sinyal minat jadwal dari state.
+      if (!hasScheduleIntentSignal(c.session_data, c.last_discussed_treatment)) continue;
+
+      // Pesan nyata terakhir harus INBOUND (belum dibalas admin) → menggantung.
+      const lastReal = (c as any).messages?.[0];
+      if (!lastReal || (lastReal.direction as any) !== Direction.INBOUND) continue;
+
+      rows.push({
+        customerId: cust.id,
+        customerName: cust.name || 'Bunda',
+        conversationId: c.id,
+        treatment: c.last_discussed_treatment || null,
+        lastMessage: lastReal.content,
+        lastInboundAt: lastReal.created_at,
+        waitingMinutes: Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000),
+      });
+    }
+    return { tool: 'query_stalled_inquiries', args, count: rows.length, rows };
+  },
+};
+
 export const COPILOT_TOOLS: CopilotTool[] = [
   queryReservationsByFilter,
   queryUnrepliedChats,
   queryUnscheduledProspects,
+  queryStalledInquiries,
 ];
 
 export function getCopilotTool(name: string): CopilotTool | undefined {
