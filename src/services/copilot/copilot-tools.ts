@@ -1,6 +1,7 @@
 import { prisma } from '../../db/client';
 import { Direction } from '@prisma/client';
 import { wibDayBoundsUtc, startOfTodayWib } from '../../utils/wib-time';
+import { isDummyOrTestContact } from '../../utils/dummy-filter';
 
 /**
  * copilot-tools.ts (Fase 6r + fixing plan) — Tools database Copilot Admin
@@ -157,7 +158,68 @@ export const queryUnrepliedChats: CopilotTool = {
   },
 };
 
-export const COPILOT_TOOLS: CopilotTool[] = [queryReservationsByFilter, queryUnrepliedChats];
+/** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
+const ACTIVE_RESERVATION_STATUSES = ['confirmed', 'pending', 'hold'];
+
+/**
+ * Tool 3: prospek yang BELUM punya jadwal aktif — customer tanpa reservasi
+ * berstatus confirmed/pending/hold. Definisi state-based (bukan keyword):
+ * mencakup prospek murni maupun yang reservasi lamanya sudah selesai/batal.
+ * Kontak sandbox & dummy disaring; nomor HP tidak diteruskan ke LLM (privasi).
+ */
+export const queryUnscheduledProspects: CopilotTool = {
+  name: 'query_unscheduled_prospects',
+  description:
+    'Daftar customer yang BELUM punya jadwal aktif (tanpa reservasi confirmed/pending/hold). ' +
+    'Gunakan untuk pertanyaan "siapa yang belum terjadwal", "prospek yang belum booking", ' +
+    '"siapa saja yang belum ada jadwalnya".',
+  parameters: {
+    limit: { type: 'number', description: `Maksimum baris (default ${MAX_ROWS}).` },
+  },
+  run: async (tenantId, args) => {
+    const take = Math.min(Math.max(parseInt(String(args.limit || MAX_ROWS), 10) || MAX_ROWS, 1), MAX_ROWS);
+    const customers = await prisma.customer.findMany({
+      where: {
+        tenant_id: tenantId,
+        is_sandbox_test: false,
+        reservations: { none: { status: { in: ACTIVE_RESERVATION_STATUSES } } },
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        updated_at: true,
+        conversations: {
+          select: { id: true, last_message_at: true },
+          orderBy: { last_message_at: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updated_at: 'desc' },
+      take: 100,
+    });
+    const rows: any[] = [];
+    for (const c of customers) {
+      if (rows.length >= take) break;
+      // Saring kontak dummy/test di level aplikasi (pola nomor tak bisa diindeks DB).
+      if (isDummyOrTestContact(c.phone, c.name, false)) continue;
+      const conv = (c as any).conversations?.[0] || null;
+      rows.push({
+        customerId: c.id,
+        customerName: c.name || 'Bunda',
+        conversationId: conv?.id || null,
+        lastActivityAt: conv?.last_message_at || (c as any).updated_at || null,
+      });
+    }
+    return { tool: 'query_unscheduled_prospects', args, count: rows.length, rows };
+  },
+};
+
+export const COPILOT_TOOLS: CopilotTool[] = [
+  queryReservationsByFilter,
+  queryUnrepliedChats,
+  queryUnscheduledProspects,
+];
 
 export function getCopilotTool(name: string): CopilotTool | undefined {
   return COPILOT_TOOLS.find((t) => t.name === name);

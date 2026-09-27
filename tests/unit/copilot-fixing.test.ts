@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const h = vi.hoisted(() => ({
   reservationFindMany: vi.fn(),
   conversationFindMany: vi.fn(),
+  customerFindMany: vi.fn(),
   callChat: vi.fn(),
 }));
 
@@ -10,6 +11,7 @@ vi.mock('../../src/db/client', () => ({
   prisma: {
     reservation: { findMany: h.reservationFindMany },
     conversation: { findMany: h.conversationFindMany },
+    customer: { findMany: h.customerFindMany },
   },
 }));
 
@@ -27,6 +29,7 @@ import {
   isValidIsoDate,
   queryReservationsByFilter,
   queryUnrepliedChats,
+  queryUnscheduledProspects,
   getCopilotTool,
   COPILOT_TOOLS,
 } from '../../src/services/copilot/copilot-tools';
@@ -183,7 +186,90 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
     expect(call.include.messages.take).toBe(1);
   });
 
-  it('registry tool konsisten (whitelist hanya 2 tool)', () => {
-    expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual(['query_reservations_by_filter', 'query_unreplied_chats']);
+  it('registry tool konsisten (whitelist hanya 3 tool)', () => {
+    expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'query_reservations_by_filter',
+      'query_unreplied_chats',
+      'query_unscheduled_prospects',
+    ]);
+  });
+});
+
+describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.customerFindMany.mockResolvedValue([]);
+  });
+
+  it('"siapa saja yang belum terjadwal" → tool prospek terpanggil tenant-scoped', async () => {
+    h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'));
+    h.customerFindMany.mockResolvedValue([
+      {
+        id: 'c1',
+        name: 'Bunda Rina',
+        phone: '6285712345678',
+        updated_at: new Date(),
+        conversations: [{ id: 'conv-1', last_message_at: new Date() }],
+      },
+    ]);
+    h.callChat.mockResolvedValueOnce(llmReply('Belum terjadwal: Bunda Rina.'));
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'siapa saja yang belum terjadwal ya' });
+    expect(res.toolsUsed).toEqual(['query_unscheduled_prospects']);
+    expect(h.customerFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenant_id: 'tenant-a',
+          is_sandbox_test: false,
+          reservations: { none: { status: { in: expect.arrayContaining(['confirmed', 'pending', 'hold']) } } },
+        }),
+      })
+    );
+    expect(res.answer).toContain('Bunda Rina');
+  });
+
+  it('parafrase "prospek yang belum booking" & "yang belum ada jadwalnya" → tool sama', async () => {
+    for (const q of ['prospek yang belum booking siapa?', 'yang belum ada jadwalnya siapa saja?']) {
+      vi.clearAllMocks();
+      h.callChat.mockResolvedValueOnce(llmReply('{"tool":"query_unscheduled_prospects","args":{}}'));
+      h.customerFindMany.mockResolvedValue([]);
+      const res = await copilotService.chat({ tenantId: 'tenant-a', message: q });
+      expect(res.toolsUsed).toEqual(['query_unscheduled_prospects']);
+      expect(res.answer).toContain('Tidak ditemukan data');
+    }
+  });
+
+  it('filter di DB: tanpa reservasi aktif (bukan filter teks "jadwal")', async () => {
+    await queryUnscheduledProspects.run('tenant-a', {});
+    const where = h.customerFindMany.mock.calls[0][0].where;
+    expect(where.reservations).toEqual({ none: { status: { in: ['confirmed', 'pending', 'hold'] } } });
+    // completed/cancelled lama TIDAK menghalangi → tetap prospek
+    expect(where.reservations.none.status.in).not.toContain('completed');
+    expect(where.reservations.none.status.in).not.toContain('cancelled');
+  });
+
+  it('kontak sandbox & dummy disaring; nomor HP tidak diteruskan ke baris', async () => {
+    h.customerFindMany.mockResolvedValue([
+      { id: 'c1', name: 'Bunda Rina', phone: '6285712345678', updated_at: new Date(), conversations: [] },
+      { id: 'c2', name: 'QA Bot', phone: '628123456789', updated_at: new Date(), conversations: [] },
+    ]);
+    const res = await queryUnscheduledProspects.run('tenant-a', {});
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0].customerName).toBe('Bunda Rina');
+    expect(res.rows[0]).not.toHaveProperty('phone');
+  });
+
+  it('conversationId tersedia untuk deep-link; null bila belum pernah chat', async () => {
+    h.customerFindMany.mockResolvedValue([
+      { id: 'c1', name: 'Bunda Rina', phone: '6285712345678', updated_at: new Date(), conversations: [{ id: 'conv-9', last_message_at: new Date() }] },
+      { id: 'c2', name: 'Bunda Sari', phone: '6285712345679', updated_at: new Date(), conversations: [] },
+    ]);
+    const res = await queryUnscheduledProspects.run('tenant-a', {});
+    expect(res.rows[0].conversationId).toBe('conv-9');
+    expect(res.rows[1].conversationId).toBeNull();
+  });
+
+  it('limit dibatasi maksimal 20 (token budget)', async () => {
+    await queryUnscheduledProspects.run('tenant-a', { limit: 500 });
+    expect(h.customerFindMany.mock.calls[0][0].take).toBe(100);
   });
 });

@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Copilot: tool `query_unscheduled_prospects` (jawaban "belum terjadwal")
+
+- **Laporan & bukti live:** pertanyaan "siapa saja yang belum terjadwal ya" dijawab template
+  "tidak menemukan data yang cocok" dengan `toolsUsed: []` (audit `AI_COPILOT_CHAT`,
+  admin@kalamomsspa.com). Investigasi: BUKAN bug fix kemarin — router LLM dengan benar menolak
+  mengarang karena 2 tool existing (reservasi & unreplied) tak mencakup "tanpa jadwal".
+- **Fix fondasional (bukan regex/prompt make-up):** tool ketiga deterministik —
+  customer tanpa reservasi confirmed/pending/hold (mencakup prospek murni & batal/selesai lama),
+  tenant-scoped, `is_sandbox_test=false` di DB + saring dummy di aplikasi, nomor HP tidak
+  diteruskan ke LLM, `conversationId` untuk deep-link, `take≤20`. Router otomatis melihatnya
+  via menu tool (tanpa ubah prompt routing).
+- **Test:** 6 adversarial baru (plumbing parafrase, filter DB state-based, saring sandbox/dummy,
+  deep-link null-safe, limit budget) + registry 2→3 tool. Tanpa migrasi DB.
+- **Verifikasi:** `tsc` 0 error; full suite **425 file / 3346 passed / 0 gagal** (23 skipped).
+
 #### 2026-09-27 — Fix pasca-live Fase 1r–6r: Copilot date-anchor/anti-N+1/grounding, RBAC Settings read & Pre-Visit idempotency
 
 - **Laporan:** fitur Fase 1r–6r (commit `755e7063`) "tidak bisa dipakai" saat uji live: Copilot
