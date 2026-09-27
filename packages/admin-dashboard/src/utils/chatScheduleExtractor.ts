@@ -24,7 +24,9 @@ export interface ExtractedScheduleData {
   isExtractedFromChat: boolean;
   confidenceScore: number;
   /** Fase 4A: true HANYA bila ada blok formulir reservasi terisi eksplisit dari pesan
-   *  (template kosong bot → false) dengan jadwal + subjek terisi — gerbang smart-banner. */
+   *  INBOUND customer (template kosong bot & invoice OUTBOUND admin → false) dengan
+   *  jadwal + subjek terisi DAN tanggal booking belum kadaluwarsa (>= awal hari WIB)
+   *  — gerbang smart-banner. */
   hasExplicitReservationForm: boolean;
 }
 
@@ -162,6 +164,69 @@ export function formatIndonesianDate(d?: Date | string | null): string {
 }
 
 /**
+ * Label subjek audiens untuk banner "FORM RESERVASI MASUK" — data-driven dari
+ * kategori layanan (bukan hafalan string): MOMS → Bunda, BABY → anak,
+ * BUNDLE/BOTH → keduanya. Mencegah layanan ibu (mis. Oksitosin Massage)
+ * dilabeli keliru "👶 Anak" saat nama anak memang kosong.
+ */
+export function formatFormBannerAudienceLabel(
+  data: Pick<ExtractedScheduleData, 'treatmentCategory' | 'childName' | 'bundaName'>
+): string {
+  const cat = String(data?.treatmentCategory || '').toUpperCase();
+  const childLabel = data?.childName ? `👶 ${data.childName}` : '👶 Anak';
+  if (cat === 'MOMS') return `👩 ${data?.bundaName || 'Bunda'}`;
+  if (cat === 'BUNDLE' || cat === 'BOTH') return `👩 Bunda & ${childLabel}`;
+  return childLabel;
+}
+
+/**
+ * Fase 4C — Apakah customer SUDAH punya reservasi pada tanggal yang sama dengan jadwal
+ * hasil ekstraksi? Gerbang banner "FORM RESERVASI MASUK" agar tidak menawarkan duplikat
+ * (mis. reservasi tanggal itu sudah `completed`/`confirmed`).
+ *
+ * Treatment-aware: match bila kategori layanan sama ATAU nama treatment beririsan —
+ * customer yang selesai MOMS pagi lalu booking BABY baru di hari yang sama tetap dapat
+ * banner. Status batal/gagal (`cancelled`/`failed`/`no_show`) DIABAIKAN → customer
+ * berhak booking ulang. Bulan/tanggal dibandingkan dalam kalender lokal (selaras
+ * seluruh parsing tanggal frontend).
+ */
+export function hasExistingReservationForSchedule(
+  reservations:
+    | Array<{
+        booking_date?: string | Date | null;
+        status?: string | null;
+        treatment_detail?: string | null;
+        treatment_category?: string | null;
+      }>
+    | null
+    | undefined,
+  bookingDate: Date | string | null | undefined,
+  treatmentName?: string | null,
+  treatmentCategory?: string | null
+): boolean {
+  if (!reservations || reservations.length === 0 || !bookingDate) return false;
+  const target = bookingDate instanceof Date ? bookingDate : new Date(bookingDate);
+  if (isNaN(target.getTime())) return false;
+  const ymd = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const targetYmd = ymd(target);
+  const norm = (s: unknown): string => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const targetTreat = norm(treatmentName);
+  const targetCat = String(treatmentCategory || '').toUpperCase();
+  const SUPPRESS_STATUSES = new Set(['confirmed', 'completed', 'hold', 'pending', 'in_progress']);
+  return reservations.some((r) => {
+    if (!r?.booking_date) return false;
+    if (!SUPPRESS_STATUSES.has(String(r.status || '').toLowerCase())) return false;
+    const d = r.booking_date instanceof Date ? r.booking_date : new Date(r.booking_date);
+    if (isNaN(d.getTime()) || ymd(d) !== targetYmd) return false;
+    const rCat = String(r.treatment_category || '').toUpperCase();
+    if (targetCat && rCat && targetCat === rCat) return true;
+    const rTreat = norm(r.treatment_detail);
+    return Boolean(targetTreat && rTreat && (rTreat.includes(targetTreat) || targetTreat.includes(rTreat)));
+  });
+}
+
+/**
  * Helper untuk parsing nominal harga (e.g. "80.000", "80rb", "80k", "free")
  */
 export function parsePriceText(val: string | null | undefined): number | null {
@@ -242,24 +307,35 @@ function isFilledFormMessage(content: string | undefined): boolean {
   return isRealVal(dateVal) || isRealVal(bundaVal);
 }
 
+/** Blok formulir reservasi terisi beserta arah pesannya (INBOUND/OUTBOUND). */
+interface FilledFormBlock {
+  content: string;
+  direction: string;
+}
+
 /**
  * Prioritas Pesan Formulir Terisi (Reverse Scan, terbaru → terlama):
  * 1. Formulir INBOUND customer yang terisi (diutamakan — kata-kata customer sendiri).
  * 2. Fallback: formulir OUTBOUND terisi (mis. invoice "Berikut reservasi 🐣" yang
  *    sudah dikoreksi admin — data paling lengkap & final).
  * Template kosong bot tidak pernah dipilih. Return null bila tidak ada yang terisi.
+ *
+ * Sumber DATA memakai content apa pun arahnya (fallback OUTBOUND dipertahankan),
+ * namun `direction` dikembalikan agar gerbang `hasExplicitReservationForm` dapat
+ * menolak pesan yang dikirim admin/bot sendiri (bukan form masuk dari customer).
  */
 function pickFilledFormBlock(
   messages: Array<{ content?: string; direction?: string }>
-): string | null {
+): FilledFormBlock | null {
   const list = messages || [];
-  let bestOutbound: string | null = null;
+  let bestOutbound: FilledFormBlock | null = null;
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i];
     const c = m?.content || '';
     if (!isFilledFormMessage(c)) continue;
-    if ((m?.direction || '').toUpperCase() === 'INBOUND') return c;
-    if (!bestOutbound) bestOutbound = c;
+    const dir = (m?.direction || '').toUpperCase();
+    if (dir === 'INBOUND') return { content: c, direction: dir };
+    if (!bestOutbound) bestOutbound = { content: c, direction: dir };
   }
   return bestOutbound;
 }
@@ -392,7 +468,7 @@ export function extractScheduleFromMessages(
   // bila ada; fallback longgar (jam mandiri, tanggal percakapan, payment) tetap
   // memakai fullChatText.
   const explicitFormBlock = pickFilledFormBlock(recentMessages);
-  const formText = explicitFormBlock || fullChatText;
+  const formText = explicitFormBlock?.content || fullChatText;
 
   // Fase 4A — Flag deterministik "form reservasi terisi eksplisit": sinyal untuk
   // smart-banner 1-tap quick booking. Gate KEMBALI memakai pickFilledFormBlock /
@@ -400,9 +476,16 @@ export function extractScheduleFromMessages(
   // → false. Kriteria diambil dari blok form yang sama: (tanggal ATAU jam) terisi DAN
   // (nama bunda ATAU nama anak ATAU treatment) terisi. Tanpa jadwal valid, pre-fill
   // modal jatuh ke default besok 12.00 → banner menyesatkan, jadi ditolak.
+  //
+  // Fase 4C (gerbang arah & kadaluwarsa):
+  //  - Wajib INBOUND: invoice/rekap OUTBOUND admin ("Berikut reservasi 🐣") DILARANG
+  //    mengaktifkan banner — itu pesan keluar, bukan form masuk customer.
+  //  - Tanggal booking hasil parse blok form WAJIB >= awal hari ini (kalender lokal
+  //    browser, selaras parsing tanggal frontend). Tanggal yang sudah lewat → banner
+  //    aktif mustahil (reservasi lama/selesai).
   let hasExplicitReservationForm = false;
   if (explicitFormBlock) {
-    const block = explicitFormBlock;
+    const block = explicitFormBlock.content;
     /** true bila setidaknya satu baris "label[:=] nilai" punya nilai riil (bukan "-"/":"/kosong). */
     const hasFilledLabel = (re: RegExp): boolean => {
       const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
@@ -422,7 +505,35 @@ export function extractScheduleFromMessages(
       hasFilledLabel(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=]/i) ||
       hasFilledLabel(/(?:nama\s*bayi|nama\s*anak)\s*[:=]/i) ||
       hasFilledLabel(/treatment\s*[:=]/i);
-    hasExplicitReservationForm = hasSchedule && hasSubject;
+
+    // Parse tanggal absolut dari baris "Hari dan tanggal" khusus blok form INI
+    // (bukan default besok di akhir fungsi) untuk validasi kadaluwarsa.
+    let formDate: Date | null = null;
+    const formDateLineMatch = block.match(/(?:hari\s*dan\s*tanggal|hari\/tgl|jadwal|tanggal)\s*[:=][ \t]*([^\r\n]+)/i);
+    if (formDateLineMatch?.[1]?.trim()) {
+      const absMatch = formDateLineMatch[1].trim().match(/([0-3]?\d)\s+([a-zA-Z]+)(?:\s+(\d{4}))?/i);
+      if (absMatch) {
+        const day = parseInt(absMatch[1], 10);
+        const month = MONTH_MAP[absMatch[2].toLowerCase()];
+        if (month !== undefined) {
+          const year = absMatch[3] ? parseInt(absMatch[3], 10) : baseDate.getFullYear();
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) formDate = d;
+        }
+      }
+    }
+    // Awal hari ini pada kalender lokal browser. Extractor ini berjalan di frontend
+    // dan seluruh parsing tanggalnya (`new Date(y,m,d)` / formatIndonesianDate) memakai
+    // kalender lokal; untuk pengguna klinik (WIB) ini identik dengan batas hari WIB.
+    // Backend punya definisi kanonis WIB sendiri (active-reservations) — lihat KNOWN_ISSUES.
+    const nowLocal = new Date();
+    const startOfTodayLocal = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
+    // Tanpa tanggal absolut (mis. hanya jam atau tanggal relatif) → tidak bisa
+    // dinyatakan kadaluwarsa; tetap diterima sebagai kandidat banner.
+    const isNotPastDate = !formDate || formDate.getTime() >= startOfTodayLocal.getTime();
+
+    hasExplicitReservationForm =
+      explicitFormBlock.direction === 'INBOUND' && isNotPastDate && hasSchedule && hasSubject;
   }
 
   // =========================================================================

@@ -4,6 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Fix false-positive banner "FORM RESERVASI MASUK" + pelabelan audiens MOMS
+
+- **Latar (bukti akar masalah):** membuka chat Bunda Inggrid (6288000000003) memunculkan
+  banner hijau "FORM RESERVASI MASUK" untuk reservasi 25 Sep 2026 yang sudah `completed`.
+  Tiga causa: (1) `pickFilledFormBlock` fallback ke pesan OUTBOUND → invoice admin
+  ("Berikut reservasi 🐣") dikira form masuk customer; (2) `hasExplicitReservationForm`
+  tak memvalidasi tanggal lampau; (3) supresi banner mengabaikan status `completed`;
+  (4) template banner hardcode `👶 {childName || 'Anak'}` → layanan ibu ter-label "Anak".
+- **Fixed — Extractor (`chatScheduleExtractor.ts`):**
+  - `pickFilledFormBlock` kini mengembalikan `{ content, direction }`. Sumber DATA tetap
+    memakai fallback OUTBOUND (invoice terbaru admin — data paling final), tetapi
+    `hasExplicitReservationForm` HANYA true bila `direction === 'INBOUND'`.
+  - Tambah gerbang kadaluwarsa: tanggal hasil parse blok form wajib `>= awal hari ini`
+    (kalender lokal browser). Form tanpa tanggal absolut (hanya jam) tetap diterima.
+  - Tambah `formatFormBannerAudienceLabel` (data-driven: MOMS → 👩 Bunda, BABY → 👶 anak,
+    BUNDLE/BOTH → keduanya) dan `hasExistingReservationForSchedule` (pure helper, testable).
+- **Fixed — LiveChat (`LiveChatMonitor.tsx`):**
+  - `showFormReservasiBanner` menambah gate `hasExistingReservationForExtractedSchedule`:
+    suppress bila customer sudah punya reservasi same-day berstatus
+    confirmed/completed/hold/pending/in_progress. Treatment-aware — kategori sama ATAU
+    nama treatment beririsan; status cancelled/failed/no_show TIDAK men-suppress.
+  - Baris render banner memakai `formatFormBannerAudienceLabel` → layanan MOMS menampilkan
+    👩 Bunda (eliminasi hardcode 👶 Anak).
+- **Tests:** `tests/unit/chat-schedule-extractor-form-flag.test.ts` diperluas 13 → 30 kasus
+  (gerbang arah OUTBOUND, kadaluwarsa + batas hari ini, multiphrasa label, label audiens,
+  helper supresi duplikat). Tanggal statis → relatif dinamis (anti time-bomb).
+- **Verifikasi:** vitest file 30 passed; 4 suite extractor 33 passed; root `tsc` 0;
+  dashboard `tsc` 0 + `vite build` 0. Full suite 3763 passed (1 flake timeout WAHA
+  webhook, lulus saat dijalankan ulang). Lihat `docs/KNOWN_ISSUES.md` #148.
+
 #### 2026-09-27 — AI Copilot on/off dipindah ke Sidebar (sesuai permintaan)
 
 - **Changed:** tombol toggle AI Copilot DIHAPUS dari header LiveChat dan FAB mengambang;

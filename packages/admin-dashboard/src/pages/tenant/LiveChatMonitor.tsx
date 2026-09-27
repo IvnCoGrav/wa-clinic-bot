@@ -94,7 +94,7 @@ import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
 import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, WilayahReference } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, WilayahReference } from '../../utils/chatScheduleExtractor';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -2947,6 +2947,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   }, [messages, customerDetailData, clinicServices]);
 
+  // Fase 4C — Supresi banner bila customer SUDAH punya reservasi pada tanggal yang
+  // sama dengan jadwal ter-ekstrak. Gate pada state DB (customerDetailData.reservations),
+  // bukan hafalan teks (lihat hasExistingReservationForSchedule). Treatment-aware.
+  const hasExistingReservationForExtractedSchedule = useMemo(
+    () =>
+      hasExistingReservationForSchedule(
+        customerDetailData?.reservations,
+        formBannerExtracted?.bookingDate,
+        formBannerExtracted?.treatmentName,
+        formBannerExtracted?.treatmentCategory
+      ),
+    [
+      customerDetailData?.reservations,
+      formBannerExtracted?.bookingDate,
+      formBannerExtracted?.treatmentName,
+      formBannerExtracted?.treatmentCategory,
+    ]
+  );
+
   // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
   // form BARU (konten beda) otomatis tampil lagi.
   const formBannerKey =
@@ -2957,6 +2976,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const showFormReservasiBanner = Boolean(
     formBannerKey &&
       formBannerKey !== dismissedFormBanner &&
+      !hasExistingReservationForExtractedSchedule &&
       !activeHoldReservation &&
       !activeConfirmedReservation &&
       !activePendingReservation
@@ -4520,7 +4540,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           FORM RESERVASI MASUK
                         </span>
                         <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • 👶 {formBannerExtracted.childName || 'Anak'} • {formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
+                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
                         </span>
                       </div>
                     </div>

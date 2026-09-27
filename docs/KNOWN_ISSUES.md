@@ -5,6 +5,28 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 148. [LiveChat/Reservasi] Catatan fix banner "FORM RESERVASI MASUK" (2026-09-27) - OPEN (sebagian by-design)
+
+- **Konteks:** fix false-positive banner smart-booking + pelabelan audiens MOMS
+  (`chatScheduleExtractor.ts`, `LiveChatMonitor.tsx`). Lihat CHANGELOG 2026-09-27.
+- **Kalender lokal browser vs WIB backend:** gerbang kadaluwarsa tanggal form memakai
+  kalender lokal (selaras seluruh parsing tanggal frontend: `new Date(y,m,d)`,
+  `formatIndonesianDate`). Backend `active-reservations` memakai batas hari WIB kanonis.
+  Untuk pengguna klinik (browser WIB) keduanya identik; browser di zona waktu lain tepat
+  di sekitar tengah malam bisa bergeser 1 hari. Bila perlu determinisme lintas zona,
+  angkat perbandingan ke util WIB bersama (`dateWib`) untuk seluruh extractor.
+- **Supresi duplikat berbasis kategori/treatment:** `hasExistingReservationForSchedule`
+  men-suppress banner bila tanggal sama DAN kategori sama ATAU nama treatment beririsan.
+  Konsekuensi by-design: dua booking sah untuk kategori layanan yang sama pada hari yang
+  sama (mis. 2 sesi BABY berbeda) akan menyembunyikan banner kedua. Trade-off disengaja
+  untuk mencegah banner duplikat palsu; admin tetap bisa booking manual dari kalender.
+- **Kategori MOMS dari substring:** `Oksitosin Massage` polos (tanpa kata "mom"/"ibu")
+  bisa jatuh ke kategori BABY hingga katalog DB menyuplai `category`. Gerbang label
+  mengikuti `treatmentCategory` hasil ekstraksi/katalog - pastikan kategori layanan ibu
+  terisi di DB agar label MOMS akurat.
+
+---
+
 ## 147. [LiveChat/Reservasi] Catatan sisa fix audit Live Chat & Reservasi (2026-09-27) — OPEN (sebagian by-design)
 
 - **Konteks:** fix holistik audit percakapan & reservasi (katalog `cukur`, negosiasi jam
