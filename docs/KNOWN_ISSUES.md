@@ -5,6 +5,30 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 146. [Copilot] Sisa multi-step loop & tool stalled (2026-09-27) — OPEN (sebagian by-design)
+
+- **Konteks:** Fase A (multi-step loop), B1 (`query_stalled_inquiries`), UI-Mobile selesai &
+  ter-deploy (commit `16c1a66c`).
+- **Fase B2 tidak menghasilkan tool baru:** mining 30 audit `AI_COPILOT_CHAT` terakhir hanya
+  menemukan 1 entri `toolsUsed:[]` (pertanyaan "belum terjadwal", sudah ditutup tool prospek).
+  Sesuai aturan plan (bangun hanya bila ada kelas dominan) → berhenti. Jalankan mining ulang
+  setelah trafik bertambah.
+- **`query_stalled_inquiries` recall terbatas pada state sesi:** sinyal minat diambil dari
+  `session_data.inquiryDate/cartItems` + `last_discussed_treatment`. Chat yang menanyakan jadwal
+  tanpa melewati alur booking bot (mis. obrolan bebas) tidak terdeteksi. Ini konsekuensi
+  desain state-based (menolak keyword) — perluasan butuh sinyal state baru, bukan regex.
+- **`session_data` JSON tak bisa diindeks:** filter sinyal dilakukan di aplikasi setelah query
+  `last_message_at` terbatas (`take: 200`). Bila tenant punya >200 percakapan aktif dalam jendela
+  `sinceDays`, sebagian tidak dievaluasi. Naikkan `take` bila perlu (sadari biaya query).
+- **Loop budget = 3 iterasi / 40 baris:** pertanyaan yang butuh >3 tool tidak terjawab penuh
+  (dijawab dengan data sejauh loop). Batas disengaja (biaya/latensi); naikkan konstanta bila
+  terbukti perlu, dengan kesadaran biaya.
+- **Anti-loop berbasis signature `tool:args`:** router yang mengulang tool sama dengan args
+  *sedikit berbeda* (mis. date berubah) tidak terdeteksi sebagai loop — bisa 2 query mirip.
+  Trade-off disengaja (mencegah false-stop); pantau via `llmCalls` di audit bila perlu.
+
+---
+
 ## 145. [Copilot/RBAC] Sisa & keputusan fix pasca-live Fase 1r–6r (2026-09-27) — OPEN (sebagian by-design)
 
 - **Konteks:** fix pasca-live (date anchor, anti-N+1, grounding, RBAC read, pre-visit flag)

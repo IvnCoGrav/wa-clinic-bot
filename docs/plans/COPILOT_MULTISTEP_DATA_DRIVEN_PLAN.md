@@ -1,6 +1,11 @@
 # Plan: Copilot Multi-Step, Tool Berbasis Data & Panel Mobile Collapsible
 
-> Status: PLAN — siap eksekusi setelah disetujui. Bahasa: Indonesia.
+> Status: **SELESAI & TER-DEPLOY LIVE (2026-09-27, commit `16c1a66c`).**
+> Fase A (loop), Fase B1 (`query_stalled_inquiries`), Fase UI-Mobile selesai & live.
+> Fase B2: mining 30 audit → hanya 1 `toolsUsed:[]` (sudah ditutup) → **tidak ada kelas
+> dominan → berhenti di 1 tool** (sesuai aturan plan, tidak spekulatif). Fase C ditunda.
+> Sisa/limitasi tercatat di `docs/KNOWN_ISSUES.md` #146.
+> Bahasa: Indonesia.
 > Latar: audit log live 7 hari (8 chat) membuktikan single-tool-ceiling tercapai —
 > "yang belum terjadwal dan minta besok?" dijawab dengan data orang *yang sudah
 > terjadwal* (`query_reservations_by_filter`, `grounded:true` tapi salah semantik).
