@@ -1,13 +1,15 @@
 import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tools';
+import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
 
 /**
- * copilot.service.ts (Fase 6r) — AI Clinic Copilot in-system.
+ * copilot.service.ts (Fase 6r + fixing plan) — AI Clinic Copilot in-system.
  *
  * Kontrak fondasional (anti-halusinasi):
  * - LLM memilih tool + args (JSON), lalu tool query DB. Jawaban WAJIB grounded pada hasil tool.
  * - Jika tool mengembalikan [] → paksa jawaban "tidak ditemukan" (template), BUKAN mengarang.
  * - Validator pasca-jawaban: nama customer yang disebut di jawaban WAJIB subset nama di hasil tool.
  * - Budget token & cap history.
+ * - Jangkar waktu WIB disuntik ke prompt (date anchor) agar kata relatif ("besok") teresolusi.
  */
 
 export interface CopilotChatParams {
@@ -26,6 +28,34 @@ export interface CopilotChatResult {
 
 const MAX_HISTORY_TURNS = 10;
 
+/**
+ * Bangun prompt router (murni — deterministik, mudah diuji).
+ * Menyuntik jangkar waktu WIB (hari ini + besok) supaya LLM dapat menghitung
+ * tanggal relatif ke format YYYY-MM-DD.
+ */
+export function buildRouterPrompt(
+  message: string,
+  toolMenu: string,
+  now: Date = new Date()
+): string {
+  const todayStr = formatWibDateYYYYMMDD(now);
+  const tomorrowStr = formatWibDateYYYYMMDD(wibDayBoundsUtc(1, now).start);
+  const todayName = getWibDayName(now);
+  const tomorrowName = getWibDayName(wibDayBoundsUtc(1, now).start);
+
+  return `Kamu adalah asisten internal klinik. Pilih SATU tool untuk menjawab pertanyaan admin.
+Konteks Waktu Server (WIB):
+- Hari ini: ${todayName}, ${todayStr}
+- Besok: ${tomorrowName}, ${tomorrowStr}
+Gunakan konteks ini untuk menghitung tanggal format YYYY-MM-DD bila admin menyebut kata relatif (mis. "hari ini", "besok", "lusa", "hari minggu depan").
+Tool tersedia:
+${toolMenu}
+
+Jawab HANYA dengan JSON: {"tool": "<nama>", "args": { ... }}.
+Jika tidak ada tool yang cocok, jawab {"tool": null, "args": {}}.
+Pertanyaan admin: "${message}"`;
+}
+
 export class CopilotService {
   public async chat(params: CopilotChatParams): Promise<CopilotChatResult> {
     const { tenantId, message } = params;
@@ -38,17 +68,11 @@ export class CopilotService {
 
       const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
 
-      // Langkah 1: LLM memilih tool + args.
+      // Langkah 1: LLM memilih tool + args (prompt murni + jangkar WIB).
       const toolMenu = COPILOT_TOOLS.map(
         (t) => `- ${t.name}: ${t.description}\n  args: ${JSON.stringify(t.parameters)}`
       ).join('\n');
-      const routerPrompt = `Kamu adalah asisten internal klinik. Pilih SATU tool untuk menjawab pertanyaan admin.
-Tool tersedia:
-${toolMenu}
-
-Jawab HANYA dengan JSON: {"tool": "<nama>", "args": { ... }}.
-Jika tidak ada tool yang cocok, jawab {"tool": null, "args": {}}.
-Pertanyaan admin: "${message}"`;
+      const routerPrompt = buildRouterPrompt(message, toolMenu);
 
       const routerResp = await callChatCompletionsWithFallback({
         model: cfg.model,
@@ -106,7 +130,8 @@ Pertanyaan admin: "${message}"`;
 
       // Langkah 3: LLM merangkum HASIL TOOL saja.
       const summarizePrompt = `Berikut data riil dari database (JSON). Rangkum dalam bahasa Indonesia singkat untuk admin.
-DILARANG menambah nama, nomor, atau jadwal yang TIDAK ada di data. Bila perlu, sertakan tautan Live Chat bila ada conversationId.
+DILARANG menambah nama, nomor, atau jadwal yang TIDAK ada di data.
+Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan ke Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
 Data:
 ${JSON.stringify(toolResult.rows).slice(0, 6000)}`;
 
@@ -144,22 +169,32 @@ ${JSON.stringify(toolResult.rows).slice(0, 6000)}`;
   }
 
   /**
-   * Validator grounding deterministik: setiap nama customer yang muncul di jawaban
+   * Validator grounding deterministik: nama customer yang muncul di jawaban
    * harus berasal dari hasil tool (anti-halusinasi nama).
-   * Heuristik aman: cek apakah token nama "Bunda X" di jawaban ada di set nama tool.
+   *
+   * Normalisasi: buang honorifik (Bunda/Ibu/Mbak/Bu/Kak/…) lalu cocokkan
+   * per-token (≥3 huruf) — toleran beda honorifik & kapitalisasi.
+   * Catatan: `chat()` sudah short-circuit saat rows kosong, jadi cabang
+   * `rows.length === 0` di sini tidak pernah tercapai dari jalur utama.
    */
   public validateGrounding(answer: string, rows: any[]): boolean {
-    const names = new Set<string>();
+    if (!rows || rows.length === 0) return true;
+
+    const knownTokens = new Set<string>();
     for (const r of rows) {
-      const n = (r.customerName || '').toString().trim().toLowerCase();
-      if (n) names.add(n);
+      const raw = (r.customerName || '').toString().toLowerCase();
+      const cleaned = raw.replace(/\b(bunda|ibu|mbak|bu|kak|ny|tante)\b/gi, ' ');
+      const parts = cleaned.match(/[a-z]{3,}/g) || [];
+      for (const p of parts) knownTokens.add(p);
     }
-    // Deteksi pola "Bunda <Nama>" atau "Ibu <Nama>" di jawaban.
-    const matches = answer.match(/(?:Bunda|Ibu|Mbak|Bu)\s+([A-Z][a-zA-Z]+)/g) || [];
+    if (knownTokens.size === 0) return true;
+
+    // Sebutan pasien di jawaban, mis. "Bunda Risma", "Ibu Dara".
+    const matches = answer.match(/(?:Bunda|Ibu|Mbak|Bu|Kak)\s+([A-Za-z]+)/gi) || [];
     for (const m of matches) {
-      const token = m.trim().toLowerCase();
-      if (!names.has(token)) {
-        return false; // nama tak ada di data → halusinasi
+      const namePart = m.replace(/^(?:Bunda|Ibu|Mbak|Bu|Kak)\s+/i, '').trim().toLowerCase();
+      if (namePart.length >= 3 && !knownTokens.has(namePart)) {
+        return false; // nama yang disebut tak ada satupun token-nya di data tool
       }
     }
     return true;

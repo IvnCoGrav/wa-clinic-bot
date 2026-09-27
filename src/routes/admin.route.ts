@@ -192,11 +192,29 @@ export async function adminRoutes(fastify: FastifyInstance) {
       ];
 
       if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
-        console.warn(`[RBAC GUARD] Blocked unauthorized access attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
-        return reply.status(403).send({
-          error: 'Forbidden: Insufficient role privileges for this administrative resource.',
-          code: 'FORBIDDEN_STAFF_ROLE',
-        });
+        // Read-only monitoring: staf operasional (ADMIN_CS/SPV_CS) boleh MEMBACA
+        // endpoint Settings tertentu (GET) — WRITE tetap super-admin. Rahasia sudah
+        // ter-masking di layer endpoint (mis. telegramBotTokenConfigured, bukan token).
+        // Rasional nyata (bukti log live): LiveChatMonitor memanggil GET /api/admin/settings
+        // (status globalBotActive) saat dibuka CS → sebelumnya 403. Halaman /admin/settings
+        // SENDIRI tetap TIDAK dibuka untuk CS (boundary keamanan: WAHA QR/session, AI model,
+        // token CAPI) — dijaga di frontend rolePermissions (role-permissions.test.ts).
+        // Daftar final (Task 0.2, enumerasi Settings.tsx + DailyReportPanel.tsx + LiveChatMonitor).
+        const settingsReadAllowlist = [
+          '/api/admin/settings',
+          '/api/admin/settings/notifications',
+          '/api/admin/settings/notifications/logs',
+          '/api/admin/settings/daily-report',
+        ];
+        const isSettingsRead =
+          request.method.toUpperCase() === 'GET' && settingsReadAllowlist.includes(urlPath);
+        if (!isSettingsRead) {
+          console.warn(`[RBAC GUARD] Blocked unauthorized access attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
+          return reply.status(403).send({
+            error: 'Forbidden: Insufficient role privileges for this administrative resource.',
+            code: 'FORBIDDEN_STAFF_ROLE',
+          });
+        }
       }
 
       // Prohibit custom roles modification (creating, updating, deleting custom roles)

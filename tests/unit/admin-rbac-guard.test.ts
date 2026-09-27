@@ -214,4 +214,86 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.json().code).toBe('FORBIDDEN_STAFF_MANAGEMENT');
     });
   });
+
+  // Fase 3 (fixing plan): staf operasional boleh MEMBACA Settings (monitoring),
+  // tapi WRITE tetap super-admin. Regression lock untuk allowlist Task 0.2.
+  describe('3. Settings read-only exemption (ADMIN_CS)', () => {
+    beforeEach(() => {
+      // Simulasikan kondisi produksi: ADMIN_CS "unmanaged" (tanpa baris scope) →
+      // scope guard mengembalikan [] → allowed (bukan fail-closed DB-error).
+      // Reset mock agar tidak terpolusi test sebelumnya yang menyetel findMany.
+      (prisma as any).roleApiScope = { findMany: vi.fn().mockResolvedValue([]) };
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+        staff: {
+          id: 'staff-cs',
+          tenant_id: 'default-tenant',
+          name: 'CS Rina',
+          phone: '628123456780',
+          role: 'ADMIN_CS',
+          active: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+          telegram_chat_id: null,
+        },
+        session: {
+          id: 'sess-cs',
+          staff_id: 'staff-cs',
+          token: 'valid_cs_token',
+          expires_at: new Date(Date.now() + 86400000),
+          created_at: new Date(),
+        },
+      } as any);
+    });
+
+    it('ADMIN_CS boleh GET /api/admin/settings (endpoint yang terbukti 403 di live)', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/settings',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(res.statusCode).not.toBe(403);
+    });
+
+    it('ADMIN_CS boleh GET endpoint read Settings (notifikasi/logs/daily-report)', async () => {
+      for (const url of [
+        '/api/admin/settings/notifications',
+        '/api/admin/settings/notifications/logs',
+        '/api/admin/settings/daily-report',
+      ]) {
+        const res = await app.inject({
+          method: 'GET',
+          url,
+          headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+        });
+        expect(res.statusCode, `GET ${url}`).not.toBe(403);
+      }
+    });
+
+    it('ADMIN_CS TETAP diblokir untuk WRITE Settings (PUT/POST)', async () => {
+      const putRes = await app.inject({
+        method: 'PUT',
+        url: '/api/admin/settings/notifications',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+        payload: { nightlyReportEnabled: true },
+      });
+      expect(putRes.statusCode).toBe(403);
+      expect(putRes.json().code).toBe('FORBIDDEN_STAFF_ROLE');
+
+      const postRes = await app.inject({
+        method: 'POST',
+        url: '/api/admin/settings/notifications/test',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(postRes.statusCode).toBe(403);
+    });
+
+    it('ADMIN_CS tetap diblokir endpoint Settings SENSITIF di luar allowlist (ai-models)', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/ai-models',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
 });

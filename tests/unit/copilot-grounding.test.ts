@@ -79,11 +79,19 @@ describe('Copilot grounding (Fase 6r)', () => {
   });
 
   it('tool query_unreplied_chats: hanya INBOUND terakhir (state-based)', async () => {
-    h.conversationFindMany.mockResolvedValue([{ id: 'conv1', customer: { id: 'c1', name: 'Bunda Rina' } }]);
-    h.messageFindFirst.mockResolvedValue({ direction: 'INBOUND', content: 'halo', created_at: new Date(Date.now() - 600000), sender_type: 'CUSTOMER' });
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv1',
+        customer: { id: 'c1', name: 'Bunda Rina' },
+        // Anti-N+1: relasi messages (take 1) dikembalikan langsung oleh findMany.
+        messages: [{ direction: 'INBOUND', content: 'halo', created_at: new Date(Date.now() - 600000) }],
+      },
+    ]);
     const res = await queryUnrepliedChats.run('tenant-a', {});
     expect(res.rows.length).toBe(1);
     expect(res.rows[0].customerName).toBe('Bunda Rina');
+    // Bukti anti-N+1: tidak ada pemanggilan message.findFirst per-percakapan.
+    expect(h.messageFindFirst).not.toHaveBeenCalled();
   });
 
   it('getCopilotTool hanya mengembalikan tool terdaftar (whitelist)', () => {

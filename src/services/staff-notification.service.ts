@@ -388,8 +388,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
 👉 [Buka Tugas di Portal Terapis](${portalUrl})`;
 
       // Distribusi Telegram pribadi (G2=B). Web Push in-system tetap dikirim sebagai kanal cadangan.
+      let pushSent = 0;
       try {
-        await webPushService.sendPushToStaff(staff.id, tenantId, {
+        const pushRes = await webPushService.sendPushToStaff(staff.id, tenantId, {
           title: '📋 Ringkasan Pasien Sebelum Kunjungan',
           body: `${cust?.name || 'Bunda'} — ${timeStr} WIB. Cek detail di portal.`,
           url: '/admin/staff/today',
@@ -398,11 +399,12 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
           badge: '/admin/favicon.ico',
           data: { reservationId: reservation.id, staffId: staff.id, url: '/admin/staff/today' },
         });
+        pushSent = pushRes?.sent ?? 0;
       } catch (pushErr: any) {
         console.warn(`[StaffNotificationService] Web Push pre-visit brief error:`, pushErr.message);
       }
 
-      let sent = false;
+      let telegramSent = false;
       if (staff.telegram_chat_id) {
         try {
           const res = await telegramService.sendMessage({
@@ -410,18 +412,32 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
             text: messageText,
             parseMode: 'Markdown',
           });
-          sent = res.ok;
+          telegramSent = res.ok;
         } catch (tgErr: any) {
           console.warn(`[StaffNotificationService] Telegram pre-visit brief error:`, tgErr.message);
         }
       }
 
-      // Tandai terkirim (idempoten) walau Telegram tak terhubung — kartu tetap ada di portal.
-      await prisma.reservation
-        .update({ where: { id: reservationId }, data: { pre_visit_brief_sent_at: new Date() } })
-        .catch(() => {});
+      // Idempotensi HANYA bila minimal satu kanal benar-benar mengirim. Bila tidak ada
+      // kanal aktif (staf belum pairing Telegram & belum subscribe Web Push), JANGAN
+      // tandai terkirim — biarkan sweep retry saat kanal tersedia (mis. staf pairing
+      // Telegram beberapa menit kemudian). Konsekuensi: sweep berulang tiap interval
+      // selama kanal belum aktif (disengaja, dicatat di KNOWN_ISSUES).
+      const deliverySuccess = telegramSent || pushSent > 0;
+      if (deliverySuccess) {
+        await prisma.reservation
+          .update({ where: { id: reservationId }, data: { pre_visit_brief_sent_at: new Date() } })
+          .catch(() => {});
+      } else {
+        console.log(
+          `[Pre-Visit Brief] Skip marking sent_at for reservation ${reservationId}: no active delivery channel (telegram/push)`
+        );
+      }
 
-      return { sent, reason: sent ? undefined : 'Telegram belum terhubung (kartu tersedia di portal)' };
+      return {
+        sent: deliverySuccess,
+        reason: deliverySuccess ? undefined : 'Belum ada kanal aktif (Telegram/Web Push) — brief menunggu kanal tersedia',
+      };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to send pre-visit brief for ${reservationId}:`, err.message);
       return { sent: false, reason: err.message };

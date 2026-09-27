@@ -1,14 +1,17 @@
 import { prisma } from '../../db/client';
 import { Direction } from '@prisma/client';
+import { wibDayBoundsUtc, startOfTodayWib } from '../../utils/wib-time';
 
 /**
- * copilot-tools.ts (Fase 6r) — Tools database Copilot Admin (read-only, tenant-scoped).
+ * copilot-tools.ts (Fase 6r + fixing plan) — Tools database Copilot Admin
+ * (read-only, tenant-scoped).
  *
  * Kontrak fondasional:
  * - Grounding 100% pada hasil query DB. Tool mengembalikan array; LLM DILARANG mengarang.
  * - Window token: `take` dibatasi (default 20) agar tidak meledakkan context window.
  * - Definisi deterministik (state DB), BUKAN pencocokan kata kunci ("harga"/"penawaran").
  * - Semua query tenant-scoped (anti IDOR lintas-tenant).
+ * - Default tanpa tanggal → hanya jadwal AKTIF MENDATANG (anti past-trap).
  */
 
 export interface CopilotToolResult {
@@ -28,13 +31,28 @@ export interface CopilotTool {
 
 const MAX_ROWS = 20;
 
-function dayBoundsUtc(dateStr: string): { start: Date; end: Date } {
-  // dateStr "YYYY-MM-DD" → batas hari WIB (UTC+7).
-  const [y, m, d] = dateStr.split('-').map((n) => parseInt(n, 10));
-  const startWibAsUtc = Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
-  const endWibAsUtc = Date.UTC(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
-  const offset = 7 * 60 * 60 * 1000;
-  return { start: new Date(startWibAsUtc - offset), end: new Date(endWibAsUtc - offset) };
+/** Validasi string tanggal "YYYY-MM-DD" (bukan kalimat bebas dari LLM). */
+export function isValidIsoDate(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return false;
+  const d = new Date(`${value.trim()}T00:00:00Z`);
+  return !Number.isNaN(d.getTime());
+}
+
+/**
+ * Resolusi filter `booking_date` untuk query reservasi (murni, mudah diuji).
+ * - tanggal valid → rentang hari WIB tsb
+ * - tanpa tanggal / tanggal tidak valid → hanya jadwal aktif mendatang (anti past-trap)
+ */
+export function resolveReservationDateFilter(
+  date: unknown,
+  now: Date = new Date()
+): { gte: Date; lte?: Date } {
+  if (isValidIsoDate(date)) {
+    const { start, end } = wibDayBoundsUtc(0, new Date(`${String(date).trim()}T12:00:00Z`));
+    return { gte: start, lte: end };
+  }
+  return { gte: startOfTodayWib(now) };
 }
 
 /** Tool 1: jadwal reservasi berdasarkan filter (tanggal/status/terapis). */
@@ -44,16 +62,14 @@ export const queryReservationsByFilter: CopilotTool = {
     'Mengambil daftar reservasi berdasarkan filter tanggal (YYYY-MM-DD, WIB), status, atau nama terapis. ' +
     'Gunakan untuk pertanyaan "jadwal besok", "siapa terapis X hari ini", dsb.',
   parameters: {
-    date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB). Kosong = semua tanggal.' },
+    date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB). Kosong = jadwal aktif mendatang.' },
     status: { type: 'string', description: 'confirmed | pending | hold | completed | cancelled. Kosong = semua.' },
     staffName: { type: 'string', description: 'Nama terapis (sebagian). Kosong = semua.' },
   },
   run: async (tenantId, args) => {
     const where: any = { tenant_id: tenantId };
-    if (args.date) {
-      const { start, end } = dayBoundsUtc(String(args.date));
-      where.booking_date = { gte: start, lte: end };
-    }
+    // Default (tanpa tanggal valid) = jadwal aktif mendatang, bukan 20 baris tertua.
+    where.booking_date = resolveReservationDateFilter(args.date);
     if (args.status) where.status = String(args.status);
     if (args.staffName) {
       where.assigned_staff = { name: { contains: String(args.staffName), mode: 'insensitive' } };
@@ -61,7 +77,18 @@ export const queryReservationsByFilter: CopilotTool = {
     const rows = await prisma.reservation.findMany({
       where,
       include: {
-        customer: { select: { id: true, name: true } },
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            // conversationId untuk deep-link Live Chat (1 query, tanpa N+1).
+            conversations: {
+              select: { id: true },
+              orderBy: { last_message_at: 'desc' },
+              take: 1,
+            },
+          },
+        },
         assigned_staff: { select: { name: true } },
       },
       orderBy: { booking_date: 'asc' },
@@ -75,6 +102,7 @@ export const queryReservationsByFilter: CopilotTool = {
         id: r.id,
         customerId: r.customer?.id || null,
         customerName: r.customer?.name || 'Bunda',
+        conversationId: r.customer?.conversations?.[0]?.id || null,
         treatment: r.treatment_detail || r.treatment_category,
         bookingDate: r.booking_date,
         status: r.status,
@@ -95,21 +123,25 @@ export const queryUnrepliedChats: CopilotTool = {
   },
   run: async (tenantId, args) => {
     const take = Math.min(Math.max(parseInt(String(args.limit || MAX_ROWS), 10) || MAX_ROWS, 1), MAX_ROWS);
+    // Anti-N+1: satu query dengan relasi messages terbatas (take 1) — bukan loop findFirst.
     const convs = await prisma.conversation.findMany({
       where: { tenant_id: tenantId },
-      include: { customer: { select: { id: true, name: true } } },
+      include: {
+        customer: { select: { id: true, name: true } },
+        messages: {
+          where: { sender_type: { not: 'INTERNAL_NOTE' } },
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          select: { direction: true, content: true, created_at: true },
+        },
+      },
       orderBy: { last_message_at: 'desc' },
-      take: 200,
+      take: 50,
     });
     const rows: any[] = [];
     for (const c of convs) {
       if (rows.length >= take) break;
-      const lastReal = await prisma.message
-        .findFirst({
-          where: { conversation_id: c.id, tenant_id: tenantId, sender_type: { not: 'INTERNAL_NOTE' } },
-          orderBy: { created_at: 'desc' },
-        })
-        .catch(() => null);
+      const lastReal = (c as any).messages?.[0];
       if (lastReal && (lastReal.direction as any) === Direction.INBOUND) {
         rows.push({
           conversationId: c.id,

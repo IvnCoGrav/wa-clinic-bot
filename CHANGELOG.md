@@ -4,6 +4,52 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Fix pasca-live Fase 1r–6r: Copilot date-anchor/anti-N+1/grounding, RBAC Settings read & Pre-Visit idempotency
+
+- **Laporan:** fitur Fase 1r–6r (commit `755e7063`) "tidak bisa dipakai" saat uji live: Copilot
+  menjawab dengan 20 reservasi kuno (date blindness), respons lambat (N+1), dan staf `ADMIN_CS`
+  kena 403 saat membuka Live Chat; brief bidan bisa hangus tanpa terkirim.
+- **Root cause (terverifikasi kode + log live, bukan menelan klaim):**
+  - `copilot.service.ts:45-51` prompt router TANPA jangkar tanggal → "besok" tak teresolusi.
+  - `copilot-tools.ts:51-69` tanpa `args.date` tak ada filter `booking_date` + `orderBy asc take 20`
+    = 20 reservasi **tertua** (past-trap).
+  - `copilot-tools.ts:98-112` loop `findFirst` per percakapan (N+1, hingga 200 query).
+  - `copilot-tools.ts:74-82` tak mengembalikan `conversationId` → deep-link mustahil.
+  - `copilot.service.ts:158-164` grounding bandingkan string honorifik utuh → "Bu Dewi" vs
+    "Bunda Dewi" = false-negative.
+  - Log live: `[RBAC GUARD] Blocked ... 'ADMIN_CS' on GET /api/admin/settings` — pemicu nyata
+    `LiveChatMonitor.tsx:497` (`loadBotCutoffStatus`), bukan halaman Settings.
+  - `staff-notification.service.ts:419-422` menandai `pre_visit_brief_sent_at` walau Telegram
+    tak terhubung.
+- **Fix fondasional (gerbang kode, bukan tambal prompt):**
+  - **`src/utils/wib-time.ts` (baru)** — util WIB terpusat (`getWibNow`, `wibDayBoundsUtc`,
+    `startOfTodayWib`, `formatWibDateYYYYMMDD`, `getWibDayName`, `formatWibTime`); kode baru
+    memakainya (duplikasi WIB lama dimigrasi bertahap — dicatat KNOWN_ISSUES).
+  - **Copilot:** `buildRouterPrompt(message, toolMenu, now)` murni menyuntik jangkar WIB
+    (hari ini/besok + nama hari + ISO); `resolveReservationDateFilter()` murni — default tanpa
+    tanggal = **jadwal aktif mendatang** (anti past-trap), tanggal invalid → fallback future-only
+    (tak crash); `query_reservations_by_filter` sertakan `conversationId` via
+    `customer.conversations take 1` (1 query, tanpa N+1 baru); `query_unreplied_chats` pakai relasi
+    `messages take 1` (single round-trip, `take:200→50`); summarizer diarahkan format markdown
+    `[Buka Chat](/admin/live-chat?conversationId=ID)`; `validateGrounding` normalisasi token
+    (buang honorifik, cocok ≥3 huruf).
+  - **RBAC (backend-only):** `admin.route.ts` allowlist GET read-only
+    (`/api/admin/settings`, `.../notifications`, `.../notifications/logs`, `.../daily-report`);
+    WRITE tetap super-admin; endpoint sensitif (ai-models, backup, dll) tetap 403. **Frontend
+    `rolePermissions` SENGAJA tidak diubah** — `/admin/settings` tetap terkunci untuk CS karena
+    halaman memuat WAHA QR/session, AI model, token CAPI (boundary keamanan, dijaga
+    `role-permissions.test.ts:36`). Pemicu 403 CS (LiveChatMonitor) tercakup oleh exemption
+    backend. Tidak menyentuh tabel `role_api_scopes` (seed parsial akan men-flip role ke managed
+    → default-deny regresi; dicatat KNOWN_ISSUES).
+  - **Pre-Visit Brief:** `pre_visit_brief_sent_at` di-set HANYA bila minimal 1 kanal benar-benar
+    mengirim (`telegramRes.ok || pushRes.sent > 0`); tanpa kanal aktif → tidak di-set (sweep retry).
+- **Test:** `tests/unit/copilot-fixing.test.ts` (20, adversarial: anchor WIB, default future-only,
+  5 parafrase→tool, grounding honorifik, empty-result, whitelist, deep-link, anti-N+1) +
+  update `copilot-grounding.test.ts` (relasi messages) + `pre-visit-brief.test.ts` (no-channel
+  tidak set flag; push-only set flag) + `admin-rbac-guard.test.ts` (ADMIN_CS GET read 200, WRITE 403).
+- **Verifikasi:** root `tsc` 0 error; dashboard `tsc` + `vite build` 0; full suite
+  **425 file / 3340 passed / 0 gagal** (23 skipped). Tanpa migrasi DB.
+
 #### 2026-09-27 — Fase 6r: AI Clinic Copilot (2 tool, panel kontekstual, grounding kode)
 
 - **Konteks:** eksekusi plan Fase 6r (keputusan G3=B: panel kontekstual di modul LiveChat, bukan

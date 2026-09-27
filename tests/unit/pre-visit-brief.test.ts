@@ -100,6 +100,35 @@ describe('StaffNotificationService.sendPreVisitBrief (Fase 5r)', () => {
     expect(h.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('TANPA kanal aktif (telegram & push kosong) → flag sent_at TIDAK di-set (anti hangus)', async () => {
+    // Bidan belum pairing Telegram & belum subscribe Web Push.
+    h.reservationFindUnique.mockResolvedValue(
+      baseReservation({ assigned_staff: { id: 'staff-1', name: 'Bidan Yusi', telegram_chat_id: null } })
+    );
+    h.sendPushToStaff.mockResolvedValue({ sent: 0, failed: 0 });
+
+    const res = await svc.sendPreVisitBrief('res-1', 'tenant-a');
+
+    expect(res.sent).toBe(false);
+    expect(h.sendMessage).not.toHaveBeenCalled();
+    // KUNCI: pre_visit_brief_sent_at TIDAK boleh di-update → sweep bisa retry.
+    expect(h.reservationUpdate).not.toHaveBeenCalled();
+  });
+
+  it('Web Push sukses (tanpa Telegram) → flag sent_at di-set (kanal cadangan)', async () => {
+    h.reservationFindUnique.mockResolvedValue(
+      baseReservation({ assigned_staff: { id: 'staff-1', name: 'Bidan Yusi', telegram_chat_id: null } })
+    );
+    h.sendPushToStaff.mockResolvedValue({ sent: 1, failed: 0 });
+
+    const res = await svc.sendPreVisitBrief('res-1', 'tenant-a');
+
+    expect(res.sent).toBe(true);
+    expect(h.reservationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pre_visit_brief_sent_at: expect.any(Date) }) })
+    );
+  });
+
   it('tanpa bidan ditugaskan → tidak kirim', async () => {
     h.reservationFindUnique.mockResolvedValue(baseReservation({ assigned_staff: null }));
     const res = await svc.sendPreVisitBrief('res-1', 'tenant-a');

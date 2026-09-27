@@ -5,6 +5,33 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 145. [Copilot/RBAC] Sisa & keputusan fix pasca-live Fase 1r–6r (2026-09-27) — OPEN (sebagian by-design)
+
+- **Konteks:** fix pasca-live (date anchor, anti-N+1, grounding, RBAC read, pre-visit flag)
+  SELESAI & ter-deploy. Catatan sengaja ditunda / keputusan yang diketahui:
+- **RBAC `role_api_scopes` tidak di-seed untuk ADMIN_CS/SPV_CS:** seeding parsial akan men-flip
+  role dari "unmanaged" (legacy allow) ke "managed" (default-deny) → memblokir SELURUH endpoint
+  operasional lain mereka. Saat ini enforcement read-only Settings memakai allowlist kode di
+  `admin.route.ts`. Bila kelak peran dijadikan managed penuh, wajib seed SEMUA prefix yang
+  dibutuhkan (bukan hanya settings) dalam satu migrasi + uji regresi menyeluruh.
+- **`/admin/settings` tetap terkunci untuk ADMIN_CS/SPV_CS (frontend):** boundary keamanan
+  disengaja (halaman memuat WAHA QR/session, AI model, token CAPI). Monitoring notifikasi bagi CS
+  tersedia lewat endpoint read (backend allowlist) + panel LiveChat; bukan lewat halaman Settings.
+- **Duplikasi logika WIB belum seluruhnya dimigrasi:** util `src/utils/wib-time.ts` dibuat untuk
+  kode baru; call-site lama (`reservation-core.service.ts`, `customers.subroute.ts`,
+  `indonesian-date-parser.ts`, `nightly-watchdog.service.ts`) masih memuat salinan inline.
+  Migrasi bertahap disarankan (blast radius rendah, tapi menyentuh jalur booking — jangan sapu rata).
+- **Copilot `query_unreplied_chats` `take: 200→50`:** trade-off recall vs latensi. Bila tenant
+  punya >50 percakapan aktif, percakapan belum-dibalas di luar 50 terbaru tidak terlihat tool.
+  Naikkan bila perlu, sadari biaya query.
+- **Pre-Visit Brief tanpa kanal aktif:** flag tidak di-set → sweep retry tiap interval (10 mnt)
+  selama kanal belum ada (Telegram pairing / Web Push subscribe). Disengaja (agar brief tidak
+  hangus); berdampak log berulang. Bila berisik, tambah kolom `pre_visit_brief_attempts`.
+- **N+1 fix bergantung pada Prisma relation-load:** relasi `conversations`/`messages` di-`include`
+  → 1 query per relasi (Prisma batch), bukan N+1. Bila kelak dipecah manual, pastikan tetap batch.
+
+---
+
 ## 144. [Notif/Copilot/LiveChat] Catatan sisa Fase 1r–6r (2026-09-27) — OPEN (sebagian by-design)
 
 - **Konteks:** implementasi bertahap `docs/plans/REVISI_NOTIFIKASI_COPILOT_LIVECHAT_PLAN.md`
