@@ -109,6 +109,21 @@ describe('ReservationSeriesService', () => {
     expect(updated).toBeDefined();
   });
 
+  it('5. Fase 3.3 — sesi bentrok staf → series ditolak atomik (STAFF_COLLISION)', async () => {
+    // existing 09:00 WIB (02:00Z) 60m untuk staff_1; sesi baru 09:30 → overlap.
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
+      { id: 'ex', booking_date: new Date('2026-09-02T02:00:00Z'), duration_minutes: 60, assigned_staff_id: 'staff_1' },
+    ] as any);
+    await expect(
+      reservationSeriesService.createSeries({
+        customerId: 'cust_1', treatmentName: 'Prenatal Massage (Pijat Hamil)', totalSessions: 1,
+        assignedStaffId: 'staff_1',
+        sessions: [{ sessionNumber: 1, bookingDate: new Date('2026-09-02T02:30:00Z'), assignedStaffId: 'staff_1' }],
+      } as any, 'default-tenant')
+    ).rejects.toMatchObject({ code: 'STAFF_COLLISION' });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('4. getSeries and getCustomerSeries return computed completed_sessions', async () => {
     vi.mocked(prisma.reservationSeries.findFirst).mockResolvedValueOnce({
       id: 's1', customer_id: 'cust_1', tenant_id: 'default-tenant', treatment_name: 'Pijat', total_sessions: 3, status: 'active',

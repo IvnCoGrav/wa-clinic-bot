@@ -584,6 +584,42 @@ export class CronService {
   }
 
   /**
+   * Fase 4.2 — Auto-expire reservasi `hold` yang tanggal kunjungannya sudah
+   * lewat (status menggantung selamanya bila tak ada worker). Tenant-scoped,
+   * best-effort: DB offline → silent.
+   */
+  public async runExpiredHoldSweep(): Promise<void> {
+    try {
+      const { getAllTenantIds } = await import('./media.service');
+      const tenantIds = await getAllTenantIds();
+      let expired = 0;
+      for (const tenantId of tenantIds) {
+        try {
+          // Batas awal hari ini WIB (hold dengan booking_date sebelum ini = usang).
+          const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+          const startOfTodayWibUtc = new Date(
+            Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), 0, 0, 0, 0) - 7 * 60 * 60 * 1000
+          );
+          const res = await prisma.reservation.updateMany({
+            where: {
+              tenant_id: tenantId,
+              status: 'hold',
+              booking_date: { lt: startOfTodayWibUtc },
+            },
+            data: { status: 'cancelled' },
+          });
+          expired += res?.count || 0;
+        } catch (e: any) {
+          console.warn(`[Cron Service] Expired hold sweep tenant ${tenantId} skipped:`, e?.message);
+        }
+      }
+      if (expired > 0) console.log(`[Cron Service] Hold usang di-expire: ${expired} reservasi.`);
+    } catch (err) {
+      console.error('[Cron Service] Error running expired hold sweep:', (err as Error).message);
+    }
+  }
+
+  /**
    * Buffer penugasan terapis: kirim notifikasi yang sudah melewati jendela 5 menit.
    * Persisten via kolom assignment_pending_at/assignment_notified_at.
    */

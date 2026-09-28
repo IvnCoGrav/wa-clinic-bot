@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Loader, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, X, Send, Loader, ShieldCheck, MessageCircle } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useCopilot } from '../../contexts/CopilotContext';
@@ -24,18 +25,76 @@ interface CopilotMessage {
 }
 
 const QUICK_PROMPTS = [
-  'Chat siapa yang belum dibalas?',
   'Jadwal besok siapa saja?',
-  'Jadwal hari ini status pending?',
+  'Chat siapa yang belum dibalas?',
+  'Riwayat Bunda Devia sebelumnya apa?',
+  'SOP jeda pijat setelah vaksin?',
 ];
+
+/** Markdown inline minimal: tautan `[teks](url)` dan tebal `**teks**`. */
+const INLINE_RE = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*/g;
+
+/**
+ * Renderer pesan Copilot: mengubah markdown tautan internal `/admin/live-chat`
+ * menjadi tombol yang membuka ruang obrolan, plus penebalan `**teks**`.
+ * Hanya tautan internal Live Chat yang diaktifkan; URL eksternal ditolak (anti open-redirect).
+ */
+const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void }> = ({ content, onNavigate }) => {
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  INLINE_RE.lastIndex = 0;
+  while ((m = INLINE_RE.exec(content)) !== null) {
+    if (m.index > last) nodes.push(content.slice(last, m.index));
+    if (m[1] !== undefined) {
+      const label = m[1];
+      const url = m[2];
+      if (url.startsWith('/admin/live-chat')) {
+        nodes.push(
+          <button
+            key={`link-${m.index}`}
+            type="button"
+            onClick={() => onNavigate(url)}
+            className="inline-flex items-center gap-1 align-middle mx-0.5 px-1.5 py-0.5 rounded-md bg-[#008069] hover:bg-[#00a884] text-white text-[10px] font-semibold active:scale-[0.97] transition-colors"
+          >
+            <MessageCircle size={10} /> {label}
+          </button>
+        );
+      } else {
+        nodes.push(
+          <a key={`ext-${m.index}`} href={url} target="_blank" rel="noopener noreferrer" className="underline">
+            {label}
+          </a>
+        );
+      }
+    } else {
+      nodes.push(<strong key={`b-${m.index}`}>{m[3]}</strong>);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < content.length) nodes.push(content.slice(last));
+  return <>{nodes}</>;
+};
 
 export const AdminCopilotPanel: React.FC = () => {
   const { toast } = useUiFeedback();
   const { open, setOpen } = useCopilot();
+  const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Deep-link Live Chat: sinkronkan selectedId (pola sama dengan useLiveChatNotification).
+  const openLiveChat = (url: string) => {
+    try {
+      const convId = new URLSearchParams(url.split('?')[1] || '').get('conversationId');
+      if (convId) sessionStorage.setItem('liveChat:selectedId', convId);
+    } catch {
+      /* abaikan URL malformed */
+    }
+    navigate(url);
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -124,7 +183,7 @@ export const AdminCopilotPanel: React.FC = () => {
                       : 'bg-[#f8fafc] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-tl-none'
                   }`}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? <RichMessage content={m.content} onNavigate={openLiveChat} /> : m.content}
                   {m.role === 'assistant' && m.toolsUsed && m.toolsUsed.length > 0 && (
                     <div className="mt-1.5 pt-1.5 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center gap-1 text-[9px] text-[#667781] dark:text-[#8696a0]">
                       <ShieldCheck size={10} className={m.grounded ? 'text-emerald-600' : 'text-amber-600'} />

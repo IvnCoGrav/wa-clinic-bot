@@ -65,7 +65,6 @@ export class ReservationConflictError extends Error {
 }
 
 const ACTIVE_STATUSES = ['confirmed', 'hold'];
-const STAFF_BUFFER_MINUTES = 20;
 const WIB_OFFSET_MS = 7 * 3600000;
 
 function getWibCalendarDayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
@@ -156,7 +155,7 @@ async function computeIsRepeatOrder(params: {
   }
 }
 
-async function findOverlappingStaffReservations(params: {
+export async function findOverlappingStaffReservations(params: {
   tenantId: string;
   staffId: string;
   bookingDate: Date;
@@ -164,8 +163,11 @@ async function findOverlappingStaffReservations(params: {
   excludeId?: string;
 }): Promise<any[]> {
   const { tenantId, staffId, bookingDate, durationMinutes } = params;
-  const windowStart = new Date(bookingDate.getTime() - (durationMinutes + STAFF_BUFFER_MINUTES) * 60000);
-  const windowEnd = new Date(bookingDate.getTime() + (durationMinutes + STAFF_BUFFER_MINUTES) * 60000);
+  // Kontrak durasi TUNGGAL (audit Fase 3.1): `duration_minutes` = TOTAL menit
+  // terjadwal SUDAH termasuk 1x buffer transisi 20 menit. Backend DILARANG
+  // menambah buffer lagi (sebelumnya 60 → 80 frontend → 100 backend = 409 palsu).
+  const windowStart = new Date(bookingDate.getTime() - durationMinutes * 60000);
+  const windowEnd = new Date(bookingDate.getTime() + durationMinutes * 60000);
   let candidates: any[] = [];
   try {
     candidates = await prisma.reservation.findMany({
@@ -184,8 +186,9 @@ async function findOverlappingStaffReservations(params: {
     if (!r.booking_date) return false;
     if (params.excludeId && r.id === params.excludeId) return false;
     const existingStart = new Date(r.booking_date);
-    const existingDur = effectiveDuration((r as any).duration_minutes, 60) + STAFF_BUFFER_MINUTES;
-    return intervalsOverlap(bookingDate, durationMinutes + STAFF_BUFFER_MINUTES, existingStart, existingDur);
+    // Kontrak tunggal: durasi tersimpan SUDAH termasuk buffer — bandingkan apa adanya.
+    const existingDur = effectiveDuration((r as any).duration_minutes, 60);
+    return intervalsOverlap(bookingDate, durationMinutes, existingStart, existingDur);
   });
 }
 
@@ -231,9 +234,19 @@ export class ReservationCoreService {
       }
     }
     const validCategory = ((treatmentCategory as TreatmentCategory) || TreatmentCategory.BABY) as TreatmentCategory;
+    // Fase 4.1: tandai booking di luar jam operasional (jam FLEKSIBEL — tidak
+    // ditolak, hanya diberi ekspektasi + badge dashboard agar bidan menyanggupi).
+    let outsideHoursTag = '';
+    if (bookingDate && !isNaN(bookingDate.getTime())) {
+      try {
+        const { getOperationalHours, isOutsideOperationalHours } = await import('../config/operational-hours');
+        const hours = await getOperationalHours(tenantId);
+        if (isOutsideOperationalHours(bookingDate, hours)) outsideHoursTag = '[OUTSIDE_HOURS] Perlu konfirmasi bidan (di luar jam operasional)\n';
+      } catch {}
+    }
     const effectiveRawText =
-      rawText ||
-      `[RESERVATION:${source}] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0, 10) : '-'} | ${customerName || '-'}`;
+      `${outsideHoursTag}${rawText ||
+      `[RESERVATION:${source}] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0, 10) : '-'} | ${customerName || '-'}`}`;
 
     // Stage 7 (R6): idempotency — bila request_id sudah pernah tersimpan untuk
     // tenant ini, kembalikan baris yang ada (retry webhook / concurrency aman).
@@ -347,7 +360,7 @@ export class ReservationCoreService {
            const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
            await reservationLifecycleService.onReservationCreated({
              customerId, reservationId: updated.id, tenantId, chatId, babies,
-             customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
+             customerName, kecamatan, kota, kelurahan: kelurahan || undefined, address,
            });
 
            // Follow-up otomatis untuk reservasi yang dikonfirmasi
@@ -451,7 +464,7 @@ export class ReservationCoreService {
     const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
     await reservationLifecycleService.onReservationCreated({
       customerId, reservationId: reservation.id, tenantId, chatId, babies,
-      customerName, kecamatan, kota, kelurahan: kelurahan || address, address,
+      customerName, kecamatan, kota, kelurahan: kelurahan || undefined, address,
     });
 
     // Follow-up otomatis untuk reservasi confirmed (efek samping terstandarisasi).

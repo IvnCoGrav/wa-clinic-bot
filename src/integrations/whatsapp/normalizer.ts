@@ -30,6 +30,7 @@ export function normalizeWabaPayload(
         if (msg.referral) {
           referral = {
             ctwaClid: msg.referral.ctwa_clid,
+            sourceId: msg.referral.source_id,
             sourceUrl: msg.referral.source_url,
             sourceType: msg.referral.source_type,
             headline: msg.referral.headline,

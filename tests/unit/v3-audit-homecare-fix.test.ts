@@ -69,6 +69,24 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
     expect(resolveTreatmentCategory([KIDS_CERIA])).toBe('KIDS');
   });
 
+  // Audit Fase 1.2 (bug `if (opts.isMulti) return 'BOTH'`): pesanan multi-item
+  // TANPA entitas Ibu DILARANG dicatat BOTH — harus mengikuti kategori katalog.
+  const BABY_CUKUR = treatmentCatalogService.getServiceById('baby-cukur')?.name || 'Kala Baby – Cukur Rambut';
+  const BABY_MANDI = treatmentCatalogService.getServiceById('baby-mandi')?.name || 'Kala Baby – Memandikan Bayi';
+
+  it('multi layanan BAYI (2 item) → BABY, BUKAN BOTH', () => {
+    expect(resolveTreatmentCategory([BABY_CERIA, BABY_CUKUR], { isMulti: true, hasChildren: true })).toBe('BABY');
+    expect(resolveTreatmentCategory([BABY_CERIA, BABY_MANDI], { isMulti: true, hasChildren: true })).toBe('BABY');
+  });
+
+  it('multi-anak (2 bayi, 1 layanan) → BABY, BUKAN BOTH', () => {
+    expect(resolveTreatmentCategory([BABY_CERIA], { isMulti: true, hasChildren: true })).toBe('BABY');
+  });
+
+  it('multi-anak KIDS (2 anak) → KIDS, BUKAN BOTH', () => {
+    expect(resolveTreatmentCategory([KIDS_CERIA], { isMulti: true, hasChildren: true })).toBe('KIDS');
+  });
+
   it('multi Mom + Baby → BOTH', async () => {
     const res = await executeSaveReservation({
       customerId: 'cust-1',

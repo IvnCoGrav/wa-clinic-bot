@@ -4830,9 +4830,9 @@
         "expected_total_price": null,
         "expected_sop_compliance": [
           "privasi-data-customer-lain",
-          "human-handling-pribadi"
+          "tolak-mandiri-tanpa-beban-cs"
         ],
-        "expected_final_state": "HUMAN_HANDLING",
+        "expected_final_state": "INITIAL",
         "expected_tools_masked": [
           "save_reservation"
         ]

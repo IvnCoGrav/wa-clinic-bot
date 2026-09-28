@@ -98,6 +98,23 @@ export class ReservationLifecycleService {
                 }
               }
 
+              // Fallback fondasional: Jika geocoding Maps tidak presisi, gunakan kamus Gazetteer internal
+              if (!resolvedLat || !resolvedLng) {
+                const { getGazetteerCoordinates } = await import('../utils/gazetteer');
+                const gzSearchQueries = [fullAddressStr, customerName, kecamatan, kota].filter(Boolean);
+                for (const q of gzSearchQueries) {
+                  const gz = getGazetteerCoordinates(String(q));
+                  if (gz && gz.lat && gz.lng) {
+                    resolvedLat = gz.lat;
+                    resolvedLng = gz.lng;
+                    resolvedKel = resolvedKel || gz.kelurahan;
+                    resolvedKec = resolvedKec || gz.kecamatan;
+                    resolvedKota = resolvedKota || gz.kota;
+                    break;
+                  }
+                }
+              }
+
               if (resolvedLat && resolvedLng) {
                 const { deliveryService } = await import('./delivery.service');
                 const delivery = await deliveryService.calculateDelivery({ lat: resolvedLat, lng: resolvedLng }, undefined, tenantId);

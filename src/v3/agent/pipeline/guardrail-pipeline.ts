@@ -796,7 +796,12 @@ export class GuardrailPipeline {
         (catalogTool as any)?.args?.targetPrice != null ||
         (catalogTool as any)?.args?.inquirePrice
       );
-      if (catalogTool && hasExplicitCatalogIntent && (catalogTool as any).result?.treatments?.[0]) {
+      // CASE-015: bila tool katalog BENAR-BENAR dipanggil turn ini dan
+      // menghasilkan layanan, hasilnya kontekstual apa pun eksplisit-tidaknya
+      // parameter router (mis. selapan/cukur bocor dari Call-1). Jangan jatuh
+      // ke kaleng buntu hanya karena specificTreatmentName kosong.
+      const hasCatalogResult = Boolean((catalogTool as any)?.result?.treatments?.[0]);
+      if (catalogTool && (hasExplicitCatalogIntent || hasCatalogResult) && (catalogTool as any).result?.treatments?.[0]) {
         const top: any = (catalogTool as any).result.treatments[0];
         const isMoms = top.category === 'MOMS';
         const { isFunnelCommitted } = await import('./phase-resolver');

@@ -643,10 +643,20 @@ export class LiveChatService {
     // di atas → jadi di sini cukup pastikan tipe pengirim adalah ADMIN.
     if (logged?.sender_type === 'ADMIN') {
       try {
-        await prisma.conversation.update({
+        const cleared = await prisma.conversation.update({
           where: { id: conversationId },
           data: { is_frustrated: false, frustrated_at: null, frustrated_reason: null },
         });
+        // Multi-viewer sync: siarkan pemadaman ke SEMUA dashboard admin
+        // (bukan hanya tab pengirim) via SSE conversation.updated.
+        try {
+          const { getLiveChatHub } = await import('./live-chat-hub.service');
+          await getLiveChatHub().publish({
+            type: 'conversation.updated',
+            tenantId,
+            payload: buildConversationUpdatedPayload(cleared),
+          });
+        } catch (_) {}
       } catch (_) {}
     }
 

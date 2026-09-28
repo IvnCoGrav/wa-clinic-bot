@@ -224,6 +224,95 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       expect(userData.fbc).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
       expect(userData.fbp).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
     });
+
+    it('should include raw (unhashed) ctwa_clid in user_data when AdClick is a CTWA touchpoint', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      const rawClid = 'AfjcTHNKDctClrnb-m9NkJrBspOBQ-z1mmhIDkvokHSICaCZmqmDoz93';
+      const res = await capiService.sendCapiEvent({
+        eventName: 'Contact',
+        customer: { id: 'cust_ctwa', phone: '6289667285350', name: 'Bunda CTWA' },
+        adClick: { trackingCode: 'ctwa_abc', ctwa_clid: rawClid, utmSource: 'instagram' },
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      expect(res.success).toBe(true);
+      const userData = executeSpy.mock.calls[0][1].data[0].user_data;
+      // WAJIB mentah: CTWA CLID bukan PII sehingga tidak melalui ParamBuilder/hashing.
+      expect(userData.ctwa_clid).toBe(rawClid);
+    });
+
+    it('should NOT set ctwa_clid when AdClick has no CTWA clid (organic / web CTA)', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      await capiService.sendCapiEvent({
+        eventName: 'Contact',
+        customer: { id: 'cust_web', phone: '628123456790', name: 'Bunda Web' },
+        adClick: { trackingCode: 'ck', utmSource: 'ig' },
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const userData = executeSpy.mock.calls[0][1].data[0].user_data;
+      expect(userData.ctwa_clid).toBeUndefined();
+    });
+
+    it('should use Meta Business Messaging envelope (action_source + top-level messaging_channel + WABA id) when tenant has WABA config', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        id: DEFAULT_TENANT_ID,
+        waba_business_account_id: 'WABA_ACCT_123',
+      } as any);
+
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      const rawClid = 'ARM_a8rmlFeiCktEJQ-QTwRiyYHAFDLMNDBH0CD3qpjd0HR4irJ6LEkR7JwFF4XvnO2E4N';
+      await capiService.sendCapiEvent({
+        eventName: 'Purchase',
+        customer: { id: 'cust_ctwa_bm', phone: '6289667285350', name: 'Bunda BM' },
+        adClick: { trackingCode: 'ctwa_bm', ctwa_clid: rawClid },
+        value: 100000,
+        currency: 'IDR',
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const event = executeSpy.mock.calls[0][1].data[0];
+      expect(event.action_source).toBe('business_messaging');
+      expect(event.messaging_channel).toBe('whatsapp');
+      expect(event.user_data.ctwa_clid).toBe(rawClid);
+      expect(event.user_data.whatsapp_business_account_id).toBe('WABA_ACCT_123');
+      // messaging_channel HARUS top-level, bukan di custom_data
+      expect(event.custom_data.messaging_channel).toBeUndefined();
+    });
+
+    it('should fail-open to action_source "chat" when ctwa_clid exists but tenant has no WABA id', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockRejectedValue(new Error('Database offline'));
+
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      await capiService.sendCapiEvent({
+        eventName: 'Contact',
+        customer: { id: 'cust_ctwa_noid', phone: '6289667285351', name: 'Bunda NoId' },
+        adClick: { trackingCode: 'ctwa_noid', ctwa_clid: 'RAW_CLID_NO_WABA' },
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const event = executeSpy.mock.calls[0][1].data[0];
+      expect(event.action_source).toBe('chat');
+      expect(event.messaging_channel).toBeUndefined();
+      expect(event.user_data.ctwa_clid).toBe('RAW_CLID_NO_WABA');
+      expect(event.user_data.whatsapp_business_account_id).toBeUndefined();
+    });
   });
 
   describe('6. Landing Page View Tracking & External Tracker Beacon', () => {

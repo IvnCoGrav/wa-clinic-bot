@@ -36,13 +36,20 @@ describe('tool-masker — Rule 5 Active User Commitment Gate', () => {
       'Hari ini aja',
       'Selasa bu, tgl 18 agt',
       'kayaknya sabtu deh',
-      'minggu pagi bisa gak',
     ];
     for (const p of phrases) {
       const session = baseSession(); // bookingCommitConfirmed belum diset
       expect(isAllowed(p, session), `"${p}" harus DIMASKING`).toBe(false);
       expect(reason(p, session)).toContain('BOOKING_COMMIT_PENDING');
     }
+  });
+
+  it('PERTANYAAN ketersediaan tanpa "?" → DIMASKING dengan alasan AVAILABILITY_INQUIRY', () => {
+    // Fase 2.2: "minggu pagi bisa gak" adalah tanya slot (partikel "gak"),
+    // bukan preferensi hari tentatif — tetap DIMASKING, alasan lebih presisi.
+    const session = baseSession();
+    expect(isAllowed('minggu pagi bisa gak', session)).toBe(false);
+    expect(reason('minggu pagi bisa gak', session)).toContain('AVAILABILITY_INQUIRY');
   });
 
   it('KOMITMEN eksplisit (sticky flag) → save_reservation DIIZINKAN saat hari sudah disebut', () => {

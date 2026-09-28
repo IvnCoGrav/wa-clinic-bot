@@ -20,6 +20,27 @@ import type { ServiceAudience } from '../../services/treatment-catalog.service';
 // (utils murni, tanpa I/O → anti-cycle). Tanpa daftar kata baru.
 import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText } from '../../utils/date-confirmation';
 
+/**
+ * Closed-class ucapan sapaan/ack murni (setingkat bahasa fungsional). Dipakai
+ * gerbang struktural: pesan asisten DILARANG diperlakukan sebagai "tawaran
+ * layanan" bila belum ada pesan USER substantif sebelumnya (sapaan pembuka bot
+ * yang menyebut 1 layanan ≠ penawaran yang diiyakan oleh salam "Iya mbak").
+ */
+const BARE_GREETING_OR_ACK_TOKENS = new Set([
+  'halo', 'hallo', 'hai', 'hi', 'helo', 'pagi', 'siang', 'sore', 'malam',
+  'assalamualaikum', 'salam', 'permisi', 'tes', 'test', 'p', 'oke', 'ok',
+  'okay', 'okey', 'siap', 'sip', 'iya', 'iyaa', 'ya', 'yah', 'makasih',
+  'terima', 'kasih', 'thanks', 'thank', 'thx',
+  // Vokatif/honorifik sapaan (tanpa muatan substantif): "Iya mbak", "Oke bu".
+  'mbak', 'mba', 'kak', 'ka', 'bu', 'pak', 'mas', 'bunda', 'bund', 'sis', 'bro',
+]);
+
+function isBareGreetingOrAck(text: string): boolean {
+  const tokens = (text || '').toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+  if (tokens.length === 0 || tokens.length > 4) return false;
+  return tokens.every((t) => BARE_GREETING_OR_ACK_TOKENS.has(t));
+}
+
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
 // Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
 export type {
@@ -359,12 +380,24 @@ export class CartManager {
       const raw = (lastUserMsg?.content || '').toLowerCase();
       if (!raw || raw.includes('?')) return false;
       const toks = raw.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
-      if (toks.length === 0 || toks.length > 4) return false;
-      const AFFIRM = new Set(['iya', 'iyaa', 'ya', 'betul', 'benar', 'ambil', 'mau', 'boleh', 'setuju', 'lanjut', 'deal', 'oke', 'ok', 'sip']);
-      const BLOCK = new Set(['apa', 'berapa', 'kapan', 'bagaimana', 'gimana', 'kenapa', 'dimana', 'mana', 'apakah', 'atau', 'tidak', 'nggak', 'ngga', 'gak', 'jangan', 'batal', 'nanti', 'tanya', 'belum', 'kak', 'mbak', 'bunda']);
-      if (!toks.some((t) => AFFIRM.has(t))) return false;
-      return !toks.some((t) => BLOCK.has(t));
+      if (toks.length === 0 || toks.length > 6) return false;
+      const AFFIRM = new Set(['iya', 'iyaa', 'ya', 'betul', 'benar', 'ambil', 'mau', 'boleh', 'setuju', 'lanjut', 'deal', 'oke', 'ok', 'sip', 'ganti', 'jadi']);
+      const BLOCK = new Set(['apa', 'berapa', 'kapan', 'bagaimana', 'gimana', 'kenapa', 'dimana', 'mana', 'apakah', 'atau', 'tidak', 'nggak', 'ngga', 'gak', 'jangan', 'batal', 'nanti', 'tanya', 'belum']);
+      if (toks.some((t) => BLOCK.has(t))) return false;
+      // Afirmasi telanjang ("boleh/iya") ATAU kelas deiksis ("yg td aja",
+      // "sesuai rekomendasi") via SATU sumber kebenaran date-confirmation.
+      // Menutup deadlock anaphora: set AFFIRM lama tidak mengenali rujukan.
+      return toks.some((t) => AFFIRM.has(t)) || hasBookingCommitSignal(raw);
     })();
+    // Fase 2 (bug 156i): apakah percakapan sudah melewati tahap sapaan — ada
+    // pesan USER substantif (bukan sekadar sapaan/ack/pertanyaan durasi).
+    // Sapaan pembuka bot yang menyebut 1 layanan DILARANG dianggap "tawaran
+    // tunggal yang diiyakan" selama belum ada pesan user substantif.
+    const hasSubstantiveUserTurn = history.some((h) => {
+      if ((h?.role || '').toLowerCase() !== 'user') return false;
+      const c = (h?.content || '');
+      return !isBareGreetingOrAck(c) && !CartManager.isDurationOnlyQuestion(c);
+    });
     // Diproses KRONOLOGIS (tertua → terbaru) agar PRIMARY terbaru menimpa yang lama secara natural (domain rule)
     // ST6 (RC-05): bila verdict komitmen TERAKHIR = EXPLORING dan TIDAK ADA
     // pesan USER mana pun yang membawa sinyal komitmen/hari, seluruh giliran
@@ -538,7 +571,9 @@ export class CartManager {
           const isExact = fullSet.has(s.name.toLowerCase()) || cleanSet.has(s.name.toLowerCase());
           // Plan regresi Fase 3: tawaran asisten yang ditolak gerbang tetap
           // tercatat sebagai bahan konsultasi (bukan transaksi).
-          if (!(lastUserBareAffirm && singleExactOffer && isExact)) { discussed.add(s.name); continue; }
+          // Fase 2 (bug 156i): pengecualian afirmasi-tunggal HANYA sah setelah
+          // ada pesan user substantif — sapaan pembuka bot bukan penawaran.
+          if (!(lastUserBareAffirm && singleExactOffer && isExact && hasSubstantiveUserTurn)) { discussed.add(s.name); continue; }
         }
         // Sesi 834128: tawaran multi-opsi asisten (≥2 PRIMARY berbeda dalam
         // satu pesan) hanya boleh masuk keranjang bila user pernah merujuk

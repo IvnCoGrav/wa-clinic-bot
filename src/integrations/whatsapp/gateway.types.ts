@@ -1,5 +1,19 @@
 export type WhatsAppProvider = 'WAHA' | 'WABA';
 
+/**
+ * Kontrak bersama metadata atribusi iklan (CTWA Meta) lintas WAHA & WABA.
+ * Satu sumber kebenaran agar extractor WAHA dan normalizer WABA tidak menyimpang.
+ */
+export interface AdReferral {
+  ctwaClid?: string;
+  sourceId?: string;
+  sourceType?: string;
+  sourceApp?: string;
+  sourceUrl?: string;
+  headline?: string;
+  body?: string;
+}
+
 export interface SendResult {
   success: boolean;
   messageId?: string;
@@ -80,12 +94,6 @@ export interface NormalizedInboundMessage {
   mimeType?: string;
   contactName?: string;
   phoneNumberId?: string;
-  referral?: {
-    ctwaClid?: string;
-    sourceUrl?: string;
-    sourceType?: string;
-    headline?: string;
-    body?: string;
-  };
+  referral?: AdReferral;
   rawPayload: unknown;
 }

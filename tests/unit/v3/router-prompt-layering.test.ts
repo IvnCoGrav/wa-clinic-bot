@@ -11,7 +11,7 @@ describe('Router Prompt Layering (Fase 3)', () => {
   it('default: jahitan antar-layer utuh (byte-identical assembly)', () => {
     const p = composeRouterPrompt(session, false);
     expect(p).toContain('TUGAS UTAMAMU (CALL 1 - TOOL ROUTING & EVALUASI INTENT):\n1. Evaluasi');
-    expect(p).toContain('manusia.\n2. Jika pesan customer TIDAK memerlukan');
+    expect(p).toContain('DILARANG mengerjakan permintaan tersebut.\n2. Jika pesan customer TIDAK memerlukan');
     expect(p).toContain('diinginkan.\n\n');
     expect(p).toContain('KONTRAK BUNDLING');
   });

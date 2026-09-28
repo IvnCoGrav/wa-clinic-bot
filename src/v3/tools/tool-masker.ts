@@ -19,6 +19,7 @@ import {
   isSameDayRequestText,
   hasBookingCommitSignal,
   isConsultativeUserText,
+  isAvailabilityInquiryText,
 } from '../../utils/date-confirmation';
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazetteer';
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
@@ -356,12 +357,21 @@ export function evaluateToolMasking(
   const hasCommitment = session.bookingCommitConfirmed === true
     || hasBookingCommitSignal(cleanIncomingText);
 
+  // Fase 2.2/2.3: pertanyaan ketersediaan slot TANPA '?' bukan komitmen final.
+  const availabilityInquiry = isAvailabilityInquiryText(cleanIncomingText);
+
   if (!hasTreatment) {
     isSaveReservationAllowed = false;
     reason = 'TREATMENT_EMPTY: Layanan/keranjang belum dipilih';
   } else if (!hasLocation) {
     isSaveReservationAllowed = false;
     reason = 'LOCATION_EMPTY: Lokasi/domisili customer belum diketahui';
+  } else if (availabilityInquiry && !session.bookingCommitConfirmed) {
+    // Customer menanyakan ketersediaan slot ("sabtu jam 10 kosong gak") tanpa
+    // komitmen lengket lintas-turn → DILARANG buka save_reservation.
+    isSaveReservationAllowed = false;
+    reason = 'AVAILABILITY_INQUIRY: Customer menanyakan ketersediaan slot, belum menyetujui booking final';
+    if (containsAnyTimeWord) suspectOverRestrictive = true;
   } else if (!dateVerdict.confirmed) {
     isSaveReservationAllowed = false;
     reason = `DATE_NOT_CONFIRMED: ${dateVerdict.rejectionReason || 'Hari/tanggal belum disepakati'}`;

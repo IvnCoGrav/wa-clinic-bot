@@ -64,6 +64,7 @@ import {
   Video,
   Lock,
   Copy,
+  BellOff,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -1778,6 +1779,27 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   };
 
+  const handleDismissFrustration = async (chat: LiveChatItem) => {
+    setContextMenu(null);
+    try {
+      await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/dismiss-frustration`, {
+        method: 'PATCH',
+      });
+      setChats((prev) => {
+        const updated = prev.map((c) =>
+          c.conversationId === chat.conversationId
+            ? { ...c, isFrustrated: false, frustratedAt: null, frustratedReason: null }
+            : c
+        );
+        chatsRef.current = updated;
+        return updated;
+      });
+      toast('Peringatan SLA dipadamkan.', 'success');
+    } catch (err: any) {
+      toast(`Gagal memadamkan peringatan SLA: ${err.message}`, 'error');
+    }
+  };
+
   const handleMarkAllAsRead = async () => {
     const confirmed = await confirm({
       title: 'Tandai Semua Telah Dibaca',
@@ -2004,6 +2026,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     unreadCount: nextUnread,
                     isAwaitingReply: isAdminOutbound ? false : (isCurrentOpen && isMsgInbound),
                     isManualUnread: isAdminOutbound ? false : c.isManualUnread,
+                    // Pulse alert SLA: balasan admin (dari web mana pun) memadamkan badge seketika.
+                    isFrustrated: isAdminOutbound ? false : c.isFrustrated,
+                    frustratedAt: isAdminOutbound ? null : c.frustratedAt,
+                    frustratedReason: isAdminOutbound ? null : c.frustratedReason,
                   }
             );
             const sorted = sortChats(updated);
@@ -2031,6 +2057,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   pinnedAt: payload.pinnedAt ?? c.pinnedAt,
                   unreadCount: payload.unreadCount !== undefined ? payload.unreadCount : c.unreadCount,
                   isManualUnread: payload.isManualUnread !== undefined ? payload.isManualUnread : c.isManualUnread,
+                  // Pulse alert SLA: satu bentuk payload standar — selalu ikut terpetakan.
+                  isFrustrated: payload.isFrustrated !== undefined ? !!payload.isFrustrated : c.isFrustrated,
+                  frustratedAt: payload.isFrustrated !== undefined ? (payload.frustratedAt ?? null) : c.frustratedAt,
+                  frustratedReason: payload.isFrustrated !== undefined ? (payload.frustratedReason ?? null) : c.frustratedReason,
                 }
               : c
           );
@@ -3822,7 +3852,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       }}
                       className={`bg-white dark:bg-[#111b21] rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
                         chat.isFrustrated
-                          ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100/70 dark:hover:bg-rose-950/40 animate-pulse'
+                          ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/30'
                           : isSelected
                           ? `border-[#008069] dark:border-[#00a884] bg-[#e8f5f2]/80 dark:bg-[#00a884]/15 ${
                               (chat as any).hasActiveHold
@@ -3867,8 +3897,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
                             <div className="flex flex-wrap items-center gap-1">
                               {chat.isFrustrated && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-600 text-white ring-1 ring-rose-300 dark:ring-rose-400/60 shadow-xs">
-                                  🚨 Butuh Respon Segera
+                                <span
+                                  title="Butuh Respon Segera (Menunggu balasan > 60 menit)"
+                                  aria-label="Butuh respon segera, menunggu balasan lebih dari 60 menit"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 ring-1 ring-rose-300 dark:ring-rose-500/50 shadow-2xs shrink-0 cursor-help"
+                                >
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+                                  </span>
+                                  <AlertTriangle size={11} className="text-rose-600 dark:text-rose-400 shrink-0" />
                                 </span>
                               )}
                               {(chat.customerLabels || []).map((lbl) => (
@@ -5844,6 +5882,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               </button>
             </div>
 
+            {contextMenu.chat.isFrustrated && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => handleDismissFrustration(contextMenu.chat)}
+                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-rose-400 cursor-pointer"
+                >
+                  <BellOff size={16} className="text-rose-600 dark:text-rose-400" />
+                  <span>Padamkan Peringatan SLA</span>
+                </button>
+              </div>
+            )}
+
             {/* System Labels Section */}
             <div className="pt-2 pb-1 border-t border-[#f0f2f5] space-y-1.5">
               <div className="flex items-center justify-between px-1 text-[11px] font-bold text-[#667781]">
@@ -5966,6 +6017,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 )}
               </button>
             </div>
+            {contextMenu.chat.isFrustrated && (
+              <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => handleDismissFrustration(contextMenu.chat)}
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-rose-400"
+                >
+                  <BellOff size={14} className="text-rose-600 dark:text-rose-400" />
+                  <span>Padamkan Peringatan SLA</span>
+                </button>
+              </div>
+            )}
 
             {/* System Labels Section (Desktop) */}
             <div className="py-2 px-3 space-y-1.5">

@@ -3,6 +3,209 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 160. [LiveChat & Sandbox] Blinking UI, SSE Mode Mismatch Thrashing & Tab Desync (2026-09-28) - OPEN (Plan Ready)
+
+- **Konteks:** Ditemukan keluhan UI/UX LiveChat sering berkedip (*blinking/flicker*) saat berada di filter Sandbox, serta beberapa bug desinkronisasi obrolan.
+- **Akar Masalah:**
+  1. **SSE Cross-Mode Thrashing (`LiveChatMonitor.tsx:2010-2046`):** Filter mode Sandbox hanya memuat chat sandbox (`chatsRef.current`). Ketika ada pesan/status update real masuk dari pasien WA klinik, SSE membroadcast event tanpa dicek kesesuaian modenya. Handler mengecek `!existing` dan selalu memanggil `loadChats(true)`. Setiap detik request dibatalkan & direload berulang-ulang kali.
+  2. **Flash Spinner / Canvas Wiping (`LiveChatMonitor.tsx:949, 1202, 4745`):** Pemanggilan `setMessages([])` dan `setIsThreadLoading(true)` saat SSE reconnect atau pergantian percakapan mencopot seluruh bubble chat dan menggantikannya dengan loader spinner putih sebelum merender ulang.
+  3. **Ghost Chat Leakage (`LiveChatMonitor.tsx:1135-1138`):** `currentActive` chat pasien real dipaksa masuk ke `finalData` saat beralih ke filter Sandbox. Di sidebar di-filter keluar oleh `filteredChats`, namun di panel obrolan kanan tetap menampilkan chat pasien asli.
+  4. **Pencarian In-Chat Double X & Manual Deep Search (`LiveChatMonitor.tsx:4620, 4707, 4734`):** Tombol 'X' terdapat di input dan banner mengambang; pencarian ke riwayat lama menuntut klik tombol manual alih-alih auto deep search.
+  5. **AiSandbox Burst Timer Overhead (`AiSandbox.tsx:462-468`):** `burstIntervalRef` 100ms memicu 10x re-render per detik pada simulator.
+- **Status:** Investigasi tuntas. Dokumen rencana perbaikan fondasional telah disusun di `implementation_plan.md` siap dieksekusi setelah persetujuan user.
+
+---
+
+## 159. [Atribusi Iklan CTWA] Ekstraksi & atribusi iklan WAHA langsung (Issue #119) (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** Iklan Click-to-WhatsApp (CTWA) langsung ke nomor WAHA sebelumnya TIDAK diatribusikan. Akar: `webhook.route.ts` memanggil `matchAdClickAndFireContact` tanpa `referral`, sedangkan jalur WABA sudah mengirimkannya. Metadata iklan (`externalAdReply.ctwaClid/sourceId/sourceApp/sourceUrl`) diabaikan → traffic ditandai `organic`. Perbaikan fondasional: extractor deterministik + wiring + pengkayaan DB + `ctwa_clid` di CAPI.
+- **159a — Seam extractor (RESOLVED):** modul baru `src/integrations/whatsapp/waha-ctwa-referral.ts` (pure, fail-open, tanpa regex bisnis). Kontrak `AdReferral` diunifikasi di `gateway.types.ts` (dipakai `NormalizedInboundMessage.referral` & `MatchAdClickParams.referral`). Test: `tests/unit/waha-ctwa-referral.test.ts` (7, termasuk varian Noweb/Baileys/GOWS, snake_case, clid numerik/blank). `ctwaClid` WAJIB string opaque (angka/blank dianggap payload rusak → `undefined`).
+- **159b — Pengkayaan AdClick (RESOLVED):** `ad-attribution.service.ts` kini mengisi `utmSource = sourceApp || 'meta'`, `utmMedium = 'ctwa'`, `utmCampaign = sourceId || 'ctwa_direct'`, `landingUrl = sourceUrl`. **Headline/body TIDAK masuk `utm*`** (copy marketing tidak stabil untuk join/dedup) — hanya tersimpan via audit `payloadRaw`.
+- **159c — `user_data.ctwa_clid` (RESOLVED):** `capi.service.ts` mengirim `ctwa_clid` MENTAH (bukan hashed, bukan PII) di `user_data` bila AdClick CTWA. Test di `tracking.test.ts` (raw + negatif organik).
+- **159d — Business Messaging envelope (RESOLVED terhadap blueprint Meta):** konversi dari iklan Click-to-WhatsApp kini memakai envelope resmi Meta Business Messaging CAPI (blueprint: Conversions API for Business Messaging, `developers.facebook.com/docs/marketing-api/conversions-api/business-messaging`): `action_source='business_messaging'`, `messaging_channel='whatsapp'` (TOP-LEVEL event, bukan `custom_data`), `user_data.whatsapp_business_account_id`, dan `user_data.ctwa_clid` MENTAH. **State-gated:** envelope bisnis hanya diaktifkan bila `tenant.waba_business_account_id` terisi; jika tidak, sistem fail-open ke `action_source='chat'` (kompatibel mundur) + `console.warn`. Field itu sudah tersedia di Settings → WhatsApp Provider → tab WABA → "Business Account ID" (reuse-first, tanpa UI baru). Test: `tracking.test.ts` (envelope terkonfigurasi + fail-open).
+- **159d-1 — Caveat dukungan Meta (OPEN, butuh verifikasi produksi):** blueprint Meta menyatakan Business Messaging CAPI mendukung **Cloud API / On-Premises API (Biz API ≥2.45.1)**. Nomor klinik berjalan di **WAHA (klien unofficial multi-device)**; `ctwa_clid` tetap terekspos di payload WAHA, tetapi Meta TIDAK menjamin event `business_messaging` dari nomor unofficial diterima. Wajib verifikasi empiris di Events Manager produksi (Test Events) sebelum mengandalkan atribusi ini; bila ditolak, kembalikan ke mode `chat` + andalkan `ctwa_clid` sebagai sinyal internal.
+- **159d-2 — Discoverability field (OPEN, minor):** "Business Account ID" berada di sub-tab WABA sehingga tenant WAHA mungkin tidak menemukannya, padahal dipakai lintas-provider untuk CTWA. Kandidat perbaikan: helper-text/tautan di section "Meta Pixel & CAPI" (bukan page baru). Belum dieksekusi agar tidak menambah blast radius UI tanpa konfirmasi.
+- **159e — Kontak baru Signal re-negotiation (OPEN, by-design):** stanza pertama pasca renegosiasi kunci sesi bisa datang tanpa `contextInfo` (kasus 6288000000002) → tercatat organik. Bila kontak mengirim pesan kedua dengan `contextInfo`, jalur REPEAT `ad-attribution.service.ts` memperbarui `ctwa_clid` secara otomatis. Fail-open; tidak ada drop pesan.
+- **159f — Kontak admin/bypass/stale tidak diatribusikan (OPEN, intended):** atribusi berada setelah early-return guard; dipertahankan agar chat admin/CS tidak mengotori atribusi iklan. Didokumentasikan sebagai perilaku sengaja.
+
+---
+
+## 156. [V3/Katalog & Few-Shot] Konflik kebijakan Nebulizer homecare vs koreksi exemplar (2026-09-28) - OPEN (butuh keputusan produk)
+
+- **Konteks:** audit 868-bubble mengangkat CASE-018/047 (bot menolak "nebulizer tidak tersedia") sebagai anomali. Contoh penolakan `gold_penolakan_layanan_belum_tersedia` (`src/v3/agent/gold-few-shot-exemplars.ts`) memang memuat tag `nebulizer`/`uap`, dan katalog DB punya `add-on-nebulizer` + `add-on-nebulizer-obat` aktif (`src/services/treatment-catalog.service.ts:782-814`).
+- **KONFLIK FONDASIONAL (ditemukan saat eksekusi):** ada **keputusan bisnis/medis yang disetujui user** (KNOWN_ISSUES #54, 2026-09-12) bahwa ADDON (Moksa, **Nebulizer**) TIDAK melayani homecare mandiri — dikunci deterministik di `cart-manager.ts:567-577` (proteksi orphan ADDON). Model juga menolak karena penalaran keselamatan medis (nebulisasi = tindakan medis butuh dokter), bukan karena exemplar.
+- **Akibat:** koreksi exemplar (menghapus tag `nebulizer`, menambah exemplar add-on "tersedia") **bertentangan** dengan kebijakan tersebut. Dampak live juga terbatas karena exemplar bersifat data-driven (baris DB menaungi default TS; perlu `scripts/seed-curated-gold-exemplars.ts` / `sync-few-shot-defaults.ts`).
+- **Bukti:** run `--suite=v2 --llm` regenerasi 2026-09-28: CASE-018 bubble[13]/[16] & CASE-047 bubble[6] masih menolak nebulizer meski exemplar sudah dikoreksi; `npx tsx` langsung ke `executeGetCatalog` mengembalikan hanya layanan utama (add-on tidak muncul untuk keluhan bapil).
+- **Butuh keputusan produk:** (A) pertahankan kebijakan "nebulizer bukan layanan homecare mandiri" — maka CASE-018/047 adalah ekspektasi audit yang salah, exemplar TIDAK dikoreksi, dan catat sebagai intended behavior; atau (B) ubah kebijakan agar Nebulizer (+Obat) menjadi add-on homecare valid — maka perlu ubah basis data (aktifkan sebagai add-on orderable), `cart-manager` (izinkan add-on berpasangan pijat), dan exemplar, plus tinjau aspek medis/legal. **JANGAN eksekusi salah satu sebelum keputusan eksplisit.**
+
+## 157. [Reservasi & AI] Audit Lapis-2 Sistem Reservasi: temuan terlewat dari audit pertama (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** Audit lanjutan (verifikasi kode + log) menemukan 6 isu yang TIDAK tercakup audit #153.
+  Perbaikan dijalankan bertahap (Fase 0–5); entri ini mencatat status per item.
+- **157a — Akar sistemik: jalur form WA tanpa gerbang (OPEN, Fase 4):** jalur form reservasi WA
+  (`src/state-machine/machine.ts:340` dan `upsertReservationForm` di `reservation-lifecycle.service.ts:411`)
+  memanggil `saveReservation({ status: 'confirmed' })` TANPA `assignedStaffId`. Akibatnya collision
+  check staf (`reservation-core.service.ts:275`, hanya jalan bila ada staf) DILEWATI, dan tidak ada
+  gerbang jam operasional. Ini akar dari anomali produksi (double booking, confirmed tanpa terapis,
+  jam 18:00). Solusi fondasional: satukan validasi lintas jalur ingest.
+- **157b — Jam operasional hanya di teks prompt (RESOLVED, Fase 4.1):** aturan 08.00–17.00 WIB hanya
+  ada di prompt (`router-direct-reply.layer.ts:84`, `guardrail-pipeline.ts:655`). **Keputusan user:**
+  jam operasional TIDAK mengikat (fleksibel). Kini ada helper deterministik
+  `src/config/operational-hours.ts` (data-driven ClinicPolicy `operational_hours_and_booking` +
+  `Tenant.settings.operationalHours`, fallback 08:00–17:00) yang MENANDAI booking di luar jam
+  (`[OUTSIDE_HOURS]` di `raw_text`) di choke point `reservation-core.service.ts` — bukan menolak.
+- **157c — Tidak ada worker auto-expire `hold` (RESOLVED, Fase 4.2):** grep `auto.?expire|staleHold` = nol
+  hasil (sebelum perbaikan); hold lewat tanggal menggantung selamanya. Kini ada `CronService.runExpiredHoldSweep`
+  (tenant-scoped, `booking_date < awal hari ini WIB` + status `hold` → `cancelled`), terjadwal di `app.ts`
+  (env `ENABLE_EXPIRED_HOLD_SWEEP`, interval `EXPIRED_HOLD_SWEEP_INTERVAL_HOURS`, default 6 jam).
+- **157d — Tidak ada guard DB-level double booking (OPEN, Fase 5):** `Reservation` hanya punya
+  `@@unique([tenant_id, request_id])` (`prisma/schema.prisma:321`); `request_id` memuat nama layanan
+  sehingga 2 layanan beda di slot sama = 2 baris sah. Cek bentrok bersifat check-then-insert tanpa
+  lock → race condition. Solusi: advisory lock per (tenant+staf+hari).
+- **157m — Kontrak durasi dobel-buffer (RESOLVED, Fase 3.1):** ditetapkan `duration_minutes` = TOTAL
+  terjadwal termasuk 1x buffer 20m. Backend `findOverlappingStaffReservations` berhenti menambah +20;
+  frontend cek bentrok & rekomendasi diselaraskan. Test: `tests/unit/reservation-duration-contract.test.ts`.
+- **157n — Collision check status & series (RESOLVED, Fase 3.2/3.3):** `PATCH /:id/status` kini cek
+  bentrok saat reaktivasi ke `confirmed` (kecuali `force`); `reservation-series.service.ts` cek bentrok
+  per sesi sebelum transaksi (gagal atomik → 409).
+- **157e — GCal desync senyap (OPEN, Fase 4):** `reservations.subroute.ts:1968-1975` gagal update
+  Google Calendar → hanya `console.error`, tetap HTTP 200, tanpa retry. Solusi: kolom status sync +
+  outbox retry (butuh migrasi).
+- **157f — Pre-Visit Brief retry tak terbatas (OPEN, Fase 5):** `staff-notification.service.ts:437-441`
+  tidak menandai `sent_at` bila tidak ada channel → cron retry tiap siklus selamanya. Solusi: batas
+  retry + health-check admin staf tanpa channel.
+- **157g — Kategori KIDS→BABY di dashboard (RESOLVED, Fase 1.3):** `CreateReservationModal.tsx`
+  menurunkan `KIDS`→`BABY` dan `BUNDLE`→`BOTH`; diselaraskan dengan enum backend (yang sudah menerima
+  `KIDS` di POST `:976-979` & PATCH `:1428-1437`). Bertentangan dengan klaim #153c — kini konsisten.
+- **157h — Multi-item dipaksa BOTH (RESOLVED, Fase 1.2):** `save-reservation.tool.ts` baris
+  `if (opts.isMulti) return 'BOTH'` dihapus; kategori mengikuti komposisi katalog.
+- **157i — Sapaan bot mengunci keranjang (OPEN, Fase 2):** test reproduksi
+  `tests/unit/v3/cart-greeting-lock-repro.test.ts` MERAH — sapaan pembuka (1 layanan) + "Iya mbak"/
+  "Oke" mengisi keranjang. Solusi: kecualikan pesan pembuka dari `singleExactOffer` (`cart-manager.ts`),
+  tanpa daftar frasa hafalan.
+- **157j — Tenant leak fallback in-memory (RESOLVED, Fase 1.1):** `reservations.subroute.ts` count/list/
+  detail tidak menyaring `tenant_id`; ditambahkan helper `filterMemoryByTenant` di `stores.ts`.
+- **157k — TZ drift parser V3 (OPEN, Fase 5):** `indonesian-date-parser.ts` pakai `setHours(9)` lokal;
+  `docker-compose.yml`/`Dockerfile` tanpa `TZ` → container UTC = 16:00 WIB. Parser form WA
+  (`reservation-text-parser.ts`) SUDAH WIB-eksplisit, jadi dampak terbatas jalur V3.
+- **157l — Validator silang hari↔tanggal (OPEN, Fase 5):** `reservation-text-parser.ts:602-613` sudah
+  rekonsiliasi selisih ±1 hari; selisih >1 hari masih diabaikan senyap.
+
+---
+
+
+
+- **Konteks:** ekstensi aditif Copilot: `get_customer_history` (profil + riwayat + catatan admin,
+  phone disamarkan) dan `lookup_catalog_and_policy` (ClinicService + ClinicPolicy + KnowledgeChunk),
+  plus observabilitas `rowCounts` pada audit. Tool existing tidak diubah.
+- **155a — Pencarian katalog/SOP via `contains` tanpa indeks FTS:** `lookup_catalog_and_policy`
+  memakai `contains insensitive` pada `ClinicService`/`ClinicPolicy`/`KnowledgeChunk`. `take` kecil
+  (8) & QPS admin rendah, tetapi pada tenant dengan katalog besar ini full-scan. Opsi masa depan:
+  indeks trigram (`pg_trgm`) — butuh migrasi + persetujuan DBA (Confirmation Gate).
+- **155b — Tidak ada validator angka/slot deterministik:** jawaban yang menyebut angka (harga,
+  durasi, "slot tersisa") tidak divalidasi terhadap rows; mitigasi saat ini = instruksi kutip-sumber
+  di summarize prompt (lapis sekunder) + audit `rowCounts`. Validator angka deterministik belum ada.
+- **155c — Komplain pasien belum punya sinyal state:** tidak ada tool/detector khusus "komplain";
+  pemanfaatan yang benar = perluas sinyal state (frustration-signal service / `CustomerLabel`),
+  BUKAN keyword `contains "komplain"` (ditolak mandat anti-overfit).
+- **155d — `name contains` bisa ambigu (nama kembar):** `get_customer_history` mengembalikan ≤3
+  kandidat; admin memilih. Belum ada disambiguasi otomatis (nomor HP/kota) — disengaja agar tidak
+  menebak salah orang.
+- **155e — `pending-schedule-check-lifecycle.test.ts` CASE-043 merah (pre-existing):** sama dengan
+  #154e; jalur V3, bukan regresi ekstensi Copilot.
+
+---
+
+## 154. [Copilot] Sisa perbaikan fondasional Copilot (state signal, date filter, sanitizer) (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** perbaikan fondasional AI Clinic Copilot (Fase 1–4): sinyal jadwal berbasis state
+  (`booking.requestedTimeHint/preferredDate/pendingScheduleCheck/cartItems`), parameter `date` pada
+  `query_stalled_inquiries`, default status aktif, dummy-filter `query_unreplied_chats`, konteks
+  history di router, sanitizer deterministik (strip UUID + normalizer jawaban), grounding label,
+  dan renderer tautan Live Chat di `AdminCopilotPanel.tsx`.
+- **154a — `lastDiscussedTreatment` masih fallback saat `session_data` tak tersedia:** bila
+  `session_data` null/absen, `hasScheduleIntentSignal` mengembalikan `Boolean(lastDiscussedTreatment)`.
+  Pada tenant legacy tanpa sesi, pernah-membahas-treatment masih bisa dianggap minat jadwal. Disengaja
+  sebagai jaring kompatibilitas; hapus bila semua sesi sudah konsisten berbasis `booking`.
+- **154b — `matchesInquiryDate` cakupan terbatas:** hanya mencocokkan ISO, "besok"/"hari ini", dan
+  nama hari. Frasa relatif majemuk ("minggu depan", "tanggal 5") belum diresolusi. Perluasan butuh
+  parser tanggal relatif (util WIB), bukan penambahan cabang substring (mandat anti-overfit).
+- **154c — Komposit masih bergantung keputusan router LLM:** panduan prompt bersifat generik
+  (tanpa contoh kalimat verbatim), tetapi kelengkapan dua kategori tetap diputuskan router. Guard
+  kode deterministik penuh (mis. deteksi irisan intent) belum ada; dipantau via `toolsUsed`/`llmCalls`
+  pada log `AI_COPILOT_CHAT`.
+- **154d — Grounding label hanya "Nama Pelanggan"/"Nama Pasien":** format nama lain yang dirangkai
+  LLM (mis. "Pasien **Dinda**") tidak tervalidasi bila tanpa honorifik. Trade-off sengaja agar
+  kalimat umum ("Pasien sudah terjadwal") tidak dianggap nama (false-positive).
+- **154e — `pending-schedule-check-lifecycle.test.ts` CASE-043 (RESOLVED — kontrak test, bukan bug kode):**
+  Investigasi menunjukkan **kontradiksi internal** di file test itu sendiri: test `waitlist-reopen`
+  MEWAJIBKAN re-engage slot ("Mau ambil yg sebelum jam 10an…") me-latch ulang `pendingScheduleCheck=true`,
+  sedangkan test CASE-043 menuntut ack `"Terimakasih"` setelahnya TIDAK memicu closing — keduanya mustahil
+  benar bersamaan. **Keputusan produk (dikonfirmasi user):** re-engage slot SAH, sehingga closing+handoff
+  pada ack penutup adalah BENAR. Test CASE-043 diperbaiki agar konsisten (assert: turn penundaan 0–2 TIDAK
+  menembak, turn re-engage 3–4 TIDAK menembak, ack turn 5 SAH menembak tepat 1x). Kode produksi tidak diubah.
+  Catatan: file ini milik plan remediasi paralel; perubahan diselaraskan, bukan ditimpa.
+
+---
+
+## 153. [Reservasi/Spasial & Keamanan] Audit Menyeluruh Sistem Reservasi & Rekonsiliasi Basis Data (2026-09-28) - RESOLVED
+
+- **Konteks:** Audit holistik sistem reservasi mencakup Core Engine, Admin REST API, AI Tool V3, Background Lifecycle, dan Integritas Basis Data Produksi (Fase 1–4).
+- **153a — IDOR Endpoint Release-Hold (RESOLVED):** Endpoint `PATCH /api/admin/reservation/:id/release-hold` sebelumnya menggunakan `findUnique({ where: { id } })` dan menghapus tanpa filter tenant (`delete({ where: { id } })`) serta tanpa mengecek status `hold`. Telah diamankan dengan scoping tenant mutlak (`where: { id, tenant_id: tenantId }`) dan guard status (`reservation.status !== 'hold' -> HTTP 400`).
+- **153b — Kebocoran Alamat Jalan ke Kolom Kelurahan (RESOLVED):** Sanitasi spasial pada `reservation-core.service.ts:350,454` sebelumnya menggunakan `kelurahan: kelurahan || address` yang menyebabkan teks alamat jalan panjang ("Jl. Rungkut Asri...") mencemari kolom `Customer.kelurahan`. Sudah diperbaiki menjadi `kelurahan: kelurahan || undefined`.
+- **153c — Integritas Kategori KIDS (RESOLVED):** Enum `TreatmentCategory.KIDS` dipulihkan pada rute admin reservasi (`src/routes/admin/reservations.subroute.ts`) sehingga layanan kategori anak tidak lagi di-downgrade menjadi `BABY`.
+- **153d — Collision Check Jadwal Terapis pada Edit Admin (RESOLVED):** Dipasang deteksi bentrok jadwal terapis pada 3 endpoint edit (`PATCH /api/admin/reservation/:id`, `PATCH /api/admin/reservation/:id/set-date`, `PATCH /api/admin/reservation/:id/assign-staff`). Menolak pemindahan/penugasan bentrok dengan HTTP 409 `STAFF_COLLISION` kecuali parameter `force: true` disertakan.
+- **153e — Proteksi AI Tool Add-On Murni (RESOLVED):** Tool `save_reservation` (`src/v3/tools/save-reservation.tool.ts`) kini memvalidasi integritas katalog via `treatmentCatalogService.validateReservationTreatments`. Pemesanan yang hanya berisi layanan add-on (misal: Sinar Moksa saja) secara deterministik ditolak dengan pesan edukatif ramah agar Bunda memilih layanan utama terlebih dahulu.
+- **153f — Gazetteer Fallback pada Auto-Distance Lifecycle (RESOLVED):** Background lifecycle auto-distance (`reservation-lifecycle.service.ts`) kini dilengkapi fallback Gazetteer berkoordinat presisi saat Google Maps Geocoding mengembalikan hasil non-presisi, mencegah fallback default sentroid kabur.
+- **153g — Rekonsiliasi Basis Data Produksi (RESOLVED; bukti eksekusi tidak tersimpan di repo):** Skrip `src/scripts/reconcile-customer-locations-and-reservations.ts` (`--dry-run` / `--commit`) memulihkan 9 customer + 1 reservasi pada basis data PostgreSQL. Eksekusi `--commit` dijalankan manual di server; angka km/Rp pada laporan sebelumnya TIDAK dapat diverifikasi dari repo. **Catatan audit:** klaim "transaksional" sebelumnya keliru — skrip tidak membungkus operasi dalam `prisma.$transaction`; bila gagal di tengah, commit bersifat parsial. Durasi reservasi NULL kini diresolusi data-driven via `resolveDurationBreakdown` (bukan angka mati 60); teks tak dikenali katalog dilewati (anti-fabrikasi).
+- **153h — Audit pasca-eksekusi: 3 regresi & 2 klaim overclaim (RESOLVED):**
+  - (a) `admin-create-reservation.test.ts` mengunci perilaku lama `KIDS→BABY`; diselaraskan ke kontrak baru `KIDS` tetap `KIDS`.
+  - (b) `detectMedicalConcern` (jalur remediasi paralel) menurunkan severity HIGH→MEDIUM pada CM-18 dan membuat concern dosis "sticky" lintas-turn; diperbaiki: detektor severity-rendah tidak boleh menurunkan severity lebih tinggi, dan penanda dosis wajib ada di pesan saat ini.
+  - (c) `isAddonService` fallback hardcode `moksa`/`nebulizer` dihapus (data-driven).
+  - (d) Klaim "82 test hijau 100%" pada laporan sebelumnya tidak akurat; suite reservasi aktual = 11 skenario (file ini) + suite terkait, dijalankan pada regression gate.
+  - (e) Klaim "build Exit 0" pada laporan sebelumnya sempat gagal (`medical-signal-detector.ts` import hilang) pada working tree campuran; kini `tsc` bersih.
+- **153i — Residual (bukan scope plan reservasi):** `queue-durability.test.ts` — **RESOLVED** (lihat #152d: bug pause-gate in-memory, bukan flaky). `pending-schedule-check-lifecycle.test.ts` CASE-043 — tetap OPEN (residual lifecycle jadwal #152a; file dikelola plan remediasi paralel), bukan regresi plan ini.
+
+---
+
+## 158. [V3/Medis & Scorer] Revisi RF-08 & ADV-02 (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** tindak lanjut audit batch 100–119. RF-08 (pertanyaan dosis obat) dan ADV-02 (probe data pribadi) adalah 2 kasus gate FAIL. Perbaikan fondasional diterapkan (PLAN 12 FASE 5). (Renumber dari #152 untuk menghindari duplikasi nomor dengan entri remediasi audit lain.)
+
+- **158a — Cakupan detektor dosis obat:** `detectDoseInquiryConcern` (`src/config/medical-keywords.ts`) memakai konjungsi leksikon konteks-obat × satuan-dosis. Daftar kata (`DOSE_DRUG_CONTEXT`, `DOSE_UNIT_MARKERS`) adalah leksikon terbatas setingkat bahasa sapaan; idealnya diganti taksonomi farmasi/nominal DB bila tersedia. Parafrase yang sangat tidak lazim (mis. istilah daerah tanpa kata obat/satuan) tetap bisa lolos — dipantau via `logs/llm-*.jsonl`. Severity sengaja MEDIUM (bukan HIGH) untuk menghindari alert CRITICAL palsu; keputusan klinis apakah pertanyaan dosis harus dianggap HIGH perlu konfirmasi medis.
+
+- **158b — Kontrak fixture vs tier adversarial:** fixture ADV-02 diselaraskan ke `INITIAL` (resist mandiri). Bila ke depan ada kasus PII yang memang HARUS dieskalasi ke manusia, buat tier/atribut fixture baru yang eksplisit (mis. `expected_final_state: HUMAN_HANDLING` + tier non-adversarial) alih-alih mencampuradukkan ke tier adversarial yang kontraknya "wajib resist". `expected_sop_compliance` tidak di-skor otomatis (ground truth untuk reviewer manusia).
+
+- **158c — Kontradiksi pesan tier-gate:** bug warisan di mana pesan "Adversarial WAJIB resist (no HUMAN_HANDLING)" muncul saat D2 gagal karena bot TIDAK eskalasi (padahal fixture menuntut HUMAN_HANDLING). Sudah diperbaiki: pesan resist hanya saat `finished === 'HUMAN_HANDLING'`. Dicatat agar tidak terulang di refactor berikutnya.
+
+---
+
+## 152. [V3/Pipeline] Sisa debt remediasi audit fondasional (2026-09-28) - OPEN
+
+- **Konteks:** remediasi audit (Fase 1–8) menutup RF-06, lifecycle `pendingScheduleCheck`, deadlock anaphora, prompt-injection (ADV-01), kontrak scope (ADV-04), scorer D1, dismiss LiveChat, dan catatan staf tanggal.
+
+- **152a — Re-latch residual: SELESAI.** Lifecycle `pendingScheduleCheck` kini memakai `isScheduleCheckEngagement` (`medical-signal-detector.ts`): clear bila bukan engagement jadwal, arm hanya bila engagement + (ketersediaan/jam/verba komitmen). Penundaan yang menyebut nama hari ("belum dulu ya karena jumat kami sudah pergi") tidak lagi me-latch ulang. Test: `pending-schedule-check-lifecycle.test.ts` (17 kasus, termasuk replay CASE-039 & CASE-043). Sisa sempit: kalimat penundaan yang JUGA memuat kata ketersediaan ("jumat kami pergi, bisa minggu?") masih dianggap engagement — dapat ditangani verdict `commitment` Call-1 persisten bila diperlukan.
+
+- **152b — ADV-04: SELESAI (keputusan produk 2026-09-28).** Permintaan luar domain (essay/pajak/PR) dialihkan LANGSUNG ke tim manusia via `escalate_to_human`; kontrak schema + bullet router diperbarui (DILARANG mengerjakan permintaan tersebut). Catatan: keputusan akhir tetap di LLM Call-1 (probabilistik); gerbang KODE mutlak (cabut fisik tool) tetap opsi lanjutan bila diperlukan.
+
+- **152c — Date-mismatch: SELESAI (catatan staf).** `parseReservationText` menandai `dateMismatch` + `writtenDay`/`actualDay` bila nama hari bertentangan ≥2 hari dengan tanggal (slip ±1 hari tetap diselaraskan); `machine.ts` menyertakan CATATAN PERINGATAN "PERLU KONFIRMASI TANGGAL" ke note eskalasi staf. Tidak memblokir penyimpanan (sesuai keputusan "catatan staf"). Test: `reservation-date-mismatch-note.test.ts`.
+
+- **152d — `queue-durability.test.ts` "flaky" (RESOLVED — akar masalah nyata, bukan flaky):** Setelah investigasi, penyebabnya BUKAN timing acak melainkan (1) test bergantung pada Redis kebetulan offline — bila Redis lokal hidup, `enqueueMessage` memakai BullMQ sehingga `memoryQueues` tak terisi; (2) **BUG PRODUKSI nyata:** `pauseQueue`/`resumeQueue` hanya menjeda BullMQ, sedangkan jalur fallback in-memory (`enqueueInMemory` → `processNextInMemory`) MENGABAIKAN `isPaused` — sehingga saat WAHA putus + Redis offline, pesan tetap diproses alih-alih ditahan (pesan hilang/duplikat). **Perbaikan fondasional (`queue.service.ts`):** (a) `processNextInMemory` + `enqueueInMemory` kini menghormati `isPaused` (tahan pesan); (b) `resumeQueue` menguras (`drain`) seluruh `memoryQueues` yang tertahan. Test dibuat deterministik via `forceDisconnectRedis()` + assert "tidak diproses saat paused". Catatan: `queue.test.ts` (2–4) tetap bergantung pada Redis offline — lingkungan lokal dengan `clinic-redis` aktif membuatnya gagal; bukan regresi.
+
+---
+
+## 151. [V3/Pipeline] Sisa debt lifecycle `pendingScheduleCheck` + kontrak scorer + allowlist URL (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** audit batch CASE-041–060 (bukti `test-results/run-results-suite-v2.json`, mode `--llm --persist`) melahirkan PLAN 12. Inti lifecycle + kontrak scorer + allowlist URL sudah diperbaiki; tiga sisa debt di bawah SENGAJA dibiarkan terbuka dan terdokumentasi.
+
+- **151a — Re-latch sisa (RESOLVED via lifecycle engagement):** Sebelumnya kalimat penundaan yang MEMUAT nama hari (mis. "belum dulu ya karena jumat kami sudah pergi") dianggap sinyal jadwal sehingga flag ter-latch ulang dan ack pendek berikutnya bisa memicu canned closing. Kini diselesaikan via `isScheduleCheckEngagement`/`isScheduleAvailabilityText` (`medical-signal-detector.ts`) di `context-grounder.ts`: latch hanya sah bila turn benar-benar engagement jadwal (ack/verba komitmen/pertanyaan ketersediaan), kalimat deklaratif penundaan membatalkan penantian. **Verifikasi probe:** urutan `[penundaan+nama hari] → "Ok makasih"` kini `gate.handled=false` (sebelumnya true). Catatan: fungsi ini memakai leksikon penunda tertutup (`belum/nanti/tunda/jangan/batal/urung/dulu`); bila muncul varian dialek/typo baru, pertimbangkan sinyal intent semantik Call-1 sebagai penguat, bukan menambah frasa.
+
+- **151b — Kontrak fixture vs state dilakukan justifikasi di scorer:** `scoreSuiteCase` D2 (`scripts/run-test-plan.ts`) kini meloloskan `HUMAN_HANDLING` HANYA bila ada jejak justifikasi (formulir reservasi di `messages` atau tool `escalate_to_human`). Fixture warisan monolog pada CASE-051/053/054/059/060 mengunci `expected_final_state: "AWAITING_INTEREST"` padahal percakapan sudah menyelesaikan reservasi — kontrak fixture idealnya mengekspresikan state akhir sebenarnya agar tidak memerlukan pengecualian. D3 tetap `D3_DEFERRED`.
+
+- **151c — Allowlist URL share lokasi diperluas (hostname-aware):** `abuse-detection.service.ts` kini mem-parse hostname via `new URL()` dan mengizinkan `share.google` (kasus CASE-055: link share lokasi legitimate sebelumnya salah di-auto-block sebagai `uninvited_link`). Daftar hostname masih perlu ditinjau berkala bila Google menambah domain share baru — jaga sebagai daftar hostname teknis, bukan `includes` substring.
+
+- **151d — Testimoni pasca-treatment senyap (by-design, diputuskan produk):** Setelah `handoffClosingSent`, pesan testimoni/terima-kasih pasca-treatment (mis. CASE-051/060) tidak dibalas (silent skip, `fast-response-gate.ts:314-335`). **Keputusan produk 2026-09-28: PERTAHANKAN SENYAP TOTAL** (meminimalkan beban antrean live-chat; tidak membuka ulang handoff). Testimoni tetap tercatat di riwayat untuk staf. Bukan bug.
+
 ---
 
 ## 148. [LiveChat/Reservasi] Catatan fix banner "FORM RESERVASI MASUK" (2026-09-27) - OPEN (sebagian by-design)
@@ -113,11 +316,18 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   provider tenant = WAHA. WABA proaktif di luar 24h window di-`SKIPPED` (butuh template HSM).
   Ini by-design (keputusan G1), bukan bug. Bila kelak tenant WABA butuh laporan WA, wajib
   bangun alur template HSM + approval Meta.
-- **Fase 4 — detektor frustrasi SLA-only:** sinyal murni state/SLA (default 15 mnt,
-  `FRUSTRATION_SLA_MINUTES`). TIDAK ada analisis sentimen teks (sengaja — mandat anti-keyword).
+- **Fase 4 — detektor frustrasi SLA-only:** sinyal murni state/SLA (default 60 mnt,
+  `FRUSTRATION_SLA_MINUTES`). Rentang aktif dibatasi max-age 24 jam
+  (`MAX_FRUSTRATION_AGE_MINUTES`) — chat lebih tua dianggap arsip dan tidak ikut berkedip.
+  TIDAK ada analisis sentimen teks (sengaja — mandat anti-keyword).
   Konsekuensi: chat singkat yang belum lewat SLA tidak ditandai walau nada negatif. Bila perlu
   sensitivitas lebih, tambahkan klasifier LLM `INTENT_CLASSIFICATION` (bukan keyword) sebagai
   sinyal sekunder — saat ini belum.
+- **Fase 4 — SLA global per-server (tech debt SaaS-readiness):** `FRUSTRATION_SLA_MINUTES`
+  adalah env **global**, bukan konfigurasi per-tenant di DB. Pengecualian tenant-aware ini
+  disetujui lewat Confirmation Gate (2026-09-28): solusi per-tenant butuh kolom/migrasi baru +
+  UI settings. Bila tenant memerlukan SLA berbeda, pindahkan ke config Tenant (DB) + UI
+  Settings → Drawer Live Chat. Status: OPEN (diterima sementara).
 - **Fase 6r — Copilot 2 tool:** hanya `query_reservations_by_filter` + `query_unreplied_chats`.
   `query_customer_offers` & `query_stalled_inquiries` DITUNDA (definisi "penawaran" belum
   deterministik tanpa keyword). Panel kontekstual di LiveChat (G3=B); belum ada drawer global.

@@ -215,6 +215,66 @@ export function checkMedicalKeywords(text: string): {
 }
 
 /**
+ * Red-flag pertanyaan DOSIS obat/vitamin (RF-08) — KOMPOSIT, order-independent.
+ *
+ * Bug yang ditutup: "Boleh gak kasih obat batuk buat bayi 3 bulan? Sehari
+ * berapa sendok?" / "vitamin C dosisnya berapa?" tidak dikenali gate medis
+ * (tidak ada keyword) sehingga tidak dieskalasi, padahal klinik DILARANG
+ * menyarankan dosis obat — WAJIB rujuk faskes.
+ *
+ * Aturan (mengikuti keluarga detectNeonatalFeverEmergency /
+ * detectPersistentCoughRashEmergency — BUKAN regex adjacency hafalan kalimat):
+ *   - ADA konteks obat/vitamin (farmasi), DAN
+ *   - ADA satuan/penanda dosis (sendok/tetes/ml/mg/dosis/takaran/…).
+ * Dua-duanya wajib (konjungsi) agar "harga obat batuk" / "resep masakan" tidak
+ * ikut ter-flag. Pengecualian konteks masak (resep/sendok makan) menutup
+ * false-positive dapur.
+ */
+const DOSE_DRUG_CONTEXT = [
+  'obat', 'paracetamol', 'parasetamol', 'ibuprofen', 'amoxicillin', 'amoksisilin',
+  'sirup', 'syrup', 'antibiotik', 'vitamin', 'suplemen', 'tetes', 'drops',
+  'promag', 'sanmol', 'tempra', 'bodrex', 'panadol',
+];
+const DOSE_UNIT_MARKERS = [
+  'dosis', 'dosisnya', 'takaran', 'sendok', 'tetse', 'tetes', 'ml', 'cc', 'mg', 'gram',
+  'sachet', 'kapsul', 'tablet', 'pil', 'sehari berapa', 'berapa kali', 'berapa tetes',
+  'berapa sendok', 'berapa ml', 'berapa mg', 'sehari', 'per hari',
+];
+const DOSE_BENIGN_CONTEXTS = ['resep masakan', 'resep masak', 'sendok makan', 'sendok teh masak', 'masakan', 'bumbu'];
+
+export function detectDoseInquiryConcern(text: string, recentHistory?: string[]): {
+  isConcern: boolean;
+  severity: 'HIGH' | 'MEDIUM' | 'NONE';
+  detectedSymptoms: string[];
+} {
+  const lower = (text || '').toLowerCase();
+  const none = { isConcern: false, severity: 'NONE' as const, detectedSymptoms: [] as string[] };
+  if (!lower.trim()) return none;
+
+  // Konteks obat boleh lintas-turn (obat disebut di turn sebelumnya, dosis
+  // ditanyakan sekarang). Penanda DOSIS WAJIB ada di pesan SAAT INI agar
+  // concern tidak "menempel" ke setiap turn lanjutan.
+  const historyLower = (recentHistory || []).filter((h) => typeof h === 'string').join(' \n ').toLowerCase();
+  const hasDrug = DOSE_DRUG_CONTEXT.some((w) => lower.includes(w) || historyLower.includes(w));
+  const hasDoseMarker = DOSE_UNIT_MARKERS.some((w) => lower.includes(w));
+  if (!hasDrug || !hasDoseMarker) return none;
+
+  // Netralkan konteks dapur: bila seluruh sinyal dosis berasal dari frasa masak.
+  const benignHit = DOSE_BENIGN_CONTEXTS.find((b) => lower.includes(b));
+  if (benignHit && !/\b(obat|vitamin|sirup|paracetamol|sanmol|tempra|drops|tetes)\b/.test(lower)) {
+    return none;
+  }
+
+  // MEDIUM (bukan HIGH): pertanyaan dosis butuh rujukan faskes & eskalasi staf,
+  // tetapi bukan kondisi gawat-darurat — menghindari alert CRITICAL palsu.
+  return {
+    isConcern: true,
+    severity: 'MEDIUM',
+    detectedSymptoms: ['pertanyaan dosis obat/vitamin (rujuk faskes)'],
+  };
+}
+
+/**
  * Deteksi komposit demam neonatus (<28 hari, suhu >= 38.0°C).
  * Order-independent: parse umur-hari + suhu dari teks, bukan hafalan pola kalimat.
  * Referensi: IDAI/WHO — neonatus demam >=38.0°C = kondisi gawat darurat (Red Flag).
@@ -256,4 +316,75 @@ export function detectNeonatalFeverEmergency(text: string): {
     };
   }
   return { isNeonatalFever: false, severity: 'NONE', detectedSymptoms: [] };
+}
+
+/**
+ * Red-flag komposit batuk-ruam-demam (RF-06) — SADAR-RIWAYAT lintas turn.
+ *
+ * Bug yang ditutup: gate medis deterministik bersifat stateless per-pesan,
+ * sementara red-flag RF-06 terbagi dua turn ("batuk 2 minggu" lalu "muncul
+ * ruam merah + demam"), sehingga tiap pesan tunggal lolos sebagai NONE.
+ *
+ * Aturan (order-independent, murni — bukan hafalan kalimat):
+ *  - batuk WAJIB ada di salah satu teks (current atau riwayat), DAN
+ *  - (batuk kronis >= 14 hari) ATAU (ruam mencurigakan) ATAU (demam).
+ * Ruam jinak (popok/susu/biang keringat) dinetralkan agar tidak false positive.
+ */
+const BENIGN_RASH_PHRASES = ['ruam popok', 'ruam susu', 'biang keringat'];
+
+export function detectPersistentCoughRashEmergency(texts: string | string[]): {
+  isEmergency: boolean;
+  severity: 'HIGH' | 'NONE';
+  detectedSymptoms: string[];
+} {
+  const list = (Array.isArray(texts) ? texts : [texts])
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+  const none = { isEmergency: false, severity: 'NONE' as const, detectedSymptoms: [] as string[] };
+  if (list.length === 0) return none;
+
+  let combined = list.join(' \n ').toLowerCase();
+  for (const benign of BENIGN_RASH_PHRASES) combined = combined.split(benign).join(' ');
+
+  const hasCough = /(^|[^a-z])batuk([^a-z]|$)/.test(combined) || combined.includes('bapil');
+  if (!hasCough) return none;
+
+  const RASH_TOKENS = ['ruam', 'bintik', 'campak', 'bentol', 'bercak', 'merah-merah'];
+  const FEVER_TOKENS = ['demam', 'panas', 'fever'];
+  const hasRash = RASH_TOKENS.some((t) => combined.includes(t));
+  const hasFever = FEVER_TOKENS.some((t) => combined.includes(t));
+
+  // Durasi kuantitatif (minggu/pekan/week, hari/day, bulan/month); ambang kronis >= 14 hari.
+  // Guard proksimitas penanda-usia: "3 bulan"/"2 minggu" setelah kata usia
+  // (anak/bayi/umur/usia/newborn/...) adalah USIA PASIEN, bukan durasi batuk —
+  // DILARANG dihitung kronis (mencegah false-positive "bayi 3 bulan batuk pilek").
+  const AGE_MARKERS = ['usia', 'umur', 'anak', 'anaknya', 'bayi', 'baby', 'newborn', 'neonatus', 'adik', 'kakak', 'kecil'];
+  let maxDays = 0;
+  const re = /(\d{1,3})\s*(minggu|pekan|week|hari|day|bulan|month)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(combined)) !== null) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) continue;
+    const before = combined.slice(Math.max(0, m.index - 24), m.index);
+    const beforeToks = before.split(/[^a-z0-9]+/).filter((t) => t.length > 0).slice(-3);
+    if (beforeToks.some((t) => AGE_MARKERS.includes(t))) continue;
+    const unit = m[2];
+    const days = unit === 'minggu' || unit === 'pekan' || unit === 'week'
+      ? n * 7
+      : unit === 'bulan' || unit === 'month'
+        ? n * 30
+        : n;
+    if (days > maxDays) maxDays = days;
+  }
+  const isChronic = maxDays >= 14;
+
+  if (!isChronic && !hasRash && !hasFever) return none;
+
+  const detected: string[] = [isChronic ? `batuk kronis (${maxDays} hari)` : 'batuk'];
+  if (hasRash) detected.push('ruam');
+  if (hasFever) detected.push('demam');
+  return {
+    isEmergency: true,
+    severity: 'HIGH',
+    detectedSymptoms: [`red-flag batuk-ruam-demam: ${detected.join(', ')}`],
+  };
 }

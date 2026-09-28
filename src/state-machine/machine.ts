@@ -132,8 +132,19 @@ export class ConversationStateMachine {
     // --- GATE KELAS 🏥: MEDICAL CONCERN DETECTION ENGINE ---
     const incomingText = (incomingMessage as any).cleanTextForAi || incomingMessage.text?.body || '';
     const bubbleCorrelationId = incomingMessage.id || `msg_${customer.phone}_${Date.now()}`;
+    // RF-06: red-flag komposit (batuk kronis + ruam/demam) terbagi lintas turn —
+    // gate medis deterministik WAJIB sadar-riwayat. Dimuat SEBELUM gate (dipakai
+    // ulang oleh V3 di bawah) agar satu sumber kebenaran riwayat.
+    const recentDbMsgs = await messageService.getRecentMessages(conversation.id, LLM_HISTORY_LIMIT, tenantId);
+    const historyFormatted = recentDbMsgs.map((m) => ({
+      role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+      content: m.content || '',
+    }));
     const { MedicalDetectionService } = await import('../services/medical-detection.service');
-    const medicalResult = MedicalDetectionService.detectMedicalConcern(incomingText);
+    const medicalResult = MedicalDetectionService.detectMedicalConcern(
+      incomingText,
+      historyFormatted.filter((h) => h.role === 'user').map((h) => h.content)
+    );
 
     if (medicalResult.isMedical) {
       const { knowledgeBaseService } = await import('../services/knowledge.service');
@@ -374,11 +385,16 @@ export class ConversationStateMachine {
           }
         }
 
-        // Eskalasi ke Human Handling
+        // Eskalasi ke Human Handling. 152c: bila hari tertulis bertentangan
+        // dengan tanggal (mis. "jumat 28 Juli" padahal Selasa), sertakan CATATAN
+        // PERINGATAN ke staf agar dikonfirmasi — tanpa memblokir penyimpanan.
+        const dateMismatchNote = parsed.dateMismatch
+          ? ` ⚠️ PERLU KONFIRMASI TANGGAL: customer menulis hari "${parsed.writtenDay}", tetapi tanggal ${parsed.bookingDate ? parsed.bookingDate.toISOString().slice(0, 10) : ''} jatuh pada hari "${parsed.actualDay}". Mohon konfirmasi hari/tanggal yang benar ke customer.`
+          : '';
         await conversationService.escalateToHumanHandling(
           activeConversation,
           customer.phone,
-          `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"`,
+          `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"${dateMismatchNote}`,
           tenantId,
           'reservation_submitted'
         );
@@ -394,7 +410,7 @@ export class ConversationStateMachine {
 
         const { TEMPLATES } = await import('../config/persona');
         const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
-        const replyText = `Baik Bunda, data reservasi sudah kami terima ya bund. Kami cek dulu ya bund. 😊${shareNote}`;
+        const replyText = `Baik Bunda, data reservasi sudah kami terima yaa. Segera kami bantu cekkan ketersediaan jadwalnya 😊${shareNote}`;
 
         return {
           nextState: ConversationState.HUMAN_HANDLING,
@@ -470,11 +486,7 @@ export class ConversationStateMachine {
     } catch {}
 
     // --- 🚀 4. EKSEKUSI UTAMA: V3 AGENTIC (DEFAULT) / V2 SLOT-FILLING ENGINE ---
-    const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
-    const historyFormatted = recentDbMsgs.map((m) => ({
-      role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
-      content: m.content || '',
-    }));
+    // recentDbMsgs/historyFormatted dimuat di gate medis (RF-06) & dipakai ulang di sini.
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
 
     // --- GATE DOMAIN + KELUHAN + MINTA MANUSIA: eskalasi sunyi SEBELUM V3

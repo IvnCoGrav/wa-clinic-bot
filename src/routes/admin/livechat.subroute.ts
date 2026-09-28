@@ -1123,5 +1123,31 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * PATCH /api/admin/live-chat/conversations/:id/dismiss-frustration
+   * Padamkan peringatan SLA/frustrasi secara manual (1 klik admin, tanpa kirim pesan).
+   * Idempoten; siarkan conversation.updated (isFrustrated:false) via SSE ke semua dashboard.
+   */
+  fastify.patch(
+    '/api/admin/live-chat/conversations/:id/dismiss-frustration',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        const updated = await conversationService.dismissFrustration(id, tenantId);
+        if (!updated) {
+          return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
+        }
+        return reply.status(200).send({
+          success: true,
+          isFrustrated: false,
+          message: 'Peringatan SLA berhasil dipadamkan.',
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal memadamkan peringatan SLA' });
+      }
+    }
+  );
 }
 

@@ -19,7 +19,7 @@ export const ESCALATE_HUMAN_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'escalate_to_human',
-    description: 'Mengalihkan percakapan ke tim Bidan kami (manusia) dan menghentikan respon otomatis bot. Wajib dipanggil saat ada gejala darurat medis, komplain berat, permintaan eksplisit customer untuk bicara dengan manusia, atau topik di luar layanan klinik yang tidak ter-grounding ke katalog layanan, knowledge base, maupun kebijakan klinik.',
+    description: 'Mengalihkan percakapan ke tim Bidan kami (manusia) dan menghentikan respon otomatis bot. Wajib dipanggil saat: (1) gejala darurat medis, (2) komplain berat atas pelayanan, (3) customer meminta kepastian slot jam kunjungan yang butuh konfirmasi admin, (4) permintaan eksplisit customer untuk bicara dengan manusia, atau (5) permintaan di luar domain layanan klinik (mis. tugas sekolah/essay, PR, pajak, politik, koding) — alihkan LANGSUNG ke tim manusia tanpa mengerjakan permintaan tersebut dan tanpa menjanjikan pengerjaannya.',
     parameters: {
       type: 'object',
       properties: {

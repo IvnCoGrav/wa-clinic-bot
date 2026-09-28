@@ -37,7 +37,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         adminIdentity: (request as any).adminIdentity,
         action: 'AI_COPILOT_CHAT',
         targetId: tenantId,
-        payload: { message: message.slice(0, 200), toolsUsed: result.toolsUsed, grounded: result.grounded },
+        payload: { message: message.slice(0, 200), toolsUsed: result.toolsUsed, grounded: result.grounded, rowCounts: result.rowCounts },
         ipAddress: request.ip,
         tenantId,
       });

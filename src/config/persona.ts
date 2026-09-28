@@ -297,7 +297,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     `Mohon dikonfirmasi dulu ya Bunda 😊 — untuk lokasinya di Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan} sudah benar atau mau pakai alamat lain ya bund?`,
 
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
-    `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗`,
+    `Kalau boleh tahu, ${params.textLocation} masuk kelurahan/desa mana ya Bunda? Nanti kami bantu cekkan ongkir presisinya 😊`,
 
   askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; cityName?: string; isCity?: boolean; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
     if (!params.isCity && params.kecamatanName) {
@@ -437,7 +437,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   promoOngoingInfo: () =>
     `Masih berlangsung Bunda! ✨ Seluruh harga promo treatment kami saat ini masih aktif ya bund 😊\n\nKalau boleh tahu, perawatannya untuk si kecil usia berapa bulan atau untuk Bunda sendiri ya? Biar kami bantu pilihkan promo yang paling cocok 🤗`,
   // Minta share location setelah customer submit form reservasi (jika pin belum pernah dikirim).
-  askShareLocation: () => `Kalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
+  askShareLocation: () => `Kalau berkenan, boleh sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
   // INITIAL (belum ada lokasi): jangan menolak, langsung alihkan ke tanya lokasi.
   askLocationFirstPrice: () => `Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Kalau boleh tahu, rumahnya di mana ya Bunda? 😊`,
   // AWAITING_LOCATION (belum ada lokasi, tapi harga sudah ditampilkan): tetap minta lokasi,

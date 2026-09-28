@@ -301,6 +301,17 @@ if (require.main === module) {
       }).catch(e => console.error('[PRE-VISIT BRIEF START ERROR]', e));
     }
 
+    // Fase 4.2: Auto-expire reservasi hold yang tanggal kunjungannya sudah lewat.
+    // Default aktif; nonaktifkan dengan env 'false'.
+    if (process.env.ENABLE_EXPIRED_HOLD_SWEEP !== 'false') {
+      const intervalHours = parseInt(process.env.EXPIRED_HOLD_SWEEP_INTERVAL_HOURS || '6', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runExpiredHoldSweep(), intervalHours * 60 * 60 * 1000);
+        console.log(`♻️ Expired hold sweep cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[EXPIRED HOLD SWEEP START ERROR]', e));
+    }
+
     // Buffer notifikasi penugasan terapis (5 menit). Default aktif; env 'false' menonaktifkan.
     if (process.env.ENABLE_ASSIGNMENT_NOTIF_SWEEP !== 'false') {
       const intervalMinutes = parseInt(process.env.ASSIGNMENT_NOTIF_SWEEP_INTERVAL_MINUTES || '2', 10);
