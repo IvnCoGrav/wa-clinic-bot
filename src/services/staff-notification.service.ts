@@ -437,14 +437,27 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
           .update({ where: { id: reservationId }, data: { pre_visit_brief_sent_at: new Date() } })
           .catch(() => {});
       } else {
+        // #157f: observabilitas deterministik. Staf tanpa kanal aktif (belum pairing
+        // Telegram & belum subscribe Web Push) TIDAK ditandai terkirim → sweep retry
+        // saat kanal tersedia. Baris terstruktur ini membuat kondisi "no channel"
+        // bisa di-forensik dari log (sebelumnya hanya console.log bebas).
         console.log(
-          `[Pre-Visit Brief] Skip marking sent_at for reservation ${reservationId}: no active delivery channel (telegram/push)`
+          `[PRE_VISIT_BRIEF_NO_CHANNEL] ${JSON.stringify({
+            event: 'PRE_VISIT_BRIEF_NO_CHANNEL',
+            reservationId,
+            tenantId,
+            staffId: staff.id,
+            hasTelegram: Boolean(staff.telegram_chat_id),
+            pushSent,
+            telegramSent,
+            ts: new Date().toISOString(),
+          })}`
         );
       }
 
       return {
         sent: deliverySuccess,
-        reason: deliverySuccess ? undefined : 'Belum ada kanal aktif (Telegram/Web Push) — brief menunggu kanal tersedia',
+        reason: deliverySuccess ? undefined : 'no_channel',
       };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to send pre-visit brief for ${reservationId}:`, err.message);

@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-28 — Refaktor UI Mobile: Relokasi Online/Sound/Theme ke Sidebar & Copilot Icon di Header
+
+- **Latar & UX:** Pada layar mobile (< 768px), header sebelumnya memuat 5 tombol/badge (Status Online, Suara, Mode UI, Menu, dan Alert) sehingga terasa sempit dan padat. Sementara itu, AI Copilot di sidebar berbentuk toggle bar yang sulit diakses cepat saat membuka percakapan Live Chat di HP.
+- **Changed — Header:**
+  - Status sesi WAHA ("Online" / "Scan QR" / "Offline"), tombol suara notifikasi chat, dan switcher tema disembunyikan dari header mobile (`hidden md:flex`) sehingga header mobile menjadi lega dan bersih.
+  - AI Copilot dipindahkan ke header sebagai **icon button murni** (`<Sparkles />`, aktif hanya saat membuka rute `/live-chat`). Saat aktif, ikon diberi aksen emerald (`bg-[#d9fdd3] text-[#008069]`) dengan ring halus. Di luar Live Chat, ikon otomatis tidak dirender.
+  - Sisi kanan header mobile kini ramping dan fokus: hanya memuat ikon Copilot (bila di Live Chat) dan tombol menu hamburger.
+- **Changed — Sidebar:**
+  - Toggle bar AI Copilot di sidebar dihapus.
+  - Ditambahkan panel **Quick Controls** di atas profil pengguna: kartu status WhatsApp dengan lampu berdenyut ("WhatsApp Online" / "Offline"), tombol toggle suara chat (🔊 On / 🔇 Mute), dan tombol mode UI (☀️/🌙).
+  - Popover status sistem diubah menjadi modal dialog terpusat dengan backdrop blur agar dapat dibuka dari mobile sidebar maupun header desktop tanpa risiko terpotong tepi layar.
+- **Verifikasi:** Build dashboard Vite (`npm run build`) sukses 0 error; root `tsc` lulus 0 error; unit tests 52 passed.
+
 #### 2026-09-28 — Atribusi Iklan CTWA WAHA + Meta Business Messaging CAPI (Issue #119)
 
 - **Added — Extractor CTWA (`src/integrations/whatsapp/waha-ctwa-referral.ts`):** deep module

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { StaffAuthService } from '../../services/staff-auth.service';
+import { SessionStoreUnavailable } from '../../services/admin-session.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { verifyPassword } from '../../utils/bcrypt';
 import { prisma } from '../../db/client';
@@ -113,7 +114,18 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Token wajib diisi.' });
     }
 
-    const session = await StaffAuthService.validateSession(token);
+    let session;
+    try {
+      session = await StaffAuthService.validateSession(token);
+    } catch (err) {
+      if (err instanceof SessionStoreUnavailable) {
+        return reply.status(503).send({
+          error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+          code: 'SESSION_STORE_UNAVAILABLE',
+        });
+      }
+      throw err;
+    }
     if (!session) {
       return reply.status(401).send({ error: 'Sesi tidak valid atau telah kadaluarsa.' });
     }

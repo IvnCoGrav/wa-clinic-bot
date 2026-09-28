@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Sparkles,
   ChevronLeft,
+  ChevronRight,
   ChevronDown,
   Send,
   TrendingUp,
@@ -749,33 +750,75 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           })()}
         </nav>
 
-        {/* AI Copilot On/Off — hanya tampil di halaman Live Chat (panel hidup di sana) */}
-        {isLiveChat && (
-          <div className="px-3 pt-3 pb-1 border-t border-[#e9edef] dark:border-[#2a3942]">
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#f8fafc] dark:bg-[#2a3942]/50 border border-[#e9edef] dark:border-[#374248]">
-              <span className="flex items-center space-x-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">
-                <Sparkles size={15} className={copilotOpen ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'} />
-                <span>AI Copilot</span>
+        {/* Quick Controls (Online Status, Sound, & Mode UI) — dipindah dari header mobile */}
+        <div className="px-3 pt-3 pb-2 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">
+          {/* Status WAHA / Online */}
+          <button
+            type="button"
+            onClick={() => setShowStatusPopover(true)}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition active:scale-98 cursor-pointer shadow-2xs ${
+              wahaStatus === 'WORKING'
+                ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
+                : wahaStatus === 'SCAN_QR_CODE'
+                ? 'bg-amber-50 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+                : 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+            }`}
+            title="Klik untuk melihat status sistem WhatsApp & Server"
+          >
+            <span className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  wahaStatus === 'WORKING' ? 'bg-emerald-400' : 'bg-rose-400'
+                }`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                  wahaStatus === 'WORKING' ? 'bg-emerald-500' : 'bg-rose-500'
+                }`} />
               </span>
+              <span className="text-[11px] font-bold">
+                {wahaStatus === 'WORKING' ? 'WhatsApp Online' : wahaStatus === 'SCAN_QR_CODE' ? 'Scan QR WA' : 'WhatsApp Offline'}
+              </span>
+            </span>
+            <ChevronRight size={14} className="opacity-60" />
+          </button>
+
+          {/* Dual Buttons: Sound & Theme */}
+          <div className="flex items-center gap-2">
+            {canAccessLiveChat && (
               <button
                 type="button"
-                role="switch"
-                aria-checked={copilotOpen}
-                aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Tampilkan AI Copilot'}
-                onClick={() => setCopilotOpen(!copilotOpen)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/50 ${
-                  copilotOpen ? 'bg-[#008069]' : 'bg-[#cbd5e1] dark:bg-[#374248]'
+                onClick={async () => {
+                  toggleSound();
+                  if (!soundActive) {
+                    toast('🔊 Suara notifikasi aktif!', 'info');
+                    try {
+                      const perm = await requestPushPermission();
+                      if (perm === 'granted') {
+                        toast('🔔 Web Push Background Aktif!', 'success');
+                      }
+                    } catch (_) {}
+                  } else {
+                    toast('🔇 Suara notifikasi dimatikan (Mute).', 'info');
+                  }
+                }}
+                className={`flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
+                  soundActive
+                    ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-[#008069] dark:text-[#00a884]'
+                    : 'bg-white dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                 }`}
+                title={soundActive ? 'Suara & Push: Aktif (Klik untuk Mute)' : 'Suara & Push: Mati (Klik untuk Aktifkan)'}
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                    copilotOpen ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+                {soundActive ? <Volume2 size={14} className="text-[#008069] dark:text-[#00a884]" /> : <VolumeX size={14} />}
+                <span className="text-[11px] font-bold">{soundActive ? 'Suara On' : 'Mute'}</span>
               </button>
+            )}
+
+            {/* Mode UI Theme Button */}
+            <div className="flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border border-[#e9edef] dark:border-[#374248] bg-white dark:bg-[#2a3942] text-xs font-semibold shadow-2xs">
+              <ThemeToggle size={14} className="!w-6 !h-6 !min-w-[24px] !min-h-[24px] !border-none !bg-transparent !shadow-none" />
+              <span className="text-[11px] font-bold text-[#54656f] dark:text-[#aebac1]">Mode UI</span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* User profile / Logout */}
         <div className="p-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">
@@ -828,18 +871,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {redisQueueFallback && (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="p-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
+                className="hidden md:flex p-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
                 title="Redis Fallback Aktif"
               >
                 <AlertCircle size={15} />
               </button>
             )}
 
-            {/* WAHA Session Live Status */}
+            {/* WAHA Session Live Status (Desktop only, mobile dipindah ke sidebar) */}
             {wahaStatus === 'WORKING' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <CheckCircle size={14} />
                 <span className="text-[11px] font-bold">Online</span>
@@ -847,7 +890,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             ) : wahaStatus === 'SCAN_QR_CODE' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <QrCode size={14} />
                 <span className="text-[11px] font-bold">Scan QR</span>
@@ -855,7 +898,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             ) : wahaStatus === 'FAILED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <AlertCircle size={14} />
                 <span className="text-[11px] font-bold">Offline</span>
@@ -864,7 +907,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Terputus. Klik untuk membuka panel status"
-                className="rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <WifiOff size={14} />
                 <span className="text-[11px] font-bold">Terputus</span>
@@ -874,7 +917,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Sedang memeriksa koneksi server... Klik untuk membuka panel status"
-                className="rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <Loader size={14} className="animate-spin" />
                 <span className="text-[11px] font-bold">WA: Memeriksa...</span>
@@ -882,7 +925,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </button>
             )}
 
-            {/* Live Chat Notification Sound Mute/Unmute Toggle (RBAC Filtered) */}
+            {/* Live Chat Notification Sound Mute/Unmute Toggle (Desktop only, mobile dipindah ke sidebar) */}
             {canAccessLiveChat && (
               <button
                 onClick={async () => {
@@ -904,7 +947,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   }
                 }}
                 title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
-                className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
+                className={`hidden md:flex w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
                   soundActive
                     ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
                     : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'
@@ -914,8 +957,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </button>
             )}
 
-            {/* Theme Switcher Toggle (☀️/🌙) — desktop & mobile */}
-            <ThemeToggle />
+            {/* Theme Switcher Toggle (☀️/🌙) — desktop only, mobile dipindah ke sidebar */}
+            <div className="hidden md:flex items-center">
+              <ThemeToggle />
+            </div>
+
+            {/* AI Copilot Toggle Button (Icon Only) — Aktif di Live Chat untuk mobile & desktop */}
+            {isLiveChat && (
+              <button
+                type="button"
+                onClick={() => setCopilotOpen(!copilotOpen)}
+                title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                aria-pressed={copilotOpen}
+                className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
+                  copilotOpen
+                    ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 border-[#00a884]/40 text-[#008069] dark:text-[#00a884] ring-2 ring-[#00a884]/30'
+                    : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                }`}
+              >
+                <Sparkles size={16} />
+              </button>
+            )}
 
             {/* Mobile Hamburger Menu Button (Moved to Right Side) */}
             <button 
@@ -927,14 +990,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <Menu size={20} />
             </button>
 
-            {/* Interactive Status Popover for Mobile & Desktop Touch */}
+            {/* Interactive Status Popover / Modal for Mobile & Desktop Touch */}
             {showStatusPopover && (
-              <>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div
-                  className="fixed inset-0 z-40"
+                  className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
                   onClick={() => setShowStatusPopover(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-[#202c33] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-50 space-y-3 animate-in fade-in zoom-in-95 origin-top-right duration-150">
+                <div className="relative w-full max-w-sm bg-white dark:bg-[#202c33] rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-10 space-y-3 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-2">
                     <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center gap-1.5">
                       <Activity size={15} className="text-[#008069] dark:text-[#00a884]" />
@@ -1025,7 +1088,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     </Link>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
           </div>

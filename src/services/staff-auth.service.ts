@@ -1,8 +1,23 @@
 import crypto from 'crypto';
 import { prisma } from '../db/client';
 import { verifyPassword } from '../utils/bcrypt';
+import { SessionStoreUnavailable } from './admin-session.service';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+
+/**
+ * Query sesi staff + relasi `staff` (satu sumber). Dipisah agar tipe hasilnya
+ * dapat di-infer (`Awaited<ReturnType<...>>`) tanpa kehilangan field `include`.
+ */
+function findStaffSessionByToken(token: string) {
+  return prisma.staffSession.findUnique({
+    where: { token_hash: hashToken(token) },
+    include: { staff: true },
+  });
+}
+
+/** Sesi staff beserta relasi `staff` (hasil `findStaffSessionByToken`). */
+export type StaffSessionWithStaff = Awaited<ReturnType<typeof findStaffSessionByToken>>;
 
 export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -53,27 +68,32 @@ export class StaffAuthService {
 
   /**
    * Validasi token sesi dari cookie.
-   * Return null jika token tidak ada, sesi tidak ditemukan, expired, direvoke,
-   * atau akun staff dinonaktifkan.
+   *
+   * Kontrak sinyal (paritas dengan `AdminSessionService`, KNOWN_ISSUES #141):
+   * - SessionStoreUnavailable → 503 (DB tak bisa dicek; JANGAN klaim token invalid)
+   * - null                    → 401 jujur (token tidak ada / kedaluwarsa / direvoke /
+   *                             akun staff nonaktif)
+   *
+   * Sebelumnya SEMUA error DB ditelan menjadi `null` → 401 ambigu → frontend
+   * menghapus token cadangan padahal sesi 30-hari di DB masih sah.
    */
   static async validateSession(token: string) {
     if (!token || typeof token !== 'string') return null;
 
+    let session: StaffSessionWithStaff;
     try {
-      const session = await prisma.staffSession.findUnique({
-        where: { token_hash: hashToken(token) },
-        include: { staff: true },
-      });
-
-      if (!session || session.revoked_at) return null;
-      if (session.expires_at < new Date()) return null;
-      if (!session.staff || !session.staff.active) return null;
-
-      return session;
+      session = await findStaffSessionByToken(token);
     } catch (err: any) {
-      console.error('[STAFF AUTH] Error validating session:', err.message);
-      return null;
+      // DB error (pool jenuh/timeout/mati) → BUKAN bukti token invalid.
+      console.error('[STAFF AUTH] Penyimpanan sesi staff tidak tersedia:', err?.message ?? err);
+      throw new SessionStoreUnavailable('Penyimpanan sesi staff (database) tidak tersedia');
     }
+
+    if (!session || session.revoked_at) return null;
+    if (session.expires_at < new Date()) return null;
+    if (!session.staff || !session.staff.active) return null;
+
+    return session;
   }
 
   /**

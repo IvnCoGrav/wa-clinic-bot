@@ -41,17 +41,22 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
       throw err;
     }
   };
+  // DB sesi staff tak tersedia → deny aman (false), bukan 500/401 ambigu.
+  // Media bukan jalur logout; fallback lain (API key) tetap dicoba.
+  const staffSessionValid = async (t: string): Promise<boolean> => {
+    try {
+      const { StaffAuthService } = await import('../services/staff-auth.service');
+      return !!(await StaffAuthService.validateSession(t));
+    } catch (err) {
+      if (err instanceof SessionStoreUnavailable) return false;
+      throw err;
+    }
+  };
   if (sessionCookie && (await adminSessionValid(sessionCookie))) return true;
-  if (staffCookie) {
-    const { StaffAuthService } = await import('../services/staff-auth.service');
-    const staff = await StaffAuthService.validateSession(staffCookie);
-    if (staff) return true;
-  }
+  if (staffCookie && (await staffSessionValid(staffCookie))) return true;
   if (queryToken) {
     if (await adminSessionValid(queryToken)) return true;
-    const { StaffAuthService } = await import('../services/staff-auth.service');
-    const staff = await StaffAuthService.validateSession(queryToken);
-    if (staff) return true;
+    if (await staffSessionValid(queryToken)) return true;
   }
   const adminKey = process.env.ADMIN_API_KEY;
   if (apiKey && adminKey && safeCompare(apiKey, adminKey)) return true;

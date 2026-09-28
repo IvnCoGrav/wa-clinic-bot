@@ -28,7 +28,22 @@ export async function staffRoutes(fastify: FastifyInstance) {
     const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
     const adminCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
 
-    let session = staffCookie ? await StaffAuthService.validateSession(staffCookie) : null;
+    let session = null;
+    if (staffCookie) {
+      try {
+        session = await StaffAuthService.validateSession(staffCookie);
+      } catch (err) {
+        // Kontrak sinyal: DB sesi staff tak tersedia → 503, jangan 401 ambigu
+        // (401 memicu penghapusan token cadangan di frontend).
+        if (err instanceof SessionStoreUnavailable) {
+          return reply.status(503).send({
+            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+            code: 'SESSION_STORE_UNAVAILABLE',
+          });
+        }
+        throw err;
+      }
+    }
 
     if (!session && adminCookie) {
       let adminSession: Awaited<ReturnType<typeof AdminSessionService.validateSession>>;

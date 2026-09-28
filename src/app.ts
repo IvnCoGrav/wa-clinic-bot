@@ -13,6 +13,7 @@ import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
+import { shouldLogAuthAccess, buildAuthAccessLogEntry, emitAuthAccessLog } from './utils/auth-access-log';
 import { trackInterval } from './lifecycle/interval-registry';
 
 dotenv.config();
@@ -70,6 +71,29 @@ export function buildApp() {
     logger: {
       level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
     },
+  });
+
+  // Observabilitas forensik jalur auth (KNOWN_ISSUES #143): catat SATU baris JSON
+  // ringkas untuk respons 401/503 pada rute auth/admin/staff. Token penuh tidak
+  // pernah masuk log (hanya hash prefix-8). Deterministik, terpusat, tanpa duplikasi.
+  app.addHook('onResponse', async (request, reply) => {
+    try {
+      const path = request.url.split('?')[0];
+      if (!shouldLogAuthAccess(path, reply.statusCode)) return;
+      emitAuthAccessLog(
+        buildAuthAccessLogEntry({
+          method: request.method,
+          path,
+          statusCode: reply.statusCode,
+          latencyMs: reply.elapsedTime,
+          cookieHeader: request.headers['cookie'] as string | undefined,
+          ip: request.ip,
+          reqId: request.id,
+        })
+      );
+    } catch {
+      // Observabilitas TIDAK boleh mengganggu jalur request.
+    }
   });
 
   // Simpan raw body (Buffer) untuk verifikasi X-Hub-Signature-256 Meta.

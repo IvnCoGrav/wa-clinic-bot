@@ -4,6 +4,7 @@ import { StaffAuthService } from '../../src/services/staff-auth.service';
 import { StaffReservationService } from '../../src/services/staff-reservation.service';
 import { liveChatService } from '../../src/services/live-chat.service';
 import { auditService } from '../../src/services/audit.service';
+import { SessionStoreUnavailable } from '../../src/services/admin-session.service';
 import { prisma } from '../../src/db/client';
 
 describe('Staff Routes Integration Tests (/api/staff/*)', () => {
@@ -140,6 +141,38 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       });
 
       expect(res.statusCode).toBe(401);
+    });
+
+    it('kontrak 503: DB sesi staff tak tersedia → 503 (bukan 401) di restore', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockRejectedValue(
+        new SessionStoreUnavailable()
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        payload: { token: 'stored_token_abc' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe('SESSION_STORE_UNAVAILABLE');
+    });
+
+    it('kontrak 503: DB sesi staff tak tersedia → 503 di preHandler rute staff', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockRejectedValue(
+        new SessionStoreUnavailable()
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/staff/today-tasks',
+        headers: { cookie: 'staff_session=valid_token' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe('SESSION_STORE_UNAVAILABLE');
     });
 
     it('GET /api/staff/auth/me returns 401 when no session', async () => {

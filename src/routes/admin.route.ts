@@ -38,6 +38,7 @@ import { backupAdminRoutes } from './admin/backup.subroute';
 import { analyticsAdminRoutes } from './admin/analytics.subroute';
 import { quickRepliesAdminRoutes } from './admin/quick-replies.subroute';
 import { aiHealthAdminRoutes } from './admin/ai-health.subroute';
+import type { StaffSessionWithStaff } from '../services/staff-auth.service';
 
 let cachedIndexHtml: string | null = null;
 let cachedManifest: Buffer | null = null;
@@ -126,7 +127,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     } else if (staffCookie) {
       const { StaffAuthService } = await import('../services/staff-auth.service');
-      const staffSession = await StaffAuthService.validateSession(staffCookie);
+      let staffSession: StaffSessionWithStaff;
+      try {
+        staffSession = await StaffAuthService.validateSession(staffCookie);
+      } catch (err) {
+        if (err instanceof SessionStoreUnavailable) {
+          return reply.status(503).send({
+            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+            code: 'SESSION_STORE_UNAVAILABLE',
+          });
+        }
+        throw err;
+      }
       if (staffSession) {
         isAuthenticated = true;
         identity = staffSession.staff.name;

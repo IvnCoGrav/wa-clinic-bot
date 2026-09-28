@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { safeCompare } from '../../utils/auth';
 import { getAdminEmail, loginAttemptsMap, pruneLoginAttempts, LOGIN_ATTEMPTS_MAX_ENTRIES } from './stores';
 import { StaffAuthService } from '../../services/staff-auth.service';
+import type { StaffSessionWithStaff } from '../../services/staff-auth.service';
 import { verifyPassword } from '../../utils/bcrypt';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -239,7 +240,13 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     }
 
     // 2. Coba sebagai sesi staff
-    const staffSession = await StaffAuthService.validateSession(token);
+    let staffSession: StaffSessionWithStaff;
+    try {
+      staffSession = await StaffAuthService.validateSession(token);
+    } catch (err) {
+      if (err instanceof SessionStoreUnavailable) return sendSessionUnavailable(reply);
+      throw err;
+    }
     if (staffSession) {
       const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
@@ -351,7 +358,13 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     // 2. Cek sesi staff dari cookie
     const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
     if (staffCookie) {
-      const session = await StaffAuthService.validateSession(staffCookie);
+      let session: StaffSessionWithStaff;
+      try {
+        session = await StaffAuthService.validateSession(staffCookie);
+      } catch (err) {
+        if (err instanceof SessionStoreUnavailable) return sendSessionUnavailable(reply);
+        throw err;
+      }
       if (session) {
         const staffRole = session.staff.role;
         const role =
