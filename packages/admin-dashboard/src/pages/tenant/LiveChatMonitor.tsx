@@ -91,6 +91,7 @@ import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
+import { LiveChatDispatchWidget, DispatchTripData } from '../../components/livechat/LiveChatDispatchWidget';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
 import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
@@ -263,6 +264,8 @@ interface LiveChatItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
   activeConfirmedReservation?: {
     id: string;
@@ -273,6 +276,8 @@ interface LiveChatItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
   activePendingReservation?: {
     id: string;
@@ -283,6 +288,8 @@ interface LiveChatItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
 }
 
@@ -392,6 +399,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
+  // Widget pemantauan perjalanan terapis (OTW) untuk CS.
+  const [dispatchTrip, setDispatchTrip] = useState<DispatchTripData | null>(null);
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const loadDispatchTripRef = useRef<((reservationId: string) => void) | null>(null);
 
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
   // Prefetch staff list on mount agar modal edit tidak kosong saat diklik
@@ -2192,6 +2203,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               };
             });
           }
+        } else if (type === 'staff.telemetry_updated') {
+          // Posisi terapis terbaru — perbarui widget bila relevan dengan chat terpilih.
+          const reservationId = payload?.reservationId;
+          if (reservationId && dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
+        } else if (type === 'staff.trip_closed') {
+          const reservationId = payload?.reservationId;
+          if (reservationId && dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
         }
       },
     });
@@ -2945,6 +2967,71 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     if (fromChat) return fromChat;
     return null;
   }, [selectedChat, customerDetailData]);
+
+  // Reservasi aktif terpilih (prioritas: OTW aktif > confirmed > hold > pending).
+  // Sumber utama status OTW kini dari item chat (active*Reservation.otw_sent_at),
+  // sehingga widget tetap muncul tanpa bergantung pembukaan modal detail customer.
+  const dispatchReservationId = useMemo<string | null>(() => {
+    const fromChat = [
+      (selectedChat as any)?.activeConfirmedReservation,
+      (selectedChat as any)?.activeHoldReservation,
+      (selectedChat as any)?.activePendingReservation,
+    ].find((r: any) => r?.otw_sent_at && !r?.arrived_at);
+    if (fromChat?.id) return fromChat.id;
+    const fromDetail = (customerDetailData?.reservations || []).find(
+      (r: any) => r.otw_sent_at && !r.arrived_at && !['completed', 'cancelled', 'rejected'].includes(String(r.status))
+    );
+    if (fromDetail?.id) return fromDetail.id;
+    if (selectedReservation?.reservationId && selectedReservation?.otwSentAt && !selectedReservation?.arrivedAt) {
+      return selectedReservation.reservationId;
+    }
+    return (
+      activeConfirmedReservation?.id ||
+      activeHoldReservation?.id ||
+      activePendingReservation?.id ||
+      null
+    );
+  }, [selectedChat, customerDetailData, selectedReservation, activeConfirmedReservation, activeHoldReservation, activePendingReservation]);
+
+  const dispatchReservationIdRef = useRef<string | null>(null);
+  dispatchReservationIdRef.current = dispatchReservationId;
+
+  const loadDispatchTrip = useCallback(async (reservationId: string) => {
+    setDispatchLoading(true);
+    try {
+      const res = await apiRequest(`/api/admin/dispatch/trip/${reservationId}`);
+      const data = res?.data || res;
+      if (dispatchReservationIdRef.current === reservationId) {
+        setDispatchTrip(data || null);
+      }
+    } catch {
+      if (dispatchReservationIdRef.current === reservationId) setDispatchTrip(null);
+    } finally {
+      setDispatchLoading(false);
+    }
+  }, []);
+  loadDispatchTripRef.current = loadDispatchTrip;
+
+  useEffect(() => {
+    if (!dispatchReservationId) {
+      setDispatchTrip(null);
+      return;
+    }
+    loadDispatchTrip(dispatchReservationId);
+  }, [dispatchReservationId, loadDispatchTrip]);
+
+  // Refresh berkala ringan (10s) hanya bila OTW aktif — jaring bila SSE terputus.
+  useEffect(() => {
+    if (!dispatchTrip?.otwSentAt || dispatchTrip?.arrivedAt) return;
+    const id = dispatchReservationIdRef.current;
+    if (!id) return;
+    const t = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDispatchTrip(id);
+      }
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [dispatchTrip?.otwSentAt, dispatchTrip?.arrivedAt, loadDispatchTrip]);
 
   // Smart Micro-Pill: reset tiap ganti chat/reservasi; auto-collapse 3 detik khusus mobile
   useEffect(() => {
@@ -5306,6 +5393,29 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               </div>
             )}
           </div>
+
+          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (hanya saat OTW aktif) */}
+          {dispatchTrip && dispatchTrip.otwSentAt && !dispatchTrip.arrivedAt && (
+            <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 p-2 overflow-y-auto">
+              <div className="w-full">
+                <LiveChatDispatchWidget
+                  data={dispatchTrip}
+                  loading={dispatchLoading}
+                  staffName={dispatchTrip.staffName || null}
+                  onRefresh={() => {
+                    if (dispatchReservationId) loadDispatchTrip(dispatchReservationId);
+                  }}
+                  onContactStaff={() => {
+                    if (dispatchTrip.staffPhone) {
+                      window.location.href = `tel:${dispatchTrip.staffPhone}`;
+                    } else {
+                      toast('Nomor Bidan belum tersedia.', 'info');
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -7,6 +7,8 @@ import {
   getStaffChatWindowConfig,
   StaffChatWindowConfig,
 } from '../config/staff-chat-window-config';
+import { getRollingFollowUpMessage, getRollingVariant } from '../config/followup-templates';
+import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 
 export interface StaffTaskChild {
   name: string;
@@ -27,6 +29,10 @@ export interface StaffTaskAddress {
   originName?: string | null;
   housePhotoUrl?: string | null;
   landmark?: string | null;
+  /** Alamat jalan/perumahan lengkap (preferences.address/full_address) — untuk bold UI. */
+  addressDetail?: string | null;
+  /** Akurasi koordinat: gps_pin (presisi) | estimated_area (estimasi) | manual_staff. */
+  locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
 }
 
 export interface StaffTaskPricing {
@@ -71,16 +77,61 @@ export interface StaffTaskItem {
   };
 }
 
-function buildAddressText(c: {
+/**
+ * Merangkai alamat yang ditampilkan ke terapis. Sumber alamat jalan/perumahan
+ * (`preferences.address` / `preferences.full_address`) DIMASUKKAN lebih dulu,
+ * baru hierarki wilayah resmi (Kel./Kec./Kota). Tanpa ini, nama perumahan &
+ * nomor blok hilang dari kartu tugas → terapis tersasar (insiden 28 Sep 2026).
+ * Dedupe teknis non-semantik: kelurahan tidak diulang bila sudah terkandung
+ * di teks alamat lengkap (data lama sempat mencemari kolom kelurahan).
+ */
+export function buildAddressText(c: {
   kelurahan?: string | null;
   kecamatan?: string | null;
   kota?: string | null;
+  preferences?: any;
 }): string {
+  const pref = (c.preferences as any) || {};
+  const addressDetail = String(pref.address || pref.full_address || '').trim();
   const parts: string[] = [];
-  if (c.kelurahan) parts.push(`Kel. ${c.kelurahan}`);
+  if (addressDetail) parts.push(addressDetail);
+  const kel = (c.kelurahan || '').trim();
+  if (kel && !addressDetail.toLowerCase().includes(kel.toLowerCase())) parts.push(`Kel. ${kel}`);
   if (c.kecamatan) parts.push(`Kec. ${c.kecamatan}`);
   if (c.kota) parts.push(c.kota);
   return parts.join(', ') || 'Alamat belum tercatat lengkap';
+}
+
+/**
+ * Derivasi TUNGGAL sumber akurasi koordinat untuk kartu terapis (server-driven).
+ *
+ * Urutan (deterministik, berbasis state — bukan tebakan teks):
+ *   1. Kolom `location_source` (kanonis).
+ *   2. `preferences.location_source`/`preferences.source` (provenance jalur
+ *      enrich/refresh) → dinormalkan ke makna yang sama.
+ *   3. Penanda edit staf → manual_staff.
+ *   4. `share_location_sent` + koordinat valid → gps_pin (data lama).
+ *   5. Tidak diketahui → null (netral: DILARANG menampilkan badge "presisi"
+ *      palsu; lebih baik tanpa badge daripada menyesatkan terapis).
+ */
+export function resolveLocationSource(
+  c: any
+): 'gps_pin' | 'estimated_area' | 'manual_staff' | null {
+  if (!c) return null;
+  const col = c.location_source;
+  if (col === 'gps_pin' || col === 'estimated_area' || col === 'manual_staff') return col;
+
+  const pref = (c.preferences as any) || {};
+  const src = pref.location_source || pref.source;
+  if (src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') return 'gps_pin';
+  if (src === 'geocoding' || src === 'url_text_geocoded' || src === 'gazetteer') return 'estimated_area';
+  if (src === 'manual_staff') return 'manual_staff';
+
+  if (pref.location_updated_by_staff_name || pref.location_updated_by_staff_id || pref.field_gps_lat) {
+    return 'manual_staff';
+  }
+  if (c.share_location_sent === true && c.lat != null && c.lng != null) return 'gps_pin';
+  return null;
 }
 
 /**
@@ -304,6 +355,7 @@ export class StaffReservationService {
               kelurahan: true,
               kecamatan: true,
               kota: true,
+              location_source: true,
               distance_km: true,
               ongkir: true,
               preferences: true,
@@ -466,6 +518,8 @@ export class StaffReservationService {
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
             landmark: (cust?.preferences as any)?.landmark || null,
+            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource: resolveLocationSource(cust),
           },
           children: childrenList,
           pricing,
@@ -580,6 +634,7 @@ export class StaffReservationService {
               kelurahan: true,
               kecamatan: true,
               kota: true,
+              location_source: true,
               distance_km: true,
               ongkir: true,
               preferences: true,
@@ -741,6 +796,8 @@ export class StaffReservationService {
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
             landmark: (cust?.preferences as any)?.landmark || null,
+            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource: resolveLocationSource(cust),
           },
           children: childrenList,
           pricing,
@@ -810,6 +867,7 @@ export class StaffReservationService {
               kelurahan: true,
               kecamatan: true,
               kota: true,
+              location_source: true,
               distance_km: true,
               ongkir: true,
               preferences: true,
@@ -912,6 +970,8 @@ export class StaffReservationService {
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
             landmark: (cust?.preferences as any)?.landmark || null,
+            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource: resolveLocationSource(cust),
           },
           children: childrenList,
           pricing,
@@ -976,6 +1036,51 @@ export class StaffReservationService {
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error rendering OTW template:', err.message);
       return `Halo Bunda ${params.patientName || 'Bunda'}, saya ${params.therapistName || 'Bidan Terapis'} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
+    }
+  }
+
+  /**
+   * Merender pesan status perjalanan terapis untuk CS (jawaban siap kirim saat
+   * pasien bertanya "sudah sampai mana?"). Data-driven: nama area & ETA di-inject
+   * dari state trip; template bisa dikustom Super Admin (`STAFF_TRIP_STATUS`).
+   */
+  static async getTripStatusMessageText(
+    tenantId: string = DEFAULT_TENANT_ID,
+    params: { patientName: string; areaName?: string | null; etaMinutes?: number | null; variantKey?: string }
+  ): Promise<string> {
+    const cleanName = sanitizeCustomerNameForGreeting(params.patientName || '');
+    const areaName = (params.areaName || '').trim() || 'perjalanan menuju lokasi';
+    const etaMinutes = params.etaMinutes != null && Number.isFinite(Number(params.etaMinutes))
+      ? String(Math.max(1, Math.round(Number(params.etaMinutes))))
+      : 'beberapa';
+    try {
+      const variant = (getRollingVariant(params.variantKey || params.patientName || '', new Date()) || 1);
+      const customTpl = await prisma.followUpTemplate.findUnique({
+        where: {
+          tenant_id_type_variant: { tenant_id: tenantId, type: 'STAFF_TRIP_STATUS', variant },
+        },
+      });
+      if (customTpl?.text) {
+        return customTpl.text
+          .replace(/\{\{?name\}\}?/gi, cleanName || 'Bunda')
+          .replace(/\{\{?patientName\}\}?/gi, cleanName || 'Bunda')
+          .replace(/\{\{?areaName\}\}?/gi, areaName)
+          .replace(/\{\{?etaMinutes\}\}?/gi, etaMinutes);
+      }
+      return getRollingFollowUpMessage('STAFF_TRIP_STATUS', {
+        name: cleanName,
+        areaName,
+        etaMinutes,
+        index: variant - 1,
+      }).text;
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error rendering trip status template:', err.message);
+      return getRollingFollowUpMessage('STAFF_TRIP_STATUS', {
+        name: cleanName,
+        areaName,
+        etaMinutes,
+        index: 0,
+      }).text;
     }
   }
 

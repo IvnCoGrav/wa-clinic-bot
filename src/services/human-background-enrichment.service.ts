@@ -178,8 +178,12 @@ export class HumanBackgroundEnrichmentService {
       //   dihitung ULANG dari koordinat via calculateDelivery; angka chat admin DIABAIKAN.
       // - Tanpa koordinat presisi → angka chat admin hanya ESTIMATE → disimpan di
       //   preferences.distance_estimate, kolom distance_km/ongkir resmi TIDAK disentuh.
+      // Gerbang presisi selaras CustomerService.isPreciseGps: shareloc native
+      // ATAU pin ber-sumber gps_pin (mis. link Maps ber-koordinat).
       const hasPreciseGps =
-        customer.share_location_sent === true && customer.lat != null && customer.lng != null;
+        (customer.share_location_sent === true || (customer as any).location_source === 'gps_pin') &&
+        customer.lat != null &&
+        customer.lng != null;
 
       let distanceKm: number | undefined;
       let ongkir: number | undefined;
@@ -342,7 +346,7 @@ export class HumanBackgroundEnrichmentService {
                   const { geocodingService } = await import('../integrations/google-maps/geocoding');
                   const { deliveryService } = await import('./delivery.service');
                   const { customerService } = await import('./customer.service');
-                  if (customer.share_location_sent) {
+                  if (customer.share_location_sent || (customer as any).location_source === 'gps_pin') {
                     console.log(`[HUMAN ENRICH] form geocode skipped for ${customer.phone} — GPS pin already exists`);
                   } else {
                     const resolved = await geocodingService.geocodeText(query);

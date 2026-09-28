@@ -3,6 +3,111 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 163. [Copilot] Timeout multi-step vs klien & recall "konfirmasi verbal" (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** laporan "AI Clinic Copilot … Gagal menghubungi Copilot. Coba lagi." saat bertanya
+  "yang konfirmasi besok tapi belum masuk reservasi siapa?". Akar: mismatch timeout — loop multi-step
+  (≤4 LLM call) memakai `LLM_TIMEOUT_CHAT_MS=120000` per attempt, sedangkan POST frontend abort 15 dtk.
+  **Perbaikan fondasional (2026-09-28, CHANGELOG):** anggaran wall-clock `COPILOT_TOTAL_BUDGET_MS`
+  (default 60 dtk) + degradasi deterministik + timeout frontend 70 dtk. Sisa yang BELUM:
+- **163a — Degradasi menyajikan data mentah:** bila deadline tersentuh setelah tool berjalan, jawaban
+  berupa daftar mentah (`buildDegradedAnswer`) tanpa rangkuman gaya bahasa. Sengaja: lebih baik data
+  benar daripada halusinasi; bisa diperhalus kelak bila ada model cepat (non-reasoning) untuk summarize.
+- **163b — Recall `query_stalled_inquiries` (RESOLVED untuk tool; akar hulu OPEN):**
+  **Bukti DB live 2026-09-28:** dari 780 percakapan, `session_data` NULL = 738 (95%), key `booking`
+  = **0**. Artinya `booking.requestedTimeHint/preferredDate/pendingScheduleCheck` TIDAK PERNAH
+  terisi di produksi, sehingga tool stalled (yang bergantung padanya) selalu kosong.
+  **Perbaikan fondasional (layer Tool Contract):** tool kini mendeteksi sinyal jadwal dari riwayat
+  pesan INBOUND memakai detektor kanonik pipeline (`hasScheduleSignal`/`isScheduleCheckEngagement`/
+  `extractTimeHint`/`hasBookingCommitSignal`), bukan keyword baru. Bukti recall: replika logika pada
+  DB live (7 hari) menemukan 29 kandidat tanpa reservasi aktif (sebelumnya 0). Test adversarial
+  hijau; full unit suite 3646 passed.
+  **SISA (akar hulu, OPEN):** mengapa `booking` tidak persisten di pipeline V3 (latch
+  `ContextGrounder.applySessionLatches` seharusnya menulisnya; label "Tanya Jadwal" terbukti jalan
+  20×) BELUM diinvestigasi tuntas. Recall Copilot kini tidak lagi bergantung pada state ini, tetapi
+  state `booking` tetap dipakai jalur lain (tool-masker `save_reservation`, phase-resolver,
+  fast-response-gate handoff) — bila kosong di produksi, perilaku jalur itu berpotensi salah.
+  Perlu audit tersendiri (apakah write ter-swallow, race, atau `booking` dihapus idle-reset).
+- **163c — Ambang & anggaran via env global:** `COPILOT_TOTAL_BUDGET_MS` (dan rate-limit 30/menit) masih
+  global per-server, belum per-tenant di DB. Bila tenant butuh berbeda → pindahkan ke config Tenant
+  (Confirmation Gate, sama pola dengan #144 Fase 4 SLA).
+- **163d — `withDeadline` membuang hasil terlambat:** promise LLM yang melewati deadline tidak
+  dibatalkan di level HTTP (axios) — hanya hasilnya diabaikan. Tidak ada kebocoran resource nyata
+  (koneksi ditutup axios saat timeout attempt), tetapi idealnya AbortSignal diteruskan ke axios.
+
+---
+
+## 162. [Dispatch & Tracking] Realtime Location Tracking Terapis — sisa tech debt (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** Fitur internal CS memantau posisi terapis realtime + geofence anti-lost.
+  Fase 1–5 + hardening rekomendasi SUDAH dieksekusi & teruji (lihat CHANGELOG). Entri ini
+  mencatat sisa yang BELUM/tidak dieksekusi.
+- **162a — Storage masih in-memory (OPEN, sengaja):** `staffTripTrackingService` memakai
+  `Map` + TTL. Belum wiring Redis `SETEX` agar `npm test` tetap offline-safe (tanpa Redis).
+  `redisKey()` sudah diekspos dengan format final `staff:trip:{tenantId}:{reservationId}`.
+  Konsekuensi: state trip hilang bila proses restart & TIDAK terbagi antar-instance
+  (multi-instance SaaS). Kandidat fix: adapter Redis dengan fallback memori (butuh
+  keputusan kontrak async — Confirmation Gate tersendiri).
+- **162b — Deteksi OTW (RESOLVED):** `otw_sent_at`/`arrived_at` dibawa di `LiveChatItem`;
+  widget kondisi langsung dari item chat (tak bergantung modal detail customer).
+- **162c — Widget CS & Modal Peta (RESOLVED):** `LiveChatDispatchWidget.tsx` +
+  `DispatchMapModal.tsx` (raster tile OSM 2-marker, tanpa Leaflet/marker= ganda OSM).
+- **162d — Akurasi indoor & throttle OS (OPEN, keterbatasan platform):** saat HP di
+  kantong/layar mati, OS mem-throttle GPS; posisi bisa basi. Mitigasi: `lastUpdateSec`
+  + pill "Update X menit lalu". Perlu validasi lapangan.
+- **162e — Auto-close berbasis jam jadwal (belum):** TTL 600s sudah mencegah memory leak,
+  tetapi auto-close "jadwal lewat 1 jam" belum diimplementasikan (butuh sweep/cron).
+- **162f — Ambang geofence global (OPEN, tenant-aware):** `GEOFENCE_*` masih konstanta file
+  (ditandai `TODO(tenant-aware)`). Pindahkan ke `ClinicPolicy` bila tiap tenant butuh ambang
+  berbeda.
+- **162g — Broadcast SSE per-tenant (OPEN, single-tenant aman):** payload telemetry
+  dipancar ke channel `livechat:{tenantId}` (semua admin tenant). Aman hari ini
+  (single-tenant) & tanpa identitas customer; bila multi-admin banyak, pertimbangkan
+  filter per-`conversationId` yang dibuka.
+- **162h — Wake Lock re-acquire (RESOLVED):** `useTripTelemetry` mengambil ulang lock saat
+  tab kembali visible.
+- **162i — Rate limit telemetry (RESOLVED):** 40 req/menit per key + `bodyLimit 4KB`.
+- **162j — Uji cabang DB template (RESOLVED):** `getTripStatusMessageText` diuji dengan
+  injeksi `prisma.followUpTemplate` scoped-test (tanpa mengubah mock global).
+- **Catatan:** uji perangkat nyata (HP Bidan + LiveChat live) & deploy produksi BELUM
+  dilakukan.
+
+---
+
+## 161. [Lokasi & Navigasi] Akurasi Koordinat Terapis — sisa tech debt (2026-09-28) - OPEN (sebagian)
+
+- **Konteks:** Insiden customer 6288000000009 (28 Sep 2026): alamat perumahan
+  dicatat sebagai kolom `kelurahan`, pin presisi berpotensi tertimpa hasil teks, dan
+  kartu terapis tidak memuat nama perumahan/blok. Perbaikan fondasional sudah dieksekusi
+  (lihat CHANGELOG 2026-09-28). Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
+- **161a — Sentroid kecamatan masih membawa nama desa-pertama (OPEN, sebagian):**
+  `getGazetteerCoordinates('perum banjarmukti blok g6a buduran')` mengembalikan
+  `kelurahan: 'Sidokerto'` (desa pertama kecamatan Buduran) walau tidak disebut customer.
+  Mitigasi deterministik sudah dipasang di jalur lifecycle (anti-fabrikasi wilayah: nama desa
+  hanya dipersist bila muncul di alamat), TETAPI fungsi gazetteer global masih mengembalikan
+  nama desa tsb ke konsumen lain (peta admin memakai `is_estimated_centroid` sehingga aman;
+  `calculate-delivery.tool.ts` hanya memakai koordinat sentroid + kecamatan). Kandidat fix
+  fondasional: tambah flag `matchedLevel: 'kelurahan' | 'kecamatan'` pada return gazetteer
+  agar konsumen tidak perlu menebak — butuh audit blast-radius seluruh konsumen.
+- **161b — Tombol 1-klik "Minta Shareloc WhatsApp" (Belum dieksekusi, sengaja):**
+  Fase 3.2 plan awal ditunda mengikuti prinsip reuse-first & anti-bloat: kapabilitas meminta
+  shareloc ke customer SUDAH ada via LiveChat + Quick Reply default ("Alamat Lengkap &
+  Shareloc"), dan menambah endpoint pengirim WhatsApp baru berisiko duplikasi + shadow-ban
+  (waha-testing-safety). Bila tetap diinginkan, wajib lewat Confirmation Gate (butuh endpoint
+  kirim tenant-aware + template dari DB + verifikasi 2-langkah).
+  **Klarifikasi (audit ulang):** override presisi untuk "pindah rumah" SUDAH tersedia dari
+  dashboard admin — `PUT /api/admin/customers/:id/location` (`Reservations.tsx`) dan tombol
+  "Refresh Lokasi" menulis koordinat langsung (bypass guard `isPreciseGps`) + audit
+  `ADMIN_UPDATE_CUSTOMER_LOCATION`. Karena itu tombol `forceUpdateGps` baru TIDAK dibuat
+  (redundan); param tetap sebagai escape-hatch API terprogram. Yang benar-benar belum ada
+  hanyalah kemudahan 1-klik kirim permintaan shareloc — bukan celah fungsional.
+- **161c — Remediasi data live 6288000000009 (Belum dieksekusi, runbook):**
+  Perbaikan record produksi (isi `preferences.address` bersih, koreksi `location_source`)
+  DIPISAH dari deploy kode karena menyentuh data live → butuh verifikasi 2-langkah +
+  WARNING sesuai aturan deploy. Belum dijalankan.
+
+---
+
 ## 160. [LiveChat & Sandbox] Blinking UI, SSE Mode Mismatch Thrashing & Tab Desync (2026-09-28) - OPEN (Plan Ready)
 
 - **Konteks:** Ditemukan keluhan UI/UX LiveChat sering berkedip (*blinking/flicker*) saat berada di filter Sandbox, serta beberapa bug desinkronisasi obrolan.
@@ -30,13 +135,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 156. [V3/Katalog & Few-Shot] Konflik kebijakan Nebulizer homecare vs koreksi exemplar (2026-09-28) - OPEN (butuh keputusan produk)
+## 156. [V3/Katalog & Few-Shot] Konflik kebijakan Nebulizer homecare vs koreksi exemplar (2026-09-28) — RESOLVED (keputusan produk B, 2026-09-28)
 
-- **Konteks:** audit 868-bubble mengangkat CASE-018/047 (bot menolak "nebulizer tidak tersedia") sebagai anomali. Contoh penolakan `gold_penolakan_layanan_belum_tersedia` (`src/v3/agent/gold-few-shot-exemplars.ts`) memang memuat tag `nebulizer`/`uap`, dan katalog DB punya `add-on-nebulizer` + `add-on-nebulizer-obat` aktif (`src/services/treatment-catalog.service.ts:782-814`).
-- **KONFLIK FONDASIONAL (ditemukan saat eksekusi):** ada **keputusan bisnis/medis yang disetujui user** (KNOWN_ISSUES #54, 2026-09-12) bahwa ADDON (Moksa, **Nebulizer**) TIDAK melayani homecare mandiri — dikunci deterministik di `cart-manager.ts:567-577` (proteksi orphan ADDON). Model juga menolak karena penalaran keselamatan medis (nebulisasi = tindakan medis butuh dokter), bukan karena exemplar.
-- **Akibat:** koreksi exemplar (menghapus tag `nebulizer`, menambah exemplar add-on "tersedia") **bertentangan** dengan kebijakan tersebut. Dampak live juga terbatas karena exemplar bersifat data-driven (baris DB menaungi default TS; perlu `scripts/seed-curated-gold-exemplars.ts` / `sync-few-shot-defaults.ts`).
-- **Bukti:** run `--suite=v2 --llm` regenerasi 2026-09-28: CASE-018 bubble[13]/[16] & CASE-047 bubble[6] masih menolak nebulizer meski exemplar sudah dikoreksi; `npx tsx` langsung ke `executeGetCatalog` mengembalikan hanya layanan utama (add-on tidak muncul untuk keluhan bapil).
-- **Butuh keputusan produk:** (A) pertahankan kebijakan "nebulizer bukan layanan homecare mandiri" — maka CASE-018/047 adalah ekspektasi audit yang salah, exemplar TIDAK dikoreksi, dan catat sebagai intended behavior; atau (B) ubah kebijakan agar Nebulizer (+Obat) menjadi add-on homecare valid — maka perlu ubah basis data (aktifkan sebagai add-on orderable), `cart-manager` (izinkan add-on berpasangan pijat), dan exemplar, plus tinjau aspek medis/legal. **JANGAN eksekusi salah satu sebelum keputusan eksplisit.**
+- **Konteks:** audit 868-bubble mengangkat CASE-018/047 (bot menolak "nebulizer tidak tersedia") sebagai anomali. Katalog DB punya `add-on-nebulizer` + `add-on-nebulizer-obat` aktif (`src/services/treatment-catalog.service.ts:782-814`).
+- **Keputusan produk (dikonfirmasi user): OPSI B** — Nebulizer (+Obat) ADALAH add-on katalog yang SAH dipesan **BERSAMA** layanan utama (pijat terapi), TIDAK berdiri sendiri. Kebijakan #54 (add-on tidak mandiri) TETAP berlaku.
+- **Akar lintas lapis (terverifikasi kode, bukan klaim dokumen):**
+  1. **Exemplar kontradiktif:** `gold_penolakan_layanan_belum_tersedia` (`gold-few-shot-exemplars.ts`) memuat tag `nebulizer`/`uap` → LLM meniru penolakan.
+  2. **Mirror enrichment:** `keyword-enrichment.service.ts` menyuntik tag yang sama ke exemplar DB.
+  3. **Hardcode moksa-only:** `get-catalog.tool.ts` hanya menyuntik add-on `id.includes('moksa')`; nebulizer tak pernah muncul di output tool. Add-on juga tenggelam di urutan skor terapi sehingga terpotong `slice(0,5)`.
+  4. **DB seed:** tidak ada migrasi yang men-seed nebulizer ke `clinic_services`.
+- **Perbaikan (fondasional, data-driven):**
+  - **Exemplar:** tag `nebulizer`/`uap` DIHAPUS dari contoh penolakan (kini murni cuci hidung/sedot lendir/jasa luar); ditambah exemplar baru `gold_nebulizer_addon_tersedia` (menawarkan nebulizer sebagai add-on). `keyword-enrichment.service.ts` disinkronkan.
+  - **Tool:** blok add-on pernapasan kini **data-driven** — memilih SEMUA add-on aktif yang deskripsinya cocok topik pernapasan/token keluhan (Sinar Moksa + Nebulizer Saline + Nebulizer + Obat), bukan hafalan nama `moksa`. Add-on disisipkan tepat di bawah layanan teratas (tidak terpotong `slice(0,5)`); `isAddon` ditandai dari katalog.
+  - **Migrasi:** `prisma/migrations/20260928000000_add_nebulizer_addon/migration.sql` — idempoten (`ON CONFLICT`/`WHERE NOT EXISTS`) seed kedua add-on untuk `default-tenant`; TIDAK menimpa kustomisasi admin.
+- **Test:** `tests/unit/v3/nebulizer-addon-availability.test.ts` (8 skenario: katalog aktif, klasifikasi add-on, exemplar bersih, tool data-driven, anti-brosur mode konsultasi).
+- **Verifikasi:** `tsc` 0; full suite 4023 passed / 0 failed.
 
 ## 157. [Reservasi & AI] Audit Lapis-2 Sistem Reservasi: temuan terlewat dari audit pertama (2026-09-28) - OPEN (sebagian)
 

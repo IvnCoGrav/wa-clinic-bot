@@ -4,6 +4,181 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-28 — Dispatch Tracking: Hardening Rekomendasi (Deteksi OTW, Peta Presisi, Wake Lock, Rate Limit)
+
+- **Fixed — Deteksi OTW reliable (#8):** `LiveChatItem.active*Reservation` kini membawa
+  `otw_sent_at`/`arrived_at` (`live-chat.service.ts`). `LiveChatMonitor.tsx` memakai item
+  chat sebagai sumber utama status OTW, sehingga widget muncul tanpa bergantung pembukaan
+  modal detail customer.
+- **Fixed — Peta 2 titik presisi tanpa dependency (#6):** `DispatchMapModal.tsx` tidak lagi
+  menembak dua param `marker=` (tak didukung OSM embed). Diganti raster tile OSM
+  (Web Mercator) via util murni baru `packages/admin-dashboard/src/utils/dispatchMap.ts`
+  (`computeMapView`/`chooseZoom`/`tileUrl`), marker hijau Bidan + merah rumah presisi,
+  atribusi OSM, dan deep-link rute Google Maps. Nol dependency baru.
+- **Fixed — Wake Lock re-acquire (#7):** `useTripTelemetry` mengambil ulang wake lock saat
+  tab kembali `visible` (browser melepas lock saat tab disembunyikan) — layar HP tidak mati
+  di holder motor.
+- **Security — Rate limit telemetry (#12):** `POST /api/staff/telemetry` dibatasi
+  40 req/menit per key (selain `bodyLimit 4KB`).
+- **Fixed — Template status aman nama kosong:** `STAFF_TRIP_STATUS` tidak lagi menghasilkan
+  `{name}` / `Bunda ,` saat nama pasien kosong.
+- **Tests (`+15`):** `tests/unit/dispatch-map-projection.test.ts` (6, adversarial proyeksi:
+  invers, input rusak, bounds marker, tile range), `tests/unit/staff-trip-status-template.test.ts`
+  (3, cabang DB `FollowUpTemplate` + fallback offline + nama kosong). Cabang DB yang
+  sebelumnya tak teruji sekarang terverifikasi.
+- **Verifikasi:** root `tsc --noEmit` 0 error; dashboard Vite build sukses; vitest full suite
+  **4056 passed / 0 failed** (28 skipped).
+
+#### 2026-09-28 — Internal Realtime Location Tracking & Dispatch Alert Terapis (Fase 3–5)
+
+- **Added — Emitter PWA (`packages/admin-dashboard/src/hooks/useTripTelemetry.ts`):**
+  hook reusable `startTelemetry/stopTelemetry` dengan `watchPosition` + interval kirim
+  25s, throttle anti-spam, silent-fail saat sinyal hilang, `wakeLock` best-effort
+  (iOS-unavailable diabaikan), dan pembersihan total saat unmount. Dipasang di
+  `StaffToday.tsx`: mulai saat OTW sukses, berhenti saat "Sampai"/"Selesai".
+  Indikator halus: dot hijau berdenyut pada badge OTW saat pemantauan aktif.
+- **Added — Widget CS (`components/livechat/LiveChatDispatchWidget.tsx`):** badge
+  status + pulse kesegaran (<60 dtk), nama area, sisa km, laju, ETA, `lastUpdateSec`
+  ("Update X menit lalu"), tombol **Salin Teks Jawaban Pasien** (dari `readyText`
+  server-side, bukan hardcode), dan banner geofence anti-lost + tombol `tel:` Bidan.
+- **Added — Modal peta tanpa dependency baru (`components/livechat/DispatchMapModal.tsx`):**
+  iframe OpenStreetMap embed (2 marker: hijau Bidan, merah rumah pasien) + deep-link
+  Google Maps. TANPA Leaflet / Google Maps API berbayar.
+- **Changed — LiveChat (client + page):** `liveChatSse.ts` mendaftarkan event
+  `staff.telemetry_updated` / `staff.trip_closed`; `LiveChatMonitor.tsx` fetch
+  `GET /api/admin/dispatch/trip/:id`, sidebar kanan muncul hanya saat OTW aktif
+  (`hidden xl:flex`), refresh 10s saat tab visible, dan update realtime via SSE.
+- **Changed — Endpoint dispatch:** respons menambah `staffName`, `staffPhone`,
+  `geofenceDistanceM` (jarak terukur untuk banner).
+- **Verifikasi:** root `tsc --noEmit` 0 error; dashboard Vite build sukses; vitest
+  full suite **4041 passed / 0 failed** (28 skipped).
+
+#### 2026-09-28 — Internal Realtime Location Tracking & Dispatch Alert Terapis (Fase 1 & 2)
+
+- **Added — Service fondasi `src/services/staff-trip-tracking.service.ts` (Fase 1):**
+  store transient in-memory + TTL 600s (siap wiring Redis `SETEX` di Fase 3 via
+  `redisKey()` tanpa ubah kontrak). Tenant-scoped key `trip:{tenantId}:{reservationId}`
+  (cegah race 1 bidan 2 OTW). Pure `resolveHumanAreaName` (landmark ≤2km > gazetteer
+  `findNearestSubdistrict` > fallback; sengaja TIDAK memakai `ARTERY_CORRIDORS` yang
+  text-match), `calculateTripProgress` (Haversine 1.25x, 25 km/jam, clamp 1–120 mnt),
+  dan `evaluateGeofenceAlert` (300m–1.5km, stalled 180s, tolak `accuracy>100`).
+  `movedAt` mereset timer stalled hanya saat perpindahan >30m (anti-noise GPS diam).
+- **Added — Endpoint telemetry staf (`src/routes/staff/today.subroute.ts`):**
+  `POST /api/staff/telemetry` (ping GPS, `bodyLimit 4KB`) & `POST /api/staff/trip/stop`
+  (matikan pemantauan saat tiba). Guard tenant + anti-IDOR via helper
+  `loadAuthorizedReservation` (fail-closed unassigned, supervisor lintas-terapis);
+  publish `staff.telemetry_updated` / `staff.trip_closed` ke LiveChatHub.
+- **Added — Endpoint dispatch admin (`src/routes/admin/reservations.subroute.ts`):**
+  `GET /api/admin/dispatch/trip/:reservationId` — posisi, `lastUpdateSec`, sisa km,
+  ETA, flag geofence, dan `readyText` siap kirim (DB-driven).
+- **Added — Template status perjalanan DB-driven:** tipe `STAFF_TRIP_STATUS` di
+  `src/config/followup-templates.ts` (placeholder `{name}/{areaName}/{etaMinutes}`) +
+  `StaffReservationService.getTripStatusMessageText()` (custom `FollowUpTemplate`
+  tenant > rolling default) + entri editor di `FollowUpTemplates.tsx`. Tidak ada
+  template hardcode di frontend.
+- **Changed — SSE:** `LiveChatHubEventType` + allowlist `ALLOWED_STAFF_EVENTS` staf
+  menambah `staff.telemetry_updated`/`staff.trip_closed`, difilter `staffId` agar
+  posisi tidak bocor lintas-terapis. SSE admin tanpa allowlist (forward) — aman.
+- **Tests:** `tests/unit/staff-trip-tracking.test.ts` (6, adversarial: isolasi tenant,
+  koordinat/akurasi invalid, overwrite `createdAt`, batas geofence, low-accuracy,
+  ETA clamp) + `tests/integration/staff-trip-dispatch.test.ts` (11, 401/403/404
+  anti-IDOR lintas-tenant, jadwal selesai, stop, progress + readyText).
+- **Verifikasi:** `npx vitest run` suite terpilih hijau (17+23+44+19); root `tsc --noEmit`
+  0 error; dashboard `npm run build` sukses. Fase 3–5 (emitter PWA, widget CS, modal peta
+  tanpa Leaflet) BELUM dieksekusi — lihat `docs/KNOWN_ISSUES.md` #162.
+
+#### 2026-09-28 — AI Clinic Copilot: Recall Stalled Inquiry dari Teks Pesan (Akar #163b)
+
+- **Latar (bukti DB live):** pertanyaan "yang konfirmasi besok tapi belum masuk reservasi siapa?"
+  selalu kosong. Audit `conversations`: dari **780 percakapan**, `session_data` NULL = 738 (95%),
+  dan key `booking` = **0 (nol)** — sinyal `requestedTimeHint/preferredDate/pendingScheduleCheck`
+  TIDAK PERNAH terisi di produksi. `query_stalled_inquiries` bergantung pada `session_data.booking.*`
+  → recall = nol secara sistematis. Label "Tanya Jadwal" sempat terpasang (20×) membuktikan latch
+  berjalan, tetapi state `booking` tidak persisten.
+- **Fixed — Sinyal jadwal dari TEKS pesan (`src/services/copilot/copilot-tools.ts`):** bila
+  `session_data` kosong, tool mendeteksi minat jadwal dari riwayat pesan INBOUND memakai detektor
+  kanonik pipeline produksi (`hasScheduleSignal`, `isScheduleCheckEngagement`,
+  `isScheduleAvailabilityText`, `extractTimeHint`, `hasBookingCommitSignal`) — BUKAN keyword baru.
+  Helper `hasTextScheduleSignal` menyatukan predikat. Ambil 5 pesan terakhir (bukan 1) agar turn
+  pertanyaan tertangkap walau ada balasan bot sesudahnya.
+- **Fixed — Filter tanggal dari teks:** `matchesInquiryDate` kini juga dievaluasi terhadap petunjuk
+  waktu hasil ekstraksi teks (mis. "besok"), bukan hanya state sesi.
+- **Bukti recall (replika logika tool pada DB live, 7 hari):** kandidat tanpa reservasi aktif
+  dengan sinyal jadwal = **29 baris** (sebelumnya 0). Pada jendela 3 hari saat admin responsif,
+  jumlah yang benar-benar menggantung (inbound terakhir belum dibalas) = 0 — konsisten.
+- **Tests:** `copilot-fixing.test.ts` +6 skenario adversarial (session_data null + teks "besok",
+  multi-parafrase "bsk bisa…/slot jam berapa", teks tanpa sinyal, filter date dari teks, sudah
+  punya reservasi, sudah dibalas admin).
+- **Verifikasi:** root `tsc` 0; vitest full unit suite **3646 passed / 0 failed**; root build 0.
+- **Catatan:** memperbaiki *recall tool*. Akar hulu (state `booking` tidak persisten di pipeline)
+  tetap tercatat sebagai sisa di `docs/KNOWN_ISSUES.md` #163b (kini recall tidak lagi bergantung
+  padanya).
+
+#### 2026-09-28 — AI Clinic Copilot: Anggaran Wall-Clock & Degradasi Jujur (anti "Gagal menghubungi Copilot")
+
+- **Latar (bukti audit):** pertanyaan komposit ("yang konfirmasi besok tapi belum masuk reservasi siapa?")
+  memicu loop multi-step (sampai 4 panggilan LLM sekuensial). Tiap attempt boleh berjalan
+  `cfg.timeoutMs` (env `LLM_TIMEOUT_CHAT_MS` = **120 dtk**) ditambah retry transient + fallback
+  lintas-provider. Sementara `apiRequest` frontend (POST default) abort di **15 dtk** → admin melihat
+  toast "Gagal menghubungi Copilot. Coba lagi." walau backend masih bekerja. Catch-all di
+  `copilot.service.ts` juga menyamakan timeout ini dengan "gangguan layanan AI".
+- **Fixed — Anggaran wall-clock deterministik (`src/services/copilot/copilot.service.ts`):**
+  `DEFAULT_TOTAL_BUDGET_MS = 60_000` (override env `COPILOT_TOTAL_BUDGET_MS`) sebagai deadline turn.
+  Helper `withDeadline()` me-race seluruh panggilan LLM terhadap deadline sehingga total tunggu tidak
+  pernah melewati batas (retry/fallback tetap dibuang aman). `callTimeout()` membatasi timeout tiap
+  attempt ke sisa anggaran. Loop router berhenti bila sisa waktu < ambang proporsional.
+- **Added — Degradasi jujur deterministik:** `buildDegradedAnswer()` merangkai jawaban dari baris tool
+  NYATA (tanpa LLM → anti-halusinasi) saat deadline tersentuh; tanpa data sama sekali → `success:false`
+  dengan `error: 'COPILOT_DEADLINE_EXCEEDED'` + pesan actionable, BUKAN "gangguan layanan AI".
+- **Fixed — Timeout frontend selaras (`AdminCopilotPanel.tsx`):** `timeoutMs: 70000` pada POST
+  `/api/admin/copilot/chat` (margin di atas anggaran backend 60 dtk) agar backend sempat mengembalikan
+  degradasi jujur sebelum klien abort.
+- **Fixed — Klaim plan vs kode (rate-limit):** `copilot.subroute.ts` kini benar-benar memasang
+  `config.rateLimit { max: 30, timeWindow: '1 minute' }` (sebelumnya hanya disebut di komentar).
+- **Tests:** `copilot-fixing.test.ts` +6 skenario adversarial (deadline race, degradasi tanpa data,
+  degradasi dengan data grounded, happy-path tidak regresi, `buildDegradedAnswer` anti-halusinasi).
+- **Verifikasi:** root `tsc` 0; dashboard Vite build 0; `copilot-fixing` + `copilot-grounding` 71/71 hijau;
+  unit suite 3639 passed (1 timeout flaky #142 `capi-tenant-isolation`, hijau saat diisolasi).
+
+#### 2026-09-28 — Jaminan Akurasi Koordinat & Presisi Navigasi Terapis (Insiden Terapis Tersasar)
+
+- **Fixed — Integritas spasial kolom `kelurahan` (Fase 0):** alamat jalan/perumahan
+  (`Banjarmukti Residence Blok G-6A`) tidak lagi disalin ke kolom `kelurahan` saat
+  reservasi dibuat dari form teks. `reservations.subroute.ts` (endpoint
+  `POST /api/admin/reservation`) kini mengirim `kelurahan: undefined` — kolom kelurahan
+  khusus entitas desa resmi hasil geocoding/gazetteer. `reservation-lifecycle.service.ts`
+  mempersist alamat lengkap ke `preferences.address/full_address` (bukan kolom wilayah).
+- **Fixed — GPS Immutability Guard fondasional (Fase 1):** gerbang baru tunggal
+  `CustomerService.isPreciseGps` (`location_source === 'gps_pin'` ATAU
+  `share_location_sent === true` + lat/lng valid) melindungi koordinat presisi dari
+  penimpaan hasil geocoding teks. Dipasang di SEMUA seam tulis: `updateCustomerLocation`
+  (DB + memory), `updateCustomer` (auto-recalc admin — sebelumnya tanpa guard sama sekali),
+  `promotePendingLocation`, dan jalur pengayaan form WA (`human-background-enrichment`).
+  Estimasi `estimated_area` sengaja TETAP boleh dikoreksi; override presisi hanya lewat
+  `isNativePin`, `locationSource: gps_pin`, atau `forceUpdateGps` eksplisit.
+- **Fixed — Provenance koordinat konsisten:** `url_coords` (link Maps ber-koordinat) kini
+  dipetakan ke `gps_pin` + `share_location_sent=true` (sejajar jalur enrich), bukan lagi
+  `estimated_area`. `url_text_geocoded`/`geocoding` tetap `estimated_area`.
+- **Fixed — Anti-fabrikasi wilayah (Fase 4):** fallback gazetteer pada lifecycle tidak lagi
+  mempersist nama desa dari sentroid kecamatan bila nama desa itu tidak benar-benar disebut
+  customer (mis. `buduran` → sentroid desa lain); cukup koordinat estimasi + kecamatan/kota.
+- **Added — Presisi Navigasi Terapis (Fase 2 & 3):** `buildAddressText` kini merangkai
+  alamat jalan/perumahan + hierarki wilayah (dedupe teknis), sehingga kartu tugas memuat
+  nama perumahan & blok. Payload staf menambah `addressDetail` + `locationSource`
+  (derivasi server tunggal `resolveLocationSource`: kolom → `preferences` → penanda staf →
+  `share_location_sent`; tak diketahui = null agar TIDAK menampilkan "presisi" palsu), dan
+  kartu tugas menampilkan **badge akurasi deterministik** (`📍 Titik Presisi` /
+  `⚠️ Estimasi Wilayah` / `🛠️ Titik Staf`) berbasis state server.
+- **Catatan — Override "pindah rumah" sudah tersedia:** jalur admin `PUT /api/admin/customers/:id/location`
+  (`Reservations.tsx`) dan "Refresh Lokasi" menulis koordinat langsung + audit, sehingga
+  tombol `forceUpdateGps` baru TIDAK dibuat (redundan, anti-bloat). Param `forceUpdateGps`
+  dipertahankan sebagai escape-hatch API terprogram + dipakai test kontrak.
+- **Tests:** `tests/unit/location-immutability.test.ts` (12, adversarial multi-parafrase):
+  pin presisi tidak tertimpa, estimasi boleh dikoreksi, override eksplisit, promosi pending,
+  edit admin tidak geocode-ulang, `buildAddressText`, dan gazetteer tidak mengarang desa.
+- **Verifikasi:** root `tsc --noEmit` 0 error; dashboard Vite build sukses; vitest full suite
+  **4006 passed / 0 failed** (28 skipped).
+
 #### 2026-09-28 — Optimasi LiveChat Mobile: Placeholder Ringkas, Tombol Kunci Mobile-Hidden, & Filter/Toggle Unread
 
 - **Changed — LiveChatComposer:**
@@ -13,6 +188,14 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semanti
   - Ditambahkan filter baru **"Pesan Belum Dibaca (Unread)"** dengan ikon `MessageSquareDot` pada toolbar atas daftar percakapan WhatsApp. Dilengkapi indikator dot hijau dinamis saat ada pesan yang belum dibaca.
   - Ditambahkan tombol aksi toggle Unread (`MessageSquareDot`) di samping tombol cari pada header percakapan aktif. Staf dapat menandai percakapan sebagai belum dibaca / sudah dibaca dengan sekali sentuh/klik tanpa perlu long-press / klik kanan.
 - **Verifikasi:** Build dashboard Vite (`npm run build`) sukses 0 error; root `tsc` lulus 0 error; test integration auth signal contract 9 passed.
+
+#### 2026-09-28 — Nebulizer sebagai Add-on Katalog Valid (KNOWN_ISSUES #156, keputusan produk B)
+
+- **Fixed — Exemplar kontradiktif:** `gold_penolakan_layanan_belum_tersedia` (`src/v3/agent/gold-few-shot-exemplars.ts`) tidak lagi menandai `nebulizer`/`uap` sebagai "layanan belum tersedia" (kini murni cuci hidung/sedot lendir/jasa luar). Ditambah exemplar `gold_nebulizer_addon_tersedia`. `keyword-enrichment.service.ts` disinkronkan.
+- **Fixed — Tool `get_catalog_and_price` data-driven:** blok add-on pernapasan tidak lagi hafalan `id.includes('moksa')`. Kini memilih SEMUA add-on aktif yang deskripsinya cocok topik pernapasan/token keluhan (Sinar Moksa, Nebulizer Saline, Nebulizer + Obat), disisipkan tepat di bawah layanan teratas agar tak terpotong `slice(0,5)`; `isAddon` ditandai dari katalog.
+- **Added — Migrasi idempoten:** `prisma/migrations/20260928000000_add_nebulizer_addon/migration.sql` men-seed `add-on-nebulizer` & `add-on-nebulizer-obat` untuk `default-tenant` (`ON CONFLICT`/`WHERE NOT EXISTS`, tidak menimpa kustomisasi admin).
+- **Keputusan produk:** Nebulizer (+Obat) SAH sebagai add-on **bersama** layanan utama (pijat terapi), TIDAK berdiri sendiri (kebijakan #54 tetap).
+- **Tests:** `tests/unit/v3/nebulizer-addon-availability.test.ts` (8). **Verifikasi:** root `tsc` 0; vitest full suite 4023 passed / 0 failed.
 
 #### 2026-09-28 — Hardening Sesi Staff (503), Access-Log Auth & Observabilitas Pre-Visit Brief (KNOWN_ISSUES #141, #143, #157f)
 

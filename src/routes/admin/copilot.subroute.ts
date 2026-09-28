@@ -14,6 +14,16 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/copilot/chat',
+    {
+      // Gerbang kode (bukan klaim komentar): endpoint ini memanggil LLM multi-step
+      // (mahal). Batasi per-klien agar tidak bisa membanjiri biaya/kuota.
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: '1 minute',
+        },
+      },
+    },
     async (
       request: FastifyRequest<{
         Body: { message?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> };

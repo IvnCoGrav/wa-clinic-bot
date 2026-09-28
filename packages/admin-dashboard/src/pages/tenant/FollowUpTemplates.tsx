@@ -38,6 +38,11 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'REMINDER',
     description: 'Pesan konfirmasi keberangkatan bidan menuju rumah pasien (home care).',
   },
+  STAFF_TRIP_STATUS: {
+    label: 'Status Perjalanan Bidan (Jawaban CS)',
+    category: 'REMINDER',
+    description: 'Teks siap kirim untuk CS saat pasien bertanya posisi bidan. Placeholder: {name}, {areaName}, {etaMinutes}.',
+  },
   REVIEW_H1_BABY: {
     label: 'Review H+1 Pasca Treatment Baby',
     category: 'REVIEW',

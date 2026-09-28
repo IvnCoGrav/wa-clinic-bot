@@ -3,6 +3,7 @@ import { StaffReservationService } from '../../services/staff-reservation.servic
 import { liveChatService } from '../../services/live-chat.service';
 import { auditService } from '../../services/audit.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
+import { staffTripTrackingService } from '../../services/staff-trip-tracking.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
 import { isStaffSupervisorRole } from '../staff.route';
@@ -425,6 +426,126 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * Helper internal: muat reservasi + guard tenant/anti-IDOR untuk rute telemetry.
+   * Fail-closed untuk unassigned; supervisor boleh lintas-terapis.
+   */
+  const loadAuthorizedReservation = async (
+    reservationId: string,
+    staffId: string,
+    tenantId: string,
+    isSupervisor: boolean
+  ): Promise<{ ok: true; reservation: any } | { ok: false; status: number; error: string }> => {
+    if (!reservationId || typeof reservationId !== 'string') {
+      return { ok: false, status: 400, error: 'reservationId wajib disertakan.' };
+    }
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { customer: { select: { id: true, lat: true, lng: true, name: true } } },
+    });
+    if (!reservation || (reservation as any).tenant_id !== tenantId) {
+      return { ok: false, status: 404, error: 'Reservasi tidak ditemukan.' };
+    }
+    if (!isSupervisor) {
+      const assigned = (reservation as any).assigned_staff_id;
+      if (!assigned || assigned !== staffId) {
+        return { ok: false, status: 403, error: 'Anda tidak memiliki hak akses untuk perjalanan jadwal terapis lain.' };
+      }
+    }
+    return { ok: true, reservation };
+  };
+
+  /**
+   * POST /api/staff/telemetry
+   * Menerima ping GPS berkala dari HP terapis saat OTW (transient, TTL 10 menit).
+   * Wajib tenant-scoped + anti-IDOR. Payload < 1 KB.
+   */
+  fastify.post(
+    '/api/staff/telemetry',
+    { bodyLimit: 4 * 1024, config: { rateLimit: { max: 40, timeWindow: '1 minute' } } },
+    async (
+      request: FastifyRequest<{
+        Body: { reservationId: string; lat: number; lng: number; speed?: number; heading?: number; accuracy?: number };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor = isStaffSupervisorRole(role);
+      const { reservationId, lat, lng, speed, heading, accuracy } = request.body || {};
+
+      const auth = await loadAuthorizedReservation(reservationId, staffId, tenantId, isSupervisor);
+      if (!auth.ok) return reply.status(auth.status).send({ success: false, error: auth.error });
+
+      const statusLower = String((auth.reservation as any).status || '').toLowerCase();
+      if (['completed', 'cancelled', 'rejected'].includes(statusLower)) {
+        return reply.status(400).send({ success: false, error: 'Perjalanan sudah berakhir untuk jadwal ini.' });
+      }
+
+      try {
+        const record = staffTripTrackingService.recordTripPing(tenantId, reservationId, staffId, {
+          lat: Number(lat),
+          lng: Number(lng),
+          speed,
+          heading,
+          accuracy,
+        });
+
+        // Broadcast ke CS: hanya payload ringkas (tanpa data pribadi customer).
+        getLiveChatHub()
+          .publish({
+            type: 'staff.telemetry_updated',
+            tenantId,
+            payload: {
+              reservationId,
+              staffId,
+              lat: record.lat,
+              lng: record.lng,
+              speed: record.speed,
+              heading: record.heading,
+              accuracy: record.accuracy,
+              areaName: record.areaName,
+              updatedAt: record.updatedAt,
+            },
+          })
+          .catch(() => {});
+
+        return reply.status(200).send({ success: true, data: { areaName: record.areaName, updatedAt: record.updatedAt } });
+      } catch (err: any) {
+        return reply.status(400).send({ success: false, error: err.message || 'Data telemetry tidak valid.' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/staff/trip/stop
+   * Mematikan sesi pemantauan perjalanan (privasi) saat terapis tiba/selesai.
+   */
+  fastify.post(
+    '/api/staff/trip/stop',
+    { bodyLimit: 4 * 1024 },
+    async (
+      request: FastifyRequest<{ Body: { reservationId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor = isStaffSupervisorRole(role);
+      const { reservationId } = request.body || {};
+
+      const auth = await loadAuthorizedReservation(reservationId, staffId, tenantId, isSupervisor);
+      if (!auth.ok) return reply.status(auth.status).send({ success: false, error: auth.error });
+
+      const cleared = staffTripTrackingService.clearTrip(tenantId, reservationId);
+      getLiveChatHub()
+        .publish({ type: 'staff.trip_closed', tenantId, payload: { reservationId, staffId } })
+        .catch(() => {});
+      return reply.status(200).send({ success: true, data: { cleared } });
+    }
+  );
+
+  /**
    * POST /api/staff/reservations/:id/arrive
    * Mencatat kedatangan bidan di depan rumah/lokasi pasien (ARRIVED) dan mengirim pesan WA otomatis.
    */
@@ -781,6 +902,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       'staff.task_cancelled',
       'customer.location_updated',
       'staff.task_completed',
+      'staff.telemetry_updated',
+      'staff.trip_closed',
       'message.created',
       'message.updated',
       'message.status_updated',
@@ -791,6 +914,16 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       if (closed) return;
       try {
         if (!event?.type || !ALLOWED_STAFF_EVENTS.has(event.type)) {
+          return;
+        }
+
+        // Event telemetry: hanya pemilik perjalanan (anti-leak posisi lintas-terapis).
+        if (event.type === 'staff.telemetry_updated' || event.type === 'staff.trip_closed') {
+          if (!isSupervisor && event.payload?.staffId && event.payload.staffId !== staffId) {
+            return;
+          }
+          const data = JSON.stringify(event.payload || {});
+          reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
           return;
         }
 

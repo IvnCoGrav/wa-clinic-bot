@@ -16,6 +16,10 @@ export interface FollowUpTemplateParams {
   babyName?: string;
   treatmentName?: string;
   index?: number;
+  /** Nama area perjalanan terapis (untuk template status dispatch CS). */
+  areaName?: string;
+  /** Estimasi menit tiba (untuk template status dispatch CS). */
+  etaMinutes?: number | string;
 }
 
 export type FollowUpTemplateType =
@@ -33,7 +37,8 @@ export type FollowUpTemplateType =
   | 'MILESTONE_6M'
   | 'MILESTONE_9M'
   | 'MILESTONE_12M'
-  | 'STAFF_OTW';
+  | 'STAFF_OTW'
+  | 'STAFF_TRIP_STATUS';
 
 export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   FollowUpTemplateType,
@@ -187,6 +192,18 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Selamat pagi/siang Bunda ${name || '{name}'}! 🛵 ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sedang menuju ke rumah Bunda untuk jadwal treatment hari ini ya. Sampai jumpa sebentar lagi Bunda! 🥰`,
     ({ name, therapistName, clinicName }: any) =>
       `Halo Bunda ${name || '{name}'}! ✨ ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah OTW ke lokasi Bunda. Mohon disiapkan tempat yang nyaman untuk perawatan ya Bunda. Terimakasih! 🙏`,
+  ],
+
+  // 15. Pesan Status Perjalanan Terapis untuk CS (jawaban siap kirim saat
+  // pasien bertanya "sudah sampai mana?"). Data-driven: nama area & ETA
+  // di-inject dari state trip, bukan hafalan kalimat di kode frontend.
+  STAFF_TRIP_STATUS: [
+    ({ name, areaName, etaMinutes }: any) =>
+      `${name ? `Bunda ${name}` : 'Bunda'}, pantauan kami Bidan saat ini sudah melintas di ${areaName || '{areaName}'}, estimasi tiba di lokasi sekitar ${etaMinutes || '{etaMinutes}'} menit lagi ya Bun. Mohon ditunggu kedatangannya ya Bunda 🙏`,
+    ({ name, areaName, etaMinutes }: any) =>
+      `${name ? `Bunda ${name}` : 'Bunda'}, Bidan kami saat ini berada di sekitar ${areaName || '{areaName}'} dan diperkirakan tiba sekitar ${etaMinutes || '{etaMinutes}'} menit lagi ya Bun. Terima kasih sudah menunggu 🙏`,
+    ({ name, areaName, etaMinutes }: any) =>
+      `Siap ${name ? `Bunda ${name}` : 'Bunda'}, pantauan kami Bidan sudah di ${areaName || '{areaName}'}, estimasi ${etaMinutes || '{etaMinutes}'} menit menuju lokasi Bunda ya. Ditunggu sebentar lagi ya Bun 😊`,
   ],
 };
 

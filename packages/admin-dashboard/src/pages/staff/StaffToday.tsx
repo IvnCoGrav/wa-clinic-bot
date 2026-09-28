@@ -70,6 +70,7 @@ import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
+import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 
 interface StaffTaskChild {
   name: string;
@@ -90,6 +91,48 @@ interface StaffTaskAddress {
   fullText: string;
   housePhotoUrl?: string | null;
   landmark?: string | null;
+  addressDetail?: string | null;
+  locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
+}
+
+/**
+ * Badge deterministik status akurasi koordinat pada kartu tugas terapis.
+ * Sumber: `location_source` dari server (state, bukan tebakan klien).
+ * Tujuan: terapis tahu apakah titik = pin rumah presisi atau estimasi wilayah
+ * (wajib minta shareloc/patokan) → mencegah terapis tersasar.
+ */
+function AccuracyBadge({ source }: { source?: string | null }) {
+  if (source === 'gps_pin') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#008069] bg-[#d9fdd3] border border-[#b7e4c7] px-1.5 py-0.5 rounded-md"
+        title="Titik koordinat presisi dari pin GPS / shareloc pasien."
+      >
+        📍 Titik Presisi
+      </span>
+    );
+  }
+  if (source === 'estimated_area') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md"
+        title="Titik masih estimasi wilayah (belum ada pin GPS rumah). Konfirmasi shareloc/patokan ke pasien sebelum berangkat."
+      >
+        <AlertTriangle size={10} /> Estimasi Wilayah
+      </span>
+    );
+  }
+  if (source === 'manual_staff') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-md"
+        title="Titik di-set/diedit oleh bidan/staf."
+      >
+        <PenLine size={10} /> Titik Staf
+      </span>
+    );
+  }
+  return null;
 }
 
 interface StaffTaskPricing {
@@ -276,6 +319,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const { staff, logout: staffLogout } = useStaffAuth();
   const { user, logout: adminLogout } = useAuth();
   const { toast, confirm } = useUiFeedback();
+  const { status: telemetryStatus, startTelemetry, stopTelemetry } = useTripTelemetry();
 
   const logout = staff ? staffLogout : adminLogout;
   const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
@@ -1397,6 +1441,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
           setMessages((prev) => [...prev, res.data].slice(-10));
         }
+        // Mulai pemancar telemetry perjalanan (dipantau CS). Best-effort.
+        startTelemetry(task.reservationId).catch(() => {});
       } else {
         toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mengirim info OTW'}`, 'error');
       }
@@ -1444,6 +1490,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (selectedTask?.reservationId === task.reservationId) {
           setSelectedTask((prev) => (prev ? updateArrival(prev) : null));
         }
+        // Hentikan pemancar telemetry (privasi mati total saat tiba).
+        stopTelemetry().catch(() => {});
       } else {
         toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mencatat kedatangan'}`, 'error');
       }
@@ -1483,6 +1531,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (selectedTask?.reservationId === task.reservationId) {
           setSelectedTask((prev) => (prev ? updateCompleted(prev) : null));
         }
+        // Kunjungan selesai → pastikan pemantauan perjalanan benar-benar mati.
+        stopTelemetry().catch(() => {});
       } else {
         toast(`Gagal: ${res.error || 'Terjadi kesalahan saat menyelesaikan kunjungan'}`, 'error');
       }
@@ -2518,9 +2568,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <span>Tiba</span>
                               </span>
                             ) : task.otwSentAt ? (
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
+                              <span
+                                className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse"
+                                title={
+                                  telemetryStatus.active && telemetryStatus.reservationId === task.reservationId
+                                    ? 'Pemantau Perjalanan Aktif (hanya terlihat Admin CS)'
+                                    : 'Sedang menuju lokasi'
+                                }
+                              >
                                 <span>🛵</span>
                                 <span>OTW</span>
+                                {telemetryStatus.active && telemetryStatus.reservationId === task.reservationId && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping" />
+                                )}
                               </span>
                             ) : isScheduleOngoing(task) ? (
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
@@ -2553,6 +2613,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
+                                <div className="mt-1"><AccuracyBadge source={task.address.locationSource} /></div>
                               {task.address.distanceKm != null && (
                                 <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
                                   <Compass size={10} />
@@ -3484,6 +3545,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                <div className="mt-1"><AccuracyBadge source={item.address.locationSource} /></div>
                                 {item.address.distanceKm != null && (
                                   <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
                                     <Compass size={11} />
@@ -3732,6 +3794,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                <div className="mt-1"><AccuracyBadge source={item.address.locationSource} /></div>
                                 {item.address.distanceKm != null && (
                                   <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
                                     <Compass size={11} />
@@ -4303,6 +4366,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <MapPin size={15} className="text-[#008069] mt-0.5 flex-shrink-0" />
                 <div className="leading-relaxed flex-1 min-w-0">
                   <p className="font-medium">{detailModalTask.address.fullText}</p>
+                  <div className="mt-1"><AccuracyBadge source={detailModalTask.address.locationSource} /></div>
                   {detailModalTask.address.distanceKm != null && (
                     <p className="text-[11px] font-semibold text-[#008069] mt-1 flex items-center space-x-1">
                       <Compass size={12} />

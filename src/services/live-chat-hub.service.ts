@@ -14,7 +14,9 @@ export type LiveChatHubEventType =
   | 'staff.task_assigned'
   | 'staff.task_cancelled'
   | 'customer.location_updated'
-  | 'staff.task_completed';
+  | 'staff.task_completed'
+  | 'staff.telemetry_updated'
+  | 'staff.trip_closed';
 
 /**
  * Event real-time yang dipublikasikan ke Live Chat Panel admin.

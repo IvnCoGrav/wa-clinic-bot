@@ -115,6 +115,10 @@ export const AdminCopilotPanel: React.FC = () => {
         {
           method: 'POST',
           body: JSON.stringify({ message: msg, history }),
+          // Anggaran backend satu turn = 60 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
+          // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM
+          // klien abort — mencegah "Gagal menghubungi Copilot" padahal server bekerja.
+          timeoutMs: 70000,
         }
       );
       const data = res?.data;

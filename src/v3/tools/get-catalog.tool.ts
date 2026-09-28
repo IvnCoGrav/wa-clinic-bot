@@ -445,7 +445,9 @@ export async function executeGetCatalog(
         originalPrice: item.originalPrice,
         promoPrice: item.promoPrice,
         description: item.description,
-        isRecommendedForSymptoms: false
+        isRecommendedForSymptoms: false,
+        // Data-driven: tandai add-on dari katalog (bukan asumsi nama).
+        isAddon: treatmentCatalogService.isAddonService(item) || undefined,
       };
     });
 
@@ -709,11 +711,27 @@ export async function executeGetCatalog(
       const priceLine = showPrices
         ? ` promo ${formatRp(Number(topService.promoPrice ?? 0))} (normal ${formatRp(Number(topService.originalPrice ?? 0))}${showDuration && topService.durationMinutes != null ? `, durasi ${Number(topService.durationMinutes)} menit` : ''}).`
         : '.';
-      const moksa = allServices.find((s) => s.id.includes('moksa'));
       const topText = `${topService.name} ${topService.description}`.toLowerCase();
       const isRespiratory = /pernapasan|dahak|flu|bapil|pilek|batuk/i.test(topText);
-      const comboLine = (showPrices && moksa && topService.id !== moksa.id && isRespiratory)
-        ? ` Paket Combo ${topService.name} + Sinar Moksa total Promo ${formatRp(Number(topService.promoPrice ?? 0) + moksa.promoPrice)} (normal ${formatRp(Number(topService.originalPrice ?? 0) + moksa.originalPrice)}).`
+      // KNOWN_ISSUES #156 — Data-driven (bukan hafalan nama "moksa"): add-on
+      // relevan = seluruh layanan add-on AKTIF yang deskripsinya cocok dengan
+      // topik pernapasan layanan teratas ATAU token keluhan efektif. Menemukan
+      // Sinar Moksa, Nebulizer Saline, Nebulizer + Obat dari katalog DB tanpa
+      // menyebut nama apa pun di kode.
+      const addonSymptomTokens = effectiveSymptoms
+        .flatMap((s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/))
+        .filter((w) => w.length > 3);
+      const relevantAddons = allServices.filter((s) => {
+        if (!(s.isAddon || s.category === 'ADD_ON')) return false;
+        if (s.id === topService.id) return false;
+        const text = `${s.name} ${s.description || ''}`.toLowerCase();
+        if (isRespiratory && /pernapasan|dahak|flu|bapil|pilek|batuk|uap|inhalasi/i.test(text)) return true;
+        return addonSymptomTokens.some((tok) => text.includes(tok));
+      });
+      const comboLine = (showPrices && relevantAddons.length > 0 && isRespiratory)
+        ? ` Paket Combo ${topService.name} + ${relevantAddons
+            .map((a) => `${a.name} total Promo ${formatRp(Number(topService.promoPrice ?? 0) + Number(a.promoPrice ?? 0))} (normal ${formatRp(Number(topService.originalPrice ?? 0) + Number(a.originalPrice ?? 0))})`)
+            .join(' / ')}.`
         : '';
       recommendationReason = `Berdasarkan keluhan yang disampaikan (${effectiveSymptoms.join(', ')}), layanan yang paling sesuai adalah ${topService.name}${priceLine} ${topService.description}${comboLine}`;
 
@@ -721,27 +739,39 @@ export async function executeGetCatalog(
       // formattedTreatments (flag isAddon) saat keluhan pernapasan DAN mode
       // harga (showPrices) — agar grounding & validator faktual melihat add-on
       // yang SAH tanpa melanggar anti-menu brosur (mode konsultasi tetap ≤2).
-      if (moksa && isRespiratory && showPrices && !formattedTreatments.some((t) => t.id === moksa.id)) {
-        const addonEntry: any = {
-          id: moksa.id,
-          name: moksa.name,
-          category: moksa.category,
-          durationMinutes: moksa.durationMinutes,
-          originalPrice: moksa.originalPrice,
-          promoPrice: moksa.promoPrice,
-          description: moksa.description,
-          isRecommendedForSymptoms: false,
-          isAddon: true,
-        };
-        // Hormati scoping yang sama (jangan bocorkan harga/durasi bila tak ditanya).
-        if (!showPrices) {
-          delete addonEntry.originalPrice;
-          delete addonEntry.promoPrice;
+      // KNOWN_ISSUES #156: seluruh add-on relevan (data-driven), bukan moksa saja.
+      // Disisipkan TEPAT setelah layanan teratas agar tidak terpotong slice(0,5)
+      // (add-on berdurasi pendek tenggelam di urutan skor terapi).
+      if (isRespiratory && showPrices) {
+        let insertAt = formattedTreatments.findIndex((t) => t.id === topService.id);
+        if (insertAt < 0) insertAt = 0;
+        let offset = 1;
+        for (const addon of relevantAddons) {
+          // Buang entri lama (add-on mungkin sudah ada di posisi rendah akibat
+          // urutan skor terapi) agar dapat diposisikan ulang tepat di bawah
+          // layanan teratas — tidak terpotong slice(0,5) di output akhir.
+          const existingIdx = formattedTreatments.findIndex((t) => t.id === addon.id);
+          if (existingIdx >= 0) {
+            if (existingIdx < insertAt + offset) insertAt -= 1;
+            formattedTreatments.splice(existingIdx, 1);
+          }
+          const addonEntry: any = {
+            id: addon.id,
+            name: addon.name,
+            category: addon.category,
+            durationMinutes: addon.durationMinutes,
+            originalPrice: addon.originalPrice,
+            promoPrice: addon.promoPrice,
+            description: addon.description,
+            isRecommendedForSymptoms: false,
+            isAddon: true,
+          };
+          if (!showDuration) {
+            delete addonEntry.durationMinutes;
+          }
+          formattedTreatments.splice(insertAt + offset, 0, addonEntry);
+          offset++;
         }
-        if (!showDuration) {
-          delete addonEntry.durationMinutes;
-        }
-        formattedTreatments.push(addonEntry);
       }
     }
 

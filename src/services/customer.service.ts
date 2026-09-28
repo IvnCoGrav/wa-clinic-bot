@@ -31,6 +31,28 @@ export class CustomerService {
   }
 
   /**
+   * Gerbang deterministik: apakah customer sudah memiliki koordinat PRESISI
+   * (pin GPS asli / shareloc native / link Maps ber-koordinat) yang WAJIB
+   * dilindungi dari penimpaan oleh hasil geocoding teks / sentroid gazetteer.
+   *
+   * Invarian (fondasional, satu definisi — dipakai SEMUA seam tulis):
+   *   - `location_source === 'gps_pin'`  → pin presisi (native / url_coords / bidan).
+   *   - `share_location_sent === true`   → penanda VERIFIED_GPS historis.
+   *   - WAJIB punya lat/lng valid.
+   *
+   * CATATAN PENTING: "punya lat/lng" saja TIDAK cukup mengunci — sentroid
+   * `estimated_area` (hasil teks) sengaja TIDAK dikunci agar alamat baru yang
+   * lebih akurat tetap bisa mengoreksi wilayah. Hanya pin presisi yang dikunci;
+   * pembaruan titik presisi baru tetap diizinkan lewat `isNativePin` /
+   * `locationSource: gps_pin` / `forceUpdateGps` (tombol eksplisit "pindah rumah").
+   */
+  private static isPreciseGps(c: any): boolean {
+    if (!c) return false;
+    if (c.lat == null || c.lng == null) return false;
+    return c.location_source === LocationSource.gps_pin || c.share_location_sent === true;
+  }
+
+  /**
    * Set flag label chat (is_admin_labeled / is_hold_labeled) pada semua customer
    * yang memiliki nomor HP yang sama (baik awalan 62 maupun 0).
    * Menjamin konsistensi status chat di seluruh record customer.
@@ -191,6 +213,11 @@ export class CustomerService {
       zipcode?: string;
       isNativePin?: boolean;
       locationSource?: LocationSource;
+      /**
+       * Override eksplisit (tombol "Perbarui Titik Lokasi") untuk customer yang
+       * benar-benar pindah rumah. DILARANG di-set true oleh jalur otomatis.
+       */
+      forceUpdateGps?: boolean;
     },
     tenantId: string
   ): Promise<any> {
@@ -202,9 +229,13 @@ export class CustomerService {
         throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
       }
 
-      // GPS PRIORITY GUARD: Jika customer sudah pernah mengirimkan Pin GPS asli (share_location_sent = true)
-      // dan update ini BUKAN dari Pin GPS baru, pertahankan koordinat presisi asli (jangan timpa dengan centroid kelurahan teks)!
-      const preserveExactGps = existing.share_location_sent && !data.isNativePin && existing.lat !== null && existing.lng !== null;
+      // GPS PRIORITY GUARD (fondasional): customer dengan koordinat PRESISI
+      // (pin GPS asli / shareloc / link Maps ber-koordinat → location_source
+      // 'gps_pin' ATAU share_location_sent=true) TIDAK BOLEH ditimpa oleh hasil
+      // geocoding teks / sentroid gazetteer. Update hanya sah bila datang dari
+      // pin GPS baru (isNativePin / locationSource gps_pin) atau override eksplisit.
+      const isNewGpsInput = data.isNativePin === true || data.locationSource === LocationSource.gps_pin;
+      const preserveExactGps = CustomerService.isPreciseGps(existing) && !isNewGpsInput && !data.forceUpdateGps;
 
       const effectiveLat = preserveExactGps
         ? existing.lat
@@ -311,7 +342,8 @@ export class CustomerService {
       }
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
-          const preserveGps = cust.share_location_sent && !data.isNativePin && cust.lat != null && cust.lng != null;
+          const isNewGpsInput = data.isNativePin === true || data.locationSource === LocationSource.gps_pin;
+          const preserveGps = CustomerService.isPreciseGps(cust) && !isNewGpsInput && !data.forceUpdateGps;
           const effLat = preserveGps ? cust.lat : (data.lat !== undefined ? (CustomerService.toNumberOrNull(data.lat) ?? cust.lat) : cust.lat);
           const effLng = preserveGps ? cust.lng : (data.lng !== undefined ? (CustomerService.toNumberOrNull(data.lng) ?? cust.lng) : cust.lng);
           const effDist = preserveGps ? cust.distance_km : (data.distanceKm !== undefined ? data.distanceKm : cust.distance_km);
@@ -551,18 +583,28 @@ export class CustomerService {
             throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
           }
 
+          // Guard presisi: promosi pending TIDAK BOLEH mendegradasi pin GPS presisi
+          // yang sudah dimiliki customer (koordinat pending berbasis teks hanyalah
+          // estimasi wilayah). Bila customer sudah presisi, promosikan TEKS wilayah
+          // saja — pertahankan lat/lng + jarak + ongkir + sumber presisi lama.
+          const preservePendingGps = CustomerService.isPreciseGps(existing);
+
           await tx.customer.update({
             where: { id: customerId },
             data: {
               kelurahan: pendingData.pending_kelurahan,
               kecamatan: pendingData.pending_kecamatan,
               kota: pendingData.pending_kota,
-              lat: pendingLat,
-              lng: pendingLng,
-              zipcode: pendingData.pending_zipcode || null,
-              distance_km: delivery.distanceKm,
-              ongkir: delivery.ongkir,
-              is_out_of_coverage: delivery.isOutOfCoverage,
+              ...(preservePendingGps
+                ? {}
+                : {
+                    lat: pendingLat,
+                    lng: pendingLng,
+                    zipcode: pendingData.pending_zipcode || null,
+                    distance_km: delivery.distanceKm,
+                    ongkir: delivery.ongkir,
+                    is_out_of_coverage: delivery.isOutOfCoverage,
+                  }),
 
               // Null-kan pending
               pending_kelurahan: null,
@@ -580,16 +622,21 @@ export class CustomerService {
         let found = false;
         for (const [phone, cust] of memoryCustomers.entries()) {
           if (cust.id === customerId && cust.tenant_id === tenantId) {
+            const preservePendingGps = CustomerService.isPreciseGps(cust);
             Object.assign(cust, {
               kelurahan: pendingData.pending_kelurahan,
               kecamatan: pendingData.pending_kecamatan,
               kota: pendingData.pending_kota,
-              lat: pendingLat,
-              lng: pendingLng,
-              zipcode: pendingData.pending_zipcode || null,
-              distance_km: delivery.distanceKm,
-              ongkir: delivery.ongkir,
-              is_out_of_coverage: delivery.isOutOfCoverage,
+              ...(preservePendingGps
+                ? {}
+                : {
+                    lat: pendingLat,
+                    lng: pendingLng,
+                    zipcode: pendingData.pending_zipcode || null,
+                    distance_km: delivery.distanceKm,
+                    ongkir: delivery.ongkir,
+                    is_out_of_coverage: delivery.isOutOfCoverage,
+                  }),
 
               pending_kelurahan: null,
               pending_kecamatan: null,
@@ -716,6 +763,8 @@ export class CustomerService {
       landmark?: string | null; // alias address_notes
       lat?: number | null;
       lng?: number | null;
+      /** Override eksplisit pindah rumah (tombol "Perbarui Titik Lokasi"). */
+      forceUpdateGps?: boolean;
       children?: Array<{
         id?: string;
         name: string;
@@ -833,7 +882,15 @@ export class CustomerService {
         data.lat != null && data.lng != null ||
         data.kelurahan !== undefined || data.kecamatan !== undefined || data.kota !== undefined;
 
-      if (shouldRecalculate && finalCustomer) {
+      // Gerbang presisi: admin yang mengubah komponen TEKS (kelurahan/kecamatan/kota)
+      // pada customer ber-pin GPS presisi TIDAK BOLEH memicu geocode-ulang yang menimpa
+      // lat/lng + menurunkan sumber ke manual_staff. Teks tetap ter-update; koordinat
+      // presisi dipertahankan. (Explicit lat/lng di form = override sah, tetap jalan.)
+      const explicitCoords = data.lat != null && data.lng != null;
+      const preciseLocked =
+        !!finalCustomer && CustomerService.isPreciseGps(finalCustomer) && !explicitCoords && !data.forceUpdateGps;
+
+      if (shouldRecalculate && finalCustomer && !preciseLocked) {
         try {
           let recalcLat: number | null = finalCustomer.lat;
           let recalcLng: number | null = finalCustomer.lng;
@@ -1840,6 +1897,12 @@ export class CustomerService {
         refreshedAt: nowIso,
       };
 
+      // Provenance TUNGGAL (fondasional): `url_coords` adalah koordinat presisi
+      // langsung dari link Google Maps → sejajar dengan shareloc native (gps_pin),
+      // BUKAN estimated_area. Hanya teks-yang-di-geocode yang berstatus estimasi.
+      const isPinSourceChosen =
+        chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc' || chosen.source === 'url_coords';
+
       // Persist atomically
       try {
         await prisma.customer.update({
@@ -1850,11 +1913,11 @@ export class CustomerService {
             distance_km: delivery.distanceKm,
             ongkir: delivery.ongkir,
             is_out_of_coverage: delivery.isOutOfCoverage,
-            share_location_sent: chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc' ? true : customer.share_location_sent,
+            share_location_sent: isPinSourceChosen ? true : customer.share_location_sent,
             location_source:
-              chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
+              isPinSourceChosen
                 ? LocationSource.gps_pin
-                : chosen.source === 'geocoding' || chosen.source === 'url_coords' || chosen.source === 'url_text_geocoded'
+                : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
                   ? LocationSource.estimated_area
                   : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
             kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
@@ -1900,11 +1963,11 @@ export class CustomerService {
             },
             updated_at: new Date(),
           });
-          if (chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc') mem.share_location_sent = true;
+          if (isPinSourceChosen) mem.share_location_sent = true;
           mem.location_source =
-            chosen.source === 'bidan_shareloc' || chosen.source === 'customer_shareloc'
+            isPinSourceChosen
               ? LocationSource.gps_pin
-              : chosen.source === 'geocoding' || chosen.source === 'url_coords' || chosen.source === 'url_text_geocoded'
+              : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
                 ? LocationSource.estimated_area
                 : mem.location_source ?? LocationSource.estimated_area;
         }

@@ -1,6 +1,16 @@
 # Plan: Copilot Multi-Step, Tool Berbasis Data & Panel Mobile Collapsible
 
-> Status: **SELESAI & TER-DEPLOY LIVE (2026-09-27, commit `16c1a66c`).**
+> **ADDENDUM 2026-09-28 — Anggaran wall-clock & degradasi jujur (implemented).**
+> Pasca-live ditemukan mismatch timeout: loop multi-step (≤4 LLM call) memakai
+> `LLM_TIMEOUT_CHAT_MS=120 dtk`/attempt, sedangkan POST frontend abort 15 dtk → admin melihat
+> "Gagal menghubungi Copilot" padahal backend bekerja. Fix fondasional (bukan tambal prompt):
+> `COPILOT_TOTAL_BUDGET_MS` (default 60 dtk) + `withDeadline()` (race keras) +
+> `buildDegradedAnswer()` deterministik (data nyata, tanpa LLM) + `config.rateLimit` yang
+> sebelumnya hanya klaim komentar + timeout frontend 70 dtk. Lihat CHANGELOG 2026-09-28 &
+> KNOWN_ISSUES #163 (sisa: 163a–163d). Gate baru: `tests/unit/copilot-fixing.test.ts`
+> "Fase budget" (6 skenario adversarial).
+>
+> Status awal: **SELESAI & TER-DEPLOY LIVE (2026-09-27, commit `16c1a66c`).**
 > Fase A (loop), Fase B1 (`query_stalled_inquiries`), Fase UI-Mobile selesai & live.
 > Fase B2: mining 30 audit → hanya 1 `toolsUsed:[]` (sudah ditutup) → **tidak ada kelas
 > dominan → berhenti di 1 tool** (sesuai aturan plan, tidak spekulatif). Fase C ditunda.

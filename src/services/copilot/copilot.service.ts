@@ -1,5 +1,6 @@
 import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tools';
 import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
+import { parsePositiveInt } from '../../utils/env-numeric';
 
 /**
  * copilot.service.ts (Fase 6r + fixing plan) — AI Clinic Copilot in-system.
@@ -34,6 +35,19 @@ const MAX_HISTORY_TURNS = 10;
 /** Budget loop multi-step (gerbang kode, bukan imbauan): cegah biaya/latensi meledak. */
 export const MAX_ITERATIONS = 3;
 export const MAX_TOTAL_ROWS = 40;
+/**
+ * Budget wall-clock (ms) untuk SATU turn Copilot (semua router + summarize).
+ *
+ * Akar masalah "Gagal menghubungi Copilot": loop multi-step memanggil sampai 4 LLM
+ * sekuensial; tiap attempt boleh berjalan `cfg.timeoutMs` (env `LLM_TIMEOUT_CHAT_MS`,
+ * default 120 dtk). Tanpa anggaran global, total bisa > 120 dtk sementara POST
+ * frontend abort di 15 dtk → admin melihat kegagalan walau backend masih bekerja.
+ * Gerbang ini memastikan jawaban (atau degradasi jujur) kembali SEBELUM timeout
+ * klien. Override via env `COPILOT_TOTAL_BUDGET_MS`.
+ */
+export const DEFAULT_TOTAL_BUDGET_MS = 60_000;
+/** Sisa anggaran minimum untuk memulai panggilan LLM berikutnya (hindari call 1 dtk). */
+const MIN_CALL_BUDGET_MS = 1_500;
 
 /** Pola UUID teknis internal (mis. customerId/reservationId) yang DILARANG bocor ke admin. */
 const INTERNAL_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -126,10 +140,74 @@ PANDUAN:
 Pertanyaan admin: "${message}"`;
 }
 
+/**
+ * Bangun jawaban degradasi jujur dari data yang SUDAH terkumpul — dipakai ketika
+ * anggaran waktu habis sebelum summarize. Deterministik (tanpa LLM) sehingga TIDAK
+ * bisa berhalusinasi: hanya menyalin nama + field dari baris tool nyata.
+ */
+export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[] }>): string {
+  const sections: string[] = [];
+  for (const c of collected) {
+    if (!c.rows.length) continue;
+    const shown = c.rows.slice(0, 10).map((r) => {
+      const name = r.customerName || r.title || r.name || '—';
+      const bits: string[] = [];
+      if (r.bookingDate) bits.push(String(r.bookingDate));
+      if (r.treatment) bits.push(String(r.treatment));
+      if (r.status) bits.push(String(r.status));
+      if (r.staff) bits.push(String(r.staff));
+      if (r.requestedTime) bits.push(`minta ${r.requestedTime}`);
+      if (r.lastMessage) bits.push(`"${String(r.lastMessage).slice(0, 60)}"`);
+      return `- ${name}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
+    });
+    const more = c.rows.length > shown.length ? `\n- … (${c.rows.length - shown.length} baris lain)` : '';
+    sections.push(`*${c.tool}*\n${shown.join('\n')}${more}`);
+  }
+  if (!sections.length) {
+    return 'Permintaan terlalu lama diproses (batas waktu). Coba persempit pertanyaan (mis. sebutkan tanggal atau nama pasien).';
+  }
+  return `⏱️ Jawaban diambil sebagian karena batas waktu pemrosesan. Data mentah dari database:\n\n${sections.join('\n\n')}`;
+}
+
+/** Penanda error khusus batas waktu Copilot (bukan kegagalan LLM nyata). */
+const COPILOT_DEADLINE_ERROR = 'COPILOT_DEADLINE_EXCEEDED';
+
+/**
+ * Jalankan promise LLM dengan batas waktu keras (wall-clock). Berbeda dari
+ * `timeoutMs` per-attempt (yang bisa diakumulasi retry + fallback lintas-provider),
+ * gerbang ini menjamin total tunggu TIDAK melewati deadline turn — sehingga respons
+ * selalu kembali sebelum timeout klien. Promise yang kalah tetap "dibuang" aman
+ * (catch diattach) agar tidak memicu unhandled rejection.
+ */
+export function withDeadline<T>(factory: () => Promise<T>, ms: number): Promise<T> {
+  const p = factory();
+  p.catch(() => {
+    /* hasil yang datang setelah deadline dibuang; jangan unhandled-reject */
+  });
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(COPILOT_DEADLINE_ERROR)), Math.max(1, ms));
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+export function isCopilotDeadlineError(err: any): boolean {
+  return err?.message === COPILOT_DEADLINE_ERROR;
+}
+
 export class CopilotService {
   public async chat(params: CopilotChatParams): Promise<CopilotChatResult> {
     const { tenantId, message } = params;
     const history = (params.history || []).slice(-MAX_HISTORY_TURNS);
+    const totalBudgetMs = parsePositiveInt(process.env.COPILOT_TOTAL_BUDGET_MS, DEFAULT_TOTAL_BUDGET_MS);
+    const deadline = Date.now() + totalBudgetMs;
+    const remainingMs = () => deadline - Date.now();
+    // Ambang minimal proporsional: pada anggaran normal = MIN_CALL_BUDGET_MS; pada
+    // anggaran sangat kecil (uji/adversarial) diperkecil agar loop tetap bisa mulai.
+    const minCallBudget = Math.min(MIN_CALL_BUDGET_MS, Math.max(1, Math.floor(totalBudgetMs / 3)));
+    /** Batasi timeout LLM ke sisa anggaran (agar attempt tak melewati deadline). */
+    const callTimeout = (cfgTimeout: number) => Math.max(minCallBudget, Math.min(cfgTimeout, remainingMs()));
+    let timedOut = false;
 
     try {
       const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
@@ -151,6 +229,10 @@ export class CopilotService {
       let totalRows = 0;
 
       for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        // Gerbang anggaran: hentikan loop bila waktu tersisa terlalu tipis untuk
+        // satu panggilan LLM lagi (cegah request melewati deadline klien).
+        if (remainingMs() < minCallBudget) break;
+
         const priorSteps: RouterPriorStep[] = collected.map((c) => ({
           tool: c.tool,
           count: c.rows.length,
@@ -159,18 +241,31 @@ export class CopilotService {
         const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps, history);
 
         llmCalls++;
-        const routerResp = await callChatCompletionsWithFallback({
-          model: cfg.model,
-          fallbackModel: cfg.fallbackModel,
-          baseUrl: cfg.baseUrl,
-          apiKey: cfg.apiKey,
-          timeoutMs: cfg.timeoutMs,
-          payload: {
-            messages: [{ role: 'user', content: routerPrompt }],
-            temperature: 0,
-            max_tokens: 200,
-          },
-        });
+        let routerResp: any;
+        try {
+          routerResp = await withDeadline(
+            () =>
+              callChatCompletionsWithFallback({
+                model: cfg.model,
+                fallbackModel: cfg.fallbackModel,
+                baseUrl: cfg.baseUrl,
+                apiKey: cfg.apiKey,
+                timeoutMs: callTimeout(cfg.timeoutMs),
+                payload: {
+                  messages: [{ role: 'user', content: routerPrompt }],
+                  temperature: 0,
+                  max_tokens: 200,
+                },
+              }),
+            remainingMs()
+          );
+        } catch (e: any) {
+          if (isCopilotDeadlineError(e)) {
+            timedOut = true;
+            break; // anggaran habis → keluar loop, degradasi di bawah
+          }
+          throw e;
+        }
 
         const rawRouter = routerResp?.data?.choices?.[0]?.message?.content || '';
         const parsed = extractBalancedJson(rawRouter, 'tool');
@@ -215,6 +310,31 @@ export class CopilotService {
       const rowCounts: Record<string, number> = {};
       for (const c of collected) rowCounts[c.tool] = c.rows.length;
 
+      // Gerbang anggaran (prioritas tertinggi): bila deadline tersentuh, kembalikan
+      // jawaban degradasi deterministik dari baris yang sudah dikumpulkan — jangan
+      // menembak LLM yang pasti melewati deadline klien.
+      if (timedOut) {
+        if (collected.length === 0) {
+          return {
+            success: false,
+            answer: 'Copilot melebihi batas waktu sebelum sempat mengambil data. Coba lagi atau persempit pertanyaan.',
+            toolsUsed: [],
+            grounded: false,
+            error: COPILOT_DEADLINE_ERROR,
+            llmCalls,
+            rowCounts,
+          };
+        }
+        return {
+          success: true,
+          answer: buildDegradedAnswer(collected),
+          toolsUsed,
+          grounded: true,
+          llmCalls,
+          rowCounts,
+        };
+      }
+
       // Tak ada data terkumpul → jawab jujur (anti-halusinasi), jangan panggil summarize.
       if (unionRows.length === 0) {
         return {
@@ -223,6 +343,19 @@ export class CopilotService {
             toolsUsed.length > 0
               ? 'Tidak ditemukan data untuk kriteria tersebut.'
               : 'Maaf, saya tidak menemukan data yang cocok untuk pertanyaan itu. Coba sebutkan tanggal atau nama pasien secara spesifik ya.',
+          toolsUsed,
+          grounded: true,
+          llmCalls,
+          rowCounts,
+        };
+      }
+
+      // Gerbang anggaran: bila sisa waktu tak cukup untuk summarize, sajikan data
+      // mentah (degradasi jujur) daripada menembak LLM yang melewati deadline.
+      if (remainingMs() < minCallBudget) {
+        return {
+          success: true,
+          answer: buildDegradedAnswer(collected),
           toolsUsed,
           grounded: true,
           llmCalls,
@@ -247,21 +380,42 @@ Data:
 ${labeled.slice(0, 8000)}`;
 
       llmCalls++;
-      const summaryResp = await callChatCompletionsWithFallback({
-        model: cfg.model,
-        fallbackModel: cfg.fallbackModel,
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        timeoutMs: cfg.timeoutMs,
-        payload: {
-          messages: [
-            ...history.map((h) => ({ role: h.role, content: h.content })),
-            { role: 'user', content: summarizePrompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 400,
-        },
-      });
+      let summaryResp: any;
+      try {
+        summaryResp = await withDeadline(
+          () =>
+            callChatCompletionsWithFallback({
+              model: cfg.model,
+              fallbackModel: cfg.fallbackModel,
+              baseUrl: cfg.baseUrl,
+              apiKey: cfg.apiKey,
+              timeoutMs: callTimeout(cfg.timeoutMs),
+              payload: {
+                messages: [
+                  ...history.map((h) => ({ role: h.role, content: h.content })),
+                  { role: 'user', content: summarizePrompt },
+                ],
+                temperature: 0.2,
+                max_tokens: 400,
+              },
+            }),
+          remainingMs()
+        );
+      } catch (e: any) {
+        // Batas waktu pada tahap ringkasan → tetap sajikan data mentah (degradasi jujur),
+        // bukan pesan "layanan AI gangguan" yang menyesatkan.
+        if (isCopilotDeadlineError(e)) {
+          return {
+            success: true,
+            answer: buildDegradedAnswer(collected),
+            toolsUsed,
+            grounded: true,
+            llmCalls,
+            rowCounts,
+          };
+        }
+        throw e;
+      }
 
       const rawAnswer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
       // Normalizer deterministik: buang sisa UUID yang lolos dari LLM.

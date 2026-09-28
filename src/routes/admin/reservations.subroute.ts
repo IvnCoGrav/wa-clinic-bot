@@ -14,6 +14,12 @@ import {
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
+import { StaffReservationService } from '../../services/staff-reservation.service';
+import {
+  staffTripTrackingService,
+  calculateTripProgress,
+  evaluateGeofenceAlert,
+} from '../../services/staff-trip-tracking.service';
 import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { wibDayRangeToUtc } from '../../utils/time-wib';
@@ -102,6 +108,113 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         .send({ success: true, count: filterMemoryByTenant(memoryReservations.values(), tenantId).length });
     }
   });
+
+  /**
+   * GET /api/admin/dispatch/trip/:reservationId
+   * Data realtime perjalanan terapis untuk widget CS (posisi, sisa jarak, ETA,
+   * flag geofence anti-lost, dan teks jawaban siap kirim — DB-driven).
+   */
+  fastify.get(
+    '/api/admin/dispatch/trip/:reservationId',
+    async (request: FastifyRequest<{ Params: { reservationId: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
+      const { reservationId } = request.params;
+      if (!reservationId) {
+        return reply.status(400).send({ success: false, error: 'reservationId wajib disertakan.' });
+      }
+
+      let reservation: any = null;
+      try {
+        reservation = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          include: {
+            customer: { select: { name: true, lat: true, lng: true } },
+            assigned_staff: { select: { name: true, phone: true } },
+          },
+        });
+      } catch {
+        reservation = null;
+      }
+      if (!reservation || reservation.tenant_id !== tenantId) {
+        return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+      }
+
+      const trip = staffTripTrackingService.getTrip(tenantId, reservationId);
+      const customerLat = reservation.customer?.lat;
+      const customerLng = reservation.customer?.lng;
+      const now = Date.now();
+
+      let remainingKm: number | null = null;
+      let etaMinutes: number | null = null;
+      let isStalledOutsideTarget = false;
+      let geofenceReason: string | null = null;
+      let geofenceDistanceM: number | null = null;
+
+      if (trip) {
+        const progress = calculateTripProgress(trip.lat, trip.lng, customerLat, customerLng);
+        if (progress) {
+          remainingKm = progress.remainingKm;
+          etaMinutes = progress.etaMinutes;
+        }
+        const stalledSec = Math.max(0, Math.round((now - trip.movedAt) / 1000));
+        const geo = evaluateGeofenceAlert(
+          trip.lat,
+          trip.lng,
+          customerLat,
+          customerLng,
+          trip.speed,
+          trip.accuracy,
+          stalledSec
+        );
+        isStalledOutsideTarget = geo.isStalledOutsideTarget;
+        geofenceReason = geo.reason;
+        geofenceDistanceM = geo.distanceM;
+      }
+
+      let readyText = '';
+      try {
+        readyText = await StaffReservationService.getTripStatusMessageText(tenantId, {
+          patientName: reservation.customer?.name || 'Bunda',
+          areaName: trip?.areaName || null,
+          etaMinutes,
+          variantKey: reservationId,
+        });
+      } catch {
+        readyText = '';
+      }
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          reservationId,
+          status: reservation.status,
+          otwSentAt: reservation.otw_sent_at || null,
+          arrivedAt: reservation.arrived_at || null,
+          staffName: reservation.assigned_staff?.name || null,
+          staffPhone: reservation.assigned_staff?.phone || null,
+          trip: trip
+            ? {
+                lat: trip.lat,
+                lng: trip.lng,
+                speed: trip.speed,
+                heading: trip.heading,
+                accuracy: trip.accuracy,
+                areaName: trip.areaName,
+                updatedAt: trip.updatedAt,
+                lastUpdateSec: Math.max(0, Math.round((now - trip.updatedAt) / 1000)),
+              }
+            : null,
+          customerCoords: { lat: customerLat ?? null, lng: customerLng ?? null },
+          remainingKm,
+          etaMinutes,
+          isStalledOutsideTarget,
+          geofenceReason,
+          geofenceDistanceM,
+          readyText,
+        },
+      });
+    }
+  );
 
   /**
    * GET /api/admin/reservations/daily-slots
@@ -658,7 +771,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             customerName: parsed.name,
             kecamatan: parsed.kec,
             kota: parsed.kota,
-            kelurahan: parsed.address,
+            // Integritas spasial: parser form TIDAK punya field kelurahan; `parsed.address`
+            // adalah alamat jalan/perumahan lengkap. DILARANG menyalinnya ke kolom
+            // `kelurahan` (sumber pencemaran "Banjarmukti Residence" → kolom desa yang
+            // membuat gazetteer salah mencocokkan desa). Alamat lengkap hidup di
+            // preferences.address; kolom kelurahan hanya diisi entitas desa resmi
+            // hasil geocoding/gazetteer.
+            kelurahan: undefined,
             address: parsed.address,
             source: 'ADMIN_PANEL',
             force: force === true,

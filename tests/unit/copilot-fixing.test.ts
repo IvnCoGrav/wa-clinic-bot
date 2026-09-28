@@ -30,7 +30,7 @@ vi.mock('../../src/integrations/llm/llm-gateway', () => ({
   getLlmEndpointConfig: () => ({ model: 'test', fallbackModel: 'test', baseUrl: 'http://x', apiKey: 'k', timeoutMs: 1000 }),
 }));
 
-import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer } from '../../src/services/copilot/copilot.service';
+import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer, buildDegradedAnswer, withDeadline, isCopilotDeadlineError } from '../../src/services/copilot/copilot.service';
 import {
   resolveReservationDateFilter,
   isValidIsoDate,
@@ -446,6 +446,116 @@ describe('Fase B1 — query_stalled_inquiries (state-based)', () => {
       'query_unscheduled_prospects',
     ]);
   });
+
+  // ── Akar #163b: session_data.booking NYARIS TIDAK PERNAH terisi di produksi
+  // (0 dari 780). Recall tool harus bangkit dari TEKS pesan (detektor kanonik). ──
+  it('fallback teks: session_data KOSONG tapi pesan "besok" → tetap terdeteksi', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-nanda',
+        session_data: null, // produksi: state tidak terisi
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Nanda', phone: '6282186222568', reservations: [] },
+        messages: [
+          { direction: 'INBOUND', content: 'Mau pijit besok bisa?', created_at: new Date(Date.now() - 60000) },
+          { direction: 'OUTBOUND', content: 'Halo Bunda!', created_at: new Date(Date.now() - 120000) },
+        ],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0].customerName).toBe('Nanda');
+    expect(res.rows[0].requestedTime).toBe('besok');
+  });
+
+  it('adversarial multi-parafrase teks jadwal (slot/jam/hari) → terdeteksi', async () => {
+    const texts = [
+      'besok sma mbaknya sendiri ada slot jam berapa?',
+      'Besok pagi kira-kira bs ndk ya',
+      'apakah msh ada slot untuk pijat besok ?',
+      'Besok bisa?',
+      'Bsk bisa pijat full body oksi tah?',
+    ];
+    for (const [i, text] of texts.entries()) {
+      h.conversationFindMany.mockResolvedValue([
+        {
+          id: `conv-${i}`,
+          session_data: null,
+          last_discussed_treatment: null,
+          customer: { id: `c${i}`, name: `Bunda ${i}`, phone: `628571234567${i}`, reservations: [] },
+          messages: [{ direction: 'INBOUND', content: text, created_at: new Date(Date.now() - 60000) }],
+        },
+      ]);
+      const res = await queryStalledInquiries.run('tenant-a', {});
+      expect(res.rows.length, `text="${text}"`).toBe(1);
+    }
+  });
+
+  it('teks TANPA sinyal jadwal (obrolan biasa) tetap dikecualikan', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-chat',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Rina', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'makasih ya kak', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
+
+  it('filter date: sinyal dari TEKS cocok ("besok") / tidak cocok ("hari ini")', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-dinda',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Dinda', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'hari ini sore bisa?', created_at: new Date() }],
+      },
+      {
+        id: 'conv-tere',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c2', name: 'Bunda Tere', phone: '6285712345679', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'minta besok pagi', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', { date: 'besok' });
+    expect(res.rows.map((r: any) => r.customerName)).toEqual(['Bunda Tere']);
+  });
+
+  it('sudah punya reservasi aktif → dikecualikan walau teks minta besok', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-booked',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Firda', phone: '6285755644990', reservations: [{ status: 'confirmed' }] },
+        messages: [{ direction: 'INBOUND', content: 'minggu besok ada kosong?', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
+
+  it('sudah dibalas ADMIN setelah inbound → dikecualikan (tidak menggantung)', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-replied',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Renita', phone: '6282226558642', reservations: [] },
+        messages: [
+          { direction: 'OUTBOUND', content: 'baik bunda', created_at: new Date() },
+          { direction: 'INBOUND', content: 'besok bs?', created_at: new Date(Date.now() - 60000) },
+        ],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(0);
+  });
 });
 
 describe('Fase 4 — adversarial: sinyal state, filter tanggal, sanitasi, grounding label', () => {
@@ -692,5 +802,95 @@ describe('lookup_catalog_and_policy — katalog layanan & SOP (tenant-scoped)', 
     const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'xyz', type: 'ALL' });
     expect(res.rows).toEqual([]);
     expect(res.count).toBe(0);
+  });
+});
+
+describe('Fase budget — wall-clock guard & degradasi jujur (anti "Gagal menghubungi Copilot")', () => {
+  beforeEach(() => {
+    // resetAllMocks (bukan clearAllMocks): buang sisa antrean mockResolvedValueOnce
+    // dari describe sebelumnya agar test budget deterministik.
+    vi.resetAllMocks();
+    delete process.env.COPILOT_TOTAL_BUDGET_MS;
+    h.reservationFindMany.mockResolvedValue([]);
+    h.conversationFindMany.mockResolvedValue([]);
+    h.customerFindMany.mockResolvedValue([]);
+  });
+
+  it('withDeadline: menolak dengan penanda deadline saat promise menggantung', async () => {
+    const never = () => new Promise((resolve) => setTimeout(() => resolve('late'), 5000));
+    await expect(withDeadline(never, 30)).rejects.toSatisfy((e: any) => isCopilotDeadlineError(e));
+  });
+
+  it('withDeadline: promise selesai cepat → tidak kena timeout', async () => {
+    const fast = async () => 'ok';
+    await expect(withDeadline(fast, 5000)).resolves.toBe('ok');
+  });
+
+  it('buildDegradedAnswer: hanya menyalin data nyata, tanpa mengarang (anti-halusinasi)', () => {
+    const out = buildDegradedAnswer([
+      { tool: 'query_stalled_inquiries', rows: [{ customerName: 'Bunda Dewi', requestedTime: 'besok', lastMessage: 'minta besok jam 10' }] },
+    ]);
+    expect(out).toContain('Bunda Dewi');
+    expect(out).toContain('query_stalled_inquiries');
+    expect(out).toContain('minta besok');
+    // Tidak menyebut nama yang tak ada di baris.
+    expect(out).not.toContain('Bunda Siti');
+  });
+
+  it('buildDegradedAnswer: tanpa baris → pesan arahan persempit (bukan crash)', () => {
+    const out = buildDegradedAnswer([]);
+    expect(out).toMatch(/batas waktu/i);
+  });
+
+  it('router menggantung melewati anggaran → degradasi/`error` deadline, BUKAN "gangguan layanan AI"', async () => {
+    process.env.COPILOT_TOTAL_BUDGET_MS = '80';
+    // Router LLM tidak pernah selesai (simulasi provider lambat).
+    h.callChat.mockImplementation(() => new Promise(() => {}));
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'jadwal besok siapa?' });
+    // Tanpa data terkumpul → success:false dengan error deadline yang jujur.
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('COPILOT_DEADLINE_EXCEEDED');
+    expect(res.answer).not.toContain('gangguan layanan AI');
+  });
+
+  it('anggaran habis SETELAH tool berjalan → data mentah tersaji (grounded), bukan error', async () => {
+    // Router pertama balas cepat memilih tool; router kedua menggantung → deadline.
+    h.reservationFindMany.mockResolvedValue([
+      {
+        id: 'r1',
+        customer: { id: 'c1', name: 'Bunda Dara', conversations: [{ id: 'conv-1' }] },
+        treatment_detail: 'Baby Massage',
+        booking_date: new Date('2026-09-28T02:00:00Z'),
+        status: 'confirmed',
+        assigned_staff: { name: 'Bidan Yusi' },
+      },
+    ]);
+    let call = 0;
+    h.callChat.mockImplementation(() => {
+      call++;
+      if (call === 1) return Promise.resolve(llmReply(JSON.stringify({ tool: 'query_reservations_by_filter', args: { date: '2026-09-28' } })));
+      return new Promise(() => {}); // router ke-2 menggantung → deadline
+    });
+    process.env.COPILOT_TOTAL_BUDGET_MS = '120';
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'jadwal besok siapa?' });
+    expect(res.success).toBe(true);
+    expect(res.grounded).toBe(true);
+    expect(res.answer).toContain('Bunda Dara');
+    expect(res.answer).toMatch(/batas waktu/i);
+    expect(res.toolsUsed).toEqual(['query_reservations_by_filter']);
+  });
+
+  it('happy-path tetap memakai summarize (tidak regresi ke degradasi)', async () => {
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_unreplied_chats","args":{}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'))
+      .mockResolvedValueOnce(llmReply('Ringkasan rapi.'));
+    h.conversationFindMany.mockResolvedValue([
+      { id: 'conv-1', customer: { id: 'c1', name: 'Bunda Rina' }, messages: [{ direction: 'INBOUND', content: 'hai', created_at: new Date() }] },
+    ]);
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'chat menggantung?' });
+    expect(res.success).toBe(true);
+    expect(res.answer).toBe('Ringkasan rapi.');
+    expect(res.llmCalls).toBe(3);
   });
 });

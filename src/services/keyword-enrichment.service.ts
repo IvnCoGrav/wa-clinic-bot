@@ -176,7 +176,9 @@ export const EXEMPLAR_TAG_RULES: ExemplarTagRule[] = [
   { keys: ['balita / anak usia', 'kids'],
     tags: ['kids', 'balita', 'anak', 'kids_spa', 'usia', 'perawatan_anak', 'tahun', 'umur', 'tk', 'paud'] },
   { keys: ['belum tersedia', 'tolak santun'],
-    tags: ['tidak_tersedia', 'belum_ada', 'cuci_hidung', 'layanan_luar', 'tolak', 'eskalasi', 'nasal', 'nebulizer', 'uap', 'tidak bisa'] },
+    // KNOWN_ISSUES #156: `nebulizer`/`uap` DIHAPUS dari daftar ini — nebulizer adalah
+    // add-on katalog yang sah (dipadukan dengan pijat), bukan layanan tak tersedia.
+    tags: ['tidak_tersedia', 'belum_ada', 'cuci_hidung', 'layanan_luar', 'tolak', 'eskalasi', 'nasal', 'tidak bisa'] },
   { keys: ['membatalkan/menunda'],
     tags: ['batal', 'cancel', 'menunda', 'tidak_papa', 'follow_up', 'penundaan', 'batalin', 'undur', 'tunda', 'lain kali', 'acara', 'halangan'] },
   { keys: ['meminta dikonfirmasi (keep jadwal)', 'keep jadwal'],

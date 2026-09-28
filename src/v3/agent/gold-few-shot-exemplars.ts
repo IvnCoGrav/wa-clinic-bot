@@ -211,9 +211,14 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   },
   {
     id: 'gold_penolakan_layanan_belum_tersedia',
-    scenario: 'Customer menanyakan layanan yang belum tersedia (mis. cuci hidung, baby sitter) — tolak santun',
-    tags: ['tidak_tersedia', 'belum_ada', 'cuci_hidung', 'layanan_luar', 'tolak', 'eskalasi', 'nasal', 'nebulizer', 'uap', 'tidak bisa'],
-    customerMessage: 'Kak, ada layanan cuci hidung atau nebulin bayi nggak?',
+    scenario: 'Customer menanyakan layanan yang belum tersedia (mis. cuci hidung/sedot lendir, baby sitter) — tolak santun',
+    // CATATAN (KNOWN_ISSUES #156): tag `nebulizer`/`uap` SENGAJA DIHAPUS dari sini.
+    // Nebulizer adalah ADD-ON resmi di katalog (add-on-nebulizer / add-on-nebulizer-obat)
+    // yang BOLEH dipesan BERSAMA pijat. Menandainya "belum tersedia" menyebabkan bot
+    // menolak layanan yang sah. Contoh ini kini hanya untuk layanan yang benar-benar
+    // tidak ada di katalog (cuci hidung/sedot lendir, jasa luar).
+    tags: ['tidak_tersedia', 'belum_ada', 'cuci_hidung', 'layanan_luar', 'tolak', 'eskalasi', 'nasal', 'tidak bisa'],
+    customerMessage: 'Kak, ada layanan cuci hidung atau sedot lendir bayi nggak?',
     idealResponse:
       'Mohon maaf Bunda, untuk layanan tersebut saat ini kami belum tersedia 🙏 Layanan kami berfokus pada perawatan pijat & spa Moms and Baby. Untuk kebutuhan medis seperti itu, sebaiknya Bunda berkonsultasi dengan tenaga medis ya. Ada yang bisa kami bantu untuk treatment lainnya? 🤗',
     isActive: true,
@@ -310,5 +315,19 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
       'Sama-sama Bunda, terima kasih kembali 😊 Jika ada yang ingin ditanyakan, kami siap membantu. Sampai jumpa! 🤗',
     isActive: true,
     sortOrder: 32,
+  },
+  {
+    id: 'gold_nebulizer_addon_tersedia',
+    scenario: 'Customer menanyakan nebulizer/uap inhalasi untuk bapil — tawarkan sebagai add-on BERSAMA pijat (bukan mandiri)',
+    // KNOWN_ISSUES #156: Nebulizer adalah ADD-ON resmi katalog
+    // (add-on-nebulizer / add-on-nebulizer-obat) yang SAH dipesan BERSAMA layanan
+    // utama (pijat terapi), TIDAK berdiri sendiri. Contoh ini mengoreksi penolakan
+    // keliru sebelumnya. Nama/harga TIDAK disebut (data-driven dari katalog runtime).
+    tags: ['nebulizer', 'nebul', 'nebulin', 'uap', 'inhalasi', 'addon', 'add_on', 'tambahan', 'dahak', 'bapil', 'batuk', 'pilek', 'terapi_tambahan'],
+    customerMessage: 'Kak, ada nebulizer atau uapnya juga nggak?',
+    idealResponse:
+      'Ada Bunda 😊 Nebulizer kami sediakan sebagai terapi tambahan yang bisa dipadukan dengan pijat terapi si kecil, tidak berdiri sendiri ya. Apakah saat ini si kecil sedang batuk atau pilek Bunda? 🤗',
+    isActive: true,
+    sortOrder: 36,
   },
 ];

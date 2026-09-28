@@ -63,6 +63,8 @@ export interface LiveChatConversationItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
   activeConfirmedReservation?: {
     id: string;
@@ -73,6 +75,8 @@ export interface LiveChatConversationItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
   activePendingReservation?: {
     id: string;
@@ -83,6 +87,8 @@ export interface LiveChatConversationItem {
     assigned_staff?: { id: string; name: string } | null;
     notes?: string | null;
     customer_id?: string | null;
+    otw_sent_at?: string | null;
+    arrived_at?: string | null;
   } | null;
 }
 
@@ -1088,6 +1094,12 @@ export class LiveChatService {
         assigned_staff: res.assigned_staff ? { id: res.assigned_staff.id, name: res.assigned_staff.name } : null,
         notes: res.notes || null,
         customer_id: res.customer_id || c.customer_id,
+        otw_sent_at: res.otw_sent_at
+          ? (typeof res.otw_sent_at === 'string' ? res.otw_sent_at : (res.otw_sent_at as Date).toISOString())
+          : null,
+        arrived_at: res.arrived_at
+          ? (typeof res.arrived_at === 'string' ? res.arrived_at : (res.arrived_at as Date).toISOString())
+          : null,
         customer: {
           id: c.customer?.id || c.customer_id,
           name: c.customer?.name || 'Bunda',

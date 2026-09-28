@@ -64,6 +64,16 @@ export class ReservationLifecycleService {
           kelurahan: kelurahan?.trim() || undefined,
         }, tenantId).catch(() => {});
 
+        // Integritas spasial: alamat lengkap (nama perumahan + blok + patokan)
+        // WAJIB tersimpan di preferences.address/full_address — bukan di kolom
+        // `kelurahan` (kolom itu khusus entitas desa resmi). Tanpa ini, kartu
+        // tugas terapis kehilangan nama perumahan/blok (insiden Terapis Tersasar).
+        if (address && address.trim()) {
+          await customerService
+            .updateCustomer(customerId, { address: address.trim() }, tenantId)
+            .catch(() => {});
+        }
+
         // Background Auto-Distance Calculation jika customer belum memiliki distance_km
         const currentCust = await customerService.getCustomerById(customerId, tenantId);
         if (currentCust && (currentCust.distance_km == null || currentCust.lat == null)) {
@@ -107,7 +117,15 @@ export class ReservationLifecycleService {
                   if (gz && gz.lat && gz.lng) {
                     resolvedLat = gz.lat;
                     resolvedLng = gz.lng;
-                    resolvedKel = resolvedKel || gz.kelurahan;
+                    // Anti-fabrikasi wilayah: sentroid kecamatan dapat mengembalikan
+                    // nama desa-pertama (mis. "buduran" → "Sidokerto") yang TIDAK
+                    // disebut customer. Nama desa hanya dipersist bila benar-benar
+                    // muncul di alamat/query; selain itu cukup koordinat estimasi +
+                    // kecamatan/kota (jangan mengarang kelurahan).
+                    const kelFromGaz = (gz.kelurahan || '').trim();
+                    const kelMentioned =
+                      !!kelFromGaz && String(q).toLowerCase().includes(kelFromGaz.toLowerCase());
+                    resolvedKel = resolvedKel || (kelMentioned ? kelFromGaz : undefined);
                     resolvedKec = resolvedKec || gz.kecamatan;
                     resolvedKota = resolvedKota || gz.kota;
                     break;

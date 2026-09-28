@@ -3,6 +3,8 @@ import { Direction } from '@prisma/client';
 import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName } from '../../utils/wib-time';
 import { isDummyOrTestContact } from '../../utils/dummy-filter';
 import { maskPhoneNumber } from '../../utils/pii-masker';
+import { hasScheduleSignal, extractTimeHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
+import { hasBookingCommitSignal } from '../../utils/date-confirmation';
 
 /**
  * copilot-tools.ts (Fase 6r + fixing plan) — Tools database Copilot Admin
@@ -297,14 +299,42 @@ function matchesDayToken(text: string, token: string): boolean {
 }
 
 /**
+ * Sinyal minat jadwal dari TEKS pesan customer (detektor kanonik pipeline
+ * produksi — single source of truth, BUKAN keyword baru):
+ * - `isScheduleCheckEngagement`: ack/komitmen/pertanyaan ketersediaan, dan
+ * - `hasScheduleSignal` ATAU `isScheduleAvailabilityText` ATAU `extractTimeHint`
+ *   ATAU `hasBookingCommitSignal` (petunjuk waktu/hari, "bisa", verba komitmen).
+ * Menangkap varian nyata seperti "Bsk bisa pijat full body oksi tah?" (singkatan
+ * "bsk" + kata ketersediaan "bisa" tanpa kata jadwal eksplisit).
+ */
+export function hasTextScheduleSignal(text: string): boolean {
+  if (!text || !text.trim()) return false;
+  if (!isScheduleCheckEngagement(text)) return false;
+  return (
+    hasScheduleSignal(text) ||
+    isScheduleAvailabilityText(text) ||
+    extractTimeHint(text) !== null ||
+    hasBookingCommitSignal(text)
+  );
+}
+
+/**
  * Tool 4: tanya jadwal yang belum booking (stalled inquiry).
  *
- * Definisi deterministik (state, bukan keyword):
+ * Definisi deterministik (state + riwayat pesan, bukan keyword hafalan):
  * - ada pesan INBOUND dalam `sinceDays` hari terakhir,
- * - ada sinyal minat jadwal dari state sesi (`requestedTimeHint`/`preferredDate`/`pendingScheduleCheck`/`cartItems`),
+ * - ada sinyal minat jadwal — dari state sesi (`requestedTimeHint`/`preferredDate`/
+ *   `pendingScheduleCheck`/`cartItems`) ATAU dari teks pesan customer itu sendiri
+ *   memakai detektor kanonik `hasScheduleSignal` (dipakai pipeline produksi),
  * - TANPA reservasi aktif (confirmed/pending/hold),
  * - TANPA balasan ADMIN setelah inbound terakhir (masih menggantung),
- * - bila ada parameter `date`, hanya mengambil yang sinyal tanggalnya cocok.
+ * - bila ada parameter `date`, hanya mengambil yang sinyal tanggalnya cocok
+ *   (state sesi atau petunjuk waktu dari teks).
+ *
+ * Akar masalah yang ditutup (2026-09-28): di produksi `session_data.booking` NYARIS
+ * TIDAK PERNAH terisi (0 dari 780 percakapan) sehingga recall tool ini = nol.
+ * Bukti paling andal & selalu tersedia adalah riwayat pesan → sinyal jadwal diambil
+ * dari teks inbound memakai detektor kanonik (bukan keyword baru).
  *
  * Batas jujur: `session_data` JSON tak bisa diindeks DB → filter sinyal di aplikasi
  * (setelah query inbound terbatas). Tenant-scoped, tanpa phone ke LLM.
@@ -341,7 +371,9 @@ export const queryStalledInquiries: CopilotTool = {
         messages: {
           where: { sender_type: { not: 'INTERNAL_NOTE' } },
           orderBy: { created_at: 'desc' },
-          take: 1,
+          // Ambil beberapa pesan terakhir: sinyal jadwal bisa muncul di turn
+          // customer sebelum balasan bot terakhir (bukan hanya pesan terakhir).
+          take: 5,
           select: { direction: true, content: true, created_at: true },
         },
       },
@@ -362,15 +394,29 @@ export const queryStalledInquiries: CopilotTool = {
       );
       if (hasActive) continue;
 
-      // Sinyal minat jadwal dari state.
-      if (!hasScheduleIntentSignal(c.session_data, c.last_discussed_treatment)) continue;
-
-      // Filter tanggal bila admin menanyakan hari/tanggal tertentu.
-      if (args.date && !matchesInquiryDate(c.session_data, args.date)) continue;
-
+      const msgs: any[] = (c as any).messages || [];
+      const lastReal = msgs[0];
       // Pesan nyata terakhir harus INBOUND (belum dibalas admin) → menggantung.
-      const lastReal = (c as any).messages?.[0];
       if (!lastReal || (lastReal.direction as any) !== Direction.INBOUND) continue;
+
+      // Sinyal jadwal: state sesi ATAU teks pesan customer (detektor kanonik).
+      const inboundTexts = msgs
+        .filter((m) => (m.direction as any) === Direction.INBOUND && typeof m.content === 'string')
+        .map((m) => m.content as string);
+      const textHint = inboundTexts.map((t) => extractTimeHint(t)).find((h) => h) || null;
+      const textSignal = inboundTexts.some((t) => hasTextScheduleSignal(t));
+      const stateSignal = hasScheduleIntentSignal(c.session_data, c.last_discussed_treatment);
+      if (!stateSignal && !textSignal) continue;
+
+      // Filter tanggal bila admin menanyakan hari/tanggal tertentu — cocokkan
+      // dari state sesi ATAU petunjuk waktu teks (reuse matcher kanonik).
+      if (args.date) {
+        const textSessionLike = textHint ? { booking: { requestedTimeHint: textHint } } : null;
+        const dateOk =
+          matchesInquiryDate(c.session_data, args.date) ||
+          (textSessionLike ? matchesInquiryDate(textSessionLike, args.date) : false);
+        if (!dateOk) continue;
+      }
 
       const booking = (c.session_data as any)?.booking;
       rows.push({
@@ -378,7 +424,7 @@ export const queryStalledInquiries: CopilotTool = {
         customerName: cust.name || 'Bunda',
         conversationId: c.id,
         treatment: c.last_discussed_treatment || null,
-        requestedTime: booking?.requestedTimeHint || booking?.preferredDate || null,
+        requestedTime: booking?.requestedTimeHint || booking?.preferredDate || textHint || null,
         lastMessage: lastReal.content,
         lastInboundAt: lastReal.created_at,
         waitingMinutes: Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000),
