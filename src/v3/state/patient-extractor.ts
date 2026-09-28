@@ -407,6 +407,26 @@ export class PatientProfileExtractor {
     return null;
   }
 
+  /**
+   * Normalisasi slot anak → array DENSE (tanpa hole/null).
+   * Slot kosong dipertahankan POSISINYA sebagai placeholder agar pemetaan
+   * CHILD_1→idx0 / CHILD_2→idx1 (cart + grounding) tidak bergeser.
+   * Murni (pure): aman di-unit-test, tanpa I/O.
+   */
+  public static normalizeChildrenSlots(
+    input: Array<ChildState | null | undefined> | undefined
+  ): ChildState[] {
+    const source: Array<ChildState | null | undefined> = Array.isArray(input) ? input : [];
+    const arr: ChildState[] = [];
+    for (let i = 0; i < source.length; i++) {
+      arr.push(source[i] ?? { roleLabel: i === 1 ? 'Kakak' : 'Adik', symptoms: [] });
+    }
+    for (const child of arr) {
+      if (!Array.isArray(child.symptoms)) child.symptoms = [];
+    }
+    return arr;
+  }
+
   public static syncChildrenProfiles(
     session: CustomerGoalSession,
     text: string
@@ -415,11 +435,14 @@ export class PatientProfileExtractor {
     if (!lower) return [...(session.children || [])];
     // Anti-kontaminasi silang: pesan murni maternal DILARANG menyentuh profil anak.
     if (PatientProfileExtractor.isMaternalOnlyMessage(text)) return [...(session.children || [])];
-    const children: ChildState[] = (session.children || []).map((c) => ({
+    const children: ChildState[] = PatientProfileExtractor.normalizeChildrenSlots(session.children).map((c) => ({
       ...c,
       symptoms: [...(c.symptoms || [])],
     }));
     const ensureChild = (idx: 0 | 1, roleLabel: string): ChildState => {
+      // Backstop anti-hole: bila slot-1 ditulis tanpa slot-0 (array dense
+      // seharusnya sudah dicegah normalizeChildrenSlots), isi dulu index 0.
+      if (idx === 1 && !children[0]) children[0] = { roleLabel: 'Adik', symptoms: [] };
       if (!children[idx]) children[idx] = { roleLabel, symptoms: [] };
       else if (!children[idx].roleLabel) children[idx].roleLabel = roleLabel;
       return children[idx];
@@ -547,11 +570,21 @@ export class PatientProfileExtractor {
         addSymptoms(child);
       }
     } else {
-      if (mentionsAdik) ensureChild(0, 'Adik');
-      if (mentionsKakak) ensureChild(1, 'Kakak');
+      // Gerbang bukti-entitas slot-2 (anti phantom Kakak): kata peran telanjang
+      // (sapaan CS di ekor kalimat) TANPA bukti entitas = sapaan, bukan pasien.
+      // Bukti = konteks keluarga eksplisit ATAU anak/cart sudah tercatat sesi ini.
+      // (Ages/symptoms sudah ditangani cabang (a)-(e) di atas; cabang ini hanya
+      // tercapai bila keduanya kosong.)
+      const hasSecondChildEvidence =
+        PatientProfileExtractor.isKakakFamilyContext(text)
+        || lower.includes('keduanya')
+        || children.length > 0
+        || (session.cartItems || []).some((c) => (c.recipientScope || 'GENERAL') !== 'GENERAL');
+      if (mentionsAdik) ensureChild(0, 'Adik'); // idx-0 hole-safe & mirror childProfile → tak digate
+      if (mentionsKakak && hasSecondChildEvidence) ensureChild(1, 'Kakak');
     }
 
     // childProfile selalu mirror children[0] (backward compat).
-    return children;
+    return PatientProfileExtractor.normalizeChildrenSlots(children);
   }
 }

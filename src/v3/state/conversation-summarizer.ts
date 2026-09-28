@@ -85,7 +85,7 @@ export class V3ConversationSummarizer {
     } else {
       const symptoms = [
         ...(session.childProfile?.symptoms || []),
-        ...((session.children || []).flatMap((c) => c.symptoms || [])),
+        ...((session.children || []).flatMap((c) => c?.symptoms || [])),
       ].filter((s, i, arr) => arr.indexOf(s) === i);
       const momComplaints = [...(session.momProfile?.complaints || [])].filter((s, i, arr) => arr.indexOf(s) === i);
       const activeSymptoms = session.targetAudience === 'MOMS' ? momComplaints : symptoms;

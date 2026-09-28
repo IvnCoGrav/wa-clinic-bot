@@ -216,7 +216,7 @@ export class GoalTracker {
           ageMonths: prefs.childAgeMonths,
           symptoms: prefs.symptoms || []
         } : undefined),
-        children: Array.isArray(prefs.children) ? prefs.children : undefined,
+        children: Array.isArray(prefs.children) ? PatientProfileExtractor.normalizeChildrenSlots(prefs.children) : undefined,
         selectedTreatment: prefs.selectedTreatmentName || prefs.selectedTreatment || undefined,
         booking: prefs.booking || undefined,
         cartItems: Array.isArray(prefs.cartItems) ? prefs.cartItems : undefined,
@@ -362,7 +362,7 @@ export class GoalTracker {
     // keluhan ibu (momProfile.complaints) dan keluhan anak digabung sesuai subjek.
     const childSymptoms: string[] = [
       ...(session.childProfile?.symptoms || []),
-      ...((session.children || []).flatMap((c) => c.symptoms || [])),
+      ...((session.children || []).flatMap((c) => c?.symptoms || [])),
     ].filter((s, i, arr) => arr.indexOf(s) === i);
     const momComplaints: string[] = [...(session.momProfile?.complaints || [])]
       .filter((s, i, arr) => arr.indexOf(s) === i);
@@ -587,7 +587,7 @@ export class GoalTracker {
     // MOMS/BOTH: tampilkan Data Bunda; BABY/KIDS: tampilkan Data Si Kecil; BOTH: keduanya.
     const hasMom = Boolean(session.momProfile && (session.momProfile.gestationalWeeks != null || session.momProfile.stage || (session.momProfile.complaints || []).length > 0 || session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH'));
     const kids = session.children && session.children.length > 0
-      ? session.children
+      ? PatientProfileExtractor.normalizeChildrenSlots(session.children)
       : (session.childProfile ? [session.childProfile] : []);
     const hasKids = kids.length > 0 && (kids.some((k) => k.ageMonths != null || (k.symptoms || []).length > 0) || session.targetAudience === 'BABY' || session.targetAudience === 'KIDS' || session.targetAudience === 'BOTH');
     if (session.targetAudience) {

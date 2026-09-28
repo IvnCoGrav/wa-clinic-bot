@@ -67,3 +67,60 @@ describe('Multi-child honorific disambiguation (983902)', () => {
     expect(GoalTracker.detectRecipientScope('kakaknya umur 3 tahun', { category: 'KIDS' } as any)).toBe('CHILD_2');
   });
 });
+
+/**
+ * CASE-011: sapaan CS di EKOR kalimat ("...berapa kakak") lolos isKakakHonorific →
+ * slot anak-2 dialokasikan di index 1 pada array KOSONG → sparse array (hole di
+ * index 0) → goal-tracker.ts flatMap(c => c.symptoms) crash tiap turn berikutnya.
+ */
+describe('Dense children array — anti sparse-hole (CASE-011)', () => {
+  it('sapaan ekor "kakak" tidak boleh membuat sparse array', () => {
+    const kids = GoalTracker.syncChildrenProfiles(
+      { genderGreeting: 'Bunda' } as any,
+      'Kalau kesini ongkir berapa kakak'
+    );
+    expect(Object.keys(kids).length).toBe(kids.length);
+    expect(kids.every((k) => k != null)).toBe(true);
+  });
+
+  it('formatGoalSessionForPrompt tahan array children korup legacy (null/undefined)', () => {
+    const text = GoalTracker.formatGoalSessionForPrompt({
+      genderGreeting: 'Bunda',
+      children: [undefined, { roleLabel: 'Kakak', symptoms: [] }],
+    } as any);
+    expect(typeof text).toBe('string');
+  });
+});
+
+/**
+ * Gerbang bukti-entitas: kata peran telanjang TANPA bukti (usia/keluhan/konteks
+ * keluarga/cart) = sapaan, bukan pasien anak kedua. Diuji dengan parafrase
+ * bervariasi (bukan meniru satu kalimat penguji).
+ */
+describe('Evidence-gate slot anak-2 (anti phantom Kakak)', () => {
+  const TRAILING_ADDRESS = [
+    'Kalau kesini ongkir berapa kakak',
+    'Untuk besok ada nggak yaa kak',
+    'Oke kakak saya tunggu',
+    'Makasih banyak ya kak',
+    'Boleh deh yg jam 11 itu kak',
+    'Siap kak saya kabarin lagi',
+  ];
+  it.each(TRAILING_ADDRESS)('sapaan "%s" tanpa bukti → tidak alokasi anak-2', (msg) => {
+    const kids = GoalTracker.syncChildrenProfiles({ genderGreeting: 'Bunda' } as any, msg);
+    expect(kids.length).toBeLessThanOrEqual(1);
+    expect(kids[1]).toBeUndefined();
+  });
+
+  const LEGIT_SECOND_CHILD = [
+    'kakaknya yang umur 3 tahun juga mau dipijat',
+    'untuk kakak yg umur 2 tahun bisa?',
+    'anak saya 2, adik 6 bulan kakak 3 tahun',
+    'keduanya mau dipijat, adik batuk kakak sehat',
+  ];
+  it.each(LEGIT_SECOND_CHILD)('kontrol positif tetap 2 anak: "%s"', (msg) => {
+    const s1 = GoalTracker.syncChildrenProfiles({ genderGreeting: 'Bunda' } as any, 'bayi saya umur 2 bulan');
+    const kids = GoalTracker.syncChildrenProfiles({ genderGreeting: 'Bunda', children: s1 } as any, msg);
+    expect(kids).toHaveLength(2);
+  });
+});

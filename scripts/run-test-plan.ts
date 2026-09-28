@@ -14,10 +14,15 @@
  *   npx tsx scripts/run-test-plan.ts --only 25  # hanya skenario 25
  *
  * Mode Suite v2 (119 kasus dari tests/fixtures/test-suite-v2.json):
- *   npx tsx scripts/run-test-plan.ts --suite=v2            # semua 119 (offline)
+ *   npx tsx scripts/run-test-plan.ts --suite=v2            # semua 119 (offline, in-memory)
  *   npx tsx scripts/run-test-plan.ts --suite=v2 --llm      # pakai LLM asli
  *   npx tsx scripts/run-test-plan.ts --suite=v2 --id=RF-01 # 1 kasus (gate: + --offline)
  *   npx tsx scripts/run-test-plan.ts --suite=v2 101-119    # rentang posisional (index fixture)
+ *
+ * CATATAN PERSISTENSI: default = IN-MEMORY (Repository in-memory) → chat TIDAK
+ * ditulis ke DB dan TIDAK muncul di Live Chat dashboard. Tambahkan --persist
+ * (alias --db/--livechat) untuk menulis ke DB asli (semua customer ditandai
+ * is_sandbox_test=true, filter "QA Tester / Sandbox" di dashboard).
  *
  * Mode Episode Suite (478 episode atomik dari tests/fixtures/test-suite-episodes.json):
  *   npx tsx scripts/run-test-plan.ts --suite=episodes --replay    # replay deterministik (offline)
@@ -43,6 +48,8 @@ let RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results.json'
 let REPORT_FILE = path.join(__dirname, '..', 'test-results', 'testing-plan-report.md');
 let SIM_RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results-simulated.json');
 let SIM_REPORT_FILE = path.join(__dirname, '..', 'test-results', 'episodes-simulation-report.md');
+/** true bila run ini menulis ke DB asli (--persist/--db/--livechat). Diisi di main(). */
+let persistToDbFile = false;
 
 /** Baca argumen CLI (dipanggil sebelum `main` selesai parsing). */
 function valOfLocal(flag: string): string {
@@ -79,6 +86,12 @@ async function main() {
     console.error('[FATAL] --simulator butuh --llm (LLM_API_KEY di .env)');
     process.exit(1);
   }
+  // --persist memaksa tulis ke DB asli. Default harness = murni in-memory/offline
+  // (setCustomerRepository/Conversation/Message in-memory) sehingga chat TIDAK
+  // pernah muncul di Live Chat dashboard — terlepas dari --persist di posisi mana.
+  const persistToDb = args.includes('--persist') || args.includes('--db') || args.includes('--livechat');
+  persistToDbFile = persistToDb;
+
   if (suiteV2) {
     RESULTS_FILE = path.join(__dirname, '..', 'test-results', 'run-results-suite-v2.json');
     REPORT_FILE = path.join(__dirname, '..', 'test-results', 'test-suite-v2-report.md');
@@ -277,7 +290,6 @@ async function main() {
   S.push({ no: 50, category: 'H', title: 'Idle reopen — warm greeting', steps: [text('Halo lagi bu')], idleHrsAgo: 48 });
 
   // ============ 4b. MODE --suite=v2: muat fixture & bangun skenario replay ============
-  const persistToDb = process.argv.includes('--persist') || process.argv.includes('--db') || process.argv.includes('--livechat');
   let resetStoresForSuite: () => void = () => {};
   if (suiteV2) {
     if (!persistToDb) {
@@ -878,6 +890,22 @@ async function main() {
 
   fs.writeFileSync(RESULTS_FILE, JSON.stringify(merged, null, 2), 'utf8');
 
+  // Label QA TEST wajib bila run ini menulis ke DB (livechat). Guard kolom DB
+  // (Live Chat) & CRM memang meng-exclude is_sandbox_test, tapi kanal ekspor
+  // chat (`chat-export.service`) hanya memfilter kolom flag — jadi pastikan
+  // setiap customer yang baru dibuat oleh run ini ter-set is_sandbox_test=true.
+  if (persistToDb && suiteV2 && !useSimulator) {
+    try {
+      const { prisma } = await import('../src/db/client');
+      await prisma.customer.updateMany({
+        where: { name: { startsWith: 'QA Tester - ' }, tenant_id: DEFAULT_TENANT_ID },
+        data: { is_sandbox_test: true },
+      });
+    } catch (labelErr: any) {
+      console.warn('[QA TEST LABEL] Gagal menjaga flag is_sandbox_test:', labelErr?.message);
+    }
+  }
+
   writeReport(merged, V2, suiteV2, suiteEpisodes, useSimulator, episodeFixture);
 
   // Ringkasan.
@@ -896,6 +924,11 @@ async function main() {
     console.log(`Gate FAIL (SOP/Keamanan < 2): ${gateFail.length ? gateFail.map((r: any) => r.id).join(', ') : '(tidak ada)'}`);
     console.log(`Semua kasus butuh human review untuk dimensi Tone & Resolusi.`);
     console.log(`\nReport: ${REPORT_FILE}`);
+    if (!persistToDb) {
+      console.log(`\n[i] Mode in-memory (default): chat TIDAK ditulis ke DB → TIDAK muncul di Live Chat.`);
+      console.log(`    Untuk melihat chat di Live Chat dashboard, tambahkan --persist (⚠️ WAJIB QA TEST, `);
+      console.log(`    otomatis is_sandbox_test=true; filter "QA Tester / Sandbox" di dashboard).`);
+    }
     process.exit(0);
   }
   const failRows = merged.filter((r) => r.flags.some((f: any) => !f.pass));
