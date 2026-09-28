@@ -117,6 +117,38 @@ describe('ad-attribution.service Unit Tests', () => {
     );
   });
 
+  it('should enrich CTWA ad-click with ad identity (sourceId/sourceApp) when present', async () => {
+    vi.spyOn(prisma.adClick, 'create').mockResolvedValue({
+      id: 'click_ctwa_2',
+      ctwa_clid: 'CTWA_CLID_ENRICH',
+      customerId: 'cust_ctwa_2',
+    } as any);
+
+    const result = await matchAdClickAndFireContact({
+      bodyText: 'Halo',
+      isNewCustomerRecord: true,
+      customer: { id: 'cust_ctwa_2', phone: '628123456794' },
+      tenantId: 'default-tenant',
+      referral: {
+        ctwaClid: 'CTWA_CLID_ENRICH',
+        sourceId: '120250673996340235',
+        sourceApp: 'instagram',
+        sourceUrl: 'https://www.instagram.com/p/Dd0LihqAEmX/',
+        headline: 'PROMO KHUSUS SURABAYA & SIDOARJO!',
+      },
+    });
+
+    expect(result.matched).toBe(true);
+    expect(prisma.adClick.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        utmSource: 'instagram',
+        utmMedium: 'ctwa',
+        utmCampaign: '120250673996340235',
+        landingUrl: 'https://www.instagram.com/p/Dd0LihqAEmX/',
+      }),
+    });
+  });
+
   it('should match native CTWA ctwa_clid referral from Meta for new customer', async () => {
     vi.spyOn(prisma.adClick, 'create').mockResolvedValue({
       id: 'click_ctwa_1',
@@ -143,6 +175,9 @@ describe('ad-attribution.service Unit Tests', () => {
       data: {
         ctwa_clid: 'CTWA_CLID_999',
         landingUrl: 'https://fb.me/ad123',
+        utmSource: 'meta',
+        utmMedium: 'ctwa',
+        utmCampaign: 'ctwa_direct',
         matchedAt: expect.any(Date),
         customerId: 'cust_ctwa',
         tenant_id: 'default-tenant',

@@ -18,8 +18,41 @@ export class AbuseDetectionService {
   // Regex pencocokan kata kasar (word boundary match)
   private readonly PROFANITY_REGEX = /\b(asu|anjing|bangsat|tolol|goblok|babi|kontol|memek|jembut)\b/i;
 
-  // Regex pencocokan link URL umum
+  // Regex pencocokan link URL umum (deteksi mesin, bukan gatekeeper semantik)
   private readonly URL_REGEX = /https?:\/\/[^\s]+/i;
+
+  // Hostname resmi untuk share lokasi/peta (Google Maps & share sheet).
+  // Daftar hostname TEKNIS (bukan frasa customer) — diverifikasi via parsing
+  // URL standar, bukan `includes` hafalan (CASE-055: `share.google` lolos lalu
+  // salah di-auto-block sebagai uninvited_link).
+  private readonly LOCATION_URL_HOSTS = [
+    'maps.google.com',
+    'maps.app.goo.gl',
+    'goo.gl',
+    'google.com',
+    'share.google',
+  ];
+
+  /** True bila pesan memuat URL share lokasi/peta resmi (hostname-aware). */
+  private isLocationShareUrl(message: string): boolean {
+    const raw = (message || '').trim();
+    if (!raw) return false;
+    // Pindai tiap token ber-URL agar tanda baca di sekitarnya tidak merusak parse.
+    for (const token of raw.split(/\s+/)) {
+      if (!this.URL_REGEX.test(token)) continue;
+      let host: string;
+      try {
+        const normalized = token.replace(/[)\].,;!?]+$/, '');
+        host = new URL(normalized).hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        continue;
+      }
+      if (this.LOCATION_URL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /**
    * Mengecek apakah pesan masuk memicu salah satu kriteria abuse (flood, uninvited link, repetitive spam),
@@ -51,9 +84,7 @@ export class AbuseDetectionService {
     // 2. TRIGGER UNINVITED LINK: Mengirim URL selain Google Maps sebelum AWAITING_INTEREST/RESERVATION_SENT/COMPLETED
     const containsUrl = this.URL_REGEX.test(cleanMessage);
     if (containsUrl) {
-      const isMapsUrl = cleanMessage.includes('maps.google.com') || 
-                        cleanMessage.includes('maps.app.goo.gl') || 
-                        cleanMessage.includes('google.com/maps');
+      const isMapsUrl = this.isLocationShareUrl(cleanMessage);
 
       if (!isMapsUrl) {
         // Cek state saat ini

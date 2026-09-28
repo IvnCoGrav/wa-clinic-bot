@@ -8,29 +8,46 @@ describe('Queue Service Durability & Pause Handling', () => {
 
   it('holds in-memory queued messages when queue is paused and drains upon resume', async () => {
     const phone = '628999888777';
-    await queueService.pauseQueue();
-    expect(queueService.isQueuePaused()).toBe(true);
+    // Deterministik: paksa jalur in-memory dengan MEMUTUS Redis sungguhan
+    // (jangan andalkan Redis kebetulan offline — bila Redis lokal hidup,
+    // event 'ready' akan mengaktifkan ulang BullMQ dan test jadi goyah).
+    await queueService.forceDisconnectRedis();
+    expect(queueService.isRedisEnabled()).toBe(false);
+    (queueService as any).memoryQueues.delete(phone);
+    (queueService as any).memoryProcessing.delete(phone);
 
-    // Enqueue pesan saat paused
-    const processSpy = vi.fn();
-    (queueService as any).processNextInMemory = processSpy;
+    const originalProcessNext = (queueService as any).processNextInMemory.bind(queueService);
+    try {
+      await queueService.pauseQueue();
+      expect(queueService.isQueuePaused()).toBe(true);
 
-    await queueService.enqueueMessage({
-      tenantId: 'test-tenant',
-      customerId: 'cust_1',
-      phone,
-      incomingMessage: { id: 'msg_1', text: { body: 'halo' } },
-    });
+      // Enqueue pesan saat paused — proses TIDAK boleh langsung berjalan.
+      const processSpy = vi.fn();
+      (queueService as any).processNextInMemory = processSpy;
 
-    // Pesan tertahan di memoryQueues
-    const memQueue = (queueService as any).memoryQueues.get(phone);
-    expect(memQueue).toBeDefined();
-    expect(memQueue.length).toBe(1);
+      await queueService.enqueueMessage({
+        tenantId: 'test-tenant',
+        customerId: 'cust_1',
+        phone,
+        incomingMessage: { id: 'msg_1', text: { body: 'halo' } },
+      });
 
-    // Resume queue -> downstream processNextInMemory dipicu
-    await queueService.resumeQueue();
-    expect(queueService.isQueuePaused()).toBe(false);
-    expect(processSpy).toHaveBeenCalledWith(phone);
+      // Pesan tertahan di memoryQueues, belum diproses.
+      const memQueue = (queueService as any).memoryQueues.get(phone);
+      expect(memQueue).toBeDefined();
+      expect(memQueue.length).toBe(1);
+      expect(processSpy).not.toHaveBeenCalled();
+
+      // Resume queue -> downstream processNextInMemory dipicu (drain).
+      await queueService.resumeQueue();
+      expect(queueService.isQueuePaused()).toBe(false);
+      expect(processSpy).toHaveBeenCalledWith(phone);
+    } finally {
+      (queueService as any).processNextInMemory = originalProcessNext;
+      (queueService as any).memoryQueues.delete(phone);
+      (queueService as any).memoryProcessing.delete(phone);
+      if (queueService.isQueuePaused()) await queueService.resumeQueue();
+    }
   });
 
   it('ensureRedisOrThrow throws when QUEUE_REQUIRE_REDIS=true and Redis fails', async () => {

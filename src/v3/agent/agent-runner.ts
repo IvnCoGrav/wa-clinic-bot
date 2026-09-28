@@ -12,6 +12,7 @@ import { DeliveryFastPath } from './pipeline/delivery-fast-path';
 import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
 import { telemetryService } from '../../services/telemetry.service';
+import { wrapCustomerMessage } from '../../utils/prompt-injection-sanitizer';
 
 /**
  * Detektor semantik token-based (sesi 951450): apakah pesan adalah komitmen
@@ -184,7 +185,7 @@ export class V3AgentRunner {
     const messages: any[] = [
       { role: 'system', content: routerPrompt },
       ...recentHistory,
-      { role: 'user', content: `<customer_message>\n${cleanIncomingText}\n</customer_message>` },
+      { role: 'user', content: wrapCustomerMessage(cleanIncomingText) },
     ];
 
     // Stage 0: Fast Gate deterministik (sapaan Turn-0 / ack pasca-reservasi).

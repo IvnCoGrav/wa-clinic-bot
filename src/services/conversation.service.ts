@@ -21,6 +21,11 @@ export function buildConversationUpdatedPayload(conversation: any) {
     pinnedAt: conversation.pinned_at ?? null,
     isManualUnread: !!conversation.is_manual_unread,
     isSandboxTest: Boolean(conversation.customer?.is_sandbox_test),
+    // Pulse alert SLA: status frustrasi disiarkan dalam SATU bentuk payload
+    // standar agar frontend tidak perlu event/shape kedua.
+    isFrustrated: !!conversation.is_frustrated,
+    frustratedAt: conversation.frustrated_at ?? null,
+    frustratedReason: conversation.frustrated_reason ?? null,
   };
 }
 
@@ -112,6 +117,29 @@ export class ConversationService {
       }
       return null;
     }
+  }
+
+  /**
+   * Padamkan peringatan SLA/frustrasi secara manual (aksi admin 1-klik tanpa
+   * mengetik pesan ke pasien). Idempoten; siarkan conversation.updated dengan
+   * isFrustrated:false ke seluruh dashboard via SSE.
+   */
+  public async dismissFrustration(conversationId: string, tenantId: string): Promise<any> {
+    const current = await this.getConversationById(conversationId, tenantId);
+    if (!current) return null;
+    let updated: any = current;
+    try {
+      updated = await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { is_frustrated: false, frustrated_at: null, frustrated_reason: null },
+      });
+    } catch (error) {
+      // Fallback memory store saat DB offline: tetap padamkan agar UI konsisten.
+      updated = { ...current, is_frustrated: false, frustrated_at: null, frustrated_reason: null };
+    }
+    memoryConversations.set(conversationId, updated);
+    this.publishConversationUpdated(updated, tenantId);
+    return updated;
   }
 
   /**

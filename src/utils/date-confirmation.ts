@@ -58,9 +58,114 @@ const BOOKING_COMMIT_SINGLE_TOKENS = [
   'jadwalkan', 'ambil', 'deal', 'fix', 'pesan', 'booking',
 ];
 
+/**
+ * Fase 4 — Kelas DEIKSIS (rujukan "yang tadi/itu/barusan") + verba afirmasi.
+ * Menggantikan hafalan frasa literal (anti-overfitting): variasi slang/typo
+ * ("yg td aja", "tdi", "barusan") tertangkap karena dipetakan ke token kanonis,
+ * bukan dicocokkan sebagai substring kalimat. Verba afirmasi reusable dari
+ * BOOKING_COMMIT_SINGLE_TOKENS.
+ */
+const DEIXIS_CANONICAL_TOKENS = new Set(['tadi', 'itu', 'barusan', 'td', 'tdi', 'tdy']);
+const DEIXIS_VERB_TOKENS = new Set([...BOOKING_COMMIT_SINGLE_TOKENS, 'mau', 'boleh', 'ganti', 'jadi', 'ikut']);
+const DEIXIS_PARTICLE_TOKENS = new Set(['aja', 'deh', 'saja', 'dong', 'ya', 'yah']);
+const DEIXIS_MARKERS = new Set(['yang', 'yg']);
+const DEIXIS_RECOMMEND_TOKENS = new Set([
+  'rekomendasi', 'rekomendasikan', 'direkomendasikan', 'direkomendasi',
+  'saran', 'sarankan', 'recommended',
+]);
+const DEIXIS_STOP = new Set(['tidak', 'nggak', 'ngga', 'gak', 'jangan', 'batal', 'nanti', 'pikir', 'dulu', 'belum', 'tunda']);
+
+function tokenizeAlnum(text: string): string[] {
+  let norm = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    norm += ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) ? ch : ' ';
+  }
+  return norm.split(' ').filter((t) => t.length > 0);
+}
+
+/**
+ * Kata benda ketersediaan slot (data-driven, setingkat bahasa fungsional).
+ * Dipakai untuk mengenali PERTANYAAN ketersediaan tanpa tanda '?' — masalah
+ * WhatsApp Indonesia: "sabtu jam 10 kosong gak", "ada slot min".
+ */
+const AVAILABILITY_NOUNS = ['slot', 'jadwal', 'kosong', 'tersedia', 'available', 'lowong', 'kuota'];
+/** Partikel/penanda interogatif fungsional (bukan hafalan kalimat). */
+const INTERROGATIVE_PARTICLES = new Set([
+  'gak', 'ga', 'nggak', 'ngga', 'engga', 'enggak', 'kah', 'kan', 'belum', 'kagak',
+]);
+/** Penanda pertanyaan ya/tidak eksplisit (closed-class) — selalu interogatif. */
+const STRONG_INTERROGATIVES = new Set(['apakah']);
+/** Verba/penanda yang bersama kata-benda ketersediaan membentuk pertanyaan. */
+const AVAILABILITY_QUESTION_MARKERS = new Set([
+  'ada', 'bisa', 'boleh', 'bs', 'bsa', 'ready', 'masih', 'apa', 'apakah',
+  'gimana', 'gmn', 'kapan', 'berapa', 'minta', 'cek', 'tanya',
+]);
+
+/**
+ * Pertanyaan KETERSEDIAAN jadwal tanpa '?' (Fase 2.2): konstruksi gramatikal
+ * interogatif Indonesia — partikel tanya (…gak/kah/kan) ATAU kata-benda
+ * ketersediaan disertai verba tanya ("ada slot", "bisa jadwal"). Level
+ * konstruksi gramatikal, BUKAN daftar kalimat hafalan.
+ *
+ * Tujuan: kalimat seperti "mau booking sabtu jam 10 kosong gak" DILARANG
+ * dianggap komitmen booking final.
+ */
+export function isAvailabilityInquiryText(text: string | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  const tokens = tokenizeAlnum(lower);
+  if (tokens.length === 0) return false;
+  // Partikel tanya gramatikal (…gak/kah/kan) SELALU menandai pertanyaan —
+  // "mau booking sabtu jam 10 kosong gak" tetap pertanyaan walau ada verba.
+  if (tokens.some((t) => INTERROGATIVE_PARTICLES.has(t))) return true;
+  // Penanda tanya ya/tidak eksplisit ("apakah ...") selalu interogatif.
+  if (tokens.some((t) => STRONG_INTERROGATIVES.has(t))) return true;
+  const hasNoun = AVAILABILITY_NOUNS.some((n) => lower.includes(n));
+  if (hasNoun && tokens.some((t) => AVAILABILITY_QUESTION_MARKERS.has(t))) {
+    // Tanpa partikel tanya, verba komitmen eksplisit ("bisa ambil jadwal sabtu")
+    // dimenangkan sebagai komitmen — bukan pertanyaan ketersediaan.
+    return !hasBookingCommitSignal(lower);
+  }
+  // '?' sopan pada pesan berverba komitmen ("Ambil ... ya??") BUKAN pertanyaan
+  // ketersediaan — verba komitmen mengadopsi tanggal (sesi 180166 FM1).
+  if (lower.includes('?') && !hasBookingCommitSignal(lower)) return true;
+  return false;
+}
+
+/**
+ * Sinyal customer MUNDUR / menunda dari komitmen booking (Fase 2.1): kata
+ * penunda fungsional (batal/nanti/dulu/belum/tunda/pikir/jangan/tidak) ATAU
+ * pertanyaan ketersediaan. Dipakai untuk melepas flag lengket
+ * `bookingCommitConfirmed` agar tidak mengunci selamanya.
+ */
+export function hasBookingRetreatSignal(text: string | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  if (tokenizeAlnum(lower).some((t) => DEIXIS_STOP.has(t))) return true;
+  return isAvailabilityInquiryText(lower);
+}
+
+
+/** Kelas deiksis: ada penanda rujukan + (verba afirmasi ATAU partikel), tanpa kata penunda. */
+function hasDeixisCommit(tokens: string[]): boolean {
+  if (tokens.length === 0) return false;
+  if (tokens.some((t) => DEIXIS_STOP.has(t))) return false;
+  const hasMarker = tokens.some((t) => DEIXIS_MARKERS.has(t));
+  const hasRecommend = tokens.some((t) => DEIXIS_RECOMMEND_TOKENS.has(t));
+  const hasDeixis = tokens.some((t) => DEIXIS_CANONICAL_TOKENS.has(t));
+  // Frasa rujukan-rekomendasi ("sesuai rekomendasi", "yang direkomendasikan
+  // tadi") sah tanpa verba afirmasi eksplisit.
+  if (hasRecommend) return true;
+  if (!hasMarker || !hasDeixis) return false;
+  return tokens.some((t) => DEIXIS_VERB_TOKENS.has(t) || DEIXIS_PARTICLE_TOKENS.has(t));
+}
+
 export function hasBookingCommitSignal(text: string | undefined): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower) return false;
+  // Fase 4: kelas deiksis (tahan slang/typo/parafrasa) — dievaluasi lebih dulu.
+  if (hasDeixisCommit(tokenizeAlnum(lower))) return true;
   // Frasa multi-kata via includes (distinctive, tak ambigu, mencakup variasi partikel percakapan alami).
   if (
     lower.includes('mau yang itu') || lower.includes('boleh yang itu')
@@ -227,10 +332,12 @@ export function verifyDayMentioned(
   // komitmen transaksi. Tanpa verba komitmen, fail-closed tetap berlaku.
   if (aggregateProven) {
     const hasNonQuestionSupport = (evidence || []).some(
-      (m) => !(m || '').includes('?') && messageSupportsDay(m)
+      (m) => !isAvailabilityInquiryText(m) && messageSupportsDay(m)
     );
     const currentMsg = (evidence || [])[(evidence || []).length - 1] || '';
-    const hasCommitAdoption = hasBookingCommitSignal(currentMsg);
+    // Adopsi komitmen: verba komitmen yang BUKAN sekadar pertanyaan ketersediaan.
+    // "mau booking sabtu jam 10 kosong gak" = tanya slot, DILARANG diadopsi.
+    const hasCommitAdoption = hasBookingCommitSignal(currentMsg) && !isAvailabilityInquiryText(currentMsg);
     if (!hasNonQuestionSupport && !hasCommitAdoption) {
       return `Jadwal kunjungan ("${bookingDate}") masih dalam tahap pengecekan ketersediaan slot oleh tim Bidan — customer baru menanyakan ketersediaan (bukti hari hanya dari kalimat tanya) dan belum menyetujui booking final. Sampaikan dengan hangat bahwa tim sedang mengecekkan jadwal tersebut. DILARANG memanggil save_reservation sebelum customer menyetujui booking secara tegas tanpa tanda tanya!`;
     }

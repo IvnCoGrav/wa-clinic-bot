@@ -326,10 +326,21 @@ export class QueueService {
     const queue = this.memoryQueues.get(phone)!;
     queue.push(payload);
 
-    this.processNextInMemory(phone);
+    // Pause-gate FONDASIONAL (WAHA disconnect resilience): saat antrian
+    // di-pause, pesan WAJIB ditahan di memori — BUKAN langsung diproses.
+    // Tanpa ini, jalur fallback in-memory mengabaikan `isPaused` sehingga
+    // balasan bot tetap terkirim saat WAHA mati (pesan hilang / duplikat).
+    if (!this.isPaused) {
+      this.processNextInMemory(phone);
+    }
   }
 
   private async processNextInMemory(phone: string): Promise<void> {
+    // Pause-gate: jangan proses apa pun selama antrian dijeda. Pesan tetap
+    // tersimpan di `memoryQueues` dan akan dikuras saat `resumeQueue()`.
+    if (this.isPaused) {
+      return;
+    }
     // Jika sedang memproses pesan untuk nomor ini, tunggu giliran berikutnya
     if (this.memoryProcessing.has(phone)) {
       return;
@@ -502,6 +513,13 @@ export class QueueService {
 
     for (const queue of this.bullQueues.values()) {
       await queue.resume().catch(() => {});
+    }
+
+    // Kuras antrian in-memory yang tertahan selama jeda (WAHA offline fallback).
+    // Tanpa ini, pesan yang masuk saat paused TIDAK pernah diproses meski
+    // koneksi sudah pulih.
+    for (const phone of this.memoryQueues.keys()) {
+      this.processNextInMemory(phone);
     }
 
     const { alertService, AlertType, AlertSeverity } = await import('./alert.service');

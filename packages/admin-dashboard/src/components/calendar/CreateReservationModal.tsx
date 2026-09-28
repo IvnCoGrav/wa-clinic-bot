@@ -653,7 +653,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
       if (res.treatment_category) {
         const cat = res.treatment_category as any;
-        setTreatmentCategory(cat === 'KIDS' ? 'BABY' : (cat === 'BUNDLE' ? 'BOTH' : cat));
+        setTreatmentCategory(cat === 'BUNDLE' ? 'BOTH' : cat);
       }
 
       if (res.booking_date) {
@@ -1230,9 +1230,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         for (const b of staffBookings) {
           const { hours: bH, minutes: bM } = getWibHoursAndMinutes(b.booking_date!);
           const bStartMinutes = bH * 60 + bM;
+          // Kontrak tunggal (audit Fase 3.1): `duration_minutes` SUDAH termasuk
+          // 1x buffer 20m. Frontend DILARANG menambah buffer lagi saat cek bentrok.
           const bDuration = (b as any).duration_minutes || 60;
-          const bBuffer = 20;
-          const bEndMinutes = bStartMinutes + bDuration + bBuffer;
+          const bEndMinutes = bStartMinutes + bDuration;
 
           // Direct slot overlap
           if (slotStartMinutes < bEndMinutes && slotEndMinutes > bStartMinutes) {
@@ -1277,7 +1278,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         // If midwife has prior booking, departure cannot be earlier than previous booking end
         if (prevBooking) {
           const { hours: pbH, minutes: pbM } = getWibHoursAndMinutes(prevBooking.booking_date!);
-          const prevEndMinutes = pbH * 60 + pbM + ((prevBooking as any).duration_minutes || 60) + 20;
+          const prevEndMinutes = pbH * 60 + pbM + ((prevBooking as any).duration_minutes || 60);
           if (plannedDepartureMinutes < prevEndMinutes) {
             continue; // Midwife hasn't finished prior patient yet!
           }
@@ -1369,9 +1370,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
     const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
     const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
-    const computedCategory: 'BABY' | 'MOMS' | 'BOTH' =
+    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
       rawCategory === 'BUNDLE' ? 'BOTH' :
-      rawCategory === 'KIDS' ? 'BABY' :
       (rawCategory as any) || 'BABY';
     return {
       fullBookingIso, finalTreatmentDetail, computedCategory, treatmentSummary,
@@ -1461,9 +1461,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
     const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
     const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
-    const computedCategory: 'BABY' | 'MOMS' | 'BOTH' =
+    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
       rawCategory === 'BUNDLE' ? 'BOTH' :
-      rawCategory === 'KIDS' ? 'BABY' :
       (rawCategory as any) || 'BABY';
 
     let forceSubmit = false;

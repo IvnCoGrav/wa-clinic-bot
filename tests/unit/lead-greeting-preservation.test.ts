@@ -44,6 +44,35 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
     expect(isPureLeadGreeting('Hari sabtu bisa?').isLeadGreeting).toBe(false);
   });
 
+  describe('Fase 3 — sapaan panjang ber-alamat DILARANG disambar gate statis', () => {
+    it('sapaan + alamat eksplisit → bukan pure lead greeting', () => {
+      expect(isPureLeadGreeting('halo kak, alamat saya Semolowaru Sukolilo Surabaya, bisa homecare?').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('assalamualaikum, domisili saya di Semolowaru, mau tanya pijat bayi').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('halo kak alamat saya di Jl. Melati No 12').isLeadGreeting).toBe(false);
+    });
+
+    it('sapaan + nama wilayah TANPA kata "alamat" (gazetteer whole-word) → bukan sapaan murni', () => {
+      expect(isPureLeadGreeting('halo kak sukolilo').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('halo kak saya di sukolilo').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('halo min saya di kutisari').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('Semolowaru Sukolilo').isLeadGreeting).toBe(false);
+    });
+
+    it('frasa lokasi (tinggal di / rumahnya di / perumahan) → bukan sapaan murni', () => {
+      expect(isPureLeadGreeting('permisi min mau tanya saya tinggal di sukolilo').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('mau tanya dong saya rumahnya di rungkut').isLeadGreeting).toBe(false);
+      expect(isPureLeadGreeting('halo saya di perumahan Wisma Indah blok C').isLeadGreeting).toBe(false);
+    });
+
+    it('sapaan murni & sapaan berisi layanan tetap terdeteksi (anti-regresi)', () => {
+      expect(isPureLeadGreeting('pagi kak').isLeadGreeting).toBe(true);
+      expect(isPureLeadGreeting('halo bu bidan').isLeadGreeting).toBe(true);
+      expect(isPureLeadGreeting('selamat pagi bidan').isLeadGreeting).toBe(true);
+      expect(isPureLeadGreeting('bisa homecare gak?').isLeadGreeting).toBe(true);
+      expect(isPureLeadGreeting('assalamualaikum').isIslamic).toBe(true);
+    });
+  });
+
   it('stripAdTags membersihkan tag tracking', () => {
     expect(stripAdTags('Promo[b8]\n\nHalo')).toBe('Halo');
     expect(stripAdTags('[ID: abc] Halo kak')).toBe('Halo kak');

@@ -1,7 +1,8 @@
 import { prisma } from '../../db/client';
 import { Direction } from '@prisma/client';
-import { wibDayBoundsUtc, startOfTodayWib } from '../../utils/wib-time';
+import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName } from '../../utils/wib-time';
 import { isDummyOrTestContact } from '../../utils/dummy-filter';
+import { maskPhoneNumber } from '../../utils/pii-masker';
 
 /**
  * copilot-tools.ts (Fase 6r + fixing plan) — Tools database Copilot Admin
@@ -31,6 +32,9 @@ export interface CopilotTool {
 }
 
 const MAX_ROWS = 20;
+
+/** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
+export const ACTIVE_RESERVATION_STATUSES = ['confirmed', 'pending', 'hold'];
 
 /** Validasi string tanggal "YYYY-MM-DD" (bukan kalimat bebas dari LLM). */
 export function isValidIsoDate(value: unknown): boolean {
@@ -64,14 +68,19 @@ export const queryReservationsByFilter: CopilotTool = {
     'Gunakan untuk pertanyaan "jadwal besok", "siapa terapis X hari ini", dsb.',
   parameters: {
     date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB). Kosong = jadwal aktif mendatang.' },
-    status: { type: 'string', description: 'confirmed | pending | hold | completed | cancelled. Kosong = semua.' },
+    status: { type: 'string', description: 'confirmed | pending | hold | completed | cancelled. Kosong = jadwal aktif (confirmed/pending/hold).' },
     staffName: { type: 'string', description: 'Nama terapis (sebagian). Kosong = semua.' },
   },
   run: async (tenantId, args) => {
     const where: any = { tenant_id: tenantId };
     // Default (tanpa tanggal valid) = jadwal aktif mendatang, bukan 20 baris tertua.
     where.booking_date = resolveReservationDateFilter(args.date);
-    if (args.status) where.status = String(args.status);
+    // Default status = jadwal AKTIF; tanpa ini, reservasi cancelled memcemari rekap mendatang.
+    if (args.status) {
+      where.status = String(args.status);
+    } else {
+      where.status = { in: ACTIVE_RESERVATION_STATUSES };
+    }
     if (args.staffName) {
       where.assigned_staff = { name: { contains: String(args.staffName), mode: 'insensitive' } };
     }
@@ -128,7 +137,7 @@ export const queryUnrepliedChats: CopilotTool = {
     const convs = await prisma.conversation.findMany({
       where: { tenant_id: tenantId },
       include: {
-        customer: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, phone: true } },
         messages: {
           where: { sender_type: { not: 'INTERNAL_NOTE' } },
           orderBy: { created_at: 'desc' },
@@ -142,6 +151,8 @@ export const queryUnrepliedChats: CopilotTool = {
     const rows: any[] = [];
     for (const c of convs) {
       if (rows.length >= take) break;
+      const cust: any = c.customer;
+      if (cust && cust.phone && isDummyOrTestContact(cust.phone, cust.name, false)) continue;
       const lastReal = (c as any).messages?.[0];
       if (lastReal && (lastReal.direction as any) === Direction.INBOUND) {
         rows.push({
@@ -157,9 +168,6 @@ export const queryUnrepliedChats: CopilotTool = {
     return { tool: 'query_unreplied_chats', args, count: rows.length, rows };
   },
 };
-
-/** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
-const ACTIVE_RESERVATION_STATUSES = ['confirmed', 'pending', 'hold'];
 
 /**
  * Tool 3: prospek yang BELUM punya jadwal aktif — customer tanpa reservasi
@@ -217,15 +225,75 @@ export const queryUnscheduledProspects: CopilotTool = {
 
 /**
  * Sinyal minat jadwal dari STATE sesi (bukan keyword pesan):
- * inquiryDate (tanggal yang sedang dinegosiasikan) atau cartItems (layanan terkunci).
- * `last_discussed_treatment` (kolom Conversation) juga dipakai sebagai bukti minat.
+ * - booking.requestedTimeHint (kata waktu dari customer: "besok", "selasa", dsb.),
+ * - booking.preferredDate (tanggal yang dinegosiasikan),
+ * - booking.pendingScheduleCheck (sedang menunggu cek slot admin/bidan),
+ * - cartItems (layanan terkunci di keranjang yang siap dijadwalkan),
+ * - backwards-compatible dengan inquiryDate lama.
+ *
+ * Catatan anti-overfit: `lastDiscussedTreatment` BUKAN sinyal tunggal — pernah
+ * membahas nama treatment di masa lalu tidak sama dengan minat jadwal. Ia hanya
+ * dipakai sebagai sinyal bila sesi sudah punya state booking/keranjang (dicek di
+ * pemanggil lewat `booking`/`cartItems`), atau saat `sessionData` tak tersedia.
  */
 export function hasScheduleIntentSignal(sessionData: any, lastDiscussedTreatment: string | null): boolean {
-  if (lastDiscussedTreatment && String(lastDiscussedTreatment).trim()) return true;
-  if (!sessionData || typeof sessionData !== 'object') return false;
-  if (sessionData.inquiryDate) return true;
+  if (!sessionData || typeof sessionData !== 'object') {
+    return Boolean(lastDiscussedTreatment && String(lastDiscussedTreatment).trim());
+  }
+  const booking = sessionData.booking || {};
+  if (booking.requestedTimeHint && String(booking.requestedTimeHint).trim()) return true;
+  if (booking.preferredDate && String(booking.preferredDate).trim()) return true;
+  if (booking.pendingScheduleCheck === true) return true;
+  if (sessionData.inquiryDate && String(sessionData.inquiryDate).trim()) return true;
   if (Array.isArray(sessionData.cartItems) && sessionData.cartItems.length > 0) return true;
   return false;
+}
+
+/**
+ * Evaluasi kecocokan tanggal yang diminta customer pada sesi dengan filter tanggal admin.
+ * Deterministik: cocokkan ISO, kata relatif ("besok"/"hari ini"), atau nama hari — BUKAN
+ * substring bebas dua arah (mencegah "sen" cocok dengan "senin" secara keliru).
+ */
+export function matchesInquiryDate(sessionData: any, targetDate: unknown, now: Date = new Date()): boolean {
+  if (!targetDate) return true;
+  const target = String(targetDate).trim().toLowerCase();
+  if (!target) return true;
+
+  const booking = sessionData?.booking || {};
+  const prefDate = String(booking.preferredDate || sessionData?.inquiryDate || '').trim().toLowerCase();
+  const timeHint = String(booking.requestedTimeHint || '').trim().toLowerCase();
+
+  const todayStr = formatWibDateYYYYMMDD(now);
+  const tomorrowStr = formatWibDateYYYYMMDD(wibDayBoundsUtc(1, now).start);
+  const todayDayName = getWibDayName(now).toLowerCase();
+  const tomorrowDayName = getWibDayName(wibDayBoundsUtc(1, now).start).toLowerCase();
+
+  // 1. Cocok persis string tanggal (YYYY-MM-DD).
+  if (prefDate && prefDate === target) return true;
+
+  // 2. Target = besok (kata / ISO besok / nama hari besok).
+  if (target === 'besok' || target === tomorrowStr || target === tomorrowDayName) {
+    if (prefDate === tomorrowStr) return true;
+    if (matchesDayToken(timeHint, 'besok') || matchesDayToken(timeHint, tomorrowDayName)) return true;
+  }
+
+  // 3. Target = hari ini (kata / ISO hari ini / nama hari ini).
+  if (target === 'hari ini' || target === todayStr || target === todayDayName) {
+    if (prefDate === todayStr) return true;
+    if (matchesDayToken(timeHint, 'hari ini') || matchesDayToken(timeHint, todayDayName)) return true;
+  }
+
+  // 4. Target nama hari eksplisit (mis. "senin") → cocokkan token hari pada hint.
+  if (matchesDayToken(timeHint, target)) return true;
+
+  return false;
+}
+
+/** Cocokkan token hari/frasa utuh (word-boundary), bukan substring bebas. */
+function matchesDayToken(text: string, token: string): boolean {
+  if (!text || !token) return false;
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`, 'i').test(text);
 }
 
 /**
@@ -233,9 +301,10 @@ export function hasScheduleIntentSignal(sessionData: any, lastDiscussedTreatment
  *
  * Definisi deterministik (state, bukan keyword):
  * - ada pesan INBOUND dalam `sinceDays` hari terakhir,
- * - ada sinyal minat jadwal dari state sesi (`inquiryDate`/`cartItems`/`last_discussed_treatment`),
+ * - ada sinyal minat jadwal dari state sesi (`requestedTimeHint`/`preferredDate`/`pendingScheduleCheck`/`cartItems`),
  * - TANPA reservasi aktif (confirmed/pending/hold),
- * - TANPA balasan ADMIN setelah inbound terakhir (masih menggantung).
+ * - TANPA balasan ADMIN setelah inbound terakhir (masih menggantung),
+ * - bila ada parameter `date`, hanya mengambil yang sinyal tanggalnya cocok.
  *
  * Batas jujur: `session_data` JSON tak bisa diindeks DB → filter sinyal di aplikasi
  * (setelah query inbound terbatas). Tenant-scoped, tanpa phone ke LLM.
@@ -244,9 +313,9 @@ export const queryStalledInquiries: CopilotTool = {
   name: 'query_stalled_inquiries',
   description:
     'Daftar pasien yang menanyakan/minta jadwal tapi BELUM booking (tanpa reservasi aktif, ' +
-    'belum dibalas admin setelah pesan terakhir). Gunakan untuk "yang minta dijadwalkan", ' +
-    '"belum terjadwal dan minta besok", "siapa yang tanya jadwal tapi belum booking".',
+    'belum dibalas admin setelah pesan terakhir). Mendukung filter tanggal bila admin menanyakan hari/tanggal tertentu.',
   parameters: {
+    date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB) atau kata relatif ("besok", "hari ini"). Kosong = semua.' },
     sinceDays: { type: 'number', description: 'Jendela hari ke belakang (default 7).' },
     limit: { type: 'number', description: `Maksimum baris (default ${MAX_ROWS}).` },
   },
@@ -296,15 +365,20 @@ export const queryStalledInquiries: CopilotTool = {
       // Sinyal minat jadwal dari state.
       if (!hasScheduleIntentSignal(c.session_data, c.last_discussed_treatment)) continue;
 
+      // Filter tanggal bila admin menanyakan hari/tanggal tertentu.
+      if (args.date && !matchesInquiryDate(c.session_data, args.date)) continue;
+
       // Pesan nyata terakhir harus INBOUND (belum dibalas admin) → menggantung.
       const lastReal = (c as any).messages?.[0];
       if (!lastReal || (lastReal.direction as any) !== Direction.INBOUND) continue;
 
+      const booking = (c.session_data as any)?.booking;
       rows.push({
         customerId: cust.id,
         customerName: cust.name || 'Bunda',
         conversationId: c.id,
         treatment: c.last_discussed_treatment || null,
+        requestedTime: booking?.requestedTimeHint || booking?.preferredDate || null,
         lastMessage: lastReal.content,
         lastInboundAt: lastReal.created_at,
         waitingMinutes: Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000),
@@ -314,11 +388,170 @@ export const queryStalledInquiries: CopilotTool = {
   },
 };
 
+/**
+ * Tool 5: profil & riwayat pasien (kunjungan lampau + catatan admin).
+ * Tenant-scoped; nomor HP DISAMARKAN via `maskPhoneNumber` (privasi — nomor mentah
+ * tidak pernah sampai ke LLM). Row berkunci `customerName` agar tercakup grounding.
+ */
+export const getCustomerHistory: CopilotTool = {
+  name: 'get_customer_history',
+  description:
+    'Menarik profil pelanggan beserta riwayat kunjungan lampau dan catatan admin. ' +
+    'Gunakan bila admin menanyakan riwayat/preferensi seorang pasien (mis. "Bunda X sebelumnya ambil perawatan apa").',
+  parameters: {
+    name: { type: 'string', description: 'Nama pelanggan (sebagian).' },
+    customerId: { type: 'string', description: 'ID pelanggan bila sudah diketahui (opsional).' },
+  },
+  run: async (tenantId, args) => {
+    const name = args.name ? String(args.name).trim() : '';
+    const customerId = args.customerId ? String(args.customerId).trim() : '';
+    if (!name && !customerId) {
+      return { tool: 'get_customer_history', args, count: 0, rows: [], note: 'Sebutkan nama atau ID pelanggan.' };
+    }
+
+    const select = {
+      id: true,
+      name: true,
+      phone: true,
+      kecamatan: true,
+      kota: true,
+      ltv_cache: true,
+      admin_notes: true,
+      preferences: true,
+      reservations: {
+        select: { booking_date: true, treatment_detail: true, treatment_category: true, status: true },
+        orderBy: { booking_date: 'desc' as const },
+        take: 5,
+      },
+      conversations: { select: { id: true }, orderBy: { last_message_at: 'desc' as const }, take: 1 },
+    };
+
+    let customers: any[] = [];
+    if (customerId) {
+      const one = await prisma.customer.findFirst({ where: { tenant_id: tenantId, id: customerId }, select });
+      customers = one ? [one] : [];
+    } else {
+      customers = await prisma.customer.findMany({
+        where: { tenant_id: tenantId, is_sandbox_test: false, name: { contains: name, mode: 'insensitive' } },
+        select,
+        orderBy: { updated_at: 'desc' },
+        take: 3,
+      });
+    }
+
+    const rows: any[] = [];
+    for (const c of customers) {
+      if (isDummyOrTestContact(c.phone, c.name, false)) continue;
+      const reservations = (c as any).reservations || [];
+      const conv = (c as any).conversations?.[0] || null;
+      rows.push({
+        customerId: c.id,
+        customerName: c.name || 'Bunda',
+        phone: maskPhoneNumber(c.phone),
+        kecamatan: c.kecamatan || null,
+        kota: c.kota || null,
+        ltvTotal: (c as any).ltv_cache || 0,
+        adminNotes: c.admin_notes ? String(c.admin_notes).slice(0, 500) : null,
+        preferences: (c as any).preferences || null,
+        pastReservationsCount: reservations.length,
+        lastVisits: reservations.slice(0, 3).map((r: any) => ({
+          date: r.booking_date,
+          treatment: r.treatment_detail || r.treatment_category,
+          status: r.status,
+        })),
+        conversationId: conv?.id || null,
+      });
+    }
+    return { tool: 'get_customer_history', args, count: rows.length, rows };
+  },
+};
+
+/**
+ * Tool 6: katalog layanan resmi & SOP/kebijakan klinik (grounding medis).
+ * Sumber: `ClinicService` (harga/durasi), `ClinicPolicy` (SOP), `KnowledgeChunk` (FAQ/dokumen).
+ * Semua tenant-scoped, `take` dibatasi. Row TANPA `customerName` (bukan entitas pasien).
+ */
+export const lookupCatalogAndPolicy: CopilotTool = {
+  name: 'lookup_catalog_and_policy',
+  description:
+    'Mencari katalog layanan resmi (harga normal/promo, durasi, usia) dan dokumen SOP/kebijakan klinik ' +
+    '(mis. jeda pasca vaksin, penanganan komplain). Gunakan untuk pertanyaan SOP/prosedur/layanan.',
+  parameters: {
+    query: { type: 'string', description: 'Topik SOP atau nama layanan yang dicari.' },
+    type: { type: 'string', description: 'TREATMENT | POLICY | ALL (default ALL).' },
+  },
+  run: async (tenantId, args) => {
+    const q = args.query ? String(args.query).trim() : '';
+    const type = (args.type ? String(args.type).toUpperCase() : 'ALL') as 'TREATMENT' | 'POLICY' | 'ALL';
+    const like = { contains: q, mode: 'insensitive' as const };
+
+    const wantTreatments = type === 'TREATMENT' || type === 'ALL';
+    const wantPolicy = type === 'POLICY' || type === 'ALL';
+    const wantKnowledge = type === 'ALL';
+
+    const [services, policies, chunks] = await Promise.all([
+      wantTreatments
+        ? prisma.clinicService.findMany({
+            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: [{ name: like }, { description: like }] } : {}) },
+            take: 8,
+          })
+        : Promise.resolve([] as any[]),
+      wantPolicy
+        ? prisma.clinicPolicy.findMany({
+            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: [{ topic: like }, { title: like }, { factual_summary: like }] } : {}) },
+            take: 8,
+          })
+        : Promise.resolve([] as any[]),
+      wantKnowledge
+        ? prisma.knowledgeChunk.findMany({
+            where: { tenant_id: tenantId, ...(q ? { OR: [{ title: like }, { content: like }, { keywords: like }] } : {}) },
+            take: 8,
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+
+    const rows: any[] = [];
+    for (const s of services as any[]) {
+      rows.push({
+        kind: 'TREATMENT',
+        source: `ClinicService:${s.service_id}`,
+        title: s.name,
+        category: s.category,
+        ageLabel: s.age_label,
+        durationMinutes: s.duration_minutes,
+        originalPrice: s.original_price,
+        promoPrice: s.promo_price,
+        body: s.description ? String(s.description).slice(0, 800) : null,
+      });
+    }
+    for (const p of policies as any[]) {
+      rows.push({
+        kind: 'POLICY',
+        source: `ClinicPolicy:${p.topic}`,
+        title: p.title,
+        body: String(p.factual_summary || '').slice(0, 800),
+      });
+    }
+    for (const k of chunks as any[]) {
+      rows.push({
+        kind: 'KNOWLEDGE',
+        source: `KnowledgeChunk:${k.title}`,
+        title: k.title,
+        body: String(k.content || '').slice(0, 800),
+      });
+    }
+
+    return { tool: 'lookup_catalog_and_policy', args, count: Math.min(rows.length, MAX_ROWS), rows: rows.slice(0, MAX_ROWS) };
+  },
+};
+
 export const COPILOT_TOOLS: CopilotTool[] = [
   queryReservationsByFilter,
   queryUnrepliedChats,
   queryUnscheduledProspects,
   queryStalledInquiries,
+  getCustomerHistory,
+  lookupCatalogAndPolicy,
 ];
 
 export function getCopilotTool(name: string): CopilotTool | undefined {

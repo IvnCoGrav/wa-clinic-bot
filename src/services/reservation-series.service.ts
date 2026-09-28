@@ -95,6 +95,30 @@ class ReservationSeriesService {
     const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
     const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
 
+    // Fase 3.3: collision check per sesi SEBELUM transaksi — gagal atomik
+    // (seluruh series ditolak bila ada 1 sesi bentrok), mencegah double-booking
+    // terapis lewat pembuatan paket sesi berulang.
+    const { findOverlappingStaffReservations } = await import('./reservation-core.service');
+    for (const s of sessions) {
+      const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
+      if (!sessionStaffId) continue;
+      const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+      if (!bookingDate || isNaN(bookingDate.getTime())) continue;
+      const conflicts = await findOverlappingStaffReservations({
+        tenantId,
+        staffId: sessionStaffId,
+        bookingDate,
+        durationMinutes: 60,
+      });
+      if (conflicts.length > 0) {
+        const err: any = new Error('STAFF_COLLISION');
+        err.code = 'STAFF_COLLISION';
+        err.conflict = conflicts[0];
+        err.sessionNumber = s.sessionNumber;
+        throw err;
+      }
+    }
+
     // Create series + all reservations in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const series = await tx.reservationSeries.create({

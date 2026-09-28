@@ -4,6 +4,10 @@ const h = vi.hoisted(() => ({
   reservationFindMany: vi.fn(),
   conversationFindMany: vi.fn(),
   customerFindMany: vi.fn(),
+  customerFindFirst: vi.fn(),
+  clinicServiceFindMany: vi.fn(),
+  knowledgeChunkFindMany: vi.fn(),
+  clinicPolicyFindMany: vi.fn(),
   callChat: vi.fn(),
 }));
 
@@ -11,7 +15,10 @@ vi.mock('../../src/db/client', () => ({
   prisma: {
     reservation: { findMany: h.reservationFindMany },
     conversation: { findMany: h.conversationFindMany },
-    customer: { findMany: h.customerFindMany },
+    customer: { findMany: h.customerFindMany, findFirst: h.customerFindFirst },
+    clinicService: { findMany: h.clinicServiceFindMany },
+    knowledgeChunk: { findMany: h.knowledgeChunkFindMany },
+    clinicPolicy: { findMany: h.clinicPolicyFindMany },
   },
 }));
 
@@ -23,7 +30,7 @@ vi.mock('../../src/integrations/llm/llm-gateway', () => ({
   getLlmEndpointConfig: () => ({ model: 'test', fallbackModel: 'test', baseUrl: 'http://x', apiKey: 'k', timeoutMs: 1000 }),
 }));
 
-import { copilotService, buildRouterPrompt } from '../../src/services/copilot/copilot.service';
+import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer } from '../../src/services/copilot/copilot.service';
 import {
   resolveReservationDateFilter,
   isValidIsoDate,
@@ -31,6 +38,10 @@ import {
   queryUnrepliedChats,
   queryUnscheduledProspects,
   queryStalledInquiries,
+  getCustomerHistory,
+  lookupCatalogAndPolicy,
+  hasScheduleIntentSignal,
+  matchesInquiryDate,
   getCopilotTool,
   COPILOT_TOOLS,
 } from '../../src/services/copilot/copilot-tools';
@@ -194,8 +205,10 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
     expect(call.include.messages.take).toBe(1);
   });
 
-  it('registry tool konsisten (whitelist 4 tool)', () => {
+  it('registry tool konsisten (whitelist 6 tool)', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'get_customer_history',
+      'lookup_catalog_and_policy',
       'query_reservations_by_filter',
       'query_stalled_inquiries',
       'query_unreplied_chats',
@@ -423,12 +436,261 @@ describe('Fase B1 — query_stalled_inquiries (state-based)', () => {
     expect(h.conversationFindMany.mock.calls[0][0].where.tenant_id).toBe('tenant-a');
   });
 
-  it('registry memuat 4 tool', () => {
+  it('registry memuat 6 tool', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'get_customer_history',
+      'lookup_catalog_and_policy',
       'query_reservations_by_filter',
       'query_stalled_inquiries',
       'query_unreplied_chats',
       'query_unscheduled_prospects',
     ]);
+  });
+});
+
+describe('Fase 4 — adversarial: sinyal state, filter tanggal, sanitasi, grounding label', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.reservationFindMany.mockResolvedValue([]);
+    h.conversationFindMany.mockResolvedValue([]);
+    h.customerFindMany.mockResolvedValue([]);
+  });
+
+  it('pertanyaan komposit → query_reservations_by_filter DAN query_stalled_inquiries', async () => {
+    h.callChat
+      .mockResolvedValueOnce(llmReply('{"tool":"query_reservations_by_filter","args":{"date":"2026-09-28"}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":"query_stalled_inquiries","args":{"date":"2026-09-28"}}'))
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'))
+      .mockResolvedValueOnce(llmReply('Ringkasan gabungan.'));
+
+    const res = await copilotService.chat({
+      tenantId: 'tenant-a',
+      message: 'siapa saja yang minta besok ? baik yang belum dan sudah terjadwal',
+    });
+    expect(res.toolsUsed).toEqual(['query_reservations_by_filter', 'query_stalled_inquiries']);
+    expect(h.reservationFindMany).toHaveBeenCalled();
+    expect(h.conversationFindMany).toHaveBeenCalled();
+    // Observabilitas audit: jumlah baris per tool terekspos.
+    expect(res.rowCounts).toEqual({
+      query_reservations_by_filter: 0,
+      query_stalled_inquiries: 0,
+    });
+  });
+
+  it('hasScheduleIntentSignal: lastDiscussedTreatment TANPA state booking BUKAN sinyal', () => {
+    // Bug lama: pernah bahas treatment dianggap minta jadwal (Dinda false-positive).
+    expect(hasScheduleIntentSignal({}, 'Baby Massage')).toBe(false);
+    expect(hasScheduleIntentSignal({ cartItems: [] }, 'Baby Massage')).toBe(false);
+    // Sinyal sah dari state booking / keranjang.
+    expect(hasScheduleIntentSignal({ booking: { requestedTimeHint: 'besok' } }, null)).toBe(true);
+    expect(hasScheduleIntentSignal({ booking: { pendingScheduleCheck: true } }, null)).toBe(true);
+    expect(hasScheduleIntentSignal({ cartItems: [{ id: 'x' }] }, null)).toBe(true);
+  });
+
+  it('matchesInquiryDate: hint "hari ini" TIDAK cocok filter "besok" (Dinda disaring)', () => {
+    const dinda = { booking: { requestedTimeHint: 'hari ini sore' } };
+    const tere = { booking: { requestedTimeHint: 'besok pagi' } };
+    expect(matchesInquiryDate(dinda, 'besok')).toBe(false);
+    expect(matchesInquiryDate(tere, 'besok')).toBe(true);
+  });
+
+  it('matchesInquiryDate: substring dua arah tidak lolos (sen ≠ senin)', () => {
+    expect(matchesInquiryDate({ booking: { requestedTimeHint: 'sen' } }, 'senin')).toBe(false);
+  });
+
+  it('query_stalled_inquiries: filter date menyaring yang hint-nya tidak cocok', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-dinda',
+        session_data: { booking: { requestedTimeHint: 'hari ini' } },
+        last_discussed_treatment: 'Baby Massage',
+        customer: { id: 'c1', name: 'Dinda', phone: '6285712345678', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'halo', created_at: new Date() }],
+      },
+      {
+        id: 'conv-tere',
+        session_data: { booking: { requestedTimeHint: 'besok pagi' } },
+        last_discussed_treatment: null,
+        customer: { id: 'c2', name: 'Bunda Tere', phone: '6285712345679', reservations: [] },
+        messages: [{ direction: 'INBOUND', content: 'minta besok', created_at: new Date() }],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', { date: 'besok' });
+    expect(res.rows.map((r: any) => r.customerName)).toEqual(['Bunda Tere']);
+  });
+
+  it('query_unreplied_chats: kontak dummy disaring', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      { id: 'c1', customer: { id: 'u1', name: 'QA Bot', phone: '628123456789' }, messages: [{ direction: 'INBOUND', content: 'hai', created_at: new Date() }] },
+      { id: 'c2', customer: { id: 'u2', name: 'Bunda Rina', phone: '6285712345678' }, messages: [{ direction: 'INBOUND', content: 'hai', created_at: new Date() }] },
+    ]);
+    const res = await queryUnrepliedChats.run('tenant-a', {});
+    expect(res.rows.map((r: any) => r.customerName)).toEqual(['Bunda Rina']);
+  });
+
+  it('query_reservations_by_filter: default status = jadwal aktif (cancelled tidak mencemari)', async () => {
+    await queryReservationsByFilter.run('tenant-a', {});
+    const call = h.reservationFindMany.mock.calls[0][0];
+    expect(call.where.status).toEqual({ in: ['confirmed', 'pending', 'hold'] });
+  });
+
+  it('stripInternalIds: customerId & id teknis dibuang dari baris', () => {
+    const out = stripInternalIds([{ customerId: 'uuid-1', id: 'res-1', customerName: 'Bunda Tere' }]);
+    expect(out[0]).not.toHaveProperty('customerId');
+    expect(out[0]).not.toHaveProperty('id');
+    expect(out[0].customerName).toBe('Bunda Tere');
+  });
+
+  it('sanitizeCopilotAnswer: UUID bocor dihapus (zero-UUID)', () => {
+    const dirty = 'Pasien (03b3f301-1111-2222-3333-444455556666) sudah terjadwal.';
+    const clean = sanitizeCopilotAnswer(dirty);
+    expect(clean).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(clean).toContain('Pasien');
+  });
+
+  it('grounding: label "**Nama Pelanggan**: X" divalidasi terhadap data', () => {
+    const rows = [{ customerName: 'Bunda Tere' }];
+    expect(copilotService.validateGrounding('- **Nama Pelanggan**: Tere', rows)).toBe(true);
+    expect(copilotService.validateGrounding('- **Nama Pelanggan**: Siti', rows)).toBe(false);
+  });
+
+  it('grounding: kalimat "Pasien sudah terjadwal" BUKAN ekstraksi nama (no false-positive)', () => {
+    const rows = [{ customerName: 'Bunda Tere' }];
+    expect(copilotService.validateGrounding('Pasien sudah terjadwal semua.', rows)).toBe(true);
+  });
+});
+
+describe('get_customer_history — profil & riwayat pasien (tenant-scoped, phone masked)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.customerFindMany.mockResolvedValue([]);
+    h.customerFindFirst.mockResolvedValue(null);
+  });
+
+  it('nama dikenal → profil + kunjungan lampau; phone DISAMARKAN (tidak bocor mentah)', async () => {
+    h.customerFindMany.mockResolvedValue([
+      {
+        id: 'c1',
+        name: 'Bunda Devia',
+        phone: '6285712345678',
+        kecamatan: 'Rungkut',
+        kota: 'Surabaya',
+        ltv_cache: 2500000,
+        admin_notes: 'Suka jadwal pagi',
+        preferences: { preferred_time: 'pagi' },
+        reservations: [
+          { booking_date: new Date('2026-09-20'), treatment_detail: 'Baby Massage', treatment_category: 'BABY', status: 'completed' },
+          { booking_date: new Date('2026-09-01'), treatment_detail: 'Pijat Bapil', treatment_category: 'BABY', status: 'completed' },
+        ],
+        conversations: [{ id: 'conv-9' }],
+      },
+    ]);
+    const res = await getCustomerHistory.run('tenant-a', { name: 'Devia' });
+    expect(res.rows.length).toBe(1);
+    const row = res.rows[0];
+    expect(row.customerName).toBe('Bunda Devia');
+    expect(row.phone).not.toBe('6285712345678');
+    expect(String(row.phone)).toContain('****');
+    expect(row.ltvTotal).toBe(2500000);
+    expect(row.pastReservationsCount).toBe(2);
+    expect(row.lastVisits.length).toBe(2);
+    expect(row.conversationId).toBe('conv-9');
+    expect(h.customerFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a' }) })
+    );
+  });
+
+  it('nama tak dikenal → rows kosong (anti-halusinasi)', async () => {
+    h.customerFindMany.mockResolvedValue([]);
+    const res = await getCustomerHistory.run('tenant-a', { name: 'Tidak Ada' });
+    expect(res.rows).toEqual([]);
+    expect(res.count).toBe(0);
+  });
+
+  it('tanpa name/customerId → rows kosong + note arahan', async () => {
+    const res = await getCustomerHistory.run('tenant-a', {});
+    expect(res.rows).toEqual([]);
+    expect(res.note).toBeTruthy();
+    expect(h.customerFindMany).not.toHaveBeenCalled();
+    expect(h.customerFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('customerId → findFirst tenant-scoped', async () => {
+    h.customerFindFirst.mockResolvedValue({
+      id: 'c1', name: 'Bunda Devia', phone: '6285712345678', kecamatan: null, kota: null,
+      ltv_cache: 0, admin_notes: null, preferences: null, reservations: [], conversations: [],
+    });
+    const res = await getCustomerHistory.run('tenant-a', { customerId: 'c1' });
+    expect(res.rows.length).toBe(1);
+    expect(h.customerFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a', id: 'c1' }) })
+    );
+  });
+
+  it('kontak dummy disaring', async () => {
+    h.customerFindMany.mockResolvedValue([
+      { id: 'c1', name: 'QA Bot', phone: '628123456789', kecamatan: null, kota: null, ltv_cache: 0, admin_notes: null, preferences: null, reservations: [], conversations: [] },
+    ]);
+    const res = await getCustomerHistory.run('tenant-a', { name: 'QA' });
+    expect(res.rows).toEqual([]);
+  });
+});
+
+describe('lookup_catalog_and_policy — katalog layanan & SOP (tenant-scoped)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.clinicServiceFindMany.mockResolvedValue([]);
+    h.knowledgeChunkFindMany.mockResolvedValue([]);
+    h.clinicPolicyFindMany.mockResolvedValue([]);
+  });
+
+  it('query "pijat" → row TREATMENT dengan harga & durasi dari ClinicService', async () => {
+    h.clinicServiceFindMany.mockResolvedValue([
+      { service_id: 'pijat-bapil', name: 'Pijat Bapil', category: 'BABY', duration_minutes: 45, original_price: 150000, promo_price: 120000, description: 'Terapi batuk pilek', min_age_months: 3, max_age_months: 60, age_label: '3-60 bulan' },
+    ]);
+    const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'pijat', type: 'TREATMENT' });
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0].kind).toBe('TREATMENT');
+    expect(res.rows[0].promoPrice).toBe(120000);
+    expect(res.rows[0].durationMinutes).toBe(45);
+    expect(h.clinicServiceFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a' }) })
+    );
+    // type TREATMENT → tidak menyentuh policy/knowledge
+    expect(h.clinicPolicyFindMany).not.toHaveBeenCalled();
+  });
+
+  it('query SOP → row POLICY dengan factual_summary + sumber', async () => {
+    h.clinicPolicyFindMany.mockResolvedValue([
+      { topic: 'vaksin-jeda', title: 'Jeda pasca vaksinasi', factual_summary: 'Jeda minimal 3 hari setelah vaksin.', suggested_reply: 'Baik Bunda...' },
+    ]);
+    const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'vaksin', type: 'POLICY' });
+    expect(res.rows[0].kind).toBe('POLICY');
+    expect(res.rows[0].source).toContain('vaksin-jeda');
+    expect(res.rows[0].body).toContain('3 hari');
+    expect(h.clinicPolicyFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a' }) })
+    );
+  });
+
+  it('type ALL → menggabungkan katalog + policy + knowledge (tenant-scoped ketiganya)', async () => {
+    h.clinicServiceFindMany.mockResolvedValue([
+      { service_id: 's1', name: 'Baby Massage', category: 'BABY', duration_minutes: 30, original_price: 100000, promo_price: 90000, description: 'x', min_age_months: 0, max_age_months: 12, age_label: '0-12' },
+    ]);
+    h.knowledgeChunkFindMany.mockResolvedValue([
+      { title: 'FAQ Homecare', content: 'Kami melayani homecare.', keywords: 'homecare', source_type: 'FAQ' },
+    ]);
+    h.clinicPolicyFindMany.mockResolvedValue([]);
+    const res = await lookupCatalogAndPolicy.run('tenant-a', { query: '', type: 'ALL' });
+    expect(res.rows.map((r: any) => r.kind).sort()).toEqual(['KNOWLEDGE', 'TREATMENT']);
+    expect(h.knowledgeChunkFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenant_id: 'tenant-a' }) })
+    );
+  });
+
+  it('tanpa hasil → rows kosong (anti-halusinasi medis)', async () => {
+    const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'xyz', type: 'ALL' });
+    expect(res.rows).toEqual([]);
+    expect(res.count).toBe(0);
   });
 });

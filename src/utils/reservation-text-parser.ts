@@ -23,6 +23,17 @@ export interface ParsedReservation {
   momProfile?: { gestationalWeeks?: string; stage?: string; notes?: string } | null;
   /** Jam tanggal ditulis eksplisit oleh customer di form (bukan fallback 09:00 WIB). */
   hasExplicitTime: boolean;
+  /**
+   * 152c — True bila nama hari tertulis BERTENTANGAN (≥2 hari) dengan tanggal
+   * numerik hasil parse (mis. "jumat 28 Juli" padahal 28 Juli = Selasa). Slip
+   * ±1 hari (typo umum) sudah diselaraskan parser → TIDAK dianggap mismatch.
+   * Dipakai untuk memberi CATATAN PERINGATAN ke staf (bukan memblokir).
+   */
+  dateMismatch?: boolean;
+  /** Nama hari yang tertulis customer (bila ada) — untuk catatan staf. */
+  writtenDay?: string;
+  /** Nama hari sebenarnya dari tanggal hasil parse — untuk catatan staf. */
+  actualDay?: string;
   payment?: {
     treatmentPrice: number;
     ongkir: number;
@@ -425,6 +436,9 @@ export function parseReservationText(rawText: string): ParseResult {
       }
     : undefined;
 
+  // 152c — deteksi kontradiksi hari vs tanggal (setelah reconcile ±1 hari).
+  const dateMismatchInfo = bookingDate ? detectDateMismatch(bookingDate, cleaned) : { mismatch: false };
+
   let durationMinutes: number | undefined;
   try {
     const breakdown = treatmentCatalogService.resolveDurationBreakdown(treatmentDetail);
@@ -448,6 +462,9 @@ export function parseReservationText(rawText: string): ParseResult {
        momProfile,
        payment,
        hasExplicitTime: !!timeStr,
+       dateMismatch: dateMismatchInfo.mismatch,
+       writtenDay: dateMismatchInfo.writtenDay,
+       actualDay: dateMismatchInfo.actualDay,
      },
    };
  }
@@ -597,6 +614,24 @@ function findWrittenDayOfWeek(cleanStr: string): number | undefined {
     if (pattern.test(cleanStr)) return dayOfWeek;
   }
   return undefined;
+}
+
+/** Nama hari Indonesia dari index getDay() (0=Minggu). */
+const ID_DAY_NAMES = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+/**
+ * 152c — Deteksi kontradiksi nama-hari vs tanggal numerik yang TIDAK terselaraskan.
+ * Slip ±1 hari sudah diperbaiki `reconcileWrittenDayWithDate`; sisa selisih
+ * (≥2 hari) = kontradiksi berat → laporkan untuk catatan staf. Murni.
+ */
+function detectDateMismatch(candidate: Date, cleanStr: string): { mismatch: boolean; writtenDay?: string; actualDay?: string } {
+  const written = findWrittenDayOfWeek(cleanStr);
+  if (written === undefined) return { mismatch: false };
+  const actual = candidate.getDay();
+  if (written === actual) return { mismatch: false };
+  const writtenName = ID_DAY_NAMES[written];
+  const actualName = ID_DAY_NAMES[actual];
+  return { mismatch: true, writtenDay: writtenName, actualDay: actualName };
 }
 
 function reconcileWrittenDayWithDate(candidate: Date, cleanStr: string): Date {

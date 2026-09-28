@@ -408,18 +408,21 @@ export async function executeGetCatalog(
     }
     let nameFilterApplied = false;
     if (specificTreatmentName && specificTreatmentName.trim()) {
-      const query = specificTreatmentName.toLowerCase();
-      let matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
-      // Fallback token-based via matchCatalogItem terpusat (tahan rebrand: 'Pijat Bayi Pulih Ceria'
-      // vs 'Kala Baby – Pijat Pulih Ceria', alias Baby/Bayi) bila substring gagal — dibatasi pool terfilter.
+      // Otoritas UTAMA: matcher terpusat (alias linguistik baby<->bayi + penalti
+      // BUNDLE + tie-break non-bundle). Substring KASAR hanya fallback terakhir —
+      // sebagai filter utama ia membajak layanan tunggal ("Pijat Bayi Ceria") ke
+      // deskripsi BUNDLE ("...cukur rambut steril + pijat bayi ceria relaksasi")
+      // yang kebetulan memuat frasa sama (CASE-019, durasi 55 mnt salah kutip).
+      let matched: ClinicServiceItem[] = [];
+      try {
+        const tokenHit = treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId);
+        if (tokenHit) {
+          matched = filtered.filter((s) => s.id === (tokenHit as ClinicServiceItem).id);
+        }
+      } catch { matched = []; }
       if (matched.length === 0) {
-        try {
-          const tokenHit = treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId);
-          if (tokenHit) {
-            const inPool = filtered.filter((s) => s.id === (tokenHit as ClinicServiceItem).id);
-            if (inPool.length > 0) matched = inPool;
-          }
-        } catch { /* abaikan, pakai pool apa adanya */ }
+        const query = specificTreatmentName.toLowerCase();
+        matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
       }
       const evictsClinical = clinicalRecommendation != null
         && matched.length > 0

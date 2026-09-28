@@ -5,6 +5,7 @@
  * tanpa I/O kecuali pelabelan internal DB yang fail-safe). Diekstrak verbatim
  * dari context-grounder.ts; context-grounder.ts kini mendelegasikan ke sini.
  */
+import { hasBookingCommitSignal } from '../../../utils/date-confirmation';
 
 export function hasScheduleSignal(text: string): boolean {
   // Aturan deterministik sendiri (data-driven includes) — SENGAJA tidak
@@ -57,6 +58,59 @@ export function hasScheduleSignal(text: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * 152a — Apakah pesan customer adalah ENGAGEMENT jadwal (bukan sekadar
+ * menyebut nama hari dalam kalimat menunda). Lifecycle `pendingScheduleCheck`
+ * hanya sah dipertahankan bila turn ini engagement: ack pendek, verba komitmen,
+ * atau pertanyaan ketersediaan ("bisa/ready/kosong/?"). Kalimat deklaratif
+ * penundaan yang menyebut hari ("belum dulu ya karena jumat kami pergi")
+ * TIDAK memenuhi syarat → penantian dibatalkan (anti eskalasi palsu).
+ *
+ * Fungsi kata tertutup (setingkat bahasa sapaan), bukan hafalan kalimat:
+ * sinyal penunda murni fungsional (belum/nanti/tunda/jangan/batal/dulu).
+ */
+const SCHEDULE_AVAILABILITY_TOKENS = new Set([
+  'bisa', 'boleh', 'bs', 'bsa', 'ready', 'tersedia', 'kosong', 'buka',
+  'gimana', 'gmn', 'kah', 'apakah', 'slot',
+]);
+const SCHEDULE_ACK_TOKENS = new Set([
+  'oke', 'ok', 'okay', 'okey', 'siap', 'sip', 'baik', 'iya', 'iyaa', 'ya',
+  'terima', 'makasih', 'kasih', 'tunggu', 'kabari', 'ditunggu',
+]);
+const SCHEDULE_DECLINATURE_TOKENS = new Set([
+  'belum', 'nanti', 'tunda', 'tundain', 'jangan', 'batal', 'batalin', 'urung',
+  'dulu', 'gajadi', 'gakjadi',
+]);
+
+export function isScheduleCheckEngagement(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  const tokens = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return false;
+  // Sinyal penunda/penolakan fungsional MEMBATALKAN engagement (menang pertama).
+  if (tokens.some((t) => SCHEDULE_DECLINATURE_TOKENS.has(t))) return false;
+  // Ack pendek, verba komitmen, atau sinyal jadwal apa pun = engagement.
+  if (tokens.length <= 6 && tokens.some((t) => SCHEDULE_ACK_TOKENS.has(t))) return true;
+  if (hasBookingCommitSignal(lower)) return true;
+  if (hasScheduleSignal(lower)) return true;
+  return tokens.some((t) => SCHEDULE_AVAILABILITY_TOKENS.has(t));
+}
+
+/**
+ * Apakah pesan memuat PERMINTAAN KETERSEDIAAN jadwal konkret (kata ketersediaan
+ * atau tanda tanya), tanpa sinyal penunda. Dipakai lifecycle: `pendingScheduleCheck`
+ * HANYA di-latch ulang oleh permintaan ketersediaan atau petunjuk hari — bukan oleh
+ * kalimat preferensi tanpa hari (mis. "mau ambil yg sebelum jam 10an atau sore").
+ */
+export function isScheduleAvailabilityText(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  const tokens = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return false;
+  if (tokens.some((t) => SCHEDULE_DECLINATURE_TOKENS.has(t))) return false;
+  return tokens.some((t) => SCHEDULE_AVAILABILITY_TOKENS.has(t));
 }
 
 /**

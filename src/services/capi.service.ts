@@ -924,10 +924,17 @@ export class CapiService {
       if (fbp) {
         userData.fbp = fbp;
       }
+      // CTWA (Click-to-WhatsApp): Meta menghendaki ctwa_clid MENTAH (bukan hashed,
+      // bukan PII) di user_data untuk mengatribusikan konversi ke iklan klik-WA.
+      const isCtwaBusinessMessaging = Boolean(effectiveAdClick?.ctwa_clid);
+      if (isCtwaBusinessMessaging) {
+        userData.ctwa_clid = effectiveAdClick.ctwa_clid;
+      }
 
       // 4. CONSTRUCT EVENT DATA payload
       //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
       let tenantDomain = '';
+      let wabaBusinessAccountId = '';
       if (tenantId) {
         try {
           const { prisma } = await import('../db/client');
@@ -935,10 +942,31 @@ export class CapiService {
           if ((tenant as any)?.landing_domain) {
             tenantDomain = (tenant as any).landing_domain.trim();
           }
+          if ((tenant as any)?.waba_business_account_id) {
+            wabaBusinessAccountId = String((tenant as any).waba_business_account_id).trim();
+          }
         } catch {}
       }
 
       const eventSourceUrl = resolveCanonicalLandingUrl(effectiveAdClick?.landingUrl, tenantDomain);
+
+      // 3b. Business Messaging envelope (Meta CTWA spec):
+      //     Konversi dari iklan Click-to-WhatsApp WAJIB memakai
+      //       action_source: 'business_messaging', messaging_channel: 'whatsapp',
+      //       user_data.whatsapp_business_account_id + user_data.ctwa_clid (mentah).
+      //     State-gated: modalitas ini HANYA diaktifkan bila tenant punya WABA
+      //     business account id; tanpa itu envelope tidak lengkap dan berisiko
+      //     ditolak Meta (400), jadi kita fail-open ke action_source 'chat' lama.
+      const useBusinessMessaging = isCtwaBusinessMessaging && Boolean(wabaBusinessAccountId);
+      if (isCtwaBusinessMessaging && !wabaBusinessAccountId) {
+        console.warn(
+          `[CAPI CTWA] ctwa_clid ada untuk tenant ${tenantId || '(tanpa tenantId)'} tetapi ` +
+          `waba_business_account_id belum dikonfigurasi — memakai action_source 'chat' (envelope business_messaging tidak lengkap).`
+        );
+      }
+      if (useBusinessMessaging) {
+        userData.whatsapp_business_account_id = wabaBusinessAccountId;
+      }
 
       // 4a. TEMPORAL GUARD — Meta CAPI menolak event_time >7 hari (HTTP 400 subcode 2804003).
       //     Jika eventTime lebih tua dari 6.9 hari (596.160 detik), jepit ke waktu sekarang
@@ -961,7 +989,7 @@ export class CapiService {
         event_name: eventName,
         event_time: effectiveEventTime,
         event_source_url: eventSourceUrl,
-        action_source: 'chat',
+        action_source: useBusinessMessaging ? 'business_messaging' : 'chat',
         user_data: userData,
         custom_data: {
           ...(customData || {}),
@@ -976,6 +1004,11 @@ export class CapiService {
           ...(effectiveAdClick?.utmCampaign ? { utm_campaign: effectiveAdClick.utmCampaign } : {}),
         },
       };
+      // messaging_channel adalah field TOP-LEVEL event (bukan custom_data) — spesifikasi
+      // Meta Business Messaging CAPI untuk ads that click to WhatsApp.
+      if (useBusinessMessaging) {
+        eventData.messaging_channel = 'whatsapp';
+      }
       if (customEventId) {
         eventData.event_id = customEventId;
       } else if (eventId) {

@@ -381,4 +381,92 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
 
     ingestSpy.mockRestore();
   });
+
+  it('POST /webhook: meneruskan referral CTWA WAHA ke matchAdClickAndFireContact (Issue #119)', async () => {
+    const attrMod = await import('../../src/services/ad-attribution.service');
+    const attrSpy = vi
+      .spyOn(attrMod, 'matchAdClickAndFireContact')
+      .mockResolvedValue({ matched: true, strippedText: 'Halo' } as any);
+
+    const phone = `628133${Date.now().toString().slice(-6)}`;
+    const ctwaClid = 'SYNTHETIC_ctwa_clid_AbC123-xyz789_tokenForTestOnly';
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_ctwa_msg_${Date.now()}`,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'Hallo Bu Bidan, Saya mau booking home service. Bagaimana Caranya ?',
+        _data: {
+          notifyName: 'Wieda Endah Kelaswara',
+          message: {
+            extendedTextMessage: {
+              text: 'Hallo Bu Bidan, Saya mau booking home service. Bagaimana Caranya ?',
+              contextInfo: {
+                externalAdReply: {
+                  ctwaClid,
+                  sourceId: '120250673996340235',
+                  sourceApp: 'instagram',
+                  sourceUrl: 'https://www.instagram.com/p/Dd0LihqAEmX/',
+                  title: 'PROMO KHUSUS SURABAYA & SIDOARJO!',
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res.statusCode).toBe(200);
+
+    expect(attrSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isNewCustomerRecord: true,
+        referral: expect.objectContaining({
+          ctwaClid,
+          sourceId: '120250673996340235',
+          sourceApp: 'instagram',
+          sourceUrl: 'https://www.instagram.com/p/Dd0LihqAEmX/',
+        }),
+      })
+    );
+
+    attrSpy.mockRestore();
+  });
+
+  it('POST /webhook: pesan organik tanpa externalAdReply TIDAK mengirim referral (fail-open)', async () => {
+    const attrMod = await import('../../src/services/ad-attribution.service');
+    const attrSpy = vi
+      .spyOn(attrMod, 'matchAdClickAndFireContact')
+      .mockResolvedValue({ matched: false, strippedText: 'Halo' } as any);
+
+    const phone = `628134${Date.now().toString().slice(-6)}`;
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_organic_msg_${Date.now()}`,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'Halo, mau tanya jadwal',
+        _data: {
+          notifyName: 'Organic Customer',
+          message: { extendedTextMessage: { text: 'Halo, mau tanya jadwal' } },
+        },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res.statusCode).toBe(200);
+
+    expect(attrSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ referral: undefined })
+    );
+
+    attrSpy.mockRestore();
+  });
 });

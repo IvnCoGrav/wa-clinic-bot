@@ -7,7 +7,7 @@
  * (utils, bukan tool) + tipe sesi — tanpa siklus impor.
  */
 import type { CustomerGoalSession } from '../../state/goal-tracker';
-import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText } from '../../../utils/date-confirmation';
+import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText, isAvailabilityInquiryText } from '../../../utils/date-confirmation';
 
 /**
  * Audit sesi 614425 (commit booking deterministik): true bila customer sudah
@@ -41,6 +41,12 @@ export function isBookingCommitReady(
   // (a) flag lengket session.bookingCommitConfirmed (diset lintas turn), atau
   // (b) verba komitmen pada pesan saat ini.
   if (session.bookingCommitConfirmed !== true && !hasBookingCommitSignal(incomingText)) return false;
+
+  // Fase 2.2/2.3: PERTANYAAN ketersediaan slot TANPA '?' ("mau booking sabtu
+  // jam 10 kosong gak", "ada slot sabtu?") DILARANG memicu save_reservation —
+  // customer baru menanyakan slot, bukan menyetujui booking final. Level
+  // konstruksi gramatikal (isAvailabilityInquiryText), bukan daftar kalimat.
+  if (isAvailabilityInquiryText(incomingText)) return false;
 
   // Fail-closed pertanyaan slot (cermin Day Evidence Gate di kontrak tool):
   // giliran bertanda tanya BUKAN komitmen booking — DILARANG memaksa

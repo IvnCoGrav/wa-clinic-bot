@@ -139,13 +139,13 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     expect(lifecycleSpy.mock.calls[0][0].reservationId).toBe(reservation.id);
   });
 
-  it('Mendukung assignedStaffId, status confirmed, notes, dan mapping kategori KIDS/BUNDLE', async () => {
+  it('Mendukung assignedStaffId, status confirmed, notes, dan mapping kategori KIDS (bukan downgrade ke BABY)', async () => {
     const customer = {
       id: 'cust-kids', tenant_id: DEFAULT_TENANT_ID, phone: `6289912${Date.now()}`, name: 'Bunda Kids',
     };
     const reservation = {
       id: `res_kids_${Date.now()}`, tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id,
-      treatment_category: 'BABY', treatment_detail: 'Kids Spa & Massage', booking_date: new Date('2026-08-20T10:00:00Z'),
+      treatment_category: 'KIDS', treatment_detail: 'Kids Spa & Massage', booking_date: new Date('2026-08-20T10:00:00Z'),
       assigned_staff_id: 'staff-123',
       raw_text: '[Admin Manual] KIDS: Kids Spa & Massage\nCatatan: Pasien request terapis ramah',
       status: 'confirmed', created_at: new Date(), updated_at: new Date(),
@@ -172,9 +172,11 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     });
 
     expect(res.statusCode).toBe(201);
+    // Kontrak baru (Issue #153c): TreatmentCategory.KIDS TIDAK lagi di-downgrade
+    // menjadi BABY — kategori anak tersimpan apa adanya di DB.
     expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        treatment_category: 'BABY',
+        treatment_category: 'KIDS',
         assigned_staff_id: 'staff-123',
         status: 'confirmed',
       }),

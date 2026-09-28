@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { memoryAdClicks } from '../routes/tracking.route';
 import { capiService } from './capi.service';
+import type { AdReferral } from '../integrations/whatsapp/gateway.types';
 
 export interface CustomerIdentity {
   id: string;
@@ -15,13 +16,7 @@ export interface MatchAdClickParams {
   isNewCustomerRecord: boolean;
   customer: CustomerIdentity;
   tenantId: string;
-  referral?: {
-    ctwaClid?: string;
-    sourceUrl?: string;
-    sourceType?: string;
-    headline?: string;
-    body?: string;
-  };
+  referral?: AdReferral;
 }
 
 export interface MatchAdClickResult {
@@ -81,6 +76,9 @@ export async function matchAdClickAndFireContact(
           data: {
             ctwa_clid: ctwaClid,
             landingUrl: referral?.sourceUrl || existingAdClick.landingUrl || undefined,
+            utmSource: referral?.sourceApp || existingAdClick.utmSource || 'meta',
+            utmMedium: existingAdClick.utmMedium || 'ctwa',
+            utmCampaign: referral?.sourceId || existingAdClick.utmCampaign || 'ctwa_direct',
             matchedAt: new Date(),
             phone: customer.phone,
           },
@@ -94,6 +92,9 @@ export async function matchAdClickAndFireContact(
           data: {
             ctwa_clid: ctwaClid,
             landingUrl: referral?.sourceUrl || undefined,
+            utmSource: referral?.sourceApp || 'meta',
+            utmMedium: 'ctwa',
+            utmCampaign: referral?.sourceId || 'ctwa_direct',
             matchedAt: new Date(),
             customerId: customer.id,
             tenant_id: tenantId,

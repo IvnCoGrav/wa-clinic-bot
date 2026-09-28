@@ -1017,12 +1017,14 @@ export class TreatmentCatalogService {
     if (!s) {
       if (typeof serviceOrId === 'string') {
         const idLower = serviceOrId.toLowerCase();
-        return (
-          idLower.startsWith('add-on') ||
-          idLower.startsWith('addon') ||
-          idLower.includes('moksa') ||
-          idLower.includes('nebulizer')
-        );
+        // Prefix ID struktural (konvensi katalog `add-on-*`) — bukan hafalan nama.
+        if (idLower.startsWith('add-on') || idLower.startsWith('addon')) return true;
+        // Data-driven: nama bebas diresolusi ke katalog tenant lebih dulu
+        // (Single Source of Truth). DILARANG mencocokkan kata bisnis hafalan
+        // (mis. "moksa"/"nebulizer") — klasifikasi add-on HANYA dari
+        // `isAddon`/`serviceType`/`category` DB.
+        const matched = this.matchCatalogItem(serviceOrId);
+        return matched ? this.isAddonService(matched) : false;
       }
       return false;
     }

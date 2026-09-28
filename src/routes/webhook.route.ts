@@ -21,6 +21,7 @@ import dotenv from 'dotenv';
 import { normalizeWahaJid, extractRealPhoneFromWahaPayload, parseJidType } from '../utils/jid';
 import { extractWahaLocation } from '../utils/waha-location-parser';
 import { parseCanonicalInboundMessage } from '../utils/canonical-message-normalizer';
+import { extractWahaAdReferral } from '../integrations/whatsapp/waha-ctwa-referral';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
 import { hasBypassLabel, isBypassLabelName, checkCustomerBypass } from '../utils/customer-bypass';
@@ -512,6 +513,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 try {
                   await messageService.markConversationMessagesAsRead(conversation.id, resolvedTenantId);
                   await conversationService.setManualUnread(conversation.id, resolvedTenantId, false);
+                  // Pulse alert SLA: balasan admin dari WA HP memadamkan status frustrasi
+                  // (multi-device sync — DB + SSE isFrustrated:false ke seluruh dashboard).
+                  // Satu sumber kebenaran: dismissFrustration (tenant-verified + idempoten +
+                  // fallback memori + siaran conversation.updated standar).
+                  await conversationService.dismissFrustration(conversation.id, resolvedTenantId);
                   const { getLiveChatHub } = await import('../services/live-chat-hub.service');
                   const hub = getLiveChatHub();
                   await hub.publish({
@@ -1135,12 +1141,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
+      // Ekstraksi metadata iklan CTWA langsung dari payload WAHA (Issue #119).
+      // Jalur bypass admin / stale / blocked sudah return lebih awal (intended:
+      // chat admin tidak diatribusikan). Fail-open bila payload organik.
       const bodyText = incomingMessage.text?.body || '';
+      const wahaReferral = extractWahaAdReferral(payload);
       const attributionResult = await matchAdClickAndFireContact({
         bodyText,
         isNewCustomerRecord,
         customer,
         tenantId: resolvedTenantId,
+        referral: wahaReferral,
       });
 
       // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail.

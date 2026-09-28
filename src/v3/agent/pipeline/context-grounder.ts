@@ -25,9 +25,11 @@ import {
   isBookingCommitReady,
   detectAgreedTreatment,
 } from './booking-commit-gate';
-import { hasBookingCommitSignal } from '../../../utils/date-confirmation';
+import { hasBookingCommitSignal, hasBookingRetreatSignal } from '../../../utils/date-confirmation';
 import {
   hasScheduleSignal,
+  isScheduleCheckEngagement,
+  isScheduleAvailabilityText,
   assignInternalScheduleLabel,
   hasFallInjurySignal,
   extractTimeHint,
@@ -56,6 +58,8 @@ export {
   isBookingCommitReady,
   detectAgreedTreatment,
   hasScheduleSignal,
+  isScheduleCheckEngagement,
+  isScheduleAvailabilityText,
   assignInternalScheduleLabel,
   hasFallInjurySignal,
   extractTimeHint,
@@ -182,8 +186,34 @@ export class ContextGrounder {
     const { extractFastIntents } = await import('../persona');
     if (conversationId && !session.priceDiscussed
       && extractFastIntents(cleanIncomingText).includes('ask_price')) {
+      // Persist best-effort; JANGAN timpa sesi lokal dengan hasil GoalTracker
+      // (saat DB offline hasilnya kehilangan `booking` → amnesia jadwal).
+      session.priceDiscussed = true;
       try {
-        session = await GoalTracker.updateGoalSession(conversationId, { priceDiscussed: true }, tenantId);
+        await GoalTracker.updateGoalSession(conversationId, { priceDiscussed: true }, tenantId);
+      } catch (e) {}
+    }
+
+    // Fase 2 + 152a — LIFECYCLE pendingScheduleCheck (CASE-039, anti eskalasi palsu):
+    // flag "menunggu ack" hanya sah bila turn ini benar-benar ENGAGEMENT jadwal
+    // (ack / verba komitmen / pertanyaan ketersediaan). Kalimat deklaratif yang
+    // sekadar MENYEBUT nama hari untuk menunda ("belum dulu ya karena jumat kami
+    // pergi") BUKAN engagement → penantian dibatalkan (state lifecycle, bukan
+    // daftar frasa "batal/jangan").
+    if (conversationId && session.booking?.pendingScheduleCheck === true
+      && !session.booking?.reservationId
+      && !isScheduleCheckEngagement(cleanIncomingText)) {
+      const clearedBooking = {
+        ...(session.booking || {}),
+        pendingScheduleCheck: false,
+        requestedTimeHint: undefined,
+        handoffClosingSent: false,
+      };
+      session = { ...session, booking: clearedBooking } as CustomerGoalSession;
+      // Persist best-effort; sumber kebenaran turn ini tetap sesi lokal (anti
+      // kehilangan booking saat DB offline / fallback memory).
+      try {
+        await GoalTracker.updateGoalSession(conversationId, { booking: clearedBooking }, tenantId);
       } catch (e) {}
     }
 
@@ -193,7 +223,11 @@ export class ContextGrounder {
     // berikutnya tidak menodong hari lagi, dan diperbarui bila customer mengganti hari.
     // Jika lokasi atau treatment sudah diketahui, tandai pendingScheduleCheck agar ack
     // penegasan ("oke/baik/tunggu") dapat dieskalasi ke antrean staf tanpa loop.
-    if (conversationId && hasScheduleSignal(cleanIncomingText)
+    if (conversationId
+      && isScheduleCheckEngagement(cleanIncomingText)
+      && (isScheduleAvailabilityText(cleanIncomingText)
+        || extractTimeHint(cleanIncomingText) !== null
+        || hasBookingCommitSignal(cleanIncomingText))
       && !session.booking?.preferredDate
       && !session.booking?.reservationId) {
       const hint = extractTimeHint(cleanIncomingText);
@@ -270,6 +304,18 @@ export class ContextGrounder {
           session = await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: true }, tenantId);
         } catch (e) {}
       }
+    }
+    // Fase 2.1 (anti-sticky-leak): flag komitmen DILEPAS bila customer mundur /
+    // menunda / kembali bertanya ketersediaan ("tunggu dulu mba", "batal",
+    // "sabtu jam 10 kosong gak") — TANPA verba komitmen baru di turn ini.
+    // Berbasis sinyal state, bukan hafalan kalimat (hasBookingRetreatSignal).
+    else if (conversationId && session.bookingCommitConfirmed === true
+      && !hasBookingCommitSignal(cleanIncomingText)
+      && hasBookingRetreatSignal(cleanIncomingText)) {
+      session = { ...session, bookingCommitConfirmed: false } as CustomerGoalSession;
+      try {
+        await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: false }, tenantId);
+      } catch (e) {}
     }
 
     return session;

@@ -14,7 +14,7 @@ import {
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
-import { memoryReservations } from './stores';
+import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { wibDayRangeToUtc } from '../../utils/time-wib';
 
@@ -99,7 +99,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       return reply
         .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
         .status(200)
-        .send({ success: true, count: memoryReservations.size });
+        .send({ success: true, count: filterMemoryByTenant(memoryReservations.values(), tenantId).length });
     }
   });
 
@@ -511,7 +511,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             });
         } catch (err2: any) {
           console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
-          let data = Array.from(memoryReservations.values()).map((r) => ({
+          let data = filterMemoryByTenant(memoryReservations.values(), tenantId).map((r) => ({
             ...r,
             notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
             baby_details: extractBabyDetails(r.raw_text),
@@ -772,10 +772,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'customerId atau customerPhone wajib diisi.' });
       }
 
-      const dbCategory: 'BABY' | 'MOMS' | 'BOTH' =
-        treatmentCategory === 'KIDS' ? 'BABY' :
+      const dbCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
         treatmentCategory === 'BUNDLE' ? 'BOTH' :
-        (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
+        treatmentCategory === 'KIDS' ? 'KIDS' :
+        (treatmentCategory as 'BABY' | 'KIDS' | 'MOMS' | 'BOTH');
 
       const rawNotes = notes ? `\nCatatan Hold: ${notes}` : '';
       const rawText = `[Admin Quick Hold] Ditawarkan: ${parsedDate.toLocaleString('id-ID')}${rawNotes}`;
@@ -863,9 +863,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/reservation/:id/release-hold',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       // Memory fallback first (untuk test offline & hold yang dibuat via fallback)
       const mem = memoryReservations.get(id);
       if (mem) {
+        // Fail-closed: entri tanpa tenant_id sekalipun DILARANG lolos isolasi
+        // tenant (jangan hanya menolak bila tenant_id ada & berbeda).
+        if (mem.tenant_id !== tenantId) {
+          return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+        }
+        if (mem.status !== 'hold') {
+          return reply.status(400).send({ success: false, error: 'Hanya reservasi berstatus hold yang dapat dilepas.' });
+        }
         memoryReservations.delete(id);
         try {
           await auditService.logAdminAction({
@@ -880,11 +889,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: mem, deleted: true });
       }
       try {
-        const reservation = await prisma.reservation.findUnique({ where: { id } });
+        const reservation = await prisma.reservation.findFirst({
+          where: { id, tenant_id: tenantId },
+        });
         if (!reservation) {
           return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
         }
-        await prisma.reservation.delete({ where: { id } });
+        if (reservation.status !== 'hold') {
+          return reply.status(400).send({ success: false, error: 'Hanya reservasi berstatus hold yang dapat dilepas.' });
+        }
+        await prisma.reservation.delete({ where: { id: reservation.id } });
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -959,10 +973,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Format bookingDate tidak valid.' });
       }
 
-      const dbCategory: 'BABY' | 'MOMS' | 'BOTH' = 
-        treatmentCategory === 'KIDS' ? 'BABY' : 
+      const dbCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' = 
         treatmentCategory === 'BUNDLE' ? 'BOTH' : 
-        (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
+        treatmentCategory === 'KIDS' ? 'KIDS' : 
+        (treatmentCategory as 'BABY' | 'KIDS' | 'MOMS' | 'BOTH');
 
       const reservationStatus = status === 'hold' ? 'hold' : 'confirmed';
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
@@ -975,7 +989,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (!isNaN(parsedOngkir) && parsedOngkir >= 0) {
           try {
             await prisma.customer.update({
-              where: { id: customerId },
+              where: { id: customerId, tenant_id: tenantId },
               data: { ongkir: Math.round(parsedOngkir) },
             });
           } catch (e) {
@@ -1114,7 +1128,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (!reservation) {
           // memory fallback
           const mem = memoryReservations.get(id);
-          if (!mem) return reply.status(404).send({ success: false, error: 'Reservation tidak ditemukan' });
+          if (!mem || mem.tenant_id !== tenantId) return reply.status(404).send({ success: false, error: 'Reservation tidak ditemukan' });
           return reply.status(200).send({
             success: true,
             data: {
@@ -1134,7 +1148,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         });
       } catch (err: any) {
         const mem = memoryReservations.get(id);
-        if (mem) {
+        if (mem && mem.tenant_id === tenantId) {
           return reply.status(200).send({
             success: true,
             data: {
@@ -1411,12 +1425,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         console.warn(`[Admin API] DB query failed for reservation ${id}, checking in-memory store:`, dbErr.message);
       }
 
-      const normalizeTreatmentCategory = (cat?: string): 'BABY' | 'MOMS' | 'BOTH' | undefined => {
+      const normalizeTreatmentCategory = (cat?: string): 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | undefined => {
         if (!cat) return undefined;
         const upper = String(cat).toUpperCase();
         if (upper === 'BUNDLE' || upper === 'BOTH') return 'BOTH';
         if (upper === 'MOMS') return 'MOMS';
-        if (upper === 'KIDS' || upper === 'BABY') return 'BABY';
+        if (upper === 'KIDS') return 'KIDS';
+        if (upper === 'BABY') return 'BABY';
         return 'BABY';
       };
       const normalizedCat = treatmentCategory !== undefined ? normalizeTreatmentCategory(treatmentCategory) : undefined;
@@ -1488,7 +1503,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if ((body as any).ongkir !== undefined && (body as any).ongkir !== null && existing.customer_id) {
           try {
             await prisma.customer.update({
-              where: { id: existing.customer_id },
+              where: { id: existing.customer_id, tenant_id: tenantId },
               data: { ongkir: Number((body as any).ongkir) },
             });
           } catch (e) {
@@ -1507,6 +1522,32 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               updateData.booking_date = d;
               parsedBookingDate = d;
             }
+          }
+        }
+
+        // Pengecekan bentrok staf pada edit jadwal / reassign (kecuali force: true)
+        const targetDate = parsedBookingDate !== undefined ? parsedBookingDate : existing.booking_date;
+        const targetStaff = assignedStaffId !== undefined ? (assignedStaffId || null) : existing.assigned_staff_id;
+        const targetDur = updateData.duration_minutes ?? existing.duration_minutes ?? 60;
+        const isForce = Boolean((body as any).force);
+        const isActiveStatus = (updateData.status || existing.status) !== 'cancelled';
+
+        if (targetStaff && targetDate && isActiveStatus && !isForce && (staffChanged || parsedBookingDate !== undefined)) {
+          const { findOverlappingStaffReservations } = await import('../../services/reservation-core.service');
+          const staffConflicts = await findOverlappingStaffReservations({
+            tenantId,
+            staffId: targetStaff,
+            bookingDate: targetDate,
+            durationMinutes: targetDur,
+            excludeId: existing.id,
+          });
+          if (staffConflicts.length > 0) {
+            return reply.status(409).send({
+              success: false,
+              code: 'STAFF_COLLISION',
+              error: 'Jadwal terapis bentrok dengan reservasi lain.',
+              conflict: staffConflicts[0],
+            });
           }
         }
 
@@ -1640,7 +1681,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           // assigned_staff_id: string kosong → null agar tidak menabrak FK
           // (ditangani di updateData.assigned_staff_id di atas; blok ini hanya customer)
           await prisma.customer.update({
-            where: { id: existing.customer_id },
+            where: { id: existing.customer_id, tenant_id: tenantId },
             data: custUpdate,
           });
         }
@@ -1790,6 +1831,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
+        // Fase 3.2: reaktivasi (cancelled/hold → confirmed) WAJIB dicek bentrok
+        // terapis. Tanpa ini, terapis bisa double-booked tanpa terdeteksi.
+        const isReactivatingToConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
+        const forceStatus = Boolean((request.body as any)?.force);
+        if (isReactivatingToConfirmed && existing.assigned_staff_id && existing.booking_date && !forceStatus) {
+          const { findOverlappingStaffReservations } = await import('../../services/reservation-core.service');
+          const staffConflicts = await findOverlappingStaffReservations({
+            tenantId,
+            staffId: existing.assigned_staff_id,
+            bookingDate: existing.booking_date,
+            durationMinutes: existing.duration_minutes ?? 60,
+            excludeId: existing.id,
+          });
+          if (staffConflicts.length > 0) {
+            return reply.status(409).send({
+              success: false,
+              code: 'STAFF_COLLISION',
+              error: 'Jadwal terapis bentrok dengan reservasi lain.',
+              conflict: staffConflicts[0],
+            });
+          }
+        }
+
         const reservation = await prisma.reservation.update({
           where: { id },
           data: { status },
@@ -1890,6 +1954,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         });
         if (!existing) {
           throw new Error('Reservation not found');
+        }
+
+        const isForce = Boolean((request.body as any)?.force);
+        if (existing.assigned_staff_id && existing.status !== 'cancelled' && !isForce) {
+          const { findOverlappingStaffReservations } = await import('../../services/reservation-core.service');
+          const staffConflicts = await findOverlappingStaffReservations({
+            tenantId,
+            staffId: existing.assigned_staff_id,
+            bookingDate: parsedDate,
+            durationMinutes: existing.duration_minutes ?? 60,
+            excludeId: existing.id,
+          });
+          if (staffConflicts.length > 0) {
+            return reply.status(409).send({
+              success: false,
+              code: 'STAFF_COLLISION',
+              error: 'Jadwal terapis bentrok dengan reservasi lain.',
+              conflict: staffConflicts[0],
+            });
+          }
         }
 
         const reservation = await prisma.reservation.update({
@@ -2039,6 +2123,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             return reply.status(400).send({ success: false, error: 'Staff yang dipilih tidak valid.' });
           }
           staffName = staff.name;
+        }
+
+        const isForce = Boolean((request.body as any)?.force);
+        if (assigned_staff_id && existing.booking_date && existing.status !== 'cancelled' && !isForce) {
+          const { findOverlappingStaffReservations } = await import('../../services/reservation-core.service');
+          const staffConflicts = await findOverlappingStaffReservations({
+            tenantId,
+            staffId: assigned_staff_id,
+            bookingDate: existing.booking_date,
+            durationMinutes: existing.duration_minutes ?? 60,
+            excludeId: existing.id,
+          });
+          if (staffConflicts.length > 0) {
+            return reply.status(409).send({
+              success: false,
+              code: 'STAFF_COLLISION',
+              error: 'Jadwal terapis bentrok dengan reservasi lain.',
+              conflict: staffConflicts[0],
+            });
+          }
         }
 
         const reservation = await prisma.reservation.update({
@@ -2926,6 +3030,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(201).send({ success: true, data: series });
       } catch (err: any) {
+        // Fase 3.3: collision per sesi → 409 dengan info sesi bentrok.
+        if (err?.code === 'STAFF_COLLISION') {
+          return reply.status(409).send({
+            success: false,
+            code: 'STAFF_COLLISION',
+            error: `Jadwal terapis bentrok pada sesi ${err.sessionNumber ?? '?'}.`,
+            conflict: err.conflict,
+          });
+        }
         return reply.status(500).send({ success: false, error: err.message });
       }
     }

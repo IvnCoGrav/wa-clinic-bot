@@ -5,7 +5,7 @@ import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { messageService } from '../../src/services/message.service';
 import { createTestGateway, resetGateway } from '../../src/integrations/whatsapp/factory';
-import { computeFrustrationSignal } from '../../src/services/frustration-signal.service';
+import { computeFrustrationSignal, getFrustrationSlaMinutes, MAX_FRUSTRATION_AGE_MINUTES } from '../../src/services/frustration-signal.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 function makeFakeGateway(provider: 'WAHA' | 'WABA' = 'WAHA') {
@@ -196,5 +196,68 @@ describe('computeFrustrationSignal — state/SLA-based (bukan keyword)', () => {
     // Kalimat "santai" pun tetap dinilai dari SLA, bukan kata.
     const lastAt = new Date(now.getTime() - 30 * 60 * 1000);
     expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now, slaMinutes: 15 })).toBe(true);
+  });
+});
+
+describe('computeFrustrationSignal — SLA 60 menit & max-age 24 jam', () => {
+  const now = new Date('2026-09-28T12:00:00Z');
+
+  it('default SLA adalah 60 menit', () => {
+    expect(getFrustrationSlaMinutes()).toBe(60);
+    expect(MAX_FRUSTRATION_AGE_MINUTES).toBe(24 * 60);
+  });
+
+  it('menunggu 50 menit (belum SLA 60) → false', () => {
+    const lastAt = new Date(now.getTime() - 50 * 60 * 1000);
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now })).toBe(false);
+  });
+
+  it('menunggu 65 menit (> SLA 60) → true', () => {
+    const lastAt = new Date(now.getTime() - 65 * 60 * 1000);
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now })).toBe(true);
+  });
+
+  it('menunggu 25 jam (> max-age 24 jam) → false (chat kuno tidak ditandai)', () => {
+    const lastAt = new Date(now.getTime() - 25 * 60 * 60 * 1000);
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now })).toBe(false);
+  });
+
+  it('menunggu 23 jam (dalam jendela aktif) → true', () => {
+    const lastAt = new Date(now.getTime() - 23 * 60 * 60 * 1000);
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now })).toBe(true);
+  });
+
+  it('max-age dapat dioverride (misal 2 jam)', () => {
+    const lastAt = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3 jam lalu
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now, slaMinutes: 60, maxAgeMinutes: 120 })).toBe(false);
+    expect(computeFrustrationSignal({ lastDirection: 'INBOUND', lastMessageAt: lastAt, now, slaMinutes: 60, maxAgeMinutes: 240 })).toBe(true);
+  });
+
+  it('balasan OUTBOUND tetap false walau dalam rentang', () => {
+    const lastAt = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+    expect(computeFrustrationSignal({ lastDirection: 'OUTBOUND', lastMessageAt: lastAt, now })).toBe(false);
+  });
+});
+
+describe('dismissFrustration — pemadaman manual (Fase 7)', () => {
+  it('idempoten: padamkan dua kali tetap sukses & isFrustrated=false', async () => {
+    const { conversationService } = await import('../../src/services/conversation.service');
+    const { customerService } = await import('../../src/services/customer.service');
+    const phone = `62877${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda SLA', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const first = await conversationService.dismissFrustration(conversation.id, DEFAULT_TENANT_ID);
+    const second = await conversationService.dismissFrustration(conversation.id, DEFAULT_TENANT_ID);
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first.is_frustrated).toBe(false);
+    expect(second.is_frustrated).toBe(false);
+  });
+
+  it('conversation tidak ditemukan → null (tanpa throw)', async () => {
+    const { conversationService } = await import('../../src/services/conversation.service');
+    const res = await conversationService.dismissFrustration('conv-tidak-ada-xyz', DEFAULT_TENANT_ID);
+    expect(res).toBeNull();
   });
 });

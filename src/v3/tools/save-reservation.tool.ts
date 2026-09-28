@@ -250,7 +250,6 @@ export function resolveTreatmentCategory(
   const hasKidsCat = matchedCategories.has('KIDS');
   const hasMomEntity = Boolean(opts.momStage || opts.gestationalWeeks != null);
   if (opts.isMulti && ((hasMomCat || hasMomEntity) && (hasBabyCat || hasKidsCat || opts.hasChildren))) return 'BOTH';
-  if (opts.isMulti) return 'BOTH';
   if (hasMomCat && !hasBabyCat && !hasKidsCat) return 'MOMS';
   if ((hasBabyCat || hasKidsCat) && !hasMomCat) return hasKidsCat && !hasBabyCat ? 'KIDS' : 'BABY';
   if (hasMomCat && (hasBabyCat || hasKidsCat)) return 'BOTH';
@@ -392,6 +391,24 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     // Multi-treatment / multi-pasien: gabung semua layanan; kategori otomatis BOTH bila multi.
     const extraClean = (additionalTreatments || []).map((t) => String(t || '').trim()).filter(Boolean);
     const allTreatments = [treatmentName, ...extraClean.filter((t) => t.toLowerCase() !== treatmentName.toLowerCase())];
+
+    // Validasi layanan add-on: add-on tidak boleh dipesan berdiri sendiri tanpa main treatment
+    const addonValidation = treatmentCatalogService.validateReservationTreatments(allTreatments);
+    if (!addonValidation.valid) {
+      console.warn(JSON.stringify({
+        event: 'V3_TOOL_RESERVATION_ADDON_ONLY_REJECTED',
+        tenantId,
+        allTreatments,
+        error: addonValidation.error,
+        timestamp: new Date().toISOString(),
+      }));
+      return {
+        success: false,
+        summary: 'Layanan add-on memerlukan layanan utama',
+        message: `${addonValidation.error || 'Layanan tambahan tidak dapat dipesan sendiri.'} Mohon tanyakan kepada Bunda paket treatment utama yang diinginkan (misal Pijat Bayi Ceria/Pulih Ceria atau Oksitosin) untuk digabungkan dengan layanan tersebut ya.`,
+      };
+    }
+
     const isMulti = allTreatments.length > 1 || children.length > 1;
     const treatmentDetail = allTreatments.join(' + ');
     // Kategori data-driven dari master katalog (tanpa tebakan regex):

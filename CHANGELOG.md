@@ -4,6 +4,160 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-28 — Atribusi Iklan CTWA WAHA + Meta Business Messaging CAPI (Issue #119)
+
+- **Added — Extractor CTWA (`src/integrations/whatsapp/waha-ctwa-referral.ts`):** deep module
+  `extractWahaAdReferral(payload)` (pure, fail-open) mengurai `contextInfo.externalAdReply` dari
+  berbagai varian encoder WAHA (Noweb `_data`, Baileys `message`, root, image/video). Kontrak
+  `AdReferral` diunifikasi di `gateway.types.ts` (dipakai `NormalizedInboundMessage.referral` &
+  `MatchAdClickParams.referral`). `ctwaClid` wajib string opaque — angka/blank → `undefined`.
+- **Fixed — Blind spot webhook WAHA (`webhook.route.ts`):** `matchAdClickAndFireContact` kini
+  menerima `referral` hasil ekstraksi payload (sebelumnya hanya jalur WABA yang mengirim). Iklan
+  CTWA langsung tidak lagi tercatat sebagai `organic`.
+- **Added — Pengkayaan AdClick (`ad-attribution.service.ts`):** record CTWA mengisi
+  `utmSource=sourceApp||'meta'`, `utmMedium='ctwa'`, `utmCampaign=sourceId||'ctwa_direct'`,
+  `landingUrl=sourceUrl`. Headline/body TIDAK masuk `utm*` (copy tak stabil; cukup audit `payloadRaw`).
+- **Fixed — Meta Business Messaging CAPI (`capi.service.ts`):** event CTWA kini memakai envelope
+  resmi (`action_source='business_messaging'`, `messaging_channel='whatsapp'` top-level,
+  `user_data.whatsapp_business_account_id`, `user_data.ctwa_clid` mentah) saat tenant punya WABA id;
+  fail-open ke `action_source='chat'` bila tidak. `event_id` skema Pixel tidak diubah (anti-regresi).
+- **Tests — `waha-ctwa-referral.test.ts` (+7 unit), `waha-webhook.test.ts` (+2 integrasi seam),
+  `tracking.test.ts` (+3 CAPI envelope), `ad-attribution.test.ts` (+1 enrichment).**
+- **Residual (#159):** caveat dukungan Meta untuk nomor unofficial WAHA wajib diverifikasi empiris
+  di Events Manager; discoverability field WABA id lintas-provider.
+
+#### 2026-09-28 — Ekstensi Copilot: riwayat pasien & katalog/SOP (aditif, grounded)
+
+- **Added — Tool `get_customer_history` (`copilot-tools.ts`):** profil pasien (kecamatan/kota,
+  `ltv_cache`, `admin_notes`, `preferences`) + 3 kunjungan terakhir. Nomor HP **disamarkan**
+  deterministik via `maskPhoneNumber` (privasi — nomor mentah tidak pernah ke LLM). Tenant-scoped,
+  ≤3 kandidat untuk nama ambigu.
+- **Added — Tool `lookup_catalog_and_policy` (`copilot-tools.ts`):** katalog resmi (`ClinicService`:
+  harga normal/promo, durasi, usia), SOP/kebijakan (`ClinicPolicy`), dan FAQ/dokumen (`KnowledgeChunk`).
+  Setiap row berlabel `source` untuk grounding; tenant-scoped; `take` dibatasi (8/sumber, cap 20).
+- **Added — Observabilitas `rowCounts`:** `CopilotChatResult.rowCounts` (baris per tool) kini
+  dicatat pada payload `AuditLog` `AI_COPILOT_CHAT` (`copilot.subroute.ts`).
+- **Hardening — Grounding medis (lapis sekunder):** summarize prompt menegaskan kutip HANYA dari
+  baris berlabel sumber + larangan mengarang angka (harga/durasi/slot); primer tetap baris DB.
+- **UI — Quick prompts operasional:** `AdminCopilotPanel.tsx` menampilkan saran riwayat pasien &
+  SOP pasca-vaksin.
+- **Tests — Suite ekstensi Copilot:** `copilot-fixing.test.ts` +9 skenario (masking HP, tenant-scope
+  ketiga model, dummy filter, katalog/policy/ALL, empty anti-halusinasi, `rowCounts`). Full suite
+  3889 hijau; `pending-schedule-check-lifecycle` CASE-043 merah pre-existing (#155e).
+- **Catatan arsitektur:** pendekatan "universal keyword search" DITOLAK (melanggar mandat anti-overfit
+  & state-based); ekstensi ini aditif tanpa menyentuh 4 tool existing. Residual dicatat #155a–e.
+
+#### 2026-09-28 — Perbaikan fondasional AI Clinic Copilot (state signal, date filter, sanitizer, deep-link)
+
+- **Fixed — Sinyal minat jadwal kini state-based (`copilot-tools.ts`):** `hasScheduleIntentSignal`
+  membaca `booking.requestedTimeHint/preferredDate/pendingScheduleCheck` + `cartItems` (bukan lagi
+  mengandalkan `inquiryDate` hantu / `lastDiscussedTreatment` tunggal). Pelanggan yang sekadar pernah
+  membahas treatment tanpa state booking tidak lagi dianggap minta jadwal (anti false-positive Dinda).
+- **Added — Filter `date` pada `query_stalled_inquiries`:** `matchesInquiryDate` mencocokkan ISO,
+  kata relatif ("besok"/"hari ini"), atau nama hari dengan **word-boundary** (bukan substring bebas
+  dua arah), sehingga filter tanggal mempersempit hasil secara deterministik.
+- **Fixed — Default status jadwal aktif:** `query_reservations_by_filter` tanpa `status` kini default
+  ke `confirmed/pending/hold` sehingga reservasi `cancelled` tidak mencemari rekap mendatang.
+- **Fixed — Dummy-filter `query_unreplied_chats`:** kontak sandbox/test disaring via
+  `isDummyOrTestContact` (pola nomor tak terindeks DB).
+- **Hardening — Deskripsi tool bebas overfit:** contoh kata kunci hafalan ("belum terjadwal dan minta
+  besok") dihapus dari `description` (mandat anti-overfitting).
+- **Added — Konteks history di router (`copilot.service.ts`):** `buildRouterPrompt(..., history)`
+  menyuntik 4 pesan terakhir agar pertanyaan lanjutan tidak amnesia; panduan komposit bersifat generik
+  (tanpa contoh kalimat verbatim).
+- **Added — Sanitizer deterministik (anti-UUID):** `stripInternalIds` membuang `customerId`/`id` dari
+  baris SEBELUM ke LLM; `sanitizeCopilotAnswer` menghapus sisa UUID dari jawaban — gerbang kode, bukan
+  sekadar imbauan prompt.
+- **Hardening — Grounding label:** `validateGrounding` juga memvalidasi format `**Nama Pelanggan**: X` /
+  `Nama Pasien: X` dengan regex ketat (tanpa alternatif kata umum yang memicu false-positive).
+- **Added — Deep-link Live Chat di `AdminCopilotPanel.tsx`:** renderer markdown inline mengubah
+  `[Buka Chat](/admin/live-chat?conversationId=…)` menjadi tombol yang menyinkronkan `liveChat:selectedId`
+  lalu `navigate()` (pola sama dengan `useLiveChatNotification`); hanya tautan internal yang diaktifkan.
+- **Tests — Suite adversarial Copilot:** `copilot-fixing.test.ts` +12 skenario (komposit 2-tool,
+  Dinda disaring, dummy-filter, default status, stripInternalIds, zero-UUID, grounding label &
+  non-false-positive). Full suite 3880 hijau; `pending-schedule-check-lifecycle` CASE-043 merah
+  pre-existing (#154e).
+
+#### 2026-09-28 — Penguatan fondasional sistem reservasi & rekonsiliasi spasial (IDOR, collision check, AI add-on guard, data healing)
+
+- **Security — Penutupan IDOR lintas tenant pada Release Hold:** Endpoint `PATCH /api/admin/reservation/:id/release-hold` (`src/routes/admin/reservations.subroute.ts`) kini mewajibkan tenant context `where: { id, tenant_id: tenantId }` serta memasang status guard (`reservation.status !== 'hold' -> HTTP 400`), mencegah modifikasi atau penghapusan data reservasi tenant lain.
+- **Fixed — Kebocoran alamat jalan ke kolom kelurahan:** Perbaikan spasial di `src/services/reservation-core.service.ts:350,454` mengganti `kelurahan: kelurahan || address` menjadi `kelurahan: kelurahan || undefined`, mencegah string alamat panjang mencemari data wilayah customer.
+- **Fixed — Pemulihan enum TreatmentCategory KIDS:** Rute admin reservasi memulihkan enum `TreatmentCategory.KIDS` agar layanan anak tidak di-downgrade menjadi `BABY`.
+- **Added — Backend collision check jadwal terapis pada edit admin:** Memasang deteksi bentrok jadwal terapis pada 3 endpoint edit reservasi (`PATCH /api/admin/reservation/:id`, `set-date`, `assign-staff`). Sistem menolak bentrok jadwal dengan HTTP 409 `STAFF_COLLISION` kecuali parameter override `force: true` disertakan.
+- **Added — AI Tool Guard penolakan pemesanan add-on murni:** Tool `save_reservation` (`src/v3/tools/save-reservation.tool.ts`) kini memvalidasi pemesanan via `treatmentCatalogService.validateReservationTreatments`. Pemesanan yang hanya memuat layanan add-on (tanpa layanan utama) ditolak dengan respons edukatif ramah ke Bunda.
+- **Added — Fallback Gazetteer pada auto-distance background lifecycle:** `reservation-lifecycle.service.ts` kini memakai fallback kamus Gazetteer saat geocoding Google Maps mengembalikan hasil non-presisi, menjamin perhitungan jarak & ongkir tetap akurat.
+- **Fixed — Rekonsiliasi data produksi (Data Healing):** Skrip `src/scripts/reconcile-customer-locations-and-reservations.ts` memulihkan data spasial & durasi pada basis data PostgreSQL (9 customer + 1 reservasi). Eksekusi `--commit` dilakukan manual di server (bukti angka km/Rp tidak tersimpan di repo). Catatan audit: klaim "transaksional" sebelumnya tidak akurat — skrip tidak membungkus operasi dalam transaksi DB.
+- **Fixed — Rekonsiliasi durasi data-driven (audit):** Durasi reservasi NULL kini diresolusi via `treatmentCatalogService.resolveDurationBreakdown` (Single Source of Truth). Angka mati `60` dihapus; teks layanan yang tak dikenali katalog DILEWATI (anti-fabrikasi data).
+- **Hardening — `isAddonService` data-driven (audit):** Fallback hardcode nama bisnis (`moksa`/`nebulizer`) dihapus; klasifikasi add-on untuk string bebas kini melalui resolusi katalog (`matchCatalogItem` → `isAddon`/`serviceType`/`category` DB). Sesuai Mandat Non-Hardcode.
+- **Hardening — Isolasi tenant (audit):** (a) `release-hold` memory-fallback fail-closed — entri tanpa `tenant_id` DILARANG lolos; (b) `prisma.customer.update` pada create/edit reservasi kini ter-scope `tenant_id`.
+- **Tests — Suite adversarial diperluas:** `tests/unit/reservation-security-and-integrity.test.ts` (11 skenario: ketahanan spasial, IDOR dengan assert scope tenant non-tautologis, fail-closed memory fallback, collision check terapis, add-on rejection multi-parafrase & combo acceptance, gazetteer fallback lifecycle deterministik).
+- **Fixed — Pause-gate antrian in-memory (`queue.service.ts`):** `pauseQueue`/`resumeQueue` sebelumnya hanya menjeda BullMQ; jalur fallback in-memory tetap memproses pesan saat `isPaused` (WAHA putus + Redis offline → pesan bocor/hilang). Kini `enqueueInMemory`/`processNextInMemory` menghormati `isPaused` dan `resumeQueue` menguras antrian yang tertahan. `queue-durability.test.ts` dibuat deterministik via `forceDisconnectRedis()` (bukan bergantung Redis offline). Lihat KNOWN_ISSUES #152d.
+- **Fixed — Kontrak test CASE-043 (`pending-schedule-check-lifecycle.test.ts`):** kontradiksi internal (test `waitlist-reopen` mewajibkan re-engage slot me-latch ulang, sedangkan test CASE-043 menuntut ack setelahnya tidak menembak) diselaraskan dengan keputusan produk: re-engage slot SAH → closing+handoff pada ack penutup adalah benar. Assert diperjelas (turn penundaan 0–2 tidak menembak; ack turn 5 menembak 1x). Kode produksi tidak diubah. Lihat KNOWN_ISSUES #154e.
+
+#### 2026-09-28 — Remediasi fondasional audit (RF-06, lifecycle jadwal, anaphora, injection, scope)
+
+- **Added — Red-flag komposit batuk-ruam-demam lintas-turn (RF-06):** `detectPersistentCoughRashEmergency`
+  (`src/config/medical-keywords.ts`) + `MedicalDetectionService.detectMedicalConcern(text, recentHistory?)`.
+  Bug: gate medis stateless per-pesan meloloskan "batuk 2 minggu" (turn 1) + "ruam merah + demam" (turn 2)
+  sebagai `NONE`. Kini digabung lintas riwayat → `HIGH` → `HUMAN_HANDLING` + alert. Guard proksimitas
+  penanda-usia mencegah false-positive ("bayi 3 bulan batuk pilek" = usia, bukan durasi kronis).
+  `machine.ts` memuat riwayat sebelum gate medis (satu sumber riwayat untuk gate & V3).
+- **Fixed — Lifecycle `pendingScheduleCheck` (CASE-039, anti eskalasi palsu):**
+  `ContextGrounder.applySessionLatches` membersihkan flag "menunggu ack" pada turn non-jadwal/non-ack/non-komit
+  secara deterministik (state lifecycle, bukan daftar frasa batal). "Jangan"/"Nanti dulu"/pindah topik
+  membatalkan penantian sehingga ack berikutnya ("Siap") tidak memicu `FastResponseGate`.
+- **Fixed — Amnesia booking saat DB offline:** latch `priceDiscussed` & lifecycle tidak lagi menimpa sesi lokal
+  dengan hasil `GoalTracker.updateGoalSession` (persist best-effort) — mencegah `booking` hilang.
+- **Fixed — Deadlock anaphora ("yang tadi aja bubid"):** `hasBookingCommitSignal` (`src/utils/date-confirmation.ts`)
+  memakai kelas deiksis (rujukan + verba/partikel, tahan slang/typo "yg td aja") menggantikan hafalan frasa;
+  `CartManager` menyatukan afirmasi-tunggal ke sumber yang sama sehingga penawaran tunggal asisten sah mengisi
+  keranjang tanpa mengunci menu multi-opsi.
+- **Added — Sanitizer prompt injection (ADV-01):** `src/utils/prompt-injection-sanitizer.ts`
+  (`sanitizeCustomerInput` + `wrapCustomerMessage`) menetralkan delimiter `customer_message`, tag peran
+  (`<system>`/`<assistant>`), penanda `SYSTEM:` dan pola instruksi-peran — menutup breakout isolasi.
+  Dipakai `agent-runner` untuk membungkus pesan customer.
+- **Fixed — Kontrak tool scope (ADV-04):** deskripsi `escalate_to_human` (`escalate-human.tool.ts`) tidak lagi
+  mengundang eskalasi "topik di luar layanan klinik"; luar-domain wajib ditolak sopan mandiri (2 kalimat).
+- **Fixed — Scorer D1 evidence-gated (Test Suite V2):** `scripts/lib/scorer.ts` tidak lagi memvonis
+  `PRICE_UNSOLICITED` bila nominal dipicu konteks harga customer (intent `ask_price` atau tool
+  `calculate_delivery`), bukan sekadar ada nominal di balasan.
+- **Fixed — LiveChat dismiss satu sumber:** `webhook.route.ts` (balasan admin dari WA HP) memakai
+  `ConversationService.dismissFrustration` (tenant-verified, idempoten, SSE standar) alih-alih reset mentah.
+- **Tests:** `persistent-cough-rash-redflag`, `pending-schedule-check-lifecycle`, `anaphora-state-gate`,
+  `prompt-injection-sanitizer`, `out-of-scope-resist`; `lead-greeting-preservation` (+4),
+  `scorer-suite-contract` (+5), `livechat-notes-frustration` (+2).
+- **Docs:** `docs/KNOWN_ISSUES.md` #152 (residual: 151a re-latch, ADV-04 LLM, CASE-037 date-mismatch,
+  queue-durability flaky).
+- **Verifikasi:** root `tsc` 0; vitest full suite hijau (0 gagal).
+
+#### 2026-09-28 — Pulse SLA 60 menit, pemadaman multi-device, & refaktor UI/UX LiveChat
+
+- **Changed — SLA deteksi frustrasi:** default `FRUSTRATION_SLA_MINUTES` 15 → **60 menit**
+  (`src/services/frustration-signal.service.ts`). Jendela wajar staf sebelum eskalasi darurat.
+- **Added — max-age guard:** `MAX_FRUSTRATION_AGE_MINUTES = 24 jam`; `computeFrustrationSignal`
+  kini hanya true bila usia pesan berada di rentang `[SLA .. 24 jam]` — chat kuno tidak ikut
+  berkedip (alarm fatigue).
+- **Fixed — flag dua arah + SSE:** `FrustrationSignalService.evaluateConversation` kini juga
+  menurunkan flag (INBOUND→OUTBOUND) dan menyiarkan `conversation.updated` saat status berubah;
+  `sweep()` membatasi kandidat dengan rentang aktif + membersihkan status frustrasi usang >24 jam.
+- **Fixed — payload standar:** `buildConversationUpdatedPayload` menambah `isFrustrated`,
+  `frustratedAt`, `frustratedReason` (satu bentuk event untuk semua konsumen).
+- **Fixed — multi-device dismiss:** balasan admin dari WhatsApp HP (`fromMe`) dan dari web Live
+  Chat kini mereset frustrasi di DB **dan** menyiarkan `isFrustrated:false` via SSE — badge padam
+  di semua dashboard tanpa refresh.
+- **Added — endpoint manual dismiss:** `PATCH /api/admin/live-chat/conversations/:id/dismiss-frustration`
+  + `ConversationService.dismissFrustration` (padamkan alert 1 klik tanpa kirim pesan).
+- **Changed — refaktor UI (`LiveChatMonitor.tsx`):** `animate-pulse` dihapus dari badan kartu
+  (kartu solid/stabil, anti eye-fatigue); badge teks "🚨 Butuh Respon Segera" diganti ikon
+  `AlertTriangle` ringkas + pulsing beacon dot terisolasi (tooltip + aria-label); aksi
+  "Padamkan Peringatan SLA" (`BellOff`) di menu konteks mobile & desktop; state React
+  menyinkronkan `isFrustrated` dari `message.created` & `conversation.updated`.
+- **Tests:** `tests/unit/livechat-notes-frustration.test.ts` diperluas 14 → 21 kasus
+  (SLA 50/65 mnt, max-age 25 jam, override max-age, OUTBOUND, default 60).
+- **Docs:** `docs/KNOWN_ISSUES.md` #144 diperbarui (default 60 mnt + catatan tech debt SLA
+  global per-server lewat Confirmation Gate).
+- **Verifikasi:** root `tsc` 0; dashboard `vite build` 0; vitest frustration 21 passed.
+
 #### 2026-09-27 — Fix false-positive banner "FORM RESERVASI MASUK" + pelabelan audiens MOMS
 
 - **Latar (bukti akar masalah):** membuka chat Bunda Inggrid (6288000000003) memunculkan

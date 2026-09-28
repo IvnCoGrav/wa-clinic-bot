@@ -3,6 +3,23 @@
 export const memoryReservations = new Map<string, any>();
 export const memoryLandings = new Map<string, any>();
 
+/**
+ * Isolasi multi-tenant untuk fallback in-memory (saat DB offline): saring
+ * record agar tenant peminta HANYA melihat datanya sendiri. Wajib dipakai di
+ * SETIAP endpoint yang membaca memoryReservations — tanpa ini, admin Tenant B
+ * dapat melihat reservasi Tenant A (kebocoran lintas-tenant).
+ */
+export function filterMemoryByTenant<T extends { tenant_id?: string | null }>(
+  records: Iterable<T>,
+  tenantId: string
+): T[] {
+  const out: T[] = [];
+  for (const r of records) {
+    if (r && r.tenant_id === tenantId) out.push(r);
+  }
+  return out;
+}
+
 export const RESERVED_LANDING_SLUGS = new Set([
   'go',
   'promo',
