@@ -837,7 +837,7 @@ const LiveChatComposerInner = (
           autoCapitalize="sentences"
           autoCorrect="on"
           spellCheck={true}
-          data-placeholder={isInternalMode ? 'Menulis catatan internal (hanya staf)...' : 'Tulis balasan... (Enter baris baru, klik Kirim)'}
+          data-placeholder={isInternalMode ? 'Tulis catatan internal...' : 'Tulis balasan...'}
           onFocus={() => {
             if (typeof window !== 'undefined') {
               window.scrollTo(0, 0);
@@ -860,7 +860,7 @@ const LiveChatComposerInner = (
           type="button"
           onClick={() => setIsInternalMode((v) => !v)}
           disabled={sending}
-          className={`w-10 h-10 sm:w-auto sm:px-3 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation disabled:opacity-40 cursor-pointer ${
+          className={`hidden sm:flex sm:w-auto sm:px-3 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 rounded-xl text-xs font-bold transition items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation disabled:opacity-40 cursor-pointer ${
             isInternalMode
               ? 'bg-amber-500 hover:bg-amber-600 text-white'
               : 'bg-white border border-[#d1d7db] hover:border-amber-400 text-[#54656f] hover:text-amber-600'

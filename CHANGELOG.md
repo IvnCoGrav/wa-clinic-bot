@@ -4,6 +4,41 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-28 — Optimasi LiveChat Mobile: Placeholder Ringkas, Tombol Kunci Mobile-Hidden, & Filter/Toggle Unread
+
+- **Changed — LiveChatComposer:**
+  - Placeholder textbox disederhanakan menjadi `"Tulis balasan..."` (dari sebelumnya `"Tulis balasan... (Enter baris baru, klik Kirim)"`) dan `"Tulis catatan internal..."` pada mode catatan internal agar tidak memotong layar sempit di perangkat mobile.
+  - Tombol ikon kunci catatan internal di samping tombol kirim disembunyikan khusus layar mobile (`hidden sm:flex`) sehingga area ketik mendapatkan tambahan lebar ~40px dan bebas desakan. Akses catatan internal di mobile tetap dapat digunakan melalui menu tools (`+`).
+- **Added — Unread Filter & Header Toggle (LiveChatMonitor):**
+  - Ditambahkan filter baru **"Pesan Belum Dibaca (Unread)"** dengan ikon `MessageSquareDot` pada toolbar atas daftar percakapan WhatsApp. Dilengkapi indikator dot hijau dinamis saat ada pesan yang belum dibaca.
+  - Ditambahkan tombol aksi toggle Unread (`MessageSquareDot`) di samping tombol cari pada header percakapan aktif. Staf dapat menandai percakapan sebagai belum dibaca / sudah dibaca dengan sekali sentuh/klik tanpa perlu long-press / klik kanan.
+- **Verifikasi:** Build dashboard Vite (`npm run build`) sukses 0 error; root `tsc` lulus 0 error; test integration auth signal contract 9 passed.
+
+#### 2026-09-28 — Hardening Sesi Staff (503), Access-Log Auth & Observabilitas Pre-Visit Brief (KNOWN_ISSUES #141, #143, #157f)
+
+- **Fixed — Kontrak 503 sesi staff (#141, paritas admin):** `StaffAuthService.validateSession`
+  (`src/services/staff-auth.service.ts`) tidak lagi menelan error DB menjadi `null` (→ 401 ambigu →
+  frontend menghapus token cadangan). Kini melempar `SessionStoreUnavailable` (kelas sinyal yang sama
+  dengan admin, tanpa duplikat) saat query DB error; `null` hanya untuk token invalid/expired/revoked/
+  inaktif. Pemetaan **503 `SESSION_STORE_UNAVAILABLE`** dipasang di seluruh call-site: `staff.route.ts`
+  (preHandler), `staff/auth.subroute.ts` (restore), `admin/auth.subroute.ts` (restore + /me), `admin.route.ts`
+  (preHandler cabang staff); `media.route.ts` fail-closed (deny, bukan 500). Tipe `StaffSessionWithStaff`
+  diekspor agar `include: { staff }` tak hilang dari inferensi.
+- **Added — Access-log forensik jalur auth (#143):** hook `onResponse` terpusat di `src/app.ts` +
+  modul `src/utils/auth-access-log.ts` memancarkan SATU baris JSON `[AUTH ACCESS]` untuk tiap respons
+  **401/503** pada rute auth/admin/staff: `path, method, status, signal(401|503), latencyMs,
+  sessionHashPrefix8, ipHashPrefix8, reqId, ts`. Token penuh & IP mentah DILARANG masuk log (hanya hash
+  prefix-8). Memungkinkan forensic "berapa kali 401 vs 503" pasca-deploy.
+- **Added — Observabilitas Pre-Visit Brief (#157f):** `sendPreVisitBrief` kini mengembalikan
+  `reason: 'no_channel'` + baris log terstruktur `[PRE_VISIT_BRIEF_NO_CHANNEL]` saat staf belum punya
+  kanal (Telegram/Web Push). Perilaku retry DIPERTAHANKAN (kanal bisa aktif beberapa menit kemudian);
+  `sent_at` tetap tidak ditandai agar sweep mengulang.
+- **Tests:** `staff-session-store.test.ts` (5), `auth-access-log.test.ts` unit (9) + integrasi (4),
+  `pre-visit-brief-channel.test.ts` (3), kontrak 503 di `staff-routes.test.ts` (+2) &
+  `admin-auth-signal-contract.test.ts` (+1). **Verifikasi:** root `tsc` 0; vitest full suite 3994 passed / 0 failed.
+- **Docs:** `docs/KNOWN_ISSUES.md` #141/#143/#157f → RESOLVED; #157i/#157l/#153i/#155e (CASE-043)
+  ditandai RESOLVED (terverifikasi hijau; dokumen sebelumnya keliru menandai merah).
+
 #### 2026-09-28 — Refaktor UI Mobile: Relokasi Online/Sound/Theme ke Sidebar & Copilot Icon di Header
 
 - **Latar & UX:** Pada layar mobile (< 768px), header sebelumnya memuat 5 tombol/badge (Status Online, Suara, Mode UI, Menu, dan Alert) sehingga terasa sempit dan padat. Sementara itu, AI Copilot di sidebar berbentuk toggle bar yang sulit diakses cepat saat membuka percakapan Live Chat di HP.

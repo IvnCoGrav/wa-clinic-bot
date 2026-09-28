@@ -127,8 +127,11 @@ describe('Kontrak HTTP sinyal sesi admin (503 vs 401)', () => {
       expect(JSON.parse(res.body).code).toBe('SESSION_STORE_UNAVAILABLE');
     });
 
-    it('DB sehat + token tak dikenal → 401', async () => {
+    it('DB sehat (admin & staff) + token tak dikenal → 401', async () => {
+      // DB sehat menyeluruh: kedua penyimpanan sesi menjawab null (bukan error).
+      // Restore mencoba jalur admin lalu staff; keduanya harus 401 jujur.
       (prisma.adminSession.findUnique as any).mockResolvedValue(null);
+      (prisma.staffSession.findUnique as any).mockResolvedValue(null);
 
       const res = await app.inject({
         method: 'POST',
@@ -137,6 +140,24 @@ describe('Kontrak HTTP sinyal sesi admin (503 vs 401)', () => {
       });
 
       expect(res.statusCode).toBe(401);
+    });
+
+    it('DB store STAFF tak tersedia saat restore → 503 (bukan 401 ambigu)', async () => {
+      // Skenario nyata: token admin tak dikenal, tapi penyimpanan sesi staff error.
+      // DILARANG menyimpulkan "token invalid" saat DB tak bisa dicek.
+      (prisma.adminSession.findUnique as any).mockResolvedValue(null);
+      (prisma.staffSession.findUnique as any).mockRejectedValue(
+        new Error('connection pool timeout')
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/auth/restore',
+        payload: { token: uniqToken() },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).code).toBe('SESSION_STORE_UNAVAILABLE');
     });
   });
 

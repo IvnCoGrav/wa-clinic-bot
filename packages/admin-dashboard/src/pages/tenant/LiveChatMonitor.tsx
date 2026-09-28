@@ -65,6 +65,7 @@ import {
   Lock,
   Copy,
   BellOff,
+  MessageSquareDot,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -438,7 +439,7 @@ export const LiveChatMonitor: React.FC = () => {
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation' | 'sandbox'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'unread' | 'reservation' | 'sandbox'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
@@ -3302,6 +3303,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     } else {
       if ((chat as any).isSandboxTest) return false;
     }
+    // 0b. Filter Unread
+    if (sourceFilter === 'unread') {
+      const isUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
+      if (!isUnread) return false;
+    }
     // 1. Filter reservasi aktif (pending/hold/terjadwal)
     if (sourceFilter === 'reservation') {
       const hasRes = !!(chat as any).hasActiveHold || !!(chat as any).hasUpcomingBooking || !!(chat as any).hasPendingBooking;
@@ -3571,6 +3577,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
                     {[
                       { value: 'all', title: 'Semua Percakapan WhatsApp', icon: Layers },
+                      { value: 'unread', title: 'Pesan Belum Dibaca (Unread)', icon: MessageSquareDot },
                       { value: 'reservation', title: 'Reservasi Aktif (Pending/Hold/Terjadwal)', icon: ShoppingBag },
                       { value: 'sandbox', title: 'QA Tester / Sandbox (Simulasi Lokal)', icon: FlaskConical },
                     ].map((opt) => {
@@ -3579,6 +3586,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const activeClass = opt.value === 'sandbox'
                         ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-2xs'
                         : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
+                      const hasUnreadBadge = opt.value === 'unread' && chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread));
                       return (
                         <button
                           key={opt.value}
@@ -3597,6 +3605,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }`}
                         >
                           <Icon size={13} />
+                          {hasUnreadBadge && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#25D366] ring-1 ring-white" />
+                          )}
                         </button>
                       );
                     })}
@@ -4290,8 +4301,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     </div>
                   </div>
 
-                    {/* Header actions: In-chat search + Bot Release/Takeover */}
+                    {/* Header actions: In-chat search + Unread toggle + Bot Release/Takeover */}
                     <div className="shrink-0 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReadStatus(selectedChat)}
+                        title={(selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread ? 'Tandai sudah dibaca' : 'Tandai belum dibaca'}
+                        className={`p-1.5 rounded-xl border transition shadow-2xs cursor-pointer active:scale-95 ${
+                          (selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread
+                            ? 'bg-[#e8f5f2] dark:bg-[#1f3a34] text-[#008069] dark:text-[#25d366] border-[#c2e7e0] dark:border-[#2a4e45]'
+                            : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
+                        }`}
+                      >
+                        <MessageSquareDot size={14} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => setInChatSearchOpen((v) => !v)}

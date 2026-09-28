@@ -71,25 +71,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **157e — GCal desync senyap (OPEN, Fase 4):** `reservations.subroute.ts:1968-1975` gagal update
   Google Calendar → hanya `console.error`, tetap HTTP 200, tanpa retry. Solusi: kolom status sync +
   outbox retry (butuh migrasi).
-- **157f — Pre-Visit Brief retry tak terbatas (OPEN, Fase 5):** `staff-notification.service.ts:437-441`
-  tidak menandai `sent_at` bila tidak ada channel → cron retry tiap siklus selamanya. Solusi: batas
-  retry + health-check admin staf tanpa channel.
+- **157f — Pre-Visit Brief retry tak terbatas (RESOLVED observabilitas, 2026-09-28):** `staff-notification.service.ts` tidak menandai `sent_at` bila tidak ada channel → cron retry tiap siklus (disengaja: kanal bisa aktif beberapa menit kemudian). Perilaku retry DIPERTAHANKAN; ditambahkan **observabilitas deterministik**: `reason: 'no_channel'` pada hasil `sendPreVisitBrief` + baris log terstruktur `[PRE_VISIT_BRIEF_NO_CHANNEL] {reservationId, tenantId, staffId, hasTelegram, pushSent, telegramSent, ts}`. Test: `tests/unit/pre-visit-brief-channel.test.ts`. Sisa: health-check/alert admin untuk staf tanpa kanal (opsional, di atas log ini).
 - **157g — Kategori KIDS→BABY di dashboard (RESOLVED, Fase 1.3):** `CreateReservationModal.tsx`
   menurunkan `KIDS`→`BABY` dan `BUNDLE`→`BOTH`; diselaraskan dengan enum backend (yang sudah menerima
   `KIDS` di POST `:976-979` & PATCH `:1428-1437`). Bertentangan dengan klaim #153c — kini konsisten.
 - **157h — Multi-item dipaksa BOTH (RESOLVED, Fase 1.2):** `save-reservation.tool.ts` baris
   `if (opts.isMulti) return 'BOTH'` dihapus; kategori mengikuti komposisi katalog.
-- **157i — Sapaan bot mengunci keranjang (OPEN, Fase 2):** test reproduksi
-  `tests/unit/v3/cart-greeting-lock-repro.test.ts` MERAH — sapaan pembuka (1 layanan) + "Iya mbak"/
-  "Oke" mengisi keranjang. Solusi: kecualikan pesan pembuka dari `singleExactOffer` (`cart-manager.ts`),
-  tanpa daftar frasa hafalan.
+- **157i — Sapaan bot mengunci keranjang (RESOLVED, terverifikasi 2026-09-28):** fix sudah ada di `cart-manager.ts:576` — pengecualian afirmasi-tunggal HANYA sah bila `hasSubstantiveUserTurn` (sapaan pembuka bot bukan penawaran). Test `tests/unit/v3/cart-greeting-lock-repro.test.ts` **HIJAU** (dokumen sebelumnya keliru menandai merah).
 - **157j — Tenant leak fallback in-memory (RESOLVED, Fase 1.1):** `reservations.subroute.ts` count/list/
   detail tidak menyaring `tenant_id`; ditambahkan helper `filterMemoryByTenant` di `stores.ts`.
 - **157k — TZ drift parser V3 (OPEN, Fase 5):** `indonesian-date-parser.ts` pakai `setHours(9)` lokal;
   `docker-compose.yml`/`Dockerfile` tanpa `TZ` → container UTC = 16:00 WIB. Parser form WA
   (`reservation-text-parser.ts`) SUDAH WIB-eksplisit, jadi dampak terbatas jalur V3.
-- **157l — Validator silang hari↔tanggal (OPEN, Fase 5):** `reservation-text-parser.ts:602-613` sudah
-  rekonsiliasi selisih ±1 hari; selisih >1 hari masih diabaikan senyap.
+- **157l — Validator silang hari↔tanggal (RESOLVED, terverifikasi 2026-09-28):** `reservation-text-parser.ts` `detectDateMismatch` (baris 627) mendeteksi selisih ≥2 hari dan mengisi `dateMismatch/writtenDay/actualDay`; `state-machine/machine.ts:391` menyuntik catatan `⚠️ PERLU KONFIRMASI TANGGAL` ke staf. Selisih ±1 hari diselaraskan (`reconcileWrittenDayWithDate`). Test: `tests/unit/v3/reservation-date-mismatch-note.test.ts` (HIJAU).
 
 ---
 
@@ -111,8 +105,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **155d — `name contains` bisa ambigu (nama kembar):** `get_customer_history` mengembalikan ≤3
   kandidat; admin memilih. Belum ada disambiguasi otomatis (nomor HP/kota) — disengaja agar tidak
   menebak salah orang.
-- **155e — `pending-schedule-check-lifecycle.test.ts` CASE-043 merah (pre-existing):** sama dengan
-  #154e; jalur V3, bukan regresi ekstensi Copilot.
+- **155e — `pending-schedule-check-lifecycle.test.ts` CASE-043 (RESOLVED, terverifikasi 2026-09-28):** test kini **HIJAU** (lihat #154e); jalur V3, bukan regresi ekstensi Copilot.
 
 ---
 
@@ -164,7 +157,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - (c) `isAddonService` fallback hardcode `moksa`/`nebulizer` dihapus (data-driven).
   - (d) Klaim "82 test hijau 100%" pada laporan sebelumnya tidak akurat; suite reservasi aktual = 11 skenario (file ini) + suite terkait, dijalankan pada regression gate.
   - (e) Klaim "build Exit 0" pada laporan sebelumnya sempat gagal (`medical-signal-detector.ts` import hilang) pada working tree campuran; kini `tsc` bersih.
-- **153i — Residual (bukan scope plan reservasi):** `queue-durability.test.ts` — **RESOLVED** (lihat #152d: bug pause-gate in-memory, bukan flaky). `pending-schedule-check-lifecycle.test.ts` CASE-043 — tetap OPEN (residual lifecycle jadwal #152a; file dikelola plan remediasi paralel), bukan regresi plan ini.
+- **153i — Residual (bukan scope plan reservasi):** `queue-durability.test.ts` — **RESOLVED** (lihat #152d: bug pause-gate in-memory, bukan flaky). `pending-schedule-check-lifecycle.test.ts` CASE-043 — **RESOLVED** (terverifikasi hijau 2026-09-28), bukan regresi plan ini.
 
 ---
 
@@ -339,12 +332,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 143. [Observability] Tidak ada access-log status 401/503 untuk endpoint auth (2026-09-26) — OPEN
+## 143. [Observability] Tidak ada access-log status 401/503 untuk endpoint auth (2026-09-26) — RESOLVED (2026-09-28)
 
 - **Gejala:** saat investigasi live insiden logout (Fase 0), `docker compose logs caddy/app` tidak memuat satu pun baris status untuk `/api/admin/auth/me` & `/restore` (Caddy access log tidak mencatat, Fastify handler diam) — forensic "berapa kali 401 vs 503 dalam 24 jam" mustahil dilakukan.
 - **Akibat:** frekuensi logout ambigu tak bisa diukur pasca-deploy; regresi kontrak 503-vs-401 hanya terdeteksi oleh test, bukan monitoring.
-- **Rencana (DITUNDA):** log ringkas terstruktur (JSON) pada jalur auth: `path, status, latency, session_hash_prefix8, signal(401|503)` dengan redaksi token penuh; opsional counter in-memory per jam untuk alert.
-- **Status:** OPEN — di luar blast radius fix anti-logout (tidak memengaruhi perilaku).
+- **Perbaikan (fondasional, terpusat):** hook `onResponse` deterministik di `src/app.ts` memancarkan SATU baris JSON `[AUTH ACCESS]` untuk setiap respons **401/503** pada rute auth/admin/staff (`src/utils/auth-access-log.ts`). Field: `path, method, status, signal(401|503), latencyMs, sessionHashPrefix8, ipHashPrefix8, reqId, ts`. Token penuh & IP mentah DILARANG masuk log (hanya hash prefix-8) — aman untuk audit. Tanpa duplikasi per-route; volume dijaga kecil (hanya status auth).
+- **Test:** `tests/unit/auth-access-log.test.ts` (9) + `tests/integration/auth-access-log.test.ts` (4: 401/503 tercatat, 200 tidak, token tak bocor).
+- **Status:** RESOLVED. Counter in-memory per jam untuk alert opsional belum dibuat (bisa ditambah di atas log ini bila diperlukan).
 
 ---
 
@@ -358,12 +352,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 141. [Auth] `StaffAuthService.validateSession` belum punya kontrak 503 seperti admin (2026-09-26) — OPEN
+## 141. [Auth] `StaffAuthService.validateSession` belum punya kontrak 503 seperti admin (2026-09-26) — RESOLVED (2026-09-28)
 
-- **Gejala:** perbaikan anti-logout-paksa (CHANGELOG 2026-09-26) membedakan 503 (DB mati) vs 401 (token invalid) hanya untuk **sesi admin** (`AdminSessionService`). Jalur staff (`staff-auth.service.ts`) masih menelan error DB → `null` → 401 ambigu di `/api/staff/auth/*` & preHandler `staff.route.ts` (cabang cookie staff).
-- **Dampak saat ini:** frontend staff sudah dilindungi dari penghapusan token (helper `sessionRestore.ts` memperlakukan timeout/5xx sebagai `'network'`), tetapi DB-error yang termanifestasi sebagai 401 dari jalur staff murni (tanpa cookie admin) masih bisa mengakhiri sesi lebih agresif dari seharusnya.
-- **Rencana (DITUNDA):** seragamkan `StaffAuthService.validateSession` ke pola sama (`SessionStoreUnavailable` + tombstone + hot cache keyed-hash) dan pemetaan 503 di `staff.route.ts` cabang staff + `staff/auth.subroute.ts`; unit test kontrak serupa.
-- **Status:** OPEN — sengaja dipisah agar fix admin (yang menutup insiden live) tidak melebar blast radius-nya.
+- **Gejala:** perbaikan anti-logout-paksa (CHANGELOG 2026-09-26) membedakan 503 (DB mati) vs 401 (token invalid) hanya untuk **sesi admin** (`AdminSessionService`). Jalur staff (`staff-auth.service.ts`) menelan error DB → `null` → 401 ambigu di `/api/staff/auth/*` & preHandler `staff.route.ts` (cabang cookie staff).
+- **Perbaikan (fondasional):** `StaffAuthService.validateSession` kini melempar `SessionStoreUnavailable` (impor dari `admin-session.service.ts` — satu kelas sinyal, bukan duplikat) saat query DB error; `null` hanya untuk token benar-benar invalid/expired/revoked/inaktif. Pemetaan **503** `SESSION_STORE_UNAVAILABLE` dipasang di SEMUA call-site: `staff.route.ts` (preHandler), `staff/auth.subroute.ts` (restore), `admin/auth.subroute.ts` (restore + /me cabang staff), `admin.route.ts` (preHandler cabang staff); `media.route.ts` fail-closed (deny, bukan 500 — media bukan jalur logout). Tipe `StaffSessionWithStaff` diekspor agar `include: { staff }` tidak hilang dari inferensi.
+- **Test:** `tests/unit/staff-session-store.test.ts` (5) + 2 integrasi di `tests/integration/staff-routes.test.ts` + kontrak 503 staff-store di `tests/integration/admin-auth-signal-contract.test.ts`.
+- **Status:** RESOLVED. (Tombstone/hot-cache keyed-hash untuk staff belum ditambah — paritas fungsional sinyal 503 sudah tercapai; cache adalah optimasi, dicatat bila perlu.)
 
 ---
 
