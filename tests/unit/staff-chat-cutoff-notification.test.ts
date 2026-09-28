@@ -20,7 +20,7 @@ const HOUR = 60 * 60 * 1000;
  * kasus batas, plus integrasi service/router untuk memastikan gate benar-benar
  * terpasang di jalur nyata (bukan hanya fungsi murni).
  */
-describe('Staff Chat Window Lifecycle (H-3 jam s/d +3 jam, cut ganti hari)', () => {
+describe('Staff Chat Window Lifecycle (H-3 jam s/d +1 jam, cut ganti hari)', () => {
   // 12:00 WIB (05:00 UTC) — aman dari batas tengah malam.
   const NOW = new Date('2026-09-26T05:00:00.000Z');
   const BOOKING_TODAY = new Date('2026-09-26T05:00:00.000Z'); // 12:00 WIB
@@ -45,18 +45,26 @@ describe('Staff Chat Window Lifecycle (H-3 jam s/d +3 jam, cut ganti hari)', () 
       expect(evaluateChatWindowForBooking(BOOKING_TODAY, { now }).open).toBe(true);
     });
 
-    it('1 jam pasca treatment selesai -> masih terbuka', () => {
-      const now = new Date(BOOKING_TODAY.getTime() + 3 * HOUR);
-      const completedAt = new Date(now.getTime() - 1 * HOUR);
+    it('30 menit pasca treatment selesai -> masih terbuka', () => {
+      const now = new Date(BOOKING_TODAY.getTime() + 2 * HOUR);
+      const completedAt = new Date(now.getTime() - 0.5 * HOUR);
       const s = evaluateChatWindowForBooking(BOOKING_TODAY, { now, completedAt });
       expect(s.open).toBe(true);
       expect(s.reason).toBe('OPEN');
     });
 
-    it('tepat +3 jam pasca selesai -> masih terbuka (batas inklusif)', () => {
-      const now = new Date(BOOKING_TODAY.getTime() + 4 * HOUR);
-      const completedAt = new Date(now.getTime() - 3 * HOUR);
+    it('tepat +1 jam pasca selesai -> masih terbuka (batas inklusif)', () => {
+      const now = new Date(BOOKING_TODAY.getTime() + 3 * HOUR);
+      const completedAt = new Date(now.getTime() - 1 * HOUR);
       expect(evaluateChatWindowForBooking(BOOKING_TODAY, { now, completedAt }).open).toBe(true);
+    });
+
+    it('1.5 jam pasca treatment selesai -> tertutup (CLOSED_AFTER_COMPLETE)', () => {
+      const now = new Date(BOOKING_TODAY.getTime() + 3 * HOUR);
+      const completedAt = new Date(now.getTime() - 1.5 * HOUR);
+      const s = evaluateChatWindowForBooking(BOOKING_TODAY, { now, completedAt });
+      expect(s.open).toBe(false);
+      expect(s.reason).toBe('CLOSED_AFTER_COMPLETE');
     });
 
     it('4 jam pasca treatment selesai -> tertutup (CLOSED_AFTER_COMPLETE)', () => {
@@ -144,22 +152,22 @@ describe('Staff Chat Window Lifecycle (H-3 jam s/d +3 jam, cut ganti hari)', () 
       expect(owned).toBe(false);
     });
 
-    it('selesai 1 jam lalu -> akses chat masih dibuka (true)', async () => {
+    it('selesai 30 menit lalu -> akses chat masih dibuka (true)', async () => {
       mockConversation();
-      const completedAt = new Date(Date.now() - 1 * HOUR);
+      const completedAt = new Date(Date.now() - 0.5 * HOUR);
       (prisma.reservation.findMany as any).mockResolvedValue([
-        { id: 'r-1', booking_date: new Date(Date.now() - 2 * HOUR), status: 'completed', purchase_occurred_at: completedAt, updated_at: completedAt },
+        { id: 'r-1', booking_date: new Date(Date.now() - 1 * HOUR), status: 'completed', purchase_occurred_at: completedAt, updated_at: completedAt },
       ]);
 
       const owned = await StaffReservationService.assertConversationOwnedByStaffToday('conv-1', 'staff-1', tenantId);
       expect(owned).toBe(true);
     });
 
-    it('selesai 4 jam lalu -> akses chat ditutup (false)', async () => {
+    it('selesai 2 jam lalu -> akses chat ditutup (false)', async () => {
       mockConversation();
-      const completedAt = new Date(Date.now() - 4 * HOUR);
+      const completedAt = new Date(Date.now() - 2 * HOUR);
       (prisma.reservation.findMany as any).mockResolvedValue([
-        { id: 'r-1', booking_date: new Date(Date.now() - 5 * HOUR), status: 'completed', purchase_occurred_at: completedAt, updated_at: completedAt },
+        { id: 'r-1', booking_date: new Date(Date.now() - 3 * HOUR), status: 'completed', purchase_occurred_at: completedAt, updated_at: completedAt },
       ]);
 
       const owned = await StaffReservationService.assertConversationOwnedByStaffToday('conv-1', 'staff-1', tenantId);
@@ -231,14 +239,14 @@ describe('Staff Chat Window Lifecycle (H-3 jam s/d +3 jam, cut ganti hari)', () 
       expect(staffPushSpy).not.toHaveBeenCalled();
     });
 
-    it('selesai 4 jam lalu: push staf dibatalkan, push admin tetap terkirim', async () => {
+    it('selesai 2 jam lalu: push staf dibatalkan, push admin tetap terkirim', async () => {
       const adminPushSpy = vi.spyOn(webPushService, 'sendPushToRole').mockResolvedValue({ sent: 1, failed: 0 });
       const staffPushSpy = vi.spyOn(webPushService, 'sendPushToStaff').mockResolvedValue({ sent: 1, failed: 0 });
 
-      const completedAt = new Date(Date.now() - 4 * HOUR);
+      const completedAt = new Date(Date.now() - 2 * HOUR);
       (prisma.reservation.findFirst as any).mockResolvedValueOnce({
         assigned_staff_id: 'staff-1',
-        booking_date: new Date(Date.now() - 5 * HOUR),
+        booking_date: new Date(Date.now() - 3 * HOUR),
         status: 'completed',
         purchase_occurred_at: completedAt,
         updated_at: completedAt,

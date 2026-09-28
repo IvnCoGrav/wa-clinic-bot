@@ -503,7 +503,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       case 'NOT_YET_OPEN':
         return `Chat aktif H-3 jam sebelum jadwal (${formatTime(task.bookingDate)})`;
       case 'CLOSED_AFTER_COMPLETE':
-        return 'Chat sudah ditutup (3 jam setelah treatment selesai)';
+        return 'Chat sudah ditutup (1 jam setelah treatment selesai)';
       case 'PREVIOUS_DAY':
         return 'Chat riwayat kunjungan lampau tidak dapat dibuka';
       case 'NO_ACTIVE_BOOKING':
@@ -2686,29 +2686,34 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         </div>
 
                         {/* Quick Action Buttons: Chat, Navigasi, Infokan OTW */}
-                        <div className="grid grid-cols-3 gap-2 pt-2 mt-1">
-                          {isChatWindowOpen(task) ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenChat(task);
-                              }}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
-                              title="Buka Ruang Percakapan WhatsApp Pasien"
-                            >
-                              <MessageSquare size={15} className="text-[#008069]" />
-                              <span>Chat</span>
-                            </button>
-                          ) : (
-                            <div
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#8696a0] bg-[#f0f2f5] rounded-xl border border-[#e9edef] cursor-not-allowed"
-                              title={chatLockedTitle(task)}
-                            >
-                              <MessageSquare size={15} className="text-[#8696a0]" />
-                              <span>Chat Terkunci</span>
-                            </div>
-                          )}
+                        {(() => {
+                          const isChatHidden = (task.status === 'completed' && !isChatWindowOpen(task)) || task.chatWindow?.reason === 'CLOSED_AFTER_COMPLETE';
+                          return (
+                            <div className={`grid ${isChatHidden ? 'grid-cols-2' : 'grid-cols-3'} gap-2 pt-2 mt-1`}>
+                              {!isChatHidden && (
+                                isChatWindowOpen(task) ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenChat(task);
+                                    }}
+                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                                    title="Buka Ruang Percakapan WhatsApp Pasien"
+                                  >
+                                    <MessageSquare size={15} className="text-[#008069]" />
+                                    <span>Chat</span>
+                                  </button>
+                                ) : (
+                                  <div
+                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#8696a0] bg-[#f0f2f5] rounded-xl border border-[#e9edef] cursor-not-allowed"
+                                    title={chatLockedTitle(task)}
+                                  >
+                                    <MessageSquare size={15} className="text-[#8696a0]" />
+                                    <span>Chat Terkunci</span>
+                                  </div>
+                                )
+                              )}
 
                           {task.navigationUrl || task.mapsUrl ? (
                             <a
@@ -2805,6 +2810,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             </button>
                           )}
                         </div>
+                      );
+                    })()}
 
                         {/* Bar Terapis Penanggung Jawab & Delegasi (Khusus Supervisor / Mode Tim) */}
                         {isSupervisor && (

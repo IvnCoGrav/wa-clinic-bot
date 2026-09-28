@@ -161,7 +161,7 @@ export function evaluateChatWindowForBooking(
   const now = options.now ? new Date(options.now) : new Date();
   if (options.isSupervisor) return { open: true, reason: 'SUPERVISOR' };
 
-  const config = options.config || { openHoursBefore: 3, closeHoursAfter: 3 };
+  const config = options.config || { openHoursBefore: 3, closeHoursAfter: 1 };
 
   if (!bookingDate) return { open: false, reason: 'NO_ACTIVE_BOOKING' };
   const booking = new Date(bookingDate);

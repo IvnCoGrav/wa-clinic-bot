@@ -13,16 +13,16 @@ import { DEFAULT_TENANT_ID } from './tenant';
  * Sumber nilai (prioritas):
  * 1. Cache in-memory (TTL 5 menit)
  * 2. DB `Tenant.settings.staffChatWindow = { openHoursBefore, closeHoursAfter }`
- * 3. Default: 3 jam / 3 jam
+ * 3. Default: 3 jam / 1 jam
  */
 export interface StaffChatWindowConfig {
   openHoursBefore: number; // default 3
-  closeHoursAfter: number; // default 3
+  closeHoursAfter: number; // default 1
 }
 
 const DEFAULT_STAFF_CHAT_WINDOW_CONFIG: StaffChatWindowConfig = {
   openHoursBefore: 3,
-  closeHoursAfter: 3,
+  closeHoursAfter: 1,
 };
 
 const MIN_HOURS = 0;

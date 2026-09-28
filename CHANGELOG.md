@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-27 — Cutoff Chat Terapis 1 Jam Pasca-Treatment & Penghilangan Tombol Chat
+
+- **Latar & Kebutuhan Bisnis:** Permintaan revisi operasional klinik: jendela akses chat terapis diperpendek dari 3 jam menjadi 1 jam setelah treatment ditandai selesai (`completed`). Selain itu, setelah 1 jam berlalu, tombol pesan/chat pada kartu tugas terapis dihilangkan sepenuhnya (bukan menampilkan tombol abu-abu "Chat Terkunci") dan susunan tombol aksi otomatis menyesuaikan menjadi 2 kolom proporsional (`grid-cols-2`).
+- **Fixed — Backend Config & Service:**
+  - `src/config/staff-chat-window-config.ts`: Nilai default `closeHoursAfter` diubah dari `3` menjadi `1` jam (tetap tenant-aware via DB `Tenant.settings.staffChatWindow`).
+  - `src/services/staff-reservation.service.ts`: Fallback default di `evaluateChatWindowForBooking()` diubah menjadi `closeHoursAfter: 1`.
+- **Fixed — Frontend Terapis (`StaffToday.tsx`):**
+  - Tooltip tooltip status `chatLockedTitle` untuk `CLOSED_AFTER_COMPLETE` diperbarui menjadi `"Chat sudah ditutup (1 jam setelah treatment selesai)"`.
+  - Pada render kartu jadwal terapis, evaluasi `isChatHidden`: jika treatment sudah berstatus `completed` dan jendela chat telah tertutup (`!isChatWindowOpen` atau `CLOSED_AFTER_COMPLETE`), tombol Chat ditiadakan sepenuhnya (`null`), dan layout quick action beralih dari `grid-cols-3` menjadi `grid-cols-2` ([Navigasi] dan [Selesai]).
+  - Status pra-jadwal sebelum H-3 jam (`NOT_YET_OPEN`) tetap mempertahankan tombol "Chat Terkunci" 3-kolom agar terapis mengetahui estimasi waktu buka chat.
+- **Tests & Verifikasi:**
+  - `tests/unit/staff-chat-cutoff-notification.test.ts`: Diperbarui untuk menguji batas deterministik 1 jam (30 menit pasca selesai $\rightarrow$ buka, batas inklusif tepat 1 jam $\rightarrow$ buka, 1.5 jam & 2 jam $\rightarrow$ tutup `CLOSED_AFTER_COMPLETE`). Semua 22 test lulus 100%.
+  - Dashboard frontend build (`npm run build` di `packages/admin-dashboard`) sukses tanpa error (0 warning).
+  - Backend compile (`tsc`) sukses tanpa error.
+
 #### 2026-09-27 — Fix false-positive banner "FORM RESERVASI MASUK" + pelabelan audiens MOMS
 
 - **Latar (bukti akar masalah):** membuka chat Bunda Inggrid (6288000000003) memunculkan
