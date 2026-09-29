@@ -45,9 +45,9 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
     expect(res).not.toContain('Kids');
   });
 
-  it('6. "prenatal massage" → hanya Prenatal Gentle Massage (Pijat Hamil)', () => {
+  it('6. "prenatal massage" → hanya Pregnant Massage (Pijat Hamil)', () => {
     const res = treatmentCatalogService.searchCatalog('prenatal massage itu apa');
-    expect(res).toContain('Prenatal Massage');
+    expect(res).toContain('Pregnant Massage');
     expect(res).not.toContain('Oksitosin');
   });
 
@@ -87,9 +87,9 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
   });
 
   // ============ B. Nama Sebagian / Frasa Kunci ============
-  it('13. "pijat hamil" → Prenatal Massage (mengandung "Pijat Hamil")', () => {
+  it('13. "pijat hamil" → Pregnant Massage (mengandung "Pijat Hamil")', () => {
     const res = treatmentCatalogService.searchCatalog('pijat hamil itu aman ga');
-    expect(res).toContain('Prenatal Massage');
+    expect(res).toContain('Pregnant Massage');
     expect(res).not.toContain('Pijat Ceria');
   });
 

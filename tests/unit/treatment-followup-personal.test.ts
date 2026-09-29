@@ -110,12 +110,12 @@ describe('Personal Treatment Follow-Up (20 Test Cases)', () => {
     expect(clean).toContain('Ceria');
   });
 
-  it('16. "prenatal massage" → extract nama clean "Pijat Ibu Hamil / Prenatal Gentle Massage"', () => {
+  it('16. "prenatal massage" → extract nama clean "Pijat Ibu Hamil / Pregnant Massage"', () => {
     const res = treatmentCatalogService.searchCatalog('prenatal massage');
     const firstLine = res.split('\n').find((l) => l.startsWith('• *'))!;
     const m = firstLine.match(/• \*([^*]+)\*/)!;
     const clean = m[1].trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-    expect(clean).toContain('Prenatal');
+    expect(clean).toContain('Pregnant');
   });
 
   it('17. "cukur rambut bayi" → extract nama clean "Cukur Rambut Bayi"', () => {

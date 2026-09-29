@@ -109,8 +109,8 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
-      "maxAgeMonths": 12,
-      "label": "0 - 12 Bulan"
+      "maxAgeMonths": 24,
+      "label": "0 - 24 Bulan"
     },
     "durationMinutes": 15,
     "originalPrice": 35000,
@@ -149,22 +149,6 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "promoPrice": 30000,
     "description": "Memandikan bayi secara higienis, lembut, dan steril oleh bidan langsung di rumah.",
     "isActive": true
-  },
-  {
-    "id": "moms-relaksasi",
-    "name": "Pijat Relaksasi Ibu (Women Relaxation Massage)",
-    "category": "MOMS",
-    "serviceType": "STANDARD",
-    "ageTier": {
-      "minAgeMonths": 0,
-      "maxAgeMonths": null,
-      "label": "Khusus Wanita / Ibu"
-    },
-    "durationMinutes": 60,
-    "originalPrice": 110000,
-    "promoPrice": 85000,
-    "description": "Pijat relaksasi seluruh tubuh untuk wanita/ibu yang lelah beraktivitas harian.",
-    "isActive": false
   },
   {
     "id": "baby-cukur-pijat-terapi",
@@ -492,7 +476,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-prenatal-massage",
-    "name": "Kala Mom – Prenatal Massage",
+    "name": "Kala Mom – Pregnant Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -502,8 +486,40 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     },
     "durationMinutes": 60,
     "originalPrice": 120000,
-    "promoPrice": 90000,
+    "promoPrice": 100000,
     "description": "Pijat khusus ibu hamil posisi miring aman untuk meredakan pegal pinggang, kaki bengkak & relaksasi.",
+    "isActive": true
+  },
+  {
+    "id": "moms-induksi-massage",
+    "name": "Kala Mom – Induksi Massage",
+    "category": "MOMS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Hamil Aterm (37+ Minggu)"
+    },
+    "durationMinutes": 40,
+    "originalPrice": 70000,
+    "promoPrice": 50000,
+    "description": "Pijat stimulasi titik akupresur khusus untuk membantu merangsang kontraksi dan proses induksi alami persalinan pada usia kehamilan aterm.",
+    "isActive": true
+  },
+  {
+    "id": "moms-induksi-fullbody",
+    "name": "Kala Mom – Induksi Massage Fullbody",
+    "category": "MOMS",
+    "serviceType": "STANDARD",
+    "ageTier": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": null,
+      "label": "Ibu Hamil Aterm (37+ Minggu)"
+    },
+    "durationMinutes": 60,
+    "originalPrice": 130000,
+    "promoPrice": 105000,
+    "description": "Pijat relaksasi seluruh tubuh dipadukan dengan titik stimulasi induksi alami untuk ibu hamil menjelang HPL.",
     "isActive": true
   },
   {
@@ -714,10 +730,10 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "durationMinutes": 100,
     "originalPrice": 190000,
     "promoPrice": 150000,
-    "description": "[BUNDLE:moms-prenatal-massage,baby-massage-ceria-newborn] Pijat relaksasi ibu + Pijat Ceria Newborn dalam 1 sesi kunjungan bidan.",
+    "description": "[BUNDLE:moms-postpartum-massage,baby-massage-ceria-newborn] Paket pemulihan ibu pasca persalinan + Pijat Ceria Newborn dalam 1 sesi kunjungan bidan.",
     "isActive": true,
     "bundleItemIds": [
-      "moms-prenatal-massage",
+      "moms-postpartum-massage",
       "baby-massage-ceria-newborn"
     ]
   },
@@ -1316,6 +1332,7 @@ export class TreatmentCatalogService {
       oksitoksin: 'oksitosin',
       oksifull: 'oksitosin',
       therapist: 'terapi',
+      prenatal: 'pregnant',
     };
     const stop = new Set(['addon', 'add', 'on', 'dan', 'the', 'paket', 'spa', 'treatment', 'layanan', 'kala']);
 
@@ -1821,7 +1838,7 @@ export class TreatmentCatalogService {
     const allServices = this.getAllServices();
 
     const ageMonths = parseAgeTextToMonths(userText);
-    const isMaternal = /\b(hamil|bumil|prenatal|nifas|laktasi|menyusui|trimester|oksitosin|induksi|postpartum|payudara|breast)\b/i.test(userText);
+    const isMaternal = /\b(hamil|bumil|prenatal|pregnant|pregnancy|nifas|laktasi|menyusui|trimester|oksitosin|induksi|postpartum|payudara|breast)\b/i.test(userText);
     const isKidKeyword = /\b(anak|kids|balita|paud|tk|bocah)\b/i.test(userText);
     const isBabyKeyword = /\b(bayi|baby|newborn|selapan|infant)\b/i.test(userText);
 
@@ -1922,6 +1939,8 @@ export class TreatmentCatalogService {
       'menyusui': 'laktasi',      // ibu menyusui
       'hamil': 'hamil',           // canonical
       'prenatal': 'hamil',        // prenatal massage
+      'pregnant': 'hamil',        // pregnant massage
+      'pregnancy': 'hamil',       // pregnancy massage
       'oksitosin': 'oksitosin',   // sudah ada di nama
       'nifas': 'pasca melahirkan', // masa nifas
       'bayi': 'bayi',             // baby
