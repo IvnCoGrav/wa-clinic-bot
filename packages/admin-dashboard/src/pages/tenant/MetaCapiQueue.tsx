@@ -47,6 +47,7 @@ interface QueueItem {
   };
   attribution: {
     isPaid: boolean;
+    ctwa_clid?: string | null;
     trackingCode: string | null;
     landingUrl: string | null;
     fbp?: string | null;
@@ -99,16 +100,24 @@ const statusBadge = (s: string | null | undefined) => {
   }
 };
 
-const attributionBadge = (isPaid: boolean) =>
-  isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
-      PAID
+const attributionBadge = (attribution: QueueItem['attribution']) => {
+  if (attribution.ctwa_clid) {
+    return (
+      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
+        CTWA Direct
+      </span>
+    );
+  }
+  return attribution.isPaid ? (
+    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
+      Web LP
     </span>
   ) : (
     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#2a3942] border border-slate-200 dark:border-[#374248] text-slate-700 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
       ORGANIC
     </span>
   );
+};
 
 const utmText = (u: QueueItem['utm']) => {
   const parts = [u.campaign, u.source, u.medium].filter(Boolean);
@@ -307,12 +316,15 @@ const buildCapiJsonPayload = (item: QueueItem) => {
   const treatmentLow = (item.treatment_detail || '' + ' ' + cleanTreatments.join(' ')).toLowerCase();
   const isMoms = treatmentLow.includes('moms') || treatmentLow.includes('ibu') || treatmentLow.includes('hamil') || treatmentLow.includes('nifas') || treatmentLow.includes('laktasi');
 
+  const isCtwa = Boolean(item.attribution.ctwa_clid);
+
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
     event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`,
     event_source_url: landingUrl,
-    action_source: 'chat',
+    action_source: isCtwa ? 'business_messaging' : 'chat',
+    ...(isCtwa ? { messaging_channel: 'whatsapp' } : {}),
     user_data: {
       ph: item.customer.phone ? `sha256(${item.customer.phone.replace(/\D/g, '')})` : undefined,
       fn: resolvedFn ? `sha256(${resolvedFn.toLowerCase()})` : undefined,
@@ -325,6 +337,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
       ge: isMoms ? `sha256(f)` : undefined,
       fbp: item.attribution.fbp || (item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
       fbc: resolvedFbc,
+      ctwa_clid: item.attribution.ctwa_clid || undefined,
       client_ip_address: item.attribution.ipAddress || (item.attribution.isPaid ? '114.122.34.56' : undefined),
       client_user_agent: item.attribution.userAgent || (item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
     },
@@ -763,7 +776,7 @@ export const MetaCapiQueue: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          {attributionBadge(item.attribution.isPaid)}
+                          {attributionBadge(item.attribution)}
                           {customerTypeBadge(item)}
                           {item.attribution.trackingCode && (
                             <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
@@ -943,7 +956,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                   {/* Attribution & Distance Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                    {attributionBadge(item.attribution.isPaid)}
+                    {attributionBadge(item.attribution)}
                     {customerTypeBadge(item)}
                     {item.attribution.trackingCode && (
                       <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">

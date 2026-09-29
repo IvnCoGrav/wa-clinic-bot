@@ -4,6 +4,46 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-29 - LiveChat: Server-Side Filter (Unread/Reservasi) + Perbaikan Modal Label & Badge Unread Global
+
+- **Konteks:** Tab Unread/Reservasi hanya memfilter 50 percakapan yang sudah
+  ditarik ke memori browser, sehingga (a) tombol "Muat lebih banyak" muncul palsu
+  saat hanya 1 chat unread, (b) titik hijau tab Unread tidak muncul bila chat unread
+  berada di luar 50 chat pertama, dan (c) modal label lenyap saat digulir.
+- **Fixed - Filter server-side (`src/services/conversation.service.ts`):** `listConversations`
+  menerima parameter `filter: 'all' | 'unread' | 'reservation'`. Kondisi dibangun via
+  `AND` eksplisit (search OR + unread OR tidak lagi saling menimpa `where.OR`).
+  `unread` = `is_manual_unread:true` ATAU pesan `INBOUND` dengan `read_at:null`.
+  `reservation` = reservasi aktif (`confirmed` | `pending` | `hold` valid <2 jam),
+  paritas persis dengan logika klien. Fallback in-memory (DB offline) menerapkan
+  filter yang sama.
+- **Fondasional - Domain status reservasi (`src/domain/reservation-status.ts`, baru):**
+  Single Source of Truth `ACTIVE_RESERVATION_STATUSES` + jendela validitas hold
+  (`ACTIVE_HOLD_WINDOW_MS` 2 jam) + `isActiveReservation`/`isHoldActive`. `copilot-tools.ts`
+  kini mengimpor & me-reexport konstanta dari modul daun ini (anti-duplikasi status).
+- **Changed - Pass-through & route (`src/services/live-chat.service.ts`,
+  `src/routes/admin/livechat.subroute.ts`):** `filter` divalidasi dari query,
+  diteruskan ke service, dan disertakan dalam `cacheKey` (tidak tertukar antar-tab).
+  `hasMore` kini dihitung dari total terfilter di DB.
+- **Fixed - Modal label (`packages/admin-dashboard/.../LiveChatMonitor.tsx`):**
+  hapus `window.addEventListener('scroll', handleClose, true)` yang mencegat scroll
+  internal daftar label. Tambah body scroll-lock (`overflow:hidden` + kompensasi
+  lebar scrollbar), tutup via `Escape`, dan `overscroll-contain` pada kedua daftar
+  label (mobile/desktop).
+- **Fixed - Paging & badge (`LiveChatMonitor.tsx`):** `filter=unread|reservation`
+  dikirim ke server; offset server murni (`listOffsetRef`, bukan panjang array lokal
+  yang tercemar ghost-chat prepend); ghost-preserve dinonaktifkan untuk tab terfilter.
+  Titik hijau tab Unread kini bersumber `totalUnreadCount` global dari
+  `/api/admin/live-chat/unread-count` (debounced 1.5s, disinkronkan via SSE).
+- **UX - Empty state kontekstual:** pesan khusus per tab (unread: "Semua pesan sudah
+  dibaca"; reservasi: "Belum ada reservasi aktif") + guard tombol load-more saat
+  daftar kosong.
+- **Test - `tests/unit/conversation-filter.test.ts`:** 10 test adversarial (kontrak
+  where Prisma untuk unread/reservasi, kombinasi search+unread via AND, hold-expiry,
+  paritas fallback memory, pass-through service, guard domain). Regression gate:
+  `npm run build` Exit 0, dashboard build Exit 0, full suite 521 file / 4230 test hijau.
+- **Sisa debt:** `docs/KNOWN_ISSUES.md` #169 (indeks komposit unread + unit badge).
+
 #### 2026-09-29 - Remediasi Kebocoran Notifikasi Admin ke Perangkat Terapis (Ghost Push Subscription & RBAC Scope)
 
 - **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS, mis. Anne Lawrencia)

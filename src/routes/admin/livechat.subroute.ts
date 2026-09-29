@@ -83,7 +83,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations',
     async (
       request: FastifyRequest<{
-        Querystring: { limit?: string; offset?: string; mode?: string; search?: string; label?: string };
+        Querystring: { limit?: string; offset?: string; mode?: string; search?: string; label?: string; filter?: string };
       }>,
       reply
     ) => {
@@ -96,11 +96,15 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
         const search = request.query.search?.trim();
         const label = request.query.label?.trim();
+        // Filter server-side (dihitung dari total di DB, bukan 50 item yang sudah ditarik browser).
+        const filterRaw = request.query.filter?.trim();
+        const filter: 'all' | 'unread' | 'reservation' =
+          filterRaw === 'unread' || filterRaw === 'reservation' ? filterRaw : 'all';
         const effectiveMode: 'all' | 'real' | 'sandbox' =
           process.env.NODE_ENV === 'production' && mode === 'all' ? 'real' : mode;
 
-        // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik & tanpa filter label)
-        const cacheKey = !search && !label ? `livechat:list:${tenantId}:${effectiveMode}:${limit}:${offset}` : null;
+        // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik & tanpa filter label/filter tab)
+        const cacheKey = !search && !label && filter === 'all' ? `livechat:list:${tenantId}:${effectiveMode}:${limit}:${offset}` : null;
         if (cacheKey) {
           const cached = responseCacheService.get(cacheKey);
           if (cached) {
@@ -111,8 +115,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any);
-        const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, data: items };
+        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any, filter);
+        const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, filter, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
         }

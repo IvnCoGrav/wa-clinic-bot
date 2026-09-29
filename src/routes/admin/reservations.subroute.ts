@@ -2998,6 +2998,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
             attribution: {
               isPaid: !!r.customer?.adClick,
+              ctwa_clid: r.customer?.adClick?.ctwa_clid || null,
               trackingCode: r.customer?.adClick?.trackingCode || null,
               landingUrl: canonicalLandingUrl,
               fbp: r.customer?.adClick?.fbp || null,
@@ -3081,6 +3082,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
             attribution: {
               isPaid: !!c.adClick,
+              ctwa_clid: c.adClick?.ctwa_clid || null,
               trackingCode: c.adClick?.trackingCode || null,
               landingUrl: canonicalLandingUrl,
             },
@@ -3125,6 +3127,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 customer: { name: (c as any).name || 'Bunda', phone: (c as any).phone || '' },
                 attribution: {
                   isPaid: !!(c as any).adClick,
+                  ctwa_clid: (c as any).adClick?.ctwa_clid || null,
                   trackingCode: (c as any).adClick?.trackingCode || null,
                   landingUrl: canonicalLandingUrl,
                 },

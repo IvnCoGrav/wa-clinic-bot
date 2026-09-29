@@ -3,6 +3,34 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 169. [LiveChat] Sisa debt server-side filter unread/reservasi (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Filter tab Unread/Reservasi dipindah dari client-side ke server-side
+  (`conversation.service.ts` param `filter`, route `?filter=`) agar paginasi & `hasMore`
+  akurat dari total DB. Lihat CHANGELOG.
+- **169a — Indeks komposit belum ada (OPEN):** Query `filter=unread`
+  (`is_manual_unread` OR pesan INBOUND `read_at:null`) dan `filter=reservation`
+  (relasi `reservations.status/booking_date`) memakai `skip/offset` +
+  `orderBy is_pinned,last_message_at` tanpa indeks komposit khusus. Pada tenant
+  besar (ribuan percakapan) ini berpotensi seq-scan lambat. Kandidat migrasi indeks
+  (BUKAN katalog bisnis): `messages(conversation_id, direction, read_at)` parsial,
+  `conversations(tenant_id, is_manual_unread)`, `reservations(customer_id, status)`.
+  Belum dieksekusi — butuh rencana migrasi indeks terpisah + uji EXPLAIN di produksi.
+- **169b — Unit `unread-count` campur (by-design):** `/api/admin/live-chat/unread-count`
+  menjumlahkan **jumlah pesan** inbound unread + **jumlah percakapan** manual-unread
+  (`message.service.ts:getTotalUnreadCount`). Cocok untuk badge `>0`, TIDAK cocok
+  sebagai "jumlah percakapan unread" untuk ekspektasi paging. Badge global memakai
+  nilai ini hanya sebagai sinyal boolean; paging tetap dari `hasMore` server.
+- **169c — Hold-expiry duplikat definisi (OPEN):** Jendela 2 jam kini ada di domain
+  (`ACTIVE_HOLD_WINDOW_MS`) untuk server, sementara `LiveChatMonitor.tsx` (paket
+  dashboard terpisah) masih mendefinisikan `isHoldValid` lokal. Sulit dijaga identik
+  karena monorepo tanpa workspace sharing. Bila kebijakan hold berubah, ubah KEDUA
+  tempat (atau terbitkan shared util lintas-paket).
+- **169d — Preserve active chat di tab terfilter (by-design):** Ghost-preserve
+  sengaja dinonaktifkan untuk tab unread/reservasi (agar chat yang baru dibaca tidak
+  nyangkut). Konsekuensi: chat aktif bisa keluar dari daftar setelah mark-read —
+  dianggap benar, bukan bug.
+
 ## 168. [Push/RBAC] Remediasi ghost subscription & scope push therapist (2026-09-29) - OPEN (sebagian by-design)
 
 - **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS) bocor ke perangkat

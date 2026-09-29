@@ -35,8 +35,9 @@ export interface CopilotTool {
 
 const MAX_ROWS = 20;
 
-/** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
-export const ACTIVE_RESERVATION_STATUSES = ['confirmed', 'pending', 'hold'];
+/** Status reservasi "jadwal aktif" — Single Source of Truth di domain/reservation-status. */
+import { ACTIVE_RESERVATION_STATUSES } from '../../domain/reservation-status';
+export { ACTIVE_RESERVATION_STATUSES };
 
 /** Validasi string tanggal "YYYY-MM-DD" (bukan kalimat bebas dari LLM). */
 export function isValidIsoDate(value: unknown): boolean {

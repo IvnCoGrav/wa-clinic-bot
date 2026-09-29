@@ -154,9 +154,10 @@ export class LiveChatService {
     offset = 0,
     mode: 'all' | 'real' | 'sandbox' = 'all',
     search?: string,
-    label?: string
+    label?: string,
+    filter: 'all' | 'unread' | 'reservation' = 'all'
   ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any);
+    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter);
     if (conversations.length === 0) {
       return { items: [], hasMore: false };
     }

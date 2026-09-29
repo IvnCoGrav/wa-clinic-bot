@@ -151,4 +151,38 @@ describe('extractWahaAdReferral (WAHA CTWA)', () => {
     expect(extractWahaAdReferral([])).toBeUndefined();
     expect(extractWahaAdReferral({})).toBeUndefined();
   });
+
+  it('H. decodes Base64 ctwaPayload / conversionData from Baileys contextInfo', () => {
+    const rawClid = 'AfiAndhVXv11SVsc5IxbflJRvrJOHBl2GoLULF8ZUcAyk7pBCPpmUOyoG7ttTwqKD7yX2w9TBCtAqBiHT77Hma1DafFvhNHY0lHzbF863E';
+    const b64Clid = Buffer.from(rawClid).toString('base64');
+
+    const payload = {
+      _data: {
+        message: {
+          extendedTextMessage: {
+            text: 'Tes',
+            contextInfo: {
+              conversionSource: 'FB_Ads',
+              conversionData: b64Clid,
+              ctwaPayload: b64Clid,
+              entryPointConversionApp: 'instagram',
+              entryPointConversionSource: 'ctwa_ad',
+              externalAdReply: {
+                title: 'PROMO KHUSUS SURABAYA & SIDOARJO!',
+                sourceUrl: 'https://www.instagram.com/p/Dd0LS7Pg8r3/',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const ref = extractWahaAdReferral(payload);
+    expect(ref).toBeDefined();
+    expect(ref?.ctwaClid).toBe(rawClid);
+    expect(ref?.sourceApp).toBe('instagram');
+    expect(ref?.sourceType).toBe('ctwa_ad');
+    expect(ref?.sourceUrl).toBe('https://www.instagram.com/p/Dd0LS7Pg8r3/');
+    expect(ref?.headline).toBe('PROMO KHUSUS SURABAYA & SIDOARJO!');
+  });
 });

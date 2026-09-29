@@ -989,6 +989,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, { skipFollowUpScheduling: true });
         const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, resolvedTenantId);
 
+        // Ingest CTWA referral jika pesan membawa metadata iklan (memastikan nomor admin/test tetap tercatat ad click-nya)
+        try {
+          const wahaReferral = extractWahaAdReferral(payload);
+          if (wahaReferral?.ctwaClid || (inboundContent && /(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]/i.test(inboundContent))) {
+            await matchAdClickAndFireContact({
+              bodyText: inboundContent,
+              isNewCustomerRecord: false,
+              customer: adminCustomer,
+              tenantId: resolvedTenantId,
+              referral: wahaReferral,
+            });
+          }
+        } catch (ctwaErr: any) {
+          console.warn('[BYPASS CTWA INGEST ERROR]', ctwaErr.message);
+        }
+
         await messageService.logMessage({
           tenantId: resolvedTenantId,
           conversationId: adminConversation.id,

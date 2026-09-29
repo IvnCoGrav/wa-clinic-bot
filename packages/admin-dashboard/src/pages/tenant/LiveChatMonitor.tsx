@@ -466,6 +466,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  // Indikator unread global dari DB (bukan hanya 50 chat pertama) — akurat walau
+  // chat unread berada di luar halaman yang termuat.
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip #160.
   const sourceFilterRef = useRef<SourceFilter>('all');
   useEffect(() => { sourceFilterRef.current = sourceFilter; }, [sourceFilter]);
@@ -489,6 +492,9 @@ export const LiveChatMonitor: React.FC = () => {
   const lastScrolledInChatQueryRef = useRef<string>('');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Offset server murni (jumlah item yang benar-benar ditarik dari DB, bukan panjang
+  // array lokal) — mencegah lompatan halaman akibat ghost-chat yang di-prepend.
+  const listOffsetRef = useRef(0);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
@@ -1148,27 +1154,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       setLoadingMore(true);
     }
     try {
-      const offset = reset ? 0 : chatsRef.current.length;
+      const offset = reset ? 0 : listOffsetRef.current;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
       // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
       // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
       // memakai filter terkini — mencegah reload mode salah (bug #160).
       const backendMode = sourceFilterRef.current === 'sandbox' ? 'sandbox' : 'real';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
+      // Filter unread/reservation dikirim ke server agar paginasi & hasMore akurat
+      // dari total sesungguhnya di DB, bukan hasil filter 50 item di memori browser.
+      const activeSource = sourceFilterRef.current;
+      const filterParam = activeSource === 'unread' || activeSource === 'reservation' ? `&filter=${activeSource}` : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}${filterParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
       });
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
+      listOffsetRef.current = reset ? data.length : listOffsetRef.current + data.length;
       if (reset) {
         // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama, pertahankan agar tidak hilang —
         // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
         const isSearchActive = !!(search && search.trim());
         const rawActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
-        // #160 ghost-chat guard: chat aktif HANYA dipertahankan bila modenya cocok dengan
-        // filter aktif — chat pasien real tidak boleh "nyangkut" di panel saat filter Sandbox.
-        const currentActive = rawActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
+        // Ghost-chat guard (#160 + tab terfilter): chat aktif HANYA dipertahankan
+        // (a) bila modenya cocok (real/sandbox), dan (b) di tab 'all'/'sandbox'.
+        // Di tab unread/reservation, chat yang baru saja dibaca TIDAK boleh "nyangkut".
+        const canPreserveActive = activeSource === 'all' || activeSource === 'sandbox';
+        const currentActive = rawActive && canPreserveActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
         const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
           ? [currentActive, ...data]
           : data;
@@ -1205,6 +1218,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       setLoading(false);
     }
   };
+
+  // Sinkronisasi badge unread GLOBAL (bukan 50 item yang sudah ditarik ke browser).
+  // Debounced agar SSE storm (pesan masuk beruntun) tidak membanjiri endpoint.
+  const unreadCountFetchTimerRef = useRef<any>(null);
+  const refreshTotalUnread = useCallback((immediate = false) => {
+    if (unreadCountFetchTimerRef.current) {
+      clearTimeout(unreadCountFetchTimerRef.current);
+    }
+    const run = async () => {
+      try {
+        const res = await apiRequest('/api/admin/live-chat/unread-count');
+        const count = typeof res?.count === 'number' ? res.count : (typeof res === 'number' ? res : 0);
+        startTransition(() => setTotalUnreadCount(count));
+      } catch {
+        // Biarkan nilai lama saat offline; jangan reset ke 0 agar badge tidak berkedip.
+      }
+    };
+    if (immediate) {
+      void run();
+    } else {
+      unreadCountFetchTimerRef.current = setTimeout(run, 1500);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTotalUnread(true);
+  }, [refreshTotalUnread]);
 
   const handleSyncHistory = async (offset = 0) => {
     setSyncingHistory(true);
@@ -1766,16 +1806,38 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     });
   };
 
-  // Close context menu on outside click or window scroll
+  // Close context menu ONLY on outside click. Scroll listener `capture=true`
+  // DILARANG di sini: ia mencegat scroll internal daftar label (max-h-36/32)
+  // sehingga modal lenyap saat digulir (desktop wheel & swipe mobile).
   useEffect(() => {
     const handleClose = () => setContextMenu(null);
     window.addEventListener('click', handleClose);
-    window.addEventListener('scroll', handleClose, true);
     return () => {
       window.removeEventListener('click', handleClose);
-      window.removeEventListener('scroll', handleClose, true);
     };
   }, []);
+
+  // Body scroll lock + Escape saat context menu aktif: kunci scroll latar agar
+  // halaman di belakang tidak bergeser; kompensasi lebar scrollbar anti layout-shift.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [contextMenu]);
 
   const handleTogglePin = async (chat: LiveChatItem) => {
     setContextMenu(null);
@@ -1819,6 +1881,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         chatsRef.current = updated;
         return updated;
       });
+      refreshTotalUnread();
       toast(
         targetEndpoint === 'unread' ? 'Ditandai belum dibaca (Hijau Tua).' : 'Ditandai sudah dibaca.',
         'success'
@@ -1866,6 +1929,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }));
       setChats(updatedChats);
       chatsRef.current = updatedChats;
+      setTotalUnreadCount(0);
       toast('Semua percakapan berhasil ditandai telah dibaca!', 'success');
     } catch (err: any) {
       toast(`Gagal menandai semua dibaca: ${err.message}`, 'error');
@@ -1964,6 +2028,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         sseConnectedRef.current = connected;
         if (wasDisconnected) {
           loadChats(true);
+          refreshTotalUnread(true);
           if (selectedIdRef.current) {
             loadThread(selectedIdRef.current);
           }
@@ -1991,10 +2056,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               isManualUnread: false,
             }))
           ));
+          setTotalUnreadCount(0);
           return;
         }
 
         if (type === 'message.created') {
+          refreshTotalUnread();
           const conversationId = payload.conversationId;
           const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
           const rawPayload = payload.payloadRaw || payload.payload_raw || payload.payload;
@@ -2091,6 +2158,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             loadChats(true);
           }
         } else if (type === 'conversation.updated') {
+          refreshTotalUnread();
           const current = chatsRef.current;
           if (!current.some((c) => c.conversationId === payload.conversationId)) {
             if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
@@ -3782,7 +3850,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const activeClass = opt.value === 'sandbox'
                         ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-2xs'
                         : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
-                      const hasUnreadBadge = opt.value === 'unread' && chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread));
+                      const hasUnreadBadge = opt.value === 'unread' && (totalUnreadCount > 0 || chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread)));
                       return (
                         <button
                           key={opt.value}
@@ -3927,6 +3995,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       >
                         Reset Pencarian
                       </button>
+                    </>
+                  ) : sourceFilter === 'unread' ? (
+                    <>
+                      <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
+                      <p className="font-bold text-[#111b21]">Semua pesan sudah dibaca! 🎉</p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        Tidak ada percakapan yang menunggu dibalas saat ini.
+                      </p>
+                    </>
+                  ) : sourceFilter === 'reservation' ? (
+                    <>
+                      <ShoppingBag className="mx-auto text-[#008069] mb-2" size={24} />
+                      <p className="font-bold text-[#111b21]">Belum ada reservasi aktif</p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        Percakapan dengan booking pending, hold, atau terjadwal akan muncul di sini.
+                      </p>
                     </>
                   ) : (
                     <>
@@ -4336,7 +4420,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     </div>
                   );
                 })}
-                {hasMore && (
+                {hasMore && filteredChats.length > 0 && (
                   <div className="flex justify-center pt-2">
                     <button
                       onClick={() => loadChats(false)}
@@ -6165,7 +6249,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               {allLabels.length === 0 ? (
                 <p className="text-[11px] text-[#8696a0] px-1 py-0.5">Belum ada label sistem.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto">
+                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto overscroll-contain" data-no-select="true">
                   {allLabels.map((lbl) => {
                     const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
                     return (
@@ -6300,7 +6384,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               {allLabels.length === 0 ? (
                 <p className="text-[11px] text-[#8696a0] py-0.5">Belum ada label sistem.</p>
               ) : (
-                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto">
+                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto overscroll-contain">
                   {allLabels.map((lbl) => {
                     const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
                     return (
