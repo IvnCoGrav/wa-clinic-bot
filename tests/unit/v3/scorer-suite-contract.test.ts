@@ -144,4 +144,41 @@ describe('scoreSuiteCase — D1 evidence-gated (Fase 6 / MT-3.2)', () => {
     const r = base({ replyText: 'promonya Rp 60.000', messages: 'halo', expected: { expected_total_price: 60 } });
     expect(scoreSuiteCase(r, 'CASE').dims.d1_price.score).toBe(2);
   });
+
+  // Fase 3.2 — Anti-penalti Aturan Emas #2: fixture warisan mengunci harga dari
+  // transkrip nyata, tetapi episode replay berhenti sebelum customer menanya
+  // harga. Bot yang TIDAK menyebut nominal sedang patuh → N/A, bukan 0.
+  it('expPrice terkunci tapi customer TIDAK tanya harga → N/A (anti-penalti)', () => {
+    const r = base({
+      replyText: 'Pijat Pulih Ceria ya Bunda 😊',
+      messages: 'Apakah bs tindik bayi juga? | Baik kak',
+      expected: { expected_total_price: 105000 },
+    });
+    const s = scoreSuiteCase(r, 'CASE');
+    expect(s.dims.d1_price.score).toBe(2);
+    expect(s.dims.d1_price.note).toContain('anti-penalti');
+  });
+
+  it('expPrice terkunci & customer tanya harga tapi bot tak menyebut → tetap 0 (kegagalan data)', () => {
+    const r = base({
+      replyText: 'Pijat Pulih Ceria ya Bunda 😊',
+      messages: 'kena brp kak pijatnya',
+      expected: { expected_total_price: 105000 },
+    });
+    const s = scoreSuiteCase(r, 'CASE');
+    expect(s.dims.d1_price.score).toBe(0);
+    expect(s.dims.d1_price.note).toContain('diharapkan 105000');
+  });
+
+  it('expPrice terkunci & customer hanya tanya ONGKIR (calculate_delivery) tanpa harga paket → N/A', () => {
+    const r = base({
+      replyText: 'Ongkir ke lokasi Bunda *Rp 25.000* ya',
+      messages: 'Desa kedungkendo candi sidoarjo kak',
+      toolLog: [{ name: 'calculate_delivery' }],
+      expected: { expected_total_price: 50000 },
+    });
+    const s = scoreSuiteCase(r, 'CASE');
+    expect(s.dims.d1_price.score).toBe(2);
+    expect(s.dims.d1_price.note).toContain('anti-penalti');
+  });
 });

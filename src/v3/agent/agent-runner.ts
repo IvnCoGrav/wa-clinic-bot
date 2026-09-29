@@ -341,7 +341,58 @@ export class V3AgentRunner {
           draftReply = gen.finalReply;
         }
       } else {
-        draftReply = routing.assistantMessage?.content || '';
+        // Fase 2.2b — Fail-safe grounding vaksinasi saat Call 1 mengembalikan
+        // NOL tool (bukti CASE-063 Turn 22, logs/llm-2026-09-29 IDX 371):
+        // router mengabaikan tool_choice forcing → executedTools kosong → LLM
+        // mengklaim jeda vaksin dari parametric knowledge → validator menolak →
+        // eskalasi palsu. Gerbang KODE deterministik: jalankan tool kebijakan
+        // klinik NYATA (bukan injeksi objek kosong) lalu susun Call 2 di atas
+        // grounding resmi.
+        const vaccineSignalNoTool = ContextGrounder.hasVaccineSignal(cleanIncomingText)
+          && (turn.executedTools || []).length === 0;
+        if (vaccineSignalNoTool) {
+          const { clearClinicPolicyCache } = await import('../tools/clinic-faq.tool');
+          clearClinicPolicyCache(tenantId, 'post_vaccine_rules');
+          console.warn(JSON.stringify({
+            event: 'VACCINE_SAFETY_ROUTING_FALLBACK_APPLIED',
+            tenantId, conversationId,
+            reason: 'Router Call 1 menghasilkan 0 tool pada sinyal vaksinasi; grounding kebijakan dijalankan deterministik',
+            timestamp: new Date().toISOString(),
+          }));
+          const vArgs = { topic: 'post_vaccine_rules' as const };
+          const vCallId = `vaccine_safety_${Date.now()}`;
+          const syntheticCalls = [{
+            id: vCallId,
+            function: { name: 'get_clinic_policy_faq', arguments: JSON.stringify(vArgs) },
+          }];
+          const syntheticAssistant = {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: vCallId,
+              type: 'function',
+              function: { name: 'get_clinic_policy_faq', arguments: JSON.stringify(vArgs) },
+            }],
+          };
+          const toolOutput = await ToolExecutionPipeline.execute({
+            toolCalls: syntheticCalls as any[], assistantMessage: syntheticAssistant,
+            session, tenantId, customerId, phone, conversationId, chatId,
+            conversationHistory, cleanIncomingText, grounding,
+            seenChunkKeys, retrievedChunks, messages,
+          });
+          session = toolOutput.updatedSession;
+          turn.executedTools = toolOutput.executedTools;
+          toolEmptyKnowledge = toolOutput.emptyKnowledgeResult;
+          const gen = await GenerationStage.generateReply(turn, tel, {
+            session, isFollowUp, cleanIncomingText, conversationHistory,
+            messages, preGroundingBlock, tenantId,
+          });
+          lastContextSummary = gen.contextSummary;
+          lastPhaseDirective = gen.phaseDirective;
+          draftReply = gen.finalReply;
+        } else {
+          draftReply = routing.assistantMessage?.content || '';
+        }
       }
 
       // Stage 5: guardrail + reprompt engine.

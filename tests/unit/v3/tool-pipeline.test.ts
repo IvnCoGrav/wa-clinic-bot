@@ -185,6 +185,51 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     expect(out.updatedSession.location?.kelurahan).toBe('Bungurasih');
   });
 
+  // Fase 2.2 — Gerbang deterministik grounding vaksinasi (CASE-063 Turn 22).
+  // Router Call 1 dapat memanggil tool lain (atau nol tool) walau pesan memuat
+  // sinyal imunisasi → grounding kebijakan klinik WAJIB dijalankan oleh kode,
+  // bukan diserahkan pada kepatuhan model. Hasil tool NYATA (success true),
+  // bukan objek injeksi kosong.
+  it('sinyal vaksinasi tanpa get_clinic_policy_faq → grounding kebijakan dijalankan deterministik', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'pdhl niatnya mau pijetin pas sebelum imunisasi tp adek udah ga sabar',
+      toolCalls: [
+        {
+          id: 'call-vac-1',
+          function: {
+            name: 'get_catalog_and_price',
+            arguments: JSON.stringify({ specificTreatmentName: 'Pijat Pulih Ceria' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const policy = out.executedTools.find((t: any) => t.name === 'get_clinic_policy_faq');
+    expect(policy).toBeDefined();
+    expect(policy!.args.topic).toBe('post_vaccine_rules');
+    expect(policy!.result.success).toBe(true);
+    // Integritas protokol tool: call sintetis dipasangkan ke assistantMessage
+    expect((input.assistantMessage as any).tool_calls.some((tc: any) => tc.function.name === 'get_clinic_policy_faq')).toBe(true);
+  });
+
+  it('get_clinic_policy_faq sudah dipanggil router → TIDAK ada duplikasi grounding vaksin', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'habis imunisasi boleh langsung dipijat?',
+      toolCalls: [
+        {
+          id: 'call-vac-2',
+          function: {
+            name: 'get_clinic_policy_faq',
+            arguments: JSON.stringify({ topic: 'post_vaccine_rules' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const policyCalls = out.executedTools.filter((t: any) => t.name === 'get_clinic_policy_faq');
+    expect(policyCalls.length).toBe(1);
+  });
+
   // RC-2 (keputusan user 2026-09-19): kecamatan TARGET adalah fakta geografis
   // SAH (mis. "Bungurasih" memang kelurahan Kecamatan Waru) — payload LLM
   // DILARANG menghapusnya. Yang dilarang Rule 11 hanyalah kecamatan yang BUKAN

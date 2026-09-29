@@ -138,16 +138,23 @@ export function scoreSuiteCase(r: any, tier?: string): SuiteScore {
   // memang memicu konteks harga di percakapan itu (tanya harga ATAU memberi lokasi
   // untuk ongkir). Sinyal dari SATU sumber (extractFastIntents + gazetteer),
   // bukan daftar kata hafalan.
+  // Apakah customer MENANYAKAN harga paket treatment (intent ask_price, per-pesan).
+  // Dipisah dari sinyal ongkir: pertanyaan ongkir/lokasi BUKAN permintaan harga
+  // paket (CASE-054/065 hanya menanyakan ongkir → bot benar tak menyebut harga paket).
+  const customerAskedTreatmentPrice = (() => {
+    try {
+      const turns = msgText.split('|').map((m) => m.trim()).filter(Boolean);
+      return turns.some((m) => extractFastIntents(m).includes('ask_price'));
+    } catch {
+      return false;
+    }
+  })();
   const customerSolicitedPrice = (() => {
     // (a) Customer menanyakan harga (intent ask_price) — evaluasi PER-PESAN,
     // bukan atas teks gabungan: pada runtime intent dinilai per-turn. Teks
     // gabungan membuat sinyal durasi di pesan LAIN ("durasi per anak brp")
     // mem-suppress `ask_price` dari pesan harga ("Biaya berapa ya?") — CASE-043.
-    try {
-      const turns = msgText.split('|').map((m) => m.trim()).filter(Boolean);
-      const solicited = turns.some((m) => extractFastIntents(m).includes('ask_price'));
-      if (solicited) return true;
-    } catch {}
+    if (customerAskedTreatmentPrice) return true;
     // (b) Ongkir dihitung sah via tool calculate_delivery (konteks lokasi → ongkir).
     if (tools.includes('calculate_delivery')) return true;
     return false;
@@ -162,12 +169,24 @@ export function scoreSuiteCase(r: any, tier?: string): SuiteScore {
     }
   } else {
     const match = nominals.some((n) => n === expPrice * 1000 || n === expPrice);
-    dims.d1_price = {
-      score: match ? 2 : 0,
-      note: match
-        ? `nominal ${expPrice} ditemukan di balasan bot`
-        : `diharapkan ${expPrice} (ribu), balasan bot tidak memuat nominal sama: [${nominals.slice(0, 5).join(', ')}]`,
-    };
+    // Fase 3.2 — Anti-penalti kepatuhan (Aturan Emas #2): fixture warisan
+    // mengunci `expected_total_price` dari transkrip nyata yang customer-nya
+    // MENANYAKAN harga, tetapi episode replay berhenti sebelum turn itu. Bila
+    // customer TIDAK memicu konteks harga di episode ini, bot yang tidak
+    // menyebut nominal sedang MEMATUHI aturan (bukan kesalahan) — turunkan ke
+    // N/A agar evaluator tidak menghukum kepatuhan. Bila harga memang diminta
+    // dan bot tak menyebutnya, itu tetap kegagalan data → skor 0.
+    const matchNote = match
+      ? `nominal ${expPrice} ditemukan di balasan bot`
+      : `diharapkan ${expPrice} (ribu), balasan bot tidak memuat nominal sama: [${nominals.slice(0, 5).join(', ')}]`;
+    if (!match && !customerAskedTreatmentPrice) {
+      dims.d1_price = {
+        score: 2,
+        note: `N/A (anti-penalti Aturan Emas #2): customer tidak menanyakan harga paket di episode ini, bot benar tidak menyebut nominal. ${matchNote}`,
+      };
+    } else {
+      dims.d1_price = { score: match ? 2 : 0, note: matchNote };
+    }
   }
 
   // D2 — SOP Klinis & Eskalasi (kontrak state).

@@ -74,4 +74,24 @@ describe('Treatment Catalog Service Unit Tests', () => {
     expect(text).toContain('Promo');
     expect(text).toContain('Durasi');
   });
+
+  // Fase 1.1 — Anti-bocor metadata katalog (CASE-063). Tag storage
+  // `[BUNDLE:...]`/`[ADDON]` DILARANG muncul di deskripsi runtime — baik dari
+  // DB, file services_custom.json (live, 12 bundle + 3 addon), maupun default.
+  it('deskripsi runtime bersih dari tag [BUNDLE:...] / [ADDON]', () => {
+    const all = treatmentCatalogService.getAllServices(false);
+    expect(all.length).toBeGreaterThan(0);
+    for (const s of all) {
+      expect(s.description || '').not.toMatch(/\[BUNDLE:|\[ADDON\]/i);
+    }
+  });
+
+  it('bundle tetap dikenali sebagai bundle (bundleItemIds terjaga) setelah sanitasi', () => {
+    const all = treatmentCatalogService.getAllServices(false);
+    const bundles = all.filter((s) => s.category === 'BUNDLE' || (s.bundleItemIds || []).length >= 2);
+    expect(bundles.length).toBeGreaterThan(0);
+    for (const b of bundles) {
+      expect((b.bundleItemIds || []).length).toBeGreaterThanOrEqual(2);
+    }
+  });
 });

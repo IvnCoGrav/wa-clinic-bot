@@ -3,6 +3,19 @@ import { PatientProfileExtractor } from '../state/patient-extractor';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
+/**
+ * Sanitasi display fondasional (Fase 1.2): tag `[BUNDLE:...]`/`[ADDON]` adalah
+ * encoding storage, DILARANG bocor ke konteks LLM maupun balasan customer.
+ * Pertahanan tunggal di batas output tool (deterministik, bukan hafalan kalimat).
+ */
+function cleanCatalogDescription(d: string | null | undefined): string {
+  if (!d) return '';
+  return String(d)
+    .replace(/\[BUNDLE:[^\]]+\]\s*/g, '')
+    .replace(/\[ADDON\]\s*/g, '')
+    .trim();
+}
+
 export interface GetCatalogInput {
   category?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
   /**
@@ -444,7 +457,7 @@ export async function executeGetCatalog(
         durationMinutes: item.durationMinutes,
         originalPrice: item.originalPrice,
         promoPrice: item.promoPrice,
-        description: item.description,
+        description: cleanCatalogDescription(item.description),
         isRecommendedForSymptoms: false,
         // Data-driven: tandai add-on dari katalog (bukan asumsi nama).
         isAddon: treatmentCatalogService.isAddonService(item) || undefined,
@@ -472,7 +485,7 @@ export async function executeGetCatalog(
             durationMinutes: recommended.durationMinutes,
             originalPrice: recommended.originalPrice,
             promoPrice: recommended.promoPrice,
-            description: recommended.description,
+            description: cleanCatalogDescription(recommended.description),
             isRecommendedForSymptoms: true,
           });
         } else {
@@ -887,7 +900,7 @@ export async function executeGetCatalog(
       if (focus) {
         // Kontrak data terstruktur (fondasional): deskripsi klinis murni tanpa
         // salam pembuka & tanpa pertanyaan hafalan — LLM menalar dari data.
-        focusClinicalDescription = focus.description;
+        focusClinicalDescription = cleanCatalogDescription(focus.description);
         focusTargetAudience = isMomContext ? 'MOMS' : 'BABY';
         // Audit 310995: bila customer bertanya DURASI, panduan konsultasi wajib
         // mengizinkan penyebutan durasi resmi (nominal tetap dilarang).

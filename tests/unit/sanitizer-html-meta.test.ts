@@ -45,6 +45,22 @@ describe('Sanitizer HTML & meta-bicara (Fase 4)', () => {
     expect(out).toContain('jadwal');
   });
 
+  // Fase 1.3 — Pertahanan lapis akhir: tag metadata katalog internal
+  // `[BUNDLE:...]`/`[ADDON]` DILARANG sampai ke customer (bukti CASE-063).
+  it('tag [BUNDLE:...] internal dibersihkan tanpa mutilasi kalimat', () => {
+    const raw = 'Untuk *Kala Bundle Selapan Full* ya Bunda 😊\n\n[BUNDLE:baby-cukur,baby-massage-pulih-ceria,baby-mandi] Paket komplit saat selapanan: cukur + pijat + mandi.';
+    const out = OutputSanitizer.cleanOutboundReply(raw);
+    expect(out).not.toContain('[BUNDLE:');
+    expect(out).toContain('Paket komplit');
+    expect(out).not.toMatch(/,\s*,/);
+  });
+
+  it('tag [ADDON] internal dibersihkan', () => {
+    const out = OutputSanitizer.cleanOutboundReply('[ADDON] Terapi moksa hangat untuk melegakan pernapasan.');
+    expect(out).not.toContain('[ADDON]');
+    expect(out).toContain('Terapi moksa');
+  });
+
   it('cek an / ongkir nya TIDAK dipaksa join (anti-mutilasi)', () => {
     const raw = 'Kami bantu cek an ongkir nya ya Bunda.';
     const out = OutputSanitizer.cleanOutboundReply(raw);

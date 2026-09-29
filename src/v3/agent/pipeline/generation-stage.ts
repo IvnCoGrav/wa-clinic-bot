@@ -642,7 +642,16 @@ export class GenerationStage {
           : cleanContent,
         status: 'SUCCESS',
         durationMs: firstDurationMs,
-        promptPayload: { model: call1Model, systemPrompt: turn.currentSystemPrompt, messages: messages.slice(1), tools: toolsForCall1 },
+        promptPayload: {
+          model: call1Model,
+          systemPrompt: turn.currentSystemPrompt,
+          messages: messages.slice(1),
+          tools: toolsForCall1,
+          // Observabilitas routing (Fase 0.1): `tool_choice` efektif pasca
+          // downgrade masking + daftar tool fisik yang dikirim ke model.
+          toolChoice: dynamicToolChoice,
+          toolsSent: toolsForCall1.map((t: any) => t?.function?.name || t?.name),
+        },
         callReasoning: reasoning,
         toolsCalled: parsedCalls,
         promptTokens: firstUsageTel.promptTokens,

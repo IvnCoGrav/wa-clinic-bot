@@ -24,9 +24,11 @@ describe('FastResponseGate — Schedule Verification Handoff (Plan 7)', () => {
     expect(isShortAcknowledgement('bisa hari apa saja?')).toBe(false);
   });
 
-  it('resolvePostReservationAck: memicu saat pendingScheduleCheck === true', () => {
+  it('resolvePostReservationAck: memicu saat pendingScheduleCheck === true + lokasi diketahui', () => {
     const session: CustomerGoalSession = {
       genderGreeting: 'Bunda',
+      // State-gate CASE-058: pengecekan slot butuh lokasi rumah diketahui.
+      location: { kelurahan: 'Semampir', distanceKm: 5 },
       booking: {
         isConfirmed: false,
         pendingScheduleCheck: true,
@@ -42,9 +44,40 @@ describe('FastResponseGate — Schedule Verification Handoff (Plan 7)', () => {
     expect(resolvePostReservationAck(session, 'okey bund, nanti kabari ya')).toBe('silent');
   });
 
+  // Fase 3.1 — anti fake-confirm jadwal tanpa lokasi (CASE-058): bot DILARANG
+  // menutup percakapan seolah mengecek slot saat lokasi rumah belum diketahui.
+  it('resolvePostReservationAck: pendingScheduleCheck TANPA lokasi → null (tidak menembak)', () => {
+    const noLocation: CustomerGoalSession = {
+      genderGreeting: 'Bunda',
+      booking: { isConfirmed: false, pendingScheduleCheck: true, handoffClosingSent: false },
+    };
+    expect(resolvePostReservationAck(noLocation, 'oke min..')).toBe(null);
+  });
+
+  it('FastResponseGate.check: pendingScheduleCheck TANPA lokasi → tidak handled (anti eskalasi palsu)', async () => {
+    const noLocation: CustomerGoalSession = {
+      genderGreeting: 'Bunda',
+      booking: { isConfirmed: false, pendingScheduleCheck: true, handoffClosingSent: false },
+    };
+    const res = await FastResponseGate.check({
+      tenantId: 'default-tenant',
+      conversationId: 'conv-test-sched-noloc',
+      phone: '628111222333',
+      incomingText: 'oke min..',
+      cleanIncomingText: 'oke min..',
+      skipDbLogging: true,
+      isFollowUp: true,
+      session: noLocation,
+      currentSystemPrompt: '',
+      fewShotExemplars: [],
+    });
+    expect(res.handled).toBe(false);
+  });
+
   it('FastResponseGate.check: putaran 1 kirim closing resmi + eskalasi pending_schedule_check', async () => {
     const session: CustomerGoalSession = {
       genderGreeting: 'Bunda',
+      location: { kelurahan: 'Semampir', distanceKm: 5 },
       booking: {
         isConfirmed: false,
         pendingScheduleCheck: true,
@@ -79,6 +112,7 @@ describe('FastResponseGate — Schedule Verification Handoff (Plan 7)', () => {
   it('FastResponseGate.check: putaran 2 dan 3 senyap (silent skip, shouldSendReply: false)', async () => {
     const session: CustomerGoalSession = {
       genderGreeting: 'Bunda',
+      location: { kelurahan: 'Semampir', distanceKm: 5 },
       booking: {
         isConfirmed: false,
         pendingScheduleCheck: true,

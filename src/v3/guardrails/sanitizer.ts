@@ -88,6 +88,24 @@ export class OutputSanitizer {
   }
 
   /**
+   * Pertahanan lapis akhir (Fase 1.3): tag metadata katalog internal
+   * `[BUNDLE:id1,id2]`/`[ADDON]` adalah encoding storage — DILARANG sampai ke
+   * customer walau seluruh grounding hilir gagal. Pembersihan teknis mesin
+   * non-semantik (bukan mutilasi kalimat): hanya mencabut token kurung siku
+   * lalu merapikan spasi menggantung.
+   */
+  public static stripInternalCatalogTags(text: string): string {
+    if (!text || !/\[BUNDLE:|\[ADDON\]/i.test(text)) return text;
+    return text
+      .replace(/\[BUNDLE:[^\]]+\]\s*/gi, '')
+      .replace(/\[ADDON\]\s*/gi, '')
+      .replace(/[^\S\r\n]{2,}/g, ' ')
+      .replace(/[^\S\r\n]+([,.!?])/g, '$1')
+      .replace(/[^\S\r\n]+$/gm, '')
+      .trim();
+  }
+
+  /**
    * Membersihkan tag thinking, monolog internal, dan artefak AI dari balasan sebelum dikirim ke WhatsApp.
    * Plafon karakter tenant-aware: opts.maxChars eksplisit > TenantPersona.max_chars_per_reply (DB)
    * > default konteks-sadar (1500 katalog / 1200 umum). Param ke-4 number tetap didukung
@@ -135,6 +153,9 @@ export class OutputSanitizer {
     // token template bertanda kurung siku (mis. "*Rp [total]*", "[Harga]")
     // ke balasan customer. Kendali gaya deterministik post-generasi.
     text = OutputSanitizer.stripSystemPlaceholders(text);
+
+    // 0b. Pertahanan lapis akhir tag katalog internal (Fase 1.3).
+    text = OutputSanitizer.stripInternalCatalogTags(text);
 
     // 1b. Hapus artefak native tool-calling LLM (DeepSeek DSML, XML tool
     // call, result tags — audit DeepSeek Flash): model via gateway

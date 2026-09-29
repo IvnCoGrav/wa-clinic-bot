@@ -60,4 +60,12 @@ describe('get_catalog_and_price — AI-First Price Grounding', () => {
     expect(out.message).not.toMatch(/Rp\s*[\d.]+/);
     expect(out.suggestedPriceReply).toBeUndefined();
   });
+
+  // Fase 1.2 — Output tool DILARANG membawa tag storage katalog (CASE-063).
+  it('output katalog & rekomendasi bebas tag [BUNDLE:...] / [ADDON]', async () => {
+    const out = await executeGetCatalog({ symptoms: ['batuk', 'pilek'], inquirePrice: true });
+    const blob = JSON.stringify(out);
+    expect(blob).not.toMatch(/\[BUNDLE:/i);
+    expect(blob).not.toMatch(/\[ADDON\]/i);
+  });
 });

@@ -1,5 +1,6 @@
 import { executeToolByName } from '../../tools/tool-registry';
 import { validateToolArgs } from '../../tools/tool-schemas';
+import { hasVaccineSignal } from './medical-signal-detector';
 import { CustomerGoalSession, GoalTracker } from '../../state/goal-tracker';
 import { treatmentCatalogService, resolveServiceAudience } from '../../../services/treatment-catalog.service';
 import { maskPhoneNumber, maskToolArgsForLogging } from '../../../utils/pii-masker';
@@ -165,6 +166,81 @@ export class ToolExecutionPipeline {
     input.messages.push(assistantMessage);
 
     let reservationCommitted = false;
+
+    // Fase 2.2 — Fail-safe grounding vaksinasi (clinical safety deterministik).
+    // Bukti CASE-063 Turn 22 (logs/llm-2026-09-29 IDX 371): router Call 1
+    // mengabaikan tool_choice yang di-forcing → executedTools kosong, LLM
+    // mengklaim jeda vaksin dari parametric knowledge → validator klaim faktual
+    // menolak → eskalasi palsu `unresolved_faq`. Gerbang KODE (bukan prompt):
+    // bila sinyal vaksin deterministik ada tapi tool grounding kebijakan klinik
+    // TIDAK dieksekusi, jalankan tool NYATA agar Call 2 & validator berpijak
+    // data resmi. Injection tool-call kosong DITOLAK (tak lolos policyToolCalled).
+    const vaccineSignalDetected = hasVaccineSignal(cleanIncomingText);
+    const vaccinePolicyCalled = toolCalls.some(
+      (tc) => tc.function?.name === 'get_clinic_policy_faq'
+    );
+    if (vaccineSignalDetected && !vaccinePolicyCalled) {
+      const { clearClinicPolicyCache } = await import('../../tools/clinic-faq.tool');
+      clearClinicPolicyCache(tenantId, 'post_vaccine_rules');
+      console.warn(JSON.stringify({
+        event: 'VACCINE_SAFETY_ROUTING_FALLBACK_APPLIED',
+        tenantId, conversationId,
+        reason: 'Router Call 1 tidak memanggil grounding kebijakan pasca-vaksinasi; tool dijalankan deterministik',
+        timestamp: new Date().toISOString(),
+      }));
+      const vArgs = { topic: 'post_vaccine_rules' as const };
+      const vValidation = validateToolArgs('get_clinic_policy_faq', vArgs);
+      let vResult: any = { error: vValidation.success ? undefined : vValidation.error };
+      if (vValidation.success) {
+        try {
+          vResult = await withTimeout(
+            executeToolByName('get_clinic_policy_faq', vValidation.data, toolContext),
+            7000,
+            'Tool "get_clinic_policy_faq" timeout setelah 7000ms'
+          );
+        } catch (vErr: any) {
+          vResult = { error: vErr.message };
+        }
+      }
+      const vCallId = `vaccine_safety_${Date.now()}`;
+      const vRawCall = {
+        id: vCallId,
+        type: 'function' as const,
+        function: { name: 'get_clinic_policy_faq', arguments: JSON.stringify(vArgs) },
+      };
+      // Integritas protokol tool: bila assistantMessage tidak membawa tool_calls
+      // (router menghasilkan teks langsung), pasangkan call sintetis ini agar
+      // pesan `role: 'tool'` berikutnya valid di mata provider LLM Call 2.
+      if (!Array.isArray(assistantMessage.tool_calls) || assistantMessage.tool_calls.length === 0) {
+        assistantMessage.tool_calls = [vRawCall];
+        assistantMessage.content = null;
+      } else {
+        assistantMessage.tool_calls.push(vRawCall);
+      }
+      executedTools.push({ name: 'get_clinic_policy_faq', args: vArgs, result: vResult });
+      input.messages.push({
+        role: 'tool',
+        tool_call_id: vCallId,
+        name: 'get_clinic_policy_faq',
+        content: typeof vResult === 'string' ? vResult : JSON.stringify(
+          ToolExecutionPipeline.buildLlmSafeToolPayload('get_clinic_policy_faq', vResult)
+        ),
+      });
+      const vReduced = await ToolExecutionPipeline.applyToolEffectsToSession({
+        fnName: 'get_clinic_policy_faq',
+        fnArgs: vArgs,
+        toolResult: vResult,
+        session,
+        tenantId,
+        conversationId,
+        phone,
+        cleanIncomingText,
+        seenChunkKeys: input.seenChunkKeys,
+        retrievedChunks: input.retrievedChunks,
+      });
+      session = vReduced.session;
+    }
+
     for (const tc of toolCalls) {
       const tcName = tc.function?.name;
       if (reservationCommitted) {

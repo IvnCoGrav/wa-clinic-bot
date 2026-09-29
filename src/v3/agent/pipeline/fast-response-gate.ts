@@ -107,7 +107,15 @@ export function resolvePostReservationAck(
   incomingText: string
 ): 'closing' | 'silent' | null {
   const isPostReservation = Boolean(session?.booking?.reservationId && session?.booking?.needsStaffVerification);
-  const isScheduleCheckWait = Boolean(session?.booking?.pendingScheduleCheck);
+  // State-gate deterministik (anti fake-confirm jadwal tanpa lokasi, CASE-058):
+  // pengecekan ketersediaan slot HANYA sah bila lokasi rumah SUDAH diketahui.
+  // Tanpa lokasi, bot tidak mungkin mengecek rute/jangkauan Bidan — jangan
+  // tutup percakapan seolah jadwal sedang dikonfirmasi. Gerbang state, bukan
+  // pencocokan kalimat customer.
+  const hasKnownLocation = Boolean(
+    session?.location?.kelurahan || session?.location?.kecamatan || session?.location?.kota
+  );
+  const isScheduleCheckWait = Boolean(session?.booking?.pendingScheduleCheck && hasKnownLocation);
 
   if (!isPostReservation && !isScheduleCheckWait) return null;
   if (!isShortAcknowledgement(incomingText)) return null;

@@ -84,6 +84,26 @@ const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
 // Struktur: Map<tenantId, Map<serviceId, ClinicServiceItem>>
 const tenantServiceCatalog: Map<string, Map<string, ClinicServiceItem>> = new Map();
 
+/**
+ * Sanitasi display fondasional (Fase 1.1): tag `[BUNDLE:...]`/`[ADDON]` adalah
+ * ENCODING STORAGE (ditulis ulang di saveServicesToDb), BUKAN bahasa customer.
+ * Parse ke field terstruktur (bundleItemIds/isAddon tetap hidup untuk katalog &
+ * keranjang) lalu bersihkan deskripsi. Satu-satunya jalur masuk item ke catalog —
+ * mencegah tag bocor ke prompt Call 2 / balasan (bukti CASE-063).
+ */
+function sanitizeCatalogItem(item: ClinicServiceItem): ClinicServiceItem {
+  const rawDesc = item.description || '';
+  let bundleIds = item.bundleItemIds;
+  const bundleMatch = rawDesc.match(/\[BUNDLE:([^\]]+)\]/);
+  if (bundleMatch && (!bundleIds || bundleIds.length === 0)) {
+    bundleIds = bundleMatch[1].split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  let isAd = item.isAddon === true;
+  if (/\[ADDON\]/.test(rawDesc)) isAd = true;
+  const cleanDesc = rawDesc.replace(/\[BUNDLE:[^\]]+\]\s*/g, '').replace(/\[ADDON\]\s*/g, '').trim();
+  return { ...item, description: cleanDesc, bundleItemIds: bundleIds, isAddon: isAd };
+}
+
 /** Helper untuk mendapatkan atau membuat catalog map per-tenant */
 function getTenantCatalog(tenantId: string = DEFAULT_TENANT_ID): Map<string, ClinicServiceItem> {
   let cat = tenantServiceCatalog.get(tenantId);
@@ -838,16 +858,16 @@ export function loadServices() {
       const data = fs.readFileSync(SERVICES_FILE, 'utf-8');
       const list: ClinicServiceItem[] = JSON.parse(data);
       catalog.clear();
-      list.forEach((item) => catalog.set(item.id, item));
+      list.forEach((item) => catalog.set(item.id, sanitizeCatalogItem(item)));
     } else {
       fs.writeFileSync(SERVICES_FILE, JSON.stringify(DEFAULT_CLINIC_SERVICES, null, 2));
       catalog.clear();
-      DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, item));
+      DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, sanitizeCatalogItem(item)));
     }
   } catch (err) {
     console.error('Failed to load clinic services from file:', err);
     catalog.clear();
-    DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, item));
+    DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, sanitizeCatalogItem(item)));
   }
 }
 
@@ -947,7 +967,10 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
       source = [...DEFAULT_CLINIC_SERVICES];
       console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${source.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
     }
-    source.forEach((item) => targetCatalog.set(item.id, item));
+    // Sanitasi display fondasional (Fase 1.1): jalur fallback file/default juga
+    // melewati sanitizeCatalogItem (jalur DB sudah strip di atas) — tag storage
+    // DILARANG bocor ke prompt Call 2 / balasan (bukti CASE-063).
+    source.forEach((item) => targetCatalog.set(item.id, sanitizeCatalogItem(item)));
     await saveServicesToDb(tenantId);
   } catch (err) {
     console.warn('[TREATMENT CATALOG] DB unavailable, using file/default:', (err as Error).message);
