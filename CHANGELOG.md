@@ -45,7 +45,6 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Sisa debt:** `docs/KNOWN_ISSUES.md` #169 (indeks komposit unread + unit badge).
 
 #### 2026-09-29 - Remediasi Kebocoran Notifikasi Admin ke Perangkat Terapis (Ghost Push Subscription & RBAC Scope)
-
 - **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS, mis. Anne Lawrencia)
   bocor ke perangkat terapis. Akar masalah: perangkat penguji terdaftar
   `push_subscriptions.user_type='ADMIN'` (ghost dari sesi dashboard sebelumnya),
@@ -71,6 +70,16 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Fixed - Disosiasi push saat logout (`AuthContext.tsx`, `StaffAuthContext.tsx`):**
   `unsubscribeFromPushNotifications()` dipanggil SEBELUM destroy sesi backend
   (best-effort), mencegah perangkat tetap menerima notifikasi role lama.
+- **Fixed - Presedensi dual-cookie (`src/routes/admin.route.ts`):** `preHandler`
+  sebelumnya mengecek `admin_session` LEBIH DULU (else-if) daripada `staff_session`.
+  Perangkat dengan cookie admin lama + sesi staf baru membuat `staffId` tak pernah
+  di-set → push terikat ADMIN → kebocoran notifikasi berlanjut walau login Tabita
+  sudah benar. FIX: sesi STAF valid kini divalidasi & MENANG lebih dulu; sesi admin
+  menjadi fallback. Regression test ditambahkan (dual-cookie → STAFF+staffId).
+- **Live - Purge ghost token (2026-09-29):** baris ADMIN `2df24cf1-…` (Windows Chrome)
+  dan `ba003b08-…` (iPhone) dihapus dari produksi by `id` spesifik; backup
+  `push_subscriptions_backup_20260929` & `…_20260929b`. Migrasi + fix presedensi
+  ter-deploy ke live (app-only, WAHA untouched).
 - **Test - `tests/integration/push-rbac.test.ts`:** 11 test adversarial (scope
   allow/deny, override identitas, caller-check, sanitasi cookie). Regression gate:
   `npm run build` Exit 0, dashboard build Exit 0, full suite 520 file / 4220 test hijau.

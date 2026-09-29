@@ -47,6 +47,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   `20260930000000_allow_push_for_therapist` ter-deploy (5 scope rows therapist).
   Catatan: bila penguji login ulang sebagai Tabita, frontend baru akan menulis ulang
   baris sebagai `STAFF`+`user_id` (bukan ADMIN lagi).
+- **168a-2 — Ghost iPhone admin (RESOLVED 2026-09-29):** Baris `ba003b08-…`
+  (iPhone, `user_type='ADMIN'`) dihapus (backup: `push_subscriptions_backup_20260929b`).
+- **168e — Dual-cookie precedence (RESOLVED 2026-09-29, fondasional):** `admin.route.ts`
+  sebelumnya mengecek `admin_session` LEBIH DULU (else-if) daripada `staff_session`,
+  sehingga perangkat dengan cookie admin lama + sesi staf baru membuat `staffId` tak
+  pernah di-set → push terikat `ADMIN` (kebocoran berlanjut meski login Tabita sudah
+  benar). FIX: sesi staf yang valid kini divalidasi & menang lebih dulu; sesi admin
+  jadi fallback. Regression test: `tests/integration/push-rbac.test.ts` (dual-cookie →
+  tetap STAFF+staffId).
 - **168b — `unsubscribe` bergantung endpoint unik (by-design):** `removeSubscription`
   menghapus berdasarkan `endpoint` (unique). Bila browser sudah mencabut subscription
   lebih dulu (endpoint hilang), baris DB lama tidak ikut terhapus. Sweep berkala
