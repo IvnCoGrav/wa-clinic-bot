@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ExternalLink, Navigation, RefreshCw } from 'lucide-react';
-import { computeMapView, tileUrl, type LatLng } from '../../utils/dispatchMap';
+import { computeMapView, tileUrl, shouldPulseTherapistMarker, type LatLng } from '../../utils/dispatchMap';
 
 /**
  * Modal peta ringan untuk CS: membandingkan titik motor Bidan (hijau) vs titik
@@ -16,6 +16,8 @@ export interface DispatchMapModalProps {
   customer: { lat: number; lng: number } | null;
   areaName?: string | null;
   staffName?: string | null;
+  /** True bila posisi Bidan segar (< 60 dtk). Default false → marker statis (kompatibel mundur). */
+  isLive?: boolean;
 }
 
 export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
@@ -25,6 +27,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
   customer,
   areaName,
   staffName,
+  isLive = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 600, h: 360 });
@@ -56,6 +59,10 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
   if (!open) return null;
 
   const hasAny = !!(therapist || customer);
+  const therapistLive = shouldPulseTherapistMarker(
+    view.markers.some((m) => m.kind === 'therapist'),
+    isLive
+  );
   const routeUrl =
     therapist && customer
       ? `https://www.google.com/maps/dir/?api=1&origin=${therapist.lat.toFixed(5)},${therapist.lng.toFixed(5)}&destination=${customer.lat.toFixed(5)},${customer.lng.toFixed(5)}`
@@ -95,10 +102,13 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
 
         <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-[#54656f]">
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Motor Bidan
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Motor Bidan{therapistLive ? ' (live)' : ''}
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Rumah Pasien
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-4 border-t-2 border-dashed border-emerald-600" /> Garis lurus ke pasien (bukan rute jalan)
           </span>
           <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-[#8696a0]">
             <RefreshCw size={10} /> zoom {view.zoom}
@@ -119,6 +129,26 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
                   style={{ left: t.left, top: t.top, width: 256, height: 256 }}
                 />
               ))}
+              {view.route && (
+                <svg
+                  className="absolute inset-0 pointer-events-none"
+                  width={view.width}
+                  height={view.height}
+                  aria-hidden="true"
+                >
+                  <line
+                    x1={view.route.x1}
+                    y1={view.route.y1}
+                    x2={view.route.x2}
+                    y2={view.route.y2}
+                    stroke="#059669"
+                    strokeWidth={2.5}
+                    strokeDasharray="7 6"
+                    strokeLinecap="round"
+                    opacity={0.85}
+                  />
+                </svg>
+              )}
               {view.markers.map((m, i) => (
                 <div
                   key={`${m.kind}-${i}`}
@@ -127,10 +157,14 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
                   title={m.kind === 'therapist' ? 'Motor Bidan' : 'Rumah Pasien'}
                 >
                   <span
-                    className={`block w-3.5 h-3.5 rounded-full border-2 border-white shadow-md ${
+                    className={`relative block w-3.5 h-3.5 rounded-full border-2 border-white shadow-md ${
                       m.kind === 'therapist' ? 'bg-emerald-500' : 'bg-rose-500'
                     }`}
-                  />
+                  >
+                    {m.kind === 'therapist' && therapistLive && (
+                      <span className="absolute -inset-1 rounded-full bg-emerald-400/50 animate-ping" aria-hidden="true" />
+                    )}
+                  </span>
                 </div>
               ))}
               <div className="absolute bottom-0 right-0 px-1 text-[9px] text-[#54656f] bg-white/70">

@@ -8,6 +8,8 @@ import {
   chooseZoom,
   computeMapView,
   tileUrl,
+  shouldPulseTherapistMarker,
+  ROUTE_DOT_RADIUS_PX,
   TILE_SIZE,
   MAX_ZOOM,
   type LatLng,
@@ -101,5 +103,74 @@ describe('dispatchMap projection (adversarial)', () => {
     );
     expect(bad.markers).toHaveLength(1);
     expect(bad.markers[0].kind).toBe('therapist');
+  });
+});
+
+/**
+ * Garis rute (therapist → customer) & predikat pulse marker.
+ * Garis = LURUS (Haversine/proyeksi), BUKAN rute jalan — 0 call ORS.
+ */
+describe('dispatchMap route & pulse (adversarial)', () => {
+  const w = 600;
+  const h = 360;
+
+  it('route menghubungkan dua marker (anchor di pusat dot)', () => {
+    const therapist: LatLng = { lat: -7.345, lng: 112.74 };
+    const customer: LatLng = { lat: -7.354, lng: 112.741 };
+    const view = computeMapView([therapist, customer], [
+      { point: therapist, kind: 'therapist' },
+      { point: customer, kind: 'customer' },
+    ], w, h);
+
+    expect(view.route).not.toBeNull();
+    const t = view.markers.find((m) => m.kind === 'therapist')!;
+    const c = view.markers.find((m) => m.kind === 'customer')!;
+    expect(view.route!.x1).toBeCloseTo(t.x, 6);
+    expect(view.route!.y1).toBeCloseTo(t.y - ROUTE_DOT_RADIUS_PX, 6);
+    expect(view.route!.x2).toBeCloseTo(c.x, 6);
+    expect(view.route!.y2).toBeCloseTo(c.y - ROUTE_DOT_RADIUS_PX, 6);
+  });
+
+  it('route null bila hanya 1 marker', () => {
+    const therapist: LatLng = { lat: -7.345, lng: 112.74 };
+    const view = computeMapView([therapist], [{ point: therapist, kind: 'therapist' }], w, h);
+    expect(view.route).toBeNull();
+    expect(view.markers).toHaveLength(1);
+  });
+
+  it('route null bila dua titik identik (degenerate)', () => {
+    const p: LatLng = { lat: -7.345, lng: 112.74 };
+    const view = computeMapView([p, { ...p }], [
+      { point: p, kind: 'therapist' },
+      { point: { ...p }, kind: 'customer' },
+    ], w, h);
+    expect(view.route).toBeNull();
+  });
+
+  it('route null bila input kosong / dimensi 0', () => {
+    expect(computeMapView([], [], w, h).route).toBeNull();
+    const zero = computeMapView([{ lat: -7.3, lng: 112.7 }, { lat: -7.31, lng: 112.71 }], [], 0, 0);
+    expect(zero.route).toBeNull();
+  });
+
+  it('input rusak (NaN / lat di luar rentang) tidak throw, route null', () => {
+    const bad = computeMapView(
+      [{ lat: NaN, lng: 112 } as any, { lat: -7.3, lng: 112.7 }],
+      [
+        { point: { lat: NaN, lng: 112 } as any, kind: 'customer' },
+        { point: { lat: -7.3, lng: 112.7 }, kind: 'therapist' },
+      ],
+      w,
+      h
+    );
+    expect(bad.route).toBeNull();
+    expect(bad.markers).toHaveLength(1);
+  });
+
+  it('shouldPulseTherapistMarker: hanya saat marker ada DAN data live', () => {
+    expect(shouldPulseTherapistMarker(true, true)).toBe(true);
+    expect(shouldPulseTherapistMarker(true, false)).toBe(false);
+    expect(shouldPulseTherapistMarker(false, true)).toBe(false);
+    expect(shouldPulseTherapistMarker(false, false)).toBe(false);
   });
 });

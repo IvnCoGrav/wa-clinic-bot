@@ -25,6 +25,17 @@ export interface MapMarker {
   kind: 'therapist' | 'customer';
 }
 
+/** Segmen garis lurus Bidan→pasien dalam koordinat pixel viewport (garis LURUS, bukan rute jalan). */
+export interface MapRouteSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** Setengah diameter dot marker px (w-3.5 = 14px) — anchor garis ke pusat dot. */
+export const ROUTE_DOT_RADIUS_PX = 7;
+
 export interface MapView {
   zoom: number;
   width: number;
@@ -32,6 +43,8 @@ export interface MapView {
   center: LatLng;
   tiles: TileRef[];
   markers: MapMarker[];
+  /** Garis lurus Bidan→pasien; null bila salah satu titik absen atau titik identik. */
+  route: MapRouteSegment | null;
 }
 
 export const TILE_SIZE = 256;
@@ -107,7 +120,7 @@ export function computeMapView(
 ): MapView {
   const valid = points.filter(isValidLatLng);
   if (valid.length === 0 || width <= 0 || height <= 0) {
-    return { zoom: 13, width, height, center: DEFAULT_CENTER, tiles: [], markers: [] };
+    return { zoom: 13, width, height, center: DEFAULT_CENTER, tiles: [], markers: [], route: null };
   }
 
   const zoom = chooseZoom(valid, width, height);
@@ -147,6 +160,24 @@ export function computeMapView(
       kind: m.kind,
     }));
 
+  // Garis lurus Bidan→pasien (Haversine/proyeksi, 0 call ORS). Anchor ke pusat
+  // dot marker (transform translate(-50%,-100%) → titik = pusat dot di y-7px).
+  const therapistMark = outMarkers.find((m) => m.kind === 'therapist');
+  const customerMark = outMarkers.find((m) => m.kind === 'customer');
+  let route: MapRouteSegment | null = null;
+  if (therapistMark && customerMark) {
+    const dx = therapistMark.x - customerMark.x;
+    const dy = therapistMark.y - customerMark.y;
+    if (dx * dx + dy * dy >= 1) {
+      route = {
+        x1: therapistMark.x,
+        y1: therapistMark.y - ROUTE_DOT_RADIUS_PX,
+        x2: customerMark.x,
+        y2: customerMark.y - ROUTE_DOT_RADIUS_PX,
+      };
+    }
+  }
+
   return {
     zoom,
     width,
@@ -154,10 +185,19 @@ export function computeMapView(
     center: { lat: worldYToLat(centerY, zoom), lng: worldXToLng(centerX, zoom) },
     tiles,
     markers: outMarkers,
+    route,
   };
 }
 
 /** URL tile OSM untuk sebuah TileRef. */
 export function tileUrl(t: TileRef): string {
   return `https://tile.openstreetmap.org/${t.z}/${t.x}/${t.y}.png`;
+}
+
+/**
+ * Marker Bidan boleh berdenyut hanya bila titik Bidan ADA dan data live (segar).
+ * Data basi → titik diam (konsisten dengan dot status widget).
+ */
+export function shouldPulseTherapistMarker(hasTherapist: boolean, isLive: boolean): boolean {
+  return hasTherapist && isLive;
 }

@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
 
+#### 2026-09-29 — Peta Perjalanan Bidan: Pulse Marker + Garis Rute (reuse, tanpa library/ORS)
+
+- **Konteks:** peta perjalanan Bidan (`DispatchMapModal`) sudah ada; permintaan user: marker Bidan berdenyut + garis posisi→tujuan. Keputusan: peta **tetap pisah** dari Peta Sebaran Pelanggan (use case beda), **tanpa** library/endpoint/halaman/migrasi baru, **tanpa** call ORS.
+- **Fase 1 (util murni, TDD red→green):** `packages/admin-dashboard/src/utils/dispatchMap.ts` — `MapRouteSegment` + `route` di `MapView` (garis lurus Bidan→pasien, anchor pusat dot via `ROUTE_DOT_RADIUS_PX`) + `shouldPulseTherapistMarker(hasTherapist, isLive)`. Test `tests/unit/dispatch-map-projection.test.ts` +6 (route 2 marker, null 1 marker/identik/kosong/rusak, predikat pulse) → 12/12.
+- **Fase 2 (UI):** `DispatchMapModal` — prop `isLive` (default false, kompatibel mundur), overlay `<svg><line>` putus-putus, `animate-ping` pada dot Bidan hanya saat live, legenda jujur ("Garis lurus ke pasien (bukan rute jalan)"). `LiveChatDispatchWidget` meneruskan `isLive={isFresh}` (reuse variabel existing).
+- **Resource:** 0 call ORS; denyut & garis murni digambar di browser CS (server tidak ikut kerja).
+- **Verifikasi:** test 12/12, `tsc` 0 error, `packages/admin-dashboard` build hijau, `animate-ping`/`keyframes ping` + `strokeDasharray` + teks legenda ter-generate di `dist`.
+- **Fase 3 (OPEN):** tampilkan widget di tablet/HP CS (sekarang hanya `xl`) — butuh izin terpisah + cek visual di perangkat nyata.
+
 #### 2026-09-28 — Dispatch Tracking: Hardening Rekomendasi (Deteksi OTW, Peta Presisi, Wake Lock, Rate Limit)
 
 - **Fixed — Deteksi OTW reliable (#8):** `LiveChatItem.active*Reservation` kini membawa

@@ -201,6 +201,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         }
         areaName={trip?.areaName}
         staffName={staffName}
+        isLive={isFresh}
       />
     </div>
   );
