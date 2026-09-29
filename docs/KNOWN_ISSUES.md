@@ -753,6 +753,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 128. [Audit Mikro Sept 2026 — Bloated, Circular, Hardcode & Silent Fallback] OPEN (2026-09-25)
 
 - **Status:** Fase 0-1a parsial (2026-09-25) — 1a-1..1a-6 dieksekusi fondasional, `npm run build` hijau.
+- **Fase G parsial (2026-09-29):** `src/config/service-areas.ts` (0 importer) DIHAPUS — dead code terverifikasi
+  (`rg service-areas` hanya self-reference + komentar di `coverage.ts`). `tsc` 0 error. Sisa Fase G
+  (tenant-html merge, arsip `scripts/`, evaluasi 70+ dead export) + Fase E (god files) + Fase D (22 sirkular)
+  tetap OPEN — blast radius besar / Confirmation Gate.
 - **Baseline terverifikasi (`npx vitest run` 2026-09-25, `file:line`):** god files `LiveChatMonitor.tsx:6040` (308 KB) / `StaffToday.tsx:5278` / `CreateReservationModal.tsx:2911` / `reservations.subroute.ts:2995` / `settings.subroute.ts:2076` / `treatment-catalog:2195`; `await import(...)` 329 (machine.ts 27); silent-fallback hits 74 (`memoryCustomers/memoryReservations`); `parallel_tool_calls` 0; `npm test` **70 failed / 67 failed tests** dari 448 file / 3428 tests — semua akibat divergensi nama katalog rebrand `Kala Baby/Kids` vs ekspektasi hardcode `Pijat Bayi Pulih Ceria (Terapi Bapil` etc (bukti: `symptom-semantic-scorer.test.ts:92` `expected 'Kala Kids – Pijat Pulih Ceria' to be 'Pijat Kids Pulih Ceria (2 - 4 Tahun)'`); koreksi faktual audit: `scripts/` 135 file (bukan 61), `tenant-html.service.ts` masih dipakai `landing.route.ts:53`, `TenantGoogleIntegration`/`FollowUpTemplate` sudah `@@index([tenant_id])`, `pricing-catalog.phase.ts` & `sync-catalog-rebrand.ts` tidak ada (path basi), `131 circular chains`/`70 dead exports` belum repro dengan `madge`.
 - **Eksekusi Fase 1a (2026-09-25) — fondasional, bukan kosmetik:**
   1. `treatment-catalog.service.ts:101` tambah header SEED-ONLY (DB `clinic_services` otoritatif) — runtime tidak lagi dianggap hardcode.
