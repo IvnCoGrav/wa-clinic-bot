@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-29 - CTWA Hardening: Dekoder Token Meta Ketat + Cleanup Prod + Paritas Preview CAPI
+
+- **Konteks:** Audit pasca-deploy fitur `ctwa_clid` (commit `78fc0746`) menemukan
+  (a) fallback dekoder terlalu permisif, (b) data uji mencemari `ad_clicks` produksi,
+  (c) regex duplikat + komentar basi di jalur bypass webhook, dan (d) preview UI
+  menjanjikan envelope `business_messaging` yang tak selalu dikirim backend.
+- **Fixed — Dekoder CTWA ketat (`src/integrations/whatsapp/waha-ctwa-referral.ts`):**
+  `decodeCtwaPayload` kini HANYA menerima token berprefix Meta `Afi`/`PA` (raw atau
+  hasil decode Base64). Fallback regex longgar 20+ char DIBUANG — string acak kini
+  `undefined`, menutup false-positive atribusi organik→paid.
+- **Fixed — Cleanup data uji produksi:** baris `ad_clicks` `adclick_ctwa_test_ivan`
+  (trackingCode `vn`, customer `a4deafa7…`) DIHAPUS dari DB live. Customer terbukti
+  memiliki reservasi nyata → TIDAK ditandai `is_sandbox_test`.
+- **Fixed — Webhook bypass (`src/routes/webhook.route.ts`):** gate ingest CTWA di
+  jalur bypass admin kini HANYA `wahaReferral?.ctwaClid` (regex promo-code duplikat
+  dibuang; promo-code tetap ditangani `matchAdClickAndFireContact` jalur normal).
+  Komentar basi "chat admin tidak diatribusikan" dikoreksi.
+- **Fixed — Paritas preview CAPI (`reservations.subroute.ts`, `MetaCapiQueue.tsx`):**
+  endpoint `GET /api/admin/capi-queue` mengembalikan `wabaConfigured` (tenant punya
+  `waba_business_account_id`); preview JSON kini `action_source='business_messaging'`
+  HANYA bila `ctwa_clid` ada DAN `wabaConfigured`, sama persis dengan
+  `useBusinessMessaging` di `capi.service.ts`. Ditambah banner peringatan saat WABA id kosong.
+- **Tests:** `waha-ctwa-referral.test.ts` +4 adversarial (tolak string acak non-prefix,
+  Base64 decode bukan token Meta, `root.ctwaPayload` sampah, terima prefix `PA`);
+  `waha-webhook.test.ts` +2 seam (bypass admin + CTWA meng-ingest `isNewCustomerRecord=false`;
+  bypass admin + promo-code tanpa CTWA TIDAK memanggil attribution). Fixture token
+  disintesis ulang berprefix `Afi`. Regression gate: `npm run build` Exit 0, dashboard
+  build Exit 0, full suite 521 file / 4238 test hijau (0 failed).
+
 #### 2026-09-29 - LiveChat: Server-Side Filter (Unread/Reservasi) + Perbaikan Modal Label & Badge Unread Global
 
 - **Konteks:** Tab Unread/Reservasi hanya memfilter 50 percakapan yang sudah

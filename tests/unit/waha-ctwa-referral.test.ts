@@ -3,9 +3,10 @@ import { extractWahaAdReferral } from '../../src/integrations/whatsapp/waha-ctwa
 
 /**
  * Fixture struktural CTWA dari live server (Issue #119).
- * Token ctwaClid disintesis (struktur identik, nilai bukan token produksi).
+ * Token ctwaClid memakai prefix Meta asli (`Afi…`); nilainya bukan token produksi
+ * valid (tidak pernah dikirim ke Meta), hanya bentuk/panjang yang representatif.
  */
-const CTWA_CLID = 'SYNTHETIC_ctwa_clid_AbC123-xyz789_tokenForTestOnly';
+const CTWA_CLID = 'AfiAndhVXv11SVsc5IxbflJRvrJOHBl2GoLULF8ZUcAyk7pBCPpmUOyoG7ttTwqKD7yX2w9TBCtAqBiHT77Hma1DafFvhNHY0lHzbF863EKfTz8ulGRtS8PYDBSQv5YQl0vc5tyimWW5b8tc_YFA7LG-acM5xRhwqS1hxgLyDaoqh0rQaa';
 const AD_ID = '120250673996340235';
 
 function fullAdReply() {
@@ -184,5 +185,45 @@ describe('extractWahaAdReferral (WAHA CTWA)', () => {
     expect(ref?.sourceType).toBe('ctwa_ad');
     expect(ref?.sourceUrl).toBe('https://www.instagram.com/p/Dd0LS7Pg8r3/');
     expect(ref?.headline).toBe('PROMO KHUSUS SURABAYA & SIDOARJO!');
+  });
+
+  it('I. rejects long random strings WITHOUT Meta prefix (anti false-positive organik→paid)', () => {
+    // String 20+ char acak (dulu lolos fallback generik) — kini WAJIB undefined.
+    const random20 = 'SYNTHETIC_ctwa_clid_A1'; // 22 char, no Afi/PA prefix
+    const random48 = 'aB3xY9zQ1wE4rT6yU8iO0pL2kJ5hG7fD9sA1cV3bN6mQ8wZ0';
+    const hashLike = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+    for (const junk of [random20, random48, hashLike]) {
+      const payload = {
+        _data: { message: { extendedTextMessage: { contextInfo: { externalAdReply: { ctwaClid: junk } } } } },
+      };
+      expect(extractWahaAdReferral(payload), `should reject: ${junk}`).toBeUndefined();
+    }
+  });
+
+  it('J. rejects Base64 whose decoded value is NOT an Afi/PA Meta token', () => {
+    // Base64 valid, tapi decode-nya bukan token Meta → undefined.
+    const b64OfJunk = Buffer.from('this_is_not_a_meta_token_at_all_1234567890').toString('base64');
+    const payload = {
+      _data: { message: { extendedTextMessage: { contextInfo: { ctwaPayload: b64OfJunk } } } },
+    };
+    expect(extractWahaAdReferral(payload)).toBeUndefined();
+  });
+
+  it('K. ignores stray root.ctwaPayload garbage without externalAdReply', () => {
+    const payload = {
+      id: 'x',
+      from: '628@c.us',
+      ctwaPayload: 'someRandomPayloadValue1234567890',
+    };
+    expect(extractWahaAdReferral(payload)).toBeUndefined();
+  });
+
+  it('L. accepts raw token with PA prefix (alternate Meta form)', () => {
+    const paToken = 'PA' + 'x'.repeat(60);
+    const payload = {
+      contextInfo: { externalAdReply: { ctwaClid: paToken } },
+    };
+    expect(extractWahaAdReferral(payload)?.ctwaClid).toBe(paToken);
   });
 });

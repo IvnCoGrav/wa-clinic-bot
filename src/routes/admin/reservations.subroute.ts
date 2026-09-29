@@ -2863,16 +2863,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const now = Date.now();
 
       let tenantLandingDomain = '';
+      let wabaConfigured = false;
       try {
         // Select eksplisit: kolom tenants.settings belum ada di sebagian DB
         // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) — select-* memicu P2022.
         const tenant = await prisma.tenant.findUnique({
           where: { id: tenantId },
-          select: { id: true, landing_domain: true },
+          select: { id: true, landing_domain: true, waba_business_account_id: true },
         });
         if ((tenant as any)?.landing_domain) {
           tenantLandingDomain = (tenant as any).landing_domain.trim();
         }
+        // State-gate UI preview: envelope business_messaging HANYA sah bila tenant
+        // punya WABA id (paritas backend `capi.service.ts` useBusinessMessaging).
+        wabaConfigured = Boolean((tenant as any)?.waba_business_account_id);
       } catch {}
 
       const treatmentPriceCache = new Map<string, number | undefined>();
@@ -3151,7 +3155,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const data = [...reservationData, ...mqlLeadItems];
       const pending = data.filter((d) => d.purchase_review_status === 'pending').length;
 
-      return reply.status(200).send({ success: true, data, total: data.length, pending });
+      return reply.status(200).send({ success: true, data, total: data.length, pending, wabaConfigured });
     } catch (err: any) {
       const rows = Array.from(memoryReservations.values()).filter(
         (r) => r.status !== 'cancelled'

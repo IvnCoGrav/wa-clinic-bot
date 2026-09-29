@@ -989,10 +989,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, { skipFollowUpScheduling: true });
         const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, resolvedTenantId);
 
-        // Ingest CTWA referral jika pesan membawa metadata iklan (memastikan nomor admin/test tetap tercatat ad click-nya)
+        // Ingest CTWA referral jika pesan membawa metadata iklan native (memastikan
+        // nomor admin/test tetap tercatat ad click-nya). Gate HANYA `ctwaClid`:
+        // pencocokan promo-code `[xx]` adalah tanggung jawab tunggal
+        // matchAdClickAndFireContact (anti-duplikasi regex lintas jalur).
         try {
           const wahaReferral = extractWahaAdReferral(payload);
-          if (wahaReferral?.ctwaClid || (inboundContent && /(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]/i.test(inboundContent))) {
+          if (wahaReferral?.ctwaClid) {
             await matchAdClickAndFireContact({
               bodyText: inboundContent,
               isNewCustomerRecord: false,
@@ -1162,8 +1165,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
       // Ekstraksi metadata iklan CTWA langsung dari payload WAHA (Issue #119).
-      // Jalur bypass admin / stale / blocked sudah return lebih awal (intended:
-      // chat admin tidak diatribusikan). Fail-open bila payload organik.
+      // Jalur stale / blocked sudah return lebih awal. Jalur bypass admin TIDAK
+      // masuk sini karena sudah di-ingest khusus di blok bypass (agar ad click
+      // nomor admin tetap tercatat). Fail-open bila payload organik.
       const bodyText = incomingMessage.text?.body || '';
       const wahaReferral = extractWahaAdReferral(payload);
       const attributionResult = await matchAdClickAndFireContact({

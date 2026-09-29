@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 170. [CTWA/CAPI] Sisa debt hardening ctwa_clid pasca-audit (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Audit pasca-deploy `ctwa_clid` (commit `78fc0746`) menutup 4 celah:
+  dekoder permisif, data uji prod, regex duplikat bypass, dan preview UI tak
+  paritas backend. Lihat CHANGELOG. Sisa yang sengaja dibuka:
+- **170a — Rotasi `ADMIN_API_KEY` (OPEN, WAJIB):** key `0137bbe…` terekspos di
+  riwayat command/SSH saat verifikasi live. Wajib dirotasi di `.env` server
+  (`/opt/wa-clinic-bot/.env`) + `.env` lokal, lalu restart container `app`.
+  Jangan tempel key ke command lagi — pakai `docker compose exec app node` atau
+  `curl` dari dalam container.
+- **170b — Verifikasi empiris Meta untuk nomor unofficial WAHA (OPEN):** residual
+  #159. Dukungan Meta CAPI `business_messaging` untuk nomor WhatsApp unofficial
+  (WAHA) belum dibuktikan di Events Manager produksi. Butuh tes terkontrol +
+  cek deduplikasi/attribution di Ads Manager.
+- **170c — Fallback prefix `PA` belum terverifikasi live (OPEN):** dekoder menerima
+  prefix `PA` sebagai bentuk alternatif Meta. Baru `Afi…` yang terbukti empiris di
+  payload live; `PA…` dipertahankan dari spesifikasi, belum ada sampel produksi.
+- **170d — Cleanup data uji tanpa helper (by-design):** penghapusan
+  `adclick_ctwa_test_ivan` dilakukan manual via SQL. Belum ada endpoint/CLI
+  khusus purge `ad_clicks` uji. Jalur test masa depan WAJIB pakai
+  `Customer.is_sandbox_test=true` + `/api/admin/sandbox/cleanup`.
+
 ## 169. [LiveChat] Sisa debt server-side filter unread/reservasi (2026-09-29) - OPEN (sebagian by-design)
 
 - **Konteks:** Filter tab Unread/Reservasi dipindah dari client-side ke server-side

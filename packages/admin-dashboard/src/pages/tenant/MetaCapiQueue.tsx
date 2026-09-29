@@ -213,7 +213,7 @@ export function cleanTreatmentList(detail: string): string[] {
 /**
  * Membangun preview payload JSON Meta Graph API CAPI
  */
-const buildCapiJsonPayload = (item: QueueItem) => {
+const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
   const eventName = item.eventType || 'Purchase';
   const cleanTreatments = cleanTreatmentList(item.treatment_detail);
   const occurredTimestamp = item.purchase_occurred_at
@@ -317,14 +317,18 @@ const buildCapiJsonPayload = (item: QueueItem) => {
   const isMoms = treatmentLow.includes('moms') || treatmentLow.includes('ibu') || treatmentLow.includes('hamil') || treatmentLow.includes('nifas') || treatmentLow.includes('laktasi');
 
   const isCtwa = Boolean(item.attribution.ctwa_clid);
+  // Paritas backend (`capi.service.ts` useBusinessMessaging): envelope
+  // business_messaging HANYA dipakai bila ctwa_clid ADA *dan* tenant punya WABA id.
+  // Tanpa WABA id, backend fail-open ke action_source 'chat' — preview HARUS sama.
+  const useBusinessMessaging = isCtwa && wabaConfigured;
 
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
     event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`,
     event_source_url: landingUrl,
-    action_source: isCtwa ? 'business_messaging' : 'chat',
-    ...(isCtwa ? { messaging_channel: 'whatsapp' } : {}),
+    action_source: useBusinessMessaging ? 'business_messaging' : 'chat',
+    ...(useBusinessMessaging ? { messaging_channel: 'whatsapp' } : {}),
     user_data: {
       ph: item.customer.phone ? `sha256(${item.customer.phone.replace(/\D/g, '')})` : undefined,
       fn: resolvedFn ? `sha256(${resolvedFn.toLowerCase()})` : undefined,
@@ -375,6 +379,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
 export const MetaCapiQueue: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [wabaConfigured, setWabaConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -393,13 +398,13 @@ export const MetaCapiQueue: React.FC = () => {
     setSelectedJsonItem(item);
     setIsEditingJson(false);
     setJsonParseError(null);
-    const payload = customPayloads[item.id] || buildCapiJsonPayload(item);
+    const payload = customPayloads[item.id] || buildCapiJsonPayload(item, wabaConfigured);
     setJsonDraft(JSON.stringify(payload, null, 2));
   };
 
   const handleStartEditJson = () => {
     if (!selectedJsonItem) return;
-    const current = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+    const current = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
     setJsonDraft(JSON.stringify(current, null, 2));
     setJsonParseError(null);
     setIsEditingJson(true);
@@ -430,7 +435,7 @@ export const MetaCapiQueue: React.FC = () => {
 
   const handleResetJson = () => {
     if (!selectedJsonItem) return;
-    const original = buildCapiJsonPayload(selectedJsonItem);
+    const original = buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
     setJsonDraft(JSON.stringify(original, null, 2));
     setJsonParseError(null);
     setCustomPayloads((prev) => {
@@ -464,6 +469,7 @@ export const MetaCapiQueue: React.FC = () => {
       const res = await apiRequest('/api/admin/capi-queue');
       const data = Array.isArray(res?.data) ? res.data : [];
       setItems(data);
+      setWabaConfigured(Boolean(res?.wabaConfigured));
     } catch (err: any) {
       toast(`Error memuat queue: ${err.message}`, 'error');
     } finally {
@@ -1061,7 +1067,7 @@ export const MetaCapiQueue: React.FC = () => {
 
       {/* 📦 Modal View & Edit JSON Payload */}
       {selectedJsonItem && (() => {
-        const currentPayload = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+        const currentPayload = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
         const isCustom = !!customPayloads[selectedJsonItem.id];
         const isPending = selectedJsonItem.purchase_review_status === 'pending';
 
@@ -1093,6 +1099,12 @@ export const MetaCapiQueue: React.FC = () => {
                     <p className="text-[11px] text-[#667781] dark:text-[#aebac1]">
                       Event: <span className="font-bold text-[#008069] dark:text-[#00a884]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{selectedJsonItem.customer.name}</span>
                     </p>
+                    {Boolean(selectedJsonItem.attribution.ctwa_clid) && !wabaConfigured && (
+                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <AlertTriangle size={11} />
+                        WABA Business Account ID belum dikonfigurasi — event dikirim sebagai action_source 'chat' (envelope business_messaging tidak lengkap).
+                      </p>
+                    )}
                   </div>
                 </div>
 

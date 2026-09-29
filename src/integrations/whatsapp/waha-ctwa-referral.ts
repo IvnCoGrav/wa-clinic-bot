@@ -61,19 +61,17 @@ export function decodeCtwaPayload(raw: unknown): string | undefined {
     return trimmed;
   }
 
-  // Coba decode Base64
+  // Coba decode Base64 — HANYA terima bila hasil decode = token Meta valid (prefix
+  // `Afi`/`PA`). Fallback string generik DILARANG: token opaque Meta selalu berprefix
+  // tsb (bukti live: `AfiAndh…`), sedangkan string acak 20+ char apa pun akan
+  // menghasilkan false-positive atribusi organik → paid.
   try {
     const buf = Buffer.from(trimmed, 'base64');
     const decoded = buf.toString('utf8');
-    if (decoded && (decoded.startsWith('Afi') || decoded.startsWith('PA') || /^[A-Za-z0-9_-]{20,}$/.test(decoded))) {
+    if (decoded && (decoded.startsWith('Afi') || decoded.startsWith('PA'))) {
       return decoded;
     }
   } catch (_) {}
-
-  // Fallback: kembalikan string mentah jika panjangnya minimal 20 karakter
-  if (/^[A-Za-z0-9+/=_-]{20,}$/.test(trimmed)) {
-    return trimmed;
-  }
 
   return undefined;
 }
