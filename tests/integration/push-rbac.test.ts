@@ -219,7 +219,47 @@ describe('Push RBAC & Session Isolation (ghost subscription remediation)', () =>
     });
   });
 
-  describe('4. Sanitasi cookie silang antar portal', () => {
+  describe('4. Dual-cookie: sesi staf MENANG atas sisa admin_session (fix ghost push)', () => {
+    it('subscribe dengan KEDUA cookie (staff valid + admin lama) tetap tercatat STAFF + staffId', async () => {
+      (prisma as any).roleApiScope = {
+        findMany: vi.fn().mockResolvedValue(THERAPIST_PUSH_SCOPE_ROWS),
+      };
+      // Sesi admin lama masih valid di server — dulu ini yang menang diam-diam.
+      const { AdminSessionService } = await import('../../src/services/admin-session.service');
+      vi.spyOn(AdminSessionService, 'validateSession').mockResolvedValue({
+        id: 'admin-sess-1',
+        token: 'stale_admin_token',
+        adminIdentity: 'admin@kalamomsspa.com',
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 86400000),
+      } as any);
+
+      const saveSpy = vi.spyOn(webPushService, 'saveSubscription').mockResolvedValue({} as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/push/subscribe',
+        headers: {
+          cookie: 'admin_session=stale_admin_token; staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        payload: {
+          subscription: {
+            endpoint: 'https://push.example.com/dual-cookie-endpoint',
+            keys: { p256dh: 'p256dh-key', auth: 'auth-key' },
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+      const params = saveSpy.mock.calls[0][0] as any;
+      expect(params.userType).toBe('STAFF');
+      expect(params.userId).toBe(THERAPIST_ID);
+    });
+  });
+
+  describe('5. Sanitasi cookie silang antar portal', () => {
     it('login staf menyertakan penghapusan cookie admin_session', async () => {
       vi.spyOn(StaffAuthService, 'login').mockResolvedValue({
         token: 'new_staff_token',

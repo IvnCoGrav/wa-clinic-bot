@@ -107,38 +107,29 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (clientKey && safeCompare(clientKey, adminKey)) {
       isAuthenticated = true;
       identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
-    } else if (sessionCookie) {
-      // Kontrak sinyal: DB sesi tak tersedia → 503 (bukan 401 ambigu yang
-      // memicu penghapusan token cadangan di frontend).
-      try {
-        const validSession = await AdminSessionService.validateSession(sessionCookie);
-        if (validSession) {
-          isAuthenticated = true;
-          identity = validSession.adminIdentity;
-        }
-      } catch (err) {
-        if (err instanceof SessionStoreUnavailable) {
-          return reply.status(503).send({
-            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
-            code: 'SESSION_STORE_UNAVAILABLE',
-          });
-        }
-        throw err;
-      }
-    } else if (staffCookie) {
+    } else {
+      // PRIORITAS IDENTITAS: sesi STAF divalidasi LEBIH DULU daripada sesi admin.
+      // Rasional (bug ghost push live): perangkat yang menyimpan `admin_session`
+      // lama + `staff_session` baru membuat cabang admin menang diam-diam →
+      // `staffId` tak pernah di-set → perangkat push terikat sebagai ADMIN dan
+      // kebocoran notifikasi berlanjut. Sesi staf yang valid mencerminkan
+      // identitas yang benar-benar sedang dipakai, jadi harus menang.
       const { StaffAuthService } = await import('../services/staff-auth.service');
-      let staffSession: StaffSessionWithStaff;
-      try {
-        staffSession = await StaffAuthService.validateSession(staffCookie);
-      } catch (err) {
-        if (err instanceof SessionStoreUnavailable) {
-          return reply.status(503).send({
-            error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
-            code: 'SESSION_STORE_UNAVAILABLE',
-          });
+      let staffSession: StaffSessionWithStaff | null = null;
+      if (staffCookie) {
+        try {
+          staffSession = await StaffAuthService.validateSession(staffCookie);
+        } catch (err) {
+          if (err instanceof SessionStoreUnavailable) {
+            return reply.status(503).send({
+              error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+              code: 'SESSION_STORE_UNAVAILABLE',
+            });
+          }
+          throw err;
         }
-        throw err;
       }
+
       if (staffSession) {
         isAuthenticated = true;
         identity = staffSession.staff.name;
@@ -150,6 +141,24 @@ export async function adminRoutes(fastify: FastifyInstance) {
         // dibaca di banyak subroute (`request.tenantId || DEFAULT_TENANT_ID`)
         // tapi TIDAK PERNAH ditulis, sehingga selalu jatuh ke default-tenant.
         (request as any).tenantId = staffSession.staff.tenant_id;
+      } else if (sessionCookie) {
+        // Kontrak sinyal: DB sesi tak tersedia → 503 (bukan 401 ambigu yang
+        // memicu penghapusan token cadangan di frontend).
+        try {
+          const validSession = await AdminSessionService.validateSession(sessionCookie);
+          if (validSession) {
+            isAuthenticated = true;
+            identity = validSession.adminIdentity;
+          }
+        } catch (err) {
+          if (err instanceof SessionStoreUnavailable) {
+            return reply.status(503).send({
+              error: 'Layanan sesi sedang tidak tersedia. Silakan coba lagi.',
+              code: 'SESSION_STORE_UNAVAILABLE',
+            });
+          }
+          throw err;
+        }
       }
     }
 
