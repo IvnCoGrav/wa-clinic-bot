@@ -336,6 +336,16 @@ if (require.main === module) {
       }).catch(e => console.error('[EXPIRED HOLD SWEEP START ERROR]', e));
     }
 
+    // #162e: Auto-close sesi perjalanan terapis yang jadwalnya sudah lewat. Default aktif.
+    if (process.env.ENABLE_TRIP_AUTOCLOSE_SWEEP !== 'false') {
+      const intervalMinutes = parseInt(process.env.TRIP_AUTOCLOSE_SWEEP_INTERVAL_MINUTES || '15', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runTripAutoCloseSweep(), intervalMinutes * 60 * 1000);
+        console.log(`🛣️ Trip auto-close sweep cron started (every ${intervalMinutes}m)`);
+      }).catch(e => console.error('[TRIP AUTOCLOSE SWEEP START ERROR]', e));
+    }
+
     // Buffer notifikasi penugasan terapis (5 menit). Default aktif; env 'false' menonaktifkan.
     if (process.env.ENABLE_ASSIGNMENT_NOTIF_SWEEP !== 'false') {
       const intervalMinutes = parseInt(process.env.ASSIGNMENT_NOTIF_SWEEP_INTERVAL_MINUTES || '2', 10);

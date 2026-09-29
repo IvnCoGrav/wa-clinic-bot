@@ -24,6 +24,30 @@ import { POPULAR_LANDMARKS } from '../config/landmarks';
 /** TTL sesi trip (detik). 10 menit — selaras dengan auto-expiry anti-lupa. */
 export const TRIP_PING_TTL_SEC = 600;
 
+/** #162e: grace setelah jadwal+durasi lewat sebelum sesi trip auto-close (1 jam). */
+export const TRIP_AUTO_CLOSE_GRACE_MS = 60 * 60 * 1000;
+
+/**
+ * #162e: apakah sesi trip sudah melewati jadwal kunjungan + durasi + grace.
+ * Murni deterministik (tanpa I/O). Fail-open: booking_date null/invalid → false
+ * (jangan tutup sesi secara buta tanpa dasar jadwal).
+ */
+export function isTripScheduleExpired(
+  bookingDate: Date | null | undefined,
+  durationMinutes: number | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!bookingDate) return false;
+  const startMs = bookingDate instanceof Date ? bookingDate.getTime() : NaN;
+  if (!Number.isFinite(startMs)) return false;
+  const durMin =
+    typeof durationMinutes === 'number' && Number.isFinite(durationMinutes) && durationMinutes > 0
+      ? durationMinutes
+      : 60;
+  const endMs = startMs + durMin * 60 * 1000 + TRIP_AUTO_CLOSE_GRACE_MS;
+  return now.getTime() > endMs;
+}
+
 /** Batas geofence anti-lost (global operasional, bukan data bisnis per-tenant). */
 // TODO(tenant-aware): pindahkan ke ClinicPolicy bila tiap tenant butuh ambang beda.
 export const GEOFENCE_STALLED_SEC = 180;
@@ -257,6 +281,18 @@ class StaffTripTrackingService {
     if (!reservationId || typeof reservationId !== 'string' || !reservationId.trim()) return null;
     const hit = this.store.get(tripKey(tenantId, reservationId));
     return hit ? hit.record : null;
+  }
+
+  /**
+   * #162e: daftar sesi trip aktif (untuk sweep auto-close). Tenant-scoped bila
+   * `tenantId` diberikan; tanpa argumen mengembalikan seluruh tenant (sweep cron).
+   */
+  public listActiveTrips(tenantId?: string): TripRecord[] {
+    const out: TripRecord[] = [];
+    for (const [, v] of this.store) {
+      if (!tenantId || v.record.tenantId === tenantId) out.push(v.record);
+    }
+    return out;
   }
 
   public clearTrip(tenantId: string, reservationId: string): boolean {

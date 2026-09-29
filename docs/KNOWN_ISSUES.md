@@ -55,8 +55,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **162d — Akurasi indoor & throttle OS (OPEN, keterbatasan platform):** saat HP di
   kantong/layar mati, OS mem-throttle GPS; posisi bisa basi. Mitigasi: `lastUpdateSec`
   + pill "Update X menit lalu". Perlu validasi lapangan.
-- **162e — Auto-close berbasis jam jadwal (belum):** TTL 600s sudah mencegah memory leak,
-  tetapi auto-close "jadwal lewat 1 jam" belum diimplementasikan (butuh sweep/cron).
+- **162e — Auto-close berbasis jam jadwal (RESOLVED, 2026-09-29):** `isTripScheduleExpired` (murni,
+  grace 1 jam setelah jadwal+durasi; fail-open bila `booking_date` null) + `listActiveTrips`
+  (tenant-scoped) di `staff-trip-tracking.service.ts`; `CronService.runTripAutoCloseSweep` menutup sesi
+  usang + siarkan `staff.trip_closed` (reason `schedule_expired`); terjadwal di `app.ts`
+  (`ENABLE_TRIP_AUTOCLOSE_SWEEP`, interval `TRIP_AUTOCLOSE_SWEEP_INTERVAL_MINUTES`, default 15 mnt).
+  Test `tests/unit/staff-trip-auto-close.test.ts` (8).
 - **162f — Ambang geofence global (OPEN, tenant-aware):** `GEOFENCE_*` masih konstanta file
   (ditandai `TODO(tenant-aware)`). Pindahkan ke `ClinicPolicy` bila tiap tenant butuh ambang
   berbeda.
@@ -80,7 +84,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   dicatat sebagai kolom `kelurahan`, pin presisi berpotensi tertimpa hasil teks, dan
   kartu terapis tidak memuat nama perumahan/blok. Perbaikan fondasional sudah dieksekusi
   (lihat CHANGELOG 2026-09-28). Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
-- **161a — Sentroid kecamatan masih membawa nama desa-pertama (OPEN, sebagian):**
+- **161a — Sentroid kecamatan masih membawa nama desa-pertama (RESOLVED flag, 2026-09-29):**
+  `getGazetteerCoordinates` kini mengembalikan `matchedLevel: 'kelurahan' | 'kecamatan'` deterministik
+  (semua return path: corridor/exact/ranked scan). Konsumen dapat membedakan "customer menyebut
+  kelurahan" vs "sentroid kecamatan (nama desa = baris pertama dataset)". Test `tests/unit/gazetteer-matched-level.test.ts`
+  (4). Catatan: audit blast-radius penuh untuk konsumen lama (yang belum memakai flag) masih bertahap;
+  perilaku koordinat TIDAK berubah (aditif). Riwayat OPEN (arsip):
   `getGazetteerCoordinates('perum banjarmukti blok g6a buduran')` mengembalikan
   `kelurahan: 'Sidokerto'` (desa pertama kecamatan Buduran) walau tidak disebut customer.
   Mitigasi deterministik sudah dipasang di jalur lifecycle (anti-fabrikasi wilayah: nama desa
@@ -137,7 +146,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **159c — `user_data.ctwa_clid` (RESOLVED):** `capi.service.ts` mengirim `ctwa_clid` MENTAH (bukan hashed, bukan PII) di `user_data` bila AdClick CTWA. Test di `tracking.test.ts` (raw + negatif organik).
 - **159d — Business Messaging envelope (RESOLVED terhadap blueprint Meta):** konversi dari iklan Click-to-WhatsApp kini memakai envelope resmi Meta Business Messaging CAPI (blueprint: Conversions API for Business Messaging, `developers.facebook.com/docs/marketing-api/conversions-api/business-messaging`): `action_source='business_messaging'`, `messaging_channel='whatsapp'` (TOP-LEVEL event, bukan `custom_data`), `user_data.whatsapp_business_account_id`, dan `user_data.ctwa_clid` MENTAH. **State-gated:** envelope bisnis hanya diaktifkan bila `tenant.waba_business_account_id` terisi; jika tidak, sistem fail-open ke `action_source='chat'` (kompatibel mundur) + `console.warn`. Field itu sudah tersedia di Settings → WhatsApp Provider → tab WABA → "Business Account ID" (reuse-first, tanpa UI baru). Test: `tracking.test.ts` (envelope terkonfigurasi + fail-open).
 - **159d-1 — Caveat dukungan Meta (OPEN, butuh verifikasi produksi):** blueprint Meta menyatakan Business Messaging CAPI mendukung **Cloud API / On-Premises API (Biz API ≥2.45.1)**. Nomor klinik berjalan di **WAHA (klien unofficial multi-device)**; `ctwa_clid` tetap terekspos di payload WAHA, tetapi Meta TIDAK menjamin event `business_messaging` dari nomor unofficial diterima. Wajib verifikasi empiris di Events Manager produksi (Test Events) sebelum mengandalkan atribusi ini; bila ditolak, kembalikan ke mode `chat` + andalkan `ctwa_clid` sebagai sinyal internal.
-- **159d-2 — Discoverability field (OPEN, minor):** "Business Account ID" berada di sub-tab WABA sehingga tenant WAHA mungkin tidak menemukannya, padahal dipakai lintas-provider untuk CTWA. Kandidat perbaikan: helper-text/tautan di section "Meta Pixel & CAPI" (bukan page baru). Belum dieksekusi agar tidak menambah blast radius UI tanpa konfirmasi.
+- **159d-2 — Discoverability field (DONE, 2026-09-29):** helper-text lintas-provider ditambahkan di `MetaCapiPanel.tsx` (section "Meta Pixel & CAPI") — mengarahkan isi "Business Account ID" di WhatsApp Provider → tab WABA untuk atribusi CTWA, dengan catatan fail-open (mode chat) bila kosong. Reuse-first, tanpa page baru.
 - **159e — Kontak baru Signal re-negotiation (OPEN, by-design):** stanza pertama pasca renegosiasi kunci sesi bisa datang tanpa `contextInfo` (kasus 6288000000002) → tercatat organik. Bila kontak mengirim pesan kedua dengan `contextInfo`, jalur REPEAT `ad-attribution.service.ts` memperbarui `ctwa_clid` secara otomatis. Fail-open; tidak ada drop pesan.
 - **159f — Kontak admin/bypass/stale tidak diatribusikan (OPEN, intended):** atribusi berada setelah early-return guard; dipertahankan agar chat admin/CS tidak mengotori atribusi iklan. Didokumentasikan sebagai perilaku sengaja.
 

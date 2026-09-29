@@ -620,6 +620,46 @@ export class CronService {
   }
 
   /**
+   * #162e: Auto-close sesi perjalanan terapis yang jadwalnya sudah lewat
+   * (jadwal + durasi + grace 1 jam). Mencegah sesi "terlupa" tetap aktif sampai TTL.
+   * Tenant-scoped; tutup = clearTrip + siarkan `staff.trip_closed`.
+   */
+  public async runTripAutoCloseSweep(): Promise<void> {
+    try {
+      const { staffTripTrackingService, isTripScheduleExpired } = await import('./staff-trip-tracking.service');
+      const { prisma } = await import('../db/client');
+      const { getLiveChatHub } = await import('./live-chat-hub.service');
+      const active = staffTripTrackingService.listActiveTrips();
+      if (active.length === 0) return;
+      let closed = 0;
+      for (const trip of active) {
+        try {
+          const res = await prisma.reservation.findFirst({
+            where: { id: trip.reservationId, tenant_id: trip.tenantId },
+            select: { booking_date: true, duration_minutes: true },
+          });
+          if (!res) continue;
+          if (!isTripScheduleExpired(res.booking_date, res.duration_minutes)) continue;
+          staffTripTrackingService.clearTrip(trip.tenantId, trip.reservationId);
+          closed++;
+          getLiveChatHub()
+            .publish({
+              type: 'staff.trip_closed',
+              tenantId: trip.tenantId,
+              payload: { reservationId: trip.reservationId, staffId: trip.staffId, reason: 'schedule_expired' },
+            })
+            .catch(() => {});
+        } catch (e: any) {
+          console.warn(`[Cron Service] Trip auto-close skip ${trip.reservationId}:`, e?.message);
+        }
+      }
+      if (closed > 0) console.log(`[Cron Service] Sesi perjalanan terapis auto-closed: ${closed}.`);
+    } catch (err) {
+      console.error('[Cron Service] Error running trip auto-close sweep:', (err as Error).message);
+    }
+  }
+
+  /**
    * Buffer penugasan terapis: kirim notifikasi yang sudah melewati jendela 5 menit.
    * Persisten via kolom assignment_pending_at/assignment_notified_at.
    */
