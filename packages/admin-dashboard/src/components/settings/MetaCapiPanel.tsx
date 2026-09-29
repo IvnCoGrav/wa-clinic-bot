@@ -50,6 +50,15 @@ export const MetaCapiPanel: React.FC<Props> = ({
         Integrasi Conversion API (CAPI) Meta untuk mengirim event konversi (Lead &amp; Purchase) secara server-side ke Meta Ads Manager.
       </p>
 
+      <div className="rounded-xl bg-[#f0f7f5] border border-emerald-200 px-3 py-2.5 text-[11px] text-[#3d5a52] leading-relaxed">
+        <span className="font-bold text-[#111b21]">Atribusi iklan Click-to-WhatsApp (CTWA):</span> agar
+        konversi dari iklan WhatsApp teratribusi benar, isi juga{' '}
+        <span className="font-semibold">Business Account ID</span> di{' '}
+        <span className="font-semibold">WhatsApp Provider → tab WABA</span>. Field itu dipakai lintas
+        provider (WAHA/WABA) untuk mengirim event CTWA dengan envelope Business Messaging Meta. Bila
+        dikosongkan, sistem tetap jalan dalam mode kompatibel (event dikirim sebagai chat biasa).
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
         <div className="space-y-1">
           <label className="text-[11px] font-bold text-[#111b21] flex items-center space-x-1">

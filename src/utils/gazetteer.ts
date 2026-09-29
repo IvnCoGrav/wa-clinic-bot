@@ -235,7 +235,23 @@ export function getGazetteerKecamatanEntries(): Array<{ lower: string; orig: str
  * - Substring scan longest-first (kelurahan then kecamatan)
  * Returns lat/lng + row metadata, or null.
  */
-export function getGazetteerCoordinates(query: string): { lat: number; lng: number; kelurahan: string; kecamatan: string; kota: string; zipcode: string } | null {
+export interface GazetteerCoordinateHit {
+  lat: number;
+  lng: number;
+  kelurahan: string;
+  kecamatan: string;
+  kota: string;
+  zipcode: string;
+  /**
+   * #161a: level pencocokan deterministik. 'kelurahan' = customer menyebut
+   * kelurahan/desa secara eksplisit; 'kecamatan' = fallback sentroid kecamatan
+   * (nama desa pada `kelurahan` adalah baris pertama dataset, BUKAN sebutan
+   * customer). Konsumen WAJIB memakai flag ini, bukan menebak dari nama.
+   */
+  matchedLevel: 'kelurahan' | 'kecamatan';
+}
+
+export function getGazetteerCoordinates(query: string): GazetteerCoordinateHit | null {
   ensureInit();
   if (!query) return null;
   const qNorm = normalizeToponymAbbreviations(query).replace(/\s+/g, ' ').trim();
@@ -250,11 +266,11 @@ export function getGazetteerCoordinates(query: string): { lat: number; lng: numb
   if (corridor) {
     const kelHit = coordByKelLower.get(corridor.kelurahan.toLowerCase());
     if (kelHit) {
-      return { lat: kelHit.lat, lng: kelHit.lng, kelurahan: kelHit.row.Kelurahan_Desa, kecamatan: kelHit.row.Kecamatan, kota: kelHit.row.Kabupaten_Kota, zipcode: kelHit.row.Kode_Pos };
+      return { lat: kelHit.lat, lng: kelHit.lng, kelurahan: kelHit.row.Kelurahan_Desa, kecamatan: kelHit.row.Kecamatan, kota: kelHit.row.Kabupaten_Kota, zipcode: kelHit.row.Kode_Pos, matchedLevel: 'kelurahan' };
     }
     const kecHit = coordByKecLower.get(corridor.kecamatan.toLowerCase());
     if (kecHit) {
-      return { lat: kecHit.lat, lng: kecHit.lng, kelurahan: kecHit.row.Kelurahan_Desa, kecamatan: kecHit.row.Kecamatan, kota: kecHit.row.Kabupaten_Kota, zipcode: kecHit.row.Kode_Pos };
+      return { lat: kecHit.lat, lng: kecHit.lng, kelurahan: kecHit.row.Kelurahan_Desa, kecamatan: kecHit.row.Kecamatan, kota: kecHit.row.Kabupaten_Kota, zipcode: kecHit.row.Kode_Pos, matchedLevel: 'kecamatan' };
     }
   }
 
@@ -263,13 +279,13 @@ export function getGazetteerCoordinates(query: string): { lat: number; lng: numb
   const exactKel = coordByKelLower.get(qNorm);
   if (exactKel) {
     if (!cityScope || exactKel.row.Kabupaten_Kota === cityScope) {
-      return { lat: exactKel.lat, lng: exactKel.lng, kelurahan: exactKel.row.Kelurahan_Desa, kecamatan: exactKel.row.Kecamatan, kota: exactKel.row.Kabupaten_Kota, zipcode: exactKel.row.Kode_Pos };
+      return { lat: exactKel.lat, lng: exactKel.lng, kelurahan: exactKel.row.Kelurahan_Desa, kecamatan: exactKel.row.Kecamatan, kota: exactKel.row.Kabupaten_Kota, zipcode: exactKel.row.Kode_Pos, matchedLevel: 'kelurahan' };
     }
   }
   const exactKec = coordByKecLower.get(qNorm);
   if (exactKec) {
     if (!cityScope || exactKec.row.Kabupaten_Kota === cityScope) {
-      return { lat: exactKec.lat, lng: exactKec.lng, kelurahan: exactKec.row.Kelurahan_Desa, kecamatan: exactKec.row.Kecamatan, kota: exactKec.row.Kabupaten_Kota, zipcode: exactKec.row.Kode_Pos };
+      return { lat: exactKec.lat, lng: exactKec.lng, kelurahan: exactKec.row.Kelurahan_Desa, kecamatan: exactKec.row.Kecamatan, kota: exactKec.row.Kabupaten_Kota, zipcode: exactKec.row.Kode_Pos, matchedLevel: 'kecamatan' };
     }
   }
 
@@ -320,7 +336,7 @@ function wordCount(s: string): number {
 function rankedGazetteerScan(
   qNorm: string,
   cityScope: string | null
-): { lat: number; lng: number; kelurahan: string; kecamatan: string; kota: string; zipcode: string } | null {
+): GazetteerCoordinateHit | null {
   const rows = rawDataCache || [];
   const candidates: PhraseCandidate[] = [];
   const alreadyMatchedPhrases = new Set<string>();
@@ -429,6 +445,7 @@ function rankedGazetteerScan(
     kecamatan: best.row.Kecamatan,
     kota: best.row.Kabupaten_Kota,
     zipcode: best.row.Kode_Pos,
+    matchedLevel: best.level,
   };
 }
 
