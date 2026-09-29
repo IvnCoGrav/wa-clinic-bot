@@ -29,6 +29,29 @@ const DAY_NAME_TO_INDEX: Record<string, number> = {
   sabtu: 6,
 };
 
+// #157k: default jam booking = 09:00 WIB. Container produksi TZ=UTC, sehingga
+// `setHours(9)` (jam LOKAL) menghasilkan 09:00 UTC = 16:00 WIB (drift 7 jam).
+// Semua komputasi kalender WAJIB memakai field UTC pada Date yang sudah digeser
+// WIB, lalu dikembalikan ke UTC absolut — TIDAK boleh bergantung TZ proses.
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+const DEFAULT_BOOKING_HOUR_WIB = 9;
+
+/** Konversi komponen kalender WIB → Date UTC absolut (jam 09:00 WIB default). */
+function wibCalendarToUtc(year: number, month: number, day: number, hourWib = DEFAULT_BOOKING_HOUR_WIB): Date {
+  return new Date(Date.UTC(year, month, day, hourWib, 0, 0, 0) - WIB_OFFSET_MS);
+}
+
+/** Proyeksi Date ke komponen kalender WIB (baca via getUTC*). */
+function toWibParts(d: Date): { year: number; month: number; day: number; dayOfWeek: number } {
+  const wib = new Date(d.getTime() + WIB_OFFSET_MS);
+  return {
+    year: wib.getUTCFullYear(),
+    month: wib.getUTCMonth(),
+    day: wib.getUTCDate(),
+    dayOfWeek: wib.getUTCDay(),
+  };
+}
+
 export interface ParsedIndonesianDate {
   date: Date;
   isRecognized: boolean;
@@ -42,44 +65,44 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
 
   const clean = input.toLowerCase().trim();
   const target = new Date(referenceDate.getTime());
+  const refWib = toWibParts(referenceDate);
 
-  // Domain booking = masa depan: tanggal yang jatuh sebelum hari ini
-  // (mis. tahun lampau "2023" karangan LLM) digulir ke kemunculan
-  // berikutnya — DILARANG menyimpan booking masa lalu ke database.
-  const rollPastToFuture = (): void => {
-    const refDay = new Date(referenceDate.getTime());
-    refDay.setHours(0, 0, 0, 0);
-    if (target.getTime() < refDay.getTime()) {
-      target.setFullYear(referenceDate.getFullYear());
-      if (target.getTime() < refDay.getTime()) {
-        target.setFullYear(target.getFullYear() + 1);
-      }
+  // Domain booking = masa depan: tanggal yang jatuh sebelum hari ini WIB
+  // (mis. tahun lampau "2023" karangan LLM) digulir ke kemunculan berikutnya —
+  // DILARANG menyimpan booking masa lalu ke database. Dibandingkan per HARI WIB.
+  const startOfRefDayUtc = Date.UTC(refWib.year, refWib.month, refWib.day) - WIB_OFFSET_MS;
+  const rollPastToFuture = (candidate: Date): Date => {
+    if (candidate.getTime() >= startOfRefDayUtc) return candidate;
+    // Gulir tahun (kalender WIB) hingga mencapai hari ini/ke depan, tetap 09:00 WIB.
+    const p = toWibParts(candidate);
+    let rolled = wibCalendarToUtc(refWib.year, p.month, p.day);
+    while (rolled.getTime() < startOfRefDayUtc) {
+      const rp = toWibParts(rolled);
+      rolled = wibCalendarToUtc(rp.year + 1, rp.month, rp.day);
     }
+    return rolled;
   };
 
   // 1. Standar ISO / YYYY-MM-DD
   const isoMatch = clean.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoMatch) {
-    target.setFullYear(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
-    target.setHours(9, 0, 0, 0);
-    rollPastToFuture();
-    return { date: target, isRecognized: true, rawMatched: isoMatch[0] };
+    const candidate = wibCalendarToUtc(
+      parseInt(isoMatch[1], 10),
+      parseInt(isoMatch[2], 10) - 1,
+      parseInt(isoMatch[3], 10)
+    );
+    return { date: rollPastToFuture(candidate), isRecognized: true, rawMatched: isoMatch[0] };
   }
 
-  // 2. Format Relatif: "hari ini", "besok", "lusa"
+  // 2. Format Relatif: "hari ini", "besok", "lusa" (berbasis hari WIB)
   if (clean.includes('lusa')) {
-    target.setDate(target.getDate() + 2);
-    target.setHours(9, 0, 0, 0);
-    return { date: target, isRecognized: true, rawMatched: 'lusa' };
+    return { date: wibCalendarToUtc(refWib.year, refWib.month, refWib.day + 2), isRecognized: true, rawMatched: 'lusa' };
   }
   if (clean.includes('besok')) {
-    target.setDate(target.getDate() + 1);
-    target.setHours(9, 0, 0, 0);
-    return { date: target, isRecognized: true, rawMatched: 'besok' };
+    return { date: wibCalendarToUtc(refWib.year, refWib.month, refWib.day + 1), isRecognized: true, rawMatched: 'besok' };
   }
   if (clean.includes('hari ini')) {
-    target.setHours(9, 0, 0, 0);
-    return { date: target, isRecognized: true, rawMatched: 'hari ini' };
+    return { date: wibCalendarToUtc(refWib.year, refWib.month, refWib.day), isRecognized: true, rawMatched: 'hari ini' };
   }
 
   // 3. Tanggal dengan Nama Bulan Indonesia: "12 September", "12 September 2026", "tgl 5 okt"
@@ -88,32 +111,32 @@ export function parseIndonesianDate(input: string, referenceDate: Date = new Dat
   if (dmMatch && INDONESIAN_MONTHS[dmMatch[2]] !== undefined) {
     const day = parseInt(dmMatch[1], 10);
     const month = INDONESIAN_MONTHS[dmMatch[2]];
-    const year = dmMatch[3] ? parseInt(dmMatch[3], 10) : target.getFullYear();
-    target.setFullYear(year, month, day);
-    target.setHours(9, 0, 0, 0);
-    rollPastToFuture();
-    return { date: target, isRecognized: true, rawMatched: dmMatch[0] };
+    const year = dmMatch[3] ? parseInt(dmMatch[3], 10) : refWib.year;
+    const candidate = wibCalendarToUtc(year, month, day);
+    return { date: rollPastToFuture(candidate), isRecognized: true, rawMatched: dmMatch[0] };
   }
 
-  // 4. Hari dalam Pekan: "hari sabtu", "sabtu depan", "senin"
+  // 4. Hari dalam Pekan: "hari sabtu", "sabtu depan", "senin" (hari WIB)
   for (const [dayName, targetDayIndex] of Object.entries(DAY_NAME_TO_INDEX)) {
     if (clean.includes(dayName)) {
-      const currentDay = target.getDay();
-      let diff = targetDayIndex - currentDay;
+      let diff = targetDayIndex - refWib.dayOfWeek;
       if (diff <= 0) diff += 7; // Ambil hari yang terdekat di masa depan
       if (clean.includes('depan') && diff < 7) diff += 7;
-      target.setDate(target.getDate() + diff);
-      target.setHours(9, 0, 0, 0);
-      return { date: target, isRecognized: true, rawMatched: dayName };
+      return {
+        date: wibCalendarToUtc(refWib.year, refWib.month, refWib.day + diff),
+        isRecognized: true,
+        rawMatched: dayName,
+      };
     }
   }
 
-  // 5. Fallback ke Date.parse standar jika lolos
+  // 5. Fallback ke Date.parse standar jika lolos.
+  //    Date.parse mengembalikan instant absolut (tanpa default jam) → pertahankan,
+  //    hanya gulir tahun bila lampau (bandingkan per hari WIB).
   const fallbackTs = Date.parse(input);
   if (!isNaN(fallbackTs)) {
-    target.setTime(fallbackTs);
-    rollPastToFuture();
-    return { date: new Date(target.getTime()), isRecognized: true, rawMatched: input };
+    const parsed = new Date(fallbackTs);
+    return { date: rollPastToFuture(parsed), isRecognized: true, rawMatched: input };
   }
 
   return { date: referenceDate, isRecognized: false, rawMatched: '' };

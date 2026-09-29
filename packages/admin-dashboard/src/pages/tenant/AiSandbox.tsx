@@ -459,13 +459,15 @@ export const AiSandbox: React.FC = () => {
     const targetEnd = Date.now() + BURST_WINDOW_MS;
     setBurstTimeLeft(BURST_WINDOW_MS);
 
+    // #160: interval 100ms memicu 10x re-render/detik. Cukup 250ms (4x/detik) —
+    // tampilan hanya menampilkan 1 desimal detik, jadi tidak ada beda visual.
     burstIntervalRef.current = setInterval(() => {
       const remaining = Math.max(0, targetEnd - Date.now());
       setBurstTimeLeft(remaining);
       if (remaining <= 0) {
         if (burstIntervalRef.current) clearInterval(burstIntervalRef.current);
       }
-    }, 100);
+    }, 250);
 
     burstTimerRef.current = setTimeout(() => {
       flushBurst();

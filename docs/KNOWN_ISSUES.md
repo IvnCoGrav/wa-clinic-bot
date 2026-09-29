@@ -108,7 +108,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 160. [LiveChat & Sandbox] Blinking UI, SSE Mode Mismatch Thrashing & Tab Desync (2026-09-28) - OPEN (Plan Ready)
+## 160. [LiveChat & Sandbox] Blinking UI, SSE Mode Mismatch Thrashing & Tab Desync (2026-09-28) - DONE (2026-09-29)
 
 - **Konteks:** Ditemukan keluhan UI/UX LiveChat sering berkedip (*blinking/flicker*) saat berada di filter Sandbox, serta beberapa bug desinkronisasi obrolan.
 - **Akar Masalah:**
@@ -117,7 +117,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. **Ghost Chat Leakage (`LiveChatMonitor.tsx:1135-1138`):** `currentActive` chat pasien real dipaksa masuk ke `finalData` saat beralih ke filter Sandbox. Di sidebar di-filter keluar oleh `filteredChats`, namun di panel obrolan kanan tetap menampilkan chat pasien asli.
   4. **Pencarian In-Chat Double X & Manual Deep Search (`LiveChatMonitor.tsx:4620, 4707, 4734`):** Tombol 'X' terdapat di input dan banner mengambang; pencarian ke riwayat lama menuntut klik tombol manual alih-alih auto deep search.
   5. **AiSandbox Burst Timer Overhead (`AiSandbox.tsx:462-468`):** `burstIntervalRef` 100ms memicu 10x re-render per detik pada simulator.
-- **Status:** Investigasi tuntas. Dokumen rencana perbaikan fondasional telah disusun di `implementation_plan.md` siap dieksekusi setelah persetujuan user.
+- **Eksekusi (2026-09-29) — TDD red→green, gerbang kode deterministik:**
+  - **Helper murni** `packages/admin-dashboard/src/utils/livechatSourceFilter.ts`: `matchesSourceFilter`/`shouldReloadForSseEvent`/`shouldPreserveActiveChat`/`isSameConversation` — kontrak boolean berbasis `isSandboxTest` (state, bukan pencocokan teks). Test `tests/unit/livechat-source-filter.test.ts` (11).
+  - **(1) Anti-thrashing:** handler SSE `message.created` (else-branch) & `conversation.updated` (chat tak ada di daftar) kini memanggil `loadChats(true)` HANYA bila `shouldReloadForSseEvent(payload, sourceFilterRef.current)` — event mode berbeda tidak lagi memicu reload berulang. Ditambah `sourceFilterRef` + `loadChats` membaca mode backend dari ref (memperbaiki bug closure mount-once yang memuat mode salah).
+  - **(2) Anti-flash-spinner:** `loadThread` tidak lagi `setIsThreadLoading(true)` bila refresh menargetkan percakapan yang sama (`isSameConversation(loadedThreadConvIdRef.current, id)`); ref ditandai saat thread termuat & dibersihkan saat pindah.
+  - **(3) Anti-ghost-chat:** `currentActive` hanya dipertahankan bila `shouldPreserveActiveChat(rawActive, sourceFilterRef.current)` — chat pasien real tak lagi "nyangkut" di panel saat filter Sandbox.
+  - **(4) Auto deep-search:** efek auto-deep-search kini membuka toolbar in-chat otomatis (`setInChatSearchOpen(true)`) saat keyword berasal dari pencarian daftar, sehingga banner hasil & navigasi match tampil tanpa klik manual.
+  - **(5) AiSandbox burst timer:** interval 100ms → 250ms (tampilan hanya 1 desimal detik) → kurangi ~60% re-render.
+- **Verifikasi:** test helper 11/11 hijau, `tsc --noEmit` 0 error, `packages/admin-dashboard` `tsc && vite build` hijau. Catatan: dashboard tidak punya test infra (render-level) — verifikasi UI = build + review kode + uji manual (bukan otomatis).
+- **Status:** DONE (2026-09-29).
 
 ---
 
@@ -171,19 +179,27 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   hasil (sebelum perbaikan); hold lewat tanggal menggantung selamanya. Kini ada `CronService.runExpiredHoldSweep`
   (tenant-scoped, `booking_date < awal hari ini WIB` + status `hold` → `cancelled`), terjadwal di `app.ts`
   (env `ENABLE_EXPIRED_HOLD_SWEEP`, interval `EXPIRED_HOLD_SWEEP_INTERVAL_HOURS`, default 6 jam).
-- **157d — Tidak ada guard DB-level double booking (OPEN, Fase 5):** `Reservation` hanya punya
-  `@@unique([tenant_id, request_id])` (`prisma/schema.prisma:321`); `request_id` memuat nama layanan
-  sehingga 2 layanan beda di slot sama = 2 baris sah. Cek bentrok bersifat check-then-insert tanpa
-  lock → race condition. Solusi: advisory lock per (tenant+staf+hari).
+- **157d — Tidak ada guard DB-level double booking (OPEN, Fase 5 — CONFIRMATION GATE, 2026-09-29):**
+  `Reservation` hanya punya `@@unique([tenant_id, request_id])` (`prisma/schema.prisma:321`); `request_id`
+  memuat nama layanan sehingga 2 layanan beda di slot sama = 2 baris sah. Cek bentrok bersifat
+  check-then-insert tanpa lock → race condition. Solusi: advisory lock per (tenant+staf+hari)
+  (`pg_advisory_xact_lock`) — **butuh `prisma.$transaction` interaktif** yang saat ini di-mock reject
+  (`tests/setup.ts:307`) dan menyentuh inti `saveReservation` (40+ test bergantung) → blast radius besar.
+  Ditunda sampai keputusan user (Confirmation Gate). Catatan: kode saat ini SUDAH memblokir bentrok
+  staf lewat `findOverlappingStaffReservations` (check-then-insert) — yang belum hanya proteksi race
+  multi-instance simultan.
 - **157m — Kontrak durasi dobel-buffer (RESOLVED, Fase 3.1):** ditetapkan `duration_minutes` = TOTAL
   terjadwal termasuk 1x buffer 20m. Backend `findOverlappingStaffReservations` berhenti menambah +20;
   frontend cek bentrok & rekomendasi diselaraskan. Test: `tests/unit/reservation-duration-contract.test.ts`.
 - **157n — Collision check status & series (RESOLVED, Fase 3.2/3.3):** `PATCH /:id/status` kini cek
   bentrok saat reaktivasi ke `confirmed` (kecuali `force`); `reservation-series.service.ts` cek bentrok
   per sesi sebelum transaksi (gagal atomik → 409).
-- **157e — GCal desync senyap (OPEN, Fase 4):** `reservations.subroute.ts:1968-1975` gagal update
-  Google Calendar → hanya `console.error`, tetap HTTP 200, tanpa retry. Solusi: kolom status sync +
-  outbox retry (butuh migrasi).
+- **157e — GCal desync senyap (OPEN, Fase 4 — DEPRIORITIZED, 2026-09-29):** `reservations.subroute.ts`
+  gagal update Google Calendar → hanya `console.error`, tetap HTTP 200, tanpa retry. **Temuan audit:**
+  produksi berjalan **Mock mode** (`[Google Calendar] Service Account credentials are missing`) — tidak
+  ada kredensial GCal di `.env` server, sehingga desync nyata tidak terjadi hari ini. Fix (kolom status
+  sync + outbox retry, butuh migrasi) DITUNDA sampai GCal benar-benar diaktifkan. Solusi: kolom status
+  sync + outbox retry (butuh migrasi).
 - **157f — Pre-Visit Brief retry tak terbatas (RESOLVED observabilitas, 2026-09-28):** `staff-notification.service.ts` tidak menandai `sent_at` bila tidak ada channel → cron retry tiap siklus (disengaja: kanal bisa aktif beberapa menit kemudian). Perilaku retry DIPERTAHANKAN; ditambahkan **observabilitas deterministik**: `reason: 'no_channel'` pada hasil `sendPreVisitBrief` + baris log terstruktur `[PRE_VISIT_BRIEF_NO_CHANNEL] {reservationId, tenantId, staffId, hasTelegram, pushSent, telegramSent, ts}`. Test: `tests/unit/pre-visit-brief-channel.test.ts`. Sisa: health-check/alert admin untuk staf tanpa kanal (opsional, di atas log ini).
 - **157g — Kategori KIDS→BABY di dashboard (RESOLVED, Fase 1.3):** `CreateReservationModal.tsx`
   menurunkan `KIDS`→`BABY` dan `BUNDLE`→`BOTH`; diselaraskan dengan enum backend (yang sudah menerima
@@ -193,9 +209,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **157i — Sapaan bot mengunci keranjang (RESOLVED, terverifikasi 2026-09-28):** fix sudah ada di `cart-manager.ts:576` — pengecualian afirmasi-tunggal HANYA sah bila `hasSubstantiveUserTurn` (sapaan pembuka bot bukan penawaran). Test `tests/unit/v3/cart-greeting-lock-repro.test.ts` **HIJAU** (dokumen sebelumnya keliru menandai merah).
 - **157j — Tenant leak fallback in-memory (RESOLVED, Fase 1.1):** `reservations.subroute.ts` count/list/
   detail tidak menyaring `tenant_id`; ditambahkan helper `filterMemoryByTenant` di `stores.ts`.
-- **157k — TZ drift parser V3 (OPEN, Fase 5):** `indonesian-date-parser.ts` pakai `setHours(9)` lokal;
-  `docker-compose.yml`/`Dockerfile` tanpa `TZ` → container UTC = 16:00 WIB. Parser form WA
-  (`reservation-text-parser.ts`) SUDAH WIB-eksplisit, jadi dampak terbatas jalur V3.
+- **157k — TZ drift parser V3 (RESOLVED, 2026-09-29):** `indonesian-date-parser.ts` dulu pakai
+  `setHours(9)` (jam LOKAL server); `docker-compose.yml`/`Dockerfile` tanpa `TZ` → container UTC =
+  09:00 tersimpan sebagai 16:00 WIB (drift 7 jam). **Fix:** parser kini TZ-agnostik — semua komputasi
+  kalender memakai field UTC pada proyeksi WIB (`wibCalendarToUtc`/`toWibParts`), default 09:00 WIB =
+  02:00 UTC; `rollPastToFuture` gulir tahun berbasis hari WIB. Test `tests/unit/indonesian-date-parser-wib.test.ts`
+  (9, **memaksa `TZ=UTC`** agar bug lama benar-benar tereproduksi — red→green). Regresi parser terkait 75/75 hijau.
+  Parser form WA (`reservation-text-parser.ts`) sudah WIB-eksplisit.
 - **157l — Validator silang hari↔tanggal (RESOLVED, terverifikasi 2026-09-28):** `reservation-text-parser.ts` `detectDateMismatch` (baris 627) mendeteksi selisih ≥2 hari dan mengisi `dateMismatch/writtenDay/actualDay`; `state-machine/machine.ts:391` menyuntik catatan `⚠️ PERLU KONFIRMASI TANGGAL` ke staf. Selisih ±1 hari diselaraskan (`reconcileWrittenDayWithDate`). Test: `tests/unit/v3/reservation-date-mismatch-note.test.ts` (HIJAU).
 
 ---

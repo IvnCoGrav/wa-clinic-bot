@@ -120,6 +120,7 @@ async function getWilayahRef(): Promise<WilayahReference | null> {
   return wilayahRefInflight;
 }
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime } from '../../utils/dateWib';
+import { shouldReloadForSseEvent, shouldPreserveActiveChat, isSameConversation, type SourceFilter } from '../../utils/livechatSourceFilter';
 import { emitBootPhase } from '../../lib/bootProgress';
 
 function renderHighlightedText(text: string, query: string) {
@@ -368,6 +369,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const activeThreadRequestIdRef = useRef(0);
+  // #160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
+  // saat refresh thread yang sama (SSE reconnect / refresh manual).
+  const loadedThreadConvIdRef = useRef<string | null>(null);
   // Cursor pagination riwayat lama (infinite scroll up)
   const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -450,7 +454,10 @@ export const LiveChatMonitor: React.FC = () => {
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'unread' | 'reservation' | 'sandbox'>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip #160.
+  const sourceFilterRef = useRef<SourceFilter>('all');
+  useEffect(() => { sourceFilterRef.current = sourceFilter; }, [sourceFilter]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
@@ -976,6 +983,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           .catch(() => {});
       }
     } else {
+      loadedThreadConvIdRef.current = null;
       setMessages([]);
       setIsThreadLoading(false);
     }
@@ -1132,8 +1140,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
-      // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real
-      const backendMode = sourceFilter === 'sandbox' ? 'sandbox' : 'real';
+      // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
+      // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
+      // memakai filter terkini — mencegah reload mode salah (bug #160).
+      const backendMode = sourceFilterRef.current === 'sandbox' ? 'sandbox' : 'real';
       const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
@@ -1144,7 +1154,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama, pertahankan agar tidak hilang —
         // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
         const isSearchActive = !!(search && search.trim());
-        const currentActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
+        const rawActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
+        // #160 ghost-chat guard: chat aktif HANYA dipertahankan bila modenya cocok dengan
+        // filter aktif — chat pasien real tidak boleh "nyangkut" di panel saat filter Sandbox.
+        const currentActive = rawActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
         const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
           ? [currentActive, ...data]
           : data;
@@ -1211,7 +1224,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const reqId = ++activeThreadRequestIdRef.current;
     const effectiveFocus = focusMessageId || pendingFocusMessageIdRef.current || undefined;
     if (focusMessageId) pendingFocusMessageIdRef.current = focusMessageId;
-    setIsThreadLoading(true);
+    // #160 flash-spinner guard: refresh percakapan yang SAMA (SSE reconnect / refresh
+    // manual) TIDAK boleh menyembunyikan bubble yang sudah tampil di balik spinner.
+    // Spinner hanya untuk pergantian percakapan atau muat pertama.
+    const isRefreshSameThread = isSameConversation(loadedThreadConvIdRef.current, conversationId);
+    if (!isRefreshSameThread) {
+      setIsThreadLoading(true);
+    }
     // Reset cursor pagination setiap ganti/refresh percakapan
     setHasMoreOlderMessages(false);
     setIsLoadingOlder(false);
@@ -1256,6 +1275,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) })));
+        loadedThreadConvIdRef.current = conversationId; // #160: tandai thread ini sudah termuat
         // Direct jump: DOM #msg-<focus> sudah ada setelah batch focus-window termuat.
         if (effectiveFocus) {
           pendingFocusMessageIdRef.current = null;
@@ -1708,6 +1728,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       autoDeepSearchDoneRef.current = '';
       return;
     }
+    // #160-4: saat keyword berasal dari pencarian daftar (bukan toolbar in-chat),
+    // pastikan toolbar pencarian dalam-chat terbuka otomatis agar banner hasil &
+    // navigasi match tampil tanpa perlu klik manual lagi.
+    if (!inChatSearchOpen) {
+      setInChatSearchOpen(true);
+    }
     if (
       matchingMessageIds.length === 0 &&
       hasMoreOlderMessages &&
@@ -1720,7 +1746,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       autoDeepSearchDoneRef.current = `${selectedId}:${effectiveInChatQuery}`;
       void handleDeepSearchInHistory();
     }
-  }, [effectiveInChatQuery, matchingMessageIds.length, hasMoreOlderMessages, isDeepSearching, isLoadingOlder, isThreadLoading, messages.length, selectedId]);
+  }, [effectiveInChatQuery, matchingMessageIds.length, hasMoreOlderMessages, isDeepSearching, isLoadingOlder, isThreadLoading, messages.length, selectedId, inChatSearchOpen]);
 
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
@@ -2047,14 +2073,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             const sorted = sortChats(updated);
             startTransition(() => setChats(sorted));
             chatsRef.current = sorted;
-          } else {
-            // Percakapan baru muncul → reload daftar dari awal
+          } else if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
+            // Percakapan baru muncul → reload daftar dari awal.
+            // #160: HANYA bila mode event cocok dengan filter aktif — mencegah
+            // thrashing/kedip saat event real masuk di filter Sandbox (dan sebaliknya).
             loadChats(true);
           }
         } else if (type === 'conversation.updated') {
           const current = chatsRef.current;
           if (!current.some((c) => c.conversationId === payload.conversationId)) {
-            loadChats(true);
+            if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
+              loadChats(true);
+            }
             return;
           }
           const updated = current.map((c) =>
