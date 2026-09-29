@@ -34,6 +34,7 @@ interface InvoiceGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialData?: ExtractedScheduleData | null;
+  customerId?: string;
   clinicServices?: Array<{
     id?: string;
     name: string;
@@ -49,6 +50,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   isOpen,
   onClose,
   initialData,
+  customerId,
   clinicServices = [],
   onInsertToChat,
 }) => {
@@ -495,6 +497,17 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   };
 
   const handleInsert = () => {
+    const targetCustId = customerId || (initialData as any)?.customerId || (initialData as any)?.customer_id;
+    if (targetCustId && address && address.trim()) {
+      apiRequest('/api/admin/customers/' + targetCustId, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          address: address.trim(),
+          kecamatan: kecamatan?.trim() || undefined,
+          kota: kota?.trim() || undefined,
+        }),
+      }).catch((err) => console.warn('[InvoiceGenerator] Failed to auto-save address to customer:', err));
+    }
     discardDraft(true);
     onInsertToChat(generatedInvoiceText);
     toast('Format rincian invoice WhatsApp berhasil dimasukkan ke box chat! 🐣', 'success');

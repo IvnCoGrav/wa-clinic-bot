@@ -6125,6 +6125,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           isOpen={showInvoiceModal}
           onClose={() => setShowInvoiceModal(false)}
           initialData={invoiceModalData}
+          customerId={(invoiceModalData as any)?.customerId || selectedChat?.customerId}
           clinicServices={clinicServices}
           onInsertToChat={handleInsertInvoiceToChat}
         />

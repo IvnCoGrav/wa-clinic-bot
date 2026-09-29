@@ -673,6 +673,46 @@ export class LiveChatService {
       humanBackgroundEnrichmentService.enrichFromAdminOutboundAsync(content, customer.id, tenantId);
     } catch (_) {}
 
+    // Auto-capture reservasi & alamat jika pesan admin adalah rincian invoice/reservasi
+    try {
+      const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
+      if (isReservationFormMessage(content)) {
+        const parseResult = parseReservationText(content);
+        if (parseResult.success && parseResult.reservation) {
+          const parsed = parseResult.reservation;
+          const { upsertReservationForm } = await import('./reservation-lifecycle.service');
+          await upsertReservationForm({
+            tenantId,
+            customerId: customer.id,
+            chatId: `${customer.phone}@c.us`,
+            treatmentCategory: parsed.treatmentCategory,
+            treatmentDetail: parsed.treatmentDetail,
+            bookingDate: parsed.bookingDate,
+            rawText: content,
+            purchaseValue: parsed.payment?.totalPrice || parsed.payment?.treatmentPrice || undefined,
+            babies: parsed.babies || [],
+            customerName: parsed.name,
+            kecamatan: parsed.kec,
+            kota: parsed.kota,
+            kelurahan: undefined,
+            address: parsed.address?.trim() || undefined,
+            source: 'ADMIN_OUTBOUND_AUTO_CAPTURE',
+          }).catch((err) => console.warn('[LIVE CHAT OUTBOUND AUTO-CAPTURE UPSERT WARN]', err?.message || err));
+
+          if (parsed.address?.trim()) {
+            const { customerService } = await import('./customer.service');
+            await customerService.updateCustomer(customer.id, {
+              address: parsed.address.trim(),
+              kecamatan: parsed.kec?.trim() || undefined,
+              kota: parsed.kota?.trim() || undefined,
+            }, tenantId).catch(() => {});
+          }
+        }
+      }
+    } catch (adminCaptureErr: any) {
+      console.warn('[LIVE CHAT OUTBOUND AUTO-CAPTURE ERROR]', adminCaptureErr?.message || adminCaptureErr);
+    }
+
     // Auto-escalation: balasan admin menandakan percakapan ditangani manusia.
     // forceEscalate=true (balasan Staff/Bidan) selalu mengaktifkan mode human,
     // sehingga bot tidak ikut membalas di tengah percakapan terapis.
