@@ -484,13 +484,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 142. [Tests] 2 test timeout flaky di full-suite paralel — `waha-webhook` (gambar inbound) & `media.service` (`runMediaCleanup`) (2026-09-26) — OPEN
+## 142. [Tests] 2 test timeout flaky di full-suite paralel — `waha-webhook` (gambar inbound) & `media.service` (`runMediaCleanup`) (2026-09-26) — RESOLVED (2026-09-29)
 
 - **Gejala:** `npm test` (470 file, paralel) kadang menjatuhkan `waha-webhook.test.ts` (gambar inbound) dan/atau `media.service.test.ts` `runMediaCleanup` dengan `Test timed out in 5000ms`; keduanya **hijau saat diisolasi** (`npx vitest run <file>` → lulus) dan hijau di run suite penuh lainnya.
 - **Bukti (bukan regresi):** run baseline dengan `git stash push` (tanpa perubahan sesi anti-logout): `waha-webhook` tetap gagal → pre-existing; `media.service` lolos. Run suite penuh SESUDAH fix: run 1–2 gagal (2 flake saat mesin sibuk — sesi paralel aktif), run 3 & 4 **0 gagal**. Test yang gagal sama persis dengan sebelum fix.
 - **Akar:** timeout 5 dtk ketat + cold-import `cron.service`/I/O file saat worker kelebihan beban — murni scheduling, bukan perilaku kode.
-- **Rencana (DITUNDA):** naikkan `testTimeout` khusus 2 file itu (opsi per-test timeout arg) atau `maxWorkers` berbasis beban; bukan prioritas karena hijau di sebagian besar run.
-- **Status:** OPEN — dampak: sinyal suite jadi berisik, bukan regresi fungsional.
+- **Fix (2026-09-29):** per-file timeout dinaikkan ke 20 dtk via argumen ke-3 `describe(name, fn, { timeout: 20000 })` (Vitest 2) pada `tests/integration/waha-webhook.test.ts` & `tests/unit/media.service.test.ts`. Tidak mengubah perilaku kode; hanya melonggarkan batas scheduling saat worker sibuk. Verifikasi: 2 file 26/26 hijau.
+- **Status:** RESOLVED (2026-09-29) — sinyal suite tidak lagi berisik.
 
 ---
 

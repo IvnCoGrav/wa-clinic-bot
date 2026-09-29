@@ -8,7 +8,9 @@ const TEST_TENANT_ID = 'unit-test-tenant';
 
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-describe('MediaService — penyimpanan & pembersihan media Live Chat', () => {
+// #142: timeout dinaikkan per-file (default 5s terlalu ketat saat full-suite paralel
+// — cold-import + I/O file saat worker kelebihan beban). Bukan perubahan perilaku kode.
+describe('MediaService — penyimpanan & pembersihan media Live Chat', { timeout: 20000 }, () => {
   afterAll(() => {
     const root = path.join(process.cwd(), 'storage', 'media');
     for (const scope of ['outbound', 'inbound']) {

@@ -11,7 +11,9 @@ import { FastifyInstance } from 'fastify';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
-describe('WAHA Webhook & Guard Clause Integration Tests', () => {
+// #142: timeout dinaikkan per-file (default 5s terlalu ketat saat full-suite paralel
+// — cold-import app/cron + I/O media saat worker kelebihan beban). Bukan perubahan perilaku kode.
+describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
