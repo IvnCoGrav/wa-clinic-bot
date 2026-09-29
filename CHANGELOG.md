@@ -4,6 +4,33 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-29 - Guardrail D7/D3: Eliminasi False Positive Eskalasi Darurat (CASE-084/095)
+
+- **Konteks:** dua eskalasi darurat palsu. CASE-084: `CUSTOMER_RELIGIOUS_TRIGGER_RE`
+  kaku menolak variasi 1-'l' "Alhamdulilah" (ucapan syukur sah customer) sehingga
+  D7 menuduh balasan bot sepihak. CASE-095: `ADVISORY_RE` mencocokkan frasa
+  operasional klinik ("tersedia setiap hari (Senin–Minggu)", "dijadwalkan rutin")
+  sebagai anjuran klinis tanpa landasan (D3).
+- **Fase 1 - Kelas ejaan agama (`factual-claim-validator.ts`):** `UNPROMPTED_RELIGIOUS_RE`
+  & `CUSTOMER_RELIGIOUS_TRIGGER_RE` memakai `alhamdu[l]*i+[l]+ah` (kelas ejaan,
+  bukan hafalan kalimat). Keduanya dibuat simetris agar bot yang menyalin ejaan
+  customer tidak dianggap sepihak; netralitas agama tetap utuh (tanpa pemicu
+  customer, balasan bot tetap invalid).
+- **Fase 2 - Kontrak D3 klinis-vs-operasional:** `ADVISORY_RE` kaku diganti
+  `isClinicalAdvisory()` = `ADVISORY_MODALITY_RE` (sebaiknya/seharusnya/disarankan/
+  rutinkan/tidak boleh/dilarang/wajib X) ATAU (`HOME_CARE_ACTION_RE` AND `FREQUENCY_RE`).
+  Frasa frekuensi telanjang tanpa sikap anjuran/aksi perawatan (jam buka, penjadwalan
+  layanan) = narasi operasional, BUKAN advisory. "pijat" sengaja dikecualikan dari
+  aksi perawatan agar "jadwal pijat rutin" tetap valid. Desain kontrak ini mengganti
+  daftar pengecualian kasus (anti-whack-a-mole).
+- **Verifikasi:** `npm run build` (tsc) Exit 0; `tests/unit/factual-claim-validator.test.ts`
+  49/49 hijau (+10 kasus baru: variasi ejaan, narasi operasional, regression lock
+  campuran "Sebaiknya luka dijemur. Bidan kami tersedia setiap hari." → invalid);
+  suite `tests/unit/v3` 934 passed / 5 skipped; suite guardrail terkait 90/90.
+- **Sisa (dicatat KNOWN_ISSUES):** replay LLM CASE-084/095 (`--suite=v2 --llm`)
+  belum dijalankan (butuh network + DB live); kelas ejaan di luar `alhamdu[l]*i+[l]+ah`
+  (mis. "alhamdulilaah") belum dikenali.
+
 #### 2026-09-29 - Usia Dinamis Real-Time & Pemisahan Entitas Anak vs Moms
 
 - **Konteks:** label usia mati (`36hr`, `23bln`) + data Ibu Hamil (Bella/Fitria) bocor

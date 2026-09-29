@@ -30,9 +30,32 @@ const ABSOLUTE_EFFICACY_RE =
 /** Penanda pembahasan vaksin/imunisasi. */
 const VACCINE_RE = /vaksin|imunisasi|\bbcg\b|\bpolio\b|\bdpt\b/i;
 
-/** Penanda anjuran klinis/SOP (butuh landasan artikel bila substantif). */
-const ADVISORY_RE =
-  /sebaiknya|seharusnya|disarankan|rutinkan|rutin\s+\w+|setiap\s+hari|tidak\s+boleh|dilarang|wajib\s+\w+/i;
+/**
+ * D3 — penanda anjuran KLINIS/SOP (butuh landasan artikel/policy bila substantif).
+ *
+ * Audit CASE-084/095: frasa frekuensi TELANJANG ("setiap hari", "rutin X") juga
+ * muncul sah pada narasi OPERASIONAL klinik ("Bidan kami tersedia setiap hari")
+ * dan penjadwalan layanan ("dijadwalkan rutin") — bukan anjuran medis.
+ * Desain kontrak (ganti daftar pengecualian kasus):
+ *   - SIKAP ANJURAN EKSPLISIT (modality) → advisory dengan sendirinya, ATAU
+ *   - AKSI PERAWATAN RUMAHAN + FREKUENSI → advisory (mis. "dimandikan air hangat
+ *     setiap hari").
+ * Frasa frekuensi telanjang TANPA salah satu di atas = narasi operasional/jadwal
+ * → BUKAN advisory. Ini mencegah whack-a-mole (kontrol rutin, pijat rutin, dst).
+ */
+const ADVISORY_MODALITY_RE =
+  /\b(sebaiknya|seharusnya|disarankan|rutinkan|tidak\s+boleh|dilarang|wajib\s+\w+)\b/i;
+/** Verba aksi perawatan rumahan (domain klinis non-katalog). "pijat" SENGAJA
+ * tidak termasuk agar penjadwalan layanan ("jadwal pijat rutin") tetap valid. */
+const HOME_CARE_ACTION_RE =
+  /\b(mandikan|memandikan|dimandikan|mandi|jemur|menjemur|dijemur|berjemur|minum|minumin|oles|mengoles|oleskan|kompres|mengompres|balur|membalur|uapi|menguapi|berendam|rendam|gosok|menggosok|urut|mengurut)\b/i;
+const FREQUENCY_RE = /\b(setiap\s+hari|tiap\s+hari|sehari\s+\w+|rutin\s+\w+|berkala)\b/i;
+
+/** True bila balasan memuat anjuran klinis/SOP substantif (D3). */
+function isClinicalAdvisory(reply: string): boolean {
+  if (ADVISORY_MODALITY_RE.test(reply)) return true;
+  return HOME_CARE_ACTION_RE.test(reply) && FREQUENCY_RE.test(reply);
+}
 
 /**
  * Bingkai penolakan/defleksi sopan ("belum tersedia, diteruskan ke CS", penolakan resep obat/medis).
@@ -271,9 +294,22 @@ function mentionsVaccine(text: string): boolean {
   return /vaksin|imunisasi/i.test(text || '');
 }
 
-/** Ekspresi keagamaan yang dilarang muncul tanpa pemicu dari customer. */
-const UNPROMPTED_RELIGIOUS_RE = /\b(alhamdulillah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
-const CUSTOMER_RELIGIOUS_TRIGGER_RE = /\b(assalamu|alhamdulillah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
+/**
+ * Ekspresi keagamaan yang dilarang muncul tanpa pemicu dari customer.
+ *
+ * D7 (audit CASE-084): penulisan serapan Arab beragam ("Alhamdulillah",
+ * "Alhamdulilah", "Alhamdullilah"). Kelas ejaan alhamdu[l]*i+[l]+ah menutup
+ * variasi jumlah 'l' — pola kelas ejaan, BUKAN hafalan kalimat.
+ * KEDUA regex (pemicu customer & deteksi balasan bot) memakai kelas yang SAMA
+ * agar: (a) ucapan syukur customer yang sah dikenali sebagai pemicu, dan
+ * (b) bot yang menyalin ejaan customer (simetri) tidak dianggap sepihak.
+ * Batasan: variasi di luar kelas (mis. "alhamdulilaah", "alhamdulilahh")
+ * tetap tidak dikenali — lihat KNOWN_ISSUES.
+ */
+const UNPROMPTED_RELIGIOUS_RE =
+  /\b(alhamdu[l]*i+[l]+ah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
+const CUSTOMER_RELIGIOUS_TRIGGER_RE =
+  /\b(assalamu|alhamdu[l]*i+[l]+ah|bismillah|in?sh?[ay]+a+h?\s*allah|insyaallah|inshaallah|puji\s*tuhan)\b/i;
 
 /** Rekomendasi obat farmasi kimia di luar wewenang spa — wajib rujuk dokter. */
 const UNAUTHORIZED_MEDICATION_RE =
@@ -396,7 +432,7 @@ export function validateFactualClaims(
     /\b(sebaiknya|disarankan|sebaiknya\s+diambil|pilih|ambil|kombinasi|difokuskan)\b/i.test(reply);
   if (
     reply.length > 80 &&
-    ADVISORY_RE.test(reply) &&
+    isClinicalAdvisory(reply) &&
     !isTreatmentSelectionAdvisory &&
     !opts?.isRefusalOrEscalation &&
     !REFUSAL_FRAME_RE.test(reply) &&

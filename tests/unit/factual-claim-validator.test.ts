@@ -282,4 +282,58 @@ describe('Factual claim validator', () => {
       expect(bad.isValid).toBe(false);
     });
   });
+
+  // =========================================================================
+  // Audit CASE-084/095 — eliminasi false positive (regresi terkurung).
+  // =========================================================================
+
+  describe('D7 (audit CASE-084): variasi ejaan pemicu agama customer', () => {
+    it.each([
+      'Alhamdulilah zarenn langsung tidurr nyenyak wkwk',
+      'alhamdulillah enak banget',
+      'alhamdullilah sudah sembuh',
+      'ALHAMDULILAH baik semua',
+    ])('pemicu "%s" membebaskan balasan bot (valid)', (customerInput) => {
+      const ok = validateFactualClaims('Alhamdulillah, kami ikut senang mendengarnya Bunda 🤗', [], [], { customerInput });
+      expect(ok.isValid).toBe(true);
+    });
+
+    it('tanpa pemicu apapun → balasan bot tetap invalid (D7 tidak bocor)', () => {
+      const bad = validateFactualClaims('Alhamdulillah, area Bungurasih masuk jangkauan kami.', [], [], { customerInput: 'halo selamat pagi' });
+      expect(bad.isValid).toBe(false);
+      expect(bad.violations.join(' ')).toContain('D7_UNPROMPTED_RELIGIOUS_PHRASE');
+    });
+
+    it('kata non-religius tidak dianggap pemicu', () => {
+      const bad = validateFactualClaims('Alhamdulillah, kami ikut senang ya.', [], [], { customerInput: 'beranda rumah saya di waru' });
+      expect(bad.isValid).toBe(false);
+    });
+  });
+
+  describe('D3 (audit CASE-084/095): narasi operasional & penjadwalan bukan anjuran klinis', () => {
+    it.each([
+      'Bidan kami tersedia setiap hari (Senin–Minggu) dengan jam operasional 08.00–17.00 WIB. Silakan chat kami untuk booking ya Bunda.',
+      'Kalau nanti mau dijadwalkan rutin atau ada keluhan lain, tinggal chat kami aja ya Bunda.',
+      'Kami melayani setiap hari (Senin–Minggu) untuk area Surabaya & Sidoarjo ya Bunda.',
+      'Jadwal pijat rutin bisa diatur setiap hari bersama Bidan kami ya Bunda.',
+      'jadwal kontrol rutin tiap bulan ya Bunda',
+    ])('operasional/jadwal "%s" → valid', (text) => {
+      expect(validateFactualClaims(text, [], [], {}).isValid).toBe(true);
+    });
+
+    // Catatan: gate D3 punya `reply.length > 80` (perilaku pra-eksisting) —
+    // string uji sengaja dibuat realistis (>80 char) seperti balasan nyata.
+    it.each([
+      'Sebaiknya bayi dimandikan dengan air hangat setiap hari agar tidak rewel dan tidurnya nyenyak ya Bunda',
+      'Sebaiknya si kecil dijemur setiap pagi selama 30 menit agar tulangnya kuat dan tidak mudah sakit ya Bunda',
+      'rutinkan minum air putih ya Bunda agar tidak dehidrasi dan pencernaannya lancar setiap hari ya',
+      'Jadwal rutin minum obatnya setiap hari ya Bunda supaya batuknya segera sembuh dan tidak kambuh lagi',
+      'Sebaiknya luka dijemur pagi. Bidan kami tersedia setiap hari (Senin\u2013Minggu) untuk membantu ya Bunda', // kebocoran campuran (regression lock)
+      'dimandikan air hangat setiap hari ya Bunda agar tidurnya nyenyak dan badannya tidak kedinginan lagi',
+    ])('aksi perawatan rumahan "%s" → invalid (aturan medis tidak bocor)', (text) => {
+      const bad = validateFactualClaims(text, [], [], {});
+      expect(bad.isValid).toBe(false);
+      expect(bad.violations.join(' ')).toMatch(/Anjuran klinis\/SOP/);
+    });
+  });
 });

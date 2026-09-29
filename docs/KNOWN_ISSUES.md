@@ -3,6 +3,62 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 167. [Guardrail D7/D3] Sisa tech debt eliminasi false positive CASE-084/095 (2026-09-29)
+
+- **Konteks:** perbaikan fondasional kelas ejaan agama (D7) + kontrak D3
+  klinis-vs-operasional sudah dieksekusi (lihat CHANGELOG). Entri ini mencatat
+  sisa yang BELUM/tidak dieksekusi.
+- **167a — Replay LLM CASE-084/095 belum dijalankan (OPEN):** perintah
+  `npx tsx scripts/run-test-plan.ts --suite=v2 --id=CASE-084 --llm` (dan CASE-095)
+  butuh network LLM + `.env`; TIDAK dijalankan. Verifikasi saat ini berbasis
+  unit test deterministik. Perlu dijalankan di env eval (tanpa `--persist` ke DB
+  live, atau dengan sandbox).
+- **167b — Kelas ejaan agama terbatas (OPEN):** `alhamdu[l]*i+[l]+ah` menutup
+  variasi jumlah 'l', tetapi sisa seperti `alhamdulilaah` (dobel a) atau
+  `alhamdulilahh` (dobel h) belum dikenali → berpotensi false positive serupa
+  bila customer memakai ejaan itu. Kandidat: perluas kelas bila ditemukan di log
+  nyata (jangan menebak tanpa data).
+- **167c — `FREQUENCY_RE` `sehari\s+\w+` (OPEN, potensi over-match):** pola
+  "sehari X" dapat menangkap frasa operasional non-klinis yang mengandung verba
+  perawatan secara kebetulan. Belum ada bukti lapangan; pantau log.
+- **167d — Gate D3 `reply.length > 80` (OPEN, pra-eksisting):** anjuran medis
+  rumahan dalam balasan <80 karakter lolos D3. Bukan regresi dari perubahan ini,
+  tetapi perlu ditinjau (mis. gate berbasis kalimat, bukan panjang balasan).
+
+## 166. [Suite V2 51–70] Sisa tech debt perbaikan CASE-058/063 (2026-09-29)
+
+- **Konteks:** Perbaikan fondasional kebocoran tag katalog, gerbang vaksin
+  deterministik, dan anti-penalti evaluator sudah dieksekusi (lihat CHANGELOG).
+  Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
+- **166a — Enforcement `tool_choice` provider (OPEN, observabilitas):** Fase 0.1
+  menambahkan telemetri `toolChoice`/`toolsSent` di `generation-stage.ts`. Akar
+  CASE-063 Turn 22 (router mengabaikan `tool_choice` forcing) kini dimitigasi
+  oleh fail-safe KODE deterministik (`VACCINE_SAFETY_ROUTING_FALLBACK_APPLIED`),
+  TETAPI pertanyaan "apakah provider DeepSeek benar-benar menegakkan
+  `tool_choice: {function}`" belum terverifikasi. Monitor log `toolChoice` +
+  event fallback; bila fallback sering menyala, evaluasi kontrak provider.
+- **166b — Scope sinyal vaksin naratif (OPEN):** Fail-safe vaksin menyala pada
+  SETIAP `hasVaccineSignal` tanpa tool. Turn naratif pasif ("niatnya mau pijet
+  sebelum imunisasi") juga memicunya — disengaja untuk keselamatan klinis, namun
+  biaya satu tool ekstra per turn tersebut belum diukur di produksi. Bila
+  terbukti mahal, persempit ke sinyal tanya/klaim draf (bukan `includes` murni).
+- **166c — Gerbang lokasi `pendingScheduleCheck` (RESOLVED 2026-09-29):**
+  `resolvePostReservationAck` (`fast-response-gate.ts`) kini mensyaratkan
+  `session.location.kelurahan/kecamatan/kota` sebelum handoff `pending_schedule_check`.
+  Tanpa lokasi → tidak menembak (anti fake-confirm jadwal). CASE-058 kini
+  `HUMAN_HANDLING` terjustifikasi via `escalate_to_human` (D2 2/2).
+- **166d — Inkonsistensi dosis jeda vaksin (OPEN, perlu keputusan klinis):**
+  Tiga sumber menyebut angka berbeda: `ClinicPolicy`/`clinic-faq.tool.ts`
+  fallback = "3 hari", prompt `global-safety.layer.ts` = "2-3 hari (48-72 jam)",
+  unit test vaksin = "2-3 hari". Belum ada satu sumber kebenaran tenant-aware di
+  DB. Rekomendasi: kunci di `ClinicPolicy.post_vaccine_rules` + hapus angka
+  hardcode di prompt/test (Confirmation Gate bila butuh seed migrasi).
+- **166e — Evaluator D1 anti-penalti (RESOLVED 2026-09-29):** `scorer.ts` kini
+  menurunkan ke N/A bila `expected_total_price` terkunci tetapi customer TIDAK
+  menanyakan harga paket di episode replay (kepatuhan Aturan Emas #2 tidak lagi
+  dihukum 0/2). Sinyal ongkir (`calculate_delivery`) TIDAK lagi dianggap
+  permintaan harga paket.
+
 ## 165. [Kartu Tugas Terapis & Itinerary] Sisa tech debt perbaikan data jadwal + UX mobile (2026-09-29)
 
 - **Konteks:** Perbaikan fondasional multi-child, rute berantai per-terapis,
