@@ -325,6 +325,20 @@ export class HumanBackgroundEnrichmentService {
           const parsed = parseReservationText(incomingText);
           if (parsed.success && parsed.reservation) {
             const r = parsed.reservation;
+            // Persist alamat jalan ke preferences.address segera (defense-in-depth
+            // bila pembuatan reservasi gagal di jalur lain). Guard baca-dulu:
+            // DILARANG menimpa alamat yang sudah tersimpan agar data terbaru tidak hilang.
+            if (r.address && r.address.trim()) {
+              try {
+                const existingAddress = ((customer.preferences as any)?.address || '').trim();
+                if (!existingAddress) {
+                  const { customerService } = await import('./customer.service');
+                  await customerService
+                    .updateCustomer(customer.id, { address: r.address.trim() }, tid)
+                    .catch(() => {});
+                }
+              } catch {}
+            }
             // Gazetteer ZIP enrichment untuk form (non-destruktif)
             if (!customer.zipcode && !customer.pending_zipcode) {
               const gazZip = resolveZipcode({

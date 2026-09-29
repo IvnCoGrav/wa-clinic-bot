@@ -46,6 +46,36 @@ function firstClidString(...candidates: unknown[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Men-decode token CTWA dari format Base64 atau string langsung.
+ * WhatsApp Web / Baileys menyimpan token CTWA Meta di contextInfo.ctwaPayload
+ * atau contextInfo.conversionData sebagai Base64 string yang diawali "Afi..." saat didecode.
+ */
+export function decodeCtwaPayload(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  // Jika sudah berupa token teks yang dimulai dengan prefix standar Meta
+  if (trimmed.startsWith('Afi') || trimmed.startsWith('PA')) {
+    return trimmed;
+  }
+
+  // Coba decode Base64 — HANYA terima bila hasil decode = token Meta valid (prefix
+  // `Afi`/`PA`). Fallback string generik DILARANG: token opaque Meta selalu berprefix
+  // tsb (bukti live: `AfiAndh…`), sedangkan string acak 20+ char apa pun akan
+  // menghasilkan false-positive atribusi organik → paid.
+  try {
+    const buf = Buffer.from(trimmed, 'base64');
+    const decoded = buf.toString('utf8');
+    if (decoded && (decoded.startsWith('Afi') || decoded.startsWith('PA'))) {
+      return decoded;
+    }
+  } catch (_) {}
+
+  return undefined;
+}
+
 function asRecord(value: unknown): Record<string, any> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, any>)
@@ -109,14 +139,29 @@ export function extractWahaAdReferral(payload: unknown): WahaAdReferral | undefi
   const contextInfos = collectContextInfos(root);
   const adReplies = collectAdReplies(root, contextInfos);
 
-  const ctwaClid = firstClidString(
+  const rawClidCandidates = [
     ...adReplies.map((r) => r.ctwaClid),
     ...adReplies.map((r) => r.ctwa_clid),
+    ...adReplies.map((r) => r.ctwaPayload),
+    ...adReplies.map((r) => r.conversionData),
     ...contextInfos.map((c) => c.ctwaClid),
     ...contextInfos.map((c) => c.ctwa_clid),
+    ...contextInfos.map((c) => c.ctwaPayload),
+    ...contextInfos.map((c) => c.conversionData),
     root.ctwaClid,
-    root.ctwa_clid
-  );
+    root.ctwa_clid,
+    root.ctwaPayload,
+    root.conversionData,
+  ];
+
+  let ctwaClid: string | undefined;
+  for (const candidate of rawClidCandidates) {
+    const decoded = decodeCtwaPayload(candidate);
+    if (decoded) {
+      ctwaClid = decoded;
+      break;
+    }
+  }
 
   if (!ctwaClid) return undefined;
 
@@ -128,6 +173,7 @@ export function extractWahaAdReferral(payload: unknown): WahaAdReferral | undefi
     sourceType:
       firstString(...adReplies.map((r) => r.sourceType), ...adReplies.map((r) => r.source_type)) ||
       firstString(primaryCtx.entryPointConversionSource) ||
+      firstString(primaryCtx.conversionSource) ||
       'ad',
     sourceApp:
       firstString(...adReplies.map((r) => r.sourceApp), ...adReplies.map((r) => r.source_app)) ||

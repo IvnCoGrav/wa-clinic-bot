@@ -92,6 +92,10 @@ interface CreateReservationModalProps {
   initialTreatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | null;
   initialBabies?: Array<{ name: string; ageText: string }> | null;
   initialNotes?: string | null;
+  /** Alamat jalan fisik (prefill dari chat/profil customer) — dipersist ke preferences.address. */
+  initialAddress?: string | null;
+  /** Patokan/landmark rumah (prefill) — dipersist ke preferences.landmark. */
+  initialLandmark?: string | null;
   onSuccessAndInvoice?: (newReservation: any) => void;
 }
 
@@ -111,6 +115,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   initialTreatmentCategory,
   initialBabies,
   initialNotes,
+  initialAddress,
+  initialLandmark,
   onSuccessAndInvoice,
 }) => {
   const { user } = useAuth();
@@ -150,6 +156,24 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [assignedStaffId, setAssignedStaffId] = useState('');
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold'>('confirmed');
   const [notes, setNotes] = useState('');
+
+  // Alamat jalan fisik & patokan rumah (persist ke preferences.address/landmark)
+  const [address, setAddress] = useState(initialAddress || '');
+  const [landmark, setLandmark] = useState(initialLandmark || '');
+
+  // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
+  // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
+  // hasil ekstraksi chat (initialAddress) diutamakan; bila admin memilih customer LAIN,
+  // alamat profil customer tersebut yang diutamakan.
+  useEffect(() => {
+    if (!isOpen) return;
+    const prefAddress = selectedCustomerInfo?.preferences?.address || selectedCustomerInfo?.address || '';
+    const prefLandmark = selectedCustomerInfo?.preferences?.landmark || selectedCustomerInfo?.preferences?.address_notes || selectedCustomerInfo?.address_notes || '';
+    const isInitialCustomer =
+      !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
+    setAddress(isInitialCustomer ? (initialAddress || prefAddress || '') : (prefAddress || ''));
+    setLandmark(isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
+  }, [isOpen, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo]);
 
   // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
   const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
@@ -227,6 +251,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     assignedStaffId,
     status,
     notes,
+    address,
+    landmark,
     ongkir,
     discount,
     babies,
@@ -250,6 +276,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     assignedStaffId,
     status,
     notes,
+    address,
+    landmark,
     ongkir,
     discount,
     babies,
@@ -299,6 +327,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.assignedStaffId !== undefined) setAssignedStaffId(restored.assignedStaffId);
     if (restored.status !== undefined) setStatus(restored.status);
     if (restored.notes !== undefined) setNotes(restored.notes);
+    if (restored.address !== undefined) setAddress(restored.address);
+    if (restored.landmark !== undefined) setLandmark(restored.landmark);
     if (restored.ongkir !== undefined) setOngkir(restored.ongkir);
     if (restored.discount !== undefined) setDiscount(restored.discount);
     if (restored.babies !== undefined) setBabies(restored.babies);
@@ -332,6 +362,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setAssignedStaffId('');
     setStatus('confirmed');
     setNotes('');
+    setAddress('');
+    setLandmark('');
     setOngkir(0);
     setDiscount(0);
     setIsMultiSession(false);
@@ -1384,6 +1416,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         assignedStaffId: assignedStaffId || undefined,
         status,
         notes: notes.trim() || undefined,
+        address: address.trim() || undefined,
+        landmark: landmark.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
         purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
         ongkir: Number(ongkir) || 0,
@@ -1499,6 +1533,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               assignedStaffId: assignedStaffId ? assignedStaffId : null,
               status,
               notes: notes.trim() ? notes.trim() : null,
+              address: address.trim() || undefined,
+              landmark: landmark.trim() || undefined,
               babies: babies.filter((b) => b.name.trim().length > 0),
               purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
               ongkir: Number(ongkir) || 0,
@@ -1838,6 +1874,39 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       <span>{selectedCustomerInfo.kelurahan}, {selectedCustomerInfo.kecamatan} ({selectedCustomerInfo.distance_km?.toFixed(1) || '0'} km)</span>
                     </p>
                   )}
+                </div>
+              </div>
+            )}
+            {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
+            {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                    Alamat Lengkap (Jalan, RT/RW, No. Rumah)
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="cth: Jl. Kedungklinter 1 No. 80"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                    Patokan / Landmark
+                  </label>
+                  <input
+                    type="text"
+                    value={landmark}
+                    onChange={(e) => setLandmark(e.target.value)}
+                    placeholder="cth: Rolling door putih, yg jual kusen"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
                 </div>
               </div>
             )}

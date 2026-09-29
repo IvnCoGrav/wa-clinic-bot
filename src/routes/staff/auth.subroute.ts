@@ -85,7 +85,12 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
     const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
       isSecureRequest ? '; Secure' : ''
     }`;
-    reply.header('Set-Cookie', cookieValue);
+    // Sanitasi sesi silang: login staf WAJIB memusnahkan sisa cookie admin_session
+    // agar dua portal tidak pernah aktif bersamaan (akar ghost push subscription).
+    reply.header('Set-Cookie', [
+      cookieValue,
+      'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    ]);
 
     return reply.status(200).send({
       success: true,
@@ -139,7 +144,11 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
     const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
       isSecureRequest ? '; Secure' : ''
     }`;
-    reply.header('Set-Cookie', cookieValue);
+    // Sanitasi sesi silang saat restore sesi staf (cegah sesi ganda).
+    reply.header('Set-Cookie', [
+      cookieValue,
+      'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    ]);
 
     return reply.status(200).send({
       success: true,

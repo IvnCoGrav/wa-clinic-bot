@@ -136,6 +136,33 @@ export class InboundNotificationRouter {
         return;
       }
 
+      // GERBANG DETERMINISTIK (Mandat In-System PWA Only): Dilarang meneruskan notifikasi
+      // chat ke ponsel terapis bila percakapan sedang dipegang Bot AI (bukan eskalasi manusia).
+      // Selama Bot AI membalas, terapis tidak boleh terganggu getar/dering/banner.
+      // Ini murni gate state (is_human_handling), bukan pencocokan teks pesan.
+      try {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: ctx.conversationId },
+          select: { is_human_handling: true, current_state: true },
+        });
+        const isHumanHandling = Boolean(
+          conv?.is_human_handling || (conv as any)?.current_state === 'HUMAN_HANDLING'
+        );
+        if (!isHumanHandling) {
+          console.log(
+            `[INBOUND NOTIFICATION ROUTER] Staff push skipped: conversation '${ctx.conversationId}' is bot-handled (is_human_handling=false).`
+          );
+          return;
+        }
+      } catch (err: any) {
+        // DB offline: fail-closed untuk kanal staf (jangan spam terapis saat status tak pasti).
+        console.warn(
+          '[INBOUND NOTIFICATION ROUTER] Conversation state lookup failed, skipping staff push (fail-closed):',
+          err.message
+        );
+        return;
+      }
+
       // Gate jendela akses chat per-jadwal (H-3 jam s/d +3 jam selesai, tutup saat ganti hari).
       // Pesan tetap aman masuk ke Admin CRM (push admin dikirim lebih awal tanpa syarat).
       const isCompleted = ['completed', 'selesai'].includes(

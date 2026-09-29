@@ -38,6 +38,11 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'REMINDER',
     description: 'Pesan konfirmasi keberangkatan bidan menuju rumah pasien (home care).',
   },
+  STAFF_ARRIVAL: {
+    label: 'Pesan Bidan Sudah Sampai (Tiba di Lokasi)',
+    category: 'REMINDER',
+    description: 'Pesan otomatis saat bidan menandai tiba di lokasi pasien. Placeholder: {patientName}, {therapistName}, {clinicName}.',
+  },
   STAFF_TRIP_STATUS: {
     label: 'Status Perjalanan Bidan (Jawaban CS)',
     category: 'REMINDER',

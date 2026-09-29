@@ -19,6 +19,7 @@ import {
   staffTripTrackingService,
   calculateTripProgress,
   evaluateGeofenceAlert,
+  calculateDelayStatus,
 } from '../../services/staff-trip-tracking.service';
 import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
@@ -171,6 +172,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         geofenceDistanceM = geo.distanceM;
       }
 
+      // Prediksi keterlambatan (ETA vs jadwal) — murni, tanpa I/O.
+      const delayStatus = calculateDelayStatus(
+        (reservation as any).booking_date ?? null,
+        etaMinutes
+      );
+
       let readyText = '';
       try {
         readyText = await StaffReservationService.getTripStatusMessageText(tenantId, {
@@ -181,6 +188,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         });
       } catch {
         readyText = '';
+      }
+
+      let delayText = '';
+      if (delayStatus.isDelayed) {
+        try {
+          delayText = await StaffReservationService.getTripDelayMessageText(tenantId, {
+            patientName: reservation.customer?.name || 'Bunda',
+            delayMinutes: delayStatus.delayMinutes,
+            arrivalTime: delayStatus.formattedArrivalWib,
+            variantKey: reservationId,
+          });
+        } catch {
+          delayText = '';
+        }
       }
 
       return reply.status(200).send({
@@ -210,7 +231,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           isStalledOutsideTarget,
           geofenceReason,
           geofenceDistanceM,
+          delayStatus,
           readyText,
+          delayText,
         },
       });
     }
@@ -1062,6 +1085,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           purchaseValue?: number;
           ongkir?: number;
           durationMinutes?: number;
+          address?: string;
+          landmark?: string;
           force?: boolean;
         };
       }>,
@@ -1071,6 +1096,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
       const force = (request.body as any)?.force === true;
+      const address = (request.body as any)?.address as string | undefined;
+      const landmark = (request.body as any)?.landmark as string | undefined;
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
@@ -1142,6 +1169,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             kecamatan: customer.kecamatan || undefined,
             kota: customer.kota || undefined,
             kelurahan: customer.kelurahan || undefined,
+            // Integritas spasial: alamat jalan fisik hidup di preferences.address
+            // (di-persist via lifecycle); kolom kelurahan tetap entitas desa resmi.
+            address: address?.trim() || undefined,
             source: 'ADMIN_PANEL',
             force,
             status: reservationStatus as 'hold' | 'confirmed',
@@ -1159,6 +1189,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
           throw conflictErr;
         }
+
+        // Persist patokan/landmark ke preferences (tidak melewati saveReservation
+        // karena ReservationMutationParams tidak memiliki field landmark).
+        if (landmark?.trim()) {
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService
+              .updateCustomer(customerId, { landmark: landmark.trim() }, tenantId)
+              .catch(() => {});
+          } catch {}
+        }
+
         // Ambil ulang lengkap dengan relasi untuk respons dashboard.
         let reservation: any = coreResult.reservation;
         try {
@@ -2821,16 +2863,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const now = Date.now();
 
       let tenantLandingDomain = '';
+      let wabaConfigured = false;
       try {
         // Select eksplisit: kolom tenants.settings belum ada di sebagian DB
         // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) — select-* memicu P2022.
         const tenant = await prisma.tenant.findUnique({
           where: { id: tenantId },
-          select: { id: true, landing_domain: true },
+          select: { id: true, landing_domain: true, waba_business_account_id: true },
         });
         if ((tenant as any)?.landing_domain) {
           tenantLandingDomain = (tenant as any).landing_domain.trim();
         }
+        // State-gate UI preview: envelope business_messaging HANYA sah bila tenant
+        // punya WABA id (paritas backend `capi.service.ts` useBusinessMessaging).
+        wabaConfigured = Boolean((tenant as any)?.waba_business_account_id);
       } catch {}
 
       const treatmentPriceCache = new Map<string, number | undefined>();
@@ -2956,6 +3002,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
             attribution: {
               isPaid: !!r.customer?.adClick,
+              ctwa_clid: r.customer?.adClick?.ctwa_clid || null,
               trackingCode: r.customer?.adClick?.trackingCode || null,
               landingUrl: canonicalLandingUrl,
               fbp: r.customer?.adClick?.fbp || null,
@@ -3039,6 +3086,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
             attribution: {
               isPaid: !!c.adClick,
+              ctwa_clid: c.adClick?.ctwa_clid || null,
               trackingCode: c.adClick?.trackingCode || null,
               landingUrl: canonicalLandingUrl,
             },
@@ -3083,6 +3131,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 customer: { name: (c as any).name || 'Bunda', phone: (c as any).phone || '' },
                 attribution: {
                   isPaid: !!(c as any).adClick,
+                  ctwa_clid: (c as any).adClick?.ctwa_clid || null,
                   trackingCode: (c as any).adClick?.trackingCode || null,
                   landingUrl: canonicalLandingUrl,
                 },
@@ -3106,7 +3155,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const data = [...reservationData, ...mqlLeadItems];
       const pending = data.filter((d) => d.purchase_review_status === 'pending').length;
 
-      return reply.status(200).send({ success: true, data, total: data.length, pending });
+      return reply.status(200).send({ success: true, data, total: data.length, pending, wabaConfigured });
     } catch (err: any) {
       const rows = Array.from(memoryReservations.values()).filter(
         (r) => r.status !== 'cancelled'

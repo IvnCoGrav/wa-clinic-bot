@@ -25,6 +25,7 @@ export interface CustomerCreateData {
   phone: string;
   name?: string | null;
   is_sandbox_test?: boolean;
+  is_internal_staff?: boolean;
 }
 
 export interface CustomerRepository {

@@ -2,10 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { staffNotificationService } from '../../src/services/staff-notification.service';
 import { prisma } from '../../src/db/client';
 import { telegramService } from '../../src/services/telegram.service';
+import * as staffNotifConfig from '../../src/config/staff-notification-config';
 
 describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & Privacy', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Legacy suite menguji DISPATCH Telegram; aktifkan kanal eksplisit (default produksi = OFF).
+    vi.spyOn(staffNotifConfig, 'getStaffNotificationConfig').mockResolvedValue({ telegramEnabled: true });
   });
 
   it('getStaffPairingInfo should generate staff_PAIR_ token and correct deep link', async () => {

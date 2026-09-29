@@ -7,6 +7,7 @@ vi.mock('../../src/services/customer.service', () => ({
   customerService: {
     getCustomerById: vi.fn(),
     updateCustomerLocation: vi.fn(),
+    updateCustomer: vi.fn(),
     markShareLocationSent: vi.fn(),
   },
 }));
@@ -431,5 +432,65 @@ describe('Human Background Enrichment Service', () => {
         }),
       })
     );
+  });
+
+  // === Adversarial: persist alamat jalan (guard baca-dulu, multi-parafrase) ===
+  it('form reservasi (multi-parafrase alamat) → preferences.address terisi bila masih kosong', async () => {
+    const formBodies = [
+      'Berikut list untuk reservasi :\nNama Bunda: suciani\nAlamat & Shareloc : jalan kedungklinter 1 80\nKec : Tegalsari\nKota : Surabaya\nNo. Hp : 085878033569\nTreatment :pijat bayi pulih ceria',
+      'Berikut list untuk reservasi :\nNama Bunda: rina\nAlamat : jl. X no 12 RT 3 RW 4\nKec : Rungkut\nKota : Surabaya\nTreatment : pijat bayi ceria',
+    ];
+
+    for (const [i, body] of formBodies.entries()) {
+      vi.clearAllMocks();
+      const ctx: any = {
+        customer: {
+          id: `cust-form-${i}`,
+          phone: '6289900112300',
+          lat: null,
+          lng: null,
+          distance_km: null,
+          zipcode: '60262',
+          pending_zipcode: null,
+          preferences: {}, // alamat belum ada
+        },
+        conversation: { id: 'conv-1' },
+        incomingMessage: { type: 'text', text: { body } },
+        history: [],
+      };
+
+      await humanBackgroundEnrichmentService.enrichSync(ctx, 'default-tenant');
+
+      const addrCalls = vi.mocked(customerService.updateCustomer).mock.calls.filter((c) => c[1] && (c[1] as any).address);
+      expect(addrCalls.length, `body="${body.slice(0, 30)}"`).toBeGreaterThanOrEqual(1);
+      const saved = (addrCalls[0][1] as any).address as string;
+      expect(saved.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('guard baca-dulu: alamat yang SUDAH ada TIDAK ditimpa oleh form masuk', async () => {
+    const ctx: any = {
+      customer: {
+        id: 'cust-form-existing',
+        phone: '6289900112301',
+        lat: null,
+        lng: null,
+        distance_km: null,
+        zipcode: '60262',
+        pending_zipcode: null,
+        preferences: { address: 'Jl. Alamat Lama No 1' },
+      },
+      conversation: { id: 'conv-1' },
+      incomingMessage: {
+        type: 'text',
+        text: { body: 'Berikut list untuk reservasi :\nNama Bunda: suciani\nAlamat & Shareloc : jalan kedungklinter 1 80\nKec : Tegalsari\nKota : Surabaya\nNo. Hp : 085878033569\nTreatment :pijat bayi pulih ceria' },
+      },
+      history: [],
+    };
+
+    await humanBackgroundEnrichmentService.enrichSync(ctx, 'default-tenant');
+
+    const addrCalls = vi.mocked(customerService.updateCustomer).mock.calls.filter((c) => c[1] && (c[1] as any).address);
+    expect(addrCalls.length).toBe(0);
   });
 });

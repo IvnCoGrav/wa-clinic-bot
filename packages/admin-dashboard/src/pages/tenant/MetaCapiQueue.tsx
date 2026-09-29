@@ -47,6 +47,7 @@ interface QueueItem {
   };
   attribution: {
     isPaid: boolean;
+    ctwa_clid?: string | null;
     trackingCode: string | null;
     landingUrl: string | null;
     fbp?: string | null;
@@ -99,16 +100,24 @@ const statusBadge = (s: string | null | undefined) => {
   }
 };
 
-const attributionBadge = (isPaid: boolean) =>
-  isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
-      PAID
+const attributionBadge = (attribution: QueueItem['attribution']) => {
+  if (attribution.ctwa_clid) {
+    return (
+      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
+        CTWA Direct
+      </span>
+    );
+  }
+  return attribution.isPaid ? (
+    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
+      Web LP
     </span>
   ) : (
     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#2a3942] border border-slate-200 dark:border-[#374248] text-slate-700 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
       ORGANIC
     </span>
   );
+};
 
 const utmText = (u: QueueItem['utm']) => {
   const parts = [u.campaign, u.source, u.medium].filter(Boolean);
@@ -204,7 +213,7 @@ export function cleanTreatmentList(detail: string): string[] {
 /**
  * Membangun preview payload JSON Meta Graph API CAPI
  */
-const buildCapiJsonPayload = (item: QueueItem) => {
+const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
   const eventName = item.eventType || 'Purchase';
   const cleanTreatments = cleanTreatmentList(item.treatment_detail);
   const occurredTimestamp = item.purchase_occurred_at
@@ -307,12 +316,19 @@ const buildCapiJsonPayload = (item: QueueItem) => {
   const treatmentLow = (item.treatment_detail || '' + ' ' + cleanTreatments.join(' ')).toLowerCase();
   const isMoms = treatmentLow.includes('moms') || treatmentLow.includes('ibu') || treatmentLow.includes('hamil') || treatmentLow.includes('nifas') || treatmentLow.includes('laktasi');
 
+  const isCtwa = Boolean(item.attribution.ctwa_clid);
+  // Paritas backend (`capi.service.ts` useBusinessMessaging): envelope
+  // business_messaging HANYA dipakai bila ctwa_clid ADA *dan* tenant punya WABA id.
+  // Tanpa WABA id, backend fail-open ke action_source 'chat' — preview HARUS sama.
+  const useBusinessMessaging = isCtwa && wabaConfigured;
+
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
     event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`,
     event_source_url: landingUrl,
-    action_source: 'chat',
+    action_source: useBusinessMessaging ? 'business_messaging' : 'chat',
+    ...(useBusinessMessaging ? { messaging_channel: 'whatsapp' } : {}),
     user_data: {
       ph: item.customer.phone ? `sha256(${item.customer.phone.replace(/\D/g, '')})` : undefined,
       fn: resolvedFn ? `sha256(${resolvedFn.toLowerCase()})` : undefined,
@@ -325,6 +341,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
       ge: isMoms ? `sha256(f)` : undefined,
       fbp: item.attribution.fbp || (item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
       fbc: resolvedFbc,
+      ctwa_clid: item.attribution.ctwa_clid || undefined,
       client_ip_address: item.attribution.ipAddress || (item.attribution.isPaid ? '114.122.34.56' : undefined),
       client_user_agent: item.attribution.userAgent || (item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
     },
@@ -362,6 +379,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
 export const MetaCapiQueue: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [wabaConfigured, setWabaConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -380,13 +398,13 @@ export const MetaCapiQueue: React.FC = () => {
     setSelectedJsonItem(item);
     setIsEditingJson(false);
     setJsonParseError(null);
-    const payload = customPayloads[item.id] || buildCapiJsonPayload(item);
+    const payload = customPayloads[item.id] || buildCapiJsonPayload(item, wabaConfigured);
     setJsonDraft(JSON.stringify(payload, null, 2));
   };
 
   const handleStartEditJson = () => {
     if (!selectedJsonItem) return;
-    const current = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+    const current = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
     setJsonDraft(JSON.stringify(current, null, 2));
     setJsonParseError(null);
     setIsEditingJson(true);
@@ -417,7 +435,7 @@ export const MetaCapiQueue: React.FC = () => {
 
   const handleResetJson = () => {
     if (!selectedJsonItem) return;
-    const original = buildCapiJsonPayload(selectedJsonItem);
+    const original = buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
     setJsonDraft(JSON.stringify(original, null, 2));
     setJsonParseError(null);
     setCustomPayloads((prev) => {
@@ -451,6 +469,7 @@ export const MetaCapiQueue: React.FC = () => {
       const res = await apiRequest('/api/admin/capi-queue');
       const data = Array.isArray(res?.data) ? res.data : [];
       setItems(data);
+      setWabaConfigured(Boolean(res?.wabaConfigured));
     } catch (err: any) {
       toast(`Error memuat queue: ${err.message}`, 'error');
     } finally {
@@ -763,7 +782,7 @@ export const MetaCapiQueue: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          {attributionBadge(item.attribution.isPaid)}
+                          {attributionBadge(item.attribution)}
                           {customerTypeBadge(item)}
                           {item.attribution.trackingCode && (
                             <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
@@ -943,7 +962,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                   {/* Attribution & Distance Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                    {attributionBadge(item.attribution.isPaid)}
+                    {attributionBadge(item.attribution)}
                     {customerTypeBadge(item)}
                     {item.attribution.trackingCode && (
                       <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">
@@ -1048,7 +1067,7 @@ export const MetaCapiQueue: React.FC = () => {
 
       {/* 📦 Modal View & Edit JSON Payload */}
       {selectedJsonItem && (() => {
-        const currentPayload = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+        const currentPayload = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem, wabaConfigured);
         const isCustom = !!customPayloads[selectedJsonItem.id];
         const isPending = selectedJsonItem.purchase_review_status === 'pending';
 
@@ -1080,6 +1099,12 @@ export const MetaCapiQueue: React.FC = () => {
                     <p className="text-[11px] text-[#667781] dark:text-[#aebac1]">
                       Event: <span className="font-bold text-[#008069] dark:text-[#00a884]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{selectedJsonItem.customer.name}</span>
                     </p>
+                    {Boolean(selectedJsonItem.attribution.ctwa_clid) && !wabaConfigured && (
+                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <AlertTriangle size={11} />
+                        WABA Business Account ID belum dikonfigurasi — event dikirim sebagai action_source 'chat' (envelope business_messaging tidak lengkap).
+                      </p>
+                    )}
                   </div>
                 </div>
 

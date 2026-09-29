@@ -30,6 +30,12 @@ vi.mock('../../src/services/web-push.service', () => ({
   webPushService: { sendPushToStaff: (...a: any[]) => h.sendPushToStaff(...a) },
 }));
 
+// Legacy suite menguji DISPATCH Telegram; aktifkan kanal eksplisit (default produksi = OFF).
+vi.mock('../../src/config/staff-notification-config', () => ({
+  getStaffNotificationConfig: vi.fn().mockResolvedValue({ telegramEnabled: true }),
+  clearStaffNotificationConfigCache: vi.fn(),
+}));
+
 import { StaffNotificationService } from '../../src/services/staff-notification.service';
 
 const svc = new StaffNotificationService();

@@ -28,7 +28,9 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     expect(body.role).toBe('super_admin');
     expect(body.redirectTo).toBe('/admin/overview');
     expect(body.user.role).toBe('super_admin');
-    expect(res.headers['set-cookie']).toContain('admin_session=');
+    const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
+    expect(setCookie).toContain('admin_session=');
+    expect(setCookie).toContain('staff_session=;');
   });
 
   it('authenticates Staff Terapis via Phone + Password and redirects to /admin/staff/today', async () => {
@@ -71,7 +73,9 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     expect(body.role).toBe('therapist');
     expect(body.redirectTo).toBe('/admin/staff/today');
     expect(body.user.name).toBe('Bidan Dewi');
-    expect(res.headers['set-cookie']).toContain('staff_session=valid_staff_token_xyz');
+    const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
+    expect(setCookie).toContain('staff_session=valid_staff_token_xyz');
+    expect(setCookie).toContain('admin_session=;');
   });
 
   it('blocks Staf Admin (ADMIN_CS) from phone login with 403 notification', async () => {
@@ -194,7 +198,10 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     });
 
     expect(loginRes.statusCode).toBe(200);
-    const cookie = loginRes.headers['set-cookie'] as string;
+    const setCookies = ([] as string[]).concat(loginRes.headers['set-cookie'] as any);
+    // Ambil hanya cookie admin_session (header kini array karena sanitasi sesi silang).
+    const cookie = setCookies.find((c) => c.startsWith('admin_session=')) as string;
+    expect(cookie).toBeDefined();
 
     // 2. Akses GET /api/staff/auth/me dengan admin_session
     const staffMeRes = await app.inject({

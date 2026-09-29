@@ -357,6 +357,16 @@ export const LiveChatMonitor: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<LiveChatItem[]>([]);
+  // Early warning keterlambatan Bidan (SSE): banner pulse di header + toast sekali.
+  const [delayAlert, setDelayAlert] = useState<{
+    reservationId: string;
+    staffName?: string;
+    patientName?: string;
+    level: 'warning' | 'critical';
+    delayMinutes: number;
+    formattedArrivalWib?: string;
+  } | null>(null);
+  const delayAlertedRef = useRef<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       const urlParam = new URLSearchParams(window.location.search).get('conversationId') || new URLSearchParams(window.location.search).get('id');
@@ -456,6 +466,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  // Indikator unread global dari DB (bukan hanya 50 chat pertama) — akurat walau
+  // chat unread berada di luar halaman yang termuat.
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip #160.
   const sourceFilterRef = useRef<SourceFilter>('all');
   useEffect(() => { sourceFilterRef.current = sourceFilter; }, [sourceFilter]);
@@ -479,6 +492,9 @@ export const LiveChatMonitor: React.FC = () => {
   const lastScrolledInChatQueryRef = useRef<string>('');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Offset server murni (jumlah item yang benar-benar ditarik dari DB, bukan panjang
+  // array lokal) — mencegah lompatan halaman akibat ghost-chat yang di-prepend.
+  const listOffsetRef = useRef(0);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
@@ -1138,27 +1154,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       setLoadingMore(true);
     }
     try {
-      const offset = reset ? 0 : chatsRef.current.length;
+      const offset = reset ? 0 : listOffsetRef.current;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
       // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
       // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
       // memakai filter terkini — mencegah reload mode salah (bug #160).
       const backendMode = sourceFilterRef.current === 'sandbox' ? 'sandbox' : 'real';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
+      // Filter unread/reservation dikirim ke server agar paginasi & hasMore akurat
+      // dari total sesungguhnya di DB, bukan hasil filter 50 item di memori browser.
+      const activeSource = sourceFilterRef.current;
+      const filterParam = activeSource === 'unread' || activeSource === 'reservation' ? `&filter=${activeSource}` : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}${filterParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
       });
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
+      listOffsetRef.current = reset ? data.length : listOffsetRef.current + data.length;
       if (reset) {
         // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama, pertahankan agar tidak hilang —
         // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
         const isSearchActive = !!(search && search.trim());
         const rawActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
-        // #160 ghost-chat guard: chat aktif HANYA dipertahankan bila modenya cocok dengan
-        // filter aktif — chat pasien real tidak boleh "nyangkut" di panel saat filter Sandbox.
-        const currentActive = rawActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
+        // Ghost-chat guard (#160 + tab terfilter): chat aktif HANYA dipertahankan
+        // (a) bila modenya cocok (real/sandbox), dan (b) di tab 'all'/'sandbox'.
+        // Di tab unread/reservation, chat yang baru saja dibaca TIDAK boleh "nyangkut".
+        const canPreserveActive = activeSource === 'all' || activeSource === 'sandbox';
+        const currentActive = rawActive && canPreserveActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
         const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
           ? [currentActive, ...data]
           : data;
@@ -1195,6 +1218,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       setLoading(false);
     }
   };
+
+  // Sinkronisasi badge unread GLOBAL (bukan 50 item yang sudah ditarik ke browser).
+  // Debounced agar SSE storm (pesan masuk beruntun) tidak membanjiri endpoint.
+  const unreadCountFetchTimerRef = useRef<any>(null);
+  const refreshTotalUnread = useCallback((immediate = false) => {
+    if (unreadCountFetchTimerRef.current) {
+      clearTimeout(unreadCountFetchTimerRef.current);
+    }
+    const run = async () => {
+      try {
+        const res = await apiRequest('/api/admin/live-chat/unread-count');
+        const count = typeof res?.count === 'number' ? res.count : (typeof res === 'number' ? res : 0);
+        startTransition(() => setTotalUnreadCount(count));
+      } catch {
+        // Biarkan nilai lama saat offline; jangan reset ke 0 agar badge tidak berkedip.
+      }
+    };
+    if (immediate) {
+      void run();
+    } else {
+      unreadCountFetchTimerRef.current = setTimeout(run, 1500);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTotalUnread(true);
+  }, [refreshTotalUnread]);
 
   const handleSyncHistory = async (offset = 0) => {
     setSyncingHistory(true);
@@ -1756,16 +1806,38 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     });
   };
 
-  // Close context menu on outside click or window scroll
+  // Close context menu ONLY on outside click. Scroll listener `capture=true`
+  // DILARANG di sini: ia mencegat scroll internal daftar label (max-h-36/32)
+  // sehingga modal lenyap saat digulir (desktop wheel & swipe mobile).
   useEffect(() => {
     const handleClose = () => setContextMenu(null);
     window.addEventListener('click', handleClose);
-    window.addEventListener('scroll', handleClose, true);
     return () => {
       window.removeEventListener('click', handleClose);
-      window.removeEventListener('scroll', handleClose, true);
     };
   }, []);
+
+  // Body scroll lock + Escape saat context menu aktif: kunci scroll latar agar
+  // halaman di belakang tidak bergeser; kompensasi lebar scrollbar anti layout-shift.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [contextMenu]);
 
   const handleTogglePin = async (chat: LiveChatItem) => {
     setContextMenu(null);
@@ -1809,6 +1881,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         chatsRef.current = updated;
         return updated;
       });
+      refreshTotalUnread();
       toast(
         targetEndpoint === 'unread' ? 'Ditandai belum dibaca (Hijau Tua).' : 'Ditandai sudah dibaca.',
         'success'
@@ -1856,6 +1929,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }));
       setChats(updatedChats);
       chatsRef.current = updatedChats;
+      setTotalUnreadCount(0);
       toast('Semua percakapan berhasil ditandai telah dibaca!', 'success');
     } catch (err: any) {
       toast(`Gagal menandai semua dibaca: ${err.message}`, 'error');
@@ -1954,6 +2028,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         sseConnectedRef.current = connected;
         if (wasDisconnected) {
           loadChats(true);
+          refreshTotalUnread(true);
           if (selectedIdRef.current) {
             loadThread(selectedIdRef.current);
           }
@@ -1981,10 +2056,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               isManualUnread: false,
             }))
           ));
+          setTotalUnreadCount(0);
           return;
         }
 
         if (type === 'message.created') {
+          refreshTotalUnread();
           const conversationId = payload.conversationId;
           const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
           const rawPayload = payload.payloadRaw || payload.payload_raw || payload.payload;
@@ -2081,6 +2158,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             loadChats(true);
           }
         } else if (type === 'conversation.updated') {
+          refreshTotalUnread();
           const current = chatsRef.current;
           if (!current.some((c) => c.conversationId === payload.conversationId)) {
             if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
@@ -2242,6 +2320,42 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           }
         } else if (type === 'staff.trip_closed') {
           const reservationId = payload?.reservationId;
+          if (reservationId && dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
+        } else if (type === 'staff.trip_delay_warning') {
+          const reservationId = payload?.reservationId;
+          if (!reservationId) return;
+          const level = payload?.level === 'critical' ? 'critical' : 'warning';
+          setDelayAlert({
+            reservationId,
+            staffName: payload?.staffName,
+            patientName: payload?.patientName,
+            level,
+            delayMinutes: Number(payload?.delayMinutes) || 0,
+            formattedArrivalWib: payload?.formattedArrivalWib,
+          });
+          // Toast SEKALI per reservasi (dedupe) — ikon pulse di header tetap tampil.
+          if (!delayAlertedRef.current.has(reservationId)) {
+            delayAlertedRef.current.add(reservationId);
+            const who = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
+            const eta = payload?.formattedArrivalWib ? ` (estimasi tiba ±${payload.formattedArrivalWib} WIB)` : '';
+            toast(
+              `⚠️ ${who} diprediksi terlambat ${Number(payload?.delayMinutes) || 0} menit${eta}.`,
+              level === 'critical' ? 'error' : 'info'
+            );
+          }
+          if (dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
+        } else if (type === 'staff.trip_arrived') {
+          const reservationId = payload?.reservationId;
+          if (reservationId) {
+            setDelayAlert((prev) => (prev && prev.reservationId === reservationId ? null : prev));
+          }
+          const staffName = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
+          const patientName = payload?.patientName ? `Bunda ${payload.patientName}` : 'pasien';
+          toast(`${staffName} telah tiba di lokasi ${patientName}.`, 'success');
           if (reservationId && dispatchReservationIdRef.current === reservationId) {
             loadDispatchTripRef.current?.(reservationId);
           }
@@ -3053,7 +3167,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   // Refresh berkala ringan (10s) hanya bila OTW aktif — jaring bila SSE terputus.
   useEffect(() => {
-    if (!dispatchTrip?.otwSentAt || dispatchTrip?.arrivedAt) return;
+    if ((!dispatchTrip?.otwSentAt && !dispatchTrip?.trip) || dispatchTrip?.arrivedAt) return;
     const id = dispatchReservationIdRef.current;
     if (!id) return;
     const t = setInterval(() => {
@@ -3062,7 +3176,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     }, 10_000);
     return () => clearInterval(t);
-  }, [dispatchTrip?.otwSentAt, dispatchTrip?.arrivedAt, loadDispatchTrip]);
+  }, [dispatchTrip?.otwSentAt, dispatchTrip?.trip, dispatchTrip?.arrivedAt, loadDispatchTrip]);
 
   // Smart Micro-Pill: reset tiap ganti chat/reservasi; auto-collapse 3 detik khusus mobile
   useEffect(() => {
@@ -3532,6 +3646,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
+          {/* Early Warning keterlambatan Bidan — ikon pulse persisten selama delay aktif. */}
+          {delayAlert && (
+            <button
+              type="button"
+              onClick={() => {
+                const conv = chats.find((c) => c.conversationId && (c as any).activeConfirmedReservation?.id === delayAlert.reservationId);
+                if (conv?.conversationId) setSelectedId(conv.conversationId);
+              }}
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                delayAlert.level === 'critical'
+                  ? 'bg-red-50 border-red-300 text-red-700'
+                  : 'bg-amber-50 border-amber-300 text-amber-700'
+              }`}
+              title={`Bidan${delayAlert.staffName ? ' ' + delayAlert.staffName : ''} diprediksi terlambat ${delayAlert.delayMinutes} menit${delayAlert.formattedArrivalWib ? ' (tiba ±' + delayAlert.formattedArrivalWib + ' WIB)' : ''}`}
+            >
+              <AlertTriangle size={12} className="animate-pulse" />
+              <span>Telat {delayAlert.delayMinutes}m</span>
+            </button>
+          )}
         </div>
 
         {/* Controls: Internal Chatbot Toggle + Export */}
@@ -3663,6 +3796,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
                     <span>{sseConnected ? 'Live' : 'Offline'}</span>
                   </div>
+                  {delayAlert && (
+                    <div
+                      className={`flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                        delayAlert.level === 'critical'
+                          ? 'bg-red-50 border-red-300 text-red-700'
+                          : 'bg-amber-50 border-amber-300 text-amber-700'
+                      }`}
+                      title={`Bidan diprediksi terlambat ${delayAlert.delayMinutes} menit`}
+                    >
+                      <AlertTriangle size={11} className="animate-pulse" />
+                      <span>{delayAlert.delayMinutes}m</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center space-x-1.5">
@@ -3704,7 +3850,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const activeClass = opt.value === 'sandbox'
                         ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-2xs'
                         : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
-                      const hasUnreadBadge = opt.value === 'unread' && chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread));
+                      const hasUnreadBadge = opt.value === 'unread' && (totalUnreadCount > 0 || chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread)));
                       return (
                         <button
                           key={opt.value}
@@ -3849,6 +3995,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       >
                         Reset Pencarian
                       </button>
+                    </>
+                  ) : sourceFilter === 'unread' ? (
+                    <>
+                      <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
+                      <p className="font-bold text-[#111b21]">Semua pesan sudah dibaca! 🎉</p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        Tidak ada percakapan yang menunggu dibalas saat ini.
+                      </p>
+                    </>
+                  ) : sourceFilter === 'reservation' ? (
+                    <>
+                      <ShoppingBag className="mx-auto text-[#008069] mb-2" size={24} />
+                      <p className="font-bold text-[#111b21]">Belum ada reservasi aktif</p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        Percakapan dengan booking pending, hold, atau terjadwal akan muncul di sini.
+                      </p>
                     </>
                   ) : (
                     <>
@@ -4258,7 +4420,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     </div>
                   );
                 })}
-                {hasMore && (
+                {hasMore && filteredChats.length > 0 && (
                   <div className="flex justify-center pt-2">
                     <button
                       onClick={() => loadChats(false)}
@@ -5425,8 +5587,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             )}
           </div>
 
-          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (hanya saat OTW aktif) */}
-          {dispatchTrip && dispatchTrip.otwSentAt && !dispatchTrip.arrivedAt && (
+          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (OTW manual ATAU passive auto-tracking) */}
+          {dispatchTrip && (dispatchTrip.otwSentAt || dispatchTrip.trip) && !dispatchTrip.arrivedAt && (
             <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 p-2 overflow-y-auto">
               <div className="w-full">
                 <LiveChatDispatchWidget
@@ -5573,8 +5735,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     ) : null}
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
-                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>
-                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || selectedChat?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
+                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat Lengkap</p>
+                        <p className="font-medium text-[#111b21]">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
+                        {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
+                          <p className="text-[11px] text-[#008069] mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
+                        )}
+                        {customerDetailData?.kelurahan && (
+                          <p className="text-[10px] text-[#8696a0] mt-0.5">Kel. {customerDetailData.kelurahan}{customerDetailData?.kecamatan ? `, Kec. ${customerDetailData.kecamatan}` : ''}</p>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
@@ -5829,6 +5997,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   kelurahan: (selectedChat as any).kelurahan || null,
                   kecamatan: (selectedChat as any).kecamatan || null,
                   kota: (selectedChat as any).kota || null,
+                  address: (selectedChat as any).address || (selectedChat as any).preferences?.address || null,
+                  preferences: (selectedChat as any).preferences || {},
                   children: (selectedChat as any).children || [],
                   ongkir: (selectedChat as any).ongkir ?? 0,
                   distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
@@ -5839,6 +6009,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
           initialBabies={quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined}
           initialNotes={quickBookingExtracted?.treatmentName && quickBookingExtracted.treatmentName.trim() ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
+          initialAddress={quickBookingExtracted?.address || (selectedChat as any)?.address || (selectedChat as any)?.preferences?.address || null}
+          initialLandmark={(selectedChat as any)?.preferences?.landmark || (selectedChat as any)?.preferences?.address_notes || null}
           onSuccess={async (newRes) => {
             setShowQuickBookingModal(false);
             setConvertingHoldId(null);
@@ -6077,7 +6249,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               {allLabels.length === 0 ? (
                 <p className="text-[11px] text-[#8696a0] px-1 py-0.5">Belum ada label sistem.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto">
+                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto overscroll-contain" data-no-select="true">
                   {allLabels.map((lbl) => {
                     const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
                     return (
@@ -6212,7 +6384,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               {allLabels.length === 0 ? (
                 <p className="text-[11px] text-[#8696a0] py-0.5">Belum ada label sistem.</p>
               ) : (
-                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto">
+                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto overscroll-contain">
                   {allLabels.map((lbl) => {
                     const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
                     return (

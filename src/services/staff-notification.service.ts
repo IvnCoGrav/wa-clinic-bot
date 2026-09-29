@@ -4,6 +4,7 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { webPushService } from './web-push.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getStaffNotificationConfig } from '../config/staff-notification-config';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -236,7 +237,10 @@ export class StaffNotificationService {
       }
 
       // 11. Optional External Telegram Notification
-      if (staff.telegram_chat_id) {
+      // Mandat In-System PWA Only: Telegram ke akun pribadi terapis DEFAULT OFF.
+      // Hanya dikirim bila tenant secara eksplisit mengaktifkan (settings.staffNotification.telegramEnabled).
+      const notifConfig = await getStaffNotificationConfig(tenantId);
+      if (notifConfig.telegramEnabled && staff.telegram_chat_id) {
         const messageText = `🔔 *TUGAS RESERVASI BARU DITUGASKAN!*
 Halo *${staff.name}*, Anda memiliki jadwal kunjungan pasien baru:
 
@@ -268,7 +272,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         }
       }
 
-      return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi (notifikasi in-system PWA & SSE berhasil dikirim)' };
+      return { sent: false, reason: notifConfig.telegramEnabled
+        ? 'Staff belum menghubungkan akun Telegram pribadi (notifikasi in-system PWA & SSE berhasil dikirim)'
+        : 'External Telegram disabled (In-System PWA Mandate); notifikasi in-system PWA & SSE terkirim' };
     } catch (err: any) {
       console.error(`[StaffNotificationService] Failed to notify staff ${staffId}:`, err.message);
       return { sent: false, reason: err.message };
@@ -413,7 +419,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       }
 
       let telegramSent = false;
-      if (staff.telegram_chat_id) {
+      // Mandat In-System PWA Only: Telegram eksternal DEFAULT OFF (tenant-aware).
+      const preVisitNotifConfig = await getStaffNotificationConfig(tenantId);
+      if (preVisitNotifConfig.telegramEnabled && staff.telegram_chat_id) {
         try {
           const res = await telegramService.sendMessage({
             chatId: staff.telegram_chat_id,
@@ -629,8 +637,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
       }
 
-      // 3. Optional External Telegram
-      if (staff.telegram_chat_id) {
+      // 3. Optional External Telegram (Mandat In-System PWA Only: DEFAULT OFF, tenant-aware)
+      const cancelNotifConfig = await getStaffNotificationConfig(tenantId);
+      if (cancelNotifConfig.telegramEnabled && staff.telegram_chat_id) {
         const addressParts: string[] = [];
         if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
         if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
@@ -725,7 +734,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       }
 
       // 3. Optional External Telegram — gate yang sama dengan Web Push.
-      if (notifyOldStaff && staff.telegram_chat_id) {
+      // Mandat In-System PWA Only: DEFAULT OFF, tenant-aware.
+      const unassignNotifConfig = await getStaffNotificationConfig(tenantId);
+      if (notifyOldStaff && unassignNotifConfig.telegramEnabled && staff.telegram_chat_id) {
         const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
         const dateStr = bookingDate
           ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
@@ -920,6 +931,12 @@ _Semangat melayani Bunda & Buah Hati hari ini! ✨_`;
         return { sent: false, reason: 'Akun staff nonaktif', count: 0 };
       }
 
+      // Mandat In-System PWA Only: briefing Telegram eksternal DEFAULT OFF (tenant-aware).
+      const briefingNotifConfig = await getStaffNotificationConfig(staff.tenant_id || DEFAULT_TENANT_ID);
+      if (!briefingNotifConfig.telegramEnabled) {
+        return { sent: false, reason: 'External Telegram disabled (In-System PWA Mandate)', count: 0 };
+      }
+
       const { startOfDay, endOfDay, formattedDate } = this.getWibDayRange(targetDate);
 
       const reservations = await prisma.reservation.findMany({
@@ -975,6 +992,12 @@ _Semangat melayani Bunda & Buah Hati hari ini! ✨_`;
     targetDate: Date = new Date()
   ): Promise<{ totalStaff: number; briefedStaff: number; totalReservations: number }> {
     try {
+      // Mandat In-System PWA Only: briefing pagi Telegram eksternal DEFAULT OFF (tenant-aware).
+      const morningNotifConfig = await getStaffNotificationConfig(tenantId);
+      if (!morningNotifConfig.telegramEnabled) {
+        return { totalStaff: 0, briefedStaff: 0, totalReservations: 0 };
+      }
+
       const activeStaffList = await prisma.staff.findMany({
         where: {
           tenant_id: tenantId,

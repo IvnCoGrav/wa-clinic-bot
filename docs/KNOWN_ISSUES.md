@@ -3,61 +3,205 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 167. [Guardrail D7/D3] Sisa tech debt eliminasi false positive CASE-084/095 (2026-09-29)
+## 172. [Guardrail D7/D3] Sisa tech debt eliminasi false positive CASE-084/095 (2026-09-29)
 
 - **Konteks:** perbaikan fondasional kelas ejaan agama (D7) + kontrak D3
   klinis-vs-operasional sudah dieksekusi (lihat CHANGELOG). Entri ini mencatat
   sisa yang BELUM/tidak dieksekusi.
-- **167a — Replay LLM CASE-084/095 belum dijalankan (OPEN):** perintah
+- **172a — Replay LLM CASE-084/095 belum dijalankan (OPEN):** perintah
   `npx tsx scripts/run-test-plan.ts --suite=v2 --id=CASE-084 --llm` (dan CASE-095)
   butuh network LLM + `.env`; TIDAK dijalankan. Verifikasi saat ini berbasis
   unit test deterministik. Perlu dijalankan di env eval (tanpa `--persist` ke DB
   live, atau dengan sandbox).
-- **167b — Kelas ejaan agama terbatas (OPEN):** `alhamdu[l]*i+[l]+ah` menutup
+- **172b — Kelas ejaan agama terbatas (OPEN):** `alhamdu[l]*i+[l]+ah` menutup
   variasi jumlah 'l', tetapi sisa seperti `alhamdulilaah` (dobel a) atau
   `alhamdulilahh` (dobel h) belum dikenali → berpotensi false positive serupa
   bila customer memakai ejaan itu. Kandidat: perluas kelas bila ditemukan di log
   nyata (jangan menebak tanpa data).
-- **167c — `FREQUENCY_RE` `sehari\s+\w+` (OPEN, potensi over-match):** pola
+- **172c — `FREQUENCY_RE` `sehari\s+\w+` (OPEN, potensi over-match):** pola
   "sehari X" dapat menangkap frasa operasional non-klinis yang mengandung verba
   perawatan secara kebetulan. Belum ada bukti lapangan; pantau log.
-- **167d — Gate D3 `reply.length > 80` (OPEN, pra-eksisting):** anjuran medis
+- **172d — Gate D3 `reply.length > 80` (OPEN, pra-eksisting):** anjuran medis
   rumahan dalam balasan <80 karakter lolos D3. Bukan regresi dari perubahan ini,
   tetapi perlu ditinjau (mis. gate berbasis kalimat, bukan panjang balasan).
 
-## 166. [Suite V2 51–70] Sisa tech debt perbaikan CASE-058/063 (2026-09-29)
+## 171. [Suite V2 51–70] Sisa tech debt perbaikan CASE-058/063 (2026-09-29)
 
 - **Konteks:** Perbaikan fondasional kebocoran tag katalog, gerbang vaksin
   deterministik, dan anti-penalti evaluator sudah dieksekusi (lihat CHANGELOG).
   Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
-- **166a — Enforcement `tool_choice` provider (OPEN, observabilitas):** Fase 0.1
+- **171a — Enforcement `tool_choice` provider (OPEN, observabilitas):** Fase 0.1
   menambahkan telemetri `toolChoice`/`toolsSent` di `generation-stage.ts`. Akar
   CASE-063 Turn 22 (router mengabaikan `tool_choice` forcing) kini dimitigasi
   oleh fail-safe KODE deterministik (`VACCINE_SAFETY_ROUTING_FALLBACK_APPLIED`),
   TETAPI pertanyaan "apakah provider DeepSeek benar-benar menegakkan
   `tool_choice: {function}`" belum terverifikasi. Monitor log `toolChoice` +
   event fallback; bila fallback sering menyala, evaluasi kontrak provider.
-- **166b — Scope sinyal vaksin naratif (OPEN):** Fail-safe vaksin menyala pada
+- **171b — Scope sinyal vaksin naratif (OPEN):** Fail-safe vaksin menyala pada
   SETIAP `hasVaccineSignal` tanpa tool. Turn naratif pasif ("niatnya mau pijet
   sebelum imunisasi") juga memicunya — disengaja untuk keselamatan klinis, namun
   biaya satu tool ekstra per turn tersebut belum diukur di produksi. Bila
   terbukti mahal, persempit ke sinyal tanya/klaim draf (bukan `includes` murni).
-- **166c — Gerbang lokasi `pendingScheduleCheck` (RESOLVED 2026-09-29):**
+- **171c — Gerbang lokasi `pendingScheduleCheck` (RESOLVED 2026-09-29):**
   `resolvePostReservationAck` (`fast-response-gate.ts`) kini mensyaratkan
   `session.location.kelurahan/kecamatan/kota` sebelum handoff `pending_schedule_check`.
   Tanpa lokasi → tidak menembak (anti fake-confirm jadwal). CASE-058 kini
   `HUMAN_HANDLING` terjustifikasi via `escalate_to_human` (D2 2/2).
-- **166d — Inkonsistensi dosis jeda vaksin (OPEN, perlu keputusan klinis):**
+- **171d — Inkonsistensi dosis jeda vaksin (OPEN, perlu keputusan klinis):**
   Tiga sumber menyebut angka berbeda: `ClinicPolicy`/`clinic-faq.tool.ts`
   fallback = "3 hari", prompt `global-safety.layer.ts` = "2-3 hari (48-72 jam)",
   unit test vaksin = "2-3 hari". Belum ada satu sumber kebenaran tenant-aware di
   DB. Rekomendasi: kunci di `ClinicPolicy.post_vaccine_rules` + hapus angka
   hardcode di prompt/test (Confirmation Gate bila butuh seed migrasi).
-- **166e — Evaluator D1 anti-penalti (RESOLVED 2026-09-29):** `scorer.ts` kini
+- **171e — Evaluator D1 anti-penalti (RESOLVED 2026-09-29):** `scorer.ts` kini
   menurunkan ke N/A bila `expected_total_price` terkunci tetapi customer TIDAK
   menanyakan harga paket di episode replay (kepatuhan Aturan Emas #2 tidak lagi
   dihukum 0/2). Sinyal ongkir (`calculate_delivery`) TIDAK lagi dianggap
   permintaan harga paket.
+
+## 170. [CTWA/CAPI] Sisa debt hardening ctwa_clid pasca-audit (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Audit pasca-deploy `ctwa_clid` (commit `78fc0746`) menutup 4 celah:
+  dekoder permisif, data uji prod, regex duplikat bypass, dan preview UI tak
+  paritas backend. Lihat CHANGELOG. Sisa yang sengaja dibuka:
+- **170a — Rotasi `ADMIN_API_KEY` (OPEN, WAJIB):** key `0137bbe…` terekspos di
+  riwayat command/SSH saat verifikasi live. Wajib dirotasi di `.env` server
+  (`/opt/wa-clinic-bot/.env`) + `.env` lokal, lalu restart container `app`.
+  Jangan tempel key ke command lagi — pakai `docker compose exec app node` atau
+  `curl` dari dalam container.
+- **170b — Verifikasi empiris Meta untuk nomor unofficial WAHA (OPEN):** residual
+  #159. Dukungan Meta CAPI `business_messaging` untuk nomor WhatsApp unofficial
+  (WAHA) belum dibuktikan di Events Manager produksi. Butuh tes terkontrol +
+  cek deduplikasi/attribution di Ads Manager.
+- **170c — Fallback prefix `PA` belum terverifikasi live (OPEN):** dekoder menerima
+  prefix `PA` sebagai bentuk alternatif Meta. Baru `Afi…` yang terbukti empiris di
+  payload live; `PA…` dipertahankan dari spesifikasi, belum ada sampel produksi.
+- **170d — Cleanup data uji tanpa helper (by-design):** penghapusan
+  `adclick_ctwa_test_ivan` dilakukan manual via SQL. Belum ada endpoint/CLI
+  khusus purge `ad_clicks` uji. Jalur test masa depan WAJIB pakai
+  `Customer.is_sandbox_test=true` + `/api/admin/sandbox/cleanup`.
+
+## 169. [LiveChat] Sisa debt server-side filter unread/reservasi (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Filter tab Unread/Reservasi dipindah dari client-side ke server-side
+  (`conversation.service.ts` param `filter`, route `?filter=`) agar paginasi & `hasMore`
+  akurat dari total DB. Lihat CHANGELOG.
+- **169a — Indeks komposit belum ada (OPEN):** Query `filter=unread`
+  (`is_manual_unread` OR pesan INBOUND `read_at:null`) dan `filter=reservation`
+  (relasi `reservations.status/booking_date`) memakai `skip/offset` +
+  `orderBy is_pinned,last_message_at` tanpa indeks komposit khusus. Pada tenant
+  besar (ribuan percakapan) ini berpotensi seq-scan lambat. Kandidat migrasi indeks
+  (BUKAN katalog bisnis): `messages(conversation_id, direction, read_at)` parsial,
+  `conversations(tenant_id, is_manual_unread)`, `reservations(customer_id, status)`.
+  Belum dieksekusi — butuh rencana migrasi indeks terpisah + uji EXPLAIN di produksi.
+- **169b — Unit `unread-count` campur (by-design):** `/api/admin/live-chat/unread-count`
+  menjumlahkan **jumlah pesan** inbound unread + **jumlah percakapan** manual-unread
+  (`message.service.ts:getTotalUnreadCount`). Cocok untuk badge `>0`, TIDAK cocok
+  sebagai "jumlah percakapan unread" untuk ekspektasi paging. Badge global memakai
+  nilai ini hanya sebagai sinyal boolean; paging tetap dari `hasMore` server.
+- **169c — Hold-expiry duplikat definisi (OPEN):** Jendela 2 jam kini ada di domain
+  (`ACTIVE_HOLD_WINDOW_MS`) untuk server, sementara `LiveChatMonitor.tsx` (paket
+  dashboard terpisah) masih mendefinisikan `isHoldValid` lokal. Sulit dijaga identik
+  karena monorepo tanpa workspace sharing. Bila kebijakan hold berubah, ubah KEDUA
+  tempat (atau terbitkan shared util lintas-paket).
+- **169d — Preserve active chat di tab terfilter (by-design):** Ghost-preserve
+  sengaja dinonaktifkan untuk tab unread/reservasi (agar chat yang baru dibaca tidak
+  nyangkut). Konsekuensi: chat aktif bisa keluar dari daftar setelah mark-read —
+  dianggap benar, bukan bug.
+
+## 168. [Push/RBAC] Remediasi ghost subscription & scope push therapist (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS) bocor ke perangkat
+  terapis karena perangkat penguji terdaftar `user_type='ADMIN'` (ghost), sementara
+  rebind ke STAFF gagal 403 (therapist = role managed tanpa scope push). Perbaikan
+  fondasional: seed granular `role_api_scopes` (`20260930000000_allow_push_for_therapist`),
+  pemaksaan identitas langganan dari sesi (`push.subroute.ts`), caller-check
+  `test-staff`, sanitasi cookie silang antar portal, dan `unsubscribe` saat logout.
+  Rencana: `docs/plans/PUSH_RBAC_GHOST_SUBSCRIPTION_REMEDIATION.md`.
+- **168a — Ghost token lama di DB produksi (RESOLVED 2026-09-29):** Baris
+  `push_subscriptions` id `2df24cf1-…` (Windows NT 10.0 / Chrome, `user_type='ADMIN'`)
+  dihapus dari produksi. Backup dibuat: `push_subscriptions_backup_20260929` (7 baris).
+  Penghapusan by `id` spesifik (bukan pola UA massal). Migrasi
+  `20260930000000_allow_push_for_therapist` ter-deploy (5 scope rows therapist).
+  Catatan: bila penguji login ulang sebagai Tabita, frontend baru akan menulis ulang
+  baris sebagai `STAFF`+`user_id` (bukan ADMIN lagi).
+- **168a-2 — Ghost iPhone admin (RESOLVED 2026-09-29):** Baris `ba003b08-…`
+  (iPhone, `user_type='ADMIN'`) dihapus (backup: `push_subscriptions_backup_20260929b`).
+- **168e — Dual-cookie precedence (RESOLVED 2026-09-29, fondasional):** `admin.route.ts`
+  sebelumnya mengecek `admin_session` LEBIH DULU (else-if) daripada `staff_session`,
+  sehingga perangkat dengan cookie admin lama + sesi staf baru membuat `staffId` tak
+  pernah di-set → push terikat `ADMIN` (kebocoran berlanjut meski login Tabita sudah
+  benar). FIX: sesi staf yang valid kini divalidasi & menang lebih dulu; sesi admin
+  jadi fallback. Regression test: `tests/integration/push-rbac.test.ts` (dual-cookie →
+  tetap STAFF+staffId).
+- **168b — `unsubscribe` bergantung endpoint unik (by-design):** `removeSubscription`
+  menghapus berdasarkan `endpoint` (unique). Bila browser sudah mencabut subscription
+  lebih dulu (endpoint hilang), baris DB lama tidak ikut terhapus. Sweep berkala
+  (mis. cron prune subscription tanpa endpoint valid) belum ada.
+- **168c — Scope push therapist granular, bukan wildcard (by-design):** Hanya
+  `/public-key` (GET), `/subscribe` (POST), `/unsubscribe` (POST) yang di-seed.
+  Endpoint sensitif `/test`, `/test-staff`, `/staff-device-counts` sengaja
+  default-deny untuk therapist. Bila kelak terapis butuh uji mandiri, gunakan
+  `test-staff` dengan `staffId` dirinya (caller-check sudah menegakkan ini) —
+  tapi prefix `test-staff` harus di-seed lebih dulu untuk role therapist.
+- **168d — Verifikasi perangkat nyata (PARTIAL 2026-09-29):** Backend & migrasi
+  ter-deploy live; ghost token terhapus. Verifikasi perangkat nyata (login Tabita →
+  cek baris `push_subscriptions` = STAFF + user_id Tabita → kirim chat Anne →
+  pastikan tidak masuk) BELUM dilakukan karena butuh sesi browser penguji fisik.
+
+## 167. [Notifikasi Terapis] Sisa debt Mandat In-System PWA Only (2026-09-29) - OPEN (sebagian sengaja)
+
+- **Konteks:** Eliminasi kebocoran notifikasi ke Bidan Terapis dieksekusi 3 lapis
+  fondasional: (1) kill-switch Telegram eksternal tenant-aware
+  (`src/config/staff-notification-config.ts`, DEFAULT OFF); (2) gate deterministik
+  `is_human_handling` di `inbound-notification-router.service.ts` (push staf HANYA
+  saat percakapan dipegang manusia, fail-closed bila status tak pasti); (3) filter
+  audio/banner PWA di `StaffToday.tsx` (hanya saat `isHumanHandling`). Lihat CHANGELOG.
+- **167a — Telegram pairing lama masih tersimpan di DB (OPEN, sengaja):** Kolom
+  `Staff.telegram_chat_id` / `telegram_pairing_token` TIDAK dihapus (kebijakan "PWA
+  Only" ditegakkan di lapisan kode, bukan dengan memusnahkan data — rollback/audit
+  tetap mungkin). Untuk mengaktifkan kembali Telegram per-tenant:
+  `Tenant.settings.staffNotification.telegramEnabled = true` (butuh admin UI/seed).
+- **167b — Isolasi supervisor dari aliran monitoring pasif (OPEN):** Supervisor masih
+  menerima `message.created` untuk SEMUA percakapan tenant (by design:
+  `assertConversationOwnedByStaffToday` supervisor override + `scope=all`). Karena
+  audio/banner kini di-gate `isHumanHandling`, notifikasi supervisor hanya muncul
+  untuk percakapan yang benar-benar dieskalasi ke manusia — bukan banjir monitoring.
+  Bila tenant butuh isolasi penuh (supervisor senyap total saat tidak membuka chat),
+  tambah preferensi per-supervisor (mis. `Staff.settings.silentMonitoring`).
+- **167c — Nomor WhatsApp staf internal (RESOLVED 2026-09-29):** ditambahkan kolom
+  `Customer.is_internal_staff` (migrasi `20260929150000_add_internal_staff`, backfill
+  ternormalisasi digit dari `Staff.phone`) + `customerService.markInternalStaffCustomer`
+  (dipanggil saat staf dibuat). Percakapan staf internal kini dikecualikan dari MQL,
+  follow-up sliding window, push CRM (`message.service.ts`), dan Meta CAPI
+  (`capi.service.ts` CAPI GUARD). Sisa: staf yang dibuat SEBELUM migrasi hanya
+  tertandai via backfill SQL (tanpa pemicu ulang otomatis); bila perlu, jalankan
+  ulang backfill atau tandai manual per-staf.
+- **167d — Verifikasi perangkat nyata BELUM (OPEN):** Uji getar/dering/banner di HP
+  Bidan nyata & deploy produksi belum dilakukan. Frontend tidak punya harness test
+  (tanpa jsdom/testing-library), jadi filter PWA diverifikasi via review + build.
+
+## 166. [Dispatch Tracking] Ambang operasional auto-start/geofence/delay masih global (2026-09-29) - OPEN (sengaja)
+
+- **Konteks:** Upgrade auto-start telemetry H-30, auto-off geofence 50m, dan early
+  warning keterlambatan CS dieksekusi (lihat CHANGELOG). Ambangnya masih konstanta
+  global di `src/services/staff-trip-tracking.service.ts`:
+  `ARRIVAL_RADIUS_M=50`, `ARRIVAL_CONSECUTIVE_PING=2`, `GPS_ACCURACY_MAX_M=100`,
+  `PRE_TRIP_WINDOW_MIN=30`, `DELAY_WARN_MIN=20`, `DELAY_CRITICAL_MIN=30`.
+- **166a — Belum tenant-aware (OPEN, sengaja):** idealnya dibaca dari `ClinicPolicy`
+  per-tenant. Sesuai Confirmation Gate: ditunda (tanpa migrasi), karena solusi
+  tenant-aware butuh kolom/tabel kebijakan baru. Ada `TODO(tenant-aware)` di blok
+  konstanta.
+- **166b — Auto-stop 50m TIDAK mengubah `arrived_at` (by design):** `staff.trip_arrived`
+  hanya sinyal indikator bagi CS + mematikan pemancar pelacakan; status kedatangan
+  resmi tetap tombol manual bidan (mengirim WA). Jangan disamakan.
+- **166c — Web Push keterlambatan ditunda (OPEN):** SSE + ikon pulse header dianggap
+  cukup; web push untuk CS yang menutup tab ditunda agar tidak ada notifikasi ganda
+  dengan SSE (`src/services/web-push.service.ts` belum di-wire ke event ini).
+- **166d — Dwell hanya berbasis ping (OPEN):** anti false-stop memakai 2 ping berturut
+  dalam radius, belum memakai jendela waktu eksplisit (mis. ≥60 detik). Bila di
+  lapangan terbukti masih sensitif, tambah gerbang durasi.
+- **Catatan:** uji perangkat nyata (HP Bidan, GPS indoor) & deploy produksi BELUM dilakukan.
 
 ## 165. [Kartu Tugas Terapis & Itinerary] Sisa tech debt perbaikan data jadwal + UX mobile (2026-09-29)
 
@@ -91,6 +235,29 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   memakai `maps/search/?api=1&query=`. Dikonsolidasi ke helper tunggal
   `buildMapsUrls(lat,lng)` di `staff-reservation.service.ts` (3 titik).
 - **Catatan:** Uji perangkat nyata (HP Bidan) & deploy produksi BELUM dilakukan.
+
+## 166. [Alamat Jalan & Patokan] Sisa tech debt sinkronisasi preferences.address/landmark (2026-09-29) - OPEN (sebagian)
+
+- **Konteks:** perbaikan fondasional alamat jalan fisik + patokan (lihat CHANGELOG
+  2026-09-29). 5 caller diperbaiki, API + UI diperluas, data produksi Bunda suciani
+  di-heal via endpoint beraudit. Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
+- **166a — Ekstraksi patokan dari chat belum ada (OPEN, sengaja):** `initialLandmark`
+  pada modal reservasi selalu `null` saat dibuat dari chat, karena `ParsedReservation`
+  (`reservation-text-parser.ts`) dan `ExtractedScheduleData` (`chatScheduleExtractor.ts`)
+  TIDAK mengekstrak "patokan/landmark/ciri rumah". Saat ini patokan diisi manual atau
+  dari DB. Fondasional: tambah ekstraksi label generik `patokan|landmark|ciri|tanda rumah`
+  di kedua parser (blast radius 2 file + test adversarial multi-frasa).
+- **166b — Ekstraksi alamat admin-side (`chatScheduleExtractor`) tetap regex baris form:**
+  pola `Alamat & Shareloc :` memadai untuk format form resmi; chat bebas tanpa label form
+  tidak diekstrak ke `initialAddress`. Bila perlu, gunakan entity extractor semantik,
+  bukan menambah regex per-kasus.
+- **166c — Recovery alamat untuk form tanpa reservasi:** Fase 2 enrichment hanya
+  mem-persist `preferences.address` bila reservasi belum dibuat. Bila parse form gagal
+  total (bukan sekadar geocode), alamat tidak tertangkap — bergantung parser.
+- **166d — Latent type debt `babies` (RESOLVED 2026-09-29):** `POST /api/admin/reservation`
+  memetakan `{ name, ageText }` ke `BabyDetail` yang mengharuskan `age`, sehingga usia
+  bayi yang dibuat admin tidak pernah terisi. Diperbaiki (`ageText → age`); error tsc
+  laten sebelumnya tertutup cache inkremental (kini build bersih).
 
 ## 164. [Age Engine & Entitas Moms] Sisa tech debt transformasi usia dinamis (2026-09-29) - OPEN (sebagian)
 

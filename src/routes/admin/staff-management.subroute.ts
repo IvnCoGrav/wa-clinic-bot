@@ -126,6 +126,16 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           tenantId,
         });
 
+        // Mandat In-System PWA Only (Fase 4): tandai customer yang nomornya cocok
+        // sebagai staf internal (koordinasi CS/Bidan bukan tiket CRM pelanggan).
+        // Best-effort: kegagalan tidak menggagalkan pembuatan akun staf.
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          await customerService.markInternalStaffCustomer(newStaff.phone, tenantId);
+        } catch (markErr: any) {
+          console.warn('[ADMIN STAFF API] Gagal menandai staf internal:', markErr?.message);
+        }
+
         return reply.status(201).send({ success: true, data: newStaff });
       } catch (err: any) {
         console.error('[ADMIN STAFF API] Error creating staff:', err.message);

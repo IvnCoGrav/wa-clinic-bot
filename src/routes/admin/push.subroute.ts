@@ -39,15 +39,20 @@ export async function pushSubroutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const { subscription, userType, userId } = request.body || {};
+        const { subscription } = request.body || {};
         if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
           return reply.status(400).send({ success: false, error: 'Format PushSubscription tidak valid' });
         }
 
         const userAgent = request.headers['user-agent'] || undefined;
         const tenantId = (request as any).staffTenantId || (request as any).staffSession?.staff?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
-        const resolvedUserId = userId || (request as any).staffId || undefined;
-        const resolvedUserType = userType || ((request as any).staffId ? 'STAFF' : 'ADMIN');
+
+        // Identitas langganan DIPAKSA dari sesi otentikasi, TIDAK dari body.
+        // Mencegah eskalasi/spoofing: staf yang mengirim userType='ADMIN' tetap
+        // tercatat sebagai STAFF + staffId-nya sendiri (self-device binding).
+        const callerStaffId = (request as any).staffId as string | undefined;
+        const resolvedUserId = callerStaffId || undefined;
+        const resolvedUserType = callerStaffId ? 'STAFF' : 'ADMIN';
 
         const saved = await webPushService.saveSubscription({
           tenantId,
@@ -148,6 +153,19 @@ export async function pushSubroutes(fastify: FastifyInstance) {
         const { staffId } = request.body || {};
         if (!staffId) {
           return reply.status(400).send({ success: false, error: 'staffId wajib disertakan' });
+        }
+
+        // Staf (bukan Super Admin) HANYA boleh menguji notifikasi ke perangkatnya sendiri.
+        const callerStaffId = (request as any).staffId as string | undefined;
+        if (callerStaffId && callerStaffId !== staffId) {
+          console.warn(
+            `[PUSH RBAC] Blocked staff '${callerStaffId}' attempting test-staff for '${staffId}'.`
+          );
+          return reply.status(403).send({
+            success: false,
+            error: 'Forbidden: Staf hanya dapat mengirim notifikasi uji ke akun sendiri.',
+            code: 'FORBIDDEN_PUSH_TARGET',
+          });
         }
 
         const tenantId =

@@ -147,6 +147,14 @@ const customers = await prisma.customer.findMany({
 
 ---
 
+## Tech Debt Tenant-Aware Tercatat (2026-09-29)
+
+| Modul | Lokasi | Masalah | Status |
+|---|---|---|---|
+| Ambang dispatch tracking | `src/services/staff-trip-tracking.service.ts` | Radius kedatangan 50m, window H-30m, ambang telat 20/30m, akurasi GPS 100m masih konstanta global (belum `ClinicPolicy`) | ⚠️ Ditunda (Confirmation Gate), `TODO(tenant-aware)` — lihat `KNOWN_ISSUES.md` #166 |
+
+---
+
 ## Referensi
 
 - Skill mandat: `.agents/skills/saas-readiness/SKILL.md`

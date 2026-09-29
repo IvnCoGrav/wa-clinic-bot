@@ -616,7 +616,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                       customerName: parsed.name,
                       kecamatan: parsed.kec,
                       kota: parsed.kota,
-                      kelurahan: parsed.address,
+                      // Integritas spasial: parsed.address = alamat jalan lengkap,
+                      // DILARANG disalin ke kolom kelurahan (hanya entitas desa
+                      // resmi hasil geocoding). Alamat jalan hidup di preferences.address.
+                      kelurahan: undefined,
+                      address: parsed.address || undefined,
                       source: 'ADMIN_OUTBOUND_AUTO_CAPTURE',
                     });
                   }
@@ -985,6 +989,25 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, { skipFollowUpScheduling: true });
         const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, resolvedTenantId);
 
+        // Ingest CTWA referral jika pesan membawa metadata iklan native (memastikan
+        // nomor admin/test tetap tercatat ad click-nya). Gate HANYA `ctwaClid`:
+        // pencocokan promo-code `[xx]` adalah tanggung jawab tunggal
+        // matchAdClickAndFireContact (anti-duplikasi regex lintas jalur).
+        try {
+          const wahaReferral = extractWahaAdReferral(payload);
+          if (wahaReferral?.ctwaClid) {
+            await matchAdClickAndFireContact({
+              bodyText: inboundContent,
+              isNewCustomerRecord: false,
+              customer: adminCustomer,
+              tenantId: resolvedTenantId,
+              referral: wahaReferral,
+            });
+          }
+        } catch (ctwaErr: any) {
+          console.warn('[BYPASS CTWA INGEST ERROR]', ctwaErr.message);
+        }
+
         await messageService.logMessage({
           tenantId: resolvedTenantId,
           conversationId: adminConversation.id,
@@ -1142,8 +1165,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
       // Ekstraksi metadata iklan CTWA langsung dari payload WAHA (Issue #119).
-      // Jalur bypass admin / stale / blocked sudah return lebih awal (intended:
-      // chat admin tidak diatribusikan). Fail-open bila payload organik.
+      // Jalur stale / blocked sudah return lebih awal. Jalur bypass admin TIDAK
+      // masuk sini karena sudah di-ingest khusus di blok bypass (agar ad click
+      // nomor admin tetap tercatat). Fail-open bila payload organik.
       const bodyText = incomingMessage.text?.body || '';
       const wahaReferral = extractWahaAdReferral(payload);
       const attributionResult = await matchAdClickAndFireContact({
@@ -1213,7 +1237,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
                    });
                   if (isNew || isUpdate) {
@@ -1284,7 +1311,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
                    });
                   if (isNew || isUpdate) {
@@ -1392,7 +1422,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
                    });
                   if (isNew || isUpdate) {

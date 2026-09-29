@@ -391,7 +391,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
       .mockResolvedValue({ matched: true, strippedText: 'Halo' } as any);
 
     const phone = `628133${Date.now().toString().slice(-6)}`;
-    const ctwaClid = 'SYNTHETIC_ctwa_clid_AbC123-xyz789_tokenForTestOnly';
+    const ctwaClid = 'AfiAndhVXv11SVsc5IxbflJRvrJOHBl2GoLULF8ZUcAyk7pBCPpmUOyoG7ttTwqKD7yX2w9TBCtAqBiHT77Hma1DafFvhNHY0lHzbF863EKfTz8ulGRtS8PYDBSQv5YQl0vc5tyimWW5b8tc_YFA7LG-acM5xRhwqS1hxgLyDaoqh0rQaa';
     const payload = {
       event: 'message',
       session: 'default',
@@ -469,6 +469,97 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
       expect.objectContaining({ referral: undefined })
     );
 
+    attrSpy.mockRestore();
+  });
+
+  it('POST /webhook: chat bypass Admin DENGAN CTWA tetap meng-ingest ad click (isNewCustomerRecord=false)', async () => {
+    const attrMod = await import('../../src/services/ad-attribution.service');
+    const attrSpy = vi
+      .spyOn(attrMod, 'matchAdClickAndFireContact')
+      .mockResolvedValue({ matched: true, strippedText: 'Halo' } as any);
+
+    const adminPhone = `628199${Date.now().toString().slice(-6)}`;
+    const chatId = `${adminPhone}@c.us`;
+    // Anti-Label WAHA: pakai mockLabels (DB-internal), bukan wahaClient.addLabel.
+    wahaClient.mockLabels.set(chatId, ['Admin']);
+
+    const ctwaClid = 'AfiAndhVXv11SVsc5IxbflJRvrJOHBl2GoLULF8ZUcAyk7pBCPpmUOyoG7ttTwqKD7yX2w9TBCtAqBiHT77Hma1DafFvhNHY0lHzbF863EKfTz8ulGRtS8PYDBSQv5YQl0vc5tyimWW5b8tc_YFA7LG-acM5xRhwqS1hxgLyDaoqh0rQaa';
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_admin_ctwa_${Date.now()}`,
+        from: chatId,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'Hallo Bu Bidan, mau booking home service',
+        _data: {
+          notifyName: 'Admin Tester',
+          message: {
+            extendedTextMessage: {
+              text: 'Hallo Bu Bidan, mau booking home service',
+              contextInfo: {
+                externalAdReply: {
+                  ctwaClid,
+                  sourceId: '120250673996340235',
+                  sourceApp: 'instagram',
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_ADMIN' });
+
+    expect(attrSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isNewCustomerRecord: false,
+        referral: expect.objectContaining({ ctwaClid }),
+      })
+    );
+
+    wahaClient.mockLabels.delete(chatId);
+    attrSpy.mockRestore();
+  });
+
+  it('POST /webhook: chat bypass Admin TANPA CTWA tidak memanggil attribution (anti-regex-dup)', async () => {
+    const attrMod = await import('../../src/services/ad-attribution.service');
+    const attrSpy = vi
+      .spyOn(attrMod, 'matchAdClickAndFireContact')
+      .mockResolvedValue({ matched: false, strippedText: 'Halo' } as any);
+
+    const adminPhone = `628198${Date.now().toString().slice(-6)}`;
+    const chatId = `${adminPhone}@c.us`;
+    // Anti-Label WAHA: pakai mockLabels (DB-internal), bukan wahaClient.addLabel.
+    wahaClient.mockLabels.set(chatId, ['Admin']);
+
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_admin_organic_${Date.now()}`,
+        from: chatId,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        // Pesan membawa promo-code `[xx]` — DULU memicu ingest via regex duplikat,
+        // kini TIDAK (promo-code adalah tanggung jawab matchAdClickAndFireContact
+        // jalur normal, bukan gate bypass).
+        body: 'Halo Promo[IG-BABYSPA]',
+        _data: { notifyName: 'Admin Tester', message: { extendedTextMessage: { text: 'Halo Promo[IG-BABYSPA]' } } },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_ADMIN' });
+
+    expect(attrSpy).not.toHaveBeenCalled();
+
+    wahaClient.mockLabels.delete(chatId);
     attrSpy.mockRestore();
   });
 });

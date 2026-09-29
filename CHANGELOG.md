@@ -31,6 +31,258 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   belum dijalankan (butuh network + DB live); kelas ejaan di luar `alhamdu[l]*i+[l]+ah`
   (mis. "alhamdulilaah") belum dikenali.
 
+#### 2026-09-29 - CTWA Hardening: Dekoder Token Meta Ketat + Cleanup Prod + Paritas Preview CAPI
+
+- **Konteks:** Audit pasca-deploy fitur `ctwa_clid` (commit `78fc0746`) menemukan
+  (a) fallback dekoder terlalu permisif, (b) data uji mencemari `ad_clicks` produksi,
+  (c) regex duplikat + komentar basi di jalur bypass webhook, dan (d) preview UI
+  menjanjikan envelope `business_messaging` yang tak selalu dikirim backend.
+- **Fixed — Dekoder CTWA ketat (`src/integrations/whatsapp/waha-ctwa-referral.ts`):**
+  `decodeCtwaPayload` kini HANYA menerima token berprefix Meta `Afi`/`PA` (raw atau
+  hasil decode Base64). Fallback regex longgar 20+ char DIBUANG — string acak kini
+  `undefined`, menutup false-positive atribusi organik→paid.
+- **Fixed — Cleanup data uji produksi:** baris `ad_clicks` `adclick_ctwa_test_ivan`
+  (trackingCode `vn`, customer `a4deafa7…`) DIHAPUS dari DB live. Customer terbukti
+  memiliki reservasi nyata → TIDAK ditandai `is_sandbox_test`.
+- **Fixed — Webhook bypass (`src/routes/webhook.route.ts`):** gate ingest CTWA di
+  jalur bypass admin kini HANYA `wahaReferral?.ctwaClid` (regex promo-code duplikat
+  dibuang; promo-code tetap ditangani `matchAdClickAndFireContact` jalur normal).
+  Komentar basi "chat admin tidak diatribusikan" dikoreksi.
+- **Fixed — Paritas preview CAPI (`reservations.subroute.ts`, `MetaCapiQueue.tsx`):**
+  endpoint `GET /api/admin/capi-queue` mengembalikan `wabaConfigured` (tenant punya
+  `waba_business_account_id`); preview JSON kini `action_source='business_messaging'`
+  HANYA bila `ctwa_clid` ada DAN `wabaConfigured`, sama persis dengan
+  `useBusinessMessaging` di `capi.service.ts`. Ditambah banner peringatan saat WABA id kosong.
+- **Tests:** `waha-ctwa-referral.test.ts` +4 adversarial (tolak string acak non-prefix,
+  Base64 decode bukan token Meta, `root.ctwaPayload` sampah, terima prefix `PA`);
+  `waha-webhook.test.ts` +2 seam (bypass admin + CTWA meng-ingest `isNewCustomerRecord=false`;
+  bypass admin + promo-code tanpa CTWA TIDAK memanggil attribution). Fixture token
+  disintesis ulang berprefix `Afi`. Regression gate: `npm run build` Exit 0, dashboard
+  build Exit 0, full suite 521 file / 4238 test hijau (0 failed).
+
+#### 2026-09-29 - LiveChat: Server-Side Filter (Unread/Reservasi) + Perbaikan Modal Label & Badge Unread Global
+
+- **Konteks:** Tab Unread/Reservasi hanya memfilter 50 percakapan yang sudah
+  ditarik ke memori browser, sehingga (a) tombol "Muat lebih banyak" muncul palsu
+  saat hanya 1 chat unread, (b) titik hijau tab Unread tidak muncul bila chat unread
+  berada di luar 50 chat pertama, dan (c) modal label lenyap saat digulir.
+- **Fixed - Filter server-side (`src/services/conversation.service.ts`):** `listConversations`
+  menerima parameter `filter: 'all' | 'unread' | 'reservation'`. Kondisi dibangun via
+  `AND` eksplisit (search OR + unread OR tidak lagi saling menimpa `where.OR`).
+  `unread` = `is_manual_unread:true` ATAU pesan `INBOUND` dengan `read_at:null`.
+  `reservation` = reservasi aktif (`confirmed` | `pending` | `hold` valid <2 jam),
+  paritas persis dengan logika klien. Fallback in-memory (DB offline) menerapkan
+  filter yang sama.
+- **Fondasional - Domain status reservasi (`src/domain/reservation-status.ts`, baru):**
+  Single Source of Truth `ACTIVE_RESERVATION_STATUSES` + jendela validitas hold
+  (`ACTIVE_HOLD_WINDOW_MS` 2 jam) + `isActiveReservation`/`isHoldActive`. `copilot-tools.ts`
+  kini mengimpor & me-reexport konstanta dari modul daun ini (anti-duplikasi status).
+- **Changed - Pass-through & route (`src/services/live-chat.service.ts`,
+  `src/routes/admin/livechat.subroute.ts`):** `filter` divalidasi dari query,
+  diteruskan ke service, dan disertakan dalam `cacheKey` (tidak tertukar antar-tab).
+  `hasMore` kini dihitung dari total terfilter di DB.
+- **Fixed - Modal label (`packages/admin-dashboard/.../LiveChatMonitor.tsx`):**
+  hapus `window.addEventListener('scroll', handleClose, true)` yang mencegat scroll
+  internal daftar label. Tambah body scroll-lock (`overflow:hidden` + kompensasi
+  lebar scrollbar), tutup via `Escape`, dan `overscroll-contain` pada kedua daftar
+  label (mobile/desktop).
+- **Fixed - Paging & badge (`LiveChatMonitor.tsx`):** `filter=unread|reservation`
+  dikirim ke server; offset server murni (`listOffsetRef`, bukan panjang array lokal
+  yang tercemar ghost-chat prepend); ghost-preserve dinonaktifkan untuk tab terfilter.
+  Titik hijau tab Unread kini bersumber `totalUnreadCount` global dari
+  `/api/admin/live-chat/unread-count` (debounced 1.5s, disinkronkan via SSE).
+- **UX - Empty state kontekstual:** pesan khusus per tab (unread: "Semua pesan sudah
+  dibaca"; reservasi: "Belum ada reservasi aktif") + guard tombol load-more saat
+  daftar kosong.
+- **Test - `tests/unit/conversation-filter.test.ts`:** 10 test adversarial (kontrak
+  where Prisma untuk unread/reservasi, kombinasi search+unread via AND, hold-expiry,
+  paritas fallback memory, pass-through service, guard domain). Regression gate:
+  `npm run build` Exit 0, dashboard build Exit 0, full suite 521 file / 4230 test hijau.
+- **Sisa debt:** `docs/KNOWN_ISSUES.md` #169 (indeks komposit unread + unit badge).
+
+#### 2026-09-29 - Remediasi Kebocoran Notifikasi Admin ke Perangkat Terapis (Ghost Push Subscription & RBAC Scope)
+- **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS, mis. Anne Lawrencia)
+  bocor ke perangkat terapis. Akar masalah: perangkat penguji terdaftar
+  `push_subscriptions.user_type='ADMIN'` (ghost dari sesi dashboard sebelumnya),
+  sedangkan rebind ke STAFF gagal 403 karena `role_api_scopes` mengunci therapist
+  (SEC-AUDIT-04). Rencana: `docs/plans/PUSH_RBAC_GHOST_SUBSCRIPTION_REMEDIATION.md`.
+- **Security - Scope push data-driven (`prisma/migrations/20260930000000_allow_push_for_therapist`):**
+  seed prefix GRANULAR untuk therapist (`/api/admin/push/public-key` GET,
+  `/subscribe` POST, `/unsubscribe` POST), tenant-aware (`tenants` + fallback
+  `default-tenant`), idempoten. Endpoint sensitif (`/test`, `/test-staff`,
+  `/staff-device-counts`) TIDAK di-seed → tetap default-deny. TIDAK ada bypass
+  hardcode di `admin.route.ts` (hapus dead code `isSelfPushRegister`).
+- **Security - Pemaksaan identitas langganan (`src/routes/admin/push.subroute.ts`):**
+  `POST /subscribe` kini memaksa `userType`/`userId` dari SESI (staffId → STAFF +
+  id; selain itu ADMIN + null). Body `userType='ADMIN'`/`userId` palsu dari staf
+  di-override — menutup spoofing.
+- **Security - Caller-check `test-staff` (`src/routes/admin/push.subroute.ts`):**
+  staf hanya boleh menguji notifikasi ke `staffId` dirinya (403 `FORBIDDEN_PUSH_TARGET`
+  bila ke staf lain); Super Admin tetap bebas.
+- **Security - Sanitasi cookie silang antar portal (`staff/auth.subroute.ts`,
+  `admin/auth.subroute.ts`):** login/restore staf memusnahkan `admin_session`;
+  login/restore admin memusnahkan `staff_session`. Mencegah dua portal aktif
+  bersamaan (akar ghost subscription).
+- **Fixed - Disosiasi push saat logout (`AuthContext.tsx`, `StaffAuthContext.tsx`):**
+  `unsubscribeFromPushNotifications()` dipanggil SEBELUM destroy sesi backend
+  (best-effort), mencegah perangkat tetap menerima notifikasi role lama.
+- **Fixed - Presedensi dual-cookie (`src/routes/admin.route.ts`):** `preHandler`
+  sebelumnya mengecek `admin_session` LEBIH DULU (else-if) daripada `staff_session`.
+  Perangkat dengan cookie admin lama + sesi staf baru membuat `staffId` tak pernah
+  di-set → push terikat ADMIN → kebocoran notifikasi berlanjut walau login Tabita
+  sudah benar. FIX: sesi STAF valid kini divalidasi & MENANG lebih dulu; sesi admin
+  menjadi fallback. Regression test ditambahkan (dual-cookie → STAFF+staffId).
+- **Live - Purge ghost token (2026-09-29):** baris ADMIN `2df24cf1-…` (Windows Chrome)
+  dan `ba003b08-…` (iPhone) dihapus dari produksi by `id` spesifik; backup
+  `push_subscriptions_backup_20260929` & `…_20260929b`. Migrasi + fix presedensi
+  ter-deploy ke live (app-only, WAHA untouched).
+- **Test - `tests/integration/push-rbac.test.ts`:** 11 test adversarial (scope
+  allow/deny, override identitas, caller-check, sanitasi cookie). Regression gate:
+  `npm run build` Exit 0, dashboard build Exit 0, full suite 520 file / 4220 test hijau.
+  Test lama (`staff-routes`, `unified-login`) disesuaikan ke kontrak `Set-Cookie` array.
+- **Sisa debt:** `docs/KNOWN_ISSUES.md` #168 (purge ghost token live, verifikasi perangkat nyata).
+- **Fase 4 (live) BELUM:** deploy + purge token ghost produksi menunggu gate keamanan
+  (backup + SELECT-before-DELETE + 1-step verification).
+
+#### 2026-09-29 - Eliminasi Kebocoran Notifikasi ke Bidan Terapis (Mandat In-System PWA Only)
+
+- **Konteks:** Terapis masih menerima notifikasi liar (Telegram eksternal ke akun
+  pribadi, Web Push, serta suara/banner PWA) termasuk saat Bot AI sedang membalas
+  chat pelanggan. Perbaikan 3 lapis fondasional (bukan tambalan prompt).
+- **Fase 1 - Kill-switch Telegram tenant-aware (fondasional):** config baru
+  `src/config/staff-notification-config.ts` (`getStaffNotificationConfig`,
+  baca `Tenant.settings.staffNotification.telegramEnabled`, cache 5 mnt, DEFAULT
+  **OFF**). Kelima situs pengiriman Telegram di `staff-notification.service.ts`
+  (assignment, pre-visit brief, cancel, unassign, daily/morning briefing) kini
+  di-gate. Data `telegram_chat_id` TIDAK dihapus (kebijakan di level kode, bukan
+  pemusnahan data — rollback tetap mungkin).
+- **Fase 2 - Gate `is_human_handling` deterministik (`inbound-notification-router.service.ts`):**
+  push ke staf HANYA dikirim bila percakapan dipegang manusia
+  (`is_human_handling` atau `current_state='HUMAN_HANDLING'`). Bila status tak
+  dapat dipastikan (DB offline) → fail-closed (jangan spam terapis). Payload SSE
+  `message.created` (`message.service.ts`) kini menyertakan flag `isHumanHandling`.
+- **Fase 3 - Filter audio/banner PWA (`StaffToday.tsx`):** `playIncomingMessageSound`
+  & `showSafeNotification` untuk pesan masuk HANYA saat `isHumanHandling=true`;
+  ponsel terapis tidak lagi bergetar/berdering untuk chat bot-handled.
+- **Fase 5 - Test adversarial:** `tests/unit/staff-notification-guards.test.ts`
+  (9 test: gate human-handling, fail-closed DB offline, kill-switch OFF/ON,
+  briefing massal tanpa sentuh DB saat OFF). Suite lama yang menguji dispatch
+  Telegram diaktifkan kanal eksplisit via mock config; `staff-chat-cutoff-notification`
+  disesuaikan ke kontrak baru.
+- **Fase 4 - Isolasi nomor staf internal (fondasional, migrasi DB):** kolom baru
+  `Customer.is_internal_staff` (migrasi `20260929150000_add_internal_staff` +
+  backfill ternormalisasi digit dari `Staff.phone`). `customerService.markInternalStaffCustomer`
+  dipanggil saat staf dibuat (`staff-management.subroute.ts`). Percakapan staf
+  internal (CS/Bidan) kini dikecualikan dari MQL, follow-up sliding window, push CRM
+  (`message.service.ts`), dan Meta CAPI (`capi.service.ts`). Flag `isInternalStaff`
+  disertakan di payload SSE.
+- **Sisa debt:** `docs/KNOWN_ISSUES.md` #167 (penandaan nomor staf internal, isolasi
+  supervisor, verifikasi perangkat nyata).
+- **Verifikasi:** `npm run build` Exit 0; `packages/admin-dashboard` build Exit 0;
+  full suite Vitest 519 file / 4209 test hijau.
+
+#### 2026-09-29 - Standardisasi Tanda Tangan Staf & Anti-Sapaan Ganda (OTW & Sudah Sampai)
+
+- **Konteks:** pesan tombol cepat terapis "Kirim OTW" & "Sudah Sampai" terkirim
+  tanpa tanda tangan `~ Bidan [Nama]` (beda dengan balasan manual), dan nama
+  pelanggan tersimpan "Bunda suciani" menghasilkan sapaan ganda "Halo Bunda Bunda suciani".
+- **Fase 1 - Helper tunggal (fondasional, `src/utils/staff-signature.ts`):**
+  `ensureStaffSignature(text, staffName)` + `hasStaffSignature` idempoten, escape
+  karakter regex nama (mis. `Bidan (Ayu)`), DILARANG menyematkan tanda tangan ke
+  pesan kosong. Semua jalur memakai helper ini (service OTW/arrival + balasan manual
+  `today.subroute.ts` di-refactor — output byte-identik, dibuktikan test regresi).
+- **Fase 1b - Renderer terpadu (`staff-reservation.service.ts`):** `renderStaffTripMessage`
+  (sanitasi nama via `sanitizeCustomerNameForGreeting` + fallback "Bunda" + jaring
+  pengaman `Bunda Bunda`→`Bunda` + tanda tangan) dipakai `getOtwMessageText` dan
+  `getArrivalMessageText` (baru). `recordArrival` kini data-driven dari template
+  `STAFF_ARRIVAL` (tanpa hardcode), bukan lagi string inline.
+- **Fase 1c - Rute (`today.subroute.ts`):** `GET /otw-template` sanitasi query;
+  `POST /:id/otw` sanitasi nama + helper untuk teks kustom maupun hasil template;
+  endpoint simetris baru `GET /arrival-template`; perbaikan kontrak laten
+  (frontend kirim `customText`, rute lama membaca `body.text` → kini keduanya diterima).
+- **Fase 1d - Data-driven template:** tipe `STAFF_ARRIVAL` ditambah ke
+  `followup-templates.ts` (3 varian) + opsi editor `FollowUpTemplates.tsx`
+  (kolom `type` String polos → tanpa migrasi).
+- **Fase 2 - Frontend:** `StaffToday.tsx` fallback preview OTW & kedatangan kini
+  bertanda tangan; preview tetap diambil dari endpoint backend (single source of truth).
+- **Fase 3 - Test adversarial:** `tests/unit/staff-message-signature.test.ts` (16 test)
+  — anti-duplikasi `Bunda Bunda` (prefix ibu/mama, distrik, generik, kosong),
+  idempotensi tanda tangan, nama ber-karakter regex, OTW + arrival.
+- **Verifikasi:** `npm run build` (tsc) Exit 0; `packages/admin-dashboard` build Exit 0;
+  `staff-routes.test.ts` 23/23 + 4 suite terkait 70/70 hijau.
+
+#### 2026-09-29 - Sinkronisasi & Persistensi Alamat Jalan Fisik + Patokan (preferences.address/landmark)
+
+- **Konteks:** alamat jalan fisik dari form reservasi (mis. "jalan kedungklinter 1 80")
+  dan patokan rumah hilang / tidak tersimpan ke `customers.preferences.address`
+  meskipun invoice WhatsApp berhasil mencetaknya. Audit read-only produksi
+  membuktikan: (a) `kelurahan` terisi bersih ("Kedungdoro") tapi `preferences.address`
+  kosong; (b) 5 caller mengirim `parsed.address` ke kolom `kelurahan` (ditolak
+  kelurahan-guard → dibuang, tanpa dialihkan); (c) `address` tidak pernah diteruskan
+  ke `saveReservation`. Shareloc dipastikan AMAN (`location_source=gps_pin`,
+  `share_location_sent=t`) → di luar scope.
+- **Fase 1 — Kanonis 5 titik caller (fondasional):** `webhook.route.ts` (619
+  `ADMIN_OUTBOUND_AUTO_CAPTURE`, 1217/1291/1402 human-grace/hold-disabled/explicit)
+  dan `state-machine/machine.ts:352` (`BOT`) kini mengirim `kelurahan: undefined` +
+  `address: <alamat jalan>` (bukan `as any`), sehingga alamat mengalir otomatis via
+  `saveReservation → reservation-lifecycle.onReservationCreated (71-75) →
+  customerService.updateCustomer → preferences.address`.
+- **Fase 2 — Enrichment guard idempoten:** `human-background-enrichment.service.ts`
+  mem-persist `preferences.address` hanya bila masih kosong (baca-dulu, anti-timpa).
+- **Fase 3 — Backend API:** `POST /api/admin/reservation` (`reservations.subroute.ts`)
+  menerima `address` + `landmark`; `address` diteruskan ke `saveReservation`,
+  `landmark` di-persist via `customerService.updateCustomer`. Bug laten ikut
+  diperbaiki: `babies` mapping `ageText → age` (sebelumnya usia bayi admin hilang).
+- **Fase 4 — UI:** `CreateReservationModal` menerima `initialAddress`/`initialLandmark`,
+  sinkronisasi anti-stale via `useEffect`, dua input di Section 1, masuk ke
+  `buildCreatePayload` + PATCH edit + draft/reset. `LiveChatMonitor` meneruskan
+  prefill (chat + profil) & sidebar kini memprioritaskan `preferences.address`
+  serta menampilkan patokan.
+- **Fase 5 — Healing data produksi (via endpoint beraudit, bukan SQL mentah):**
+  customer `3844d3ee-...` (Bunda suciani) via `PATCH /api/admin/customers/:id`
+  → `preferences.address="jalan kedungklinter 1 80"`,
+  `preferences.landmark="Rumah rolling door putih / pagar stainless, yg jual kusen"`;
+  reservasi `7ded4fec-...` `raw_text` diperbarui memuat baris alamat + patokan.
+  Kolom `kelurahan` tetap "Kedungdoro" (bersih).
+- **Verifikasi:** `npx tsc` 0 error, admin-dashboard build hijau, full Vitest
+  **518 passed / 1 skipped**. Test adversarial baru: multi-parafrase alamat form,
+  guard anti-timpa, kontrak payload POST address/landmark.
+- **Catatan:** `state-machine/machine.ts:352` ikut dikoreksi (klaim KNOWN_ISSUES #165b
+  hanya menyebut webhook). Shareloc tidak diubah (terbukti aman).
+
+#### 2026-09-29 — Dispatch Tracking: Auto-Start H-30m, Auto-Off Geofence 50m & Early Warning Keterlambatan CS
+
+- **Konteks:** Bidan sering lupa klik "Kirim OTW" → telemetry tak pernah jalan, CS
+  buta posisi. Upgrade: pelacakan otomatis mendekati jadwal, auto-stop saat tiba,
+  dan peringatan keterlambatan realtime ke CS.
+- **Fase 1 (pure functions + TDD, `src/services/staff-trip-tracking.service.ts`):**
+  `evaluateArrivalGeofence` (radius 50m + dwell 2 ping berturut, fail-closed akurasi
+  >100m/null, `NO_CUSTOMER_COORDS`/`INVALID_COORDS`), `calculateDelayStatus`
+  (`delayMinutes = estimasiTiba − jadwal`, level none/warning(≥20)/critical(≥30),
+  WIB eksplisit `Asia/Jakarta`, fail-open `NO_SCHEDULE`/`NO_ETA`), `isWithinPreTripWindow`
+  (H-30m). Konstanta terpusat: `ARRIVAL_RADIUS_M`, `ARRIVAL_CONSECUTIVE_PING`,
+  `GPS_ACCURACY_MAX_M`, `PRE_TRIP_WINDOW_MIN`, `DELAY_WARN_MIN`, `DELAY_CRITICAL_MIN`.
+  Test adversarial `tests/unit/staff-trip-arrival-and-delay.test.ts` (25 kasus).
+- **Fase 2 (endpoint + event):** `POST /api/staff/telemetry` mengevaluasi geofence →
+  `autoStop:true` + `clearTrip` + event `staff.trip_arrived` (TIDAK mengubah `arrived_at`
+  — kedatangan resmi tetap tombol manual); early warning `staff.trip_delay_warning`
+  HANYA pada transisi level (anti-spam). Tipe event baru di `live-chat-hub.service.ts`.
+  `GET /api/admin/dispatch/trip/:reservationId` menambah `delayStatus` + `delayText`
+  (draf pesan DB-driven). Template `STAFF_TRIP_DELAY` di `followup-templates.ts` +
+  `StaffReservationService.getTripDelayMessageText` (bukan hardcode di frontend).
+- **Fase 3 (frontend bidan):** `useTripTelemetry` auto-stop saat `res.autoStop===true`;
+  `MIN_ACCURACY_M` diselaraskan ke 100. `StaffToday.tsx` auto-start H-30m SILENT
+  (hanya jadwal milik staf sendiri, izin lokasi `granted`, tanpa badge/toast).
+- **Fase 4 (frontend CS):** `LiveChatDispatchWidget` tampil saat passive auto-tracking
+  (`trip != null` walau `otwSentAt` null), banner merah/amber keterlambatan + tombol
+  salin draf. `LiveChatMonitor` menangkap `staff.trip_delay_warning` (toast SEKALI +
+  ikon pulse di header) & `staff.trip_arrived` (toast hijau).
+- **Verifikasi:** `tsc` 0 error; build admin-dashboard Exit 0; Vitest full suite
+  (4206 passed; 1 fail pre-existing dari WIP sesi lain di
+  `inbound-notification-router`, bukan dari perubahan ini). Tech debt tenant-aware
+  dicatat di `docs/KNOWN_ISSUES.md` #166 & `docs/SAAS_READINESS_AUDIT.md`.
+- **Belum dijalankan:** uji HP Bidan nyata & deploy produksi.
+
 #### 2026-09-29 - Usia Dinamis Real-Time & Pemisahan Entitas Anak vs Moms
 
 - **Konteks:** label usia mati (`36hr`, `23bln`) + data Ibu Hamil (Bella/Fitria) bocor

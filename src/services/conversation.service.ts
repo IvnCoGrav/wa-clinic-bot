@@ -4,6 +4,7 @@ import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON } from './ai-eligibility.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { activeHoldCutoff, isActiveReservation } from '../domain/reservation-status';
 
 const memoryConversations = new Map<string, any>();
 
@@ -152,18 +153,43 @@ export class ConversationService {
     offset = 0,
     mode: 'all' | 'real' | 'sandbox' = 'all',
     search?: string,
-    label?: string
+    label?: string,
+    filter: 'all' | 'unread' | 'reservation' = 'all'
   ): Promise<any[]> {
     try {
       const where: any = {
         tenant_id: tenantId,
         messages: { some: {} },
       };
+
+      // 1. Isolasi sandbox vs real — satu objek `customer` agar bisa digabung
+      //    dengan kondisi reservasi tanpa saling menimpa.
+      const customerWhere: any = {};
       if (mode === 'sandbox') {
-        where.customer = { is_sandbox_test: true };
+        customerWhere.is_sandbox_test = true;
       } else if (mode === 'real' || (process.env.NODE_ENV === 'production' && mode === 'all')) {
-        where.customer = { is_sandbox_test: false };
+        customerWhere.is_sandbox_test = false;
       }
+
+      // 2. Filter reservasi aktif — paritas semantik dengan LiveChatMonitor:
+      //    confirmed | pending (kapan pun) | hold (hanya booking_date dalam 2 jam).
+      if (filter === 'reservation') {
+        customerWhere.reservations = {
+          some: {
+            OR: [
+              { status: 'confirmed' },
+              { status: 'pending' },
+              { status: 'hold', booking_date: { gte: activeHoldCutoff() } },
+            ],
+          },
+        };
+      }
+      if (Object.keys(customerWhere).length > 0) where.customer = customerWhere;
+
+      // 3. Kondisi gabungan via AND eksplisit — anti-overwrite antar OR
+      //    (search OR + unread OR harus berdampingan, bukan saling menimpa).
+      const andClauses: any[] = [];
+
       if (search && search.trim()) {
         const query = search.trim();
         const digitsOnly = query.replace(/\D/g, '');
@@ -179,13 +205,28 @@ export class ConversationService {
           phoneConditions.push({ phone: { contains: normalizedPhone } });
         }
 
-        where.OR = [
-          { customer: { name: { contains: query, mode: 'insensitive' } } },
-          ...phoneConditions.map((p) => ({ customer: p })),
-          { customer: { children: { some: { name: { contains: query, mode: 'insensitive' } } } } },
-          { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
-        ];
+        andClauses.push({
+          OR: [
+            { customer: { name: { contains: query, mode: 'insensitive' } } },
+            ...phoneConditions.map((p) => ({ customer: p })),
+            { customer: { children: { some: { name: { contains: query, mode: 'insensitive' } } } } },
+            { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
+          ],
+        });
       }
+
+      // 4. Filter unread: inbound belum dibaca ATAU ditandai belum dibaca manual.
+      if (filter === 'unread') {
+        andClauses.push({
+          OR: [
+            { is_manual_unread: true },
+            { messages: { some: { direction: 'INBOUND', read_at: null } } },
+          ],
+        });
+      }
+
+      if (andClauses.length > 0) where.AND = andClauses;
+
       if (label && label !== 'all') {
         if (label === 'medical_concern') where.escalation_reason = 'medical_concern';
         else if (label === 'unresolved_faq') where.escalation_reason = 'unresolved_faq';
@@ -226,6 +267,30 @@ export class ConversationService {
         }
       }
       let working: any[] = filtered;
+
+      // Filter fondasional di fallback in-memory (DB offline) — paritas dengan query Prisma.
+      if (filter === 'unread') {
+        try {
+          const { messageService } = await import('./message.service');
+          const unreadMap = await messageService.getUnreadCountsBatch(working.map((c: any) => c.id), tenantId);
+          working = working.filter((c: any) => !!c.is_manual_unread || (unreadMap.get(c.id) || 0) > 0);
+        } catch {
+          working = working.filter((c: any) => !!c.is_manual_unread);
+        }
+      } else if (filter === 'reservation') {
+        const next: any[] = [];
+        for (const c of working) {
+          try {
+            const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
+            const res: any[] = cust?.reservations || [];
+            if (res.some((r: any) => isActiveReservation(r))) next.push(c);
+          } catch {
+            // Data customer tak tersedia → fail-closed (jangan tampilkan reservasi palsu).
+          }
+        }
+        working = next;
+      }
+
       if (label && label !== 'all') {
         if (label === 'medical_concern') working = working.filter((c: any) => c.escalation_reason === 'medical_concern');
         else if (label === 'unresolved_faq') working = working.filter((c: any) => c.escalation_reason === 'unresolved_faq');

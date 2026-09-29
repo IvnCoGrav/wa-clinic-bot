@@ -79,6 +79,12 @@ describe('InboundNotificationRouter — Routing Notifikasi Chat Inbound', () => 
     // Pastikan berada dalam jam operasional
     vi.spyOn(staffChatConfig, 'isWithinWibHourRange').mockReturnValue(true);
 
+    // Percakapan sedang dipegang manusia (eskalasi CS) → kanal staf boleh aktif.
+    (prisma.conversation.findUnique as any).mockResolvedValueOnce({
+      is_human_handling: true,
+      current_state: 'HUMAN_HANDLING',
+    });
+
     await inboundNotificationRouter.routeInboundMessage({
       tenantId,
       conversationId: 'conv-3',
