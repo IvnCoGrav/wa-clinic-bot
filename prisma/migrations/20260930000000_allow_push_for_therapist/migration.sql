@@ -15,9 +15,9 @@
 -- bila tabel tenants kosong (fresh env). Idempoten via ON CONFLICT DO NOTHING.
 
 INSERT INTO "role_api_scopes" (id, tenant_id, role_key, api_prefix, methods, created_at, updated_at)
-SELECT gen_random_uuid(), t.tenant_id, 'therapist', p.api_prefix, p.methods, NOW(), NOW()
+SELECT gen_random_uuid(), t.id, 'therapist', p.api_prefix, p.methods, NOW(), NOW()
 FROM (
-  SELECT tenant_id FROM "tenants"
+  SELECT id FROM "tenants"
   UNION
   SELECT 'default-tenant'
 ) AS t
