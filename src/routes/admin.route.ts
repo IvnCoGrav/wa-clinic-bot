@@ -241,8 +241,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       // Prohibit staff modification (creating, deleting, patching staff accounts or resetting password)
       if (urlPath.startsWith('/api/admin/staff') && request.method !== 'GET') {
         const isSelfProfileUpdate = urlPath === '/api/admin/staff/me' || urlPath === '/api/admin/staff/profile';
-        const isSelfPushRegister = urlPath.includes('/push');
-        if (!isSelfProfileUpdate && !isSelfPushRegister) {
+        if (!isSelfProfileUpdate) {
           console.warn(`[RBAC GUARD] Blocked staff modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
           return reply.status(403).send({
             error: 'Forbidden: Only Super Admin can modify staff accounts.',
@@ -250,6 +249,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
           });
         }
       }
+
+      // Push self-registration didelegasikan ke scope data-driven (tabel
+      // `role_api_scopes`): migrasi `20260930000000_allow_push_for_therapist`
+      // meng-seed prefix granular `/public-key`, `/subscribe`, `/unsubscribe`
+      // untuk therapist. Endpoint sensitif (`test-staff`, `staff-device-counts`)
+      // TIDAK di-seed → tetap default-deny. Tidak ada bypass hardcode di sini.
 
       // SEC-AUDIT-04: scope enforcement data-driven (tabel role_api_scopes).
       // Role yang punya baris = managed → default-deny kecuali (prefix, method)

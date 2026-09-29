@@ -208,6 +208,13 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const logout = async () => {
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    // Disosiasi perangkat SEBELUM sesi dimusnahkan: batalkan langganan push browser
+    // + hapus baris di DB. Mencegah ghost subscription yang membocorkan notifikasi
+    // ke perangkat terapis setelah logout.
+    try {
+      const { unsubscribeFromPushNotifications } = await import('../services/pushNotification');
+      await unsubscribeFromPushNotifications().catch(() => {});
+    } catch {}
     try {
       await apiRequest('/api/staff/auth/logout', { method: 'POST' });
     } catch (err) {

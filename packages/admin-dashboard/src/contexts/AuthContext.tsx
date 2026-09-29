@@ -256,6 +256,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(LAST_USER_KEY);
+    // Disosiasi perangkat SEBELUM sesi dimusnahkan: batalkan langganan push browser
+    // + hapus baris di DB. Mencegah ghost subscription (perangkat tetap menerima
+    // notifikasi role lama setelah user berganti akun/portal).
+    try {
+      const { unsubscribeFromPushNotifications } = await import('../services/pushNotification');
+      await unsubscribeFromPushNotifications().catch(() => {});
+    } catch {}
     try {
       await apiRequest('/api/admin/auth/logout', { method: 'POST' });
     } catch (err) {

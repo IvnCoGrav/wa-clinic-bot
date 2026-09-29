@@ -3,6 +3,34 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 168. [Push/RBAC] Remediasi ghost subscription & scope push therapist (2026-09-29) - OPEN (sebagian by-design)
+
+- **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS) bocor ke perangkat
+  terapis karena perangkat penguji terdaftar `user_type='ADMIN'` (ghost), sementara
+  rebind ke STAFF gagal 403 (therapist = role managed tanpa scope push). Perbaikan
+  fondasional: seed granular `role_api_scopes` (`20260930000000_allow_push_for_therapist`),
+  pemaksaan identitas langganan dari sesi (`push.subroute.ts`), caller-check
+  `test-staff`, sanitasi cookie silang antar portal, dan `unsubscribe` saat logout.
+  Rencana: `docs/plans/PUSH_RBAC_GHOST_SUBSCRIPTION_REMEDIATION.md`.
+- **168a — Ghost token lama di DB produksi (OPEN, butuh Fase 4):** Baris
+  `push_subscriptions` lama berstatus ADMIN pada perangkat penguji TIDAK dihapus
+  otomatis. Purge live WAJIB: backup tabel dulu, `SELECT` by endpoint/UA, lalu
+  `DELETE` by `id`/`endpoint` spesifik (DILARANG `DELETE` massal berbasis pola UA
+  — berisiko menghapus perangkat admin legit). Butuh 1-step verification.
+- **168b — `unsubscribe` bergantung endpoint unik (by-design):** `removeSubscription`
+  menghapus berdasarkan `endpoint` (unique). Bila browser sudah mencabut subscription
+  lebih dulu (endpoint hilang), baris DB lama tidak ikut terhapus. Sweep berkala
+  (mis. cron prune subscription tanpa endpoint valid) belum ada.
+- **168c — Scope push therapist granular, bukan wildcard (by-design):** Hanya
+  `/public-key` (GET), `/subscribe` (POST), `/unsubscribe` (POST) yang di-seed.
+  Endpoint sensitif `/test`, `/test-staff`, `/staff-device-counts` sengaja
+  default-deny untuk therapist. Bila kelak terapis butuh uji mandiri, gunakan
+  `test-staff` dengan `staffId` dirinya (caller-check sudah menegakkan ini) —
+  tapi prefix `test-staff` harus di-seed lebih dulu untuk role therapist.
+- **168d — Verifikasi perangkat nyata & purge live BELUM (OPEN):** Uji end-to-end
+  (login Tabita → cek baris `push_subscriptions` = STAFF + user_id Tabita → kirim
+  chat Anne → pastikan tidak masuk) belum dilakukan di server produksi.
+
 ## 167. [Notifikasi Terapis] Sisa debt Mandat In-System PWA Only (2026-09-29) - OPEN (sebagian sengaja)
 
 - **Konteks:** Eliminasi kebocoran notifikasi ke Bidan Terapis dieksekusi 3 lapis

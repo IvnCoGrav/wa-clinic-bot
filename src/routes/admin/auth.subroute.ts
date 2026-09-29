@@ -96,7 +96,11 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
-      reply.header('Set-Cookie', cookieValue);
+      // Sanitasi sesi silang: login admin memusnahkan sisa cookie staff_session.
+      reply.header('Set-Cookie', [
+        cookieValue,
+        'staff_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      ]);
 
       return reply.status(200).send({
         success: true,
@@ -140,7 +144,11 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
             const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
               isSecureRequest ? '; Secure' : ''
             }`;
-            reply.header('Set-Cookie', cookieValue);
+            // Sanitasi sesi silang: login via jalur staf memusnahkan sisa admin_session.
+            reply.header('Set-Cookie', [
+              cookieValue,
+              'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+            ]);
 
             const staffRole: string = staff.role; // 'THERAPIST' | 'SPV_CS' | 'ADMIN_CS' | 'ADVERTISER' | Custom
             const frontendRole =
@@ -225,7 +233,10 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
-      reply.header('Set-Cookie', cookieValue);
+      reply.header('Set-Cookie', [
+        cookieValue,
+        'staff_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      ]);
       return reply.status(200).send({
         success: true,
         message: 'Sesi admin dipulihkan.',
@@ -251,7 +262,10 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
-      reply.header('Set-Cookie', cookieValue);
+      reply.header('Set-Cookie', [
+        cookieValue,
+        'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      ]);
       const staffRole = staffSession.staff.role;
       return reply.status(200).send({
         success: true,

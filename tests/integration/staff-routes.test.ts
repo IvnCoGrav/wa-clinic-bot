@@ -99,7 +99,10 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(body.staff.name).toBe('Bidan Dewi');
       expect(body.token).toBe('mock_token_abc');
       expect(res.headers['set-cookie']).toBeDefined();
-      expect(res.headers['set-cookie']).toContain('staff_session=mock_token_abc');
+      const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
+      expect(setCookie).toContain('staff_session=mock_token_abc');
+      // Sanitasi sesi silang: login staf memusnahkan cookie admin_session.
+      expect(setCookie).toContain('admin_session=;');
     });
 
     it('POST /api/staff/auth/restore re-issues staff_session cookie from stored token', async () => {
@@ -128,7 +131,8 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.success).toBe(true);
-      expect(res.headers['set-cookie']).toContain('staff_session=stored_token_abc');
+      const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
+      expect(setCookie).toContain('staff_session=stored_token_abc');
     });
 
     it('POST /api/staff/auth/restore returns 401 for invalid token', async () => {

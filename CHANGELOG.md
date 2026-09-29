@@ -4,6 +4,41 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-29 - Remediasi Kebocoran Notifikasi Admin ke Perangkat Terapis (Ghost Push Subscription & RBAC Scope)
+
+- **Konteks:** Notifikasi chat pelanggan umum (unassigned/CS, mis. Anne Lawrencia)
+  bocor ke perangkat terapis. Akar masalah: perangkat penguji terdaftar
+  `push_subscriptions.user_type='ADMIN'` (ghost dari sesi dashboard sebelumnya),
+  sedangkan rebind ke STAFF gagal 403 karena `role_api_scopes` mengunci therapist
+  (SEC-AUDIT-04). Rencana: `docs/plans/PUSH_RBAC_GHOST_SUBSCRIPTION_REMEDIATION.md`.
+- **Security - Scope push data-driven (`prisma/migrations/20260930000000_allow_push_for_therapist`):**
+  seed prefix GRANULAR untuk therapist (`/api/admin/push/public-key` GET,
+  `/subscribe` POST, `/unsubscribe` POST), tenant-aware (`tenants` + fallback
+  `default-tenant`), idempoten. Endpoint sensitif (`/test`, `/test-staff`,
+  `/staff-device-counts`) TIDAK di-seed → tetap default-deny. TIDAK ada bypass
+  hardcode di `admin.route.ts` (hapus dead code `isSelfPushRegister`).
+- **Security - Pemaksaan identitas langganan (`src/routes/admin/push.subroute.ts`):**
+  `POST /subscribe` kini memaksa `userType`/`userId` dari SESI (staffId → STAFF +
+  id; selain itu ADMIN + null). Body `userType='ADMIN'`/`userId` palsu dari staf
+  di-override — menutup spoofing.
+- **Security - Caller-check `test-staff` (`src/routes/admin/push.subroute.ts`):**
+  staf hanya boleh menguji notifikasi ke `staffId` dirinya (403 `FORBIDDEN_PUSH_TARGET`
+  bila ke staf lain); Super Admin tetap bebas.
+- **Security - Sanitasi cookie silang antar portal (`staff/auth.subroute.ts`,
+  `admin/auth.subroute.ts`):** login/restore staf memusnahkan `admin_session`;
+  login/restore admin memusnahkan `staff_session`. Mencegah dua portal aktif
+  bersamaan (akar ghost subscription).
+- **Fixed - Disosiasi push saat logout (`AuthContext.tsx`, `StaffAuthContext.tsx`):**
+  `unsubscribeFromPushNotifications()` dipanggil SEBELUM destroy sesi backend
+  (best-effort), mencegah perangkat tetap menerima notifikasi role lama.
+- **Test - `tests/integration/push-rbac.test.ts`:** 11 test adversarial (scope
+  allow/deny, override identitas, caller-check, sanitasi cookie). Regression gate:
+  `npm run build` Exit 0, dashboard build Exit 0, full suite 520 file / 4220 test hijau.
+  Test lama (`staff-routes`, `unified-login`) disesuaikan ke kontrak `Set-Cookie` array.
+- **Sisa debt:** `docs/KNOWN_ISSUES.md` #168 (purge ghost token live, verifikasi perangkat nyata).
+- **Fase 4 (live) BELUM:** deploy + purge token ghost produksi menunggu gate keamanan
+  (backup + SELECT-before-DELETE + 1-step verification).
+
 #### 2026-09-29 - Eliminasi Kebocoran Notifikasi ke Bidan Terapis (Mandat In-System PWA Only)
 
 - **Konteks:** Terapis masih menerima notifikasi liar (Telegram eksternal ke akun
