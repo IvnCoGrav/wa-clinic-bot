@@ -12,11 +12,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   pemaksaan identitas langganan dari sesi (`push.subroute.ts`), caller-check
   `test-staff`, sanitasi cookie silang antar portal, dan `unsubscribe` saat logout.
   Rencana: `docs/plans/PUSH_RBAC_GHOST_SUBSCRIPTION_REMEDIATION.md`.
-- **168a — Ghost token lama di DB produksi (OPEN, butuh Fase 4):** Baris
-  `push_subscriptions` lama berstatus ADMIN pada perangkat penguji TIDAK dihapus
-  otomatis. Purge live WAJIB: backup tabel dulu, `SELECT` by endpoint/UA, lalu
-  `DELETE` by `id`/`endpoint` spesifik (DILARANG `DELETE` massal berbasis pola UA
-  — berisiko menghapus perangkat admin legit). Butuh 1-step verification.
+- **168a — Ghost token lama di DB produksi (RESOLVED 2026-09-29):** Baris
+  `push_subscriptions` id `2df24cf1-…` (Windows NT 10.0 / Chrome, `user_type='ADMIN'`)
+  dihapus dari produksi. Backup dibuat: `push_subscriptions_backup_20260929` (7 baris).
+  Penghapusan by `id` spesifik (bukan pola UA massal). Migrasi
+  `20260930000000_allow_push_for_therapist` ter-deploy (5 scope rows therapist).
+  Catatan: bila penguji login ulang sebagai Tabita, frontend baru akan menulis ulang
+  baris sebagai `STAFF`+`user_id` (bukan ADMIN lagi).
 - **168b — `unsubscribe` bergantung endpoint unik (by-design):** `removeSubscription`
   menghapus berdasarkan `endpoint` (unique). Bila browser sudah mencabut subscription
   lebih dulu (endpoint hilang), baris DB lama tidak ikut terhapus. Sweep berkala
@@ -27,9 +29,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   default-deny untuk therapist. Bila kelak terapis butuh uji mandiri, gunakan
   `test-staff` dengan `staffId` dirinya (caller-check sudah menegakkan ini) —
   tapi prefix `test-staff` harus di-seed lebih dulu untuk role therapist.
-- **168d — Verifikasi perangkat nyata & purge live BELUM (OPEN):** Uji end-to-end
-  (login Tabita → cek baris `push_subscriptions` = STAFF + user_id Tabita → kirim
-  chat Anne → pastikan tidak masuk) belum dilakukan di server produksi.
+- **168d — Verifikasi perangkat nyata (PARTIAL 2026-09-29):** Backend & migrasi
+  ter-deploy live; ghost token terhapus. Verifikasi perangkat nyata (login Tabita →
+  cek baris `push_subscriptions` = STAFF + user_id Tabita → kirim chat Anne →
+  pastikan tidak masuk) BELUM dilakukan karena butuh sesi browser penguji fisik.
 
 ## 167. [Notifikasi Terapis] Sisa debt Mandat In-System PWA Only (2026-09-29) - OPEN (sebagian sengaja)
 
