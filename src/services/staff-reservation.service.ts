@@ -9,11 +9,13 @@ import {
 } from '../config/staff-chat-window-config';
 import { getRollingFollowUpMessage, getRollingVariant } from '../config/followup-templates';
 import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
+import { computeCurrentAge } from '../utils/age-calculator';
 
 export interface StaffTaskChild {
   name: string;
   rawAgeText: string | null;
   birthDate: string | null;
+  currentAge?: string;
 }
 
 export interface StaffTaskAddress {
@@ -85,6 +87,88 @@ export interface StaffTaskItem {
  * Dedupe teknis non-semantik: kelurahan tidak diulang bila sudah terkandung
  * di teks alamat lengkap (data lama sempat mencemari kolom kelurahan).
  */
+type SelectableChild = {
+  name?: string | null;
+  raw_age_text?: string | null;
+  birth_date?: Date | string | null;
+  age_months_at_registration?: number | null;
+  created_at?: Date | string | null;
+};
+
+/**
+ * Fase 1.1: Sumber anak untuk kartu tugas terapis.
+ *
+ * `r.children` (relasi via `reservation_id`) = anak yang BENAR-BENAR didaftarkan
+ * pada reservasi ini → sumber kebenaran. `cust.children` = SEMUA anak pada profil
+ * customer → dipakai HANYA sebagai fallback untuk reservasi lama yang belum
+ * mengaitkan anak (relasi reservasi kosong). Tanpa gating ini, kartu 1 booking
+ * menampilkan seluruh anak customer (mis. Budi 2th & Ani 6bln padahal booking Ani).
+ *
+ * Dedupe dinormalkan (trim + collapse spasi + lowercase) karena nama sama bisa
+ * datang dari dua relasi; anak kembar bernama identik tetap digabung sesuai
+ * constraint DB `@@unique([customer_id, name])`.
+ */
+export function selectTaskChildren(
+  reservationChildren: SelectableChild[] | null | undefined,
+  customerChildren: SelectableChild[] | null | undefined
+): StaffTaskChild[] {
+  const reservationList = (reservationChildren || []).filter((c) => !!c?.name);
+  const source = reservationList.length > 0 ? reservationList : customerChildren || [];
+
+  const map = new Map<string, StaffTaskChild>();
+  for (const ch of source) {
+    const name = String(ch?.name || '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase().replace(/\s+/g, ' ');
+    if (map.has(key)) continue;
+    const bd = ch?.birth_date;
+    const birthDate = bd ? (bd instanceof Date ? bd.toISOString() : new Date(bd).toISOString()) : null;
+    map.set(key, {
+      name,
+      rawAgeText: ch?.raw_age_text || null,
+      birthDate,
+      currentAge: computeCurrentAge({
+        birthDate: bd ? (bd instanceof Date ? bd : new Date(bd)) : null,
+        ageMonthsAtRegistration: ch?.age_months_at_registration ?? null,
+        registeredAt: (ch as any)?.created_at ?? null,
+        rawAgeText: ch?.raw_age_text || null,
+      }),
+    });
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Apakah nilai kolom `kelurahan` sebenarnya bukan nama kelurahan, melainkan
+ * detail alamat jalan/perumahan (data lama sempat tercemar). Bila demikian,
+ * JANGAN diberi prefix "Kel." (menyesatkan terapis: "Kel. Jalan ...").
+ */
+function looksLikeStreetAddress(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (!v) return false;
+  if (/^(?:jalan|jl\.?|gang|gg\.?|komplek|perum|dusun|desa|blok|rt\.?|rw\.?)\b/.test(v)) return true;
+  // Nomor rumah/blok ("... No 12", "... 12B") → kemungkinan alamat, bukan kelurahan.
+  return /\bno\.?\s*\d+|\b\d+\s*[a-z]?\b/.test(v);
+}
+
+/**
+ * Fase 165d: sumber TUNGGAL URL peta kartu tugas (dulu diduplikasi di
+ * getTodayTasks / getUpcomingSchedule / getCompletedTasks dengan format
+ * "maps.google.com/?q=" vs "maps/search/?api=1&query=" yang divergen).
+ */
+export function buildMapsUrls(
+  lat?: number | null,
+  lng?: number | null
+): { mapsUrl: string | null; navigationUrl: string | null } {
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return { mapsUrl: null, navigationUrl: null };
+  }
+  return {
+    mapsUrl: `https://maps.google.com/?q=${lat},${lng}`,
+    navigationUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`,
+  };
+}
+
 export function buildAddressText(c: {
   kelurahan?: string | null;
   kecamatan?: string | null;
@@ -96,7 +180,11 @@ export function buildAddressText(c: {
   const parts: string[] = [];
   if (addressDetail) parts.push(addressDetail);
   const kel = (c.kelurahan || '').trim();
-  if (kel && !addressDetail.toLowerCase().includes(kel.toLowerCase())) parts.push(`Kel. ${kel}`);
+  if (kel && !addressDetail.toLowerCase().includes(kel.toLowerCase())) {
+    // Guard data-cemar: nilai kelurahan berbentuk nama jalan/nomor rumah tidak
+    // diberi prefix "Kel." agar tidak menyesatkan (mis. "Kel. Jalan Melati No 5").
+    parts.push(looksLikeStreetAddress(kel) ? kel : `Kel. ${kel}`);
+  }
   if (c.kecamatan) parts.push(`Kec. ${c.kecamatan}`);
   if (c.kota) parts.push(c.kota);
   return parts.join(', ') || 'Alamat belum tercatat lengkap';
@@ -366,7 +454,9 @@ export class StaffReservationService {
                   name: true,
                   raw_age_text: true,
                   birth_date: true,
-                },
+                  age_months_at_registration: true,
+                  created_at: true,
+},
               },
               // phone: TIDAK di-select dari DB untuk privasi data customer
               ltv_cache: true,
@@ -382,38 +472,90 @@ export class StaffReservationService {
               name: true,
               raw_age_text: true,
               birth_date: true,
-            },
+              age_months_at_registration: true,
+              created_at: true,
+},
           },
         },
         orderBy: { booking_date: 'asc' },
       });
 
       const circuityFactor = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.60');
-      let prevCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-      let prevOriginName = 'Klinik';
-      let isFirstPatient = true;
 
-      // Fase 4 (RC-6/G5): fallback jarak Klinik→Pasien #1 memakai sumber resmi tenant-aware
-      // (deliveryService.calculateDelivery: ORS + tier DB), bukan rumus Haversine lokal.
-      // Haversine tetap last-resort bila API gagal. Precompute sekuensial SEBELUM Promise.all
-      // (await di dalam map akan merusak urutan mutasi prevCoords/isFirstPatient).
-      const clinicFallbackKm = new Map<string, number>();
+      // Fase 1.1/1.2: itinerary berantai dihitung SEKALI, SEKUENSIAL, dan per-terapis.
+      // - Per-terapis: rute pasien terapis B TIDAK dihitung dari pasien terakhir terapis A
+      //   (bug pada view supervisor scope=all).
+      // - Sekuensial: Promise.all + mutasi prevCoords bersifat race (urutan tak deterministik).
+      // Fallback jarak Klinik→Pasien #1 tetap memakai sumber resmi tenant-aware
+      // (deliveryService.calculateDelivery: ORS + tier DB); Haversine last-resort bila gagal.
+      type ItineraryEntry = {
+        distanceKm: number | null;
+        distanceSource: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
+        originName: string | null;
+      };
+      const itineraryById = new Map<string, ItineraryEntry>();
       {
         const { deliveryService } = await import('./delivery.service');
-        let probeFirstPatient = true;
+        const trackerByStaff = new Map<
+          string,
+          { coords: Coordinates; originName: string; isFirst: boolean }
+        >();
         for (const r of rows) {
           const c = r.customer;
-          if (typeof c?.lat === 'number' && typeof c?.lng === 'number') {
-            if (probeFirstPatient && c.distance_km == null) {
+          const staffKey = (r as any).assigned_staff?.id || 'unassigned';
+          const tracker = trackerByStaff.get(staffKey) || {
+            coords: { lat: clinicConfig.lat, lng: clinicConfig.lng },
+            originName: clinicConfig.name || 'Klinik',
+            isFirst: true,
+          };
+          const lat = c?.lat;
+          const lng = c?.lng;
+
+          if (typeof lat !== 'number' || typeof lng !== 'number') {
+            // Tanpa koordinat: fallback distance_km, route tak berlanjut (waypoint diabaikan).
+            itineraryById.set(r.id, {
+              distanceKm: c?.distance_km ?? null,
+              distanceSource: 'CLINIC',
+              originName: clinicConfig.name || 'Klinik',
+            });
+            continue;
+          }
+
+          const currentCoords: Coordinates = { lat, lng };
+          if (tracker.isFirst) {
+            let dist: number | null = c?.distance_km ?? null;
+            if (dist == null) {
               try {
-                const calc = await deliveryService.calculateDelivery({ lat: c.lat, lng: c.lng }, undefined, tenantId);
-                if (typeof calc?.distanceKm === 'number') clinicFallbackKm.set(r.id, calc.distanceKm);
+                const calc = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
+                if (typeof calc?.distanceKm === 'number') dist = calc.distanceKm;
               } catch (e: any) {
                 console.warn(`[STAFF ITINERARY] calculateDelivery gagal untuk reservasi ${r.id}, pakai fallback Haversine: ${e?.message || e}`);
               }
             }
-            probeFirstPatient = false;
+            if (dist == null) {
+              dist = parseFloat((calculateHaversineDistance(tracker.coords, currentCoords) * circuityFactor).toFixed(1));
+            }
+            itineraryById.set(r.id, {
+              distanceKm: dist,
+              distanceSource: 'CLINIC',
+              originName: clinicConfig.name || 'Klinik',
+            });
+          } else {
+            const straightKm = calculateHaversineDistance(tracker.coords, currentCoords);
+            itineraryById.set(r.id, {
+              distanceKm: parseFloat((straightKm * circuityFactor).toFixed(1)),
+              distanceSource: 'PREVIOUS_PATIENT',
+              originName: tracker.originName,
+            });
           }
+          tracker.coords = currentCoords;
+          tracker.originName = c?.name
+            ? c.name.toLowerCase().startsWith('bunda')
+              ? c.name
+              : `Bunda ${c.name}`
+            : 'Pasien Sebelumnya';
+          tracker.isFirst = false;
+          trackerByStaff.set(staffKey, tracker);
         }
       }
 
@@ -422,56 +564,20 @@ export class StaffReservationService {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
-        const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
-        const navigationUrl =
-          lat && lng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
-            : null;
+        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng);
         const addressText = buildAddressText(cust || {});
 
-        // Sequential Homecare Distance Calculation (Haversine 0-API call)
-        let distanceKm: number | null = null;
-        let distanceSource: 'CLINIC' | 'PREVIOUS_PATIENT' | null = null;
-        let originName: string | null = null;
+        const itinerary = itineraryById.get(r.id) || {
+          distanceKm: cust?.distance_km ?? null,
+          distanceSource: 'CLINIC' as const,
+          originName: clinicConfig.name || 'Klinik',
+        };
+        const distanceKm = itinerary.distanceKm;
+        const distanceSource = itinerary.distanceSource;
+        const originName = itinerary.originName;
 
-        if (typeof lat === 'number' && typeof lng === 'number') {
-          const currentCoords: Coordinates = { lat, lng };
-          if (isFirstPatient) {
-            // Pasien #1: Dari Klinik ke Pasien #1
-            distanceKm = cust?.distance_km ?? clinicFallbackKm.get(r.id) ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
-            distanceSource = 'CLINIC';
-            originName = clinicConfig.name || 'Klinik';
-          } else {
-            // Pasien #2, #3, dst: Dari Pasien Sebelumnya ke Pasien Sekarang
-            const straightKm = calculateHaversineDistance(prevCoords, currentCoords);
-            distanceKm = parseFloat((straightKm * circuityFactor).toFixed(1));
-            distanceSource = 'PREVIOUS_PATIENT';
-            originName = prevOriginName;
-          }
-          // Update waypoint untuk pasien berikutnya
-          prevCoords = currentCoords;
-          prevOriginName = cust?.name ? (cust.name.toLowerCase().startsWith('bunda') ? cust.name : `Bunda ${cust.name}`) : 'Pasien Sebelumnya';
-          isFirstPatient = false;
-        } else {
-          // Jika pasien tidak punya koordinat, gunakan fallback distance_km jika ada
-          distanceKm = cust?.distance_km ?? null;
-          distanceSource = 'CLINIC';
-          originName = clinicConfig.name || 'Klinik';
-        }
-
-        // Gabungkan children dari reservation dan customer profile (deduplicate by name)
-        const combinedChildren = [...(r.children || []), ...(cust?.children || [])];
-        const uniqueChildrenMap = new Map<string, StaffTaskChild>();
-        for (const ch of combinedChildren) {
-          if (ch?.name && !uniqueChildrenMap.has(ch.name)) {
-            uniqueChildrenMap.set(ch.name, {
-              name: ch.name,
-              rawAgeText: ch.raw_age_text || null,
-              birthDate: ch.birth_date ? ch.birth_date.toISOString() : null,
-            });
-          }
-        }
-        const childrenList = Array.from(uniqueChildrenMap.values());
+        // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
+        const childrenList = selectTaskChildren(r.children, cust?.children);
 
         // Pricing calculation
         let treatmentFee = r.purchase_value || 0;
@@ -645,7 +751,9 @@ export class StaffReservationService {
                   name: true,
                   raw_age_text: true,
                   birth_date: true,
-                },
+                  age_months_at_registration: true,
+                  created_at: true,
+},
               },
             },
           },
@@ -654,44 +762,89 @@ export class StaffReservationService {
               name: true,
               raw_age_text: true,
               birth_date: true,
-            },
+              age_months_at_registration: true,
+              created_at: true,
+},
           },
         },
         orderBy: { booking_date: 'asc' },
       });
 
       const circuityFactor = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.60');
-      let lastDateKey = '';
-      let prevCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-      let prevOriginName = 'Klinik';
-      let isFirstPatientOfDay = true;
 
-      // Fase 4 (RC-6/G5): fallback jarak Klinik→Pasien #1/hari memakai sumber resmi
-      // tenant-aware (deliveryService.calculateDelivery), bukan rumus Haversine lokal.
-      // Precompute sekuensial SEBELUM Promise.all; reset pasien-pertama per hari (dateKey).
-      const clinicFallbackKm = new Map<string, number>();
+      // Fase 1.2: itinerary dihitung SEKALI & SEKUENSIAL (bukan di dalam Promise.all yang
+      // memutasi waypoint bersama secara race). Rantai di-reset per (terapis, hari) sehingga
+      // pasien pertama tiap hari SELALU dihitung dari Klinik. Fallback Klinik→Pasien #1
+      // tetap memakai deliveryService.calculateDelivery (tenant-aware/ORS); Haversine last-resort.
+      type ItineraryEntry = {
+        distanceKm: number | null;
+        distanceSource: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
+        originName: string | null;
+      };
+      const itineraryById = new Map<string, ItineraryEntry>();
       {
         const { deliveryService } = await import('./delivery.service');
-        let probeLastDateKey = '';
-        let probeFirstOfDay = true;
+        const trackerByKey = new Map<
+          string,
+          { coords: Coordinates; originName: string; isFirst: boolean }
+        >();
         for (const r of rows) {
           const c = r.customer;
-          const probeDateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
-          if (probeDateKey !== probeLastDateKey) {
-            probeLastDateKey = probeDateKey;
-            probeFirstOfDay = true;
+          const staffKey = (r as any).assigned_staff?.id || 'unassigned';
+          const dateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
+          const chainKey = `${staffKey}::${dateKey}`;
+          const tracker = trackerByKey.get(chainKey) || {
+            coords: { lat: clinicConfig.lat, lng: clinicConfig.lng },
+            originName: clinicConfig.name || 'Klinik',
+            isFirst: true,
+          };
+          const lat = c?.lat;
+          const lng = c?.lng;
+
+          if (typeof lat !== 'number' || typeof lng !== 'number') {
+            itineraryById.set(r.id, {
+              distanceKm: c?.distance_km ?? null,
+              distanceSource: 'CLINIC',
+              originName: clinicConfig.name || 'Klinik',
+            });
+            continue;
           }
-          if (typeof c?.lat === 'number' && typeof c?.lng === 'number') {
-            if (probeFirstOfDay && c.distance_km == null) {
+
+          const currentCoords: Coordinates = { lat, lng };
+          if (tracker.isFirst) {
+            let dist: number | null = c?.distance_km ?? null;
+            if (dist == null) {
               try {
-                const calc = await deliveryService.calculateDelivery({ lat: c.lat, lng: c.lng }, undefined, tenantId);
-                if (typeof calc?.distanceKm === 'number') clinicFallbackKm.set(r.id, calc.distanceKm);
+                const calc = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
+                if (typeof calc?.distanceKm === 'number') dist = calc.distanceKm;
               } catch (e: any) {
                 console.warn(`[STAFF ITINERARY] calculateDelivery gagal untuk reservasi ${r.id}, pakai fallback Haversine: ${e?.message || e}`);
               }
             }
-            probeFirstOfDay = false;
+            if (dist == null) {
+              dist = parseFloat((calculateHaversineDistance(tracker.coords, currentCoords) * circuityFactor).toFixed(1));
+            }
+            itineraryById.set(r.id, {
+              distanceKm: dist,
+              distanceSource: 'CLINIC',
+              originName: clinicConfig.name || 'Klinik',
+            });
+          } else {
+            const straightKm = calculateHaversineDistance(tracker.coords, currentCoords);
+            itineraryById.set(r.id, {
+              distanceKm: parseFloat((straightKm * circuityFactor).toFixed(1)),
+              distanceSource: 'PREVIOUS_PATIENT',
+              originName: tracker.originName,
+            });
           }
+          tracker.coords = currentCoords;
+          tracker.originName = c?.name
+            ? c.name.toLowerCase().startsWith('bunda')
+              ? c.name
+              : `Bunda ${c.name}`
+            : 'Pasien Sebelumnya';
+          tracker.isFirst = false;
+          trackerByKey.set(chainKey, tracker);
         }
       }
 
@@ -700,59 +853,20 @@ export class StaffReservationService {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
-        const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
-        const navigationUrl =
-          lat && lng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
-            : null;
+        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng);
         const addressText = buildAddressText(cust || {});
 
-        const dateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
-        if (dateKey !== lastDateKey) {
-          lastDateKey = dateKey;
-          prevCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-          prevOriginName = 'Klinik';
-          isFirstPatientOfDay = true;
-        }
+        const itinerary = itineraryById.get(r.id) || {
+          distanceKm: cust?.distance_km ?? null,
+          distanceSource: 'CLINIC' as const,
+          originName: clinicConfig.name || 'Klinik',
+        };
+        const distanceKm = itinerary.distanceKm;
+        const distanceSource = itinerary.distanceSource;
+        const originName = itinerary.originName;
 
-        // Sequential Homecare Distance Calculation (Haversine 0-API call)
-        let distanceKm: number | null = null;
-        let distanceSource: 'CLINIC' | 'PREVIOUS_PATIENT' | null = null;
-        let originName: string | null = null;
-
-        if (typeof lat === 'number' && typeof lng === 'number') {
-          const currentCoords: Coordinates = { lat, lng };
-          if (isFirstPatientOfDay) {
-            distanceKm = cust?.distance_km ?? clinicFallbackKm.get(r.id) ?? parseFloat((calculateHaversineDistance(prevCoords, currentCoords) * circuityFactor).toFixed(1));
-            distanceSource = 'CLINIC';
-            originName = clinicConfig.name || 'Klinik';
-          } else {
-            const straightKm = calculateHaversineDistance(prevCoords, currentCoords);
-            distanceKm = parseFloat((straightKm * circuityFactor).toFixed(1));
-            distanceSource = 'PREVIOUS_PATIENT';
-            originName = prevOriginName;
-          }
-          prevCoords = currentCoords;
-          prevOriginName = cust?.name ? (cust.name.toLowerCase().startsWith('bunda') ? cust.name : `Bunda ${cust.name}`) : 'Pasien Sebelumnya';
-          isFirstPatientOfDay = false;
-        } else {
-          distanceKm = cust?.distance_km ?? null;
-          distanceSource = 'CLINIC';
-          originName = clinicConfig.name || 'Klinik';
-        }
-
-        const combinedChildren = [...(r.children || []), ...(cust?.children || [])];
-        const uniqueChildrenMap = new Map<string, StaffTaskChild>();
-        for (const ch of combinedChildren) {
-          if (ch?.name && !uniqueChildrenMap.has(ch.name)) {
-            uniqueChildrenMap.set(ch.name, {
-              name: ch.name,
-              rawAgeText: ch.raw_age_text || null,
-              birthDate: ch.birth_date ? ch.birth_date.toISOString() : null,
-            });
-          }
-        }
-        const childrenList = Array.from(uniqueChildrenMap.values());
+        // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
+        const childrenList = selectTaskChildren(r.children, cust?.children);
 
         let treatmentFee = r.purchase_value || 0;
         if (treatmentFee <= 0 && r.treatment_detail) {
@@ -878,7 +992,9 @@ export class StaffReservationService {
                   name: true,
                   raw_age_text: true,
                   birth_date: true,
-                },
+                  age_months_at_registration: true,
+                  created_at: true,
+},
               },
               conversations: {
                 select: { id: true },
@@ -892,7 +1008,9 @@ export class StaffReservationService {
               name: true,
               raw_age_text: true,
               birth_date: true,
-            },
+              age_months_at_registration: true,
+              created_at: true,
+},
           },
         },
         orderBy: { booking_date: 'desc' },
@@ -902,29 +1020,12 @@ export class StaffReservationService {
         rows.map(async (r) => {
         const cust = r.customer;
         const addressText = buildAddressText(cust || {});
-        const mapsUrl =
-          cust?.lat != null && cust?.lng != null
-            ? `https://www.google.com/maps/search/?api=1&query=${cust.lat},${cust.lng}`
-            : null;
-        const navigationUrl =
-          cust?.lat != null && cust?.lng != null
-            ? `https://www.google.com/maps/dir/?api=1&destination=${cust.lat},${cust.lng}&travelmode=two-wheeler`
-            : null;
+        const { mapsUrl, navigationUrl } = buildMapsUrls(cust?.lat, cust?.lng);
 
         const distanceKm = cust?.distance_km ?? null;
 
-        const combinedChildren = [...(r.children || []), ...(cust?.children || [])];
-        const uniqueChildrenMap = new Map<string, StaffTaskChild>();
-        for (const ch of combinedChildren) {
-          if (ch?.name && !uniqueChildrenMap.has(ch.name)) {
-            uniqueChildrenMap.set(ch.name, {
-              name: ch.name,
-              rawAgeText: ch.raw_age_text || null,
-              birthDate: ch.birth_date ? ch.birth_date.toISOString() : null,
-            });
-          }
-        }
-        const childrenList = Array.from(uniqueChildrenMap.values());
+        // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
+        const childrenList = selectTaskChildren(r.children, cust?.children);
 
         let treatmentFee = r.purchase_value || 0;
         if (treatmentFee <= 0 && r.treatment_detail) {
@@ -1962,6 +2063,12 @@ export class StaffReservationService {
 
   /**
    * Menandai tindakan kunjungan telah selesai dilakukan oleh terapis di lapangan (COMPLETED).
+   *
+   * Fase 1.3 (Hard Code-Level Guard): kunjungan yang BELUM LUNAS
+   * (`purchase_occurred_at` null) ditolak secara deterministik — bukan sekadar
+   * peringatan UI. Terapis harus mencatat pembayaran lebih dulu; bila memang
+   * harus tetap diselesaikan (mis. pembayaran menyusul disetujui CS), wajib
+   * `forceUnpaid: true` eksplisit dan dicatat sebagai audit terpisah.
    */
   static async completeTask(params: {
     reservationId: string;
@@ -1969,8 +2076,22 @@ export class StaffReservationService {
     tenantId: string;
     staffName?: string;
     isSupervisor?: boolean;
-  }): Promise<{ success: boolean; data?: any; error?: string }> {
-    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false } = params;
+    forceUnpaid?: boolean;
+  }): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+    requiresPayment?: boolean;
+    paymentStatus?: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  }> {
+    const {
+      reservationId,
+      staffId,
+      tenantId,
+      staffName = 'Bidan Terapis',
+      isSupervisor = false,
+      forceUnpaid = false,
+    } = params;
     try {
       const reservation = await prisma.reservation.findUnique({
         where: { id: reservationId },
@@ -1984,6 +2105,17 @@ export class StaffReservationService {
         return { success: false, error: 'Anda tidak memiliki akses untuk menyelesaikan jadwal terapis lain.' };
       }
 
+      // Gerbang pelunasan: status 'completed' TIDAK bisa diklaim tanpa catatan pembayaran.
+      const isPaid = !!reservation.purchase_occurred_at;
+      if (!isPaid && !forceUnpaid) {
+        return {
+          success: false,
+          requiresPayment: true,
+          paymentStatus: 'TAGIH_DI_TEMPAT',
+          error: 'Pembayaran pasien belum dicatat. Catat pembayaran terlebih dahulu sebelum menyelesaikan kunjungan.',
+        };
+      }
+
       const updated = await prisma.reservation.update({
         where: { id: reservationId },
         data: { status: 'completed' },
@@ -1993,9 +2125,12 @@ export class StaffReservationService {
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
-        action: 'STAFF_COMPLETE_VISIT',
+        action: !isPaid && forceUnpaid ? 'STAFF_COMPLETE_VISIT_UNPAID' : 'STAFF_COMPLETE_VISIT',
         targetId: reservationId,
         tenantId,
+        ...(!isPaid && forceUnpaid
+          ? { payload: { forcedUnpaid: true, paymentStatus: 'TAGIH_DI_TEMPAT' } }
+          : {}),
       });
 
       // Real-time SSE Broadcast: tugas selesai
@@ -2250,4 +2385,5 @@ export class StaffReservationService {
     }
   }
 }
+
 

@@ -5,6 +5,7 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
+import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -221,6 +222,13 @@ export class CustomerService {
     },
     tenantId: string
   ): Promise<any> {
+    // Gerbang SEAM TULIS (Fase 165b): kolom `kelurahan` DILARANG diisi detail
+    // alamat jalan/perumahan/URL (jalur form reservasi mengirim field "Alamat").
+    // Dihitung di luar try agar jalur fallback memori juga memakai nilai bersih.
+    const safeKelurahanRaw = data.kelurahan;
+    const safeKelurahan = safeKelurahanRaw !== undefined
+      ? sanitizeKelurahanInput(safeKelurahanRaw)
+      : undefined;
     try {
       const existing = await prisma.customer.findFirst({
         where: { id: customerId, tenant_id: tenantId },
@@ -274,7 +282,7 @@ export class CustomerService {
       const updated = await prisma.customer.update({
         where: { id: customerId },
         data: {
-          kelurahan: data.kelurahan ?? existing.kelurahan,
+          kelurahan: safeKelurahan ?? existing.kelurahan,
           kecamatan: data.kecamatan ?? existing.kecamatan,
           kota: data.kota ?? existing.kota,
           lat: effectiveLat,
@@ -358,7 +366,7 @@ export class CustomerService {
                   ? LocationSource.estimated_area
                   : cust.location_source;
           Object.assign(cust, {
-            kelurahan: data.kelurahan ?? cust.kelurahan,
+            kelurahan: safeKelurahan ?? cust.kelurahan,
             kecamatan: data.kecamatan ?? cust.kecamatan,
             kota: data.kota ?? cust.kota,
             lat: effLat,
@@ -777,7 +785,18 @@ export class CustomerService {
   ): Promise<any> {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name;
-    if (data.kelurahan !== undefined) updateData.kelurahan = data.kelurahan;
+    // Fase 165b: simpan nilai kelurahan yang tercemar untuk DIALIHKAN ke
+    // preferences.address (agar info jalan/perumahan tidak hilang), bukan ditulis
+    // ke kolom kelurahan.
+    let redirectedAddressFromKelurahan: string | undefined;
+    if (data.kelurahan !== undefined) {
+      const safeKel = data.kelurahan === null ? null : sanitizeKelurahanInput(data.kelurahan);
+      if (data.kelurahan !== null && safeKel === undefined) {
+        redirectedAddressFromKelurahan = String(data.kelurahan).trim();
+      } else {
+        updateData.kelurahan = safeKel;
+      }
+    }
     if (data.kecamatan !== undefined) updateData.kecamatan = data.kecamatan;
     if (data.kota !== undefined) updateData.kota = data.kota;
     if (data.zipcode !== undefined) updateData.zipcode = data.zipcode;
@@ -794,13 +813,14 @@ export class CustomerService {
     }
 
     // Normalize address & landmark -> preferences
-    if (data.address !== undefined || data.landmark !== undefined) {
+    const effectiveAddress = data.address !== undefined ? data.address : redirectedAddressFromKelurahan;
+    if (effectiveAddress !== undefined || data.landmark !== undefined) {
       const customer = await this.getCustomerById(customerId, tenantId);
       const currentPrefs = (customer?.preferences as any) || {};
       const newPrefs: any = { ...currentPrefs };
-      if (data.address !== undefined) {
-        newPrefs.address = data.address;
-        newPrefs.full_address = data.address;
+      if (effectiveAddress !== undefined) {
+        newPrefs.address = effectiveAddress;
+        newPrefs.full_address = effectiveAddress;
       }
       if (data.landmark !== undefined) {
         newPrefs.landmark = data.landmark;

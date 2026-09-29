@@ -593,6 +593,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { id: string };
+        Body?: { forceUnpaid?: boolean };
       }>,
       reply: FastifyReply
     ) => {
@@ -602,6 +603,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
+      const forceUnpaid = request.body?.forceUnpaid === true;
 
       const result = await StaffReservationService.completeTask({
         reservationId: id,
@@ -609,10 +611,16 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         tenantId,
         staffName,
         isSupervisor,
+        forceUnpaid,
       });
 
       if (!result.success) {
-        return reply.status(400).send({ success: false, error: result.error });
+        return reply.status(400).send({
+          success: false,
+          error: result.error,
+          requiresPayment: result.requiresPayment === true,
+          paymentStatus: result.paymentStatus,
+        });
       }
 
       return reply.status(200).send({

@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { BabyDetail } from '../utils/reservation-text-parser';
+import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
 
 /**
@@ -175,14 +175,21 @@ export class ReservationLifecycleService {
     }
 
     // 2. Persist child/baby entities (best-effort)
+    // Gerbang entitas: usia gestasional (hamil/nifas) DILARANG masuk tabel children.
+    // Single seam — semua jalur (create, merge, upgrade hold, admin) lewat sini.
     try {
-      const { childService } = await import('./child.service');
-      await childService.upsertChildrenFromBabies({
-        customerId,
-        reservationId,
-        tenantId,
-        babies,
-      });
+      const childBabies = (babies || []).filter(
+        (b) => classifyPatientEntity({ name: b.name, ageText: b.age }) === 'CHILD'
+      );
+      if (childBabies.length > 0) {
+        const { childService } = await import('./child.service');
+        await childService.upsertChildrenFromBabies({
+          customerId,
+          reservationId,
+          tenantId,
+          babies: childBabies,
+        });
+      }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] childService.upsertChildrenFromBabies failed:', err.message);
     }

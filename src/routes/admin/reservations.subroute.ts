@@ -555,11 +555,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           responseCacheService.set(cacheKeyStats, stats, 15);
         }
 
-        const { computeCurrentAge } = await import('../../utils/age-calculator');
+        const { computeCurrentAge, resolveMomGestationalInfo } = await import('../../utils/age-calculator');
         const data = rows.map((r) => ({
           ...r,
           notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
           baby_details: extractBabyDetails(r.raw_text),
+          mom_gestational_info: resolveMomGestationalInfo({
+            text: `${r.raw_text || ''} ${r.treatment_detail || ''}`,
+            treatmentCategory: (r as any).treatment_category,
+            registeredAt: (r as any).created_at,
+          }),
           customer: r.customer
             ? {
                 ...r.customer,
@@ -1257,12 +1262,34 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
           });
         }
+        const { computeCurrentAge, resolveMomGestationalInfo } = await import('../../utils/age-calculator');
+        const enrichedChildren = ((reservation as any).customer?.children || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          birth_date: c.birth_date,
+          raw_age_text: c.raw_age_text,
+          age_months_at_registration: c.age_months_at_registration,
+          current_age: computeCurrentAge({
+            birthDate: c.birth_date,
+            ageMonthsAtRegistration: c.age_months_at_registration,
+            registeredAt: c.created_at,
+            rawAgeText: c.raw_age_text,
+          }),
+        }));
         return reply.status(200).send({
           success: true,
           data: {
             ...reservation,
             notes: (reservation as any).notes || extractNotesFromRawText(reservation.raw_text),
             baby_details: extractBabyDetails(reservation.raw_text),
+            mom_gestational_info: resolveMomGestationalInfo({
+              text: `${(reservation as any).raw_text || ''} ${(reservation as any).treatment_detail || ''}`,
+              treatmentCategory: (reservation as any).treatment_category,
+              registeredAt: (reservation as any).created_at,
+            }),
+            customer: (reservation as any).customer
+              ? { ...(reservation as any).customer, children: enrichedChildren }
+              : undefined,
           },
         });
       } catch (err: any) {

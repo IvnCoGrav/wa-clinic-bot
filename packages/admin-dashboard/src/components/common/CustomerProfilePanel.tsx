@@ -1,5 +1,6 @@
 import React from 'react';
 import { Phone, MapPin, Baby, Calendar, Tag, ShoppingBag, DollarSign } from 'lucide-react';
+import { formatClinicalAge } from '../../utils/clinicalAge';
 
 export interface CustomerProfileChild {
   name?: string | null;
@@ -10,22 +11,15 @@ export interface CustomerProfileChild {
 }
 
 function formatChildAge(birthDate?: string | null, ageMonths?: number | null): string {
-  let months: number | null = null;
-  if (typeof ageMonths === 'number' && !isNaN(ageMonths)) months = ageMonths;
-  else if (birthDate) {
-    const d = new Date(birthDate);
-    if (!isNaN(d.getTime())) {
-      const now = new Date();
-      months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-      if (now.getDate() < d.getDate()) months -= 1;
-      months = Math.max(0, months);
-    }
+  const clinical = formatClinicalAge(birthDate);
+  if (clinical) return clinical;
+  if (typeof ageMonths === 'number' && !isNaN(ageMonths)) {
+    if (ageMonths < 12) return `${ageMonths} bulan`;
+    const years = Math.floor(ageMonths / 12);
+    const rest = ageMonths % 12;
+    return rest === 0 ? `${years} tahun` : `${years} tahun ${rest} bulan`;
   }
-  if (months === null) return '-';
-  if (months < 12) return `${months} bln`;
-  const years = Math.floor(months / 12);
-  const rest = months % 12;
-  return rest === 0 ? `${years} thn` : `${years} thn ${rest} bln`;
+  return '-';
 }
 
 export interface CustomerProfilePanelProps {

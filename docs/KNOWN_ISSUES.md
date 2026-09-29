@@ -3,6 +3,76 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 165. [Kartu Tugas Terapis & Itinerary] Sisa tech debt perbaikan data jadwal + UX mobile (2026-09-29)
+
+- **Konteks:** Perbaikan fondasional multi-child, rute berantai per-terapis,
+  sanitasi durasi/tipografi, dan gerbang pelunasan sudah dieksekusi (lihat
+  `src/services/staff-reservation.service.ts`, `durationCalculator.ts`,
+  `StaffToday.tsx`). Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
+- **165a — OTW H-2 tidak dilonggarkan (OPEN, sengaja):** Tombol OTW tetap terkunci
+  maks. 2 jam sebelum jadwal di frontend (`isOtwAllowed`) DAN backend
+  (`src/routes/staff/today.subroute.ts:354-364`, fail-closed). Usulan "izinkan
+  OTW awal via dialog konfirmasi" DITOLAK karena gerbang backend harus ikut diubah
+  dan ambang H-2 adalah kebijakan anti-spam tenant. Bila bisnis butuh, ubah
+  kebijakan per-tenant di DB + longgarkan kedua lapis (Confirmation Gate).
+- **165b — Validasi jalur tulis `kelurahan` (RESOLVED 2026-09-29):** akar
+  cemaran ditemukan di 2 lapis: (1) caller form reservasi
+  (`state-machine/machine.ts:352`, `routes/webhook.route.ts:619/1216/1287/1395`)
+  menulis `kelurahan: parsed.address` padahal `parsed.address` = field "Alamat"
+  (jalan/perumahan); (2) seam `customer.service` menulis verbatim ke kolom
+  `Customer.kelurahan`. **Fix fondasional:** gerbang pure `sanitizeKelurahanInput`
+  (`src/utils/kelurahan-guard.ts`) dipasang di DUA seam tulis
+  (`updateCustomerLocation`, `updateCustomer`); nilai tercemar TIDAK ditulis ke
+  kolom kelurahan dan dialihkan ke `preferences.address` (info jalan tidak
+  hilang). Pola diperluas (perumahan/residence/apartemen/dusun/jln) setelah
+  diverifikasi nihil bentrok dengan 573 nama kelurahan dataset. Test
+  adversarial: `tests/unit/kelurahan-write-gate.test.ts` (9).
+- **165c — Ambang swipe tab (OPEN, perlu uji lapangan):** Threshold tab dinaikkan
+  ke 60px + rasio horizontal 1.8x (dari 40px/1.2x). Angka belum divalidasi di HP
+  nyata Bidan; sesuaikan bila masih terlalu sensitif/kurang responsif.
+- **165d — Pemetaan URL Maps terduplikasi (RESOLVED 2026-09-29):** `getTodayTasks`
+  & `getUpcomingSchedule` memakai `maps.google.com/?q=` sedangkan `getCompletedTasks`
+  memakai `maps/search/?api=1&query=`. Dikonsolidasi ke helper tunggal
+  `buildMapsUrls(lat,lng)` di `staff-reservation.service.ts` (3 titik).
+- **Catatan:** Uji perangkat nyata (HP Bidan) & deploy produksi BELUM dilakukan.
+
+## 164. [Age Engine & Entitas Moms] Sisa tech debt transformasi usia dinamis (2026-09-29) - OPEN (sebagian)
+
+- **Konteks:** perbaikan fondasional "Label Usia Mati" + pemisahan entitas Anak vs
+  Moms. Sudah dieksekusi (lihat CHANGELOG): `isGestationalText` tunggal,
+  `parseAgeTextEstimate` (tolak angka telanjang, rentang→batas bawah, "kurang" presisi),
+  `formatClinicalAge` presisi hari, `computeCurrentAge` on-the-fly dari `rawAgeText`,
+  `computeGestationalAge`, `classifyPatientEntity`, dan wiring UI seragam.
+- **164a — Ambang gestasional masih hardcode (OPEN, sengaja):** `GESTATIONAL_MAX_WEEKS = 41`
+  dan label trimester/format klinis adalah SOP klinis, belum tenant-aware (belum di
+  `ClinicPolicy`/DB). Sesuai Confirmation Gate: ditunda, perlu tabel kebijakan klinis
+  tenant-aware. Tidak ada migrasi dilakukan.
+- **164b — Tidak ada kolom gestasional persisten (OPEN, sengaja):** `mom_gestational_info`
+  di API dihitung on-the-fly dari `Reservation.raw_text + treatment_category + created_at`.
+  Konsekuensi: tidak bisa di-query/agregasi di SQL, dan bila `raw_text` tidak memuat minggu
+  kehamilan → label generik "Ibu (data kehamilan belum spesifik)". Kandidat fondasional:
+  tabel `MomPregnancy(customer_id, estimated_due_date, registered_weeks_at, source)` +
+  migrasi + backfill (blast radius besar; perlu Confirmation Gate tersendiri).
+- **164c — `age_months_at_registration` masih `Int?` (OPEN):** menyimpan bulan bulat
+  sehingga informasi hari hilang bila `birth_date` NULL. Format presisi "X bulan Y hari"
+  hanya dijamin bila `birth_date` ada. Skrip rekonsiliasi mengisi `birth_date` untuk
+  memulihkan presisi.
+- **164d — Angka telanjang "8" & teks tak terparse → FLAG, bukan tebak (by design):**
+  baris tanpa unit tidak ditebak; dilaporkan `FLAG_AMBIGUOUS` oleh skrip rekonsiliasi
+  untuk input manual CS. Tidak ada auto-heal agresif.
+- **164e — Rekonsiliasi dijalankan pada DB dev lokal (RESOLVED untuk dev; PROD OPEN):**
+  `localhost:5432` (docker `clinic-postgres`) diverifikasi 2026-09-29: 206 children, **123
+  `birth_date` NULL**. Dry-run + `--commit` dijalankan: **66 baris diperbarui**, 3 Moms
+  (Farida/Bella/Fitria) & 54 ambigu DI-FLAG (tidak dihapus). NULL turun 123→57.
+  Backup pra-perubahan: `children-null-backup.csv` (gitignored, PII). **Sisa 57 NULL & MOM
+  rows belum dibersihkan** (butuh input manual CS / keputusan pemisahan entitas).
+  **PRODUKSI BELUM diverifikasi/di-commit** — jalankan dry-run di server, tinjau CSV, baru
+  `--commit` (angka prod bisa berbeda dari dev).
+- **164f — Deteksi multi-subjek (FIXED saat dry-run):** teks usia gabungan ("2 bln & 3 thn",
+  "9bulan, 5th,3th") sebelumnya dijumlahkan jadi satu usia (data korup). Kini
+  `parseAgeTextEstimate` menandai `multiSubject: true` → skrip FLAG, tidak menjumlah.
+  9 baris terdampak dipindah dari UPDATE_BIRTH ke FLAG_AMBIGUOUS.
+
 ## 163. [Copilot] Timeout multi-step vs klien & recall "konfirmasi verbal" (2026-09-28) - OPEN (sebagian)
 
 - **Konteks:** laporan "AI Clinic Copilot … Gagal menghubungi Copilot. Coba lagi." saat bertanya

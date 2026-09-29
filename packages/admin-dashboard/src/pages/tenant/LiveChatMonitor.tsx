@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
+import { formatClinicalAge } from '../../utils/clinicalAge';
 import {
   MessageSquare,
   AlertTriangle,
@@ -5627,7 +5628,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           <div key={ch.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white space-y-0.5">
                             <p className="font-bold text-[#111b21]">{ch.name || 'Anak'}</p>
                             <p className="text-[#667781] text-[11px]">
-                              {ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : ch.current_age ? `Usia: ${ch.current_age}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : '-'}
+                              {ch.current_age ? `Usia: ${ch.current_age}` : formatClinicalAge(ch.birth_date) ? `Usia: ${formatClinicalAge(ch.birth_date)}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : '-'}
                             </p>
                           </div>
                         ))}

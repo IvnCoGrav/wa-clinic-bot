@@ -21,6 +21,12 @@ export interface ChildInfo {
   current_age: string;
 }
 
+export interface MomGestationalInfo {
+  isPregnant: boolean;
+  currentWeeks?: number;
+  stageLabel: string;
+}
+
 export interface Reservation {
   id: string;
   customer_id: string;
@@ -54,6 +60,7 @@ export interface Reservation {
   payment_method?: 'CASH' | 'TRANSFER' | 'QRIS' | string | null;
   proof_url?: string | null;
   baby_details?: BabyDetail[];
+  mom_gestational_info?: MomGestationalInfo;
   assigned_staff_id?: string | null;
   assigned_staff?: {
     id: string;

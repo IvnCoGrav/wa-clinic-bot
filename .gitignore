@@ -108,3 +108,7 @@ scripts/fix-bunda-gita.ts
 scripts/sync-export-data.ts
 scripts/verify-db-live.js
 scripts/test-customer-case-*.ts
+
+# Rekonsiliasi children (PII customer) - artefak lokal, jangan commit
+reconcile-children-plan.csv
+children-null-backup.csv

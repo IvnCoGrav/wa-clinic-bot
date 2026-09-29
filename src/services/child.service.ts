@@ -1,5 +1,5 @@
-import { parseAgeTextToBirthDate, monthsBetween } from '../utils/age-calculator';
-import { BabyDetail } from '../utils/reservation-text-parser';
+import { parseAgeTextToBirthDate, monthsBetween, computeCurrentAge } from '../utils/age-calculator';
+import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
 
 /**
  * ChildService — persistensi entitas anak per customer (multi-tenant).
@@ -24,7 +24,9 @@ export class ChildService {
 
     const cleaned = babies
       .map((b) => ({ name: (b.name || '').trim(), age: (b.age || '').trim() }))
-      .filter((b) => b.name && b.name !== '-');
+      .filter((b) => b.name && b.name !== '-')
+      // Defense-in-depth: entitas Moms (hamil/nifas) DILARANG masuk tabel children.
+      .filter((b) => classifyPatientEntity({ name: b.name, ageText: b.age }) !== 'MOM');
 
     if (cleaned.length === 0) return;
 
@@ -81,7 +83,6 @@ export class ChildService {
         orderBy: { created_at: 'asc' },
       });
 
-      const { computeCurrentAge } = await import('../utils/age-calculator');
       return children.map((c: any) => ({
         id: c.id,
         name: c.name,

@@ -1,10 +1,38 @@
 import { TreatmentCategory } from '@prisma/client';
 import { parsePaymentSection } from './conversation-transaction-extractor';
 import { treatmentCatalogService } from '../services/treatment-catalog.service';
+import { isGestationalText } from './age-calculator';
 
 export interface BabyDetail {
   name: string;
   age: string;
+}
+
+/** Klasifikasi entitas pasien: anak, Moms (hamil/nifas), atau ambigu. */
+export type PatientEntityKind = 'CHILD' | 'MOM' | 'AMBIGUOUS';
+
+/**
+ * Satu gerbang kanonis pemisah entitas Anak vs Moms (deep module).
+ * Deterministik pada STATE/KONTRAK DATA — bukan pencocokan kalimat intent:
+ *  - kategori treatment MOMS / teks usia gestasional → MOM
+ *  - kategori BABY/KIDS / usia anak non-gestasional → CHILD
+ *  - kategori BOTH tanpa penanda jelas → AMBIGUOUS (jangan asal masuk tabel anak)
+ */
+export function classifyPatientEntity(params: {
+  name?: string | null;
+  ageText?: string | null;
+  treatmentCategory?: string | null;
+}): PatientEntityKind {
+  const { name, ageText, treatmentCategory } = params;
+  const cat = String(treatmentCategory || '').toUpperCase();
+  const hasName = Boolean(name && name.trim() && name.trim() !== '-');
+  const gest = isGestationalText(ageText);
+
+  if (cat === 'MOMS') return 'MOM';
+  if (gest) return 'MOM';
+  if (cat === 'BABY' || cat === 'KIDS') return hasName || Boolean(ageText) ? 'CHILD' : 'AMBIGUOUS';
+  if (cat === 'BOTH') return hasName && ageText ? 'AMBIGUOUS' : 'AMBIGUOUS';
+  return hasName && ageText ? 'CHILD' : 'AMBIGUOUS';
 }
 
 export interface ParsedReservation {
@@ -547,9 +575,13 @@ export function buildBabyDetails(nameLines: string[], ageLines: string[]): BabyD
   const count = Math.max(nameEntries.length, ages.length);
   for (let i = 0; i < count; i++) {
     const entry = nameEntries[i];
+    const age = ages[i] ?? entry?.age ?? '';
+    // Gerbang entitas: usia gestasional (hamil/nifas) BUKAN usia anak — DILARANG
+    // masuk tabel children (bug data korup: nama ibu tercatat sebagai bayi).
+    if (isGestationalText(age)) continue;
     result.push({
       name: entry?.name || `Bayi ${i + 1}`,
-      age: ages[i] ?? entry?.age ?? '',
+      age,
     });
   }
 

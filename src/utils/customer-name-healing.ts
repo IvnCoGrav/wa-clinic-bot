@@ -6,19 +6,10 @@
  */
 import { escapeRegex } from './gazetteer';
 
-/** Pola pencemaran kolom kelurahan: URL maps / alamat jalan fisik / RT-RW. */
-const CORRUPTION_PATTERNS = /https?:\/\/|goo\.gl|maps|\bjl\.|\bjalan\b|\bblok\b|\bgang\b|\brt\s*\d|\brw\s*\d|\bno\.\s*\d/i;
-
-/**
- * True bila nilai kelurahan tercemar (URL, alamat jalan, atau terlalu panjang
- * untuk nama desa/kelurahan resmi).
- */
-export function isCorruptedKelurahan(v: string | null | undefined): boolean {
-  const s = (v || '').trim();
-  if (!s) return false;
-  if (s.length > 40) return true;
-  return CORRUPTION_PATTERNS.test(s);
-}
+// Gerbang pencemaran kolom kelurahan dipusatkan di `kelurahan-guard` (pure,
+// bebas dataset) agar dapat dipanggil hot-path service tanpa menyeret gazetteer.
+// Re-export demi kompatibilitas pemanggil lama (skrip sanitasi & test).
+export { isCorruptedKelurahan, sanitizeKelurahanInput } from './kelurahan-guard';
 
 /**
  * Kelupas suffix wilayah di akhir nama ("Bunda Retno Gedangan" → "Bunda Retno").

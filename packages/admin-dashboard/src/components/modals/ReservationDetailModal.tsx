@@ -30,6 +30,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
 import { CreateReservationModal } from '../calendar/CreateReservationModal';
@@ -68,18 +69,7 @@ interface ReservationDetailModalProps {
 }
 
 const getBabyRows = (res: Reservation): Array<{ name: string; age: string; regAge?: string }> => {
-  if (!res) return [];
-  const children = res.customer?.children;
-  if (children && children.length > 0) {
-    return children.map((c) => ({
-      name: c.name,
-      age: (c.current_age as string) || (c.raw_age_text as string) || '',
-      regAge: (c.raw_age_text as string) ?? undefined,
-    }));
-  }
-  const bd = (res as any).baby_details;
-  if (bd && bd.length > 0) return bd.map((b: any) => ({ name: b.name, age: b.age }));
-  return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
+  return resolveChildAgeRows(res as any, extractBabiesFromRawText);
 };
 
 const getPaymentMethodLabel = (m?: string | null) => {
@@ -490,6 +480,15 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       </div>
                     );
                   })()}
+
+                  {/* Info Moms (kehamilan / nifas) — badge dinamis, bukan teks mentah */}
+                  {momGestationalBadge((reservation as any).mom_gestational_info) && (
+                    <div className="mt-2 pt-2 border-t border-[#e9edef]">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-800 border border-pink-200 text-[11px] font-bold">
+                        {momGestationalBadge((reservation as any).mom_gestational_info)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Baby / Anak info */}
                   {getBabyRows(reservation).length > 0 && (

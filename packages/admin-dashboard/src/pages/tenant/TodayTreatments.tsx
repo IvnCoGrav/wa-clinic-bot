@@ -46,11 +46,16 @@ import {
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
+import {
+  parseTreatmentItems as parseNumberedTreatments,
+} from '../../utils/durationCalculator';
+import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
 
 interface TaskChild {
   name: string;
   rawAgeText: string | null;
   birthDate: string | null;
+  currentAge?: string | null;
 }
 
 interface TaskAddress {
@@ -112,72 +117,6 @@ interface DateMeta {
 
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
-}
-
-/**
- * Helper untuk membersihkan tag buffer dan menghasilkan list numbering bersih
- */
-function parseNumberedTreatments(treatmentDetail: string | null): { items: string[]; totalMinutes: number } {
-  if (!treatmentDetail) return { items: [], totalMinutes: 0 };
-
-  const sanitized = treatmentDetail
-    .replace(/\[\s*total.*?buffer.*?\]/gi, '')
-    .replace(/\[\s*total\s*bufer.*?\]/gi, '')
-    .replace(/\[\s*total\s*\d+m\s*\+\s*buffer.*?\]/gi, '')
-    .replace(/\[\s*buffer.*?\]/gi, '')
-    .replace(/\[\s*bufer.*?\]/gi, '')
-    .replace(/\[\s*total\s*=\s*\d+.*?\]/gi, '')
-    .replace(/\(\+?\d+m\s*buffer\)/gi, '')
-    .replace(/\(\+?\d+m\s*bufer\)/gi, '')
-    .replace(/\+\s*buffer\s*\d+m/gi, '')
-    .replace(/\+\s*bufer\s*\d+m/gi, '')
-    .replace(/\b\d+m\s*buffer\b/gi, '')
-    .replace(/\b\d+m\s*bufer\b/gi, '')
-    .replace(/\btotal\s*bufer\s*=\s*\d+m?\b/gi, '')
-    .replace(/\btotal\s*buffer\s*=\s*\d+m?\b/gi, '')
-    .trim();
-
-  if (!sanitized) return { items: [], totalMinutes: 0 };
-
-  const rawItems = sanitized
-    .split(/\r?\n|,|;|\+|&/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  let totalMins = 0;
-  const cleanItems: string[] = [];
-
-  for (const item of rawItems) {
-    const itemLower = item.toLowerCase();
-    if (itemLower.includes('buffer') || itemLower.includes('bufer') || itemLower.includes('total scheduled')) {
-      continue;
-    }
-
-    const minMatch = item.match(/(\d+)\s*(?:menit|mins?|m\b)/i);
-    const hourMatch = item.match(/(\d+(?:\.\d+)?)\s*(?:jam|hours?|h\b)/i);
-
-    if (minMatch) {
-      totalMins += parseInt(minMatch[1], 10);
-    } else if (hourMatch) {
-      totalMins += Math.round(parseFloat(hourMatch[1]) * 60);
-    }
-
-    const clean = item
-      .replace(/\s*[\(\[\{]\s*\d+\s*(?:menit|mins?|jam|hours?|m|h)\s*[\)\]\}]/gi, '')
-      .replace(/\s*[-–—:]\s*\d+\s*(?:menit|mins?|jam|hours?|m|h)/gi, '')
-      .replace(/\b\d+\s*(?:menit|mins?|jam|hours?|m|h)\b/gi, '')
-      .replace(/^\d+[\.\)\-]\s*/, '')
-      .trim();
-
-    if (clean && !clean.toLowerCase().includes('buffer') && !clean.toLowerCase().includes('bufer')) {
-      cleanItems.push(clean);
-    }
-  }
-
-  return {
-    items: cleanItems.length > 0 ? cleanItems : [sanitized.replace(/\s*\(\d+.*?\)/g, '').trim()].filter(Boolean),
-    totalMinutes: totalMins,
-  };
 }
 
 export const TodayTreatments: React.FC = () => {
@@ -1125,7 +1064,7 @@ export const TodayTreatments: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] transition">
-                          {task.customerName || 'Customer'}
+                          {formatPatientName(task.customerName)}
                         </h3>
                         <span
                           className={`p-1 rounded-md border ${catCfg.badge} inline-flex items-center justify-center shadow-2xs`}
@@ -1211,7 +1150,7 @@ export const TodayTreatments: React.FC = () => {
                           className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800/40 text-[11px]"
                         >
                           <Baby size={11} />
-                          <span>{c.name} {c.rawAgeText ? `(${c.rawAgeText})` : ''}</span>
+                          <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
                         </span>
                       ))
                     )}
@@ -1414,7 +1353,7 @@ export const TodayTreatments: React.FC = () => {
                   )}
                   <div>
                     <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-                      <span>{detailModalTask.customerName || 'Customer'}</span>
+                      <span>{formatPatientName(detailModalTask.customerName)}</span>
                       <span
                         className={`p-1 rounded-md border ${getCategoryIcon(detailModalTask.treatmentCategory).badge} inline-flex items-center justify-center`}
                         title={getCategoryIcon(detailModalTask.treatmentCategory).label}
@@ -1493,7 +1432,7 @@ export const TodayTreatments: React.FC = () => {
                         className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
                       >
                         <Baby size={13} />
-                        <span>{c.name} {c.rawAgeText ? `(${c.rawAgeText})` : ''}</span>
+                        <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
                       </span>
                     ))}
                   </div>

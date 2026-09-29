@@ -69,6 +69,7 @@ import { APP_VERSION, BUILD_TIME } from '../../config/version';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
+import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 
@@ -377,6 +378,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   } | null>(null);
   const [loadingPaymentInfo, setLoadingPaymentInfo] = useState(false);
   const [qrisZoomModal, setQrisZoomModal] = useState(false);
+  const paymentInfoRef = useRef<{
+    qrisImageUrl: string | null;
+    bankAccounts: Array<{ bank: string; accountNumber: string; accountName: string }>;
+    instructions?: string;
+  } | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
@@ -625,20 +631,32 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     return cleanupAudio;
   }, []);
 
+  // Muat info pembayaran (QRIS & rekening) data-driven. Dipakai modal pembayaran
+  // DAN tombol 1-tap QRIS di kartu depan (Fase 3.3), dengan cache ref anti-fetch ganda.
+  const ensurePaymentInfo = useCallback(async () => {
+    if (paymentInfoRef.current) return paymentInfoRef.current;
+    setLoadingPaymentInfo(true);
+    try {
+      const res = await apiRequest('/api/staff/payment-info');
+      if (res && res.success && res.data) {
+        paymentInfoRef.current = res.data;
+        setPaymentInfo(res.data);
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[STAFF] Failed to load payment info:', err);
+    } finally {
+      setLoadingPaymentInfo(false);
+    }
+    return null;
+  }, []);
+
   // Load payment info (QRIS & Bank Accounts) from data-driven endpoint when payment modal opens
   useEffect(() => {
-    if (paymentModalTask && !paymentInfo && !loadingPaymentInfo) {
-      setLoadingPaymentInfo(true);
-      apiRequest('/api/staff/payment-info')
-        .then((res) => {
-          if (res && res.success && res.data) {
-            setPaymentInfo(res.data);
-          }
-        })
-        .catch((err) => console.warn('[STAFF] Failed to load payment info:', err))
-        .finally(() => setLoadingPaymentInfo(false));
+    if (paymentModalTask) {
+      ensurePaymentInfo().catch(() => {});
     }
-  }, [paymentModalTask, paymentInfo, loadingPaymentInfo]);
+  }, [paymentModalTask, ensurePaymentInfo]);
 
   // Daftarkan PWA Web Push Subscription untuk Staff / Terapis jika izin sudah granted
   useEffect(() => {
@@ -873,8 +891,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     const deltaY = endY - start.y;
     const deltaTime = Date.now() - start.time;
 
-    // Ignore slow gestures (> 650ms) or short drags (< 35px) or mostly vertical scrolls
-    if (deltaTime > 650 || Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+    // Abaikan gestur lambat (> 650ms), drag pendek, atau scroll dominan vertikal.
+    // Rasio horizontal diperketat (1.8x) agar scroll diagonal jempol tidak salah
+    // ganti tab. Ambang khusus pergantian TAB dinaikkan ke 60px (edge-swipe drawer
+    // tetap 35px karena dimulai dari tepi kanan layar).
+    if (deltaTime > 650 || Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY) * 1.8) {
       return;
     }
 
@@ -892,6 +913,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       return;
     }
 
+    // Ambang khusus pergantian TAB (lebih ketat dari edge-swipe/drawer).
+    const TAB_SWIPE_MIN = 60;
+    const tabSwipeEngaged = Math.abs(deltaX) >= TAB_SWIPE_MIN;
+
     // Ignore tab/chat swipe if other modals or image zoom are open
     if (
       detailModalTask ||
@@ -906,21 +931,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
     // Case 1: In full-screen mobile chat view -> swipe RIGHT (left-to-right) navigates back to list
     if (mobileView === 'chat' && activeTab === 'today') {
-      if (deltaX > 40) {
+      if (deltaX > TAB_SWIPE_MIN) {
         handleBackToList();
       }
       return;
     }
 
     // Case 2: In tab list view -> swipe left/right switches tabs with directional sliding animation
-    if (mobileView === 'list') {
+    if (mobileView === 'list' && tabSwipeEngaged) {
       const tabs: Array<'today' | 'upcoming' | 'completed'> = ['today', 'upcoming', 'completed'];
       const currentIndex = tabs.indexOf(activeTab);
 
-      if (deltaX < -40 && currentIndex < tabs.length - 1) {
+      if (deltaX < -TAB_SWIPE_MIN && currentIndex < tabs.length - 1) {
         // Swipe Left -> next tab (content slides from right)
         handleTabChange(tabs[currentIndex + 1]);
-      } else if (deltaX > 40 && currentIndex > 0) {
+      } else if (deltaX > TAB_SWIPE_MIN && currentIndex > 0) {
         // Swipe Right -> previous tab (content slides from left)
         handleTabChange(tabs[currentIndex - 1]);
       }
@@ -1507,19 +1532,39 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     if (e) e.stopPropagation();
 
     const patientName = task.customerName || 'Bunda';
-    const confirmed = await confirm({
-      title: 'Selesaikan Kunjungan',
-      message: `Tandai kunjungan & tindakan untuk ${patientName} telah selesai dilakukan?`,
-      confirmText: 'Ya, Kunjungan Selesai',
-      cancelText: 'Batal',
-    });
 
-    if (!confirmed) return;
+    // Safety Guard pelunasan (lapis UI; backend `completeTask` tetap gerbang akhir):
+    // tagihan belum lunas → tawarkan catat pembayaran dulu, bukan langsung selesai.
+    if (task.pricing?.paymentStatus === 'TAGIH_DI_TEMPAT') {
+      const proceedUnpaid = await confirm({
+        title: '⚠️ Pembayaran Belum Lunas',
+        message: `Pasien ${patientName} memiliki tagihan ${formatRupiah(
+          task.pricing.totalFee
+        )} yang belum lunas.\n\nApakah Anda sudah menerima uang pembayaran? Disarankan mencatat pembayaran terlebih dahulu.`,
+        confirmText: 'Ya, Sudah Diterima & Selesaikan',
+        cancelText: 'Catat Pembayaran Dulu',
+        danger: true,
+      });
+      if (!proceedUnpaid) {
+        setPaymentModalTask(task);
+        return;
+      }
+    } else {
+      const confirmed = await confirm({
+        title: 'Selesaikan Kunjungan',
+        message: `Tandai kunjungan & tindakan untuk ${patientName} telah selesai dilakukan?`,
+        confirmText: 'Ya, Kunjungan Selesai',
+        cancelText: 'Batal',
+      });
+      if (!confirmed) return;
+    }
 
     setCompletingVisitId(task.reservationId);
     try {
+      const forceUnpaid = task.pricing?.paymentStatus === 'TAGIH_DI_TEMPAT';
       const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/complete`, {
         method: 'POST',
+        body: JSON.stringify({ forceUnpaid }),
       });
 
       if (res.success) {
@@ -1610,6 +1655,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       toast(`Nomor rekening ${bank} (${accNum}) berhasil disalin! 📋`, 'success');
     }
   };
+
+  // Tombol 1-tap QRIS: tampilkan barcode QRIS layar penuh langsung ke pasien.
+  const handleOpenQrisFast = useCallback(
+    async (task: StaffTask, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      setPaymentModalTask(task);
+      setPaymentMethod('QRIS');
+      const info = await ensurePaymentInfo();
+      if (!info || !info.qrisImageUrl) {
+        toast('QRIS belum tersedia. Hubungi admin untuk mengunggah barcode QRIS.', 'error');
+        return;
+      }
+      setQrisZoomModal(true);
+    },
+    [ensurePaymentInfo, toast]
+  );
 
   // Revoke / Delete for Everyone WhatsApp Message Handler
   const handleRevokeMessage = async (msg: ChatMessage) => {
@@ -2600,13 +2661,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
                         </div>
 
-                        {/* Area Bawah: Alamat, Foto Rumah, & Tombol Chat (KLIK KE BAWAH = CHAT / AKSI) */}
-                        <div
-                          onClick={() => {
-                            if (isChatWindowOpen(task)) handleOpenChat(task);
-                          }}
-                          className={isChatWindowOpen(task) ? 'cursor-pointer' : 'cursor-default'}
-                        >
+                        {/* Area Bawah: Alamat, Foto Rumah, & Tombol Aksi */}
+                        <div>
                           {/* Alamat & Jarak dari Klinik */}
                           <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
                             <div className="flex items-start gap-1.5">
@@ -2630,6 +2686,31 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 </p>
                               )}
                             </div>
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const copyText = `${task.address.fullText}${
+                                  task.address.landmark ? ` (Patokan: ${task.address.landmark})` : ''
+                                }`;
+                                try {
+                                  await navigator.clipboard.writeText(copyText);
+                                  toast('Alamat disalin ke clipboard. Tempel di Waze/Gojek! 📋', 'success');
+                                } catch {
+                                  const ta = document.createElement('textarea');
+                                  ta.value = copyText;
+                                  document.body.appendChild(ta);
+                                  ta.select();
+                                  document.execCommand('copy');
+                                  document.body.removeChild(ta);
+                                  toast('Alamat disalin ke clipboard. Tempel di Waze/Gojek! 📋', 'success');
+                                }
+                              }}
+                              className="p-1.5 rounded-lg text-[#54656f] hover:text-[#008069] hover:bg-white border border-[#e9edef] transition active:scale-95 flex-shrink-0"
+                              title="Salin alamat lengkap untuk Waze/Gojek"
+                            >
+                              <Copy size={12} />
+                            </button>
                           </div>
 
                           {/* Foto Depan Rumah & Patokan Landmark */}
@@ -2700,12 +2781,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-[11px] font-medium border border-[#00a884]/20"
                               >
                                 <Baby size={11} />
-                                <span>{child.name}</span>
+                                <span>{formatPatientName(child.name)}</span>
                                 {child.rawAgeText && (
-                                  <span className="text-[#667781]">({child.rawAgeText})</span>
+                                  <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
                                 )}
                               </span>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Cuplikan Catatan Klinis / Keluhan (dari CS/LiveChat) */}
+                        {task.adminNotes && (
+                          <div className="mb-2 flex items-start gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-medium">
+                            <AlertCircle size={12} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <span className="line-clamp-2" title={task.adminNotes}>
+                              <strong>Keluhan/Catatan:</strong> {task.adminNotes}
+                            </span>
                           </div>
                         )}
 
@@ -2730,19 +2821,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <span>Lunas</span>
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPaymentModalTask(task);
-                              }}
-                              className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-0.5 rounded-full border border-amber-300 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
-                              title="Klik untuk mencatat pembayaran transaksi ini"
-                            >
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                              <CreditCard size={11} className="text-amber-700" />
-                              <span>Tagih di Tempat</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenQrisFast(task, e)}
+                                className="text-[10px] font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] px-2 py-0.5 rounded-full border border-[#00a884]/30 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
+                                title="Tampilkan barcode QRIS langsung ke pasien"
+                              >
+                                <QrCode size={11} />
+                                <span>QRIS</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPaymentModalTask(task);
+                                }}
+                                className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-0.5 rounded-full border border-amber-300 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                                title="Klik untuk mencatat pembayaran transaksi ini"
+                              >
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <CreditCard size={11} className="text-amber-700" />
+                                <span>Tagih di Tempat</span>
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -3632,9 +3734,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-xs font-medium border border-[#00a884]/20"
                                 >
                                   <Baby size={12} />
-                                  <span>{child.name}</span>
+                                  <span>{formatPatientName(child.name)}</span>
                                   {child.rawAgeText && (
-                                    <span className="text-[#667781]">({child.rawAgeText})</span>
+                                    <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
                                   )}
                                 </span>
                               ))}
@@ -3849,9 +3951,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-xs font-medium border border-[#00a884]/20"
                                 >
                                   <Baby size={12} />
-                                  <span>{child.name}</span>
+                                  <span>{formatPatientName(child.name)}</span>
                                   {child.rawAgeText && (
-                                    <span className="text-[#667781]">({child.rawAgeText})</span>
+                                    <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
                                   )}
                                 </span>
                               ))}
@@ -4457,7 +4559,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
                     >
                       <Baby size={13} />
-                      <span>{c.name} {c.rawAgeText ? `(${c.rawAgeText})` : ''}</span>
+                      <span>{formatPatientName(c.name)} {c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
                     </span>
                   ))}
                 </div>

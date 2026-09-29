@@ -11,6 +11,7 @@ import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
+import { formatClinicalAge } from '../../utils/clinicalAge';
 import {
   Users,
   Search,
@@ -1301,7 +1302,7 @@ export const CustomerDatabase: React.FC = () => {
                             <div>
                               <p className="font-bold text-[#111b21] text-xs">{child.name || 'Anak Pasien'}</p>
                               <p className="text-[11px] text-[#667781] mt-0.5">
-                                Usia: <span className="font-semibold text-[#008069]">{child.current_age || child.raw_age_text || 'Tidak tercatat'}</span>
+                                Usia: <span className="font-semibold text-[#008069]">{child.current_age || formatClinicalAge(child.birth_date) || child.raw_age_text || 'Tidak tercatat'}</span>
                               </p>
                             </div>
                             {child.birth_date && (

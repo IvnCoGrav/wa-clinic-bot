@@ -158,6 +158,82 @@ export function extractDurationMinutes(detail?: string | null): number {
 }
 
 /**
+ * Membersihkan tag durasi/buffer internal dari `treatment_detail` LALU memecahnya
+ * menjadi daftar item layanan yang bersih untuk kartu (single source of truth —
+ * sebelumnya diduplikasi lokal di TodayTreatments.tsx dan bocor artefak "[Total ]").
+ *
+ * `totalMinutes` = akumulasi durasi LAYANAN MURNI (tanpa buffer), dipakai untuk
+ * batas "kunjungan lewat jam". Nilai total termasuk buffer tetap dihitung oleh
+ * `extractDurationMinutes`/`resolveReservationDuration`.
+ */
+export function parseTreatmentItems(
+  treatmentDetail: string | null | undefined
+): { items: string[]; totalMinutes: number } {
+  if (!treatmentDetail) return { items: [], totalMinutes: 0 };
+
+  const sanitized = treatmentDetail
+    // Tag bracket yang diawali total/buffer/bufer — mencakup "[Total ]" kosong,
+    // "[Total 60m]", "[Total 120m + Buffer 15m = 135m]", "[Buffer 15m]".
+    .replace(/\[\s*(?:total|buffer|bufer)\b[^\]]*\]/gi, ' ')
+    .replace(/\[\s*\]/g, ' ')
+    .replace(/\(\+?\d+m\s*(?:buffer|bufer)\)/gi, ' ')
+    .replace(/\+\s*(?:buffer|bufer)\s*\d+m/gi, ' ')
+    .replace(/\b\d+m\s*(?:buffer|bufer)\b/gi, ' ')
+    .replace(/\btotal\s*(?:buffer|bufer)\s*=\s*\d+m?\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!sanitized) return { items: [], totalMinutes: 0 };
+
+  const rawItems = sanitized
+    .split(/\r?\n|,|;|\+|&/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  let totalMins = 0;
+  const cleanItems: string[] = [];
+
+  for (const item of rawItems) {
+    const itemLower = item.toLowerCase();
+    if (
+      itemLower.includes('buffer') ||
+      itemLower.includes('bufer') ||
+      itemLower.includes('total scheduled')
+    ) {
+      continue;
+    }
+
+    const minMatch = item.match(/(\d+)\s*(?:menit|mins?|m\b)/i);
+    const hourMatch = item.match(/(\d+(?:\.\d+)?)\s*(?:jam|hours?|h\b)/i);
+
+    if (minMatch) {
+      totalMins += parseInt(minMatch[1], 10);
+    } else if (hourMatch) {
+      totalMins += Math.round(parseFloat(hourMatch[1]) * 60);
+    }
+
+    const clean = item
+      .replace(/\s*[\(\[\{]\s*\d+\s*(?:menit|mins?|jam|hours?|m|h)\s*[\)\]\}]/gi, '')
+      .replace(/\s*[-–—:]\s*\d+\s*(?:menit|mins?|jam|hours?|m|h)/gi, '')
+      .replace(/\b\d+\s*(?:menit|mins?|jam|hours?|m|h)\b/gi, '')
+      .replace(/^\d+[\.\)\-]\s*/, '')
+      .trim();
+
+    if (clean && !clean.toLowerCase().includes('buffer') && !clean.toLowerCase().includes('bufer')) {
+      cleanItems.push(clean);
+    }
+  }
+
+  return {
+    items:
+      cleanItems.length > 0
+        ? cleanItems
+        : [sanitized.replace(/\s*\(\d+.*?\)/g, '').trim()].filter(Boolean),
+    totalMinutes: totalMins,
+  };
+}
+
+/**
  * Durasi efektif sebuah reservasi: utamakan kolom `duration_minutes` dari DB
  * (diisi saat Quick Hold / Buat Reservasi Manual), fallback ke parsing teks
  * `treatment_detail` agar data lama tetap tampil benar.

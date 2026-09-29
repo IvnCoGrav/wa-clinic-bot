@@ -2,7 +2,38 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/semantic-versioning.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+#### 2026-09-29 - Usia Dinamis Real-Time & Pemisahan Entitas Anak vs Moms
+
+- **Konteks:** label usia mati (`36hr`, `23bln`) + data Ibu Hamil (Bella/Fitria) bocor
+  ke tabel `children`. Audit menemukan 4 lapis kebocoran + guard kehamilan inkonsisten
+  (`parseAgeTextToBirthDate` tidak punya guard `isGestationalText` yang dipunyai
+  `parseAgeTextToMonths`) - akar bug "hamil 38 minggu" -> bayi 9 bulan.
+- **Fase 1 - Engine usia (deep module, `src/utils/age-calculator.ts`):**
+  `isGestationalText` (satu sumber kebenaran, dipakai SEMUA parser), `parseAgeTextEstimate`
+  (angka telanjang "8" -> unparseable, rentang "1-2 bulan" -> batas bawah + approximate,
+  "10 bulan kurang 6 hari" -> presisi dikurangi), `formatClinicalAge` presisi hari
+  ("X hari" / "X bulan Y hari" / "X tahun Y bulan"), `computeCurrentAge` on-the-fly dari
+  `rawAgeText + registeredAt` (data lama tanpa birth_date tetap tumbuh), `computeGestationalAge`
+  (<=41 minggu PREGNANT, >41 -> Pasca Salin/Nifas), `resolveMomGestationalInfo` + `extractGestationalWeeks`.
+- **Fase 2 - Pemisahan entitas:** `classifyPatientEntity` (CHILD/MOM/AMBIGUOUS) di
+  `reservation-text-parser.ts`; `buildBabyDetails` menolak baris gestasional;
+  `reservation-lifecycle.service` (seam tunggal semua jalur) & `child.service` filter MOM
+  (defense-in-depth). API `GET /api/admin/reservations` + `/reservation/:id` mengirim
+  `current_age` dinamis + `mom_gestational_info`.
+- **Fase 3 - UI seragam:** util `packages/admin-dashboard/src/utils/clinicalAge.ts`
+  (`formatClinicalAge`, `momGestationalBadge`, `resolveChildAgeRows`) dipakai Reservations,
+  ReservationDetailModal (badge Moms), CustomerDatabase, LiveChatMonitor, TodayTreatments,
+  StaffToday, CustomerProfilePanel. Urutan prioritas `current_age` > estimasi birth_date > raw.
+- **Fase 4 - Rekonsiliasi & test:** `src/scripts/reconcile-children-birth-dates-and-moms.ts`
+  (default DRY-RUN + CSV plan; `--commit` mengisi `birth_date`; baris Moms/ambigu DI-FLAG,
+  tidak dihapus). Test adversarial `tests/unit/dynamic-age-and-gestational-calculator.test.ts`
+  + `tests/unit/patient-entity-classification.test.ts`.
+- **Verifikasi:** `npm run build` (tsc) Exit 0, `packages/admin-dashboard` build Exit 0,
+  full Vitest 4138 passed / 28 skipped. Sisa tech debt dicatat di `docs/KNOWN_ISSUES.md` #164.
+- **Belum dijalankan (butuh server):** rekonsiliasi produksi (localhost DB offline).
+
 
 #### 2026-09-29 — Peta Perjalanan Bidan: Pulse Marker + Garis Rute (reuse, tanpa library/ORS)
 

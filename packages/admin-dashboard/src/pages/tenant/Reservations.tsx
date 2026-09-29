@@ -4,6 +4,7 @@ import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
 import { 
@@ -581,20 +582,9 @@ export const Reservations: React.FC = () => {
     }
   };
 
-  // Baby info resolver
+  // Baby info resolver — usia klinis seragam (util bersama, cermin engine backend)
   const getBabyRows = (res: Reservation | null): Array<{ name: string; age: string; regAge?: string }> => {
-    if (!res) return [];
-    const children = res.customer?.children;
-    if (children && children.length > 0) {
-      return children.map((c) => ({
-        name: c.name,
-        age: c.current_age || c.raw_age_text || '',
-        regAge: c.raw_age_text || undefined,
-      }));
-    }
-    const bd = res.baby_details;
-    if (bd && bd.length > 0) return bd.map((b) => ({ name: b.name, age: b.age }));
-    return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
+    return resolveChildAgeRows(res as any, extractBabiesFromRawText);
   };
 
   const handleSort = (field: 'booking_date' | 'customer' | 'category' | 'status' | 'created_at') => {
@@ -1304,6 +1294,22 @@ export const Reservations: React.FC = () => {
                         <p className="text-xs text-[#54656f] bg-[#f8fafc] p-2.5 rounded-xl border border-[#e9edef] line-clamp-2">
                           {res.treatment_detail}
                         </p>
+                      )}
+
+                      {(momGestationalBadge(res.mom_gestational_info) || getBabyRows(res).length > 0) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {momGestationalBadge(res.mom_gestational_info) && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-pink-50 text-pink-800 border border-pink-200 text-[10px] font-bold">
+                              {momGestationalBadge(res.mom_gestational_info)}
+                            </span>
+                          )}
+                          {getBabyRows(res).map((b, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-semibold">
+                              <Baby size={10} />
+                              {b.name}{b.age ? ` · ${b.age}` : ''}
+                            </span>
+                          ))}
+                        </div>
                       )}
 
                       {res.assigned_staff && (
