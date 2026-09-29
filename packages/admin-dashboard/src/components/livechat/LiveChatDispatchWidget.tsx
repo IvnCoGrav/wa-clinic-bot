@@ -32,7 +32,18 @@ export interface DispatchTripData {
   isStalledOutsideTarget?: boolean;
   geofenceReason?: string | null;
   geofenceDistanceM?: number | null;
+  /** Prediksi keterlambatan (server-computed, murni). */
+  delayStatus?: {
+    isDelayed: boolean;
+    level: 'none' | 'warning' | 'critical';
+    delayMinutes: number;
+    estimatedArrivalIso: string;
+    formattedArrivalWib: string;
+    reason: 'OK' | 'NO_SCHEDULE' | 'NO_ETA';
+  } | null;
   readyText?: string;
+  /** Draf pesan pemberitahuan keterlambatan (DB-driven, siap salin). */
+  delayText?: string;
 }
 
 export interface LiveChatDispatchWidgetProps {
@@ -63,8 +74,12 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
   const [mapOpen, setMapOpen] = useState(false);
 
   const trip = data?.trip || null;
-  const isActive = !!data && !!data.otwSentAt && !data.arrivedAt;
+  // Passive auto-tracking: tampil bila ada data trip meski `otwSentAt` belum
+  // dicatat (Bidan belum klik OTW manual, tetapi telemetry sudah jalan H-30m).
+  const isActive = !!data && (!!data.otwSentAt || trip != null) && !data.arrivedAt;
   const isFresh = trip != null && trip.lastUpdateSec < 60;
+  const delay = data?.delayStatus || null;
+  const isDelayed = !!delay?.isDelayed;
 
   const copyReadyText = async () => {
     const text = (data?.readyText || '').trim();
@@ -92,12 +107,62 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
     }
   };
 
+  const copyDelayText = async () => {
+    const text = (data?.delayText || '').trim();
+    if (!text) {
+      toast('Draf pesan keterlambatan belum tersedia.', 'error');
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      toast('Draf pesan keterlambatan disalin ke clipboard.', 'success');
+    } catch {
+      toast('Gagal menyalin draf pesan keterlambatan.', 'error');
+    }
+  };
+
   if (!isActive) return null;
 
   const speedKmh = trip?.speed != null ? Math.max(0, trip.speed * 3.6) : null;
 
   return (
     <div className="rounded-xl border border-[#e9edef] bg-white shadow-xs p-3 space-y-3">
+      {isDelayed && (
+        <div
+          className={`rounded-lg border px-2.5 py-2 text-[11px] space-y-1.5 ${
+            delay?.level === 'critical'
+              ? 'border-red-300 bg-red-50 text-red-800'
+              : 'border-amber-300 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <div className="flex items-start gap-1.5 font-semibold">
+            <AlertTriangle size={13} className="mt-0.5 flex-shrink-0 animate-pulse" />
+            <span>
+              Bidan{staffName ? ` ${staffName}` : ''} diprediksi terlambat {delay?.delayMinutes} menit
+              {delay?.formattedArrivalWib ? ` (estimasi tiba ±${delay.formattedArrivalWib} WIB)` : ''}.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={copyDelayText}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-md px-2 py-1"
+          >
+            <Copy size={12} /> Salin Pesan Keterlambatan Pasien
+          </button>
+        </div>
+      )}
+
       {data?.isStalledOutsideTarget && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 space-y-1.5">
           <div className="flex items-start gap-1.5 font-semibold">
@@ -168,7 +233,9 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         </div>
       ) : (
         <p className="text-[11px] text-[#667781]">
-          Bidan OTW, menunggu sinyal lokasi pertama...
+          {data?.otwSentAt
+            ? 'Bidan OTW, menunggu sinyal lokasi pertama...'
+            : 'Pemantauan otomatis aktif, menunggu sinyal lokasi pertama...'}
         </p>
       )}
 

@@ -3,6 +3,7 @@ import { staffNotificationService } from '../../src/services/staff-notification.
 import { prisma } from '../../src/db/client';
 import { webPushService } from '../../src/services/web-push.service';
 import { telegramService } from '../../src/services/telegram.service';
+import * as staffNotifConfig from '../../src/config/staff-notification-config';
 
 /**
  * #157f — Pre-Visit Brief tanpa kanal notifikasi: sweep retry tiap siklus tanpa
@@ -13,6 +14,8 @@ import { telegramService } from '../../src/services/telegram.service';
 describe('Pre-Visit Brief — observabilitas kanal (#157f)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Suite ini menguji jalur kanal Telegram; aktifkan kanal eksplisit (default produksi = OFF).
+    vi.spyOn(staffNotifConfig, 'getStaffNotificationConfig').mockResolvedValue({ telegramEnabled: true });
   });
 
   afterEach(() => {

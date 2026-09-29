@@ -357,6 +357,16 @@ export const LiveChatMonitor: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<LiveChatItem[]>([]);
+  // Early warning keterlambatan Bidan (SSE): banner pulse di header + toast sekali.
+  const [delayAlert, setDelayAlert] = useState<{
+    reservationId: string;
+    staffName?: string;
+    patientName?: string;
+    level: 'warning' | 'critical';
+    delayMinutes: number;
+    formattedArrivalWib?: string;
+  } | null>(null);
+  const delayAlertedRef = useRef<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       const urlParam = new URLSearchParams(window.location.search).get('conversationId') || new URLSearchParams(window.location.search).get('id');
@@ -2245,6 +2255,42 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           if (reservationId && dispatchReservationIdRef.current === reservationId) {
             loadDispatchTripRef.current?.(reservationId);
           }
+        } else if (type === 'staff.trip_delay_warning') {
+          const reservationId = payload?.reservationId;
+          if (!reservationId) return;
+          const level = payload?.level === 'critical' ? 'critical' : 'warning';
+          setDelayAlert({
+            reservationId,
+            staffName: payload?.staffName,
+            patientName: payload?.patientName,
+            level,
+            delayMinutes: Number(payload?.delayMinutes) || 0,
+            formattedArrivalWib: payload?.formattedArrivalWib,
+          });
+          // Toast SEKALI per reservasi (dedupe) — ikon pulse di header tetap tampil.
+          if (!delayAlertedRef.current.has(reservationId)) {
+            delayAlertedRef.current.add(reservationId);
+            const who = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
+            const eta = payload?.formattedArrivalWib ? ` (estimasi tiba ±${payload.formattedArrivalWib} WIB)` : '';
+            toast(
+              `⚠️ ${who} diprediksi terlambat ${Number(payload?.delayMinutes) || 0} menit${eta}.`,
+              level === 'critical' ? 'error' : 'info'
+            );
+          }
+          if (dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
+        } else if (type === 'staff.trip_arrived') {
+          const reservationId = payload?.reservationId;
+          if (reservationId) {
+            setDelayAlert((prev) => (prev && prev.reservationId === reservationId ? null : prev));
+          }
+          const staffName = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
+          const patientName = payload?.patientName ? `Bunda ${payload.patientName}` : 'pasien';
+          toast(`${staffName} telah tiba di lokasi ${patientName}.`, 'success');
+          if (reservationId && dispatchReservationIdRef.current === reservationId) {
+            loadDispatchTripRef.current?.(reservationId);
+          }
         }
       },
     });
@@ -3053,7 +3099,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   // Refresh berkala ringan (10s) hanya bila OTW aktif — jaring bila SSE terputus.
   useEffect(() => {
-    if (!dispatchTrip?.otwSentAt || dispatchTrip?.arrivedAt) return;
+    if ((!dispatchTrip?.otwSentAt && !dispatchTrip?.trip) || dispatchTrip?.arrivedAt) return;
     const id = dispatchReservationIdRef.current;
     if (!id) return;
     const t = setInterval(() => {
@@ -3062,7 +3108,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     }, 10_000);
     return () => clearInterval(t);
-  }, [dispatchTrip?.otwSentAt, dispatchTrip?.arrivedAt, loadDispatchTrip]);
+  }, [dispatchTrip?.otwSentAt, dispatchTrip?.trip, dispatchTrip?.arrivedAt, loadDispatchTrip]);
 
   // Smart Micro-Pill: reset tiap ganti chat/reservasi; auto-collapse 3 detik khusus mobile
   useEffect(() => {
@@ -3532,6 +3578,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
+          {/* Early Warning keterlambatan Bidan — ikon pulse persisten selama delay aktif. */}
+          {delayAlert && (
+            <button
+              type="button"
+              onClick={() => {
+                const conv = chats.find((c) => c.conversationId && (c as any).activeConfirmedReservation?.id === delayAlert.reservationId);
+                if (conv?.conversationId) setSelectedId(conv.conversationId);
+              }}
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                delayAlert.level === 'critical'
+                  ? 'bg-red-50 border-red-300 text-red-700'
+                  : 'bg-amber-50 border-amber-300 text-amber-700'
+              }`}
+              title={`Bidan${delayAlert.staffName ? ' ' + delayAlert.staffName : ''} diprediksi terlambat ${delayAlert.delayMinutes} menit${delayAlert.formattedArrivalWib ? ' (tiba ±' + delayAlert.formattedArrivalWib + ' WIB)' : ''}`}
+            >
+              <AlertTriangle size={12} className="animate-pulse" />
+              <span>Telat {delayAlert.delayMinutes}m</span>
+            </button>
+          )}
         </div>
 
         {/* Controls: Internal Chatbot Toggle + Export */}
@@ -3663,6 +3728,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
                     <span>{sseConnected ? 'Live' : 'Offline'}</span>
                   </div>
+                  {delayAlert && (
+                    <div
+                      className={`flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                        delayAlert.level === 'critical'
+                          ? 'bg-red-50 border-red-300 text-red-700'
+                          : 'bg-amber-50 border-amber-300 text-amber-700'
+                      }`}
+                      title={`Bidan diprediksi terlambat ${delayAlert.delayMinutes} menit`}
+                    >
+                      <AlertTriangle size={11} className="animate-pulse" />
+                      <span>{delayAlert.delayMinutes}m</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center space-x-1.5">
@@ -5425,8 +5503,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             )}
           </div>
 
-          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (hanya saat OTW aktif) */}
-          {dispatchTrip && dispatchTrip.otwSentAt && !dispatchTrip.arrivedAt && (
+          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (OTW manual ATAU passive auto-tracking) */}
+          {dispatchTrip && (dispatchTrip.otwSentAt || dispatchTrip.trip) && !dispatchTrip.arrivedAt && (
             <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 p-2 overflow-y-auto">
               <div className="w-full">
                 <LiveChatDispatchWidget
@@ -5573,8 +5651,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     ) : null}
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
-                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>
-                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || selectedChat?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
+                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat Lengkap</p>
+                        <p className="font-medium text-[#111b21]">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
+                        {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
+                          <p className="text-[11px] text-[#008069] mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
+                        )}
+                        {customerDetailData?.kelurahan && (
+                          <p className="text-[10px] text-[#8696a0] mt-0.5">Kel. {customerDetailData.kelurahan}{customerDetailData?.kecamatan ? `, Kec. ${customerDetailData.kecamatan}` : ''}</p>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
@@ -5829,6 +5913,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   kelurahan: (selectedChat as any).kelurahan || null,
                   kecamatan: (selectedChat as any).kecamatan || null,
                   kota: (selectedChat as any).kota || null,
+                  address: (selectedChat as any).address || (selectedChat as any).preferences?.address || null,
+                  preferences: (selectedChat as any).preferences || {},
                   children: (selectedChat as any).children || [],
                   ongkir: (selectedChat as any).ongkir ?? 0,
                   distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
@@ -5839,6 +5925,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
           initialBabies={quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined}
           initialNotes={quickBookingExtracted?.treatmentName && quickBookingExtracted.treatmentName.trim() ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
+          initialAddress={quickBookingExtracted?.address || (selectedChat as any)?.address || (selectedChat as any)?.preferences?.address || null}
+          initialLandmark={(selectedChat as any)?.preferences?.landmark || (selectedChat as any)?.preferences?.address_notes || null}
           onSuccess={async (newRes) => {
             setShowQuickBookingModal(false);
             setConvertingHoldId(null);

@@ -82,6 +82,76 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('address diteruskan ke lifecycle (preferences.address) & landmark di-persist ke customer', async () => {
+    const customer = {
+      id: 'cust-addr', tenant_id: DEFAULT_TENANT_ID, phone: `6289913${Date.now()}`, name: 'Bunda Suciani',
+    };
+    const reservation = {
+      id: `res_addr_${Date.now()}`, tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id,
+      treatment_category: 'BABY', treatment_detail: 'Pijat Bayi', booking_date: null,
+      raw_text: '[Admin Manual] BABY: Pijat Bayi', status: 'confirmed', created_at: new Date(), updated_at: new Date(),
+    };
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(customer as any);
+    vi.mocked(prisma.reservation.create).mockResolvedValueOnce(reservation as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+    const lifecycleSpy = vi.spyOn(reservationLifecycleService, 'onReservationCreated').mockResolvedValue(undefined);
+    const updateCustomerSpy = vi.spyOn(customerService, 'updateCustomer').mockResolvedValue({} as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: customer.id,
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi',
+        address: 'jalan kedungklinter 1 80',
+        landmark: 'Rolling door putih / pagar stainless, yg jual kusen',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(lifecycleSpy).toHaveBeenCalledWith(expect.objectContaining({
+      address: 'jalan kedungklinter 1 80',
+      kelurahan: customer.kelurahan || undefined,
+    }));
+    expect(updateCustomerSpy).toHaveBeenCalledWith(
+      customer.id,
+      expect.objectContaining({ landmark: 'Rolling door putih / pagar stainless, yg jual kusen' }),
+      DEFAULT_TENANT_ID
+    );
+  });
+
+  it('adversarial: payload tanpa address/landmark tidak memanggil updateCustomer landmark', async () => {
+    const customer = {
+      id: 'cust-noaddr', tenant_id: DEFAULT_TENANT_ID, phone: `6289914${Date.now()}`, name: 'Bunda NoAddr',
+    };
+    const reservation = {
+      id: `res_noaddr_${Date.now()}`, tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id,
+      treatment_category: 'BABY', treatment_detail: 'Pijat Bayi', booking_date: null,
+      raw_text: '[Admin Manual] BABY: Pijat Bayi', status: 'confirmed', created_at: new Date(), updated_at: new Date(),
+    };
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(customer as any);
+    vi.mocked(prisma.reservation.create).mockResolvedValueOnce(reservation as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+    const lifecycleSpy = vi.spyOn(reservationLifecycleService, 'onReservationCreated').mockResolvedValue(undefined);
+    const updateCustomerSpy = vi.spyOn(customerService, 'updateCustomer').mockResolvedValue({} as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: { customerId: customer.id, treatmentCategory: 'BABY', treatmentDetail: 'Pijat Bayi' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(lifecycleSpy).toHaveBeenCalledWith(expect.objectContaining({ address: undefined }));
+    const landmarkCalls = updateCustomerSpy.mock.calls.filter((c) => (c[1] as any)?.landmark !== undefined);
+    expect(landmarkCalls.length).toBe(0);
+  });
+
   it('treatmentCategory invalid → 400', async () => {
     const app = buildApp();
     const res = await app.inject({

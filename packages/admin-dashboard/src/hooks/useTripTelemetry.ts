@@ -15,7 +15,12 @@ import { apiRequest } from '../services/api';
  */
 
 const SEND_INTERVAL_MS = 25_000;
-const MIN_ACCURACY_M = 200;
+/**
+ * Ambang akurasi GPS maksimum (meter) — selaras backend
+ * (`GPS_ACCURACY_MAX_M` di staff-trip-tracking.service.ts). Ping di atas ini
+ * dibuang agar geofence kedatangan tidak dipicu oleh drift GPS.
+ */
+const MIN_ACCURACY_M = 100;
 
 export interface TelemetryStatus {
   active: boolean;
@@ -40,6 +45,10 @@ export function useTripTelemetry() {
   const lastPayloadRef = useRef<{ lat: number; lng: number; speed?: number | null; heading?: number | null; accuracy?: number | null } | null>(null);
   const lastSentAtRef = useRef<number>(0);
   const reservationIdRef = useRef<string | null>(null);
+  /** Menunjuk `stopTelemetry` (didefinisikan setelah `flush`) untuk auto-stop geofence. */
+  const stopTelemetryRef = useRef<(() => Promise<void>) | null>(null);
+  /** Callback opsional saat backend mengirim `autoStop` (tiba di radius pasien). */
+  const onAutoStopRef = useRef<((reservationId: string) => void) | null>(null);
 
   const requestWakeLock = useCallback(async () => {
     try {
@@ -70,11 +79,21 @@ export function useTripTelemetry() {
     if (!force && now - lastSentAtRef.current < SEND_INTERVAL_MS - 1000) return;
     lastSentAtRef.current = now;
     try {
-      await apiRequest('/api/staff/telemetry', {
+      const res = await apiRequest('/api/staff/telemetry', {
         method: 'POST',
         body: JSON.stringify({ reservationId, ...payload }),
       });
       setStatus((prev) => ({ ...prev, lastSentAt: now, lastError: null }));
+      // Auto-stop geofence: backend mendeteksi Bidan sudah di radius pasien →
+      // matikan pemancar (privasi + baterai). Status kedatangan resmi tetap manual.
+      if (res?.autoStop === true) {
+        try {
+          onAutoStopRef.current?.(reservationId);
+        } catch {}
+        try {
+          await stopTelemetryRef.current?.();
+        } catch {}
+      }
     } catch (err: any) {
       // Silent-fail: jangan ganggu Bidan yang sedang menyetir.
       setStatus((prev) => ({ ...prev, lastError: err?.message || 'gagal kirim' }));
@@ -114,9 +133,13 @@ export function useTripTelemetry() {
     }
   }, [removeVisibilityHandler]);
 
+  // Daftarkan referensi agar `flush` (didefinisikan lebih dulu) bisa memanggil stop.
+  stopTelemetryRef.current = stopTelemetry;
+
   const startTelemetry = useCallback(
-    async (reservationId: string) => {
+    async (reservationId: string, onAutoStop?: (reservationId: string) => void) => {
       if (!reservationId) return;
+      onAutoStopRef.current = onAutoStop || null;
       // Restart bersih bila sudah aktif untuk reservasi lain.
       if (reservationIdRef.current && reservationIdRef.current !== reservationId) {
         await stopTelemetry();

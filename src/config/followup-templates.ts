@@ -20,6 +20,10 @@ export interface FollowUpTemplateParams {
   areaName?: string;
   /** Estimasi menit tiba (untuk template status dispatch CS). */
   etaMinutes?: number | string;
+  /** Estimasi keterlambatan menit (untuk template pemberitahuan telat CS). */
+  delayMinutes?: number | string;
+  /** Estimasi jam tiba WIB (untuk template pemberitahuan telat CS). */
+  arrivalTime?: string;
 }
 
 export type FollowUpTemplateType =
@@ -38,7 +42,9 @@ export type FollowUpTemplateType =
   | 'MILESTONE_9M'
   | 'MILESTONE_12M'
   | 'STAFF_OTW'
-  | 'STAFF_TRIP_STATUS';
+  | 'STAFF_ARRIVAL'
+  | 'STAFF_TRIP_STATUS'
+  | 'STAFF_TRIP_DELAY';
 
 export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   FollowUpTemplateType,
@@ -194,6 +200,16 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Halo Bunda ${name || '{name}'}! ✨ ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah OTW ke lokasi Bunda. Mohon disiapkan tempat yang nyaman untuk perawatan ya Bunda. Terimakasih! 🙏`,
   ],
 
+  // 14b. Pesan Terapis Tiba di Lokasi Pasien (Sudah Sampai)
+  STAFF_ARRIVAL: [
+    ({ name, therapistName, clinicName }: any) =>
+      `Halo Bunda ${name || '{name}'}, saya ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah sampai di depan rumah/lokasi Bunda ya 🙏`,
+    ({ name, therapistName, clinicName }: any) =>
+      `Halo Bunda ${name || '{name}'}! 🚗 ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah tiba di depan rumah Bunda. Mohon dibukakan pintunya ya Bun, terima kasih 🙏`,
+    ({ name, therapistName, clinicName }: any) =>
+      `Bunda ${name || '{name}'}, ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah sampai di lokasi Bunda ya. Kami siap untuk treatmentnya sekarang 🙏`,
+  ],
+
   // 15. Pesan Status Perjalanan Terapis untuk CS (jawaban siap kirim saat
   // pasien bertanya "sudah sampai mana?"). Data-driven: nama area & ETA
   // di-inject dari state trip, bukan hafalan kalimat di kode frontend.
@@ -204,6 +220,17 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `${name ? `Bunda ${name}` : 'Bunda'}, Bidan kami saat ini berada di sekitar ${areaName || '{areaName}'} dan diperkirakan tiba sekitar ${etaMinutes || '{etaMinutes}'} menit lagi ya Bun. Terima kasih sudah menunggu 🙏`,
     ({ name, areaName, etaMinutes }: any) =>
       `Siap ${name ? `Bunda ${name}` : 'Bunda'}, pantauan kami Bidan sudah di ${areaName || '{areaName}'}, estimasi ${etaMinutes || '{etaMinutes}'} menit menuju lokasi Bunda ya. Ditunggu sebentar lagi ya Bun 😊`,
+  ],
+
+  // 16. Pemberitahuan keterlambatan Bidan ke pasien (draf siap kirim CS).
+  // Data-driven: estimasi menit & jam tiba di-inject dari perhitungan ETA.
+  STAFF_TRIP_DELAY: [
+    ({ name, delayMinutes, arrivalTime }: any) =>
+      `Mohon maaf ya ${name ? 'Bunda ' + name : 'Bunda'}, Bidan kami sedang dalam perjalanan dan sedikit tertahan. Estimasi tiba sekitar ${arrivalTime || 'sebentar lagi'} WIB (sekitar ${delayMinutes || 'beberapa'} menit lagi). Mohon ditunggu sebentar ya Bunda 🙏`,
+    ({ name, delayMinutes, arrivalTime }: any) =>
+      `Halo ${name ? 'Bunda ' + name : 'Bunda'}, terima kasih sudah menunggu. Bidan kami diperkirakan tiba sekitar pukul ${arrivalTime || 'sebentar lagi'} WIB ya Bun, kurang lebih ${delayMinutes || 'beberapa'} menit lagi. Mohon bersabar sebentar ya Bunda 🙏`,
+    ({ name, delayMinutes, arrivalTime }: any) =>
+      `Mohon maaf atas keterlambatannya ${name ? 'Bunda ' + name : 'Bunda'}. Bidan kami masih dalam perjalanan menuju lokasi, estimasi tiba sekitar ${arrivalTime || 'sebentar lagi'} WIB (${delayMinutes || 'beberapa'} menit lagi). Terima kasih atas pengertiannya ya Bunda 🙏`,
   ],
 };
 

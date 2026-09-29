@@ -212,6 +212,12 @@ describe('Staff Chat Window Lifecycle (H-3 jam s/d +1 jam, cut ganti hari)', () 
       vi.clearAllMocks();
       clearStaffChatWindowConfigCache();
       vi.spyOn(staffChatConfig, 'isWithinWibHourRange').mockReturnValue(true);
+      // Fokus suite ini = gate jendela chat; percakapan diasumsikan dipegang manusia
+      // (Mandat In-System PWA Only: push staf hanya saat is_human_handling=true).
+      (prisma.conversation.findUnique as any).mockResolvedValue({
+        is_human_handling: true,
+        current_state: 'HUMAN_HANDLING',
+      });
     });
 
     it('jadwal 5 jam lagi: push staf dibatalkan, push admin tetap terkirim', async () => {

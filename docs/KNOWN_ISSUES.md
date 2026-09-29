@@ -3,6 +3,60 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 167. [Notifikasi Terapis] Sisa debt Mandat In-System PWA Only (2026-09-29) - OPEN (sebagian sengaja)
+
+- **Konteks:** Eliminasi kebocoran notifikasi ke Bidan Terapis dieksekusi 3 lapis
+  fondasional: (1) kill-switch Telegram eksternal tenant-aware
+  (`src/config/staff-notification-config.ts`, DEFAULT OFF); (2) gate deterministik
+  `is_human_handling` di `inbound-notification-router.service.ts` (push staf HANYA
+  saat percakapan dipegang manusia, fail-closed bila status tak pasti); (3) filter
+  audio/banner PWA di `StaffToday.tsx` (hanya saat `isHumanHandling`). Lihat CHANGELOG.
+- **167a — Telegram pairing lama masih tersimpan di DB (OPEN, sengaja):** Kolom
+  `Staff.telegram_chat_id` / `telegram_pairing_token` TIDAK dihapus (kebijakan "PWA
+  Only" ditegakkan di lapisan kode, bukan dengan memusnahkan data — rollback/audit
+  tetap mungkin). Untuk mengaktifkan kembali Telegram per-tenant:
+  `Tenant.settings.staffNotification.telegramEnabled = true` (butuh admin UI/seed).
+- **167b — Isolasi supervisor dari aliran monitoring pasif (OPEN):** Supervisor masih
+  menerima `message.created` untuk SEMUA percakapan tenant (by design:
+  `assertConversationOwnedByStaffToday` supervisor override + `scope=all`). Karena
+  audio/banner kini di-gate `isHumanHandling`, notifikasi supervisor hanya muncul
+  untuk percakapan yang benar-benar dieskalasi ke manusia — bukan banjir monitoring.
+  Bila tenant butuh isolasi penuh (supervisor senyap total saat tidak membuka chat),
+  tambah preferensi per-supervisor (mis. `Staff.settings.silentMonitoring`).
+- **167c — Nomor WhatsApp staf internal (RESOLVED 2026-09-29):** ditambahkan kolom
+  `Customer.is_internal_staff` (migrasi `20260929150000_add_internal_staff`, backfill
+  ternormalisasi digit dari `Staff.phone`) + `customerService.markInternalStaffCustomer`
+  (dipanggil saat staf dibuat). Percakapan staf internal kini dikecualikan dari MQL,
+  follow-up sliding window, push CRM (`message.service.ts`), dan Meta CAPI
+  (`capi.service.ts` CAPI GUARD). Sisa: staf yang dibuat SEBELUM migrasi hanya
+  tertandai via backfill SQL (tanpa pemicu ulang otomatis); bila perlu, jalankan
+  ulang backfill atau tandai manual per-staf.
+- **167d — Verifikasi perangkat nyata BELUM (OPEN):** Uji getar/dering/banner di HP
+  Bidan nyata & deploy produksi belum dilakukan. Frontend tidak punya harness test
+  (tanpa jsdom/testing-library), jadi filter PWA diverifikasi via review + build.
+
+## 166. [Dispatch Tracking] Ambang operasional auto-start/geofence/delay masih global (2026-09-29) - OPEN (sengaja)
+
+- **Konteks:** Upgrade auto-start telemetry H-30, auto-off geofence 50m, dan early
+  warning keterlambatan CS dieksekusi (lihat CHANGELOG). Ambangnya masih konstanta
+  global di `src/services/staff-trip-tracking.service.ts`:
+  `ARRIVAL_RADIUS_M=50`, `ARRIVAL_CONSECUTIVE_PING=2`, `GPS_ACCURACY_MAX_M=100`,
+  `PRE_TRIP_WINDOW_MIN=30`, `DELAY_WARN_MIN=20`, `DELAY_CRITICAL_MIN=30`.
+- **166a — Belum tenant-aware (OPEN, sengaja):** idealnya dibaca dari `ClinicPolicy`
+  per-tenant. Sesuai Confirmation Gate: ditunda (tanpa migrasi), karena solusi
+  tenant-aware butuh kolom/tabel kebijakan baru. Ada `TODO(tenant-aware)` di blok
+  konstanta.
+- **166b — Auto-stop 50m TIDAK mengubah `arrived_at` (by design):** `staff.trip_arrived`
+  hanya sinyal indikator bagi CS + mematikan pemancar pelacakan; status kedatangan
+  resmi tetap tombol manual bidan (mengirim WA). Jangan disamakan.
+- **166c — Web Push keterlambatan ditunda (OPEN):** SSE + ikon pulse header dianggap
+  cukup; web push untuk CS yang menutup tab ditunda agar tidak ada notifikasi ganda
+  dengan SSE (`src/services/web-push.service.ts` belum di-wire ke event ini).
+- **166d — Dwell hanya berbasis ping (OPEN):** anti false-stop memakai 2 ping berturut
+  dalam radius, belum memakai jendela waktu eksplisit (mis. ≥60 detik). Bila di
+  lapangan terbukti masih sensitif, tambah gerbang durasi.
+- **Catatan:** uji perangkat nyata (HP Bidan, GPS indoor) & deploy produksi BELUM dilakukan.
+
 ## 165. [Kartu Tugas Terapis & Itinerary] Sisa tech debt perbaikan data jadwal + UX mobile (2026-09-29)
 
 - **Konteks:** Perbaikan fondasional multi-child, rute berantai per-terapis,
@@ -35,6 +89,29 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   memakai `maps/search/?api=1&query=`. Dikonsolidasi ke helper tunggal
   `buildMapsUrls(lat,lng)` di `staff-reservation.service.ts` (3 titik).
 - **Catatan:** Uji perangkat nyata (HP Bidan) & deploy produksi BELUM dilakukan.
+
+## 166. [Alamat Jalan & Patokan] Sisa tech debt sinkronisasi preferences.address/landmark (2026-09-29) - OPEN (sebagian)
+
+- **Konteks:** perbaikan fondasional alamat jalan fisik + patokan (lihat CHANGELOG
+  2026-09-29). 5 caller diperbaiki, API + UI diperluas, data produksi Bunda suciani
+  di-heal via endpoint beraudit. Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
+- **166a — Ekstraksi patokan dari chat belum ada (OPEN, sengaja):** `initialLandmark`
+  pada modal reservasi selalu `null` saat dibuat dari chat, karena `ParsedReservation`
+  (`reservation-text-parser.ts`) dan `ExtractedScheduleData` (`chatScheduleExtractor.ts`)
+  TIDAK mengekstrak "patokan/landmark/ciri rumah". Saat ini patokan diisi manual atau
+  dari DB. Fondasional: tambah ekstraksi label generik `patokan|landmark|ciri|tanda rumah`
+  di kedua parser (blast radius 2 file + test adversarial multi-frasa).
+- **166b — Ekstraksi alamat admin-side (`chatScheduleExtractor`) tetap regex baris form:**
+  pola `Alamat & Shareloc :` memadai untuk format form resmi; chat bebas tanpa label form
+  tidak diekstrak ke `initialAddress`. Bila perlu, gunakan entity extractor semantik,
+  bukan menambah regex per-kasus.
+- **166c — Recovery alamat untuk form tanpa reservasi:** Fase 2 enrichment hanya
+  mem-persist `preferences.address` bila reservasi belum dibuat. Bila parse form gagal
+  total (bukan sekadar geocode), alamat tidak tertangkap — bergantung parser.
+- **166d — Latent type debt `babies` (RESOLVED 2026-09-29):** `POST /api/admin/reservation`
+  memetakan `{ name, ageText }` ke `BabyDetail` yang mengharuskan `age`, sehingga usia
+  bayi yang dibuat admin tidak pernah terisi. Diperbaiki (`ageText → age`); error tsc
+  laten sebelumnya tertutup cache inkremental (kini build bersih).
 
 ## 164. [Age Engine & Entitas Moms] Sisa tech debt transformasi usia dinamis (2026-09-29) - OPEN (sebagian)
 

@@ -9,6 +9,7 @@ import {
 } from '../config/staff-chat-window-config';
 import { getRollingFollowUpMessage, getRollingVariant } from '../config/followup-templates';
 import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
+import { ensureStaffSignature } from '../utils/staff-signature';
 import { computeCurrentAge } from '../utils/age-calculator';
 
 export interface StaffTaskChild {
@@ -1097,6 +1098,29 @@ export class StaffReservationService {
   }
 
   /**
+   * Render terpadu pesan perjalanan terapis (OTW / tiba di lokasi):
+   * 1. Sanitasi nama pasien (anti-sapaan ganda "Bunda Bunda") + fallback "Bunda".
+   * 2. Substitusi placeholder template tenant (data-driven, bisa diedit Super Admin).
+   * 3. Jaring pengaman deterministik `Bunda Bunda` -> `Bunda`.
+   * 4. Sematkan tanda tangan `~ [Nama Terapis]` di baris paling bawah (idempoten).
+   */
+  private static renderStaffTripMessage(
+    templateText: string,
+    params: { patientName: string; therapistName: string; clinicName: string }
+  ): string {
+    const cleanName = sanitizeCustomerNameForGreeting(params.patientName || '') || 'Bunda';
+    const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
+    const rendered = templateText
+      .replace(/\{\{?patientName\}\}?/gi, cleanName)
+      .replace(/\{\{?name\}\}?/gi, cleanName)
+      .replace(/\{\{?therapistName\}\}?/gi, therapistName)
+      .replace(/\{\{?clinicName\}\}?/gi, params.clinicName)
+      .replace(/Bunda\s+Bunda/gi, 'Bunda')
+      .trim();
+    return ensureStaffSignature(rendered, therapistName);
+  }
+
+  /**
    * Mengambil dan merender template pesan OTW (Menuju Lokasi) khusus tenant.
    * Mendukung kustomisasi dari Super Admin (`FollowUpTemplate` tipe `STAFF_OTW`).
    */
@@ -1104,6 +1128,7 @@ export class StaffReservationService {
     tenantId: string = DEFAULT_TENANT_ID,
     params: { patientName: string; therapistName: string }
   ): Promise<string> {
+    const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
     try {
       // 1. Ambil template kustom tenant dari DB
       const customTpl = await prisma.followUpTemplate.findUnique({
@@ -1123,20 +1148,66 @@ export class StaffReservationService {
       });
       const clinicName = tenant?.name || 'Kala Spa Baby & Mom Homecare';
 
-      let templateText = customTpl?.text;
-      if (!templateText) {
-        templateText = `Halo Bunda {patientName}, saya {therapistName} dari {clinicName} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
-      }
+      const templateText =
+        customTpl?.text ||
+        `Halo Bunda {patientName}, saya {therapistName} dari {clinicName} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
 
-      // 3. Render placeholders
-      return templateText
-        .replace(/\{\{?patientName\}\}?/gi, params.patientName || 'Bunda')
-        .replace(/\{\{?name\}\}?/gi, params.patientName || 'Bunda')
-        .replace(/\{\{?therapistName\}\}?/gi, params.therapistName || 'Bidan Terapis')
-        .replace(/\{\{?clinicName\}\}?/gi, clinicName);
+      return StaffReservationService.renderStaffTripMessage(templateText, {
+        patientName: params.patientName,
+        therapistName,
+        clinicName,
+      });
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error rendering OTW template:', err.message);
-      return `Halo Bunda ${params.patientName || 'Bunda'}, saya ${params.therapistName || 'Bidan Terapis'} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
+      return StaffReservationService.renderStaffTripMessage(
+        `Halo Bunda {patientName}, saya {therapistName} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
+        { patientName: params.patientName, therapistName, clinicName: 'klinik' }
+      );
+    }
+  }
+
+  /**
+   * Mengambil dan merender template pesan "Sudah Sampai" (kedatangan terapis).
+   * Data-driven: template bisa dikustom Super Admin (`FollowUpTemplate` tipe
+   * `STAFF_ARRIVAL`) — sama seperti `STAFF_OTW`, tanpa hardcode di kode.
+   */
+  static async getArrivalMessageText(
+    tenantId: string = DEFAULT_TENANT_ID,
+    params: { patientName: string; therapistName: string }
+  ): Promise<string> {
+    const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
+    try {
+      const customTpl = await prisma.followUpTemplate.findUnique({
+        where: {
+          tenant_id_type_variant: {
+            tenant_id: tenantId,
+            type: 'STAFF_ARRIVAL',
+            variant: 1,
+          },
+        },
+      });
+
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
+      const clinicName = tenant?.name || 'Kala Spa Baby & Mom Homecare';
+
+      const templateText =
+        customTpl?.text ||
+        `Halo Bunda {patientName}, saya {therapistName} dari {clinicName} sudah sampai di depan rumah/lokasi Bunda ya 🙏`;
+
+      return StaffReservationService.renderStaffTripMessage(templateText, {
+        patientName: params.patientName,
+        therapistName,
+        clinicName,
+      });
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error rendering arrival template:', err.message);
+      return StaffReservationService.renderStaffTripMessage(
+        `Halo Bunda {patientName}, saya {therapistName} sudah sampai di depan rumah/lokasi Bunda ya 🙏`,
+        { patientName: params.patientName, therapistName, clinicName: 'klinik' }
+      );
     }
   }
 
@@ -1180,6 +1251,52 @@ export class StaffReservationService {
         name: cleanName,
         areaName,
         etaMinutes,
+        index: 0,
+      }).text;
+    }
+  }
+
+  /**
+   * Merender draf pesan pemberitahuan keterlambatan Bidan ke pasien (siap kirim CS).
+   * Data-driven: estimasi menit & jam tiba di-inject; template bisa dikustom Super
+   * Admin (`STAFF_TRIP_DELAY`). Nama template TIDAK hardcode di frontend.
+   */
+  static async getTripDelayMessageText(
+    tenantId: string = DEFAULT_TENANT_ID,
+    params: { patientName: string; delayMinutes?: number | null; arrivalTime?: string | null; variantKey?: string }
+  ): Promise<string> {
+    const cleanName = sanitizeCustomerNameForGreeting(params.patientName || '');
+    const delayMinutes =
+      params.delayMinutes != null && Number.isFinite(Number(params.delayMinutes))
+        ? String(Math.max(1, Math.round(Number(params.delayMinutes))))
+        : 'beberapa';
+    const arrivalTime = (params.arrivalTime || '').trim() || 'sebentar lagi';
+    try {
+      const variant = getRollingVariant(params.variantKey || params.patientName || '', new Date()) || 1;
+      const customTpl = await prisma.followUpTemplate.findUnique({
+        where: {
+          tenant_id_type_variant: { tenant_id: tenantId, type: 'STAFF_TRIP_DELAY', variant },
+        },
+      });
+      if (customTpl?.text) {
+        return customTpl.text
+          .replace(/\{\{?name\}\}?/gi, cleanName || 'Bunda')
+          .replace(/\{\{?patientName\}\}?/gi, cleanName || 'Bunda')
+          .replace(/\{\{?delayMinutes\}\}?/gi, delayMinutes)
+          .replace(/\{\{?arrivalTime\}\}?/gi, arrivalTime);
+      }
+      return getRollingFollowUpMessage('STAFF_TRIP_DELAY', {
+        name: cleanName,
+        delayMinutes,
+        arrivalTime,
+        index: variant - 1,
+      }).text;
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error rendering trip delay template:', err.message);
+      return getRollingFollowUpMessage('STAFF_TRIP_DELAY', {
+        name: cleanName,
+        delayMinutes,
+        arrivalTime,
         index: 0,
       }).text;
     }
@@ -2017,13 +2134,17 @@ export class StaffReservationService {
 
       // 2. Kirim pesan WhatsApp otomatis bahwa bidan sudah sampai
       const conversation = (reservation as any).customer?.conversations?.[0];
-      const patientName = (reservation as any).customer?.name || 'Bunda';
+      const rawPatientName = (reservation as any).customer?.name || 'Bunda';
       const therapistName = (reservation as any).assigned_staff?.name || staffName;
 
       let waResult: any = null;
       if (conversation) {
         const { liveChatService } = await import('./live-chat.service');
-        const arrivalText = `Halo ${patientName}, saya ${therapistName} sudah sampai di depan rumah/lokasi Bunda ya 🙏`;
+        // Template data-driven (`STAFF_ARRIVAL`) + sanitasi nama + tanda tangan otomatis.
+        const arrivalText = await StaffReservationService.getArrivalMessageText(tenantId, {
+          patientName: rawPatientName,
+          therapistName,
+        });
         waResult = await liveChatService.sendAdminReply({
           conversationId: conversation.id,
           text: arrivalText,

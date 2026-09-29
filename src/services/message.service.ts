@@ -396,14 +396,20 @@ export class MessageService {
     {
       // Resolusi info customer & deteksi apakah berasal dari percakapan Sandbox/QA Test
       let isSandboxCustomer = false;
+      // Staf internal (CS/Bidan via nomor resmi klinik) — diperlakukan seperti non-pelanggan:
+      // tidak memicu MQL, follow-up, push CRM, atau CAPI.
+      let isInternalStaff = false;
       let resolvedCustomer: any = null;
+      let conversationForSse: any = null;
       try {
         const { conversationService } = await import('./conversation.service');
         const { customerService } = await import('./customer.service');
         const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
+        conversationForSse = conv;
         if (conv?.customer_id) {
           resolvedCustomer = await customerService.getCustomerById(conv.customer_id, data.tenantId);
           if (resolvedCustomer) {
+            isInternalStaff = Boolean(resolvedCustomer.is_internal_staff);
             isSandboxCustomer = Boolean(
               resolvedCustomer.is_sandbox_test ||
               isDummyOrTestContact(resolvedCustomer.phone, resolvedCustomer.name, resolvedCustomer.is_sandbox_test)
@@ -412,11 +418,14 @@ export class MessageService {
         }
       } catch {}
 
+      // Non-pelanggan = sandbox/QA test ATAU staf internal → tidak ada otomasi CRM.
+      const isNonCustomer = isSandboxCustomer || isInternalStaff;
+
       // Jika pesan INBOUND (dari customer) dan bukan sinkronisasi riwayat masa lalu (skipMqlEvaluation), increment bubble count & evaluasi status MQL (hanya customer riil)
       if (!data.skipMqlEvaluation && (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND')) {
         try {
           const { customerService } = await import('./customer.service');
-          if (resolvedCustomer?.id && !isSandboxCustomer) {
+          if (resolvedCustomer?.id && !isNonCustomer) {
             customerService.incrementCustomerMessageCount(resolvedCustomer.id, data.tenantId).catch(() => {});
           }
         } catch (mqlErr: any) {
@@ -426,13 +435,13 @@ export class MessageService {
 
       // Event-Driven Last-Chat Sliding Window: pesan masuk riil customer menggeser
       // jadwal NO_PURCHASE aktif agar selalu relatif ke chat terakhir (bukan chat pertama).
-      // Fire-and-forget: tidak memblokir alur webhook/state-machine; riwayat/sandbox dikecualikan.
+      // Fire-and-forget: tidak memblokir alur webhook/state-machine; riwayat/sandbox/staf internal dikecualikan.
       if (
         !data.skipMqlEvaluation &&
         !data.isHistorical &&
         (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND') &&
         resolvedCustomer?.id &&
-        !isSandboxCustomer
+        !isNonCustomer
       ) {
         void (async () => {
           try {
@@ -466,6 +475,13 @@ export class MessageService {
             payloadRaw: sanitizePayloadForSse(data.payloadRaw),
             isHistorical: !!data.isHistorical,
             isSandboxTest: isSandboxCustomer,
+            isInternalStaff: isInternalStaff,
+            // State kendali percakapan (AI Bot vs Manusia) — dipakai PWA terapis untuk
+            // memutuskan apakah pesan ini layak memicu suara/banner (hanya saat eskalasi manusia).
+            isHumanHandling: Boolean(
+              conversationForSse?.is_human_handling ||
+                (conversationForSse as any)?.current_state === 'HUMAN_HANDLING'
+            ),
           },
         })
         .catch(() => {});
@@ -474,7 +490,8 @@ export class MessageService {
       responseCacheService.invalidatePrefix('livechat:');
 
       // Web Push Background Notification: delegasikan ke InboundNotificationRouter untuk isolasi peran dan routing terarah
-      if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical && !isSandboxCustomer) {
+      // Staf internal dikecualikan (percakapan koordinasi CS/Bidan bukan tiket CRM pelanggan).
+      if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical && !isNonCustomer) {
         void (async () => {
           try {
             const { inboundNotificationRouter } = await import('./inbound-notification-router.service');

@@ -92,6 +92,42 @@ export class CustomerService {
     }
   }
 
+  /**
+   * Menandai seluruh record customer yang nomornya cocok dengan nomor staf
+   * (tenant yang sama) sebagai `is_internal_staff` (koordinasi internal, bukan pelanggan).
+   * Normalisasi digit reuse `normalizePhoneToE164` — tanpa regex hafalan baru.
+   * Idempoten & best-effort (dipanggil saat staf dibuat).
+   */
+  public async markInternalStaffCustomer(
+    phone: string,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<void> {
+    try {
+      const { normalizePhoneToE164 } = await import('./capi.service');
+      const target = normalizePhoneToE164(phone);
+      if (!target) return;
+      const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+      // Cari kandidat lalu bandingkan bentuk ternormalisasi (karena DB menyimpan beragam format).
+      const candidates: any[] = [];
+      try {
+        const byNorm = await prisma.customer.findMany({
+          where: { tenant_id: tenantId },
+          select: { id: true, phone: true, is_internal_staff: true },
+        });
+        if (Array.isArray(byNorm)) candidates.push(...byNorm);
+      } catch {
+        // DB offline (test) → tak ada kandidat; jangan melempar.
+      }
+      for (const c of candidates) {
+        if (normalizePhoneToE164(c?.phone || '') !== target) continue;
+        if (c.is_internal_staff) continue;
+        await repo.update(c.id, { is_internal_staff: true } as any);
+      }
+    } catch (err: any) {
+      console.warn('[CustomerService] markInternalStaffCustomer error:', err?.message);
+    }
+  }
+
   public async setLabelFlags(
     phone: string,
     flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean },

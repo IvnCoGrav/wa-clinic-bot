@@ -451,6 +451,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const currentStaffRef = useRef(currentStaff);
   const isSupervisorRef = useRef(isSupervisor);
   const fetchTasksRef = useRef<((isPolling?: boolean, currentScope?: 'mine' | 'all') => Promise<void>) | null>(null);
+  /** Cegah auto-start ganda saat beberapa render terjadi beruntun. */
+  const autoStartInFlightRef = useRef(false);
 
   currentStaffRef.current = currentStaff;
   isSupervisorRef.current = isSupervisor;
@@ -779,6 +781,61 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     };
   }, [fetchTasks]);
 
+  // Auto-start telemetry H-30 menit (SILENT) — sistem memantau posisi Bidan tanpa
+  // wajib klik OTW manual. Hanya untuk jadwal milik staf sendiri, izin lokasi sudah
+  // `granted`, dan belum tiba. Tidak memunculkan badge/toast/prompt (sesuai kebijakan).
+  useEffect(() => {
+    if (!currentStaff?.id) return;
+    if (telemetryStatus.active) return;
+    if (autoStartInFlightRef.current) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const now = Date.now();
+    const windowMs = 30 * 60 * 1000;
+
+    const candidate = [...tasks, ...upcomingTasks].find((t) => {
+      if (!t.bookingDate || !t.reservationId) return false;
+      if (t.arrivedAt) return false;
+      if (isTrulyCompleted(t)) return false;
+      const bookingMs = new Date(t.bookingDate).getTime();
+      if (!Number.isFinite(bookingMs)) return false;
+      // Jadwal belum lewat jauh (masih relevan untuk perjalanan).
+      if (bookingMs < now - windowMs) return false;
+      // Sudah masuk jendela H-30 menit.
+      if (bookingMs - now > windowMs) return false;
+      // Hanya jadwal milik staf sendiri (anti-IDOR); bila assignedStaff kosong, pakai scope 'mine'.
+      if (t.assignedStaff?.id && currentStaff?.id && t.assignedStaff.id !== currentStaff.id) return false;
+      return true;
+    });
+    if (!candidate) return;
+
+    autoStartInFlightRef.current = true;
+    const attempt = async () => {
+      try {
+        let granted = false;
+        const perms: any = (navigator as any).permissions;
+        if (perms?.query) {
+          try {
+            const status = await perms.query({ name: 'geolocation' as any });
+            granted = status?.state === 'granted';
+          } catch {
+            granted = false;
+          }
+        }
+        // Hanya mulai diam-diam bila izin sudah diberikan; jika belum, biarkan
+        // alur OTW manual yang memicunya (menghindari popup izin mendadak).
+        if (!granted) return;
+        if (telemetryStatus.active) return;
+        await startTelemetry(candidate.reservationId);
+      } catch {
+        // silent
+      } finally {
+        autoStartInFlightRef.current = false;
+      }
+    };
+    attempt();
+  }, [currentStaff?.id, tasks, upcomingTasks, telemetryStatus.active, startTelemetry]);
+
   // Track user scroll position in chat viewport (anti-jerking when reading earlier messages)
   const handleChatScroll = useCallback(() => {
     if (!chatContainerRef.current) return;
@@ -1052,16 +1109,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           };
 
           const isSandbox = Boolean(payload.isSandboxTest || payload.is_sandbox_test || payload.isSandbox);
+          // Mandat In-System PWA Only: suara & banner HANYA untuk pesan yang benar-benar
+          // butuh penanganan staf (percakapan dipegang manusia / eskalasi), BUKAN saat Bot AI
+          // sedang membalas. Ini mencegah ponsel terapis bergetar untuk chat bot-handled.
+          const isHumanHandling = Boolean(
+            payload.isHumanHandling ?? payload.is_human_handling ?? false
+          );
 
           try {
-            if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
+            if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox && isHumanHandling) {
               playIncomingMessageSound();
             }
           } catch (_) {}
 
           try {
             const isChatVisible = selectedTaskRef.current?.conversationId === convId && typeof document !== 'undefined' && document.visibilityState === 'visible';
-            if (!isChatVisible && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
+            if (!isChatVisible && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox && isHumanHandling) {
               const sender = msg.sender_name || 'Pelanggan';
               showSafeNotification(
                 `Pesan Baru dari ${sender}`,
@@ -1428,9 +1491,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
 
     const patientName = task.customerName || 'Bunda';
+    const staffSignature = staff?.name || 'Bidan Terapis';
 
     try {
-      let otwMessage = `Halo ${patientName}, saya ${staff?.name || 'Bidan Terapis'} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
+      let otwMessage = `Halo Bunda, saya ${staffSignature} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵\n\n~ ${staffSignature}`;
       try {
         const tplRes = await apiRequest(`/api/staff/otw-template?patientName=${encodeURIComponent(patientName)}`);
         if (tplRes.success && tplRes.text) {
@@ -1488,7 +1552,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
 
     const patientName = task.customerName || 'Bunda';
-    const arrivalMessage = `Halo ${patientName}, saya ${staff?.name || 'Bidan Terapis'} sudah sampai di depan rumah/lokasi Bunda ya 🙏`;
+    const staffSignature = staff?.name || 'Bidan Terapis';
+    let arrivalMessage = `Halo Bunda, saya ${staffSignature} sudah sampai di depan rumah/lokasi Bunda ya 🙏\n\n~ ${staffSignature}`;
+    try {
+      const tplRes = await apiRequest(`/api/staff/arrival-template?patientName=${encodeURIComponent(patientName)}`);
+      if (tplRes.success && tplRes.text) {
+        arrivalMessage = tplRes.text;
+      }
+    } catch (_) {}
 
     const confirmed = await confirm({
       title: 'Konfirmasi Tiba di Lokasi',

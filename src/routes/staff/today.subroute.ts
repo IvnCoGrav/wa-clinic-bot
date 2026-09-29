@@ -3,11 +3,18 @@ import { StaffReservationService } from '../../services/staff-reservation.servic
 import { liveChatService } from '../../services/live-chat.service';
 import { auditService } from '../../services/audit.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
-import { staffTripTrackingService } from '../../services/staff-trip-tracking.service';
+import {
+  staffTripTrackingService,
+  evaluateArrivalGeofence,
+  calculateDelayStatus,
+  calculateTripProgress,
+} from '../../services/staff-trip-tracking.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
 import { isStaffSupervisorRole } from '../staff.route';
 import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
+import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
+import { ensureStaffSignature } from '../../utils/staff-signature';
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
@@ -214,14 +221,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       // Sisipkan tanda tangan nama bidan secara otomatis di baris paling bawah (~ [Nama Bidan])
-      let finalText = text || '';
-      if (finalText.trim()) {
-        const trimmed = finalText.trim();
-        const signaturePattern = new RegExp(`~\\s*${staffName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-        if (!signaturePattern.test(trimmed)) {
-          finalText = `${trimmed}\n\n~ ${staffName}`;
-        }
-      }
+      const finalText = ensureStaffSignature(text || '', staffName);
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -274,9 +274,37 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
-      const { patientName = 'Bunda' } = request.query || {};
+      const rawPatientName = request.query?.patientName || 'Bunda';
+      const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
 
       const text = await StaffReservationService.getOtwMessageText(tenantId, {
+        patientName,
+        therapistName: staffName,
+      });
+
+      return reply.status(200).send({ success: true, text });
+    }
+  );
+
+  /**
+   * GET /api/staff/arrival-template
+   * Mengambil template pesan "Sudah Sampai" siap kirim (nama pasien & terapis terisi).
+   * Simetris dengan `otw-template`, agar preview modal terapis identik dengan pesan WA.
+   */
+  fastify.get(
+    '/api/staff/arrival-template',
+    async (
+      request: FastifyRequest<{
+        Querystring: { patientName?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const rawPatientName = request.query?.patientName || 'Bunda';
+      const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
+
+      const text = await StaffReservationService.getArrivalMessageText(tenantId, {
         patientName,
         therapistName: staffName,
       });
@@ -294,7 +322,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body?: { text?: string };
+        Body?: { text?: string; customText?: string };
       }>,
       reply: FastifyReply
     ) => {
@@ -304,7 +332,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
-      const customText = request.body?.text;
+      const customText = request.body?.customText ?? request.body?.text;
 
       const reservation = await prisma.reservation.findUnique({
         where: { id },
@@ -377,15 +405,19 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const patientName = (reservation as any).customer?.name || 'Bunda';
+      const rawPatientName = (reservation as any).customer?.name || 'Bunda';
+      const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
       const therapistName = (reservation as any).assigned_staff?.name || staffName;
 
-      let finalText = customText;
-      if (!finalText || !finalText.trim()) {
+      let finalText = customText && customText.trim() ? customText.trim() : '';
+      if (!finalText) {
         finalText = await StaffReservationService.getOtwMessageText(tenantId, {
           patientName,
           therapistName,
         });
+      } else {
+        // Jaring pengaman: teks kustom dari modal terapis tetap wajib bertanda tangan.
+        finalText = ensureStaffSignature(finalText, therapistName);
       }
 
       const replyResult = await liveChatService.sendAdminReply({
@@ -440,7 +472,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     }
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { customer: { select: { id: true, lat: true, lng: true, name: true } } },
+      include: {
+        customer: { select: { id: true, lat: true, lng: true, name: true } },
+        assigned_staff: { select: { name: true } },
+      },
     });
     if (!reservation || (reservation as any).tenant_id !== tenantId) {
       return { ok: false, status: 404, error: 'Reservasi tidak ditemukan.' };
@@ -483,15 +518,32 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const record = staffTripTrackingService.recordTripPing(tenantId, reservationId, staffId, {
-          lat: Number(lat),
-          lng: Number(lng),
-          speed,
-          heading,
-          accuracy,
-        });
+        const prevRecord = staffTripTrackingService.getTrip(tenantId, reservationId);
+        const customerLat = (auth.reservation as any).customer?.lat ?? null;
+        const customerLng = (auth.reservation as any).customer?.lng ?? null;
+        const patientName = (auth.reservation as any).customer?.name || 'Bunda';
+        const therapistName = (auth.reservation as any).assigned_staff?.name || 'Bidan';
 
-        // Broadcast ke CS: hanya payload ringkas (tanpa data pribadi customer).
+        // 1) Geofence kedatangan (dwell) — hanya untuk menghentikan pemancar, bukan
+        //    mengubah status kedatangan resmi (arrived_at tetap tombol manual).
+        const arrival = evaluateArrivalGeofence(
+          Number(lat),
+          Number(lng),
+          customerLat,
+          customerLng,
+          accuracy,
+          prevRecord?.arrivalStreak ?? 0
+        );
+
+        const record = staffTripTrackingService.recordTripPing(
+          tenantId,
+          reservationId,
+          staffId,
+          { lat: Number(lat), lng: Number(lng), speed, heading, accuracy },
+          { arrivalStreak: arrival.consecutiveCount, delayLevel: prevRecord?.delayLevel ?? 'none' }
+        );
+
+        // Broadcast posisi ke CS: hanya payload ringkas (tanpa data pribadi customer).
         getLiveChatHub()
           .publish({
             type: 'staff.telemetry_updated',
@@ -509,6 +561,62 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
             },
           })
           .catch(() => {});
+
+        // 2) Auto-stop: terapis sudah di radius kedatangan → matikan pemancar di HP.
+        if (arrival.isArrived) {
+          staffTripTrackingService.clearTrip(tenantId, reservationId);
+          getLiveChatHub()
+            .publish({
+              type: 'staff.trip_arrived',
+              tenantId,
+              payload: {
+                reservationId,
+                staffId,
+                staffName: therapistName,
+                patientName,
+                distanceM: arrival.distanceM,
+              },
+            })
+            .catch(() => {});
+          return reply.status(200).send({
+            success: true,
+            autoStop: true,
+            arrived: true,
+            data: { areaName: record.areaName, updatedAt: record.updatedAt, distanceM: arrival.distanceM },
+          });
+        }
+
+        // 3) Early warning keterlambatan — publish HANYA pada transisi level
+        //    (anti-spam: ping tiap 25 dtk tidak boleh membanjiri CS).
+        const progress = calculateTripProgress(record.lat, record.lng, customerLat, customerLng);
+        const delay = calculateDelayStatus(
+          (auth.reservation as any).booking_date ?? null,
+          progress?.etaMinutes ?? null
+        );
+        if (delay.reason === 'OK' && delay.level !== 'none' && delay.level !== record.delayLevel) {
+          staffTripTrackingService.recordTripPing(
+            tenantId,
+            reservationId,
+            staffId,
+            { lat: Number(lat), lng: Number(lng), speed, heading, accuracy },
+            { arrivalStreak: record.arrivalStreak, delayLevel: delay.level }
+          );
+          getLiveChatHub()
+            .publish({
+              type: 'staff.trip_delay_warning',
+              tenantId,
+              payload: {
+                reservationId,
+                staffId,
+                staffName: therapistName,
+                patientName,
+                level: delay.level,
+                delayMinutes: delay.delayMinutes,
+                formattedArrivalWib: delay.formattedArrivalWib,
+              },
+            })
+            .catch(() => {});
+        }
 
         return reply.status(200).send({ success: true, data: { areaName: record.areaName, updatedAt: record.updatedAt } });
       } catch (err: any) {

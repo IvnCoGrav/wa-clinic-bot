@@ -104,6 +104,10 @@ model Customer {
   pricelist_sent          Boolean        @default(false)
   share_location_sent     Boolean        @default(false)
   is_sandbox_test         Boolean        @default(false)
+  // Nomor WhatsApp staf internal (CS/Bidan) yang berkoordinasi via nomor resmi klinik.
+  // Percakapan mereka BUKAN pelanggan: tidak boleh memicu MQL, follow-up, CAPI, atau
+  // push CRM (admin/staf). Berbeda dari is_sandbox_test (label QA test yang bisa dibersihkan).
+  is_internal_staff       Boolean        @default(false)
   marketing_opt_in        Boolean        @default(false)
   marketing_opt_in_at     DateTime?
   marketing_opt_in_source String?
@@ -137,6 +141,7 @@ model Customer {
   @@index([tenant_id])
   @@index([tenant_id, created_at])
   @@index([tenant_id, is_sandbox_test])
+  @@index([tenant_id, is_internal_staff])
   @@index([tenant_id, is_mql])
   @@index([tenant_id, is_sandbox_test, created_at])
   @@index([tenant_id, deleted_at])

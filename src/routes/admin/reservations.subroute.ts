@@ -19,6 +19,7 @@ import {
   staffTripTrackingService,
   calculateTripProgress,
   evaluateGeofenceAlert,
+  calculateDelayStatus,
 } from '../../services/staff-trip-tracking.service';
 import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
@@ -171,6 +172,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         geofenceDistanceM = geo.distanceM;
       }
 
+      // Prediksi keterlambatan (ETA vs jadwal) — murni, tanpa I/O.
+      const delayStatus = calculateDelayStatus(
+        (reservation as any).booking_date ?? null,
+        etaMinutes
+      );
+
       let readyText = '';
       try {
         readyText = await StaffReservationService.getTripStatusMessageText(tenantId, {
@@ -181,6 +188,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         });
       } catch {
         readyText = '';
+      }
+
+      let delayText = '';
+      if (delayStatus.isDelayed) {
+        try {
+          delayText = await StaffReservationService.getTripDelayMessageText(tenantId, {
+            patientName: reservation.customer?.name || 'Bunda',
+            delayMinutes: delayStatus.delayMinutes,
+            arrivalTime: delayStatus.formattedArrivalWib,
+            variantKey: reservationId,
+          });
+        } catch {
+          delayText = '';
+        }
       }
 
       return reply.status(200).send({
@@ -210,7 +231,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           isStalledOutsideTarget,
           geofenceReason,
           geofenceDistanceM,
+          delayStatus,
           readyText,
+          delayText,
         },
       });
     }
@@ -1062,6 +1085,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           purchaseValue?: number;
           ongkir?: number;
           durationMinutes?: number;
+          address?: string;
+          landmark?: string;
           force?: boolean;
         };
       }>,
@@ -1071,6 +1096,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
       const force = (request.body as any)?.force === true;
+      const address = (request.body as any)?.address as string | undefined;
+      const landmark = (request.body as any)?.landmark as string | undefined;
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
@@ -1142,6 +1169,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             kecamatan: customer.kecamatan || undefined,
             kota: customer.kota || undefined,
             kelurahan: customer.kelurahan || undefined,
+            // Integritas spasial: alamat jalan fisik hidup di preferences.address
+            // (di-persist via lifecycle); kolom kelurahan tetap entitas desa resmi.
+            address: address?.trim() || undefined,
             source: 'ADMIN_PANEL',
             force,
             status: reservationStatus as 'hold' | 'confirmed',
@@ -1159,6 +1189,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
           throw conflictErr;
         }
+
+        // Persist patokan/landmark ke preferences (tidak melewati saveReservation
+        // karena ReservationMutationParams tidak memiliki field landmark).
+        if (landmark?.trim()) {
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService
+              .updateCustomer(customerId, { landmark: landmark.trim() }, tenantId)
+              .catch(() => {});
+          } catch {}
+        }
+
         // Ambil ulang lengkap dengan relasi untuk respons dashboard.
         let reservation: any = coreResult.reservation;
         try {

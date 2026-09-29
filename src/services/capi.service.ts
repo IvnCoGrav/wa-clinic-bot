@@ -641,14 +641,16 @@ export class CapiService {
     const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId } = params;
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard & Non-Customer Bypass Guard (Skip / Admin CS)
+    //    Staf internal (CS/Bidan via nomor resmi klinik) juga dikecualikan: bukan pelanggan.
     if (
       customer?.is_sandbox_test ||
+      customer?.is_internal_staff ||
       isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test) ||
       customer?.is_admin_labeled === true ||
       hasBypassLabel(customer) ||
       (await checkCustomerBypass({ customerId: customer?.id, phone: customer?.phone, tenantId }))
     ) {
-      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass contact (skip/admin cs): ${customer?.phone}`);
+      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${customer?.phone}`);
       return { success: false, message: 'Skipped: Sandbox, dummy test, or non-customer bypass contact (skip/admin cs)' };
     }
 

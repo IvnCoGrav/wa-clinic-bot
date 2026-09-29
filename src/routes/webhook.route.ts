@@ -616,7 +616,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                       customerName: parsed.name,
                       kecamatan: parsed.kec,
                       kota: parsed.kota,
-                      kelurahan: parsed.address,
+                      // Integritas spasial: parsed.address = alamat jalan lengkap,
+                      // DILARANG disalin ke kolom kelurahan (hanya entitas desa
+                      // resmi hasil geocoding). Alamat jalan hidup di preferences.address.
+                      kelurahan: undefined,
+                      address: parsed.address || undefined,
                       source: 'ADMIN_OUTBOUND_AUTO_CAPTURE',
                     });
                   }
@@ -1213,7 +1217,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
                    });
                   if (isNew || isUpdate) {
@@ -1284,7 +1291,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
                    });
                   if (isNew || isUpdate) {
@@ -1392,7 +1402,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                      customerName: p.name,
                      kecamatan: p.kec,
                      kota: p.kota,
-                     kelurahan: p.address,
+                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
+                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
+                     kelurahan: undefined,
+                     address: p.address || undefined,
                      source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
                    });
                   if (isNew || isUpdate) {

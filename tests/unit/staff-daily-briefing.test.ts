@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { staffNotificationService } from '../../src/services/staff-notification.service';
 import { telegramService } from '../../src/services/telegram.service';
 import { prisma } from '../../src/db/client';
+import * as staffNotifConfig from '../../src/config/staff-notification-config';
 
 describe('Staff Daily Morning Briefing Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Legacy suite menguji DISPATCH Telegram; aktifkan kanal eksplisit (default produksi = OFF).
+    vi.spyOn(staffNotifConfig, 'getStaffNotificationConfig').mockResolvedValue({ telegramEnabled: true });
   });
 
   describe('generateDailyBriefingText', () => {

@@ -56,6 +56,174 @@ export const GEOFENCE_MAX_DIST_M = 1500;
 /** Akurasi GPS di atas ini dianggap drift indoor — disimpan tapi tidak memicu alert. */
 export const GPS_LOW_ACCURACY_M = 100;
 
+/**
+ * Ambang dispatch operasional (auto-stop kedatangan, jendela pre-trip, warning telat).
+ *
+ * TODO(tenant-aware): saat ini konstanta global. Idealnya dibaca dari `ClinicPolicy`
+ * per-tenant (radius, window, ambang telat) — ditunda sesuai Confirmation Gate,
+ * dicatat di docs/KNOWN_ISSUES.md #166 & docs/SAAS_READINESS_AUDIT.md.
+ */
+/** Radius kedatangan (meter). Murni indikator; TIDAK mengubah status kedatangan resmi. */
+export const ARRIVAL_RADIUS_M = 50;
+/** Jumlah ping berturut-turut dalam radius sebelum auto-stop (anti false-stop 1 ping). */
+export const ARRIVAL_CONSECUTIVE_PING = 2;
+/** Ambang akurasi GPS maksimum (meter) agar geofence dipercaya. Di atas ini fail-closed. */
+export const GPS_ACCURACY_MAX_M = 100;
+/** Jendela auto-start telemetry sebelum jadwal (menit). */
+export const PRE_TRIP_WINDOW_MIN = 30;
+/** Ambang keterlambatan: warning (menit). */
+export const DELAY_WARN_MIN = 20;
+/** Ambang keterlambatan: critical (menit). */
+export const DELAY_CRITICAL_MIN = 30;
+
+export type DelayLevel = 'none' | 'warning' | 'critical';
+
+export interface ArrivalGeofenceResult {
+  isArrived: boolean;
+  /** Jumlah ping berturut-turut di dalam radius (dwell). */
+  consecutiveCount: number;
+  distanceM: number | null;
+  reason:
+    | 'ARRIVED'
+    | 'IN_RADIUS'
+    | 'OUT_OF_RANGE'
+    | 'LOW_ACCURACY'
+    | 'NO_CUSTOMER_COORDS'
+    | 'INVALID_COORDS';
+}
+
+export interface DelayStatusResult {
+  isDelayed: boolean;
+  level: DelayLevel;
+  /** Estimasi tiba (menit) relatif terhadap jadwal. Positif = terlambat. */
+  delayMinutes: number;
+  estimatedArrivalIso: string;
+  formattedArrivalWib: string;
+  reason: 'OK' | 'NO_SCHEDULE' | 'NO_ETA';
+}
+
+const WIB_TIME_FORMATTER = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * Deteksi kedatangan terapis dalam radius pasien. Murni deterministik (tanpa I/O).
+ *
+ * Kontrak penting: hasil `isArrived` HANYA dipakai untuk menghentikan pemancar
+ * pelacakan (privasi). Status kedatangan RESMI (`arrived_at`) tetap ditentukan
+ * tombol manual bidan + pesan WA — jangan disamakan.
+ *
+ * - Fail-closed: akurasi GPS null/NaN/>100m → tidak pernah dianggap tiba.
+ * - Dwell: butuh `ARRIVAL_CONSECUTIVE_PING` ping berturut-turut dalam radius;
+ *   satu ping keluar radius me-reset hitungan (mencegah lewat depan rumah).
+ */
+export function evaluateArrivalGeofence(
+  therapistLat: number,
+  therapistLng: number,
+  customerLat: number | null | undefined,
+  customerLng: number | null | undefined,
+  accuracyM: number | null | undefined,
+  previousStreak = 0,
+  arrivalRadiusM: number = ARRIVAL_RADIUS_M
+): ArrivalGeofenceResult {
+  if (!isValidCoord(therapistLat, therapistLng)) {
+    return { isArrived: false, consecutiveCount: 0, distanceM: null, reason: 'INVALID_COORDS' };
+  }
+  if (
+    customerLat == null ||
+    customerLng == null ||
+    !isValidCoord(Number(customerLat), Number(customerLng))
+  ) {
+    return { isArrived: false, consecutiveCount: 0, distanceM: null, reason: 'NO_CUSTOMER_COORDS' };
+  }
+  const distanceM = Math.round(
+    haversineKm(therapistLat, therapistLng, Number(customerLat), Number(customerLng)) * 1000
+  );
+  // Fail-closed: akurasi tak diketahui / buruk → tidak boleh memicu auto-stop.
+  if (accuracyM == null || !Number.isFinite(accuracyM) || accuracyM > GPS_ACCURACY_MAX_M) {
+    return { isArrived: false, consecutiveCount: 0, distanceM, reason: 'LOW_ACCURACY' };
+  }
+  const radius = Number.isFinite(arrivalRadiusM) && arrivalRadiusM > 0 ? arrivalRadiusM : ARRIVAL_RADIUS_M;
+  if (distanceM > radius) {
+    return { isArrived: false, consecutiveCount: 0, distanceM, reason: 'OUT_OF_RANGE' };
+  }
+  const streak = Math.max(0, Math.floor(Number(previousStreak) || 0)) + 1;
+  if (streak >= ARRIVAL_CONSECUTIVE_PING) {
+    return { isArrived: true, consecutiveCount: streak, distanceM, reason: 'ARRIVED' };
+  }
+  return { isArrived: false, consecutiveCount: streak, distanceM, reason: 'IN_RADIUS' };
+}
+
+/**
+ * Prediksi keterlambatan terapis vs jadwal reservasi. Murni deterministik (tanpa I/O).
+ *
+ * `delayMinutes` = estimasiTiba − jadwal (BUKAN minus toleransi). `level`:
+ * `none` (< warn), `warning` (>= warn), `critical` (>= critical).
+ * Fail-open: jadwal/ETA tidak diketahui → `none` (jangan menuduh telat tanpa dasar).
+ */
+export function calculateDelayStatus(
+  bookingDate: Date | null | undefined,
+  etaMinutes: number | null | undefined,
+  now: Date = new Date(),
+  opts?: { warnMin?: number; criticalMin?: number }
+): DelayStatusResult {
+  const empty = (reason: DelayStatusResult['reason']): DelayStatusResult => ({
+    isDelayed: false,
+    level: 'none',
+    delayMinutes: 0,
+    estimatedArrivalIso: '',
+    formattedArrivalWib: '',
+    reason,
+  });
+
+  const bookingMs = bookingDate instanceof Date ? bookingDate.getTime() : NaN;
+  if (!Number.isFinite(bookingMs)) return empty('NO_SCHEDULE');
+  if (etaMinutes == null || !Number.isFinite(Number(etaMinutes))) return empty('NO_ETA');
+
+  const eta = Math.max(0, Number(etaMinutes));
+  const nowMs = now instanceof Date && Number.isFinite(now.getTime()) ? now.getTime() : Date.now();
+  const arrivalMs = nowMs + eta * 60 * 1000;
+  const delayMinutes = Math.round((arrivalMs - bookingMs) / 60000);
+
+  const warnMin = opts?.warnMin != null && Number.isFinite(opts.warnMin) ? opts.warnMin : DELAY_WARN_MIN;
+  const criticalMin =
+    opts?.criticalMin != null && Number.isFinite(opts.criticalMin) ? opts.criticalMin : DELAY_CRITICAL_MIN;
+
+  let level: DelayLevel = 'none';
+  if (delayMinutes >= criticalMin) level = 'critical';
+  else if (delayMinutes >= warnMin) level = 'warning';
+
+  const arrivalDate = new Date(arrivalMs);
+  return {
+    isDelayed: level !== 'none',
+    level,
+    delayMinutes,
+    estimatedArrivalIso: arrivalDate.toISOString(),
+    formattedArrivalWib: WIB_TIME_FORMATTER.format(arrivalDate),
+    reason: 'OK',
+  };
+}
+
+/**
+ * Apakah jadwal berada di dalam jendela auto-start telemetry (default H-30 menit).
+ * Fail-closed: jadwal null/invalid → false.
+ */
+export function isWithinPreTripWindow(
+  bookingDate: Date | null | undefined,
+  now: Date = new Date(),
+  windowMin: number = PRE_TRIP_WINDOW_MIN
+): boolean {
+  const bookingMs = bookingDate instanceof Date ? bookingDate.getTime() : NaN;
+  if (!Number.isFinite(bookingMs)) return false;
+  const nowMs = now instanceof Date && Number.isFinite(now.getTime()) ? now.getTime() : Date.now();
+  const windowMs = Math.max(0, Number(windowMin) || PRE_TRIP_WINDOW_MIN) * 60 * 1000;
+  const diffMs = bookingMs - nowMs;
+  return diffMs <= windowMs && diffMs >= -windowMs;
+}
+
 export interface TripPing {
   lat: number;
   lng: number;
@@ -73,6 +241,10 @@ export interface TripRecord extends TripPing {
   updatedAt: number;
   /** Timestamp gerak terakhir (perpindahan > 30m). Dasar deteksi stalled. */
   movedAt: number;
+  /** Ping berturut-turut dalam radius kedatangan (dwell anti false-stop). */
+  arrivalStreak: number;
+  /** Level keterlambatan terakhir (untuk anti-spam transisi event delay). */
+  delayLevel: DelayLevel;
 }
 
 export interface TripProgress {
@@ -231,7 +403,8 @@ class StaffTripTrackingService {
     tenantId: string,
     reservationId: string,
     staffId: string,
-    ping: TripPing
+    ping: TripPing,
+    state?: { arrivalStreak?: number; delayLevel?: DelayLevel }
   ): TripRecord {
     assertTenant(tenantId);
     assertIds(reservationId, staffId);
@@ -267,6 +440,8 @@ class StaffTripTrackingService {
       createdAt: prev ? prev.record.createdAt : now,
       updatedAt: now,
       movedAt,
+      arrivalStreak: state?.arrivalStreak ?? (prev ? prev.record.arrivalStreak : 0),
+      delayLevel: state?.delayLevel ?? (prev ? prev.record.delayLevel : 'none'),
     };
     const timer = setTimeout(() => {
       this.store.delete(key);
