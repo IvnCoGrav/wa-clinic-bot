@@ -3,6 +3,29 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 178. [Katalog] Fase A unifikasi (A1/A2 selesai, A3 dibatalkan, A4 ditunda) (2026-09-30)
+
+- **Konteks:** Eksekusi Backlog §8.1 Fase A setelah audit read-only (Mandat Validasi Plan).
+- **178a — `saveServices()` sinkron file (RESOLVED):** kini no-op; `loadServices()` tidak lagi
+  `writeFileSync` seed. Sumber runtime = DB. Menghapus churn git + drift.
+- **178b — Drift 3 copy katalog (RESOLVED):** fallback dashboard manual (28 item) kehilangan 11
+  layanan aktif backend. Kini di-generate dari satu sumber (`npm run catalog:seed` →
+  `clinicServicesFallback.json`, 39 aktif) + guard `catalog-seed-drift.test.ts` (5).
+- **178c — `CartManager.adaptCartToAudienceAge` = DEAD CODE (OPEN, kandidat hapus Fase G):**
+  fungsi `cart-manager.ts:766` tidak dipanggil dari `src/` (hanya test sintetis
+  `tests/unit/v3/pediatric-taxonomy-adaptation.test.ts` dengan katalog fiktif "Bayi Lahap Juara").
+  Premis plan §8.1 A3 ("alias `juara` tak match fuzzy") menyesatkan: bug hanya di test, bukan
+  produksi (adaptasi usia nyata via `get-catalog.tool.ts:349-354` `ageTier` DB-driven). **JANGAN
+  perbaiki dengan peta alias hardcode (melanggar mandat non-hardcode).** Aksi benar: hapus fungsi +
+  testnya bila terbukti tak dibutuhkan (masuk §8.7 Fase G), atau wire ke pipeline bila memang
+  dimaksudkan. Butuh keputusan produk.
+- **178d — `services_custom.json` (42 baris, git-tracked) masih ada (OPEN):** tidak lagi ditulis
+  runtime (A1), tetap dibaca sebagai seed legacy (`loadServicesFromDb` fallback). Kandidat
+  konsolidasi/hapus setelah terbukti tak terpakai di fresh-env deploy.
+- **178e — A4 merge-key kanonik (OPEN, Confirmation Gate):** `reservation-core.service.ts:601-602`
+  masih string-equality `treatment_detail`; ganti dengan id kanonik katalog menyentuh inti
+  `saveReservation` (40+ test) → butuh gate terpisah.
+
 ## 177. [Watermark GPS] Perbaikan fondasional overlay foto rumah (2026-09-30)
 
 - **Resolved:** EXIF rotation mismatch (`media.service.ts:overlayGpsBadge` — normalisasi
@@ -564,6 +587,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   keputusan kontrak async — Confirmation Gate tersendiri).
 - **162b — Deteksi OTW (RESOLVED):** `otw_sent_at`/`arrived_at` dibawa di `LiveChatItem`;
   widget kondisi langsung dari item chat (tak bergantung modal detail customer).
+- **162k — Auto-trigger telemetry + standby CS saat Bidan klik "Navigasi" (RESOLVED, 2026-09-30):**
+  Bidan sering tekan Navigasi (Maps) tapi lupa "Infokan OTW" → sidebar CS hilang total. Fix:
+  `handleStartNavigation` di `StaffToday.tsx` (telemetry + auto-OTW best-effort + buka Maps sinkron,
+  anti popup-blocker); gerbang sidebar CS `LiveChatMonitor.tsx` dilonggarkan; `LiveChatDispatchWidget`
+  mode standby (kartu "Persiapan Perjalanan", bukan `null`). Plan
+  `docs/plans/NAVIGASI_AUTO_TELEMETRY_DISPATCH_PLAN.md` §4. **Sisa deploy:** rebuild dist dashboard
+  di server + restart bot; uji perangkat nyata tetap OPEN (lihat catatan akhir entri ini).
+- **162l — Tracking GPS kontinu DI-DEPRECATE; diganti Kontrol Keberangkatan (2026-09-30):**
+  tracking kontinu tidak andal di PWA (OS membekukan browser saat pindah ke aplikasi
+  Google Maps) → dihentikan (3 pemicu pemancar dihapus). Pengganti: klik Navigasi +
+  jadwal ±60 mnt → kirim OTW + status baru `en_route` + titik berangkat + estimasi tiba
+  (GPS sekali-tembak, Haversine). Mesin telemetry (hook/endpoint/service/sweep)
+  DIBIARKAN utuh untuk aplikasi native kelak. Plan
+  `docs/plans/NAVIGASI_DEPART_CONTROL_REVISI_PLAN.md`. **Sisa:** uji HP nyata + deploy;
+  pin lokasi WA asli (`sendLocation`) belum dibuat (link teks cukup).
 - **162c — Widget CS & Modal Peta (RESOLVED):** `LiveChatDispatchWidget.tsx` +
   `DispatchMapModal.tsx` (raster tile OSM 2-marker, tanpa Leaflet/marker= ganda OSM).
 - **162d — Akurasi indoor & throttle OS (OPEN, keterbatasan platform):** saat HP di
@@ -686,12 +724,22 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 - **Konteks:** Audit lanjutan (verifikasi kode + log) menemukan 6 isu yang TIDAK tercakup audit #153.
   Perbaikan dijalankan bertahap (Fase 0–5); entri ini mencatat status per item.
-- **157a — Akar sistemik: jalur form WA tanpa gerbang (OPEN, Fase 4):** jalur form reservasi WA
-  (`src/state-machine/machine.ts:340` dan `upsertReservationForm` di `reservation-lifecycle.service.ts:411`)
-  memanggil `saveReservation({ status: 'confirmed' })` TANPA `assignedStaffId`. Akibatnya collision
-  check staf (`reservation-core.service.ts:275`, hanya jalan bila ada staf) DILEWATI, dan tidak ada
-  gerbang jam operasional. Ini akar dari anomali produksi (double booking, confirmed tanpa terapis,
-  jam 18:00). Solusi fondasional: satukan validasi lintas jalur ingest.
+- **157a — Akar sistemik: jalur form WA tanpa gerbang (RESOLVED via seam intake kanonis, 2026-09-30):**
+  Audit ulang read-only mengoreksi premis awal: gerbang jam operasional ternyata SUDAH universal
+  (`reservation-core.service.ts:489-495`, tag `[OUTSIDE_HOURS]`), dan guard agregat KB-3
+  (`:553-559`) sudah membatasi unassigned booking via `source==='BOT'`. **Residual nyata** bukan
+  collision staf, melainkan **divergensi kontrak intake**: `machine.ts` memanggil
+  `saveReservation({ source:'BOT', status:'confirmed' })` tanpa `requestId`, sedangkan V3 tool
+  (`save-reservation.tool.ts:480,486,492`) memakai `status: isSameDay ? 'pending' : 'confirmed'`
+  + tag `[SAME_DAY_REQUEST]` + `requestId` ber-jam. Akibat: (a) same-day form lolos jadi `confirmed`
+  tanpa awareness admin (KB-2 tak terpicu); (b) redelivery/double-submit = baris duplikat (tanpa
+  idempotency key). **Solusi fondasional:** seam tunggal `src/services/reservation-intake.ts`
+  (`buildCustomerReservationIntake` → `{ isSameDay, status, sameDayTag, requestId }`) dipakai
+  bersama oleh `machine.ts` dan `save-reservation.tool.ts` (hapus duplikasi). Test:
+  `tests/unit/reservation-intake-contract.test.ts` (14, murni) + `tests/unit/reservation-form-intake-contract.test.ts`
+  (2, via state machine riil). Verifikasi: `tsc` exit 0, full suite 4364 passed / 0 failed.
+  **Catatan:** penugasan staf otomatis (auto-assign) tetap bukan scope #157a — admin menugaskan
+  manual; kuota agregat KB-3 tetap jadi pengaman.
 - **157b — Jam operasional hanya di teks prompt (RESOLVED, Fase 4.1):** aturan 08.00–17.00 WIB hanya
   ada di prompt (`router-direct-reply.layer.ts:84`, `guardrail-pipeline.ts:655`). **Keputusan user:**
   jam operasional TIDAK mengikat (fleksibel). Kini ada helper deterministik

@@ -4,6 +4,107 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-30 - Dispatch: Kontrol Keberangkatan (Deprecate Tracking GPS + Status `en_route` + ETA)
+
+- **Konteks:** tracking GPS kontinu tidak andal di PWA (OS membekukan browser saat
+  Bidan pindah ke aplikasi Google Maps). Diputuskan **deprecate** tracking; ganti
+  dengan **kontrol keberangkatan**: klik Navigasi + jadwal ±60 mnt → kirim OTW +
+  status "dalam perjalanan" + titik berangkat + estimasi tiba. Plan:
+  `docs/plans/NAVIGASI_DEPART_CONTROL_REVISI_PLAN.md`.
+- **Removed (deprecate) — `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`:**
+  3 pemicu pemancar telemetry dihapus (auto-start H-30, pasca-OTW manual, pemicu
+  handler Navigasi). Mesin telemetry (hook + endpoint + service + sweep) DIBIARKAN
+  utuh untuk aplikasi native kelak (idle, tanpa produsen).
+- **Added — status `en_route`:** `src/domain/reservation-status.ts` +
+  sinkronisasi ke seluruh daftar status (reservation-core, slot-overlap,
+  patient-lifecycle, follow-up, capi, cron, staff-notification, reservation-lifecycle,
+  daily-report, machine, customers.subroute). Badge `🛵 Dalam Perjalanan` di
+  Reservations & kartu staf. **Tanpa migrasi DB** (kolom String).
+- **Added — endpoint depart `POST /api/staff/reservations/:id/otw`:** body opsional
+  `{ lat, lng, accuracy, etaMinutes, arrivalWib, markEnRoute }` → pesan OTW
+  diperkaya blok estimasi/lokasi (placeholder template baru `{etaMinutes}`,
+  `{arrivalWib}`, `{departMapsUrl}`) + status → `en_route` dalam 1 update. Tanpa
+  field → perilaku lama PERSIS. `GET /otw-template` meneruskan ETA (preview = pesan).
+- **Added — UI `StaffToday.tsx`:** `handleStartNavigation` buka Maps sinkron →
+  jendela ±60 mnt (`isWithinDepartWindow`; luar jendela = mode intip) → GPS
+  sekali-tembak (`getCurrentDeviceLocation`) → ETA (Haversine + `estimateTravelMinutesKm`)
+  → modal konfirmasi ETA → kirim OTW + `markEnRoute`. Helper murni baru di `geoUtils.ts`.
+- **Test:** `reservation-status-en-route.test.ts` (6), `otw-depart-endpoint.test.ts` (8),
+  `depart-window.test.ts` (10) + penyesuaian ekspektasi kontrak status
+  (`patient-lifecycle.test.ts`, `active-reservations-endpoint.test.ts`).
+- **Verifikasi:** root `tsc` exit 0; dashboard `vite build` hijau; full suite hijau.
+  **Sisa deploy:** rebuild dist dashboard + restart bot.
+
+#### 2026-09-30 - Katalog: Fase A Unifikasi (A1 file-sync stop, A2 anti-drift seed) (#128-FaseA)
+
+- **Konteks:** Backlog §8.1 Fase A. Audit read-only mengoreksi premis plan: A3
+  (alias `juara`) menyasar **dead code** (`CartManager.adaptCartToAudienceAge`
+  tak dipanggil dari `src/`), bukan bug produksi.
+- **Fixed (A1) — `saveServices()` sinkron file dihentikan:** kini **no-op**;
+  `loadServices()` tidak lagi `writeFileSync` seed. Sumber kebenaran runtime =
+  tabel `clinic_services` (`loadServicesFromDb`). Menghapus churn git + drift
+  `services_custom.json` vs DB vs seed TS.
+- **Fixed (A2) — Anti-drift katalog dashboard:** fallback dashboard manual
+  (28 item) terbukti kehilangan **11 layanan aktif** backend (moms-induksi-*,
+  selapan-full, bundle-*). Kini di-generate dari SATU sumber:
+  `src/scripts/generate-catalog-seed.ts` (`npm run catalog:seed`) →
+  `packages/admin-dashboard/src/data/clinicServicesFallback.json` (39 aktif);
+  `treatmentParser.ts` meng-import JSON (offline-safe). Guard
+  `tests/unit/catalog-seed-drift.test.ts` (5) mencegah drift lagi.
+- **Dibatalkan (A3):** premis keliru (dead code) — dicatat KNOWN_ISSUES #178c,
+  kandidat hapus Fase G. **Ditunda (A4):** merge-key kanonik, Confirmation Gate.
+- **Verifikasi:** `npm run build` + `vite build` dashboard hijau; full suite
+  **4369 passed / 0 failed**.
+
+#### 2026-09-30 - Dispatch: Auto-Trigger Telemetry & Standby CS saat Bidan Klik "Navigasi" (#162)
+
+- **Konteks:** Bidan menekan "Navigasi" (buka Google Maps) tetapi lupa "Infokan OTW"
+  yang terpisah → `otw_sent_at`/`trip` tetap null → sidebar pemantauan CS
+  (`LiveChatMonitor`) **hilang total**, CS mengira fitur rusak. Plan:
+  `docs/plans/NAVIGASI_AUTO_TELEMETRY_DISPATCH_PLAN.md`.
+- **Added (Fase 1) — `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`:**
+  handler `handleStartNavigation` menyatukan (1) `startTelemetry()` (pemancar GPS +
+  wake lock), (2) auto-kirim OTW best-effort bila belum pernah (`customText:''` →
+  template resmi sistem bertanda tangan), (3) buka Google Maps. Disambungkan ke 3
+  tombol Navigasi (kartu tugas, ikon header chat, modal detail). **Revisi
+  (permintaan user):** kini muncul **modal konfirmasi** "Kirim OTW & Mulai" vs
+  "Hanya Lihat Peta" — Bidan kadang menekan Navigasi hanya untuk melihat peta.
+  "Hanya Lihat Peta" → tidak menyalakan telemetry & tidak kirim OTW (CS = standby);
+  "Kirim OTW & Mulai" → telemetry + OTW + Maps. Modal dilewati bila OTW sudah
+  terkirim. Link di tab "Selesai" sengaja tetap tautan murni (jadwal historis).
+- **Changed (Fase 2) — UX Standby CS:**
+  - `LiveChatMonitor.tsx`: gerbang sidebar dilonggarkan → `dispatchTrip && !arrivedAt
+    && status∉{completed,cancelled,rejected}` (sidebar tak lagi hilang bila belum OTW).
+  - `LiveChatDispatchWidget.tsx`: mode **standby** (kartu "Persiapan Perjalanan" +
+    info jadwal + tombol "Hubungi Bidan") menggantikan `return null`; tab aksi
+    (Salin Teks / Peta) disembunyikan saat standby.
+- **Verifikasi:** `packages/admin-dashboard` build hijau; root `tsc` exit 0; full
+  suite **4364 passed / 0 failed**. **Sisa deploy:** rebuild dist dashboard di server
+  + restart bot (tidak menyentuh WAHA).
+
+#### 2026-09-30 - Reservasi: Seam Intake Kanonis Form WA (#157a — same-day pending + idempotency)
+
+- **Konteks:** Audit ulang #157a (read-only) mengoreksi premis lama: gerbang jam
+  operasional & kuota agregat KB-3 ternyata sudah berlaku di jalur form. Residual
+  nyata = **divergensi kontrak intake**: jalur form WA (`state-machine/machine.ts`)
+  memanggil `saveReservation({ source:'BOT', status:'confirmed' })` TANPA
+  `requestId`, sedangkan V3 tool memakai `pending` + `[SAME_DAY_REQUEST]` + requestId
+  ber-jam. Efek: same-day form lolos `confirmed` (KB-2 awareness admin tak terpicu)
+  dan double-submit/redelivery menggandakan baris.
+- **Fixed (fondasional):** seam tunggal `src/services/reservation-intake.ts`
+  (`isSameWibCalendarDay`, `isSameDayBooking`, `buildCustomerReservationIntake`,
+  `SAME_DAY_REQUEST_TAG`) — murni tanpa I/O. Dipakai bersama oleh:
+  - `src/state-machine/machine.ts` (jalur form WA): kini `status: intake.status`,
+    `requestId: intake.requestId`, tag same-day disuntik ke `rawText`.
+  - `src/v3/tools/save-reservation.tool.ts`: logika same-day/requestId inline
+    dihapus, delegasi ke seam (hapus duplikasi; perilaku tak berubah).
+- **Test:** `tests/unit/reservation-intake-contract.test.ts` (14, murni:
+  batas hari WIB, same-day, requestId deterministik + jam WIB + isolasi tenant/customer/
+  treatment) + `tests/unit/reservation-form-intake-contract.test.ts` (2, via state
+  machine riil: same-day→pending+tag, beda-hari→confirmed+requestId).
+- **Verifikasi:** `tsc` exit 0 (perlu `prisma generate` — client stale KB-6);
+  full suite **4364 passed / 0 failed**. KNOWN_ISSUES #157a → RESOLVED.
+
 #### 2026-09-30 - Reservasi: A2 Channel-Aware + Rilis Sesi Paralel (Copilot, LiveChat, Media, Follow-Up)
 
 - **A2 channel-aware (fondasional, koreksi atas rilis A1–A6 sebelumnya):** gerbang
