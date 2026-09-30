@@ -3,6 +3,33 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 177. [Watermark GPS] Perbaikan fondasional overlay foto rumah (2026-09-30)
+
+- **Resolved:** EXIF rotation mismatch (`media.service.ts:overlayGpsBadge` — normalisasi
+  `.rotate().toBuffer()` dulu baru baca metadata; sebelumnya SVG terbalik →
+  `Image to composite must have same dimensions` + silent failure), sanitasi XML
+  (`escapeXml` standar `&amp;&lt;&gt;&quot;&apos;` + buang kontrol chars; sebelumnya
+  `replace(/[<>&'"]/g,'')` merusak teks), layout anti-overlap (`buildGpsBadgeSvg`
+  murni + `textLength` pagu keras + truncasi elipsis), brand/honorific tenant-aware
+  (`resolveWatermarkBrand`/`resolveCustomerHonorific` via `getBrandIdentityAsync`;
+  fallback = `DEFAULT_BRAND_IDENTITY`, bukan literal `Kala Moms & Baby`).
+- **Caller:** `staff-reservation.service.ts:updateCustomerLocation` +
+  `customers.subroute.ts:PUT /:id/location` kini teruskan `brandName` +
+  `customerHonorific` DB, watermark pakai patokan mentah (`baseLandmark`, bukan
+  `finalLandmark` bertag `[📍 GPS Lapangan]`), simpan HD 800px (`saved.hdUrl`);
+  lifecycle retensi 30 hari (`deleteExpiredMedia` → `updateMediaRefsAfterHdDelete`)
+  yang menurunkan ke thumb.
+- **Test:** `tests/unit/media-watermark.test.ts` (6, buffer Sharp nyata: landscape,
+  portrait EXIF-6, sempit 300px, XML, brand dinamis, guard kosong). Full suite:
+  530 file / 4348 test PASS, `npm run build` exit 0.
+- **Sisa tech debt (OPEN, minor):** estimasi lebar teks masih heuristik
+  (`len*7px`, font proporsional/CJK bisa meleset ±20% — `textLength` menutup overflow
+  tapi bisa menyempitkan huruf amat panjang); foto pra-perbaikan yang sudah telanjur
+  tersimpan sebagai thumb kecil tetap buram (perlu re-capture, GPS tak bisa
+  direkonstruksi dari badge); belum ada rekalkulasi `house_photo_url` lama HD→thumb
+  yang merujuk file terhapus (monitor: `preferences->>'house_photo_url' IS NOT NULL
+  AND lat IS NULL` harus 0 baris).
+
 ## 176. [Reservasi] A1–A6 keputusan pemilik dieksekusi (2026-09-30)
 
 - **Konteks:** Keputusan pemilik atas 6 item audit reservasi/ops dieksekusi test-first.

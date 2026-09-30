@@ -1171,14 +1171,20 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
           const adminName = (request as any).adminSession?.adminIdentity || 'Admin Klinik';
+          const { getBrandIdentityAsync } = await import('../../config/brand');
+          const brandTenantId = (customer as any).tenant_id || DEFAULT_TENANT_ID;
+          const brand = await getBrandIdentityAsync(brandTenantId);
           const watermarked = await mediaService.overlayGpsBadge(resized, {
             lat: targetLat,
             lng: targetLng,
+            customerName: (customer as any).name || undefined,
+            customerHonorific: brand.addressTermForCustomer,
             kelurahan: customer.kelurahan,
             kecamatan: customer.kecamatan,
-            landmark: finalLandmark,
+            landmark: baseLandmark,
             takerName: adminName,
             staffName: adminName,
+            brandName: brand.businessName,
           });
           const saved = await mediaService.saveOutboundMedia({
             tenantId: DEFAULT_TENANT_ID,
@@ -1186,13 +1192,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             mimeType: 'image/jpeg',
             fileName: `house-${customer.id}.jpg`,
           });
-          // Hemat storage: hapus file HD, hanya simpan thumbnail (~140 KB)
-          if (saved.thumbUrl) {
-            mediaService.deleteFile(saved.hdUrl);
-            housePhotoUrl = saved.thumbUrl;
-          } else {
-            housePhotoUrl = saved.hdUrl;
-          }
+          // Simpan HD 800px ber-watermark agar teks tajam; retensi 30 hari
+          // (deleteExpiredMedia → updateMediaRefsAfterHdDelete) menurunkan ke thumb.
+          housePhotoUrl = saved.hdUrl;
         }
 
         const currentPrefs = (customer.preferences as any) || {};

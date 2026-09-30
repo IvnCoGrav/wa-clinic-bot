@@ -3,6 +3,82 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { DEFAULT_BRAND_IDENTITY } from '../config/brand';
+
+/**
+ * Escape XML standar untuk teks yang disuntik ke SVG watermark.
+ * Karakter kontrol ASCII non-cetak dibuang; sisanya di-escape (&amp; dkk)
+ * agar teks patokan asli tetap terbaca dan parser librsvg/Sharp tidak rusak.
+ */
+export function escapeXml(text: string): string {
+  return (text || '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/** Buang karakter kontrol saja (tanpa merusak &<>"') untuk input watermark. */
+function stripControlChars(text: string): string {
+  return (text || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+}
+
+/** Brand watermark DB-driven: fallback = default tenant, bukan literal basi. */
+export function resolveWatermarkBrand(brandName?: string | null): string {
+  const clean = stripControlChars(brandName || '');
+  return clean || DEFAULT_BRAND_IDENTITY.businessName;
+}
+
+/** Honorific sapaan customer DB-driven (mis. "Bunda"/"Bund"). */
+export function resolveCustomerHonorific(honorific?: string | null): string {
+  const clean = stripControlChars(honorific || '');
+  return clean || DEFAULT_BRAND_IDENTITY.addressTermForCustomer;
+}
+
+function truncateForBanner(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 3) return '...'.slice(0, Math.max(0, maxChars));
+  return text.slice(0, maxChars - 3) + '...';
+}
+
+/**
+ * Builder SVG murni (deterministik, tanpa Sharp) — seam uji anti-overlap.
+ * Judul kiri ditrunkasi proporsional terhadap lebar brand kanan + textLength
+ * sebagai pagu keras agar tidak pernah bertabrakan.
+ */
+export function buildGpsBadgeSvg(
+  width: number,
+  height: number,
+  parts: { latLngText: string; subText: string; brand: string }
+): { svg: string; title: string; sub: string; brand: string } {
+  const brand = truncateForBanner(stripControlChars(parts.brand) || DEFAULT_BRAND_IDENTITY.businessName, 40);
+  const brandWidthPx = Math.min(width - 60, brand.length * 7 + 24);
+  const maxTitlePx = Math.max(60, width - 30 - 15 - brandWidthPx - 12);
+  const maxTitleChars = Math.max(10, Math.floor(maxTitlePx / 7));
+  const title = truncateForBanner(stripControlChars(parts.latLngText), maxTitleChars);
+  const maxSubChars = Math.max(10, Math.floor((width - 60) / 5.5));
+  const sub = truncateForBanner(stripControlChars(parts.subText), maxSubChars);
+  const bannerHeight = 58;
+  const bannerY = height - bannerHeight;
+  const svg = `
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+          <style>
+            .title { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #ffffff; }
+            .sub { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; fill: #cbd5e1; }
+            .brand { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; font-weight: bold; fill: #2dd4bf; }
+          </style>
+          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="#0f172a" fill-opacity="0.88"/>
+          <rect x="0" y="${bannerY}" width="${width}" height="3" fill="#00a884"/>
+          <circle cx="18" cy="${bannerY + 20}" r="5" fill="#22c55e" />
+          <text x="30" y="${bannerY + 24}" class="title" textLength="${maxTitlePx}" lengthAdjust="spacingAndGlyphs">${escapeXml(title)}</text>
+          <text x="${width - 15}" y="${bannerY + 24}" text-anchor="end" class="brand">${escapeXml(brand)}</text>
+          <text x="30" y="${bannerY + 45}" class="sub">${escapeXml(sub)}</text>
+        </svg>
+      `;
+  return { svg, title, sub, brand };
+}
 
 // Root penyimpanan media lokal. Folder sudah digitignore (storage/).
 const MEDIA_ROOT = path.join(process.cwd(), 'storage', 'media');
@@ -274,6 +350,7 @@ export class MediaService {
       lat?: number | null;
       lng?: number | null;
       customerName?: string | null;
+      customerHonorific?: string | null;
       address?: string | null;
       kelurahan?: string | null;
       kecamatan?: string | null;
@@ -285,18 +362,22 @@ export class MediaService {
     }
   ): Promise<Buffer> {
     const hasCoords = info.lat != null && info.lng != null;
-    const cleanCust = (info.customerName || '').replace(/[<>&'"]/g, '').trim();
-    const cleanKel = (info.kelurahan || '').replace(/[<>&'"]/g, '').trim();
-    const cleanKec = (info.kecamatan || '').replace(/[<>&'"]/g, '').trim();
-    const cleanLandmark = (info.landmark || '').replace(/[<>&'"]/g, '').trim();
-    const cleanTaker = (info.takerName || info.staffName || '').replace(/[<>&'"]/g, '').trim();
-    const cleanBrand = (info.brandName || 'Kala Moms & Baby').replace(/[<>&'"]/g, '').trim();
+    const cleanCust = stripControlChars(info.customerName || '');
+    const cleanKel = stripControlChars(info.kelurahan || '');
+    const cleanKec = stripControlChars(info.kecamatan || '');
+    const cleanLandmark = stripControlChars(info.landmark || '');
+    const cleanTaker = stripControlChars(info.takerName || info.staffName || '');
+    const cleanBrand = resolveWatermarkBrand(info.brandName);
+    const honorific = resolveCustomerHonorific(info.customerHonorific);
 
     if (!hasCoords && !cleanKel && !cleanKec && !cleanLandmark && !cleanCust) return buffer;
 
     try {
       const sharp = (await import('sharp')).default;
-      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+      // Normalisasi EXIF dulu (kunci orientasi visual), baru baca dimensi.
+      // Mencegah SVG portrait/landscape terbalik → "must have same dimensions".
+      const normalized = await sharp(buffer, { failOn: 'none' }).rotate().toBuffer();
+      const meta = await sharp(normalized, { failOn: 'none' }).metadata();
       const width = meta.width || 800;
       const height = meta.height || 600;
 
@@ -319,12 +400,14 @@ export class MediaService {
         areaText = ` · ${cleanKel || cleanKec}`;
       }
 
-      const custPrefix = cleanCust ? `Bunda ${cleanCust} · ` : '';
+      const custPrefix = cleanCust ? `${honorific} ${cleanCust} · ` : '';
 
-      let latLngText = `Panduan Lokasi ${cleanCust ? 'Bunda ' + cleanCust : 'Pasien'}`;
+      let latLngText = `Panduan Lokasi ${cleanCust ? honorific + ' ' + cleanCust : 'Pasien'}`;
       if (hasCoords) {
-        const latStr = Number(info.lat).toFixed(6);
-        const lngStr = Number(info.lng).toFixed(6);
+        const latNum = Number(info.lat);
+        const lngNum = Number(info.lng);
+        const latStr = Number.isFinite(latNum) ? latNum.toFixed(6) : String(info.lat);
+        const lngStr = Number.isFinite(lngNum) ? lngNum.toFixed(6) : String(info.lng);
         latLngText = `GPS: ${latStr}, ${lngStr} · ${custPrefix}${cleanKel || cleanKec ? 'Kel. ' + cleanKel + ', Kec. ' + cleanKec : ''}`.replace(/ · $/, '');
       } else if (areaText) {
         latLngText = `${custPrefix}Area:${areaText}`;
@@ -332,34 +415,14 @@ export class MediaService {
 
       const subParts: string[] = [];
       if (cleanTaker) subParts.push(`Foto: ${cleanTaker}`);
-      if (cleanLandmark) {
-        const truncated = cleanLandmark.length > 40 ? cleanLandmark.slice(0, 37) + '...' : cleanLandmark;
-        subParts.push(`Patokan: ${truncated}`);
-      }
+      if (cleanLandmark) subParts.push(`Patokan: ${cleanLandmark}`);
       subParts.push(timeStr);
       const subText = subParts.join(' · ');
 
-      const bannerHeight = 58;
-      const bannerY = height - bannerHeight;
+      const { svg } = buildGpsBadgeSvg(width, height, { latLngText, subText, brand: cleanBrand });
+      const svgOverlay = Buffer.from(svg);
 
-      const svgOverlay = Buffer.from(`
-        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-          <style>
-            .title { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #ffffff; }
-            .sub { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; fill: #cbd5e1; }
-            .brand { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; font-weight: bold; fill: #2dd4bf; }
-          </style>
-          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="#0f172a" fill-opacity="0.88"/>
-          <rect x="0" y="${bannerY}" width="${width}" height="3" fill="#00a884"/>
-          <circle cx="18" cy="${bannerY + 20}" r="5" fill="#22c55e" />
-          <text x="30" y="${bannerY + 24}" class="title">${latLngText}</text>
-          <text x="${width - 15}" y="${bannerY + 24}" text-anchor="end" class="brand">${cleanBrand}</text>
-          <text x="30" y="${bannerY + 45}" class="sub">${subText}</text>
-        </svg>
-      `);
-
-      return await sharp(buffer, { failOn: 'none' })
-        .rotate()
+      return await sharp(normalized, { failOn: 'none' })
         .composite([{ input: svgOverlay, top: 0, left: 0 }])
         .jpeg({ quality: 85 })
         .toBuffer();

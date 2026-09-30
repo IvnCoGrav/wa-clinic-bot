@@ -1837,21 +1837,30 @@ export class StaffReservationService {
 
       let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
-      // Kompres, beri watermark GPS (lengkap dengan nama pengambil foto, Kelurahan & Kecamatan), dan simpan foto jika ada
+      // Kompres, beri watermark GPS tenant-aware, dan simpan foto jika ada.
+      // - brand/honorific dari DB tenant (bukan hardcode).
+      // - Watermark memakai patokan mentah (baseLandmark) agar tag GPS internal
+      //   [📍 GPS Lapangan: ...] yang disimpan di DB tidak menduplikasi baris patokan.
+      // - Simpan HD 800px ber-watermark sebagai housePhotoUrl agar teks tajam;
+      //   lifecycle retensi/prune (media.service) yang menurunkan ke thumb setelah 30 hari.
       if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
+        const { getBrandIdentityAsync } = await import('../config/brand');
         const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         const rawB64 = matches ? matches[2] : housePhotoB64;
         const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+        const brand = await getBrandIdentityAsync(tenantId);
         const watermarked = await mediaService.overlayGpsBadge(resized, {
           lat: targetLat,
           lng: targetLng,
           customerName: customer.name || undefined,
+          customerHonorific: brand.addressTermForCustomer,
           kelurahan: customer.kelurahan,
           kecamatan: customer.kecamatan,
-          landmark: finalLandmark,
+          landmark: baseLandmark,
           staffName: staffName || undefined,
           takerName: staffName || undefined,
+          brandName: brand.businessName,
         });
         const saved = await mediaService.saveOutboundMedia({
           tenantId,
@@ -1859,13 +1868,7 @@ export class StaffReservationService {
           mimeType: 'image/jpeg',
           fileName: `house-${customer.id}.jpg`,
         });
-        // Hemat storage: hapus file HD, hanya simpan thumbnail (~140 KB)
-        if (saved.thumbUrl) {
-          mediaService.deleteFile(saved.hdUrl);
-          housePhotoUrl = saved.thumbUrl;
-        } else {
-          housePhotoUrl = saved.hdUrl;
-        }
+        housePhotoUrl = saved.hdUrl;
       }
 
       const currentPrefs = (customer.preferences as any) || {};
