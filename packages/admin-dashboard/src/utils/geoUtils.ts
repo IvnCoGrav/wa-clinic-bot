@@ -96,6 +96,48 @@ export function estimateTravelMinutesKm(distanceKm: number): number {
 }
 
 /**
+ * Jendela keberangkatan (menit) untuk menawarkan OTW + status "dalam perjalanan".
+ * Di luar jendela ini, tombol "Navigasi" hanya membuka peta (mode intip).
+ * Plan 2026-09-30 (kontrol keberangkatan).
+ */
+export const DEPART_WINDOW_MINUTES = 60;
+
+/**
+ * Menit menuju jadwal booking (bisa negatif bila sudah lewat). Murni.
+ * @returns selisih menit (dibulatkan); null bila tanggal tidak valid.
+ */
+export function minutesUntilBooking(bookingDateIso: string | Date | null | undefined, nowMs: number = Date.now()): number | null {
+  if (!bookingDateIso) return null;
+  const t = new Date(bookingDateIso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.round((t - nowMs) / 60000);
+}
+
+/**
+ * True bila booking berada dalam jendela keberangkatan (<= DEPART_WINDOW_MINUTES
+ * ke depan, atau baru lewat sedikit). Booking jauh di masa depan / lampau → false.
+ * Murni (tanpa I/O) agar mudah diuji.
+ */
+export function isWithinDepartWindow(
+  bookingDateIso: string | Date | null | undefined,
+  nowMs: number = Date.now(),
+  windowMinutes: number = DEPART_WINDOW_MINUTES
+): boolean {
+  const mins = minutesUntilBooking(bookingDateIso, nowMs);
+  if (mins == null) return false;
+  // Dalam jendela: dari -2 jam (baru lewat, masih relevan) sampai windowMinutes ke depan.
+  return mins <= windowMinutes && mins >= -120;
+}
+
+/**
+ * Format jam WIB "HH:MM" dari sebuah instant + offset menit (untuk estimasi tiba).
+ */
+export function formatWibClock(date: Date, addMinutes = 0): string {
+  const wib = new Date(date.getTime() + addMinutes * 60000 + 7 * 3600000);
+  return `${String(wib.getUTCHours()).padStart(2, '0')}:${String(wib.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/**
  * Cek apakah gap waktu antar kunjungan cukup untuk waktu tempuh.
  * Mengembalikan null jika koordinat tidak lengkap (tidak bisa hitung).
  * Mengembalikan object { sufficient: boolean, requiredMinutes: number, availableMinutes: number, distanceKm: number } jika bisa dihitung.

@@ -1107,10 +1107,21 @@ export class StaffReservationService {
    * 2. Substitusi placeholder template tenant (data-driven, bisa diedit Super Admin).
    * 3. Jaring pengaman deterministik `Bunda Bunda` -> `Bunda`.
    * 4. Sematkan tanda tangan `~ [Nama Terapis]` di baris paling bawah (idempoten).
+   *
+   * Placeholder OPSIONAL (plan 2026-09-30, kontrol keberangkatan): `{etaMinutes}`,
+   * `{arrivalWib}`, `{departMapsUrl}`. Bila tak diberikan → diganti string kosong
+   * (template lama tetap valid; tak ada placeholder menggantung).
    */
   private static renderStaffTripMessage(
     templateText: string,
-    params: { patientName: string; therapistName: string; clinicName: string }
+    params: {
+      patientName: string;
+      therapistName: string;
+      clinicName: string;
+      etaMinutes?: number | null;
+      arrivalWib?: string | null;
+      departMapsUrl?: string | null;
+    }
   ): string {
     const cleanName = sanitizeCustomerNameForGreeting(params.patientName || '') || 'Bunda';
     const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
@@ -1119,6 +1130,9 @@ export class StaffReservationService {
       .replace(/\{\{?name\}\}?/gi, cleanName)
       .replace(/\{\{?therapistName\}\}?/gi, therapistName)
       .replace(/\{\{?clinicName\}\}?/gi, params.clinicName)
+      .replace(/\{\{?etaMinutes\}\}?/gi, params.etaMinutes != null ? String(params.etaMinutes) : '')
+      .replace(/\{\{?arrivalWib\}\}?/gi, params.arrivalWib || '')
+      .replace(/\{\{?departMapsUrl\}\}?/gi, params.departMapsUrl || '')
       .replace(/Bunda\s+Bunda/gi, 'Bunda')
       .trim();
     return ensureStaffSignature(rendered, therapistName);
@@ -1130,7 +1144,14 @@ export class StaffReservationService {
    */
   static async getOtwMessageText(
     tenantId: string = DEFAULT_TENANT_ID,
-    params: { patientName: string; therapistName: string }
+    params: {
+      patientName: string;
+      therapistName: string;
+      /** Plan 2026-09-30: blok estimasi/lokasi opsional (kontrol keberangkatan). */
+      etaMinutes?: number | null;
+      arrivalWib?: string | null;
+      departMapsUrl?: string | null;
+    }
   ): Promise<string> {
     const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
     try {
@@ -1156,18 +1177,60 @@ export class StaffReservationService {
         customTpl?.text ||
         `Halo Bunda {patientName}, saya {therapistName} dari {clinicName} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
 
-      return StaffReservationService.renderStaffTripMessage(templateText, {
+      const rendered = StaffReservationService.renderStaffTripMessage(templateText, {
         patientName: params.patientName,
         therapistName,
         clinicName,
+        etaMinutes: params.etaMinutes,
+        arrivalWib: params.arrivalWib,
+        departMapsUrl: params.departMapsUrl,
       });
+      // Bila template admin SUDAH memakai placeholder ETA/lokasi, jangan tambah blok
+      // otomatis (anti-duplikasi).
+      const templateHasEtaPlaceholder = /\{\{?(etaMinutes|arrivalWib|departMapsUrl)\}\}?/i.test(templateText);
+      return templateHasEtaPlaceholder ? rendered : StaffReservationService.appendEtaBlock(rendered, params);
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error rendering OTW template:', err.message);
-      return StaffReservationService.renderStaffTripMessage(
+      const fallback = StaffReservationService.renderStaffTripMessage(
         `Halo Bunda {patientName}, saya {therapistName} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
         { patientName: params.patientName, therapistName, clinicName: 'klinik' }
       );
+      return StaffReservationService.appendEtaBlock(fallback, params);
     }
+  }
+
+  /**
+   * Sisipkan blok estimasi/lokasi ke pesan OTW (plan 2026-09-30). Deterministik:
+   * hanya ditambahkan bila data tersedia; tanda tangan tetap di baris paling bawah.
+   * Bila template admin SUDAH memakai placeholder `{etaMinutes}`/`{arrivalWib}`/
+   * `{departMapsUrl}`, blok TIDAK ditambahkan (anti-duplikasi).
+   */
+  private static appendEtaBlock(
+    message: string,
+    params: { etaMinutes?: number | null; arrivalWib?: string | null; departMapsUrl?: string | null }
+  ): string {
+    const hasEta = params.etaMinutes != null || !!params.arrivalWib;
+    const hasLoc = !!params.departMapsUrl;
+    if (!hasEta && !hasLoc) return message;
+
+    const lines: string[] = [];
+    if (hasEta) {
+      const parts: string[] = [];
+      if (params.arrivalWib) parts.push(`Estimasi tiba ±${params.arrivalWib} WIB`);
+      if (params.etaMinutes != null) parts.push(`~${params.etaMinutes} menit perjalanan`);
+      lines.push(`⏱️ ${parts.join(' ')}`);
+    }
+    if (hasLoc) lines.push(`📍 Titik berangkat Bidan: ${params.departMapsUrl}`);
+    const block = lines.join('\n');
+
+    // Sematkan sebelum tanda tangan (baris terakhir `~ Nama`), bila ada.
+    const sigMatch = message.match(/\n~ .+$/);
+    if (sigMatch && sigMatch.index != null) {
+      const head = message.slice(0, sigMatch.index);
+      const sig = message.slice(sigMatch.index);
+      return `${head}\n${block}${sig}`;
+    }
+    return `${message}\n${block}`;
   }
 
   /**

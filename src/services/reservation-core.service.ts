@@ -66,7 +66,7 @@ export class ReservationConflictError extends Error {
   }
 }
 
-const ACTIVE_STATUSES = ['confirmed', 'hold'];
+const ACTIVE_STATUSES = ['confirmed', 'en_route', 'hold'];
 const WIB_OFFSET_MS = 7 * 3600000;
 
 /** Error saat cek bentrok tidak dapat dijalankan (DB error) di production. */
@@ -206,7 +206,7 @@ async function hasCapacityForUnassignedBooking(tenantId: string, bookingDate: Da
       where: {
         tenant_id: tenantId,
         assigned_staff_id: null,
-        status: { in: ['confirmed', 'pending', 'hold'] },
+        status: { in: ['confirmed', 'en_route', 'pending', 'hold'] },
         booking_date: { gte: dayStart, lte: dayEnd },
       },
     });
@@ -353,7 +353,7 @@ async function computeIsRepeatOrder(params: {
       where: {
         customer_id: customerId,
         tenant_id: tenantId,
-        status: { in: ['confirmed', 'completed'] },
+        status: { in: ['confirmed', 'en_route', 'completed'] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
     });

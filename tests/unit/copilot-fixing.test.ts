@@ -244,7 +244,7 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
         where: expect.objectContaining({
           tenant_id: 'tenant-a',
           is_sandbox_test: false,
-          reservations: { none: { status: { in: expect.arrayContaining(['confirmed', 'pending', 'hold']) } } },
+          reservations: { none: { status: { in: expect.arrayContaining(['confirmed', 'en_route', 'pending', 'hold']) } } },
         }),
       })
     );
@@ -267,7 +267,7 @@ describe('query_unscheduled_prospects — tanpa jadwal aktif (state-based)', () 
   it('filter di DB: tanpa reservasi aktif (bukan filter teks "jadwal")', async () => {
     await queryUnscheduledProspects.run('tenant-a', {});
     const where = h.customerFindMany.mock.calls[0][0].where;
-    expect(where.reservations).toEqual({ none: { status: { in: ['confirmed', 'pending', 'hold'] } } });
+    expect(where.reservations).toEqual({ none: { status: { in: ['confirmed', 'en_route', 'pending', 'hold'] } } });
     // completed/cancelled lama TIDAK menghalangi → tetap prospek
     expect(where.reservations.none.status.in).not.toContain('completed');
     expect(where.reservations.none.status.in).not.toContain('cancelled');
@@ -641,7 +641,7 @@ describe('Fase 4 — adversarial: sinyal state, filter tanggal, sanitasi, ground
   it('query_reservations_by_filter: default status = jadwal aktif (cancelled tidak mencemari)', async () => {
     await queryReservationsByFilter.run('tenant-a', {});
     const call = h.reservationFindMany.mock.calls[0][0];
-    expect(call.where.status).toEqual({ in: ['confirmed', 'pending', 'hold'] });
+    expect(call.where.status).toEqual({ in: ['confirmed', 'en_route', 'pending', 'hold'] });
   });
 
   it('stripInternalIds: customerId & id teknis dibuang dari baris', () => {

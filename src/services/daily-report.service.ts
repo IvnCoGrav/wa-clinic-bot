@@ -284,7 +284,7 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
       where: {
         ...tenantFilter,
         created_at: dateRange,
-        status: 'confirmed'
+        status: { in: ['confirmed', 'en_route'] }
       },
       include: { customer: true }
     });

@@ -347,7 +347,7 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
         where: {
           customer_id: 'cust-retno-6288000000004',
           tenant_id: 'default-tenant',
-          status: { in: ['confirmed', 'completed'] },
+          status: { in: ['confirmed', 'en_route', 'completed'] },
         },
       });
     });

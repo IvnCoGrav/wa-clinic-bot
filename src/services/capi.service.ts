@@ -558,7 +558,7 @@ async function resolveNewVsRepeatContext(params: {
       where: {
         customer_id: customerId,
         ...(tenantId ? { tenant_id: tenantId } : {}),
-        status: { in: ['confirmed', 'completed'] },
+        status: { in: ['confirmed', 'en_route', 'completed'] },
         ...(reservationId ? { id: { not: reservationId } } : {}),
       },
     });

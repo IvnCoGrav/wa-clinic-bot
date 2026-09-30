@@ -27,20 +27,20 @@ describe('patient-lifecycle.service', () => {
     vi.mocked(prisma.customer.findUnique).mockRejectedValue(new Error('Database offline'));
   });
 
-  it('status treatment-history mencakup completed DAN confirmed', () => {
-    expect([...TREATMENT_HISTORY_STATUSES].sort()).toEqual(['completed', 'confirmed']);
-    expect([...ACTIVE_APPOINTMENT_STATUSES].sort()).toEqual(['confirmed', 'hold', 'pending']);
+  it('status treatment-history mencakup completed, confirmed & en_route', () => {
+    expect([...TREATMENT_HISTORY_STATUSES].sort()).toEqual(['completed', 'confirmed', 'en_route']);
+    expect([...ACTIVE_APPOINTMENT_STATUSES].sort()).toEqual(['confirmed', 'en_route', 'hold', 'pending']);
   });
 
   it('pasien dengan reservasi completed terdeteksi hasTreatmentHistory = true', async () => {
-    stubReservationCount(1); // count confirmed+completed > 0
+    stubReservationCount(1); // count confirmed+en_route+completed > 0
     const res = await patientLifecycleService.hasTreatmentHistory('cust-retno', 'default-tenant');
     expect(res).toBe(true);
     expect((prisma.reservation as any).count).toHaveBeenCalledWith({
       where: {
         customer_id: 'cust-retno',
         tenant_id: 'default-tenant',
-        status: { in: ['confirmed', 'completed'] },
+        status: { in: ['confirmed', 'en_route', 'completed'] },
       },
     });
   });
@@ -89,7 +89,7 @@ describe('patient-lifecycle.service', () => {
     expect(res.hasActive).toBe(true);
     expect((res.reservation as any).id).toBe('res-active');
     const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0][0].where;
-    expect(where.status).toEqual({ in: ['pending', 'confirmed', 'hold'] });
+    expect(where.status).toEqual({ in: ['pending', 'confirmed', 'en_route', 'hold'] });
     expect(new Date(where.booking_date.gte).getTime()).toBe(now.getTime() - 12 * 3600 * 1000);
     expect(new Date(where.booking_date.lte).getTime()).toBe(now.getTime() + 24 * 3600 * 1000);
   });

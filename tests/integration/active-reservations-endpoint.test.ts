@@ -64,7 +64,7 @@ describe('Active Reservations endpoint (anti split-brain booking)', () => {
     const call = vi.mocked(prisma.reservation.findMany).mock.calls.at(-1)![0] as any;
     expect(call.where.customer_id).toBe('cust-query');
     expect(call.where.tenant_id).toBe('default-tenant');
-    expect(call.where.status).toEqual({ in: ['confirmed', 'hold'] });
+    expect(call.where.status).toEqual({ in: ['confirmed', 'en_route', 'hold'] });
     expect(call.where.booking_date.gte).toBeInstanceOf(Date);
     // Awal hari WIB harus tengah malam WIB (= 17:00 UTC hari sebelumnya).
     expect(call.where.booking_date.gte.getUTCHours()).toBe(17);

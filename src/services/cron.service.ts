@@ -276,7 +276,7 @@ export class CronService {
       where: {
         // `completed` ikut dihitung: admin yang menandai Treatment Selesai di
         // hari-H tidak boleh membuat review H+1 hilang (kanonis patient-lifecycle).
-        status: { in: ['confirmed', 'completed'] },
+        status: { in: ['confirmed', 'en_route', 'completed'] },
         booking_date: {
           gte: startOfYesterday,
           lte: endOfYesterday,

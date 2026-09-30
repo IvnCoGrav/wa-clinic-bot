@@ -80,7 +80,7 @@ describe('Reservation is_repeat_order otomasi (root cause: sebelumnya di-set ole
       where: {
         customer_id: 'cust-repeat-1',
         tenant_id: 'default-tenant',
-        status: { in: ['confirmed', 'completed'] },
+        status: { in: ['confirmed', 'en_route', 'completed'] },
       },
     });
   });

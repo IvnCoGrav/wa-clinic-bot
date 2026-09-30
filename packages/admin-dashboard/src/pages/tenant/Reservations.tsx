@@ -605,6 +605,8 @@ export const Reservations: React.FC = () => {
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-2xs">⏳ Hold</span>;
       case 'confirmed':
         return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">📅 Terjadwal</span>;
+      case 'en_route':
+        return <span className="px-2.5 py-0.5 rounded-full bg-teal-100 border border-teal-200 text-teal-800 text-xs font-semibold">🛵 Dalam Perjalanan</span>;
       case 'completed':
         return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">✅ Selesai</span>;
       case 'cancelled':

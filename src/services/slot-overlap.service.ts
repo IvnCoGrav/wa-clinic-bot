@@ -9,7 +9,7 @@ import { alertService, AlertType, AlertSeverity } from './alert.service';
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 // Status reservasi yang dianggap "aktif" untuk pemeriksaan tumpang jadwal.
-const ACTIVE_STATUSES = ['confirmed', 'hold', 'pending'];
+const ACTIVE_STATUSES = ['confirmed', 'en_route', 'hold', 'pending'];
 
 /** Satu grup slot bertumpuk dalam satu hari WIB & satu staf. */
 export interface SlotOverlap {

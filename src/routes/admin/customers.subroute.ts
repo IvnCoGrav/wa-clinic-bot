@@ -537,7 +537,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
    * & Live Chat untuk peringatan dini "customer sudah punya jadwal aktif" sehingga
    * admin tidak membuat duplikat / split-brain booking.
    *
-   * Definisi kanonis (selaras reservation-core ACTIVE_STATUSES): confirmed|hold,
+   * Definisi kanonis (selaras reservation-core ACTIVE_STATUSES): confirmed|en_route|hold,
    * tanggal >= awal hari ini (WIB). Reservasi tanpa tanggal (null) diabaikan.
    */
   fastify.get(
@@ -556,7 +556,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           where: {
             customer_id: id,
             tenant_id: DEFAULT_TENANT_ID,
-            status: { in: ['confirmed', 'hold'] },
+            status: { in: ['confirmed', 'en_route', 'hold'] },
             booking_date: { gte: startOfTodayWib },
           },
           orderBy: { booking_date: 'asc' },

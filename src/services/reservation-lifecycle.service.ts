@@ -324,7 +324,7 @@ export class ReservationLifecycleService {
           where: {
             customer_id: customerId,
             tenant_id: tenantId,
-            status: { in: ['confirmed', 'completed'] },
+            status: { in: ['confirmed', 'en_route', 'completed'] },
           },
         });
       } catch (err: any) {

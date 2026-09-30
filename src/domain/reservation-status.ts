@@ -7,9 +7,26 @@
  */
 
 /** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
-export const ACTIVE_RESERVATION_STATUSES: string[] = ['confirmed', 'pending', 'hold'];
+export const ACTIVE_RESERVATION_STATUSES: string[] = ['confirmed', 'en_route', 'pending', 'hold'];
 
-export type ActiveReservationStatus = 'confirmed' | 'pending' | 'hold';
+export type ActiveReservationStatus = 'confirmed' | 'en_route' | 'pending' | 'hold';
+
+/**
+ * `en_route` — Bidan sudah berangkat menuju lokasi pasien (dipicu dari tombol
+ * Navigasi/OTW). Secara semantik = `confirmed` yang sedang berlangsung: tetap
+ * menempati slot, tetap dihitung sebagai kunjungan aktif, dan tetap dianggap
+ * kunjungan sah saat dihitung sebagai riwayat.
+ */
+export const EN_ROUTE_STATUS = 'en_route';
+
+/** True bila status termasuk "jadwal aktif" (occupied slot). */
+export function isActiveReservationStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return ACTIVE_RESERVATION_STATUSES.includes(status);
+}
+
+/** Status yang setara `confirmed` untuk perhitungan riwayat (termasuk en_route). */
+export const CONFIRMED_FAMILY_STATUSES: string[] = ['confirmed', 'en_route'];
 
 /** Jendela validitas hold: hold kedaluwarsa bila booking_date lewat > 2 jam. */
 export const ACTIVE_HOLD_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -33,7 +50,7 @@ export function isActiveReservation(
   nowMs: number = Date.now()
 ): boolean {
   if (!reservation || !reservation.status) return false;
-  if (reservation.status === 'confirmed' || reservation.status === 'pending') return true;
+  if (reservation.status === 'confirmed' || reservation.status === 'en_route' || reservation.status === 'pending') return true;
   if (reservation.status === 'hold') return isHoldActive(reservation.booking_date, nowMs);
   return false;
 }

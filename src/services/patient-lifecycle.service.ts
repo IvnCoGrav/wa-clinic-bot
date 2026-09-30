@@ -20,10 +20,10 @@ import { prisma } from '../db/client';
  */
 
 /** Status reservasi yang dihitung sebagai riwayat treatment (pernah dilayani). */
-export const TREATMENT_HISTORY_STATUSES = ['confirmed', 'completed'] as const;
+export const TREATMENT_HISTORY_STATUSES = ['confirmed', 'en_route', 'completed'] as const;
 
 /** Status reservasi yang dihitung sebagai jadwal aktif (operasional berjalan). */
-export const ACTIVE_APPOINTMENT_STATUSES = ['pending', 'confirmed', 'hold'] as const;
+export const ACTIVE_APPOINTMENT_STATUSES = ['pending', 'confirmed', 'en_route', 'hold'] as const;
 
 /** Jendela default jadwal aktif: 12 jam ke belakang, 24 jam ke depan. */
 export const ACTIVE_APPOINTMENT_WINDOW_BEFORE_HOURS = 12;

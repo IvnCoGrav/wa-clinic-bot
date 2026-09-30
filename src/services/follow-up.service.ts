@@ -353,7 +353,7 @@ export class FollowUpService {
       hasReservation = await prisma.reservation?.findFirst?.({
         where: {
           customer_id: customerId,
-          status: { in: ['pending', 'confirmed', 'completed'] },
+          status: { in: ['pending', 'confirmed', 'en_route', 'completed'] },
         },
       });
     } catch {}
@@ -447,7 +447,7 @@ export class FollowUpService {
         hasReservation = await prisma.reservation?.findFirst?.({
           where: {
             customer_id: customerId,
-            status: { in: ['pending', 'confirmed', 'completed'] },
+            status: { in: ['pending', 'confirmed', 'en_route', 'completed'] },
           },
         });
       } catch (_) {}
@@ -936,7 +936,7 @@ export class FollowUpService {
           where: {
             tenant_id: tenantId,
             customer_id: { in: customerIds },
-            status: { in: ['pending', 'confirmed', 'hold'] },
+            status: { in: ['pending', 'confirmed', 'en_route', 'hold'] },
             booking_date: { gte: now },
           },
           select: { customer_id: true },
@@ -1577,7 +1577,7 @@ export class FollowUpService {
             where: {
               customer_id: fu.customer_id,
               tenant_id: tenantId,
-              status: { in: ['pending', 'confirmed', 'completed'] },
+              status: { in: ['pending', 'confirmed', 'en_route', 'completed'] },
             },
           });
           if (res) {

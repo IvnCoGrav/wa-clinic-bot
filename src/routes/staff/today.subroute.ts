@@ -15,6 +15,7 @@ import { isStaffSupervisorRole } from '../staff.route';
 import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
+import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
@@ -268,7 +269,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     '/api/staff/otw-template',
     async (
       request: FastifyRequest<{
-        Querystring: { patientName?: string };
+        Querystring: { patientName?: string; etaMinutes?: string; arrivalWib?: string; departMapsUrl?: string };
       }>,
       reply: FastifyReply
     ) => {
@@ -277,9 +278,20 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const rawPatientName = request.query?.patientName || 'Bunda';
       const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
 
+      // Plan 2026-09-30: preview = pesan akhir (termasuk blok ETA/lokasi) bila diberikan.
+      const etaRaw = Number(request.query?.etaMinutes);
+      const etaMinutes = Number.isFinite(etaRaw) && etaRaw > 0 && etaRaw <= 180 ? Math.round(etaRaw) : null;
+      const arrivalWib = typeof request.query?.arrivalWib === 'string' && /^\d{2}:\d{2}$/.test(request.query.arrivalWib)
+        ? request.query.arrivalWib
+        : null;
+      const departMapsUrl = typeof request.query?.departMapsUrl === 'string' ? request.query.departMapsUrl : null;
+
       const text = await StaffReservationService.getOtwMessageText(tenantId, {
         patientName,
         therapistName: staffName,
+        etaMinutes,
+        arrivalWib,
+        departMapsUrl,
       });
 
       return reply.status(200).send({ success: true, text });
@@ -316,13 +328,27 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/staff/reservations/:id/otw
    * Mengirim notifikasi WhatsApp otomatis bahwa terapis sedang meluncur ke lokasi pasien (OTW).
+   *
+   * Plan 2026-09-30 (kontrol keberangkatan): body opsional `{ lat, lng, accuracy,
+   * etaMinutes, arrivalWib, markEnRoute }` → pesan diperkaya blok estimasi/lokasi +
+   * status reservasi dipindah ke `en_route` (dalam transaksi yang sama dengan
+   * `otw_sent_at`). Tanpa field ini → perilaku lama PERSIS (kompatibel mundur).
    */
   fastify.post(
     '/api/staff/reservations/:id/otw',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body?: { text?: string; customText?: string };
+        Body?: {
+          text?: string;
+          customText?: string;
+          lat?: number;
+          lng?: number;
+          accuracy?: number;
+          etaMinutes?: number;
+          arrivalWib?: string;
+          markEnRoute?: boolean;
+        };
       }>,
       reply: FastifyReply
     ) => {
@@ -333,6 +359,22 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const customText = request.body?.customText ?? request.body?.text;
+
+      // Validasi opsional data keberangkatan (defensif: nilai aneh diabaikan).
+      const body = request.body || {};
+      const hasCoords = Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng));
+      const departLat = hasCoords ? Number(body.lat) : null;
+      const departLng = hasCoords ? Number(body.lng) : null;
+      const departMapsUrl =
+        departLat != null && departLng != null
+          ? `https://maps.google.com/?q=${departLat},${departLng}`
+          : null;
+      const etaMinutes =
+        Number.isFinite(Number(body.etaMinutes)) && Number(body.etaMinutes) > 0 && Number(body.etaMinutes) <= 180
+          ? Math.round(Number(body.etaMinutes))
+          : null;
+      const arrivalWib = typeof body.arrivalWib === 'string' && /^\d{2}:\d{2}$/.test(body.arrivalWib) ? body.arrivalWib : null;
+      const markEnRoute = body.markEnRoute === true;
 
       const reservation = await prisma.reservation.findUnique({
         where: { id },
@@ -414,6 +456,9 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         finalText = await StaffReservationService.getOtwMessageText(tenantId, {
           patientName,
           therapistName,
+          etaMinutes,
+          arrivalWib,
+          departMapsUrl,
         });
       } else {
         // Jaring pengaman: teks kustom dari modal terapis tetap wajib bertanda tangan.
@@ -432,10 +477,15 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: replyResult.error });
       }
 
-      // Persist status OTW di DB
+      // Persist status OTW + (opsional) pindah status ke `en_route` (dalam 1 update).
+      const nextStatus =
+        markEnRoute && ['confirmed', 'pending'].includes(statusLower) ? EN_ROUTE_STATUS : undefined;
       await prisma.reservation.update({
         where: { id },
-        data: { otw_sent_at: new Date() },
+        data: {
+          otw_sent_at: new Date(),
+          ...(nextStatus ? { status: nextStatus } : {}),
+        },
       });
 
       // Audit trail
@@ -444,7 +494,12 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         adminIdentity: staffName,
         action: 'STAFF_SEND_OTW',
         targetId: id,
-        payload: { conversationId: conversation.id, textPreview: finalText.slice(0, 60) },
+        payload: {
+          conversationId: conversation.id,
+          textPreview: finalText.slice(0, 60),
+          enRoute: Boolean(nextStatus),
+          etaMinutes,
+        },
         ipAddress: request.ip,
         tenantId,
       });
@@ -452,7 +507,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({
         success: true,
         message: `Pesan OTW berhasil dikirim ke WhatsApp ${patientName}!`,
-        data: replyResult,
+        data: { ...replyResult, status: nextStatus || (reservation as any).status },
       });
     }
   );

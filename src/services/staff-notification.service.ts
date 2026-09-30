@@ -374,7 +374,7 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
             tenant_id: tenantId,
             customer_id: reservation.customer_id,
             id: { not: reservation.id },
-            status: { in: ['confirmed', 'completed'] },
+            status: { in: ['confirmed', 'en_route', 'completed'] },
             booking_date: { lt: reservation.booking_date || new Date() },
           },
           include: { assigned_staff: { select: { name: true } } },
