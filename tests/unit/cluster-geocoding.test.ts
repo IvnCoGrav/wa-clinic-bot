@@ -80,4 +80,18 @@ describe('Hierarki klaster Puri Surya Jaya (cluster-first)', () => {
     expect(res.distanceKm).toBeCloseTo(5.04 * 1.6, 0);
     expect(res.isOutOfCoverage).toBe(false);
   });
+
+  it('klaster perbatasan Waru (The Oso & Grand Alana) terpetakan ke Tambakoso', () => {
+    const oso = findPopularLandmark('rumah saya di The Oso blok C');
+    expect(oso).not.toBeNull();
+    expect(oso!.kelurahan).toBe('Tambakoso');
+    expect(oso!.kecamatan).toBe('Waru');
+    expect(oso!.lat).toBeCloseTo(-7.3553263, 5);
+
+    const alana = findPopularLandmark('Grand Alana Regency Tambakoso');
+    expect(alana).not.toBeNull();
+    expect(alana!.kelurahan).toBe('Tambakoso');
+    expect(alana!.kecamatan).toBe('Waru');
+    expect(alana!.lat).toBeCloseTo(-7.3519115, 5);
+  });
 });

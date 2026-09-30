@@ -88,7 +88,7 @@ export class GeocodingService {
   /**
    * Mengambil koordinat & informasi administratif dari input teks.
    * LOCAL-FIRST ARCHITECTURE:
-   * Tier 1: Periksa database gazetteer resmi (573 kelurahan/desa Surabaya & Sidoarjo) -> 0ms, 100% akurat.
+   * Tier 1: Periksa database gazetteer resmi (560 kelurahan/desa Surabaya & Sidoarjo) -> 0ms, 100% akurat.
    * Tier 2: Fallback ke Google Maps Geocoding API jika input berupa nama jalan/perumahan spesifik.
    */
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {

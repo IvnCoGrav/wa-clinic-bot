@@ -3,10 +3,13 @@ import path from 'path';
 import { resolveArteryCorridor } from '../config/landmarks';
 import {
   normalizeToponymAbbreviations,
+  normalizeCompoundToponym,
+  buildCompoundToponymMap,
   extractCityScope,
   getCanonicalCities,
 } from './toponym-normalizer';
 import { isTypoAtMostOne, GEO_TOKEN_SKIPLIST } from './typo-match';
+import { setNameSanitizerDistrictLexicon } from './name-sanitizer';
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -31,6 +34,7 @@ let cachedPrefixIndex: Map<string, string[]> | null = null;
 let cachedKecamatanNames: string[] | null = null;
 let cachedKecamatanEntries: Array<{ lower: string; orig: string }> | null = null;
 let cachedCanonicalCities: string[] = [];
+let cachedCompoundToponymMap: Map<string, string> = new Map();
 
 // For O(1) coordinate lookups
 let coordByKelLower = new Map<string, { lat: number; lng: number; row: GazetteerRow }>();
@@ -110,6 +114,17 @@ function ensureInit(): void {
 
   // Kanonis kota (data-driven) — dipakai extractCityScope di setiap query.
   cachedCanonicalCities = getCanonicalCities(rawDataCache || []);
+
+  // Toponimi majemuk (data-driven): "tambak oso" -> "Tambakoso".
+  cachedCompoundToponymMap = buildCompoundToponymMap(data);
+
+  // Injeksi leksikon distrik data-driven ke name-sanitizer (single source:
+  // dataset). Mencakup nama kanonis + varian spasi majemuk, agar dedup nama
+  // kontak ganda ("Gisik Cemandi Gisik Cemandi") bekerja tanpa daftar hafalan.
+  setNameSanitizerDistrictLexicon([
+    ...areaMap.keys(),
+    ...cachedCompoundToponymMap.keys(),
+  ]);
 
   // Build kecamatan names / entries
   cachedKecamatanNames = Array.from(seenKec.values());
@@ -254,7 +269,10 @@ export interface GazetteerCoordinateHit {
 export function getGazetteerCoordinates(query: string): GazetteerCoordinateHit | null {
   ensureInit();
   if (!query) return null;
-  const qNorm = normalizeToponymAbbreviations(query).replace(/\s+/g, ' ').trim();
+  const qNorm = normalizeCompoundToponym(
+    normalizeToponymAbbreviations(query).replace(/\s+/g, ' ').trim(),
+    cachedCompoundToponymMap
+  );
   const cityScope = extractCityScope(qNorm, getGazetteerCanonicalCities());
   if (!qNorm) return null;
 
@@ -264,13 +282,22 @@ export function getGazetteerCoordinates(query: string): GazetteerCoordinateHit |
   // kelurahan koridor → kecamatan koridor → logika eksisting di bawah.
   const corridor = resolveArteryCorridor(qNorm);
   if (corridor) {
-    const kelHit = coordByKelLower.get(corridor.kelurahan.toLowerCase());
-    if (kelHit) {
-      return { lat: kelHit.lat, lng: kelHit.lng, kelurahan: kelHit.row.Kelurahan_Desa, kecamatan: kelHit.row.Kecamatan, kota: kelHit.row.Kabupaten_Kota, zipcode: kelHit.row.Kode_Pos, matchedLevel: 'kelurahan' };
-    }
-    const kecHit = coordByKecLower.get(corridor.kecamatan.toLowerCase());
-    if (kecHit) {
-      return { lat: kecHit.lat, lng: kecHit.lng, kelurahan: kecHit.row.Kelurahan_Desa, kecamatan: kecHit.row.Kecamatan, kota: kecHit.row.Kabupaten_Kota, zipcode: kecHit.row.Kode_Pos, matchedLevel: 'kecamatan' };
+    // Guard homonim (fondasional): bila customer menyebut kecamatan LAIN yang
+    // ada di dataset, JANGAN short-circuit ke koridor — serahkan ke ranked scan
+    // yang sadar-kecamatan (mis. "tropodo krian" ≠ Tropodo/Waru; "pondok candra
+    // waru" tetap sah). Berbasis STATE (nama kecamatan dataset), bukan hafalan.
+    const mentionedOtherKec = getGazetteerKecamatanEntries().some(
+      (e) => e.lower !== corridor.kecamatan.toLowerCase() && boundedMatchIndex(qNorm, e.lower) !== null
+    );
+    if (!mentionedOtherKec) {
+      const kelHit = coordByKelLower.get(corridor.kelurahan.toLowerCase());
+      if (kelHit) {
+        return { lat: kelHit.lat, lng: kelHit.lng, kelurahan: kelHit.row.Kelurahan_Desa, kecamatan: kelHit.row.Kecamatan, kota: kelHit.row.Kabupaten_Kota, zipcode: kelHit.row.Kode_Pos, matchedLevel: 'kelurahan' };
+      }
+      const kecHit = coordByKecLower.get(corridor.kecamatan.toLowerCase());
+      if (kecHit) {
+        return { lat: kecHit.lat, lng: kecHit.lng, kelurahan: kecHit.row.Kelurahan_Desa, kecamatan: kecHit.row.Kecamatan, kota: kecHit.row.Kabupaten_Kota, zipcode: kecHit.row.Kode_Pos, matchedLevel: 'kecamatan' };
+      }
     }
   }
 
@@ -521,6 +548,7 @@ export function __resetGazetteerCache(): void {
   cachedPrefixIndex = null;
   cachedKecamatanNames = null;
   cachedKecamatanEntries = null;
+  cachedCompoundToponymMap = new Map();
   coordByKelLower = new Map();
   coordByKecLower = new Map();
   coordByKelKecKey = new Map();

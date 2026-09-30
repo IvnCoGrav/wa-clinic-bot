@@ -1,6 +1,6 @@
 # PLAN 11 (Revisi) — Solusi Fondasional Anti-Memburu-Buru Customer (*Funnel Pacing & State-Gated Information Hiding*)
 
-- **Status**: REVISI — menunggu persetujuan eksekusi. Belum ada kode diubah.
+- **Status**: TEREXEKUSI SEBAGIAN — kode Fase 1-3 SELESAI & ter-commit (`36ba7e84`); suite uji adversarial Fase 4 (MT-4.1-4.4) BELUM ditulis (test-unverified).
 - **Tanggal revisi**: 2026-09-22.
 - **Dasar**: audit plan asli vs kode aktual (semua nomor baris di bawah dicek terhadap tree `ecaf158f`).
 - **Prinsip**: Hard Code-Level Guards lintas lapisan (State Machine, Kontrak Data, RAG/Retrieval, Few-Shot). DILARANG: teks prompt "DILARANG..." baru sebagai solusi utama, regex gatekeeper intent, hafalan if-else pola kalimat, mutilasi tengah kalimat, contoh prompt baru yang menodong jadwal.
@@ -144,3 +144,13 @@ Helper reuse (dilarang bikin varian ke-4): `deriveConversationPhase`/`buildPhase
 | 4-5 | Verifikasi | — |
 
 Rollback per fase: revert commit fase terkait (independen; Fase 2→3 hanya berurutan secara bacaan, tidak secara kode).
+
+---
+
+## STATUS EKSEKUSI (sinkronisasi dokumen 2026-09-30)
+
+- **Kode Fase 1-3 SELESAI & ter-commit** di `36ba7e84` (header "belum ada kode diubah" sebelumnya STALE/keliru).
+- **Fase 1 — Pruning prompt state-gated:** `src/v3/agent/prompt/phases/scheduling.phase.ts:71,74,77`; `src/v3/agent/prompt/prompt-composer.ts:54,90-110,389-395`; `phase-resolver.ts:127-134`.
+- **Fase 2-3 — Few-shot tags + skoring & guardrail recovery:** `few-shot-exemplars.ts:99,661-667`; `guardrail-pipeline.ts:804-823,842-882`.
+- **Belum selesai (test-unverified):** suite uji adversarial/parafrase Fase 4 (MT-4.1/4.2/4.3/4.4) ENTIRELY SKIPPED — tidak ada `tests/unit/v3-funnel-exemplar-gating.test.ts`.
+- **Verdict jujur:** kode Fase 1-3 ada & ter-commit, tetapi **suite uji adversarial wajib belum ditulis**; CHANGELOG `CHANGELOG.md:1364`; debt tercatat di `docs/KNOWN_ISSUES.md:1431-1438` (#113).

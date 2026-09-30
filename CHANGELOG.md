@@ -4,6 +4,41 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-30 - Reservasi: A1–A6 Keputusan Pemilik (booking_date WAJIB, Advisory Lock, Slot-Overlap Alert, Dataset)
+
+- **Konteks:** Eksekusi 6 keputusan pemilik atas audit reservasi/ops. Prinsip:
+  solusi fondasional (gerbang kode deterministik), bukan tambalan prompt.
+- **A2 — `booking_date` WAJIB (KB-4):** `MissingBookingDateError`
+  (`MISSING_BOOKING_DATE`, HTTP 400) di awal `saveReservation`
+  (`reservation-core.service.ts`), SEBELUM idempotency. Jalur fallback "tanpa
+  tanggal" 24 jam DIHAPUS (sumber data sampah `booking_date NULL`). Jam kosong
+  tetap default 09:00 WIB + notifikasi (sudah ada). 3 test lama disesuaikan + 3
+  adversarial baru.
+- **A3 — Advisory lock anti double-booking (fondasional):** `computeAdvisoryLockKey`
+  (FNV-1a → int32; per tenant+staf+hari WIB; staf null = grup `__unassigned__`) +
+  `runWithAdvisoryLock`. Baca-cek+tulis kritis (idempotency, cek bentrok,
+  merge/create) dijalankan di dalam `pg_advisory_xact_lock` via `$transaction`
+  interaktif. Fail-open deterministik bila transaksi tak tersedia (mock offline
+  aman). Efek samping (lifecycle/follow-up/notifikasi) dipindah ke pasca-commit.
+  Test membuktikan lock benar-benar diakuisisi (bukan no-op) + fallback tepat 1x.
+- **A5 — Sapuan slot tertumpuk (peringatan dini, bukan blokir):**
+  `src/services/slot-overlap.service.ts` (`findOverlappingSlots` murni +
+  `sweepOverlappingSlots`), `runSlotOverlapSweep` (cron), registrasi `app.ts`.
+  1 notifikasi agregat ke ADMIN (Web Push + alert `DAILY_OPS_REPORT`) bila ada
+  slot tumpang tindih. Env: `ENABLE_SLOT_OVERLAP_SWEEP` (default on),
+  `SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES` (default 3). Sesuai permintaan: form tetap
+  boleh dipakai tanpa gerbang keras; admin diberi pembelajaran bertahap.
+- **A1/A4 — Keputusan by-design:** `pending` TIDAK mengunci slot (jangan blokir);
+  Google Calendar tetap mock (isu GCal tetap ditunda).
+- **A6 — Dataset wilayah:** 2 entri koordinat lintas kabupaten (`Pehkulon`,
+  `Gadingmangu` @ Prambon) dihapus (Kediri/Jombang, 47–62 km). Dataset 562→560.
+- **C2 — Sinkronisasi dokumen:** status header PLAN 10/11/12 (basi "belum ada kode
+  diubah") dikoreksi jujur sesuai audit kode.
+- **Verifikasi:** `tsc` Exit 0; suite reservasi + slot-overlap + dataset hijau.
+- **Sisa/debt:** advisory lock efektif hanya bila driver Prisma mendukung
+  `$transaction` interaktif di produksi (perlu verifikasi server); migrasi
+  `delivery_fee` + cleanup R1/173k menunggu akses server (`docs/RUNBOOK_R1_173k.md`).
+
 #### 2026-09-29 - Guardrail D7/D3: Eliminasi False Positive Eskalasi Darurat (CASE-084/095)
 
 - **Konteks:** dua eskalasi darurat palsu. CASE-084: `CUSTOMER_RELIGIOUS_TRIGGER_RE`

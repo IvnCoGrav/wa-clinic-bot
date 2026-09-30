@@ -3,6 +3,200 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 176. [Reservasi] A1–A6 keputusan pemilik dieksekusi (2026-09-30)
+
+- **Konteks:** Keputusan pemilik atas 6 item audit reservasi/ops dieksekusi test-first.
+- **A1 (pending tidak mengunci slot) — KEPUTUSAN: DIBIARKAN (by-design).** Lihat #173e.
+  Slot yang tetap tertumpuk dideteksi sapuan A5 (bukan diblokir).
+- **A2 (booking_date WAJIB) — RESOLVED.** Lihat #173b.
+- **A3 (advisory lock anti double-booking) — RESOLVED (fondasional):**
+  `computeAdvisoryLockKey(tenant, staff, date)` (FNV-1a → int32, deterministik
+  per hari WIB; staf null = grup `__unassigned__`) + `runWithAdvisoryLock` di
+  `reservation-core.service.ts`. Baca-cek + tulis kritis (idempotency, cek bentrok,
+  merge/create) kini dijalankan di dalam `pg_advisory_xact_lock` lewat
+  `$transaction` interaktif. **Fail-open deterministik:** bila `$transaction`/
+  `$executeRawUnsafe` tak tersedia (mock offline / driver Accelerate) → jalankan
+  langsung tanpa lock (suite offline aman). Efek samping (lifecycle, follow-up,
+  notifikasi) dipindah ke PASCA-commit agar transaksi tidak tertahan. Catatan
+  residu: advisory lock hanya efektif bila driver Prisma mendukung `$transaction`
+  interaktif di produksi (perlu verifikasi 1-step di server); mock unit tidak
+  mengeksekusi lock. Test: `reservation-idempotency-request-id.test.ts` (15).
+- **A4 (Google Calendar) — KEPUTUSAN: tetap mock.** Isu GCal (#173g/#173h, #157e)
+  tetap OPEN/ditunda sampai GCal benar-benar diaktifkan.
+- **A5 (notifikasi slot tertumpuk tiap 3 menit) — RESOLVED:**
+  `src/services/slot-overlap.service.ts` (`findOverlappingSlots` murni +
+  `sweepOverlappingSlots` tenant-scoped) + `runSlotOverlapSweep` (cron.service) +
+  registrasi `app.ts`. Kirim 1 notifikasi agregat ke ADMIN (Web Push + alert
+  `DAILY_OPS_REPORT`) bila ada slot tumpang tindih. **Peringatan dini, BUKAN blokir**
+  (sesuai permintaan: admin belum terbiasa, pembelajaran bertahap). Env:
+  `ENABLE_SLOT_OVERLAP_SWEEP` (default on) + `SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES`
+  (default 3). Test: `tests/unit/slot-overlap-sweep.test.ts`.
+- **A6 (hapus 2 entri gazetteer koordinat salah) — RESOLVED.** Lihat #175f.
+
+## 175. [Audit Dataset Wilayah] Koreksi kecamatan + ejaan dieksekusi; phantom & konflik sumber OPEN (2026-09-30)
+
+- **Konteks:** Audit menyeluruh 573 entri gazetteer terhadap **3 sumber resmi**:
+  (A) Kemendagri via `cahyadsn/wilayah` (Kepmendagri 300.2.2-2138/2025), (B)
+  Wikipedia "Daftar kecamatan dan kelurahan di Kabupaten Sidoarjo" (Permendagri
+  137/2017 + 72/2019), (C) Google Maps Geocoding API. A & B saling menguatkan.
+- **175a — Koreksi KECAMATAN dieksekusi (RESOLVED, 11 baris duplikat + 1 fix):**
+  13 entri "salah kecamatan" ditemukan; 11 di antaranya **baris duplikat**
+  (koordinat identik dengan entri benar di kecamatan lain) → **DIHAPUS**
+  (`Karangbong/Taman`, `Mergosari/Buduran`, `Sidoklumpuk/Buduran`, `Terung
+  Kulon/Sukodono`, `Wedi/Candi`, `Pangkemiri/Candi`, `Kedungbanteng/Tulangan`,
+  `Simoangin-angin/Prambon`, `Pagerngumbuk/Balongbendo`, `Mulyodadi/Tarik`,
+  `Sidomulyo/Sidoarjo (Kota)`); 1 non-duplikat (`Turirejo`) kecamatannya
+  **DIPERBAIKI** Menganti→Kedamean. Verifikasi: reverse-geocode Google tiap titik
+  = kecamatan resmi. Dataset 573→562. Test `tests/unit/dataset-wilayah-audit.test.ts`.
+- **175b — Koreksi EJAAN dieksekusi (RESOLVED, hanya yang UNANIM):** 6 ejaan
+  diperbaiki HANYA bila Google **dan** Kemendagri sepakat: `Klopo Sepuluh→
+  Kloposepuluh`, `Griting→Grinting`, `Kajartrengguli→Kajartengguli`,
+  `Tanjekwagir→Tanjegwagir`, `Kramattemanggung→Kramattemenggung`,
+  `Gadungkepuhsari→Gagangkepuhsari`.
+- **175c — Guard homonim lookup dieksekusi (RESOLVED, fondasional):**
+  `resolveArteryCorridor` (`gazetteer.ts`) dulu short-circuit tanpa sadar
+  kecamatan → `tropodo krian` SALAH mengembalikan `Tropodo/Waru`. FIX: koridor
+  arteri hanya dipakai bila customer TIDAK menyebut kecamatan lain yang ada di
+  dataset (berbasis state nama kecamatan, bukan hafalan). Kini `tropodo krian`→
+  Krian, `tropodo waru`→Waru. Test di `dataset-wilayah-audit.test.ts`.
+- **175d — Phantom/nama-tak-ada-di-Kemendagri DIPERTAHANKAN (OPEN, keputusan user):**
+  ~28 entri tidak ada di Kemendagri/Wikipedia, TETAPI sebagian dikenali Google
+  sebagai tempat nyata (`Kedungbendo`, `Siring`, `Mindi` Porong; `Pejarakan`,
+  `Kupang Baru`, `Besuki` Jabon). Sesuai keputusan user: **DIPERTAHANKAN** karena
+  dataset ini area layanan (bukan daftar administratif) & risiko hapus lebih besar.
+- **175e — Konflik Google vs Kemendagri pada 5 ejaan (OPEN, butuh sumber definitif):**
+  Google SEPAKAT dengan dataset (bukan Kemendagri) untuk: `Tambakrejo/Waru`
+  (Kemendagri: Tambarejo), `Sruni/Gedangan` (Kemendagri: Seruni), `Rangkah
+  Kidul` (Kemendagri: Rangka Kidul), `Sumokembangsri` (Kemendagri: Sumokebangsri),
+  `Singkalan` (Kemendagri: Singkalang). TIDAK diubah (sumber bertentangan).
+  Butuh dokumen resmi BPS/Pemkab definitif.
+- **175f — 2 entri koordinat lintas kabupaten (RESOLVED, keputusan user):**
+  `Pehkulon (Prambon)` @-7.7313,112.0789 = **Papar, Kediri** (62 km);
+  `Gadingmangu (Prambon)` @-7.5669,112.1594 = **Perak, Jombang** (47 km).
+  Koordinat jelas salah (bukan Sidoarjo). Diputuskan user untuk DIHAPUS; kedua
+  entri (Pehkulon, Gadingmangu) telah dihapus dari dataset. Dataset 562→560.
+- **Catatan sumber:** Kemendagri cahyadsn = `raw.githubusercontent.com/cahyadsn/
+  wilayah/master/db/wilayah.sql` (Kepmendagri 300.2.2-2138/2025). Gunakan
+  sebagai acuan utama; Google Maps sebagai validasi koordinat.
+
+## 174. [Toponimi Majemuk & Sanitasi Nama] Fase 1+3 dieksekusi; Fase 2/4 sisa (2026-09-30)
+
+- **Konteks:** Laporan salah pemetaan lokasi ("Tambak Os" → Suko/Wedoro, hijack
+  10–19 km) + nama pelanggan korup ("Bunda Ifa Tambak Os Tambak Os"). Audit
+  read-only atas plan yang diajukan menemukan **premis plan sebagian keliru**;
+  perbaikan fondasional dieksekusi hanya pada bagian yang terverifikasi.
+- **174a — Fase 1 RESOLVED (fondasional, data-driven):** `buildCompoundToponymMap`
+  + `normalizeCompoundToponym` (`src/utils/toponym-normalizer.ts`) membangun peta
+  varian spasi→kanonis dari seluruh dataset (tanpa hardcode nama), di-wire di
+  `getGazetteerCoordinates` (`src/utils/gazetteer.ts`). Terbukti RED→GREEN:
+  `tambak oso waru` dulu → `Wedoro` (hijack), kini → `Tambakoso`. Test
+  `tests/unit/toponym-compound-matching.test.ts` (5). Catatan: audit empiris
+  menemukan **108** kandidat majemuk (bukan 67 seperti klaim plan).
+- **174b — Fase 3 RESOLVED:** dedup frasa beruntun + strip fragmen toponimi
+  terpotong di `src/utils/name-sanitizer.ts` (`stripConsecutiveDuplicatePhrase`,
+  `stripTrailingDistrictFragment`), leksikon diinjeksi data-driven dari gazetteer
+  (`setNameSanitizerDistrictLexicon`) tanpa circular import. Test diperluas di
+  `tests/unit/name-sanitizer.test.ts`.
+- **174c — Fase 2 sentroid: KLAIM PLAN DIBANTAH Google Maps + OSM (RESOLVED sebagai "tidak ada bug"), OPEN hanya Segoro Tambak:** Klaim plan "5 sentroid masuk wilayah perairan / ORS error 2010" **terfalsifikasi** dengan bukti **Google Maps Geocoding API resmi** (divalidasi dengan key di `.env`): reverse-geocoding & forward-geocoding mengembalikan koordinat dataset **persis** (`Tambakoso -7.35128,112.8135304`; `Gunung Anyar Tambak -7.3361689,112.8135304`; `Tambakcemandi -7.3989950,112.8165095`; `Kejawan Putih Tambak -7.2772555,112.8090616`). Reverse-geocode membuktikan titik-titik itu berada di **jalan/pemukiman darat** (Wisma Indah II, Anvaya Juanda, Laguna Pakuwon, Alana Regency) — BUKAN air. Tidak ada handler kode ORS 2010 di `src/integrations/ors/client.ts` (hanya fallback `null`). **Keputusan: koordinat dataset TIDAK diubah** (sudah benar). Sisa nyata: **Segoro Tambak** — dataset `-7.3674868,112.8077787` divalidasi Google Maps sebagai "Segorotambak, Sedati" (jadi titiknya SAH menurut Google), namun OSM menandainya Banjar Kemuning. Karena dua sumber otoritatif berbeda, TIDAK diubah (butuh BPS/peta desa).
+- **174d — Landmark The Oso & Grand Alana (RESOLVED, tervalidasi Google Maps):** ditambahkan ke `POPULAR_LANDMARKS` (`src/config/landmarks.ts`): `The Oso` `-7.3553263,112.8065525` (Google: "Jl. Gajah Putih... Tambakoso") & `Grand Alana Regency` `-7.3519115,112.8120106` (Google: "Jl. Alana Regency... Tambakoso"). Test `tests/unit/cluster-geocoding.test.ts`.
+- **174e — Konflik Pondok Candra/Tjandra (RESOLVED sebagai keputusan, TIDAK diubah):** Google Maps mengonfirmasi `Pondok Tjandra Indah` = **Wadungasri** (`-7.3434984,112.7686321`). Titik eksisting `landmarks.ts` `-7.3485,112.775` di-Google-reverse = "Jl. Zainal Abidin, **Tambaksumur**". Artinya `Tambaksumur` masih benar secara titik (titik itu memang di Tambaksumur); hanya LABEL administratif perumahan yang lebih condong Wadungasri. Karena ada 3 test bergantung + menyentuh ongkir nyata, **TIDAK diubah** — dicatat sebagai keputusan produk. Bila bisnis mau, ubah kelurahan landmark ke `Wadungasri` + sesuaikan 3 test (blast radius terukur).
+- **174f — Fase 4 skrip rekonsiliasi (DIBUAT, belum dijalankan di DB):** `src/scripts/reconcile-trapped-customer-locations.ts` (default **DRY-RUN**, tulis hanya `--commit`) + gerbang murni `src/utils/location-drift.ts` (`classifyLocationDrift`: lock `manual_staff` > tanpa rujukan > resolve gagal > beda kelurahan; heuristik "titik air" DIHAPUS karena terfalsifikasi). Test adversarial `tests/unit/reconcile-trapped-locations.test.ts` (6). **Tidak dijalankan** karena Postgres lokal tidak tersedia (`localhost:5432` mati, sesuai #173k). Wajib dry-run + backup + verifikasi 2-langkah di server.
+
+## 174. [KB-2/KB-3/KB-4/KB-6] Keputusan bisnis reservasi dieksekusi (2026-09-30)
+
+- **Konteks:** Keputusan pemilik KB-1..KB-7 dieksekusi test-first (lihat
+  `docs/DECISIONS_AUDIT_RESERVASI_2026-09-30.md`).
+- **174a — Migrasi `delivery_fee` BELUM di-apply di server (OPEN, butuh deploy):**
+  File `prisma/migrations/20261001000000_add_delivery_fee/migration.sql` sudah ada
+  (idempoten via `IF NOT EXISTS`). Terapkan di server SETELAH backup:
+  `npx prisma migrate deploy`. Drift check:
+  `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script`
+  → harus kosong setelah deploy.
+- **174b — Baca laporan lama masih via fallback (OPEN, bertahap):** 6 titik baca
+  total biaya kini memakai `resolveDeliveryFeeSnapshot()` (snapshot dulu, fallback
+  `Customer.ongkir`). Dual-write `Customer.ongkir` dipertahankan sementara agar
+  baris lama tetap benar. Hapus dual-write HANYA setelah migrasi terverifikasi di
+  produksi.
+- **174c — KB-3 ambang kuota (OPEN, tuning):** kuota = jumlah `Staff.active=true`
+  tenant. Perlu verifikasi angka terapis aktif riil di produksi agar tidak menolak
+  booking sah. Non-admin (BOT/AGENT) tanpa staf saja; admin dikecualikan.
+- **174d — KB-2 badge dashboard butuh rebuild (OPEN, deploy):** badge "⏰ Hari Ini —
+  Perlu Cek" ada di `Reservations.tsx`. Rebuild dashboard (`npm run build` di
+  `packages/admin-dashboard`) + restart bot agar tampil.
+
+## 173. [Audit Silent Failure Reservasi] R0+K1 dieksekusi, sisa temuan OPEN (2026-09-30)
+
+- **Konteks:** Audit ulang menyeluruh commit `353c756b`. DIEKSEKUSI pada iterasi ini:
+  R0.1 (`daily-invariant-monitor.service.ts` + cron), R0.2 (agregasi alert di
+  `alert.service.ts`), R2.1 (window overlap staf H5), R2.3 (reaktivasi cancelled H9),
+  R2.4 (gate mock in-memory produksi pada `/parse`, `/quick-hold`, `POST /reservation`),
+  dan K1 (form customer tidak lagi mengklaim "sudah kami terima" bila simpan DB gagal).
+  Test red-capable: `tests/unit/reservation-silent-failure-audit.test.ts` (7 test).
+  Entri ini mencatat sisa yang BELUM dieksekusi.
+- **173a — Bukti `audit/evidence/P1/` TIDAK SAH (RESOLVED, 2026-09-30):**
+  Seluruh `audit/evidence/P1/*.json` + `tests/unit/redteam-*.test.ts` adalah
+  **untracked** (bukan bagian commit `353c756b`). Sudah ditandai non-otoritatif via
+  `audit/evidence/P1/README_NOT_AUTHORITATIVE.md`; file besar dihapus, PII nomor
+  telepon diredaksi. Keputusan pemilik: simpan file kecil sebagai catatan (total < 18KB).
+- **173b — R2.5 guard `booking_date` NULL (RESOLVED via A2/KB-4, 2026-09-30):**
+  Gerbang deterministik `MissingBookingDateError` (`code: MISSING_BOOKING_DATE`,
+  HTTP 400) dipasang di AWAL `saveReservation` (`reservation-core.service.ts`),
+  SEBELUM idempotency (agar request tak bertanggal tak menyamar jadi hit
+  `request_id`). Jalur fallback 24 jam "tanpa tanggal" DIHAPUS (sumber data
+  sampah). 3 test lama disesuaikan + 3 test adversarial baru
+  (`reservation-idempotency-request-id.test.ts`). Keputusan pemilik: wajibkan
+  tanggal (jam kosong tetap default 09:00 WIB + notifikasi, sudah ada).
+- **173c — R2.6 transaksionalisasi `POST /api/admin/reservation` (RESOLVED, 2026-09-30):**
+  partial-write `Customer.ongkir` diperbaiki — ongkir kini diterapkan SETELAH
+  reservasi tersimpan (sebelumnya sebelum core save). Endpoint tidak membuat customer
+  baru (menerima `customerId`), sehingga tidak ada orphan customer. Full `$transaction`
+  interaktif tidak diperlukan untuk menutup partial-write yang ada. Advisory lock
+  race tetap OPEN (lihat #157d).
+- **173d — Guard bentrok FAIL-OPEN (RESOLVED, 2026-09-30):** production kini
+  **fail-CLOSED** — `reportConflictCheckDegraded()` melempar
+  `ConflictCheckUnavailableError` (HTTP 503) bila cek bentrok gagal karena DB error,
+  sehingga reservasi tidak diloloskan tanpa validasi. Non-production tetap fail-open
+  + alert (suite offline aman). Keputusan pemilik: tolak.
+- **173e — `pending` tidak masuk ACTIVE_STATUSES (KEPUTUSAN PEMILIK, 2026-09-30):**
+  bot menulis same-day `pending` (`save-reservation.tool.ts:485`) sedangkan core
+  `ACTIVE_STATUSES = ['confirmed','hold']` (`reservation-core.service.ts:69`, catatan:
+  nomor baris lama 67 keliru) → slot pending TIDAK dihitung saat cek bentrok/kuota.
+  **Keputusan pemilik (A1): DIBIARKAN — jangan kunci slot.** `pending` = permintaan
+  same-day yang belum dikonfirmasi, tidak boleh menahan/memblokir slot. Sebagai
+  gantinya, penumpukan slot yang tetap terjadi dideteksi via sapuan A5
+  (`slot-overlap.service.ts`, notifikasi admin tiap 3 menit). Perilaku disengaja,
+  bukan bug.
+- **173f — Idempotency key bot tidak memuat jam (RESOLVED, 2026-09-30):**
+  `request_id` kini `${tenant}:${customer}:${tanggalWIB}:${jamWIB}:${treatment}`
+  (`save-reservation.tool.ts`) — dua booking treatment sama di slot berbeda
+  (pagi & sore) tidak lagi saling menimpa. Tanggal memakai kanonis WIB.
+- **173g — `needs_staff_verification` & `google_calendar_event_id` zombie (OPEN):**
+  ditulis tapi tidak dibaca frontend (`packages/admin-dashboard/src/types/index.ts`);
+  `googleCalendarMockActive` init `true` & tak pernah diupdate (`Reservations.tsx:106`).
+- **173h — GCal mock ID + durasi hardcode 60m (OPEN):** `google-calendar.service.ts:71`
+  mengembalikan `mock_cal_event_*`; `:55`/`:97` hardcode 60 menit (abaikan
+  `duration_minutes`); `deleteEvent` menelan error. Jalur create bot & manual POST
+  tidak memanggil GCal sama sekali.
+- **173i — Efek samping hilang (RESOLVED, 2026-09-30):** (a) follow-up WAHA tidak
+  lagi ditandai `SENT` bila kirim gagal → `FAILED` + alert (`follow-up.service.ts`);
+  (b) `completeTask` staf kini memanggil `onReservationCompleted` + guard status
+  cancelled/rejected (`staff-reservation.service.ts`); (c) CAPI Purchase tidak lagi
+  ditandai `approved` sebelum Meta menerima — `sendCapiEvent` di-await, gagal →
+  `pending` + alert (`purchase-detection.service.ts`); (d) DELETE hard mengirim
+  notifikasi staf SEBELUM reservasi dihapus (`reservations.subroute.ts`);
+  (e) `createSeries` menjalankan lifecycle + follow-up + notifikasi staf per sesi
+  (`reservation-series.service.ts`). Test: `reservation-silent-failure-audit.test.ts`,
+  `reservation-series.test.ts`.
+- **173j — `hold_expires_at` belum ada (RESOLVED via KB-1, 2026-09-30):** keputusan
+  pemilik: hold berlaku sampai tengah malam WIB hari pembuatan. Sweep kini berbasis
+  `created_at` (bukan `booking_date`) → hold masa depan ikut kedaluwarsa. Tidak
+  butuh kolom baru/migrasi. Test: `expired-hold-sweep.test.ts`.
+- **173k — Verifikasi DB produksi BELUM dijalankan (OPEN):** workstation audit tidak
+  punya PostgreSQL lokal (`.env` → `localhost:5432`, tidak terjangkau; Docker tidak
+  ada). 6 invariant produksi (1 null-date, 1 stale hold, 15 confirmed lampau,
+  8 completed unverified, dll.) belum terverifikasi empiris. Jalankan
+  `scripts/db-invariants` (atau monitor R0.1) di server/staging.
+
 ## 172. [Guardrail D7/D3] Sisa tech debt eliminasi false positive CASE-084/095 (2026-09-29)
 
 - **Konteks:** perbaikan fondasional kelas ejaan agama (D7) + kontrak D3
@@ -3792,3 +3986,66 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
 - **Aksi:** (a) pindahkan balasan foto ke `TenantPromptConfig`/katalog template DB;
   (b) ganti daftar frasa dengan klasifikasi intent komitmen semantik. Kerjakan sebelum
   pola yang sama ditiru di gate lain.
+
+## 111. [Fase 1 LiveChat DONE — Sisa Fase 2–4 Belum Dieksekusi] (2026-09-30)
+
+- **Status:** open (Fase 1 backend selesai; Fase 2–4 menunggu konfirmasi terpisah).
+- **Fase 1 yang SUDAH diperbaiki (regression gate hijau: 4302 passed, build bersih):**
+  - Media berat (VN/audio/PDF/video) inbound kini di-link ke `payload_raw.media` + SSE
+    `message.updated` via seam `messageService.attachMediaToMessage` (tenant-scoped, dual-ID)
+    dari `webhook.route.ts` background task. Sebelumnya file terarsip tapi record DB tidak
+    pernah diperbarui → VN 0:00 / PDF tak bisa diunduh.
+  - `mediaExtractor.ts` domain-stripping diganti `toDisplayMediaUrl()` berbasis `new URL()`
+    + deteksi loopback/same-origin (bukan `replace(/^https?:.../)` buta) → media WABA
+    (fbsbx.com/S3/CDN) tidak lagi 404.
+  - `revokeMessage`/`editMessage` (`live-chat.service.ts`) kini dual-ID `OR[id, wa_message_id]`.
+  - `memoryMessages` dibatasi FIFO 500; `memoryWaMessageIds` dibatasi 5000 via
+    `addMemoryWaMessageId` (anti-memory-leak).
+  - `markConversationMessagesAsRead` memancarkan SSE `conversation.updated` (unreadCount 0).
+  - `/typing` mereset `resetHumanHandlingTimer` saat `is_human_handling` (jendela riil 6 jam,
+    bukan 12 jam seperti klaim plan awal).
+- **Fase 2 yang SUDAH diperbaiki (regression gate hijau: 37 test LiveChat passed, build bersih):**
+  1. Takeover/release kini memakai `refreshChatItem(conversationId)` — GET detail satu
+     percakapan + merge in-place, TANPA `loadChats(false)` yang memajukan offset paginasi.
+  2. Search jump race: `pendingFocusMessageIdRef` dipakai untuk (a) menahan reset highlight
+     di `useEffect[selectedId]`, (b) meng-gate efek auto-scroll agar tidak `scrollToBottom`
+     saat direct-jump; handler klik tidak lagi memanggil `loadThread` ganda untuk percakapan
+     yang sudah aktif.
+  3. In-chat search di-debounce 350ms (`debouncedInChatQuery`) — mencegah puluhan request
+     paralel per ketikan.
+  4. `visibilitychange`: saat SSE aktif, hanya `refreshTotalUnread()` + `loadThread(aktif)`;
+     `loadChats(true)` HANYA saat SSE terputus — posisi/urutan sidebar tidak direset.
+  5. `customer.location_updated` kini juga memperbarui kartu sidebar (`chatsRef`) dan
+     `customerDetailData` (jarak/ongkir/landmark), bukan hanya modal reservasi.
+- **Fase 3 yang SUDAH diperbaiki (regression gate hijau: 41 test passed, build bersih):**
+  1. `LiveChatComposer.tsx`: Enter = kirim, Shift+Enter = newline, guard IME (`isComposing`
+     /keyCode 229) agar tombol Send keyboard virtual HP berfungsi; placeholder direset via
+     `innerHTML=''` + buang child node (pseudo `:empty` aktif lagi).
+  2. Brand klinik di interpolasi template kini dari DB (`GET /api/admin/settings` → `brand`
+     via `getBrandIdentityAsync`), fallback konstanta `BRAND` hanya sementara. Variabel
+     quick-reply diperluas: `{nama_anak}/{child_name}`, `{usia_anak}`, `{layanan}`,
+     `{tanggal}`, `{jam}`.
+  3. Tombol salin pesan media memakai `resolveMessageDisplayText` (caption asli, bukan `[IMAGE]`).
+- **Fase 4 yang SUDAH diperbaiki (regression gate hijau: build + 97 test terkait passed):**
+  1. Invoice kontrak: `enrichResWithFormState(savedRes, withInvoice)` kini menulis `_withInvoice`;
+     `LiveChatMonitor` `onSuccess` TIDAK lagi membuka modal invoice (`if(!newRes._withInvoice)`
+     dihapus) — "Simpan Jadwal Saja" senyap, "Simpan & Masukkan Invoice" hanya isi composer
+     lewat `onSuccessAndInvoice`. Double-callback tak lagi menghasilkan dobel aksi.
+  2. Context menu desktop → floating popover mengikuti koordinat mouse + clamp tepi layar
+     (`position: fixed` inline), backdrop hanya di mobile (bottom-sheet).
+  3. `VoiceNotePlayer` menampilkan state error visual (`onError`) saat audio gagal dimuat.
+  4. Copilot: panel kirim `conversationId/customerId`; `copilot.subroute` meneruskan
+     `activeContext`; `buildRouterPrompt` menyuntik blok "KONTEKS PASIEN AKTIF" agar pertanyaan
+     deiktik ("pasien ini") ter-grounding via `get_customer_history` (tool tetap tenant-scoped).
+  5. Timezone WIB: `LiveChatMonitor` (quick-booking slot + convert-hold), `ChatExport`,
+     `chatScheduleExtractor` memakai `dateWib` (`getWibDateKey`/`getWibHoursAndMinutes`).
+- **SISA timezone (belum diinventarisasi penuh):** puluhan situs `getDate()/getHours()` di
+  komponen kalender lain (`WeekScheduleGrid`, `MonthScheduleGrid`, `DayScheduleGrid`,
+  `QuickHoldModal`, `Settings`, `Reservations`, dll.) masih zona lokal browser. Perlu audit
+  terpisah bila admin multi-zona menjadi prioritas.
+- **SISA minor:** `CreateReservationModal` masih memanggil `onSuccess` LALU
+  `onSuccessAndInvoice` (dua callback berurutan) — kini idempoten karena `onSuccess` tak lagi
+  memicu invoice, tetapi kontrak dua-callback idealnya disederhanakan menjadi satu callback
+  ber-flag (tech debt).
+- **Catatan teknis:** `src/services/reservation-series.service.ts:229` error TS pre-existing
+  (`babies` shape `{name,ageText}` vs `BabyDetail[]`) — BUKAN dari perubahan Fase 1 ini.

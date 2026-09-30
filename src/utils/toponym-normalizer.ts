@@ -105,3 +105,97 @@ export function extractCityScope(
   hits.sort((a, b) => a.index - b.index);
   return hits[hits.length - 1].city;
 }
+
+// ---------------------------------------------------------------------------
+// Toponimi MAJEMUK (data-driven): dataset menulis nama kelurahan gabungan
+// sebagai SATU kata ("Tambakoso", "Pepelegi", "Sawotratap"), sedangkan
+// customer/admin sering mengetik dengan spasi ("tambak oso", "pepe legi").
+// Pencocokan word-boundary eksak gagal → fallback kecamatan membajak lokasi.
+//
+// Solusi: generator indeks morfologis yang MENGURAI setiap nama 1-kata menjadi
+// varian spasi kanonis, dibangun sekali dari dataset (tanpa hardcode nama).
+// ---------------------------------------------------------------------------
+
+/**
+ * Bangun peta varian spasi → nama kanonis dari seluruh baris dataset.
+ * Contoh: "tambak oso" -> "Tambakoso", "pepe legi" -> "Pepelegi".
+ *
+ * Aturan:
+ * - Hanya nama kelurahan 1-kata (panjang >= 6) yang diurai.
+ * - Setiap belahan harus >= 3 huruf (hindari morfem terlalu pendek/berisik).
+ * - Kunci yang BERTABRAKAN dengan nama kelurahan 2-kata resmi dilewati, agar
+ *   "kali rungkut" tidak dipaksa menjadi "Kalirungkut" bila keduanya sah.
+ */
+export function buildCompoundToponymMap(
+  rows: Array<{ Kelurahan_Desa?: string }>
+): Map<string, string> {
+  const map = new Map<string, string>();
+  const existing = new Set<string>();
+  for (const row of rows) {
+    const k = (row.Kelurahan_Desa || '').trim().toLowerCase();
+    if (k) existing.add(k);
+  }
+  for (const row of rows) {
+    const kel = (row.Kelurahan_Desa || '').trim();
+    if (!kel || kel.includes(' ')) continue;
+    const low = kel.toLowerCase();
+    if (low.length < 6) continue;
+    for (let i = 3; i <= low.length - 3; i++) {
+      const key = `${low.slice(0, i)} ${low.slice(i)}`;
+      if (existing.has(key)) continue;
+      if (!map.has(key)) map.set(key, kel);
+    }
+  }
+  return map;
+}
+
+/**
+ * Terapkan normalisasi toponimi majemuk pada teks: ganti frasa berspasi dengan
+ * nama kanonis (lowercase). Mendukung juga bentuk terpotong pada token terakhir
+ * (mis. "tambak os" -> "Tambakoso") HANYA bila kandidatnya UNIK di leksikon —
+ * mencegah pembajakan ambigu (mis. "tambak s" tidak diselesaikan).
+ */
+export function normalizeCompoundToponym(
+  text: string,
+  map: Map<string, string>
+): string {
+  if (!text || map.size === 0) return text;
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) return text;
+
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i].toLowerCase();
+    const nxt = i + 1 < tokens.length ? tokens[i + 1].toLowerCase() : '';
+    if (nxt) {
+      const exact = map.get(`${t} ${nxt}`);
+      if (exact) {
+        out.push(exact.toLowerCase());
+        i++;
+        continue;
+      }
+      // Bentuk terpotong: token terakhir pendek & unik di leksikon.
+      if (nxt.length >= 2) {
+        let found: string | null = null;
+        let count = 0;
+        for (const [k, v] of map) {
+          const sp = k.indexOf(' ');
+          if (sp < 0 || k.slice(0, sp) !== t) continue;
+          const second = k.slice(sp + 1);
+          if (second !== nxt && second.startsWith(nxt)) {
+            count++;
+            found = v;
+            if (count > 1) break;
+          }
+        }
+        if (count === 1 && found) {
+          out.push(found.toLowerCase());
+          i++;
+          continue;
+        }
+      }
+    }
+    out.push(tokens[i].toLowerCase());
+  }
+  return out.join(' ');
+}

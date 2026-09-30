@@ -1,6 +1,6 @@
 # PLAN 12 — Scorer Contract & Schedule-Check Lifecycle Hardening (temuan batch CASE-051–060 + CASE-043/052)
 
-- **Status**: DRAFT — menunggu persetujuan eksekusi. Belum ada kode diubah.
+- **Status**: HAMPIR SELESAI — Fase 0-3 + 4 (keputusan) + 5a-c SELESAI & ter-commit (`d0c0c4d1`); hanya verifikasi re-run report (MT-2.2) yang belum dipastikan.
 - **Tanggal**: 2026-09-28.
 - **Dasar**: audit read-only `test-results/run-results-suite-v2.json` (`no` 50–60, `mode: llm`, `ranAt 2026-09-28T01:44–02:08Z`), fixture `tests/fixtures/test-suite-v2.json`, `scripts/run-test-plan.ts:1032-1103`, `src/v3/agent/pipeline/context-grounder.ts:190-238`, `src/v3/agent/pipeline/fast-response-gate.ts:105-115`, `src/services/abuse-detection.service.ts:51-72`.
 - **Prinsip**: Hard Code-Level Guards (State Machine, Kontrak Data). DILARANG: daftar keyword hafalan (`jangan/belum dulu/batal`), blanket-pass `HUMAN_HANDLING`, regex gatekeeper intent baru, dependency runtime baru.
@@ -119,5 +119,16 @@ Menindaklanjuti audit RF-08 & ADV-02 (revisi disetujui user).
 - **Fase 5c — Selaraskan fixture ADV-02 — SELESAI.** `tests/fixtures/test-suite-v2.json` ADV-02 `expected_final_state: HUMAN_HANDLING` → `INITIAL`; SOP `human-handling-pribadi` → `tolak-mandiri-tanpa-beban-cs` (konsisten dengan ADV-01/03/04 & tier adversarial "wajib resist"). Mandat produk: menolak probe PII tanpa membanjiri CS.
 
 **Verifikasi:** `npx vitest run` untuk 3 file terkait + file terkait lain hijau (36/36). Catatan: 3 kegagalan suite global (`admin-create-reservation`, `reservation-security-and-integrity`, `v3-conversation-matrix`) berada di area reservasi/admin yang disentuh perubahan WIP KONKUREN (bukan file Fase 5; tidak ada impor ke `medical-keywords`/`scorer`/`abuse-detection`) — perlu ditinjau oleh pemilik WIP tsb.
+
+---
+
+## STATUS EKSEKUSI (sinkronisasi dokumen 2026-09-30)
+
+- **Status header diperbaiki:** header "DRAFT — belum ada kode diubah" sebelumnya MENYESATKAN (kode sudah ter-commit `d0c0c4d1`, lihat juga `## STATUS EKSEKUSI (2026-09-28)` di atas).
+- **Fase 0-3 SELESAI & ter-commit** (`d0c0c4d1`): tipe lifecycle `src/v3/domain/types.ts:79`; set/clear `context-grounder.ts:197-218,226-269` + test `tests/unit/v3/pending-schedule-check-lifecycle.test.ts`; scorer justifikasi `scripts/lib/scorer.ts:112-131,192-228,237`; allowlist URL peta `src/services/abuse-detection.service.ts:26-46` + test `tests/unit/abuse-maps-url-allowlist.test.ts`; red-flag dosis `src/config/medical-keywords.ts:233-272` + test `tests/unit/dose-inquiry-redflag.test.ts`; kontrak suite `tests/unit/v3/scorer-suite-contract.test.ts`.
+- **Fase 4 (keputusan produk) SELESAI:** diputuskan PERTAHANKAN SENYAP TOTAL (tanpa perubahan kode, lihat `## KEPUTUSAN FASE 4`).
+- **Fase 5a-c SELESAI:** red-flag dosis (RF-08), bug pesan tier-gate, selaraskan fixture ADV-02.
+- **Sisa belum dipastikan (test-unverified):** apakah suite di-rerun untuk meregenerasi report `test-results/test-suite-v2-report.md` (MT-2.2) — belum dapat diverifikasi.
+- **Verdict jujur:** hampir seluruh plan ter-eksekusi & ter-commit; hanya verifikasi re-run report (MT-2.2) yang belum dipastikan. Debt: `docs/KNOWN_ISSUES.md:781-791,755-763` (#151, #158).
 
 

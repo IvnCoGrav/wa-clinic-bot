@@ -53,9 +53,13 @@ export class AlertService {
   private lastAlertTimes: Map<string, number> = new Map();
   private cooldownMs: number;
   private emergencyLogPath: string;
+  // R0.2 — agregasi alert yang di-throttle agar tidak hilang senyap (silent drop).
+  private throttledCounts: Map<string, number> = new Map();
+  private alertAggregationEnabled: boolean;
 
   constructor(cooldownMs = 5 * 60 * 1000) {
     this.cooldownMs = cooldownMs;
+    this.alertAggregationEnabled = process.env.ENABLE_ALERT_AGGREGATION !== 'false';
     const logsDir = path.join(process.cwd(), 'logs');
     if (!fs.existsSync(logsDir)) {
       try {
@@ -80,20 +84,37 @@ export class AlertService {
   /**
    * Triggers a system alert with per-trigger throttling and emergency fallback logging.
    */
-  public async notifyAlert(payload: AlertPayload): Promise<{ sent: boolean; throttled?: boolean; channel: 'telegram' | 'emergency_file' | 'console' }> {
+  public async notifyAlert(payload: AlertPayload): Promise<{ sent: boolean; throttled?: boolean; channel: 'telegram' | 'emergency_file' | 'console'; aggregatedCount?: number }> {
     const key = this.getCooldownKey(payload);
     const now = Date.now();
     const lastTime = this.lastAlertTimes.get(key) || 0;
 
     // 1. Throttling Check per Trigger Type
     if (payload.type !== AlertType.DAILY_OPS_REPORT && now - lastTime < this.cooldownMs && process.env.NODE_ENV !== 'test') {
-      return { sent: false, throttled: true, channel: 'console' };
+      // R0.2: jangan buang alert senyap — akumulasi counter agar operator tahu
+      // ada N kejadian serupa yang ditahan dalam jendela cooldown.
+      let aggregatedCount: number | undefined;
+      if (this.alertAggregationEnabled) {
+        const c = (this.throttledCounts.get(key) || 0) + 1;
+        this.throttledCounts.set(key, c);
+        aggregatedCount = c;
+        console.warn(`[AlertService] THROTTLED (aggregated ${c}x): ${payload.type}${payload.provider ? ':' + payload.provider : ''}`);
+      }
+      return { sent: false, throttled: true, channel: 'console', aggregatedCount };
+    }
+
+    // Siapkan ringkasan agregasi (jika ada alert tertahan sebelum ini) sebelum reset.
+    let aggregationNote = '';
+    const suppressed = this.throttledCounts.get(key) || 0;
+    if (suppressed > 0) {
+      aggregationNote = ` [akumulasi ${suppressed} alert serupa ditahan dalam ${Math.round(this.cooldownMs / 60000)}m terakhir]`;
+      this.throttledCounts.delete(key);
     }
 
     this.lastAlertTimes.set(key, now);
 
     const sanitizedMeta = payload.metadata ? sanitizeLogPayload(payload.metadata) : undefined;
-    const formattedLog = `[${payload.severity} ALERT] [${payload.type}${payload.provider ? `:${payload.provider}` : ''}] ${payload.message}`;
+    const formattedLog = `[${payload.severity} ALERT] [${payload.type}${payload.provider ? `:${payload.provider}` : ''}] ${payload.message}${aggregationNote}`;
 
     console.warn(`\n🚨 ${formattedLog}`, sanitizedMeta ? JSON.stringify(sanitizedMeta) : '');
 
@@ -234,6 +255,7 @@ export class AlertService {
    */
   public clearCooldowns(): void {
     this.lastAlertTimes.clear();
+    this.throttledCounts.clear();
   }
 }
 

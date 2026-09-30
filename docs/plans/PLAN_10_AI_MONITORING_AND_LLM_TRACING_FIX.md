@@ -1,6 +1,6 @@
 # PLAN 10 (Revisi) — Perbaikan Sistemik AI Monitoring Dashboard & Dedicated LLM Execution Tracing
 
-- **Status**: REVISI — menunggu persetujuan eksekusi. Belum ada kode diubah.
+- **Status**: TEREXEKUSI SEBAGIAN — kode Fase 1-3 SELESAI & ter-commit (`8d988d82`); test TDD wajib (MT-1.5/1.6, MT-3.3) BELUM ditulis (test-unverified).
 - **Tanggal revisi**: 2026-09-22.
 - **Dasar**: audit plan asli vs kode aktual (semua nomor baris di bawah sudah dicek terhadap tree `eb0d6826`).
 - **Prinsip**: Hard Code-Level Guards & data-driven. DILARANG: teks prompt "DILARANG...", regex gatekeeper intent, hafalan if-else pola kalimat, mutilasi tengah kalimat, hardcode daftar dimensi di dashboard, rename writer tanpa migrasi data.
@@ -204,3 +204,13 @@ Fase 4: verifikasi scoped + CHANGELOG + KNOWN_ISSUES
 | 4 | Verifikasi | — |
 
 Rollback per fase: revert commit fase terkait (fase independen; Fase 2→3 hanya berurutan secara tampilan, tidak secara kode).
+
+---
+
+## STATUS EKSEKUSI (sinkronisasi dokumen 2026-09-30)
+
+- **Kode Fase 1-3 SELESAI & ter-commit** di `8d988d82` (header "belum ada kode diubah" sebelumnya STALE/keliru).
+- **Backend (Fase 1):** alias baca `NLU_EXTRACTOR`/`SLOT_EXTRACTOR` + grouping multi-bubble (`src/utils/llm-execution-logger.ts:301-306,317-318,341-342,391-406`); plumbing tenant + alias `task_type` audit (`src/routes/admin/evaluations.subroute.ts:395,512,519-520,538,545-546`); `src/v3/agent/pipeline/generation-stage.ts:277-280,405`.
+- **Frontend (Fase 2-3):** anti-reset polling + fetch per viewMode + provider aktual + dark-mode (`packages/admin-dashboard/.../Debug.tsx:490-491,583,588-607,620-626,1109-1111`); parser feedback data-driven + touch target (`AiEvaluations.tsx:71,146,157,318,427`).
+- **Belum selesai (test-unverified):** test TDD wajib MT-1.5/1.6 (alias/out-of-order/tenant) dan MT-3.3 (parser dashboard) TIDAK PERNAH ditulis — `tests/unit/hierarchical-debug-logs.test.ts` tidak tersentuh.
+- **Verdict jujur:** kode Fase 1-3 ada & ter-commit, tetapi **test TDD wajib belum ada**; CHANGELOG `CHANGELOG.md:1372`; debt tercatat di `docs/KNOWN_ISSUES.md:1442-1449` (#112).

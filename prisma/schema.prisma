@@ -291,6 +291,10 @@ model Reservation {
   purchase_event_sent_at   DateTime?
   purchase_occurred_at     DateTime?
   purchase_value           Int?
+  // KB-6 (2026-09-30): snapshot ongkir saat booking (riwayat abadi meski
+  // customer pindah alamat). Nullable agar baris lama tetap valid; baca
+  // memakai fallback ke Customer.ongkir bila null.
+  delivery_fee             Int?
   purchase_review_status   String            @default("pending")
   payment_method           String?
   proof_url                String?

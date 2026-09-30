@@ -11,13 +11,20 @@ describe('Geocoding Service Local Database & Ambiguity Unit Tests', () => {
     expect(res.isPrecise).toBe(false);
   });
 
-  it('2. should detect ambiguity for Wedi and return options', async () => {
-    const res = await geocodingService.geocodeText('saya di wedi');
+  it('2. should detect ambiguity for a genuine homonym (Tropodo) and return options', async () => {
+    // Audit wilayah 2026-09-30: "Wedi" sebelumnya duplikat di Gedangan+Candi;
+    // baris Candi dihapus (bukan desa Wedi). Kini Wedi hanya Gedangan → presisi.
+    // Tropodo adalah homonim NYATA (Waru + Krian).
+    const wedi = await geocodingService.geocodeText('saya di wedi');
+    expect(wedi.isPrecise).toBe(true);
+    expect(wedi.kecamatan).toBe('Gedangan');
+
+    const res = await geocodingService.geocodeText('saya di tropodo');
     expect(res.isPrecise).toBe(false);
     expect(res.ambiguityResults).toBeDefined();
     expect(res.ambiguityResults!.length).toBe(2);
-    expect(res.ambiguityResults![0].Kecamatan).toBe('Gedangan');
-    expect(res.ambiguityResults![1].Kecamatan).toBe('Candi');
+    const kecs = res.ambiguityResults!.map((a: any) => a.Kecamatan).sort();
+    expect(kecs).toEqual(['Krian', 'Waru']);
   });
 
   it('3. should resolve Wedi Gedangan precisely using the context filter', async () => {

@@ -694,6 +694,31 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lat: -7.326200,
     lng: 112.767500,
   },
+  // --- KLASTER PERBATASAN WARU (Tambakoso) — koordinat terverifikasi OSM ---
+  // Klaster ini di atas gerbang umum agar first-match-wins memetakan tepat.
+  {
+    name: 'The Oso (Tambakoso, Waru)',
+    patterns: [
+      /\bthe\s*oso\b/i,
+      /\boso\s*residence\b/i,
+    ],
+    kelurahan: 'Tambakoso',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.3553263,
+    lng: 112.8065525,
+  },
+  {
+    name: 'Grand Alana Regency Tambakoso',
+    patterns: [
+      /\b(alana|grand\s*alana)(\s*regency)?\b/i,
+    ],
+    kelurahan: 'Tambakoso',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.3519115,
+    lng: 112.8120106,
+  },
 ];
 
 /**

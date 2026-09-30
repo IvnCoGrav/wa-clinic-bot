@@ -2139,6 +2139,38 @@ export class CustomerService {
       mem.profile_picture_updated_at = now;
     }
   }
+
+  /**
+   * KB-6: ambil referensi ongkir terakhir customer agar admin tidak perlu
+   * memasukkan ulang di next treatment. Prioritas: delivery_fee snapshot
+   * reservasi terakhir (bukan cancelled) → fallback Customer.ongkir.
+   * DB offline → null (pemanggil memakai default masing-masing).
+   */
+  public async getLastDeliveryFee(customerId: string, tenantId?: string): Promise<number | null> {
+    try {
+      const last = await prisma.reservation.findFirst({
+        where: {
+          customer_id: customerId,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
+          status: { not: 'cancelled' },
+          delivery_fee: { not: null },
+        },
+        orderBy: { created_at: 'desc' },
+        select: { delivery_fee: true },
+      });
+      const snapshot = (last as any)?.delivery_fee;
+      if (typeof snapshot === 'number' && snapshot >= 0) return snapshot;
+    } catch {}
+    try {
+      const cust = await prisma.customer.findFirst({
+        where: { id: customerId, ...(tenantId ? { tenant_id: tenantId } : {}) },
+        select: { ongkir: true },
+      });
+      const legacy = (cust as any)?.ongkir;
+      if (typeof legacy === 'number' && legacy >= 0) return legacy;
+    } catch {}
+    return null;
+  }
 }
 
 export interface CustomerGroundTruth {

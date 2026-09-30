@@ -215,6 +215,48 @@ class ReservationSeriesService {
       console.warn('[RESERVATION SERIES] recalculateCustomerLtv on create failed:', err.message);
     }
 
+    // FIX 173i-e: jalankan efek samping kanonis per sesi (sebelumnya series
+    // bypass lifecycle → follow-up H-1/H+1 & notifikasi penugasan staf hilang
+    // senyap). Best-effort: kegagalan satu sesi tidak menggagalkan series.
+    for (const r of result.reservations) {
+      try {
+        const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
+        // Kontrak lifecycle memakai BabyDetail { name, age }. Series menerima
+        // { name, ageText? } → map agar tipe konsisten (ageText kosong → '').
+        await reservationLifecycleService.onReservationCreated({
+          customerId,
+          reservationId: r.id,
+          tenantId,
+          chatId: '',
+          babies: (params.babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
+        });
+      } catch (lcErr: any) {
+        console.warn(`[RESERVATION SERIES] lifecycle sesi ${r.sessionNumber} warning:`, lcErr?.message);
+      }
+
+      try {
+        const { followUpService } = await import('./follow-up.service');
+        await followUpService.createReservationFollowUps({
+          reservationId: r.id,
+          customerId,
+          bookingDate: r.bookingDate,
+          treatmentCategory: resolvedCategory,
+          tenantId,
+        });
+      } catch (fuErr: any) {
+        console.warn(`[RESERVATION SERIES] follow-up sesi ${r.sessionNumber} warning:`, fuErr?.message);
+      }
+
+      if (r.assignedStaffId) {
+        try {
+          const { staffNotificationService } = await import('./staff-notification.service');
+          await staffNotificationService.scheduleReservationAssignmentNotification(r.id, r.assignedStaffId);
+        } catch (notifErr: any) {
+          console.warn(`[RESERVATION SERIES] notifikasi staf sesi ${r.sessionNumber} warning:`, notifErr?.message);
+        }
+      }
+    }
+
     // Best-effort background Google Calendar sync (createEvent per session)
     try {
       const { googleCalendarService } = await import('./google-calendar.service');

@@ -471,13 +471,6 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Taman",
-    "Kelurahan_Desa": "Karangbong",
-    "Kode_Pos": "61257",
-    "Koordinat": "-7.408289399999999, 112.7137227"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Taman",
     "Kelurahan_Desa": "Sidodadi",
     "Kode_Pos": "61257",
     "Koordinat": "-7.381673, 112.6451925"
@@ -723,20 +716,6 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Buduran",
-    "Kelurahan_Desa": "Sidoklumpuk",
-    "Kode_Pos": "61252",
-    "Koordinat": "-7.4481832, 112.7226611"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Buduran",
-    "Kelurahan_Desa": "Mergosari",
-    "Kode_Pos": "61252",
-    "Koordinat": "-7.458566299999999, 112.5289793"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Buduran",
     "Kelurahan_Desa": "Sukorejo",
     "Kode_Pos": "61252",
     "Koordinat": "-7.4232672, 112.7167022"
@@ -772,7 +751,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Sukodono",
-    "Kelurahan_Desa": "Klopo Sepuluh",
+    "Kelurahan_Desa": "Kloposepuluh",
     "Kode_Pos": "61258",
     "Koordinat": "-7.398291299999999, 112.6883969"
   },
@@ -873,13 +852,6 @@
     "Kelurahan_Desa": "Plumbungan",
     "Kode_Pos": "61258",
     "Koordinat": "-7.393494, 112.6600907"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Sukodono",
-    "Kelurahan_Desa": "Terung Kulon",
-    "Kode_Pos": "61258",
-    "Koordinat": "-7.3970707, 112.601646"
   },
   {
     "Kabupaten_Kota": "Kota Surabaya",
@@ -1013,13 +985,6 @@
     "Kelurahan_Desa": "Sarirogo",
     "Kode_Pos": "61234",
     "Koordinat": "-7.4277073, 112.6809479"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Sidoarjo (Kota)",
-    "Kelurahan_Desa": "Sidomulyo",
-    "Kode_Pos": "61212",
-    "Koordinat": "-7.424990900000001, 112.7315995"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -1269,13 +1234,6 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Candi",
-    "Kelurahan_Desa": "Wedi",
-    "Kode_Pos": "61271",
-    "Koordinat": "-7.386360899999999, 112.7464965"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Candi",
     "Kelurahan_Desa": "Ngampelsari",
     "Kode_Pos": "61271",
     "Koordinat": "-7.4939554, 112.7167022"
@@ -1342,13 +1300,6 @@
     "Kelurahan_Desa": "Kedungkendo",
     "Kode_Pos": "61271",
     "Koordinat": "-7.477401899999998, 112.6958457"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Candi",
-    "Kelurahan_Desa": "Pangkemiri",
-    "Kode_Pos": "61271",
-    "Koordinat": "-7.494167699999998, 112.66605"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -2214,7 +2165,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Tulangan",
-    "Kelurahan_Desa": "Griting",
+    "Kelurahan_Desa": "Grinting",
     "Kode_Pos": "61273",
     "Koordinat": "-7.456374599999999, 112.6407229"
   },
@@ -2234,24 +2185,10 @@
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Tulangan",
-    "Kelurahan_Desa": "Kedungbanteng",
-    "Kode_Pos": "61273",
-    "Koordinat": "-7.501423599999999, 112.7420274"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Prambon",
     "Kelurahan_Desa": "Simogirang",
     "Kode_Pos": "61264",
     "Koordinat": "-7.4430677, 112.5826176"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Prambon",
-    "Kelurahan_Desa": "Simoangin-angin",
-    "Kode_Pos": "61264",
-    "Koordinat": "-7.4370609, 112.6004965"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -2298,13 +2235,6 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Prambon",
-    "Kelurahan_Desa": "Pehkulon",
-    "Kode_Pos": "61264",
-    "Koordinat": "-7.7313123, 112.0789355"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Prambon",
     "Kelurahan_Desa": "Jedongcangkring",
     "Kode_Pos": "61264",
     "Koordinat": "-7.4569492, 112.606456"
@@ -2319,7 +2249,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Prambon",
-    "Kelurahan_Desa": "Kajartrengguli",
+    "Kelurahan_Desa": "Kajartengguli",
     "Kode_Pos": "61264",
     "Koordinat": "-7.4692913, 112.5647384"
   },
@@ -2336,13 +2266,6 @@
     "Kelurahan_Desa": "Kedungkembar",
     "Kode_Pos": "61264",
     "Koordinat": "-7.4636646, 112.5990066"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Prambon",
-    "Kelurahan_Desa": "Gadingmangu",
-    "Kode_Pos": "61264",
-    "Koordinat": "-7.566894, 112.1594153"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -2448,13 +2371,6 @@
     "Kelurahan_Desa": "Singkalan",
     "Kode_Pos": "61263",
     "Koordinat": "-7.4245378, 112.4798088"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Balongbendo",
-    "Kelurahan_Desa": "Pagerngumbuk",
-    "Kode_Pos": "61263",
-    "Koordinat": "-7.4184312, 112.6183751"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -2676,7 +2592,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Krembung",
-    "Kelurahan_Desa": "Tanjekwagir",
+    "Kelurahan_Desa": "Tanjegwagir",
     "Kode_Pos": "61275",
     "Koordinat": "-7.528800599999999, 112.6332737"
   },
@@ -2760,7 +2676,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Tarik",
-    "Kelurahan_Desa": "Kramattemanggung",
+    "Kelurahan_Desa": "Kramattemenggung",
     "Kode_Pos": "61265",
     "Koordinat": "-7.434094300000001, 112.4663984"
   },
@@ -2770,13 +2686,6 @@
     "Kelurahan_Desa": "Kedungbocok",
     "Kode_Pos": "61265",
     "Koordinat": "-7.4542334, 112.4917291"
-  },
-  {
-    "Kabupaten_Kota": "Kabupaten Sidoarjo",
-    "Kecamatan": "Tarik",
-    "Kelurahan_Desa": "Mulyodadi",
-    "Kode_Pos": "61265",
-    "Koordinat": "-7.4255279, 112.6273143"
   },
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
@@ -3201,7 +3110,7 @@
   {
     "Kabupaten_Kota": "Kabupaten Sidoarjo",
     "Kecamatan": "Balongbendo",
-    "Kelurahan_Desa": "Gadungkepuhsari",
+    "Kelurahan_Desa": "Gagangkepuhsari",
     "Kode_Pos": "61263",
     "Koordinat": "-7.4279264, 112.5349392"
   },
@@ -3893,7 +3802,7 @@
   },
   {
     "Kabupaten_Kota": "Kabupaten Gresik",
-    "Kecamatan": "Menganti",
+    "Kecamatan": "Kedamean",
     "Kelurahan_Desa": "Turirejo",
     "Kode_Pos": "61174",
     "Koordinat": "-7.3023604, 112.5313596"

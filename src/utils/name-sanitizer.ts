@@ -51,6 +51,85 @@ const GENERIC_NAME_PLACEHOLDERS = new Set([
   '-', '--', '...', 'null', 'undefined'
 ]);
 
+// Leksikon toponimi tambahan yang DIINJEKSI saat boot (data-driven dari dataset
+// gazetteer). DILARANG mengimpor gazetteer di sini (modul ini harus pure/ringan
+// dan tidak menyeret I/O dataset ke hot-path). Pemanggil boot mengisi lewat setter.
+let injectedDistrictLexicon: string[] = [];
+
+/**
+ * Injeksi leksikon toponimi data-driven (mis. kunci toponimi majemuk dari
+ * gazetteer: "tambak oso", "pepe legi"). Idempoten & menggantikan nilai lama.
+ */
+export function setNameSanitizerDistrictLexicon(names: string[]): void {
+  injectedDistrictLexicon = Array.from(
+    new Set((names || []).map((n) => (n || '').trim().toLowerCase()).filter(Boolean))
+  );
+}
+
+/** Leksikon distrik efektif: daftar statis + injeksi data-driven (panjang dulu). */
+function getEffectiveDistrictLexicon(): string[] {
+  const merged = new Set<string>(COMMON_DISTRICTS);
+  for (const n of injectedDistrictLexicon) merged.add(n);
+  return Array.from(merged).sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Runtuhkan pengulangan frasa lokasi beruntun akibat sinkronisasi kontak ganda
+ * (Google Contact / WhatsApp webhook): "Tambak Os Tambak Os" -> "Tambak Os",
+ * "Sedati Sedati" -> "Sedati". Deterministik, tanpa mutilasi tengah kalimat.
+ *
+ * Aturan aman:
+ * - Frasa MAJEMUK (>= 2 kata) yang berulang beruntun selalu diciutkan.
+ * - Kata TUNGGAL hanya diciutkan bila kata itu memang toponimi (ada di leksikon),
+ *   sehingga nama orang asli yang berulang ("Dede Dede") tidak dirusak.
+ */
+function stripConsecutiveDuplicatePhrase(name: string): string {
+  const lexicon = new Set(getEffectiveDistrictLexicon());
+  const words = name.split(/\s+/).filter(Boolean);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let k = Math.floor(words.length / 2); k >= 1; k--) {
+      const tail = words.slice(words.length - k).join(' ').toLowerCase();
+      const prev = words.slice(words.length - 2 * k, words.length - k).join(' ').toLowerCase();
+      if (tail !== prev) continue;
+      if (k === 1 && !lexicon.has(tail)) continue;
+      words.splice(words.length - k, k);
+      changed = true;
+      break;
+    }
+  }
+  return words.join(' ');
+}
+
+/**
+ * Buang frasa toponimi yang terpotong di akhir (mis. "Tambak Os" -> "Tambakoso"
+ * adalah prefiks "tambakoso" di leksikon). Data-driven, tanpa daftar hafalan.
+ */
+function stripTrailingDistrictFragment(name: string): string {
+  const lexicon = getEffectiveDistrictLexicon();
+  const noSpace = lexicon.map((d) => d.replace(/\s+/g, ''));
+  let words = name.split(/\s+/).filter(Boolean);
+  let changed = true;
+  while (changed && words.length >= 2) {
+    changed = false;
+    for (let k = Math.min(3, words.length - 1); k >= 1; k--) {
+      const tailWords = words.slice(words.length - k);
+      if (!tailWords.every((w) => /^[a-zA-Z]+$/.test(w))) continue;
+      const concatenated = tailWords.join('').toLowerCase();
+      if (concatenated.length < 5) continue;
+      const isFragment = noSpace.some((d) => d.length > concatenated.length && d.startsWith(concatenated));
+      if (isFragment) {
+        words = words.slice(0, words.length - k);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return words.join(' ');
+}
+
+
 /**
  * Membersihkan nama customer agar hanya berupa nama panggilan/nama asli orang.
  * Menghilangkan:
@@ -96,10 +175,11 @@ export function sanitizeCustomerNameForGreeting(rawName?: string | null): string
   name = name.replace(/\s+(?:dari|di|area|daerah|lokasi)\s+[a-zA-Z0-9_\s-]+$/i, '').trim();
 
   // 7. Buang nama-nama kecamatan/kelurahan umum Surabaya/Sidoarjo di akhir string (bisa berulang misal "Semampir Sidoarjo")
+  name = stripConsecutiveDuplicatePhrase(name);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const d of COMMON_DISTRICTS) {
+    for (const d of getEffectiveDistrictLexicon()) {
       const re = new RegExp(`\\s+${d}$`, 'i');
       if (re.test(name)) {
         name = name.replace(re, '').trim();
@@ -108,6 +188,8 @@ export function sanitizeCustomerNameForGreeting(rawName?: string | null): string
       }
     }
   }
+  // 7b. Buang fragmen toponimi terpotong di akhir ("Ifa Tambak Os" -> "Ifa").
+  name = stripTrailingDistrictFragment(name);
 
   // 8. Bersihkan simbol aneh yang tersisa di awal/akhir
   name = name.replace(/^[\s~_.*\-#@!&|+=<>]+|[\s~_.*\-#@!&|+=<>]+$/g, '').trim();

@@ -336,6 +336,26 @@ if (require.main === module) {
       }).catch(e => console.error('[EXPIRED HOLD SWEEP START ERROR]', e));
     }
 
+    // R0.1 — Daily Invariant Monitor (READ-ONLY). Default aktif; env 'false' menonaktifkan.
+    if (process.env.ENABLE_INVARIANT_MONITOR !== 'false') {
+      const intervalHours = parseInt(process.env.INVARIANT_MONITOR_INTERVAL_HOURS || '24', 10);
+      import('./services/daily-invariant-monitor.service').then(({ runDailyInvariantMonitor }) => {
+        trackInterval(() => runDailyInvariantMonitor(), intervalHours * 60 * 60 * 1000);
+        console.log(`🔎 Invariant monitor cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[INVARIANT MONITOR START ERROR]', e));
+    }
+
+    // A5 — Sapuan slot jadwal bertumpuk (peringatan dini ke admin, bukan blokir).
+    // Default aktif; env 'false' menonaktifkan. Tidak dijalankan langsung saat boot.
+    if (process.env.ENABLE_SLOT_OVERLAP_SWEEP !== 'false') {
+      const intervalMinutes = Math.max(1, Number(process.env.SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES ?? 3) || 3);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        trackInterval(() => cron.runSlotOverlapSweep(), intervalMinutes * 60 * 1000);
+        console.log(`🔀 Slot overlap sweep cron started (every ${intervalMinutes}m)`);
+      }).catch(e => console.error('[SLOT OVERLAP SWEEP START ERROR]', e));
+    }
+
     // #162e: Auto-close sesi perjalanan terapis yang jadwalnya sudah lewat. Default aktif.
     if (process.env.ENABLE_TRIP_AUTOCLOSE_SWEEP !== 'false') {
       const intervalMinutes = parseInt(process.env.TRIP_AUTOCLOSE_SWEEP_INTERVAL_MINUTES || '15', 10);

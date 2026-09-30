@@ -12,7 +12,7 @@
 /**
  * Pola pencemaran kolom kelurahan: URL maps, label alamat generik, dan detail
  * alamat fisik (jalan/gang/blok/RT-RW/No rumah). Diambil dari kata yang TERBUKTI
- * tidak muncul pada 573 nama kelurahan resmi dataset (anti-false-positive).
+ * tidak muncul pada 560 nama kelurahan resmi dataset (anti-false-positive).
  */
 const CORRUPTION_PATTERNS =
   /https?:\/\/|goo\.gl|maps|\bjl\.|\bjln\.|\bjalan\b|\bblok\b|\bgang\b|\bgg\.|\bperum\b|\bperumahan\b|\bresidence\b|\bapartemen\b|\bapartment\b|\bkomplek\b|\bdusun\b|\brt\s*\d|\brw\s*\d|\bno\.\s*\d|\bnomor\s*\d/i;

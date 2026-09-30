@@ -584,8 +584,10 @@ export class CronService {
   }
 
   /**
-   * Fase 4.2 — Auto-expire reservasi `hold` yang tanggal kunjungannya sudah
-   * lewat (status menggantung selamanya bila tak ada worker). Tenant-scoped,
+   * KB-1 (2026-09-30) — Auto-expire reservasi `hold` yang dibuat SEBELUM awal
+   * hari WIB ini (kebijakan pemilik: hold berlaku sampai tengah malam WIB hari
+   * pembuatan). Berbasis `created_at`, bukan `booking_date`, sehingga hold masa
+   * depan pun kedaluwarsa (sebelumnya membeku tanpa batas). Tenant-scoped,
    * best-effort: DB offline → silent.
    */
   public async runExpiredHoldSweep(): Promise<void> {
@@ -595,7 +597,7 @@ export class CronService {
       let expired = 0;
       for (const tenantId of tenantIds) {
         try {
-          // Batas awal hari ini WIB (hold dengan booking_date sebelum ini = usang).
+          // Batas awal hari ini WIB (hold yang dibuat sebelum ini = kedaluwarsa).
           const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
           const startOfTodayWibUtc = new Date(
             Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), 0, 0, 0, 0) - 7 * 60 * 60 * 1000
@@ -604,7 +606,7 @@ export class CronService {
             where: {
               tenant_id: tenantId,
               status: 'hold',
-              booking_date: { lt: startOfTodayWibUtc },
+              created_at: { lt: startOfTodayWibUtc },
             },
             data: { status: 'cancelled' },
           });
@@ -613,9 +615,38 @@ export class CronService {
           console.warn(`[Cron Service] Expired hold sweep tenant ${tenantId} skipped:`, e?.message);
         }
       }
-      if (expired > 0) console.log(`[Cron Service] Hold usang di-expire: ${expired} reservasi.`);
+      if (expired > 0) console.log(`[Cron Service] Hold kedaluwarsa (lewat tengah malam WIB) di-expire: ${expired} reservasi.`);
     } catch (err) {
       console.error('[Cron Service] Error running expired hold sweep:', (err as Error).message);
+    }
+  }
+
+  /**
+   * A5 — Sapuan slot jadwal bertumpuk (double-booked / tumpang waktu).
+   * PERINGATAN DINI ke admin (bukan blokir keras). Tenant-scoped,
+   * best-effort: DB offline → silent. Mirrors runExpiredHoldSweep.
+   */
+  public async runSlotOverlapSweep(): Promise<void> {
+    try {
+      const { getAllTenantIds } = await import('./media.service');
+      const { sweepOverlappingSlots } = await import('./slot-overlap.service');
+      const tenantIds = await getAllTenantIds();
+      let groups = 0;
+      let reservations = 0;
+      for (const tenantId of tenantIds) {
+        try {
+          const res = await sweepOverlappingSlots(tenantId);
+          groups += res.overlappingGroups;
+          reservations += res.reservationCount;
+        } catch (e: any) {
+          console.warn(`[Cron Service] Slot overlap sweep tenant ${tenantId} skipped:`, e?.message);
+        }
+      }
+      if (groups > 0) {
+        console.log(`[Cron Service] Slot overlap sweep: ${groups} grup bertumpuk (${reservations} reservasi).`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running slot overlap sweep:', (err as Error).message);
     }
   }
 

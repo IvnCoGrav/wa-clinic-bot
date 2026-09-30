@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   sanitizeCustomerNameForGreeting,
   formatGreetingBunda,
@@ -6,8 +6,15 @@ import {
   formatBabyNamesForGreeting,
 } from '../../src/utils/name-sanitizer';
 import { getRollingFollowUpMessage } from '../../src/config/followup-templates';
+import { getGazetteerAreas } from '../../src/utils/gazetteer';
 
 describe('Name & BabyName Sanitizer Unit Tests', () => {
+  beforeAll(() => {
+    // Trigger boot wiring: gazetteer menginjeksi leksikon distrik data-driven
+    // ke name-sanitizer (single source = dataset).
+    getGazetteerAreas();
+  });
+
   describe('1. sanitizeCustomerNameForGreeting', () => {
     it('removes "Bunda" prefix and district suffix from "Bunda Rina Kecamatan Sukodono"', () => {
       expect(sanitizeCustomerNameForGreeting('Bunda Rina Kecamatan Sukodono')).toBe('Rina');
@@ -63,6 +70,20 @@ describe('Name & BabyName Sanitizer Unit Tests', () => {
       expect(sanitizeCustomerNameForGreeting('')).toBe('');
       expect(sanitizeCustomerNameForGreeting(null)).toBe('');
       expect(sanitizeCustomerNameForGreeting(undefined)).toBe('');
+    });
+
+    it('collapses duplicate contact-name tokens from Google/WA contact sync', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Ifa Tambak Os Tambak Os')).toBe('Ifa');
+      expect(sanitizeCustomerNameForGreeting('Bunda Karimah Sedati Sedati')).toBe('Karimah');
+      expect(sanitizeCustomerNameForGreeting('Bunda Mutia Gunung Anyar Tambak Gunung Anyar Tambak')).toBe('Mutia');
+    });
+
+    it('collapses duplicated location phrase NOT in static list (data-driven)', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Ifa Gisik Cemandi Gisik Cemandi')).toBe('Ifa');
+    });
+
+    it('does not mangle a real name that legitimately repeats a single word', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Dede Dede')).toBe('Dede Dede');
     });
   });
 
