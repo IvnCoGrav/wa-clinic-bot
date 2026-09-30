@@ -860,7 +860,9 @@ export function loadServices() {
       catalog.clear();
       list.forEach((item) => catalog.set(item.id, sanitizeCatalogItem(item)));
     } else {
-      fs.writeFileSync(SERVICES_FILE, JSON.stringify(DEFAULT_CLINIC_SERVICES, null, 2));
+      // #128-FaseA (A1): DB adalah sumber kebenaran runtime. DILARANG menulis
+      // file seed di sini (dulu `writeFileSync` → churn + drift git). Cukup
+      // muat default in-memory; file seed dibuat manual/versioned bila perlu.
       catalog.clear();
       DEFAULT_CLINIC_SERVICES.forEach((item) => catalog.set(item.id, sanitizeCatalogItem(item)));
     }
@@ -871,19 +873,15 @@ export function loadServices() {
   }
 }
 
+/**
+ * #128-FaseA (A1): sinkronisasi file `services_custom.json` DIHENTIKAN.
+ * Sumber kebenaran runtime = tabel `clinic_services` per-tenant (via
+ * `saveServicesToDb`). Menulis file tiap mutasi katalog menyebabkan drift
+ * (file vs DB vs seed TS) dan churn git. Fungsi dipertahankan (no-op) agar
+ * pemanggil lama tidak putus.
+ */
 export function saveServices() {
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    return true;
-  }
-  try {
-    const catalog = getTenantCatalog(DEFAULT_TENANT_ID);
-    const list = Array.from(catalog.values());
-    fs.writeFileSync(SERVICES_FILE, JSON.stringify(list, null, 2));
-    return true;
-  } catch (err) {
-    console.error('Failed to save clinic services to file:', err);
-    return false;
-  }
+  return true;
 }
 
 /**

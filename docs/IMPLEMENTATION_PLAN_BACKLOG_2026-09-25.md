@@ -133,12 +133,33 @@
 - Aksi: pastikan tak ada 2 agen menulis bersamaan (1 agen = 1 git worktree + partisi file), lalu re-run file ini; bila masih merah, perbaiki trimmer (`ends` ordering) — JANGAN tambal test.
 
 ### §8.1 Fase A — Unifikasi Katalog (fondasional, unblock semua drift)
-- `src/services/treatment-catalog.service.ts:101` `DEFAULT_CLINIC_SERVICES` → seed-only sudah; **hapus `saveServices()` sinkron ke file** (`:819-832`) atau jadikan export-only.
-- 3 copy katalog: seed TS vs `services_custom.json` vs `packages/admin-dashboard/src/utils/treatmentParser.ts:14` `DEFAULT_CLINIC_SERVICES_FALLBACK`. Rencana: fallback dashboard fetch `/api/admin/clinic-services` (jangan hardcode array), atau generate file dari DB saat build.
-- Alias legacy: token `juara` (dari "Lahap Juara" lama) tak match fuzzy ≥2 token di `cart-manager.ts`; tambah peta alias terpusat di `src/v3/domain` (bukan per-file).
-- Ekuivalensi semantik merge-key P2-4 (`src/services/reservation-core.service.ts:288-292`): ganti `treatment_detail ===` string-equality dengan hash kanonik katalog (`treatmentCatalogService.matchCatalogItem` → id) agar "Pijat Rileksasi" ≈ "Kala Baby – Pijat Ceria".
-- Acceptance: ubah 1 layanan via dashboard → tidak ada drift TS/file/test; `grep` nama legacy di `src/` = 0.
-- Gate: `npm run build` + suite katalog/cart/reservation hijau.
+> **STATUS (2026-09-30):** A1 + A2 **SELESAI**. A3 **DIBATALKAN (premis keliru — dead code)**.
+> A4 **DITUNDA** (Confirmation Gate — blast radius inti `saveReservation`). Lihat catatan tiap butir.
+- **A1 — `saveServices()` sinkron file (SELESAI, 2026-09-30):** `saveServices()` kini **no-op**
+  (return true); `loadServices()` TIDAK lagi `writeFileSync` seed. Sumber kebenaran runtime =
+  tabel `clinic_services` (`loadServicesFromDb` di `app.ts:221`). File `services_custom.json`
+  tetap sebagai seed legacy (dibaca, tidak ditulis runtime). Menghapus churn git + drift.
+- **A2 — Drift 3 copy katalog (SELESAI, 2026-09-30):** temuan terverifikasi: fallback dashboard
+  (28 item, disunting manual) **kehilangan 11 layanan aktif** backend (moms-induksi-*, selapan-full,
+  bundle-*). Solusi fondasional: satu sumber — `src/scripts/generate-catalog-seed.ts`
+  (`npm run catalog:seed`) men-generate `packages/admin-dashboard/src/data/clinicServicesFallback.json`
+  (hanya layanan **aktif**, 39) dari `DEFAULT_CLINIC_SERVICES`. `treatmentParser.ts` meng-import JSON
+  (offline-safe). Guard anti-drift: `tests/unit/catalog-seed-drift.test.ts` (5 test).
+  Catatan: `services_custom.json` (42 baris, git-tracked) DIPERTAHANKAN sebagai seed legacy —
+  tidak lagi ditulis runtime; konsolidasinya menyusul bila terbukti tak terpakai.
+- **A3 — Alias legacy `juara` (DIBATALKAN — premis keliru):** audit kode membuktikan
+  `CartManager.adaptCartToAudienceAge` (`cart-manager.ts:766`) **TIDAK dipanggil dari `src/`
+  sama sekali** (hanya 1 test dengan katalog fiktif) = **dead code**. Bug "token overlap ≥2 gagal"
+  hanya ada di test sintetis. Adaptasi usia PRODUKSI berjalan di `get-catalog.tool.ts:349-354`
+  via `ageTier` DB-driven (sudah benar). Memperbaiki A3 = make-up → **dibatalkan**; kandidat
+  hapus dead code dicatat untuk Fase G (§8.7). Lihat KNOWN_ISSUES.
+- **A4 — Merge-key kanonik (DITUNDA, Confirmation Gate):** `reservation-core.service.ts:601-602`
+  masih `primaryDetail === treatmentDetail`. Menggantinya menyentuh inti `saveReservation`
+  (40+ test bergantung) → butuh gate tersendiri.
+- **Acceptance tercapai (A1/A2):** ubah 1 layanan via dashboard → tidak ada drift TS/JSON/test
+  (guard menegakkan); fallback dashboard sinkron dengan backend. **Gate:** `npm run build` +
+  `vite build` dashboard hijau; full suite **4369 passed / 0 failed**.
+- Catatan basi plan: baris `:101`/`:819-832`/`:288-292` sudah bergeser (`:124`/`:874-887`/`:601-602`).
 
 ### §8.2 Fase B — Sisa Silent Fallback (data-loss prod)
 - 72 hit `memory*` sisa; exemplar sudah 2 (`customer.service.ts:8-15,56-65,258-293`). Pola per-service: guard `isTestRuntime()` → prod `throw` + log.

@@ -75,6 +75,11 @@ temp/
 exports/
 data/
 
+# Exception: seed katalog dashboard (di-generate `npm run catalog:seed`, WAJIB di-track
+# karena di-import bundled oleh packages/admin-dashboard/src/utils/treatmentParser.ts)
+!packages/admin-dashboard/src/data/
+!packages/admin-dashboard/src/data/clinicServicesFallback.json
+
 
 
 # local desktop tool state
