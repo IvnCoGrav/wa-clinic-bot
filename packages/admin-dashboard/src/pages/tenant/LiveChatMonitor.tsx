@@ -870,7 +870,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     // Reservasi aktif diturunkan lokal (memo active* dideklarasikan lebih bawah).
     const resList = (customerDetailData?.reservations || []) as any[];
     const activeRes =
-      resList.find((r: any) => r.status === 'confirmed') ||
+      resList.find((r: any) => r.status === 'confirmed' || r.status === 'en_route') ||
       resList.find((r: any) => r.status === 'hold') ||
       resList.find((r: any) => r.status === 'pending') ||
       (selectedChat as any)?.activeConfirmedReservation ||
@@ -3010,7 +3010,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const activeConfirmed = reservations.find((r: any) => {
-          if (!r || r.status !== 'confirmed' || !r.booking_date) return false;
+          if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
           const bd = new Date(r.booking_date).getTime();
           return !isNaN(bd) && bd >= startOfToday.getTime();
         }) || null;
@@ -3214,7 +3214,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const activeConfirmedReservation = useMemo(() => {
     if (!selectedChat) return null;
     const isUpcomingConfirmed = (r: any) => {
-      if (!r || r.status !== 'confirmed' || !r.booking_date) return false;
+      if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
       const bd = new Date(r.booking_date).getTime();
       if (isNaN(bd)) return false;
       // Jadwal aktif = hari ini atau ke depan (selaras endpoint active-reservations).
@@ -5717,8 +5717,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             )}
           </div>
 
-          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (OTW manual ATAU passive auto-tracking) */}
-          {dispatchTrip && (dispatchTrip.otwSentAt || dispatchTrip.trip) && !dispatchTrip.arrivedAt && (
+          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (OTW manual, passive auto-tracking,
+              atau STANDBY bila jadwal aktif hari ini ada tapi Bidan belum mulai perjalanan).
+              Plan 2026-09-30: sidebar TIDAK BOLEH hilang total → CS tak mengira fitur rusak. */}
+          {dispatchTrip && !dispatchTrip.arrivedAt && !['completed', 'cancelled', 'rejected'].includes(String(dispatchTrip.status || '')) && (
             <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 p-2 overflow-y-auto">
               <div className="w-full">
                 <LiveChatDispatchWidget
@@ -5986,7 +5988,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   <Receipt size={13} />
                                 </button>
                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                  r.status === 'confirmed'
+                                  r.status === 'confirmed' || r.status === 'en_route'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : r.status === 'pending'
                                     ? 'bg-amber-100 text-amber-800'

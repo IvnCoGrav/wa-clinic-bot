@@ -1,6 +1,8 @@
 # Implementation Plan — Auto-Trigger Telemetry & Dispatch Saat Bidan Klik Navigasi
 
-> **Status:** PROPOSED (Menunggu eksekusi oleh pengguna)  
+> **Status:** ⚠️ SUPERSEDED (2026-09-30) — tracking GPS kontinu di sini DI-DEPRECATE.
+> Digantikan oleh `docs/plans/NAVIGASI_DEPART_CONTROL_REVISI_PLAN.md` (kontrol
+> keberangkatan: status `en_route` + ETA + GPS sekali-tembak). Dipertahankan sebagai arsip.
 > **Tanggal:** 2026-09-30  
 > **Author:** Antigravity AI & Ivan Noor  
 > **Terkait:** `docs/plans/DISPATCH_MAP_PULSE_ROUTE_PLAN.md`, `KNOWN_ISSUES.md` #162 (Realtime Location Tracking Terapis)
@@ -219,3 +221,34 @@ Tampilkan kartu status:
 2. Jika pesan WhatsApp OTW belum pernah terkirim, sistem otomatis mengirimkan pesan notifikasi OTW resmi ke customer tanpa menghentikan pembukaan Google Maps.
 3. Di layar CS Live Chat Monitor, radar pelacakan atau kartu status Bidan tetap tampil di sisi kanan layar (tidak hilang misterius menjadi area kosong).
 4. Layar Google Maps tetap terbuka di tab/aplikasi baru dengan mulus untuk memandu perjalanan Bidan.
+
+---
+
+## §4. Catatan Eksekusi (2026-09-30)
+
+- **Fase 0** — baseline hijau: `dispatch-map-projection.test.ts` + `staff-trip-dispatch.test.ts` (23 passed).
+- **Fase 1** — `handleStartNavigation` ditambahkan di `StaffToday.tsx` (setelah `handleSendOtw`);
+  disambungkan ke 3 tombol: kartu tugas, ikon chat header, modal detail. **Deviasi sadar dari
+  naskah plan:** (a) `window.open` dipanggil SINKRON dalam tick klik (sebelum `await`), bukan
+  setelah auto-OTW — mencegah popup-blocker browser mobile memblokir Google Maps; (b) auto-OTW
+  memakai `customText: ''` (template resmi sistem + tanda tangan), bukan string kosong yang
+  tak bertanda tangan; (c) guard `task.conversationId` ditambahkan (backend menolak OTW tanpa
+  percakapan); (d) link ke-4 (`:3829`, tab "Selesai") SENGAJA tidak diubah — auto-telemetry/OTW
+  tak bermakna untuk jadwal historis (backend menolak status completed).
+- **Fase 2** — gerbang sidebar CS dilonggarkan (`LiveChatMonitor.tsx`): kini
+  `dispatchTrip && !arrivedAt && status∉{completed,cancelled,rejected}`. `LiveChatDispatchWidget`
+  menambah mode **standby** (kartu "Persiapan Perjalanan" + tombol Hubungi Bidan) alih-alih
+  `return null`. Tab aksi (Salin Teks / Peta) disembunyikan saat standby (belum ada data trip).
+- **Fase 3** — gate: `packages/admin-dashboard` build hijau, root `tsc` exit 0, full suite
+  **4364 passed / 0 failed**.
+- **Revisi (2026-09-30, permintaan user):** klik "Navigasi" kini memunculkan **modal konfirmasi**
+  ("Kirim OTW & Mulai" vs "Hanya Lihat Peta") — karena Bidan kadang menekan Navigasi hanya untuk
+  melihat peta tanpa berangkat. Memilih "Hanya Lihat Peta" → **tidak** menyalakan telemetry & tidak
+  kirim OTW (CS menampilkan status standby). Memilih "Kirim OTW & Mulai" → telemetry + OTW + Maps.
+  Bila OTW sudah pernah dikirim, modal dilewati (langsung buka Maps + telemetry).
+- **Sisa (bukan kode, butuh deploy):** rebuild `packages/admin-dashboard` dist di server +
+  restart bot agar UI baru tampil live. Tidak menyentuh WAHA (OTW via `liveChatService` internal).
+- **Batasan pelacakan (jujur):** telemetry = `watchPosition` + wake lock, berjalan selama tab
+  `StaffToday` aktif. Bila Bidan berpindah penuh ke **aplikasi** Google Maps (browser di-background),
+  OS mobile dapat men-suspend JS → ping GPS bisa tertunda (lihat KNOWN_ISSUES #162d). State trip
+  in-memory (single-instance, #162a).

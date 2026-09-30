@@ -72,6 +72,13 @@ import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayW
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
+import {
+  calculateHaversineKm,
+  estimateTravelMinutesKm,
+  getCurrentDeviceLocation,
+  isWithinDepartWindow,
+  formatWibClock,
+} from '../../utils/geoUtils';
 
 interface StaffTaskChild {
   name: string;
@@ -320,7 +327,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const { staff, logout: staffLogout } = useStaffAuth();
   const { user, logout: adminLogout } = useAuth();
   const { toast, confirm } = useUiFeedback();
-  const { status: telemetryStatus, startTelemetry, stopTelemetry } = useTripTelemetry();
+  // DEPRECATED (plan 2026-09-30): `startTelemetry`/`telemetryStatus` tidak lagi dipakai
+  // (tracking kontinu dihentikan). `stopTelemetry` disisakan untuk mematikan sesi lama
+  // (mis. saat kunjungan selesai) agar mesin idle tetap bersih.
+  const { stopTelemetry } = useTripTelemetry();
 
   const logout = staff ? staffLogout : adminLogout;
   const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
@@ -451,8 +461,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const currentStaffRef = useRef(currentStaff);
   const isSupervisorRef = useRef(isSupervisor);
   const fetchTasksRef = useRef<((isPolling?: boolean, currentScope?: 'mine' | 'all') => Promise<void>) | null>(null);
-  /** Cegah auto-start ganda saat beberapa render terjadi beruntun. */
-  const autoStartInFlightRef = useRef(false);
 
   currentStaffRef.current = currentStaff;
   isSupervisorRef.current = isSupervisor;
@@ -781,60 +789,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     };
   }, [fetchTasks]);
 
-  // Auto-start telemetry H-30 menit (SILENT) — sistem memantau posisi Bidan tanpa
-  // wajib klik OTW manual. Hanya untuk jadwal milik staf sendiri, izin lokasi sudah
-  // `granted`, dan belum tiba. Tidak memunculkan badge/toast/prompt (sesuai kebijakan).
-  useEffect(() => {
-    if (!currentStaff?.id) return;
-    if (telemetryStatus.active) return;
-    if (autoStartInFlightRef.current) return;
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-
-    const now = Date.now();
-    const windowMs = 30 * 60 * 1000;
-
-    const candidate = [...tasks, ...upcomingTasks].find((t) => {
-      if (!t.bookingDate || !t.reservationId) return false;
-      if (t.arrivedAt) return false;
-      if (isTrulyCompleted(t)) return false;
-      const bookingMs = new Date(t.bookingDate).getTime();
-      if (!Number.isFinite(bookingMs)) return false;
-      // Jadwal belum lewat jauh (masih relevan untuk perjalanan).
-      if (bookingMs < now - windowMs) return false;
-      // Sudah masuk jendela H-30 menit.
-      if (bookingMs - now > windowMs) return false;
-      // Hanya jadwal milik staf sendiri (anti-IDOR); bila assignedStaff kosong, pakai scope 'mine'.
-      if (t.assignedStaff?.id && currentStaff?.id && t.assignedStaff.id !== currentStaff.id) return false;
-      return true;
-    });
-    if (!candidate) return;
-
-    autoStartInFlightRef.current = true;
-    const attempt = async () => {
-      try {
-        let granted = false;
-        const perms: any = (navigator as any).permissions;
-        if (perms?.query) {
-          try {
-            const status = await perms.query({ name: 'geolocation' as any });
-            granted = status?.state === 'granted';
-          } catch {
-            granted = false;
-          }
-        }
-        // Hanya mulai diam-diam bila izin sudah diberikan; jika belum, biarkan
-        // alur OTW manual yang memicunya (menghindari popup izin mendadak).
-        if (!granted) return;
-        if (telemetryStatus.active) return;
-        await startTelemetry(candidate.reservationId);
-      } catch {
-        // silent
-      } finally {
-        autoStartInFlightRef.current = false;
-      }
-    };
-    attempt();
-  }, [currentStaff?.id, tasks, upcomingTasks, telemetryStatus.active, startTelemetry]);
+  // DEPRECATED (plan 2026-09-30, NAVIGASI_DEPART_CONTROL_REVISI_PLAN): tracking GPS
+  // kontinu (auto-start H-30, pemancar `useTripTelemetry`) DIHENTIKAN — tidak andal di
+  // PWA karena OS membekukan browser saat Bidan pindah ke aplikasi Google Maps.
+  // Pengganti: kontrol keberangkatan via tombol "Navigasi" (GPS sekali-tembak + status
+  // "dalam perjalanan" + ETA). Mesin telemetry (hook + endpoint backend) DIPERTAHANKAN
+  // utuh untuk aplikasi native kelak, namun TIDAK ada lagi pemicu otomatis di sini.
 
   // Track user scroll position in chat viewport (anti-jerking when reading earlier messages)
   const handleChatScroll = useCallback(() => {
@@ -1530,8 +1490,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
           setMessages((prev) => [...prev, res.data].slice(-10));
         }
-        // Mulai pemancar telemetry perjalanan (dipantau CS). Best-effort.
-        startTelemetry(task.reservationId).catch(() => {});
+        // DEPRECATED (plan 2026-09-30): pemancar telemetry perjalanan TIDAK lagi
+        // dinyalakan otomatis dari sini — tracking GPS kontinu tidak andal di PWA.
       } else {
         toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mengirim info OTW'}`, 'error');
       }
@@ -1540,6 +1500,95 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     } finally {
       setSendingOtwId(null);
     }
+  };
+
+  // Kontrol keberangkatan saat Bidan klik "Navigasi" (plan 2026-09-30, NAVIGASI_DEPART_CONTROL_REVISI_PLAN).
+  // Tracking GPS kontinu DI-DEPRECATE (tidak andal di PWA). Alur:
+  //  1. Buka Google Maps SINKRON (selalu; anti popup-blocker).
+  //  2. Di luar jendela ±60 mnt dari jam booking → mode intip (tanpa modal/pesan).
+  //  3. Dalam jendela → GPS sekali-tembak → hitung ETA (Haversine) → modal konfirmasi
+  //     menampilkan estimasi tiba. Bila disetujui → kirim OTW + status "dalam perjalanan".
+  const handleStartNavigation = async (task: StaffTask, navUrl: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // 1. Buka Google Maps DULUAN (sinkron, user-activation aktif).
+    if (navUrl && navUrl !== '#') {
+      const win = window.open(navUrl, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast('Izinkan pop-up untuk membuka peta navigasi.', 'error');
+      }
+    }
+
+    const otwAlreadySent = !!task.otwSentAt;
+    // Mode intip: hanya buka peta (di luar jendela / sudah OTW / offline / tanpa chat).
+    const withinWindow = isWithinDepartWindow(task.bookingDate);
+    const canAsk = !otwAlreadySent && withinWindow && !!task.conversationId && isOnline;
+    if (!canAsk) return;
+
+    // 2. GPS sekali-tembak (best-effort; gagal → lanjut tanpa ETA, JANGAN blokir).
+    let etaMinutes: number | null = null;
+    let arrivalWib: string | null = null;
+    let departLat: number | null = null;
+    let departLng: number | null = null;
+    let departMapsUrl: string | null = null;
+    const destLat = task.address?.lat;
+    const destLng = task.address?.lng;
+    try {
+      const pos = await getCurrentDeviceLocation(10000);
+      departLat = pos.lat;
+      departLng = pos.lng;
+      departMapsUrl = `https://maps.google.com/?q=${pos.lat},${pos.lng}`;
+      if (destLat != null && destLng != null) {
+        const km = calculateHaversineKm(pos.lat, pos.lng, destLat, destLng);
+        etaMinutes = estimateTravelMinutesKm(km);
+        arrivalWib = formatWibClock(new Date(), etaMinutes);
+      }
+    } catch {
+      // GPS ditolak/tidak tersedia → OTW tetap bisa dikirim tanpa blok ETA.
+    }
+
+    const patientName = task.customerName || 'Bunda';
+    const etaLine = etaMinutes != null && arrivalWib ? `\nEstimasi tiba ±${arrivalWib} WIB (~${etaMinutes} menit).` : '';
+    const yes = await confirm({
+      title: 'Kirim Pesan OTW?',
+      message: `Kirim pesan OTW (sedang menuju lokasi) ke WhatsApp ${patientName}?${etaLine}`,
+      confirmText: 'Kirim OTW',
+      cancelText: 'Hanya Lihat Peta',
+    });
+    if (!yes) return;
+
+    // 3. Kirim OTW + status "dalam perjalanan" (fire-and-forget).
+    (async () => {
+      try {
+        const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
+          method: 'POST',
+          body: JSON.stringify({
+            customText: '',
+            markEnRoute: true,
+            ...(etaMinutes != null ? { etaMinutes } : {}),
+            ...(arrivalWib ? { arrivalWib } : {}),
+            ...(departLat != null && departLng != null ? { lat: departLat, lng: departLng } : {}),
+          }),
+        });
+        if (res?.success) {
+          const nowIso = new Date().toISOString();
+          const nextStatus = res?.data?.status || 'en_route';
+          const updateOtw = (t: StaffTask): StaffTask =>
+            t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso, status: nextStatus } : t;
+          setTasks((prev) => prev.map(updateOtw));
+          setUpcomingTasks((prev) => prev.map(updateOtw));
+          setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+        } else {
+          toast(`Gagal kirim OTW: ${res?.error || 'kesalahan tidak diketahui'}`, 'error');
+        }
+      } catch (err) {
+        // Silent: guard 2 jam / tanpa percakapan cukup ditelan.
+        console.warn('[NAV-OTW] OTW send skipped:', (err as any)?.message || err);
+      }
+    })();
   };
 
   // Quick Action: Record Arrival and send "Sudah Sampai" notification
@@ -2701,18 +2750,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               </span>
                             ) : task.otwSentAt ? (
                               <span
-                                className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse"
-                                title={
-                                  telemetryStatus.active && telemetryStatus.reservationId === task.reservationId
-                                    ? 'Pemantau Perjalanan Aktif (hanya terlihat Admin CS)'
-                                    : 'Sedang menuju lokasi'
-                                }
+                                className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1"
+                                title="Sedang menuju lokasi pasien"
                               >
                                 <span>🛵</span>
-                                <span>OTW</span>
-                                {telemetryStatus.active && telemetryStatus.reservationId === task.reservationId && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping" />
-                                )}
+                                <span>Dalam Perjalanan</span>
                               </span>
                             ) : isScheduleOngoing(task) ? (
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
@@ -2950,17 +2992,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               )}
 
                           {task.navigationUrl || task.mapsUrl ? (
-                            <a
-                              href={task.navigationUrl || task.mapsUrl || '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs"
-                              title="Buka Peta Navigasi Google Maps"
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartNavigation(task, task.navigationUrl || task.mapsUrl || '#', e)}
+                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
+                              title="Buka Peta Navigasi Google Maps & Mulai Perjalanan"
                             >
                               <Navigation size={15} />
                               <span>Navigasi</span>
-                            </a>
+                            </button>
                           ) : (
                             <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
                               Tanpa Peta
@@ -3132,15 +3172,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     {/* Header Actions: Navigasi, Bayar, Infokan OTW (icon-only) */}
                     <div className="flex items-center space-x-1.5 flex-shrink-0">
                       {(selectedTask.navigationUrl || selectedTask.mapsUrl) && (
-                        <a
-                          href={selectedTask.navigationUrl || selectedTask.mapsUrl || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-xs transition-all active:scale-95"
-                          title="Buka Peta Navigasi Google Maps"
+                        <button
+                          type="button"
+                          onClick={(e) => handleStartNavigation(selectedTask, selectedTask.navigationUrl || selectedTask.mapsUrl || '#', e)}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+                          title="Buka Peta Navigasi Google Maps & Mulai Perjalanan"
                         >
                           <Navigation size={16} />
-                        </a>
+                        </button>
                       )}
 
                       <button
@@ -4691,15 +4730,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </button>
               )}
               {(detailModalTask.navigationUrl || detailModalTask.mapsUrl) && (
-                <a
-                  href={detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-3 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                <button
+                  type="button"
+                  onClick={(e) => handleStartNavigation(detailModalTask, detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#', e)}
+                  className="flex-1 py-3 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
                 >
                   <Navigation size={14} />
                   <span>Buka Peta Navigasi</span>
-                </a>
+                </button>
               )}
               <button
                 onClick={() => setDetailModalTask(null)}

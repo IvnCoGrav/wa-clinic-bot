@@ -76,7 +76,10 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
   const trip = data?.trip || null;
   // Passive auto-tracking: tampil bila ada data trip meski `otwSentAt` belum
   // dicatat (Bidan belum klik OTW manual, tetapi telemetry sudah jalan H-30m).
-  const isActive = !!data && (!!data.otwSentAt || trip != null) && !data.arrivedAt;
+  // STANDBY (plan 2026-09-30): jadwal aktif ada tapi Bidan belum mulai perjalanan
+  // → tampilkan kartu persiapan, JANGAN kembalikan null (sidebar CS tak boleh kosong).
+  const isActive = !!data && !data.arrivedAt;
+  const isStandby = isActive && !data?.otwSentAt && trip == null;
   const isFresh = trip != null && trip.lastUpdateSec < 60;
   const delay = data?.delayStatus || null;
   const isDelayed = !!delay?.isDelayed;
@@ -185,14 +188,16 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-bold text-[#111b21]">
-          <Radar size={14} className={isFresh ? 'text-emerald-600' : 'text-amber-500'} />
-          <span>Pemantauan Perjalanan</span>
+          <Radar size={14} className={isStandby ? 'text-[#667781]' : isFresh ? 'text-emerald-600' : 'text-amber-500'} />
+          <span>{isStandby ? 'Persiapan Perjalanan' : 'Pemantauan Perjalanan'}</span>
         </div>
         <div className="flex items-center gap-1">
-          <span
-            className={`w-2 h-2 rounded-full ${isFresh ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}
-            title={isFresh ? 'Data terupdate < 1 menit' : 'Data mungkin tertunda'}
-          />
+          {!isStandby && (
+            <span
+              className={`w-2 h-2 rounded-full ${isFresh ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}
+              title={isFresh ? 'Data terupdate < 1 menit' : 'Data mungkin tertunda'}
+            />
+          )}
           {onRefresh && (
             <button
               type="button"
@@ -206,7 +211,29 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         </div>
       </div>
 
-      {trip ? (
+      {isStandby ? (
+        <div className="space-y-2">
+          <p className="text-[11px] text-[#54656f] leading-relaxed">
+            🛵 Bidan{staffName ? ` ${staffName}` : ''} belum memulai navigasi / mengirim pesan OTW.
+            Jadwal hari ini sudah tercatat &mdash; pemantauan akan aktif otomatis begitu Bidan menekan tombol
+            <span className="font-semibold text-[#111b21]"> Navigasi</span>.
+          </p>
+          {data?.customerCoords && data.customerCoords.lat != null && data.customerCoords.lng != null && (
+            <div className="flex items-center gap-1.5 text-[11px] text-[#667781]">
+              <Map size={12} /> Lokasi pasien tersimpan, siap dipetakan.
+            </div>
+          )}
+          {onContactStaff && (
+            <button
+              type="button"
+              onClick={onContactStaff}
+              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
+            >
+              <Phone size={13} /> Hubungi Bidan
+            </button>
+          )}
+        </div>
+      ) : trip ? (
         <div className="space-y-1.5">
           <p className="text-sm font-semibold text-[#111b21]">{trip.areaName}</p>
           <p className="text-[10px] text-[#667781]">Update {formatStale(trip.lastUpdateSec)}</p>
@@ -234,28 +261,30 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       ) : (
         <p className="text-[11px] text-[#667781]">
           {data?.otwSentAt
-            ? 'Bidan OTW, menunggu sinyal lokasi pertama...'
-            : 'Pemantauan otomatis aktif, menunggu sinyal lokasi pertama...'}
+            ? 'Bidan sudah OTW menuju lokasi pasien (pelacakan GPS kontinu dinonaktifkan).'
+            : 'Menunggu Bidan memulai perjalanan.'}
         </p>
       )}
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={copyReadyText}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
-        >
-          <Copy size={13} /> Salin Teks Jawaban Pasien
-        </button>
-        <button
-          type="button"
-          onClick={() => setMapOpen(true)}
-          className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] border border-[#e9edef] rounded-lg px-2 py-2"
-          title="Lihat peta"
-        >
-          <Map size={13} /> Peta
-        </button>
-      </div>
+      {!isStandby && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copyReadyText}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
+          >
+            <Copy size={13} /> Salin Teks Jawaban Pasien
+          </button>
+          <button
+            type="button"
+            onClick={() => setMapOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] border border-[#e9edef] rounded-lg px-2 py-2"
+            title="Lihat peta"
+          >
+            <Map size={13} /> Peta
+          </button>
+        </div>
+      )}
 
       <DispatchMapModal
         open={mapOpen}
