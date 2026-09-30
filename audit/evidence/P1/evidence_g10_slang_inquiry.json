@@ -1,0 +1,812 @@
+{
+  "summary": {
+    "totalTested": 100,
+    "identifiedAsInquiry": 80,
+    "hasBookingCommitSignal": 5,
+    "leakedAsCommit": 0,
+    "leakedPercentage": "0.0%",
+    "leakedExamples": []
+  },
+  "details": [
+    {
+      "index": 1,
+      "text": "sabtu jam 10 kosong gak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 2,
+      "text": "sabtu jam 10 kosong ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 3,
+      "text": "sabtu jam 10 kosong nggak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 4,
+      "text": "sabtu jam 10 kosong ngga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 5,
+      "text": "sabtu jam 10 kosong engga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 6,
+      "text": "sabtu jam 10 kosong enggak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 7,
+      "text": "sabtu jam 10 kosong kagak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 8,
+      "text": "minggu pagi ada slot ga min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 9,
+      "text": "minggu pagi ada slot gak kak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 10,
+      "text": "jumat sore ada kuota ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 11,
+      "text": "besok ada jadwal kosong ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 12,
+      "text": "besok ada slot ngga mbak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 13,
+      "text": "lusa pagi kosong gak ya",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 14,
+      "text": "sabtu besok lowong ga min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 15,
+      "text": "tanggal 15 ada slot ga kak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 16,
+      "text": "tgl 20 ada jadwal kosong gak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 17,
+      "text": "hari senin masih ada kuota ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 18,
+      "text": "hari selasa ready gak min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 19,
+      "text": "kamis jam 9 pagi ada gak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 20,
+      "text": "rabu jam 2 siang kosong ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 21,
+      "text": "sabtu bs ga min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 22,
+      "text": "sabtu bsa gak kak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 23,
+      "text": "bsa jam 10 pagi ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 24,
+      "text": "bs ga hari minggu besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 25,
+      "text": "gmn jadwal sabtu besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 26,
+      "text": "gimana jadwal hari jumat kosong ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 27,
+      "text": "tgl 10 bsa ga ya",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 28,
+      "text": "ada slot tgl 12 ga min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 29,
+      "text": "ready tgl 15 gak mbak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 30,
+      "text": "ada jadwal kosong tgl 18 ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 31,
+      "text": "cek jadwal sabtu dong min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 32,
+      "text": "minta cek jadwal jumat jam 10",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 33,
+      "text": "cek ketersediaan hari minggu ya",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 34,
+      "text": "tanya slot hari sabtu dong",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 35,
+      "text": "mau tanya jadwal besok min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 36,
+      "text": "mau nanya slot kosong hari senin",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 37,
+      "text": "tanya jadwal kosong minggu depan",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 38,
+      "text": "minta slot hari sabtu kalau ada",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 39,
+      "text": "bisa minta tolong cek slot sabtu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 40,
+      "text": "tolong cekkan jadwal hari kamis",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 41,
+      "text": "apakah sabtu jam 10 ada slot",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 42,
+      "text": "apakah besok masih kosong",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 43,
+      "text": "apakah hari minggu bisa kunjungan",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 44,
+      "text": "kapan ada slot kosong terdekat",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 45,
+      "text": "kapan jadwal kosong di sidoarjo",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 46,
+      "text": "kapan bidan ready ke candi",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 47,
+      "text": "apa ada jadwal kosong besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 48,
+      "text": "apa besok ada slot kosong",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 49,
+      "text": "apakah masih tersedia jadwal sabtu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 50,
+      "text": "apakah tanggal 25 kosong",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 51,
+      "text": "ada slot sabtu jam 10",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 52,
+      "text": "ada slot hari minggu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 53,
+      "text": "ada slot kosong besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 54,
+      "text": "ada jadwal kosong jumat",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 55,
+      "text": "ada jadwal sabtu siang",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 56,
+      "text": "masih ada slot hari minggu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 57,
+      "text": "masih ada slot sabtu pagi",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 58,
+      "text": "masih kosong hari senin",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 59,
+      "text": "masih kosong besok jam 10",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 60,
+      "text": "masih tersedia slot jumat",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 61,
+      "text": "bisa slot sabtu jam 9",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 62,
+      "text": "boleh jadwal hari minggu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 63,
+      "text": "ready slot sabtu besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 64,
+      "text": "ready jadwal minggu ini",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 65,
+      "text": "tersedia slot hari rabu",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 66,
+      "text": "bisa ga sabtu jam 10",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 67,
+      "text": "bisa gak hari minggu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 68,
+      "text": "bisa nggak besok siang",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 69,
+      "text": "boleh ga jadwal sabtu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 70,
+      "text": "boleh gak jumat jam 1",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 71,
+      "text": "ada gak slot kosong besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 72,
+      "text": "ada ga jadwal hari senin",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 73,
+      "text": "ada nggak kuota sabtu besok",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 74,
+      "text": "ready ga tanggal 15",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 75,
+      "text": "ready gak hari kamis",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 76,
+      "text": "sabtu jam 10 kosong",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 77,
+      "text": "besok jam 9 pagi kosong",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 78,
+      "text": "hari minggu kosong",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 79,
+      "text": "minggu besok lowong",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 80,
+      "text": "tanggal 10 masih kosong",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 81,
+      "text": "sabtu jam 10 tersedia",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 82,
+      "text": "jumat sore ada",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 83,
+      "text": "besok jam 10 ready",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 84,
+      "text": "sabtu jam 9 ready",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 85,
+      "text": "senin pagi masih ada",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 86,
+      "text": "mau cek jadwal hari sabtu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 87,
+      "text": "mau tanya jadwal sabtu jam 10",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 88,
+      "text": "mau kepo slot besok min",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 89,
+      "text": "pengen tahu jadwal kosong sabtu",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 90,
+      "text": "mau konsul jadwal jumat besok",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 91,
+      "text": "mau info slot kosong hari minggu",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 92,
+      "text": "info jadwal kosong sabtu min",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 93,
+      "text": "info slot hari senin dong",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 94,
+      "text": "spill slot kosong weekend min",
+      "isAvailabilityInquiryText": false,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 95,
+      "text": "minta info ketersediaan hari sabtu",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": false,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 96,
+      "text": "mau booking sabtu jam 10 kosong gak",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": true,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 97,
+      "text": "mau booking hari minggu ada slot ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": true,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 98,
+      "text": "pengen booking besok bisa ga min",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": true,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 99,
+      "text": "niat booking jumat ada slot kosong ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": true,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    },
+    {
+      "index": 100,
+      "text": "rencana booking sabtu masih ada kuota ga",
+      "isAvailabilityInquiryText": true,
+      "hasBookingCommitSignal": true,
+      "isBookingCommitReady": false,
+      "leakedAsCommit": false
+    }
+  ]
+}

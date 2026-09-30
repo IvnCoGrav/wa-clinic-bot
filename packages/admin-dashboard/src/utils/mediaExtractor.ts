@@ -55,6 +55,40 @@ export interface ChatVideoData {
 const MEDIA_PLACEHOLDER_REGEX = /^\[(IMAGE|MEDIA|AUDIO|VOICE|PTT|DOCUMENT|VIDEO|STICKER|LOCATION|CONTACT)\]?$/i;
 
 /**
+ * toDisplayMediaUrl — normalisasi URL media untuk ditampilkan di dashboard.
+ *
+ * Aturan deterministik berbasis host (bukan regex potong-buta):
+ * - Path relatif (`/media/...`) → dibiarkan apa adanya.
+ * - URL dari origin backend sendiri (loopback: localhost/127.0.0.1/::1/0.0.0.0,
+ *   atau hostname yang sama dengan dashboard) → dipotong ke path saja agar
+ *   dilayani oleh origin yang sedang membuka dashboard.
+ * - URL dari domain eksternal (fbsbx.com, S3, Cloudinary, WhatsApp CDN, dll.)
+ *   → dipertahankan UTUH supaya tidak menghasilkan 404.
+ */
+export function toDisplayMediaUrl(raw?: string | null): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('/')) return trimmed;
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.toLowerCase();
+    const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0';
+    const isSameOrigin =
+      typeof window !== 'undefined' &&
+      !!window.location?.hostname &&
+      window.location.hostname.toLowerCase() === host;
+    if (isLoopback || isSameOrigin) {
+      return `${url.pathname}${url.search}${url.hash}` || '/';
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
  * maskPhoneInTextClient — mirror frontend dari src/utils/pii-masker.ts maskPhoneInText.
  * Defense-in-depth untuk optimistic update & SSE race sebelum backend sanitasi tiba.
  * Parity dijaga via vektor uji identik di tests/unit/staff-chat-pii-masker.test.ts.
@@ -184,34 +218,29 @@ export function extractMedia(msg: any): ChatMediaData | undefined {
     const hdUrlStr = m.hdUrl || m.url;
     const standardUrlStr = (m.url && !m.url.includes('_thumb.')) ? m.url : (m.hdUrl || m.url);
     const thumbStr = m.thumbUrl || (m.url && m.url.includes('_thumb.') ? m.url : undefined);
-    const cleanUrl = standardUrlStr.replace(/^https?:\/\/[^/]+/, '');
-    const cleanHdUrl = hdUrlStr.replace(/^https?:\/\/[^/]+/, '');
-    const cleanThumb = thumbStr ? thumbStr.replace(/^https?:\/\/[^/]+/, '') : undefined;
     return {
       ...m,
-      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
-      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
-      thumbUrl: cleanThumb ? (cleanThumb.startsWith('/') ? cleanThumb : `/${cleanThumb}`) : undefined,
+      url: toDisplayMediaUrl(standardUrlStr),
+      hdUrl: toDisplayMediaUrl(hdUrlStr),
+      thumbUrl: toDisplayMediaUrl(thumbStr),
     };
   }
   const directMediaUrl = msg?.media_url ?? msg?.mediaUrl ?? msg?.media_hd_url ?? msg?.mediaHdUrl;
   if (directMediaUrl && typeof directMediaUrl === 'string') {
     const rawHdUrl = msg?.media_hd_url ?? msg?.mediaHdUrl ?? directMediaUrl;
     const rawUrl = (!directMediaUrl.includes('_thumb.')) ? directMediaUrl : rawHdUrl;
-    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
     return {
-      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
-      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
-      thumbUrl: (msg?.media_thumb_url ?? msg?.mediaThumbUrl)?.replace(/^https?:\/\/[^/]+/, ''),
+      url: toDisplayMediaUrl(rawUrl),
+      hdUrl: toDisplayMediaUrl(rawHdUrl),
+      thumbUrl: toDisplayMediaUrl(msg?.media_thumb_url ?? msg?.mediaThumbUrl),
       mimeType: msg?.media_mime_type ?? msg?.mediaMimeType ?? 'image/jpeg',
       caption: msg?.media_caption ?? msg?.mediaCaption ?? undefined,
     };
   }
   if (msg?.payload_raw?.imageUrl) return { url: msg.payload_raw.imageUrl, hdUrl: msg.payload_raw.imageUrl };
   if (typeof msg?.content === 'string' && (msg.content.startsWith('/media/') || msg.content.startsWith('/api/files/') || msg.content.startsWith('http://') || msg.content.startsWith('https://')) && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.content)) {
-    const clean = msg.content.replace(/^https?:\/\/[^/]+/, '');
-    return { url: clean.startsWith('/') ? clean : `/${clean}`, hdUrl: clean.startsWith('/') ? clean : `/${clean}` };
+    const display = toDisplayMediaUrl(msg.content);
+    return { url: display, hdUrl: display };
   }
   return undefined;
 }
@@ -325,8 +354,7 @@ export function extractAudio(msg: any): ChatAudioData | null {
   const isAudioMime = mime.startsWith('audio/');
 
   const rawUrl = (m?.url || m?.hdUrl || pr?.audio?.url || pr?.ptt?.url || pr?.voice?.url || '') as string;
-  const cleanUrl = rawUrl ? (rawUrl.replace(/^https?:\/\/[^/]+/, '')) : undefined;
-  const url = cleanUrl ? (cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`) : undefined;
+  const url = toDisplayMediaUrl(rawUrl);
 
   if (isVoicePlaceholder || pr?.type === 'ptt' || pr?.isPtt || (m as any)?.isPtt) {
     return {
@@ -367,8 +395,7 @@ export function extractDocument(msg: any): ChatDocumentData | null {
   const fileName = matchName ? matchName[1] : (m?.fileName || pr?.message?.documentMessage?.fileName || 'Dokumen');
 
   const rawUrl = (m?.url || m?.hdUrl || pr?.document?.url || '') as string;
-  const cleanUrl = rawUrl ? (rawUrl.replace(/^https?:\/\/[^/]+/, '')) : undefined;
-  const url = cleanUrl ? (cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`) : undefined;
+  const url = toDisplayMediaUrl(rawUrl);
 
   if (isDocPlaceholder || isDocMime || pr?.type === 'document' || pr?.canonicalType === 'document') {
     return {
@@ -440,8 +467,7 @@ export function extractVideo(msg: any): ChatVideoData | null {
   const isVideoMime = mime.startsWith('video/');
 
   const rawUrl = (m?.url || m?.hdUrl || pr?.video?.url || '') as string;
-  const cleanUrl = rawUrl ? (rawUrl.replace(/^https?:\/\/[^/]+/, '')) : undefined;
-  const url = cleanUrl ? (cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`) : undefined;
+  const url = toDisplayMediaUrl(rawUrl);
 
   if (isVideoPlaceholder || isVideoMime || pr?.type === 'video' || pr?.canonicalType === 'video') {
     const matchCap = c.match(/^\[VIDEO:\s*(.+?)\]$/);

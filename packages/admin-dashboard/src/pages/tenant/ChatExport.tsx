@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Download, FileText, RefreshCw, CalendarDays, Sparkles } from 'lucide-react';
+import { getWibDateKey } from '../../utils/dateWib';
 
 interface ExportFile {
   fileName: string;
@@ -25,10 +26,9 @@ interface ExportResultData {
 }
 
 const localToday = () => {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  // WIB (Asia/Jakarta) agar nama berkas ekspor konsisten dengan operasional klinik,
+  // tidak bergantung zona waktu browser admin.
+  return getWibDateKey(new Date());
 };
 
 const formatBytes = (n: number) => {

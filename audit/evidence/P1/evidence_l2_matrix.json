@@ -1,0 +1,78 @@
+{
+  "matrix": "L2_PARITY_REVERIFIED",
+  "generatedBy": "Red-Team Execution & Code Inspection",
+  "paths": {
+    "bot_ai": {
+      "followUp": true,
+      "googleCalendar": false,
+      "staffNotification": false,
+      "recalculateLtv": true,
+      "metaCapi": false,
+      "durationSanitized": true,
+      "collisionCheck": true,
+      "needsStaffVerification": true,
+      "idempotencyKey": true,
+      "notes": "Google Calendar and Staff Notification are NOT called in save_reservation tool or reservation-core.service. Follow-up and LTV are triggered."
+    },
+    "admin_parse_form": {
+      "followUp": true,
+      "googleCalendar": false,
+      "staffNotification": false,
+      "recalculateLtv": true,
+      "metaCapi": false,
+      "durationSanitized": false,
+      "collisionCheck": true,
+      "needsStaffVerification": false,
+      "idempotencyKey": false,
+      "notes": "Calls saveReservation, which does NOT call GCal or staff notif. Duration can be null if catalog match fails."
+    },
+    "admin_quick_hold": {
+      "followUp": false,
+      "googleCalendar": false,
+      "staffNotification": false,
+      "recalculateLtv": false,
+      "metaCapi": false,
+      "durationSanitized": true,
+      "collisionCheck": true,
+      "needsStaffVerification": false,
+      "idempotencyKey": false,
+      "notes": "Hold correctly skips follow-up, GCal, and LTV until confirmed."
+    },
+    "admin_create_form_manual": {
+      "followUp": true,
+      "googleCalendar": false,
+      "staffNotification": true,
+      "recalculateLtv": true,
+      "metaCapi": false,
+      "durationSanitized": true,
+      "collisionCheck": true,
+      "needsStaffVerification": false,
+      "idempotencyKey": false,
+      "notes": "CRITICAL FINDING: GCal createEvent is MISSING on POST /api/admin/reservation (it only exists on PATCH confirm and PATCH edit). Staff notification is scheduled if assignedStaffId present."
+    },
+    "customer_form_state_machine": {
+      "followUp": true,
+      "googleCalendar": false,
+      "staffNotification": false,
+      "recalculateLtv": true,
+      "metaCapi": false,
+      "durationSanitized": false,
+      "collisionCheck": false,
+      "needsStaffVerification": false,
+      "idempotencyKey": false,
+      "notes": "Completely bypasses findOverlappingStaffReservations."
+    },
+    "admin_reservation_series": {
+      "followUp": false,
+      "googleCalendar": true,
+      "staffNotification": false,
+      "recalculateLtv": true,
+      "metaCapi": false,
+      "durationSanitized": true,
+      "collisionCheck": true,
+      "needsStaffVerification": false,
+      "idempotencyKey": false,
+      "notes": "G6 FALSE POSITIVE REFUTATION: Collision check IS active (findOverlappingStaffReservations called before transaction). GCal sync IS active (createEvent loop). Follow-up and staff notification are missing."
+    }
+  }
+}

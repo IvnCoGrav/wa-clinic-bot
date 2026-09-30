@@ -6,6 +6,7 @@ import {
   getTenantCapiFormats,
   getTenantAutoSendPurchaseCapi,
   extractValueByFormat,
+  capiService,
 } from './capi.service';
 
 /**
@@ -208,17 +209,49 @@ export async function maybeFirePurchaseEvent(params: {
     };
 
     if (autoSend) {
-      fireCapiEvent({
-        eventName: 'Purchase',
-        customer,
-        adClick: reservation.customer?.adClick || customer.adClick || undefined,
-        value: finalValue,
-        currency: 'IDR',
-        tenantId,
-        customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
-      });
-      updateData.purchase_event_sent_at = new Date();
-      updateData.purchase_review_status = 'approved';
+      // FIX 173i-c: JANGAN tandai approved sebelum Meta benar-benar menerima.
+      // Await hasil kirim; approved/sent HANYA bila sukses. Bila gagal →
+      // purchase_review_status='pending' agar masuk moderasi/retry (bukan
+      // "sent" palsu yang mematikan retry).
+      let capiOk = false;
+      let capiMessage: string | undefined;
+      try {
+        const capiResult = await capiService.sendCapiEvent({
+          eventName: 'Purchase',
+          customer,
+          adClick: reservation.customer?.adClick || customer.adClick || undefined,
+          value: finalValue,
+          currency: 'IDR',
+          tenantId,
+          customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
+        });
+        capiOk = capiResult?.success === true;
+        capiMessage = capiResult?.message;
+      } catch (capiErr: any) {
+        capiOk = false;
+        capiMessage = capiErr?.message;
+      }
+
+      if (capiOk) {
+        updateData.purchase_event_sent_at = new Date();
+        updateData.purchase_review_status = 'approved';
+      } else {
+        updateData.purchase_review_status = 'pending';
+        console.error(
+          `[CAPI PURCHASE FAILED] Event Purchase TIDAK terkirim ke Meta (reservation ${reservation.id}): ${capiMessage || 'unknown'} → ditahan pending untuk moderasi/retry.`
+        );
+        try {
+          const { AlertService, AlertType, AlertSeverity } = await import('./alert.service');
+          await new AlertService().notifyAlert({
+            type: AlertType.THIRD_PARTY_OUTAGE,
+            severity: AlertSeverity.WARNING,
+            provider: 'Meta CAPI',
+            tenantId,
+            message: `Purchase CAPI gagal terkirim (reservation ${reservation.id}). Ditahan pending.`,
+            metadata: { reservationId: reservation.id, reason: capiMessage },
+          });
+        } catch {}
+      }
     } else {
       updateData.purchase_review_status = 'pending';
       console.log(

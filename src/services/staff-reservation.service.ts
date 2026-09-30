@@ -3,6 +3,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { resolveTreatmentValue } from './capi.service';
+import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import {
   getStaffChatWindowConfig,
   StaffChatWindowConfig,
@@ -586,7 +587,8 @@ export class StaffReservationService {
           const resolved = await resolveTreatmentValue(r.treatment_detail);
           if (resolved && resolved > 0) treatmentFee = resolved;
         }
-        const deliveryFee = cust?.ongkir || 0;
+        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at;
         const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
@@ -874,7 +876,8 @@ export class StaffReservationService {
           const resolved = await resolveTreatmentValue(r.treatment_detail);
           if (resolved && resolved > 0) treatmentFee = resolved;
         }
-        const deliveryFee = cust?.ongkir || 0;
+        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at;
         const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
@@ -1033,7 +1036,8 @@ export class StaffReservationService {
           const resolved = await resolveTreatmentValue(r.treatment_detail);
           if (resolved && resolved > 0) treatmentFee = resolved;
         }
-        const deliveryFee = cust?.ongkir || 0;
+        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at || r.status === 'completed' || r.status === 'COMPLETED';
         const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
@@ -1361,7 +1365,8 @@ export class StaffReservationService {
       }
 
       // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
-      const deliveryFee = (reservation as any).customer?.ongkir || 0;
+      // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+      const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
       const totalCollected = amount != null ? amount : ((reservation as any).purchase_value || 0);
       // Nilai murni layanan yang disimpan di purchase_value agar tidak double-count saat read: totalFee = purchase_value + ongkir
       const pureTreatmentValue = amount != null ? Math.max(0, totalCollected - deliveryFee) : ((reservation as any).purchase_value || 0);
@@ -2226,6 +2231,12 @@ export class StaffReservationService {
         return { success: false, error: 'Anda tidak memiliki akses untuk menyelesaikan jadwal terapis lain.' };
       }
 
+      // FIX 173i-b: guard status — DILARANG menandai completed pada reservasi
+      // yang sudah cancelled/rejected (mencegah resurrect data mati).
+      if (reservation.status === 'cancelled' || reservation.status === 'rejected') {
+        return { success: false, error: `Reservasi berstatus ${reservation.status} tidak dapat diselesaikan.` };
+      }
+
       // Gerbang pelunasan: status 'completed' TIDAK bisa diklaim tanpa catatan pembayaran.
       const isPaid = !!reservation.purchase_occurred_at;
       if (!isPaid && !forceUnpaid) {
@@ -2241,6 +2252,24 @@ export class StaffReservationService {
         where: { id: reservationId },
         data: { status: 'completed' },
       });
+
+      // FIX 173i-b: jalankan seam completion kanonis (REVIEW/NEXT_TREATMENT +
+      // reset sesi V3). Sebelumnya jalur ini melewati lifecycle sepenuhnya
+      // sehingga efek samping penyelesaian hilang senyap.
+      try {
+        const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
+        if (reservation.booking_date) {
+          await reservationLifecycleService.onReservationCompleted({
+            customerId: reservation.customer_id,
+            reservationId: reservation.id,
+            bookingDate: reservation.booking_date,
+            treatmentCategory: reservation.treatment_category,
+            tenantId,
+          });
+        }
+      } catch (lcErr: any) {
+        console.warn('[STAFF RESERVATION] completeTask lifecycle warning:', lcErr?.message);
+      }
 
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
@@ -2347,7 +2376,8 @@ export class StaffReservationService {
 
       // Hitung rincian biaya
       const treatmentFee = typeof reservation.purchase_value === 'number' ? reservation.purchase_value : 0;
-      const deliveryFee = typeof (reservation.customer as any)?.ongkir === 'number' ? (reservation.customer as any).ongkir : 0;
+      // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+      const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
       const totalFee = treatmentFee + deliveryFee;
 
       // Susun pesan WhatsApp — data-driven: customTemplate dari DB (Tenant.settings.paymentInfo.customTemplate)

@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveTreatmentValue } from './capi.service';
+import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 
 /**
  * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236). Nilai yang diawali
@@ -218,7 +219,8 @@ export class FinancialAnalyticsService {
           treatmentFee = resolved;
         }
       }
-      const deliveryFee = r.customer?.ongkir || 0;
+      // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
+      const deliveryFee = resolveDeliveryFeeSnapshot(r as any);
       const totalFee = treatmentFee + deliveryFee;
 
       const isCompleted = (r.status || '').toLowerCase() === 'completed' || (r.booking_date && new Date(r.booking_date).getTime() <= nowMs);

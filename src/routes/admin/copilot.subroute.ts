@@ -26,12 +26,17 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
     },
     async (
       request: FastifyRequest<{
-        Body: { message?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> };
+        Body: {
+          message?: string;
+          history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+          conversationId?: string;
+          customerId?: string;
+        };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
-      const { message, history } = request.body || {};
+      const { message, history, conversationId, customerId } = request.body || {};
 
       if (!message || !message.trim()) {
         return reply.status(400).send({ success: false, error: 'message wajib diisi.' });
@@ -40,7 +45,13 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'message maksimal 1000 karakter.' });
       }
 
-      const result = await copilotService.chat({ tenantId, message: message.trim(), history });
+      // Konteks pasien aktif (opsional) — divalidasi ulang tenant-scoped oleh tool.
+      const activeContext =
+        conversationId || customerId
+          ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
+          : undefined;
+
+      const result = await copilotService.chat({ tenantId, message: message.trim(), history, activeContext });
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,

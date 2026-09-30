@@ -76,7 +76,7 @@ const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void
   return <>{nodes}</>;
 };
 
-export const AdminCopilotPanel: React.FC = () => {
+export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; customerId?: string | null }> = ({ conversationId, customerId }) => {
   const { toast } = useUiFeedback();
   const { open, setOpen } = useCopilot();
   const navigate = useNavigate();
@@ -114,7 +114,13 @@ export const AdminCopilotPanel: React.FC = () => {
         '/api/admin/copilot/chat',
         {
           method: 'POST',
-          body: JSON.stringify({ message: msg, history }),
+          body: JSON.stringify({
+            message: msg,
+            history,
+            // Konteks pasien aktif agar pertanyaan deiktik ("pasien ini") ter-grounding.
+            conversationId: conversationId || undefined,
+            customerId: customerId || undefined,
+          }),
           // Anggaran backend satu turn = 60 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
           // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM
           // klien abort — mencegah "Gagal menghubungi Copilot" padahal server bekerja.

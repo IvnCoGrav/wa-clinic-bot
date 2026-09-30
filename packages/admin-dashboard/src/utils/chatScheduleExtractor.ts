@@ -3,6 +3,7 @@
  * dari percakapan obrolan WhatsApp antara Bidan/CS dan Pelanggan.
  */
 import { matchCatalogService } from './treatmentStringParser';
+import { getWibDateKey } from './dateWib';
 
 export interface ExtractedScheduleData {
   bookingDate: Date | null;
@@ -207,8 +208,8 @@ export function hasExistingReservationForSchedule(
   if (!reservations || reservations.length === 0 || !bookingDate) return false;
   const target = bookingDate instanceof Date ? bookingDate : new Date(bookingDate);
   if (isNaN(target.getTime())) return false;
-  const ymd = (d: Date): string =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Kunci tanggal dalam WIB (bukan zona lokal browser) agar pembandingan hari konsisten.
+  const ymd = (d: Date): string => getWibDateKey(d);
   const targetYmd = ymd(target);
   const norm = (s: unknown): string => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const targetTreat = norm(treatmentName);

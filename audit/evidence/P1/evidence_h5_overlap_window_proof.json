@@ -1,0 +1,10 @@
+{
+  "testName": "H5 Overlap Window Blind Spot Proof",
+  "scenario": "Existing 120m booking at 08:00-10:00 WIB vs New 30m booking at 09:30-10:00 WIB",
+  "physicalOverlap": true,
+  "prismaWindowStart": "2026-10-05T02:00:00.000Z",
+  "prismaWindowEnd": "2026-10-05T03:00:00.000Z",
+  "rowsFetchedByPrismaQuery": 0,
+  "conflictsReturnedToCaller": 0,
+  "vulnerabilityVerdict": "CRITICAL_SILENT_COLLISION_CONFIRMED"
+}

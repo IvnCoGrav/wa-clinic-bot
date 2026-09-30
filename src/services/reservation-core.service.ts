@@ -448,14 +448,23 @@ export class ReservationCoreService {
       deliveryFee,
     } = params;
 
-    // A2 (KB-4): booking_date WAJIB — gerbang deterministik fondasional.
-    // DILARANG menyimpan reservasi tanpa tanggal (tidak bisa cek bentrok/kuota,
-    // tidak bisa dijadwalkan, memicu invariant CONFIRMED_NULL_DATE). Ditaruh
-    // SEBELUM idempotency agar permintaan tak bertanggal tidak "menyamar" jadi
-    // hit request_id dan mengembalikan baris lama palsu.
-    if (!bookingDate || isNaN(bookingDate.getTime())) {
+    // A2 (KB-4): booking_date WAJIB untuk JALUR CUSTOMER (BOT/AGENT) — gerbang
+    // deterministik fondasional. DILARANG menyimpan booking customer tanpa
+    // tanggal (tidak bisa cek bentrok/kuota, tidak bisa dijadwalkan, memicu
+    // invariant CONFIRMED_NULL_DATE). Ditaruh SEBELUM idempotency agar permintaan
+    // tak bertanggal tidak "menyamar" jadi hit request_id.
+    //
+    // CHANNEL-AWARE: jalur ADMIN_PANEL / WEBHOOK (auto-capture admin-outbound)
+    // SAH melakukan intake tanpa tanggal — admin melengkapi tanggal menyusul
+    // (mis. tombol set-date). Baris intake dipaksa status 'pending' agar tidak
+    // pernah menjadi `confirmed` tanpa tanggal (anti INV1), lalu di-dedup 24 jam.
+    const hasValidDate = Boolean(bookingDate && !isNaN((bookingDate as Date).getTime()));
+    const isCustomerChannel = source === 'BOT' || source === 'AGENT';
+    if (!hasValidDate && isCustomerChannel) {
       throw new MissingBookingDateError();
     }
+    // Status efektif: intake tanpa tanggal TIDAK BOLEH 'confirmed'/'hold'.
+    const bookingStatus: 'pending' | 'confirmed' | 'hold' = hasValidDate ? status : 'pending';
 
     // Single Source of Truth: durasi NULL diresolve via katalog kanonis agar DB
     // tidak menyimpan NULL saat nama layanan valid. Anti-fabrikasi: angka hasil
@@ -492,7 +501,7 @@ export class ReservationCoreService {
     // di dalam advisory lock per (tenant+staf+hari WIB) — menutup race check-then-insert
     // double-booking. Efek samping (lifecycle/follow-up/notifikasi) dijalankan SETELAH
     // commit agar transaksi interaktif tidak tertahan (cegah timeout → rollback).
-    const lockKey = computeAdvisoryLockKey(tenantId, assignedStaffId || null, bookingDate);
+    const lockKey = computeAdvisoryLockKey(tenantId, assignedStaffId || null, hasValidDate ? (bookingDate as Date) : new Date());
     type SaveOutcome = { mode: 'idempotent' | 'reactivated' | 'merged' | 'created'; result: ReservationResult };
 
     const outcome = await runWithAdvisoryLock<SaveOutcome>(lockKey, async (db) => {
@@ -511,11 +520,14 @@ export class ReservationCoreService {
             const reactivated = await db.reservation.update({
               where: { id: existingByRequest.id },
               data: {
-                status,
-                booking_date: bookingDate,
+                status: bookingStatus,
+                // Intake tanpa tanggal: pertahankan tanggal lama (jangan null-kan).
+                booking_date: hasValidDate ? bookingDate : (existingByRequest as any).booking_date,
                 assigned_staff_id:
                   assignedStaffId !== undefined ? assignedStaffId || null : existingByRequest.assigned_staff_id,
                 duration_minutes: duration ?? (existingByRequest as any).duration_minutes ?? null,
+                // Intake tanpa tanggal TIDAK boleh masuk jalur schedule-check.
+                ...(hasValidDate ? {} : { pendingScheduleCheck: false }),
                 // KB-6: snapshot ongkir ikut direaktivasi bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
               },
@@ -649,19 +661,54 @@ export class ReservationCoreService {
        }
     }
 
-    // --- Tidak ada konflik: buat baru. (A2 menjamin bookingDate ada; jalur
-    // tanpa tanggal dihapus — sebelumnya sumber data sampah booking_date NULL.) ---
+    // --- Tidak ada konflik: buat baru. ---
+    // A2: jalur customer (BOT/AGENT) SELALU punya tanggal (dijamin gerbang atas).
+    // Jalur admin/webhook tanpa tanggal = intake: dipaksa 'pending' (bookingStatus)
+    // dan di-dedup 24 jam agar tidak menumpuk baris pending untuk 1 customer.
+    if (!hasValidDate) {
+      let recentPending: any = null;
+      try {
+        recentPending = await db.reservation.findFirst({
+          where: {
+            customer_id: customerId,
+            tenant_id: tenantId,
+            booking_date: null,
+            created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            status: { notIn: ['cancelled', 'rejected', 'completed'] },
+          },
+          orderBy: { created_at: 'desc' },
+        });
+      } catch {
+        recentPending = null;
+      }
+      if (recentPending) {
+        const updated = await db.reservation.update({
+          where: { id: recentPending.id },
+          data: {
+            treatment_category: validCategory,
+            treatment_detail: treatmentDetail !== undefined ? treatmentDetail : recentPending.treatment_detail,
+            raw_text: effectiveRawText,
+            purchase_value: purchaseValue !== undefined ? purchaseValue : recentPending.purchase_value,
+            duration_minutes: duration ?? recentPending.duration_minutes ?? null,
+            assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : recentPending.assigned_staff_id,
+            ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
+          },
+        });
+        return { mode: 'merged', result: { reservation: updated, isNew: false, isUpdate: true } };
+      }
+    }
+
     const isRepeatOrder = await computeIsRepeatOrder({ tenantId, customerId, db });
     const createData: any = {
       tenant_id: tenantId,
       customer_id: customerId,
       treatment_category: validCategory,
       treatment_detail: treatmentDetail,
-      booking_date: bookingDate,
+      booking_date: hasValidDate ? bookingDate : null,
       duration_minutes: duration,
       assigned_staff_id: assignedStaffId || null,
       raw_text: effectiveRawText,
-      status,
+      status: bookingStatus,
       purchase_value: purchaseValue ?? null,
       // KB-6: snapshot ongkir saat booking (riwayat abadi).
       delivery_fee: deliveryFee ?? null,
@@ -669,7 +716,9 @@ export class ReservationCoreService {
       request_id: requestId && requestId.trim().length > 0 ? requestId : null,
       // CG-05 (opsi flag): bot/agent non-same-day berstatus confirmed = slot
       // belum diverifikasi staf → tandai agar admin memverifikasi.
-      needs_staff_verification: source !== 'ADMIN_PANEL' && status === 'confirmed',
+      needs_staff_verification: source !== 'ADMIN_PANEL' && bookingStatus === 'confirmed',
+      // Intake tanpa tanggal TIDAK boleh masuk jalur schedule-check.
+      ...(hasValidDate ? {} : { pendingScheduleCheck: false }),
     };
     // Create di dalam transaksi/lock (A3). Bila gagal → pemanggil memutuskan
     // fallback in-memory (admin routes punya fallback).

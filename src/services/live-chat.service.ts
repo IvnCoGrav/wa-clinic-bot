@@ -915,11 +915,17 @@ export class LiveChatService {
       return { success: false, error: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
     }
 
-    // Cari pesan di DB / memory
+    // Cari pesan di DB / memory — dual-ID (internal UUID ATAU wa_message_id),
+    // konsisten dengan sendReaction/addOrUpdateReaction.
     let msg: any = null;
     try {
       msg = await prisma.message.findFirst({
-        where: { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+        where: {
+          OR: [
+            { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+            { wa_message_id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+          ],
+        },
       });
     } catch {
       msg = null;
@@ -1013,11 +1019,17 @@ export class LiveChatService {
       return { success: false, error: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
     }
 
-    // Cari pesan di DB / memory
+    // Cari pesan di DB / memory — dual-ID (internal UUID ATAU wa_message_id),
+    // konsisten dengan sendReaction/addOrUpdateReaction.
     let msg: any = null;
     try {
       msg = await prisma.message.findFirst({
-        where: { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+        where: {
+          OR: [
+            { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+            { wa_message_id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+          ],
+        },
       });
     } catch {
       msg = null;

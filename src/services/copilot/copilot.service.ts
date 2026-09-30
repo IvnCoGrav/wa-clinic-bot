@@ -17,6 +17,12 @@ export interface CopilotChatParams {
   tenantId: string;
   message: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /**
+   * Konteks pasien yang sedang dibuka admin di Live Chat. Dipakai agar pertanyaan
+   * deiktik ("pasien ini siapa?", "riwayat dia apa?") ter-grounding tanpa admin
+   * mengetik ulang nama/nomor. ID selalu divalidasi ulang tenant-scoped oleh tool.
+   */
+  activeContext?: { customerId?: string; conversationId?: string };
 }
 
 export interface CopilotChatResult {
@@ -100,7 +106,8 @@ export function buildRouterPrompt(
   toolMenu: string,
   now: Date = new Date(),
   priorSteps: RouterPriorStep[] = [],
-  history: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+  activeContext?: { customerId?: string; conversationId?: string }
 ): string {
   const todayStr = formatWibDateYYYYMMDD(now);
   const tomorrowStr = formatWibDateYYYYMMDD(wibDayBoundsUtc(1, now).start);
@@ -124,12 +131,17 @@ export function buildRouterPrompt(
         .join('\n')}\n`
     : '';
 
+  const hasContext = !!(activeContext?.customerId || activeContext?.conversationId);
+  const contextBlock = hasContext
+    ? `\nKONTEKS PASIEN AKTIF (admin sedang membuka percakapan ini):\n${activeContext?.customerId ? `- customerId: ${activeContext.customerId}\n` : ''}${activeContext?.conversationId ? `- conversationId: ${activeContext.conversationId}\n` : ''}Bila pertanyaan memakai kata deiktik ("pasien ini", "dia", "chat ini", "riwayatnya") ATAU tidak menyebut nama/ID eksplisit, panggil get_customer_history dengan customerId di atas. DILARANG menebak pasien lain.\n`
+    : '';
+
   return `Kamu adalah asisten internal klinik. Pilih SATU tool untuk menjawab pertanyaan admin.
 Konteks Waktu Server (WIB):
 - Hari ini: ${todayName}, ${todayStr}
 - Besok: ${tomorrowName}, ${tomorrowStr}
 Gunakan konteks ini untuk menghitung tanggal format YYYY-MM-DD bila admin menyebut kata relatif (mis. "hari ini", "besok", "lusa", "hari minggu depan").
-${historyBlock}
+${contextBlock}${historyBlock}
 Tool tersedia:
 ${toolMenu}
 ${priorBlock}
@@ -238,7 +250,7 @@ export class CopilotService {
           count: c.rows.length,
           sample: c.rows.slice(0, 3),
         }));
-        const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps, history);
+        const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps, history, params.activeContext);
 
         llmCalls++;
         let routerResp: any;

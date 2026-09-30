@@ -42,7 +42,6 @@ describe('Reservation idempotency request_id (Stage 7 / R6)', () => {
   });
 
   it('request_id belum ada → buat baru dengan request_id tersimpan', async () => {
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null as any);
     vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'new-req', request_id: base.requestId } as any);
 
     // A2 (KB-4): bookingDate WAJIB → sertakan tanggal. Tanpa idempotent hit → buat baru.
@@ -55,7 +54,6 @@ describe('Reservation idempotency request_id (Stage 7 / R6)', () => {
   });
 
   it('CG-05 (flag): AGENT non-same-day confirmed → needs_staff_verification=true', async () => {
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null as any);
     vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'new-verify' } as any);
 
     await reservationCoreService.saveReservation({ ...base, requestId: undefined });
@@ -65,7 +63,6 @@ describe('Reservation idempotency request_id (Stage 7 / R6)', () => {
   });
 
   it('CG-05 (flag): ADMIN_PANEL → needs_staff_verification=false', async () => {
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null as any);
     vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'admin-new' } as any);
 
     await reservationCoreService.saveReservation({ ...base, source: 'ADMIN_PANEL', requestId: undefined });
@@ -115,6 +112,56 @@ describe('A2 — booking_date WAJIB (KB-4)', () => {
       bookingDate: new Date('2026-10-15T02:00:00.000Z'),
     });
     expect(res.isNew).toBe(true);
+  });
+
+  it('channel-aware: ADMIN_PANEL tanpa tanggal → DIIZINKAN sebagai intake, dipaksa status pending', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null as any);
+    vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'intake-1', status: 'pending' } as any);
+    await reservationCoreService.saveReservation({
+      ...base,
+      source: 'ADMIN_PANEL',
+      status: 'confirmed', // admin minta confirmed, tapi tanpa tanggal TIDAK boleh
+      bookingDate: undefined,
+    } as any);
+    const arg = vi.mocked(prisma.reservation.create).mock.calls[0][0] as any;
+    expect(arg.data.status).toBe('pending');
+    expect(arg.data.booking_date).toBeNull();
+    expect(arg.data.pendingScheduleCheck).toBe(false);
+  });
+
+  it('channel-aware: WEBHOOK (auto-capture) tanpa tanggal → intake pending (bukan ditolak)', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null as any);
+    vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'intake-2', status: 'pending' } as any);
+    const res = await reservationCoreService.saveReservation({
+      ...base,
+      source: 'WEBHOOK',
+      status: 'confirmed',
+      bookingDate: undefined,
+    } as any);
+    expect(res.isNew).toBe(true);
+    const arg = vi.mocked(prisma.reservation.create).mock.calls[0][0] as any;
+    expect(arg.data.status).toBe('pending');
+  });
+
+  it('channel-aware: BOT tanpa tanggal tetap DITOLAK (customer-facing wajib tanggal)', async () => {
+    await expect(
+      reservationCoreService.saveReservation({ ...base, source: 'BOT', bookingDate: undefined } as any)
+    ).rejects.toMatchObject({ code: 'MISSING_BOOKING_DATE' });
+    expect(prisma.reservation.create).not.toHaveBeenCalled();
+  });
+
+  it('channel-aware: intake tanpa tanggal di-dedup 24 jam (update baris pending lama, bukan create baru)', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: 'pending-lama', treatment_detail: 'X' } as any);
+    vi.mocked(prisma.reservation.update).mockResolvedValue({ id: 'pending-lama', status: 'pending' } as any);
+    const res = await reservationCoreService.saveReservation({
+      ...base,
+      source: 'WEBHOOK',
+      bookingDate: undefined,
+      requestId: undefined,
+    } as any);
+    expect(res.isNew).toBe(false);
+    expect(res.isUpdate).toBe(true);
+    expect(prisma.reservation.create).not.toHaveBeenCalled();
   });
 });
 

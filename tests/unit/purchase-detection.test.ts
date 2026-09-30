@@ -49,7 +49,7 @@ describe('purchase-detection.service', () => {
       expect(fired).toBe(false);
     });
 
-    it('fire Purchase & set status approved saat auto_send_purchase_capi = true', async () => {
+    it('fire Purchase & set status approved HANYA setelah Meta menerima (sendCapiEvent success=true)', async () => {
       mockTenantAutoSend(true);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
         id: 'r1',
@@ -65,7 +65,9 @@ describe('purchase-detection.service', () => {
       } as any);
       vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
 
-      const fireSpy = vi.spyOn(capi, 'fireCapiEvent').mockImplementation(() => {});
+      const sendSpy = vi
+        .spyOn(capi.capiService, 'sendCapiEvent')
+        .mockResolvedValue({ success: true, status: 200 } as any);
 
       const fired = await maybeFirePurchaseEvent({
         customer: baseCustomer,
@@ -75,7 +77,7 @@ describe('purchase-detection.service', () => {
       });
 
       expect(fired).toBe(true);
-      expect(fireSpy).toHaveBeenCalledWith(expect.objectContaining({
+      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
         eventName: 'Purchase',
         value: 250000,
         currency: 'IDR',
@@ -89,6 +91,37 @@ describe('purchase-detection.service', () => {
           purchase_value: 250000,
         },
       });
+    });
+
+    it('FIX 173i-c: Meta GAGAL → status TETAP pending (bukan approved/sent palsu)', async () => {
+      mockTenantAutoSend(true);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r1-fail',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'pending',
+        treatment_detail: 'Pijat Bayi',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
+        customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+
+      vi.spyOn(capi.capiService, 'sendCapiEvent').mockResolvedValue({ success: false, message: 'Meta 500' } as any);
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment 250000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(true);
+      const updateArg = vi.mocked(prisma.reservation.update).mock.calls[0][0] as any;
+      expect(updateArg.data.purchase_review_status).toBe('pending');
+      expect(updateArg.data.purchase_event_sent_at).toBeUndefined();
     });
 
     it('TIDAK fire CAPI & set pending saat moderasi manual aktif (default false)', async () => {
@@ -233,7 +266,9 @@ describe('purchase-detection.service', () => {
         customer: { id: 'c1', adClick: null },
       } as any);
       vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
-      const fireSpy = vi.spyOn(capi, 'fireCapiEvent').mockImplementation(() => {});
+      const sendSpy = vi
+        .spyOn(capi.capiService, 'sendCapiEvent')
+        .mockResolvedValue({ success: true, status: 200 } as any);
 
       const fired = await maybeFirePurchaseEvent({
         customer: baseCustomer,
@@ -248,7 +283,7 @@ describe('purchase-detection.service', () => {
         where: { id: 'r_official' },
         data: expect.objectContaining({ purchase_value: 160000 }),
       });
-      expect(fireSpy).toHaveBeenCalledWith(expect.objectContaining({ value: 160000 }));
+      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ value: 160000 }));
     });
 
     it('mendukung ekstraksi nominal murni dari financial equation (Total = 70rb + ongkir 15rb = 85rb)', async () => {

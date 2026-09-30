@@ -7,13 +7,13 @@ vi.mock('../../src/services/media.service', () => ({
 }));
 
 /**
- * FASE 4.2 — Auto-expire reservasi hold yang tanggal kunjungannya sudah lewat.
- * Tenant-scoped, hanya menyentuh status 'hold', tidak menyentuh masa depan.
+ * KB-1 (2026-09-30) — Auto-expire reservasi hold sampai tengah malam WIB hari
+ * pembuatan (berbasis `created_at`, bukan `booking_date`). Tenant-scoped.
  */
-describe('FASE 4.2 — runExpiredHoldSweep', () => {
+describe('KB-1 — runExpiredHoldSweep (created_at, tengah malam WIB)', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('memanggil updateMany dengan filter tenant + status hold + booking_date lampau', async () => {
+  it('memanggil updateMany dengan filter tenant + status hold + created_at lampau (bukan booking_date)', async () => {
     vi.mocked((prisma.reservation as any).updateMany).mockResolvedValueOnce({ count: 2 } as any);
 
     const cron = new CronService();
@@ -24,7 +24,8 @@ describe('FASE 4.2 — runExpiredHoldSweep', () => {
     const arg = calls[0][0] as any;
     expect(arg.where.tenant_id).toBe('default-tenant');
     expect(arg.where.status).toBe('hold');
-    expect(arg.where.booking_date.lt).toBeInstanceOf(Date);
+    expect(arg.where.created_at.lt).toBeInstanceOf(Date);
+    expect(arg.where.booking_date).toBeUndefined();
     expect(arg.data.status).toBe('cancelled');
   });
 

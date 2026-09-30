@@ -49,8 +49,21 @@ vi.mock('../../src/services/google-calendar.service', () => ({
   googleCalendarService: { createEvent: vi.fn().mockResolvedValue('evt_1'), syncReservation: vi.fn().mockResolvedValue(undefined) },
 }));
 
+vi.mock('../../src/services/reservation-lifecycle.service', () => ({
+  reservationLifecycleService: { onReservationCreated: vi.fn().mockResolvedValue(undefined) },
+}));
+vi.mock('../../src/services/follow-up.service', () => ({
+  followUpService: { createReservationFollowUps: vi.fn().mockResolvedValue(undefined) },
+}));
+vi.mock('../../src/services/staff-notification.service', () => ({
+  staffNotificationService: { scheduleReservationAssignmentNotification: vi.fn().mockResolvedValue(undefined) },
+}));
+
 import { reservationSeriesService } from '../../src/services/reservation-series.service';
 import { customerService } from '../../src/services/customer.service';
+import { reservationLifecycleService } from '../../src/services/reservation-lifecycle.service';
+import { followUpService } from '../../src/services/follow-up.service';
+import { staffNotificationService } from '../../src/services/staff-notification.service';
 import { prisma } from '../../src/db/client';
 
 describe('ReservationSeriesService', () => {
@@ -122,6 +135,28 @@ describe('ReservationSeriesService', () => {
       } as any, 'default-tenant')
     ).rejects.toMatchObject({ code: 'STAFF_COLLISION' });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('6. FIX 173i-e — createSeries menjalankan efek samping lifecycle per sesi', async () => {
+    const series = await reservationSeriesService.createSeries({
+      customerId: 'cust_1',
+      treatmentName: 'Prenatal Massage (Pijat Hamil)',
+      treatmentCategory: 'MOMS',
+      totalSessions: 2,
+      assignedStaffId: 'staff_1',
+      sessions: [
+        { sessionNumber: 1, bookingDate: new Date('2026-09-02T02:00:00Z') },
+        { sessionNumber: 2, bookingDate: new Date('2026-09-03T02:00:00Z') },
+      ],
+    } as any, 'default-tenant');
+
+    expect(series.reservations).toHaveLength(2);
+    // Lifecycle dijalankan per sesi
+    expect(reservationLifecycleService.onReservationCreated).toHaveBeenCalledTimes(2);
+    // Follow-up per sesi dijadwalkan
+    expect(followUpService.createReservationFollowUps).toHaveBeenCalledTimes(2);
+    // Notifikasi penugasan staf dijadwalkan per sesi ber-staf
+    expect(staffNotificationService.scheduleReservationAssignmentNotification).toHaveBeenCalledTimes(2);
   });
 
   it('4. getSeries and getCustomerSeries return computed completed_sessions', async () => {

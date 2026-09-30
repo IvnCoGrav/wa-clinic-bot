@@ -486,7 +486,14 @@ const LiveChatComposerInner = (
     stopTypingTimers();
     isTypingActiveRef.current = false;
     onTypingRef.current?.(false);
-    if (inputRef.current) inputRef.current.innerText = '';
+    // Bersihkan DOM secara menyeluruh (bukan hanya innerText) agar pseudo-class
+    // :empty / data-placeholder kembali aktif dan placeholder muncul lagi.
+    if (inputRef.current) {
+      inputRef.current.innerHTML = '';
+      while (inputRef.current.firstChild) {
+        inputRef.current.removeChild(inputRef.current.firstChild);
+      }
+    }
     clearDraft(convIdRef.current);
     setHasText(false);
     onTextChangeRef.current?.('', false);
@@ -497,6 +504,10 @@ const LiveChatComposerInner = (
   }, [readText, selectedImage, sending, stopTypingTimers, onSend, isInternalMode]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Guard IME (Android/iOS/Chinese/Japanese): saat komposisi teks berlangsung,
+    // Enter adalah "konfirmasi kandidat", BUKAN kirim. Jangan intersep.
+    if ((e.nativeEvent as any)?.isComposing || (e as any).keyCode === 229) return;
+
     if (showQuickReplyPopover) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -520,7 +531,11 @@ const LiveChatComposerInner = (
         return;
       }
     }
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+
+    // Enter = kirim; Shift+Enter = baris baru. Tombol "Send" keyboard virtual HP
+    // (enterKeyHint="send") memicu `keydown` Enter tanpa shift → ikut terkirim.
+    if (e.key === 'Enter') {
+      if (e.shiftKey) return; // biarkan default menambahkan newline
       e.preventDefault();
       handleSend();
     }

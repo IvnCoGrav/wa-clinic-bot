@@ -118,7 +118,7 @@ describe('Follow-Up Rolling Variant — Adversarial Unit Tests', () => {
       customer: { id: 'cust-custom-1', name: 'Rina', phone: '6281234567890', children: [{ name: 'Kenzo' }] },
     };
     const { typingService } = await import('../../src/services/typing.service');
-    const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ status: 'sent', chatId: '6281234567890', messageCount: 1, totalTypingMs: 100 } as any);
+    const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true, bubblesSent: 1, chatId: '6281234567890' } as any);
     vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
     const { resolveGatewayForTenant } = await import('../../src/integrations/whatsapp/factory');
     vi.spyOn(await import('../../src/integrations/whatsapp/factory'), 'resolveGatewayForTenant').mockResolvedValue({ providerType: 'WAHA' } as any);

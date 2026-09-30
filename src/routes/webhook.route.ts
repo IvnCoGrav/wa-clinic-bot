@@ -968,13 +968,41 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           payload.message?.audioMessage?.mimetype ||
           payload.message?.documentMessage?.mimetype ||
           `application/${heavyMediaType}`;
+        const heavyFileName =
+          payload.message?.documentMessage?.fileName ||
+          payload.message?.documentMessage?.title ||
+          pAny._data?.message?.documentMessage?.fileName ||
+          pAny.fileName ||
+          undefined;
+        const heavyCaption =
+          payload.message?.videoMessage?.caption ||
+          pAny.caption ||
+          undefined;
         void (async () => {
           try {
             const { mediaService } = await import('../services/media.service');
             const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
             if (buffer && buffer.length > 0) {
-              await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType: heavyMime });
-              console.log(`[WAHA MEDIA] ${heavyMediaType} inbound ${waMessageId} arsip tersimpan (background).`);
+              const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType: heavyMime });
+              // Lampirkan URL lokal ke record pesan + siarkan SSE agar bubble yang sudah
+              // tampil langsung memperoleh player audio / tautan unduhan tanpa refresh.
+              try {
+                const bgCustomer = await customerService.getCustomerByPhone(phone, resolvedTenantId);
+                if (bgCustomer) {
+                  const bgConv = await conversationService.getOrCreateConversation(bgCustomer.id, resolvedTenantId);
+                  await messageService.attachMediaToMessage(bgConv.id, waMessageId, resolvedTenantId, {
+                    url: saved.hdUrl || saved.thumbUrl,
+                    hdUrl: saved.hdUrl,
+                    thumbUrl: saved.thumbUrl,
+                    mimeType: heavyMime,
+                    fileName: heavyFileName,
+                    caption: heavyCaption ?? null,
+                  });
+                }
+              } catch (attachErr: any) {
+                console.warn(`[WAHA MEDIA] Gagal melampirkan media ${heavyMediaType} ${waMessageId} ke record:`, attachErr.message);
+              }
+              console.log(`[WAHA MEDIA] ${heavyMediaType} inbound ${waMessageId} arsip tersimpan + ter-link ke DB (background).`);
             } else {
               console.warn(`[WAHA MEDIA WARNING] Buffer kosong untuk ${heavyMediaType} ${waMessageId}.`);
             }

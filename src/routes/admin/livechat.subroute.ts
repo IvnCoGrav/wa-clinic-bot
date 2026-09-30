@@ -492,6 +492,14 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const gateway = await getGateway(tenantId);
 
       if (isTyping) {
+        // 0. Perpanjang jendela sewa human handling (default 6 jam) selama admin
+        // benar-benar mengetik — mencegah bot AI merebut alih percakapan di tengah
+        // penyusunan balasan. Hanya jika percakapan sedang di-handle manusia.
+        if (conversation.is_human_handling) {
+          await conversationService
+            .resetHumanHandlingTimer(id, tenantId)
+            .catch((err: any) => console.warn('[TYPING ERROR] resetHumanHandlingTimer failed:', err.message));
+        }
         // 1. Kirim sinyal markAsRead (sendSeen / centang biru)
         if (typeof gateway.markAsRead === 'function') {
           await gateway.markAsRead(phone).catch((err: any) => console.warn('[TYPING ERROR] markAsRead failed:', err.message));

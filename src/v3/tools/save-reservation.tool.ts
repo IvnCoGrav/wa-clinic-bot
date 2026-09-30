@@ -2,6 +2,7 @@ import { reservationCoreService } from '../../services/reservation-core.service'
 import { BabyDetail } from '../../utils/reservation-text-parser';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { parseIndonesianDate, applyBookingTimeToDate } from '../../utils/indonesian-date-parser';
+import { formatWibDateYYYYMMDD, formatWibTime } from '../../utils/wib-time';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { GoalTracker } from '../state/goal-tracker';
 
@@ -483,12 +484,23 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       purchaseValue,
       source: 'AGENT',
       status: isSameDay ? 'pending' : 'confirmed',
-      // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama
-      // (tenant+customer+tanggal+treatment). Mencegah baris reservasi ganda.
-      requestId: `${tenantId}:${customerId}:${parsedDate.toISOString().slice(0, 10)}:${treatmentDetail}`,
+      // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama.
+      // FIX 173f: sertakan JAM WIB (HH:MM) agar dua booking treatment sama pada
+      // slot BERBEDA (pagi & sore) tidak saling menimpa via short-circuit
+      // idempoten. Tanggal memakai kanonis WIB (bukan UTC slice) agar stabil
+      // di sekitar tengah malam WIB.
+      requestId: `${tenantId}:${customerId}:${formatWibDateYYYYMMDD(parsedDate)}:${formatWibTime(parsedDate)}:${treatmentDetail}`,
     });
 
     const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (${isSameDay ? 'menunggu cek jadwal hari ini' : 'terjadwal'}).`;
+
+    // KB-4 (2026-09-30): bila customer tidak menyebut jam kunjungan, sistem
+    // memakai default pukul 09.00 WIB dari parser — WAJIB diberi tahu ke
+    // customer dalam balasan agar tidak menjadi janji sepihak yang salah.
+    const bookingTimeExplicit = !!(bookingTime && typeof bookingTime === 'string' && bookingTime.trim());
+    const defaultTimeNote = bookingTimeExplicit
+      ? ''
+      : ' Jam kunjungan belum disebutkan, jadi kami catat pukul 09.00 WIB ya Bunda. Kalau mau jam lain, silakan beri tahu kami 🙏';
 
     return {
       success: true,
@@ -499,10 +511,19 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       // sepihak — permintaan ditampung untuk dicek slot oleh tim Bidan.
       message: isSameDay
         ? 'Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏'
-        : `Permintaan jadwal kunjungan ${treatmentDetail} pada hari ${bookingDate} sudah kami tampung ya Bunda 😊 Untuk ketersediaan slot pastinya, kami bantu cekkan ketersediaan jadwal tim Bidan kami dulu ya Bunda 🙏 Nanti segera kami kabari ya bund 🤗`
+        : `Permintaan jadwal kunjungan ${treatmentDetail} pada hari ${bookingDate} sudah kami tampung ya Bunda 😊 Untuk ketersediaan slot pastinya, kami bantu cekkan ketersediaan jadwal tim Bidan kami dulu ya Bunda 🙏 Nanti segera kami kabari ya bund 🤗${defaultTimeNote}`
     };
   } catch (error: any) {
     console.error(JSON.stringify({ event: 'V3_TOOL_RESERVATION_ERROR', tenantId, error: error.message, timestamp: new Date().toISOString() }));
+    // KB-3: kuota kapasitas harian penuh → arahkan jadwal ke hari lain (tanpa
+    // mengklaim slot tersedia). Pesan tetap ramah & actionable untuk asisten.
+    if (error?.code === 'CAPACITY_EXCEEDED') {
+      return {
+        success: false,
+        summary: 'Kapasitas jadwal hari itu penuh',
+        message: `Untuk tanggal tersebut, jadwal tim Bidan kami sudah penuh ya Bunda. Mohon tawarkan Bunda tanggal atau hari lain agar kami bantu cekkan ketersediaannya 😊`,
+      };
+    }
     return {
       success: false,
       summary: 'Gagal mencatat reservasi',

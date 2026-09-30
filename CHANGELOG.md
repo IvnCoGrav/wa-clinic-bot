@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-09-30 - Reservasi: A2 Channel-Aware + Rilis Sesi Paralel (Copilot, LiveChat, Media, Follow-Up)
+
+- **A2 channel-aware (fondasional, koreksi atas rilis A1–A6 sebelumnya):** gerbang
+  `MISSING_BOOKING_DATE` dulu menolak SEMUA jalur tanpa tanggal, termasuk admin
+  manual & auto-capture webhook yang SAH melakukan intake. Kini:
+  - **BOT/AGENT (customer-facing):** tetap WAJIB tanggal (ditolak bila kosong).
+  - **ADMIN_PANEL/WEBHOOK:** boleh intake tanpa tanggal, TAPI dipaksa status
+    `pending` (DILARANG `confirmed`/`hold` tanpa tanggal → anti ghost INV1) dan
+    `pendingScheduleCheck=false`, serta di-dedup 24 jam (update baris pending
+    lama, bukan menumpuk). Test: `reservation-idempotency-request-id.test.ts` (+5).
+- **Rilis sesi paralel (dikonsolidasikan, full-suite hijau):** Copilot multi-step,
+  LiveChat (unread/filter/media), media extractor, follow-up, purchase-detection,
+  webhook, machine, dan `save-reservation.tool`. Verifikasi: `tsc` Exit 0,
+  dashboard build Exit 0, **full suite 4342 passed / 0 failed**.
+- **Dibersihkan:** artifact sampah `NOW()` (0 byte).
+
 #### 2026-09-30 - Reservasi: A1–A6 Keputusan Pemilik (booking_date WAJIB, Advisory Lock, Slot-Overlap Alert, Dataset)
 
 - **Konteks:** Eksekusi 6 keputusan pemilik atas audit reservasi/ops. Prinsip:

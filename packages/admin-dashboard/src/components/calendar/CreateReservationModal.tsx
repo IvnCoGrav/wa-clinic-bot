@@ -1426,14 +1426,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
   };
 
-  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net)
-  const enrichResWithFormState = (savedRes: any) => {
+  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net).
+  // `withInvoice` diteruskan sebagai penanda kontrak agar pemanggil (LiveChatMonitor) tahu
+  // apakah invoice sudah ditangani `onSuccessAndInvoice` (jangan buka modal kedua).
+  const enrichResWithFormState = (savedRes: any, withInvoice = false) => {
     const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), age: b.ageText.trim() }));
     const enriched = {
       ...savedRes,
       babies: formBabies,
       customer: savedRes?.customer || selectedCustomerInfo || undefined,
       ongkir: Number(ongkir) || 0,
+      _withInvoice: Boolean(withInvoice),
       // CATATAN: discount TIDAK disertakan — purchaseValue sudah net (subtotal - discount).
       // Formatter param `discount` = potongan TAMBAHAN yg BELUM masuk purchaseValue. Form-driven selalu 0.
     };

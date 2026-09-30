@@ -1,0 +1,17 @@
+{
+  "findingId": "G6",
+  "methodAudited": "createSeries",
+  "allegedMethod": "createSeriesWithSessions",
+  "allegation": "createSeriesWithSessions mem-bypass reservationCoreService dan langsung tx.reservation.create tanpa collision check terapis",
+  "verdict": "FALSE POSITIVE (RESOLVED IN COMMIT d0c0c4d1)",
+  "evidence": {
+    "file": "src/services/reservation-series.service.ts",
+    "lines": "101-120",
+    "collisionCheckCalled": true,
+    "functionCalled": "findOverlappingStaffReservations",
+    "executionPoint": "BEFORE prisma.$transaction",
+    "actionOnConflict": "Throws Error('STAFF_COLLISION') which halts execution and prevents transaction from running",
+    "testPassing": "tests/unit/reservation-series.test.ts (Fase 3.3 — sesi bentrok staf -> series ditolak atomik)"
+  },
+  "partialRiskNote": "Meskipun collision check sudah aktif, createSeries mem-bypass notifikasi WhatsApp staf (notifyStaffNewReservation) dan follow-up creation (createFollowUpForReservation) yang biasanya dijalankan oleh reservationCoreService."
+}

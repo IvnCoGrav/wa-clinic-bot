@@ -1,0 +1,20 @@
+{
+  "findingId": "F11",
+  "topic": "Hold Sweep Analysis & Root Cause",
+  "verdict": "SEBAGIAN (CRON REGISTERED & RUNNING, BUT WHERE CLAUSE FLAWED)",
+  "liveServerAudit": {
+    "gitCommit": "353c756b",
+    "dockerLogs": "♻️ Expired hold sweep cron started (every 6h)",
+    "envSetting": "ENABLE_EXPIRED_HOLD_SWEEP not in .env (defaults to true via !== 'false')",
+    "dbStatus": {
+      "row_e9ace37d": "CANCELLED (successfully swept by runExpiredHoldSweep)",
+      "row_e542df55": "STILL HOLD (booking_date 2026-10-17 created on 2026-09-13 - 17 days old, never expired!)"
+    }
+  },
+  "rootCauseAnalysis": {
+    "flaw1_whereClause": "runExpiredHoldSweep checks booking_date < today (lt: startOfTodayWibUtc), NOT created_at or hold TTL. A hold placed for a future date (e.g. 1 month ahead) locks staff schedule forever until that future date arrives.",
+    "flaw2_noHoldTtl": "Prisma schema lacks hold_expires_at column; no 2-hour or 24-hour hold TTL is tracked or enforced.",
+    "flaw3_bootDelay": "trackInterval runs only after intervalHours (6 hours), not immediately on application startup.",
+    "flaw4_nullBookingDate": "Holds with null booking_date are excluded from < comparison in SQL."
+  }
+}

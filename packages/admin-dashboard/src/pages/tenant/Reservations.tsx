@@ -599,7 +599,7 @@ export const Reservations: React.FC = () => {
   // Direct server-filtered reservations (lightweight & zero memory overhead)
   const filteredReservations = reservations;
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, rawText?: string | null) => {
     switch (status) {
       case 'hold':
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-2xs">⏳ Hold</span>;
@@ -609,6 +609,12 @@ export const Reservations: React.FC = () => {
         return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">✅ Selesai</span>;
       case 'cancelled':
         return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">❌ Batal</span>;
+      case 'pending':
+        // KB-2: same-day request butuh perhatian admin (badge hilang saat status diubah).
+        if (rawText && /\[SAME_DAY_REQUEST\]/i.test(rawText)) {
+          return <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-2xs animate-pulse">⏰ Hari Ini — Perlu Cek</span>;
+        }
+        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Menunggu</span>;
       default:
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Hold</span>;
     }
@@ -1278,7 +1284,7 @@ export const Reservations: React.FC = () => {
                             </div>
                           )}
                         </div>
-                        <div>{getStatusBadge(res.status)}</div>
+                        <div>{getStatusBadge(res.status, res.raw_text)}</div>
                       </div>
 
                       <div className="flex items-center justify-between text-xs pt-1 border-t border-[#e9edef]">
@@ -1468,7 +1474,7 @@ export const Reservations: React.FC = () => {
                                 <span className="text-xs text-[#8696a0] italic">Belum ditugaskan</span>
                               )}
                             </td>
-                            <td className="py-3.5 px-5">{getStatusBadge(res.status)}</td>
+                            <td className="py-3.5 px-5">{getStatusBadge(res.status, res.raw_text)}</td>
                             <td className="py-3.5 px-5 whitespace-nowrap">
                               {res.status === 'completed' && res.proof_url ? (
                                 <button
@@ -1593,7 +1599,7 @@ export const Reservations: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
                   <span className="text-[#667781]">Status:</span>
-                  {getStatusBadge(proofModal.status)}
+                  {getStatusBadge(proofModal.status, proofModal.raw_text)}
                 </div>
               </div>
 

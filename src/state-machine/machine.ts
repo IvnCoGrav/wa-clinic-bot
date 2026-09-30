@@ -335,6 +335,9 @@ export class ConversationStateMachine {
       const parseResult = parseReservationText(incomingText);
       if (parseResult.success && parseResult.reservation) {
         const parsed = parseResult.reservation;
+        // K1 (silent false-ack) FIX: DILARANG mengakui "data sudah kami terima"
+        // bila simpan ke DB gagal. Tangkap status simpan secara eksplisit.
+        let savedOk = false;
         try {
           const { reservationCoreService } = await import('../services/reservation-core.service');
           await reservationCoreService.saveReservation({
@@ -357,6 +360,7 @@ export class ConversationStateMachine {
             source: 'BOT',
             status: 'confirmed',
           });
+          savedOk = true;
 
           try {
             const { fireCapiEvent } = await import('../services/capi.service');
@@ -414,14 +418,33 @@ export class ConversationStateMachine {
 
         const { TEMPLATES } = await import('../config/persona');
         const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
-        const replyText = `Baik Bunda, data reservasi sudah kami terima yaa. Segera kami bantu cekkan ketersediaan jadwalnya 😊${shareNote}`;
+        // K1 FIX: reply sukses HANYA bila tersimpan. Bila gagal, eskalasi ke
+        // human handling dengan pesan jujur (tanpa klaim "sudah kami terima")
+        // dan kirim alert agar admin menindaklanjuti manual.
+        let replyText: string;
+        if (savedOk) {
+          replyText = `Baik Bunda, data reservasi sudah kami terima yaa. Segera kami bantu cekkan ketersediaan jadwalnya 😊${shareNote}`;
+        } else {
+          try {
+            const { alertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+            await alertService.notifyAlert({
+              type: AlertType.UNINTENDED_SILENT_DROP,
+              severity: AlertSeverity.CRITICAL,
+              tenantId,
+              message: `Formulir reservasi customer ${customer.phone} GAGAL tersimpan ke DB (${parsed.treatmentDetail}). Perlu input manual.`,
+            });
+          } catch {}
+          replyText = `Baik Bunda, data reservasi sudah kami catat ya. Tim Bidan kami akan segera menghubungi Bunda untuk konfirmasi jadwalnya 😊${shareNote}`;
+        }
 
         return {
           nextState: ConversationState.HUMAN_HANDLING,
           replyText,
           shouldSendReply: true,
           isHumanHandling: true,
-          aiReasoning: 'Customer submitted valid reservation form -> Saved reservation to DB & escalated to human handling.',
+          aiReasoning: savedOk
+            ? 'Customer submitted valid reservation form -> Saved reservation to DB & escalated to human handling.'
+            : 'Customer submitted reservation form but DB save FAILED -> escalated to human handling with alert.',
         };
       } else {
         const hasFormHeaderOrColonFields =

@@ -4,11 +4,25 @@ import { getLiveChatHub } from './live-chat-hub.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { responseCacheService } from './response-cache.service';
 
-// In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local
+// In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local.
+// Batas FIFO agar tidak tumbuh tanpa batas (memory leak) pada proses long-running.
 const memoryWaMessageIds = new Set<string>();
+const MAX_MEMORY_WA_IDS = 5000;
 
-// In-Memory store fallback untuk record pesan (agar Live Chat panel tetap jalan saat DB offline)
+function addMemoryWaMessageId(key: string): void {
+  if (!key) return;
+  memoryWaMessageIds.add(key);
+  while (memoryWaMessageIds.size > MAX_MEMORY_WA_IDS) {
+    const oldest = memoryWaMessageIds.values().next().value as string | undefined;
+    if (oldest === undefined) break;
+    memoryWaMessageIds.delete(oldest);
+  }
+}
+
+// In-Memory store fallback untuk record pesan (agar Live Chat panel tetap jalan saat DB offline).
+// Batas FIFO (ring buffer) agar RAM tidak membengkak seiring bertambahnya percakapan.
 const memoryMessages: any[] = [];
+const MAX_MEMORY_MESSAGES = 500;
 
 // In-Memory registry untuk bot outbound yang sedang dalam proses simulasi mengetik/kirim (in-flight)
 interface InFlightBotOutbound {
@@ -187,7 +201,7 @@ export class MessageService {
       const exists = await getMessageRepository().existsByWaId(waMessageId, shortId, tenantId);
       if (exists) {
         // sinkronkan ke memori untuk dedup in-flight berikutnya
-        for (const key of keysToCheck) memoryWaMessageIds.add(key);
+        for (const key of keysToCheck) addMemoryWaMessageId(key);
         return true;
       }
     } catch (error) {
@@ -199,7 +213,7 @@ export class MessageService {
     }
 
     // 2. Belum ada di DB → kunci in-flight di memori untuk request paralel di proses yang sama
-    for (const key of keysToCheck) memoryWaMessageIds.add(key);
+    for (const key of keysToCheck) addMemoryWaMessageId(key);
     return false;
   }
 
@@ -246,9 +260,9 @@ export class MessageService {
     if (memMsg) {
       if (!memMsg.wa_message_id && waMessageId) {
         memMsg.wa_message_id = waMessageId;
-        memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        addMemoryWaMessageId(`${tenantId}:${waMessageId}`);
         if (shortId && shortId !== waMessageId) {
-          memoryWaMessageIds.add(`${tenantId}:${shortId}`);
+          addMemoryWaMessageId(`${tenantId}:${shortId}`);
         }
       }
       return true;
@@ -304,9 +318,9 @@ export class MessageService {
             data: { wa_message_id: waMessageId },
           });
         }
-        memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        addMemoryWaMessageId(`${tenantId}:${waMessageId}`);
         if (shortId && shortId !== waMessageId) {
-          memoryWaMessageIds.add(`${tenantId}:${shortId}`);
+          addMemoryWaMessageId(`${tenantId}:${shortId}`);
         }
         return true;
       }
@@ -336,10 +350,10 @@ export class MessageService {
     isHistorical?: boolean;
   }) {
     if (data.waMessageId) {
-      memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
+      addMemoryWaMessageId(`${data.tenantId}:${data.waMessageId}`);
       const shortId = extractShortMessageId(data.waMessageId);
       if (shortId && shortId !== data.waMessageId) {
-        memoryWaMessageIds.add(`${data.tenantId}:${shortId}`);
+        addMemoryWaMessageId(`${data.tenantId}:${shortId}`);
       }
     }
 
@@ -389,6 +403,10 @@ export class MessageService {
       throw new Error('Prisma create returned null/undefined (DB offline)');
     }
     memoryMessages.push(saved);
+    // FIFO ring buffer: buang record tertua agar RAM tidak tumbuh tanpa batas.
+    if (memoryMessages.length > MAX_MEMORY_MESSAGES) {
+      memoryMessages.splice(0, memoryMessages.length - MAX_MEMORY_MESSAGES);
+    }
 
     // Efek samping pasca-simpan (dulu blok finally): resolusi sandbox, MQL,
     // reschedule follow-up, publish livechat, web push. Semua best-effort dengan
@@ -562,6 +580,91 @@ export class MessageService {
         m.tenant_id === tenantId
     );
     return found || null;
+  }
+
+  /**
+   * Melampirkan metadata media ke record pesan yang sudah tersimpan (dipakai jalur
+   * unduhan BACKGROUND media berat: video/audio/dokumen). Meng-update payload_raw.media
+   * di DB + memory fallback, lalu menyiarkan `message.updated` agar bubble yang sudah
+   * tampil di Live Chat langsung memperoleh player audio / tautan unduhan tanpa refresh.
+   *
+   * Idempoten & best-effort: tidak pernah melempar ke pemanggil fire-and-forget.
+   */
+  public async attachMediaToMessage(
+    conversationId: string,
+    waMessageId: string,
+    tenantId: string,
+    media: any
+  ): Promise<boolean> {
+    if (!waMessageId || !media) return false;
+    let resolvedId: string | null = null;
+
+    // 1. Update DB (tenant-scoped, dual-ID).
+    try {
+      const existing = await prisma.message.findFirst({
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          wa_message_id: waMessageId,
+        },
+      });
+      if (existing) {
+        resolvedId = existing.id;
+        await prisma.message.update({
+          where: { id: existing.id },
+          data: {
+            payload_raw: {
+              ...(typeof existing.payload_raw === 'object' && existing.payload_raw ? existing.payload_raw : {}),
+              media: {
+                ...(typeof (existing.payload_raw as any)?.media === 'object' && (existing.payload_raw as any)?.media
+                  ? (existing.payload_raw as any).media
+                  : {}),
+                ...media,
+              },
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('DB attachMediaToMessage error (using memory fallback):', (error as Error).message);
+    }
+
+    // 2. Update memory fallback.
+    const inMem = memoryMessages.find(
+      (m) => m.wa_message_id === waMessageId && m.conversation_id === conversationId && m.tenant_id === tenantId
+    );
+    if (inMem) {
+      inMem.payload_raw = {
+        ...(typeof inMem.payload_raw === 'object' && inMem.payload_raw ? inMem.payload_raw : {}),
+        media: {
+          ...(typeof (inMem.payload_raw as any)?.media === 'object' && (inMem.payload_raw as any)?.media
+            ? (inMem.payload_raw as any).media
+            : {}),
+          ...media,
+        },
+      };
+      if (!resolvedId) resolvedId = inMem.id || null;
+    }
+
+    if (!resolvedId && !inMem) return false;
+
+    // 3. Broadcast ke seluruh dashboard.
+    try {
+      await getLiveChatHub().publish({
+        type: 'message.updated',
+        tenantId,
+        payload: {
+          conversationId,
+          messageId: resolvedId,
+          waMessageId,
+          media,
+        },
+      });
+    } catch (hubErr: any) {
+      console.warn('[HUB] Failed to publish message.updated (attachMedia):', hubErr.message);
+    }
+
+    return true;
   }
 
   /**
@@ -1155,6 +1258,24 @@ export class MessageService {
       const { conversationService } = await import('./conversation.service');
       await conversationService.setManualUnread(conversationId, tenantId, false);
     } catch {}
+
+    // Broadcast ke seluruh dashboard agar badge unread admin lain padam real-time
+    // (bukan hanya klien yang memicu mark-as-read).
+    try {
+      const hub = getLiveChatHub();
+      await hub.publish({
+        type: 'conversation.updated',
+        tenantId,
+        payload: {
+          conversationId,
+          unreadCount: 0,
+          isManualUnread: false,
+        },
+      });
+    } catch (hubErr: any) {
+      console.warn('[HUB] Failed to publish conversation.updated (mark-as-read):', hubErr.message);
+    }
+
     responseCacheService.invalidatePrefix('livechat:');
   }
 

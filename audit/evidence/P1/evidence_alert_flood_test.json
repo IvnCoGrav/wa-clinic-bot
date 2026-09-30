@@ -1,0 +1,37 @@
+{
+  "testName": "Alert Flood & Throttling Adversarial Test",
+  "timestamp": "2026-09-30T02:04:57.929Z",
+  "burstCount": 50,
+  "totalTimeMs": 3,
+  "avgLatencyMs": 0.039,
+  "sentCount": 1,
+  "throttledCount": 49,
+  "firstAlert": {
+    "index": 1,
+    "res": {
+      "sent": true,
+      "throttled": false,
+      "channel": "emergency_file"
+    },
+    "latencyMs": 1.6978000000000009
+  },
+  "secondAlert": {
+    "index": 2,
+    "res": {
+      "sent": false,
+      "throttled": true,
+      "channel": "console"
+    },
+    "latencyMs": 0.021500000000003183
+  },
+  "lastAlert": {
+    "index": 50,
+    "res": {
+      "sent": false,
+      "throttled": true,
+      "channel": "console"
+    },
+    "latencyMs": 0.004400000000003956
+  },
+  "finding": "THROTTLED_SILENTLY_WITHOUT_AGGREGATION: 49 alerts dropped without counter"
+}

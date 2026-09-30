@@ -1,0 +1,98 @@
+[
+  {
+    "scenario": "1. Dua layanan bayi murni",
+    "inputs": [
+      "Kala Baby – Cukur Rambut",
+      "Kala Baby – Memandikan Bayi"
+    ],
+    "options": {
+      "isMulti": true
+    },
+    "expectedOutcome": "BABY",
+    "actualOutcome": "BABY",
+    "passed": true,
+    "comment": "Fixed/Correct: 2 bayi menghasilkan BABY"
+  },
+  {
+    "scenario": "2. Bayi + Anak",
+    "inputs": [
+      "Kala Baby – Cukur Rambut",
+      "Kala Kids – Pijat Ceria"
+    ],
+    "options": {
+      "isMulti": true,
+      "hasChildren": true
+    },
+    "expectedOutcome": "BABY (or KIDS, NOT BOTH)",
+    "actualOutcome": "BABY",
+    "passed": true,
+    "comment": "Returned BABY (Not BOTH)"
+  },
+  {
+    "scenario": "3. Ibu + Bayi",
+    "inputs": [
+      "Kala Mom – Prenatal Gentle Yoga",
+      "Kala Baby – Cukur Rambut"
+    ],
+    "options": {
+      "isMulti": true
+    },
+    "expectedOutcome": "BOTH",
+    "actualOutcome": "BOTH",
+    "passed": true,
+    "comment": "Valid BOTH"
+  },
+  {
+    "scenario": "4. Ibu saja",
+    "inputs": [
+      "Kala Mom – Prenatal Gentle Yoga"
+    ],
+    "options": {
+      "isMulti": false
+    },
+    "expectedOutcome": "MOMS",
+    "actualOutcome": "MOMS",
+    "passed": true,
+    "comment": "Valid MOMS"
+  },
+  {
+    "scenario": "5a. Layanan tak dikenal (single)",
+    "inputs": [
+      "Layanan Super Unik Tak Dikenal 999"
+    ],
+    "options": {
+      "isMulti": false
+    },
+    "expectedOutcome": "BABY (fallback default)",
+    "actualOutcome": "BABY",
+    "passed": true,
+    "comment": "Fallback default"
+  },
+  {
+    "scenario": "5b. Layanan tak dikenal (multi tanpa profil)",
+    "inputs": [
+      "Layanan Super Unik Tak Dikenal 999",
+      "Layanan Lain"
+    ],
+    "options": {
+      "isMulti": true
+    },
+    "expectedOutcome": "BABY (bukan BOTH)",
+    "actualOutcome": "BABY",
+    "passed": true,
+    "comment": "Correctly BABY fallback"
+  },
+  {
+    "scenario": "6. Add-on saja",
+    "inputs": [
+      "Kala Terapi – Infrared (Sinar Moksa)"
+    ],
+    "options": {
+      "isMulti": false
+    },
+    "expectedOutcome": "BABY / default",
+    "actualOutcome": "BABY",
+    "passed": true,
+    "comment": "Returned BABY"
+  }
+]

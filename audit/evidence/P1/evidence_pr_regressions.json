@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-09-30T02:02:29.437Z",
+  "commit": "353c756bac7e1821487a9a2c7076c7130756e40b",
+  "suites": [
+    {
+      "pr": "PR-R2.1",
+      "name": "Staff Overlap Window Blind Spot (H5)",
+      "scenario": "Existing 08:00-10:00 WIB (120m) vs New 09:30-10:00 WIB (30m)",
+      "before": {
+        "conflictsDetected": 0,
+        "verdict": "FAIL_SILENT_COLLISION"
+      },
+      "after": {
+        "conflictsDetected": 1,
+        "verdict": "PASS_COLLISION_CAUGHT"
+      }
+    },
+    {
+      "pr": "PR-R2.2",
+      "name": "Day-Shift Timezone UTC on Date Slicing (H3)",
+      "scenario": "Input timestamp 2026-10-05 06:00 WIB (23:00 UTC Oct 4)",
+      "before": {
+        "outputString": "2026-10-04",
+        "isCorrectWibDate": false,
+        "verdict": "FAIL_PREVIOUS_DAY_LEAK"
+      },
+      "after": {
+        "outputString": "2026-10-05",
+        "isCorrectWibDate": true,
+        "verdict": "PASS_ACCURATE_WIB_DAY"
+      }
+    },
+    {
+      "pr": "PR-R2.3",
+      "name": "Cancel-then-Rebook Idempotency Dead-End (H9)",
+      "scenario": "Re-booking cancelled slot with identical request_id",
+      "before": {
+        "statusReturned": "cancelled",
+        "verdict": "FAIL_FALSE_SUCCESS_STUCK_CANCELLED"
+      },
+      "after": {
+        "statusReturned": "confirmed",
+        "reactivated": true,
+        "verdict": "PASS_SLOT_REACTIVATED"
+      }
+    },
+    {
+      "pr": "PR-R2.4",
+      "name": "In-Memory Mock Fallback Elimination (F1)",
+      "scenario": "Prisma DB connection refused on /quick-hold",
+      "before": {
+        "httpStatus": 200,
+        "successBody": true,
+        "verdict": "FAIL_FALSE_SUCCESS_MOCK_LEAK"
+      },
+      "after": {
+        "httpStatus": 500,
+        "errorBody": "DATABASE_ERROR",
+        "verdict": "PASS_ERROR_TRANSPARENT_TO_UI"
+      }
+    },
+    {
+      "pr": "PR-R2.5",
+      "name": "Strict Booking Date Guard on Core (G2)",
+      "scenario": "Payload with bookingDate: null and status: confirmed",
+      "before": {
+        "savedSuccessfully": true,
+        "savedRowDate": null,
+        "verdict": "FAIL_NULL_DATE_SAVED"
+      },
+      "after": {
+        "rejectedByGuard": true,
+        "errorCode": "MISSING_BOOKING_DATE",
+        "verdict": "PASS_NULL_DATE_REJECTED"
+      }
+    }
+  ]
+}

@@ -1162,9 +1162,20 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/settings', async (request: FastifyRequest, reply: FastifyReply) => {
     const { AiModelConfigService } = await import('../../config/ai-models.config');
+    // Brand tenant-aware (Mandat Non-Hardcode): nama klinik untuk interpolasi
+    // template balasan diambil dari DB (Tenant.settings.brand), bukan env/build-time.
+    let brand: { businessName: string; botDisplayName: string } | null = null;
+    try {
+      const { getBrandIdentityAsync } = await import('../../config/brand');
+      const identity = await getBrandIdentityAsync(resolveTenantId(request));
+      brand = { businessName: identity.businessName, botDisplayName: identity.botDisplayName };
+    } catch (brandErr: any) {
+      console.warn('[SETTINGS] Gagal memuat brand tenant:', brandErr?.message || brandErr);
+    }
     return reply.status(200).send({
       success: true,
       globalBotActive: AiModelConfigService.isBotActive(DEFAULT_TENANT_ID),
+      brand,
     });
   });
 

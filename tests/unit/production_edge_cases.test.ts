@@ -1095,7 +1095,19 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
     const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.RESERVATION_SENT;
-    
+
+    // Simulasikan DB SEHAT untuk jalur simpan form (harness default = DB offline).
+    // K1 fix: reply sukses hanya bila tersimpan; jadi test ini harus mem-return
+    // create sukses agar skenario "berhasil" benar-benar teruji.
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.reservation.count).mockResolvedValue(0 as any);
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null as any);
+    vi.mocked(prisma.reservation.create).mockResolvedValue({
+      id: 'res-form-ok',
+      status: 'confirmed',
+      booking_date: new Date('2026-06-23T02:00:00.000Z'),
+    } as any);
+
     const ctx: any = {
       tenantId: DEFAULT_TENANT_ID,
       customer: cust,

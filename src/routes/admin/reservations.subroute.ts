@@ -837,6 +837,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
+        // FIX R2.4 (F1): DILARANG membalas sukses palsu saat DB gagal di produksi.
+        // Fallback in-memory hanya untuk dev/test (konsisten dengan approve-purchase).
+        if (process.env.NODE_ENV === 'production') {
+          console.error('[Admin API] /parse gagal simpan reservasi (production):', (error as Error).message);
+          return reply.status(500).send({ success: false, error: 'DATABASE_ERROR' });
+        }
         const mockReservation = {
           id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           tenant_id: tenantId,
@@ -982,6 +988,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(201).send({ success: true, data: reservation });
       } catch (error: any) {
+        // FIX R2.4 (F1): produksi DILARANG membalas 201 sukses palsu saat DB gagal.
+        if (process.env.NODE_ENV === 'production') {
+          console.error('[Admin API] quick-hold gagal simpan (production):', error?.message);
+          return reply.status(500).send({ success: false, error: 'DATABASE_ERROR' });
+        }
         const mockReservation = {
           id: `res_hold_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           tenant_id: tenantId,
@@ -1132,21 +1143,22 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const reservationStatus = status === 'hold' ? 'hold' : 'confirmed';
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
       const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
-      // Fase 1R — Pemisahan mutlak purchase_value (murni layanan) dan ongkir (Customer.ongkir).
-      // Ongkir dikirim terpisah dari frontend; sinkron ke Customer tanpa mencemari purchase_value.
+      // Fase 1R — Pemisahan mutlak purchase_value (murni layanan) dan ongkir.
+      // R2.6: ongkir TIDAK lagi ditulis sebelum save reservasi (mencegah partial
+      // write bila core save gagal). Diterapkan SETELAH save sukses di bawah.
+      // KB-6: bila ongkir tidak diisi admin, pakai referensi ongkir terakhir
+      // customer agar tidak perlu input ulang di next treatment.
       const rawOngkir = (request.body as any)?.ongkir;
-      if (rawOngkir !== undefined && rawOngkir !== null && String(rawOngkir).trim() !== '') {
-        const parsedOngkir = Number(rawOngkir);
-        if (!isNaN(parsedOngkir) && parsedOngkir >= 0) {
-          try {
-            await prisma.customer.update({
-              where: { id: customerId, tenant_id: tenantId },
-              data: { ongkir: Math.round(parsedOngkir) },
-            });
-          } catch (e) {
-            console.warn('[Admin API] Gagal update Customer.ongkir saat CREATE reservation:', (e as Error).message);
-          }
-        }
+      let parsedOngkir: number | null =
+        rawOngkir !== undefined && rawOngkir !== null && String(rawOngkir).trim() !== '' && !isNaN(Number(rawOngkir)) && Number(rawOngkir) >= 0
+          ? Math.round(Number(rawOngkir))
+          : null;
+      if (parsedOngkir === null) {
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          const ref = await customerService.getLastDeliveryFee(customerId, tenantId);
+          if (ref !== null) parsedOngkir = ref;
+        } catch {}
       }
 
       try {
@@ -1163,6 +1175,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             durationMinutes,
             assignedStaffId: assignedStaffId || null,
             purchaseValue: finalPurchaseValue,
+            // KB-6: snapshot ongkir per-reservasi.
+            deliveryFee: parsedOngkir,
             rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
             babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
             customerName: customer.name,
@@ -1188,6 +1202,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             });
           }
           throw conflictErr;
+        }
+
+        // R2.6: ongkir diterapkan SETELAH reservasi tersimpan (bukan sebelum),
+        // sehingga kegagalan save tidak meninggalkan ongkir customer ter-update.
+        if (parsedOngkir !== null) {
+          try {
+            await prisma.customer.update({
+              where: { id: customerId, tenant_id: tenantId },
+              data: { ongkir: parsedOngkir },
+            });
+          } catch (e) {
+            console.warn('[Admin API] Gagal update Customer.ongkir saat CREATE reservation:', (e as Error).message);
+          }
         }
 
         // Persist patokan/landmark ke preferences (tidak melewati saveReservation
@@ -1243,6 +1270,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(201).send({ success: true, data: reservation });
       } catch (error: any) {
+        // FIX R2.4 (F1): produksi DILARANG membalas 201 sukses palsu saat DB gagal.
+        if (process.env.NODE_ENV === 'production') {
+          console.error('[Admin API] create reservation manual gagal (production):', error?.message);
+          return reply.status(500).send({ success: false, error: 'DATABASE_ERROR' });
+        }
         const mockReservation = {
           id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           tenant_id: tenantId,
@@ -2416,19 +2448,27 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             data: { reservation_id: null },
           }).catch(() => {});
 
+          // FIX 173i-d: notifikasi staf WAJIB dikirim SEBELUM reservasi dihapus,
+          // karena service memuat reservasi dari DB (setelah delete → "not found"
+          // → notifikasi hilang senyap). Await agar urutan deterministik.
+          if (existing.assigned_staff_id) {
+            try {
+              const { staffNotificationService } = await import('../../services/staff-notification.service');
+              await staffNotificationService.sendReservationCancelledNotification(
+                id,
+                existing.assigned_staff_id,
+                (request.query as any)?.reason || undefined
+              );
+            } catch (e: any) {
+              console.warn('[Admin API] Failed to send cancelled notification (hard delete):', e.message);
+            }
+          }
+
           await prisma.reservation.delete({
             where: { id },
           });
 
           await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
-
-          if (existing.assigned_staff_id) {
-            import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
-              staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, undefined).catch((e: any) =>
-                console.warn('[Admin API] Failed to send Telegram cancelled (hard delete):', e.message)
-              );
-            }).catch(() => {});
-          }
 
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,

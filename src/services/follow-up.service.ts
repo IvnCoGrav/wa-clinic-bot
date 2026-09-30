@@ -1704,14 +1704,40 @@ export class FollowUpService {
         console.warn('[FollowUp Worker] Failed to pre-log outbound message:', logErr.message);
       }
 
-      await typingService.simulateHumanReply({
+      const sendResult = await typingService.simulateHumanReply({
         chatId: fu.customer.phone,
         replyText: messageText,
         tenantId,
         singleBubble: true, // Follow-up selalu dikirim dalam 1 bubble utuh (tidak dipecah multi-bubble)
       });
 
-      // Mark as SENT
+      // FIX 173i-a: DILARANG menandai SENT bila kirim WAHA gagal. Sebelumnya
+      // hasil kirim diabaikan → notifikasi customer yang gagal menjadi
+      // "sukses palsu" yang tidak pernah diretry.
+      if (!sendResult || (sendResult as any).success !== true) {
+        const reason = (sendResult as any)?.error || 'simulateHumanReply returned success=false';
+        console.error(`[FollowUp Worker] WAHA send failed for ${fu.id}: ${reason}`);
+        try {
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'FAILED' },
+          });
+        } catch (dbErr: any) {
+          console.warn(`[FollowUp Worker] FollowUp FAILED status update warning:`, dbErr.message);
+        }
+        try {
+          const { AlertService, AlertType, AlertSeverity } = await import('./alert.service');
+          await new AlertService().notifyAlert({
+            type: AlertType.FOLLOWUP_FAILED,
+            severity: AlertSeverity.WARNING,
+            message: `Follow-up WAHA gagal terkirim ke ${fu.customer?.phone} (type=${fu.type}).`,
+            metadata: { tenantId, followUpId: fu.id, type: fu.type, reason },
+          });
+        } catch {}
+        return false;
+      }
+
+      // Mark as SENT (hanya bila kirim benar-benar sukses)
       try {
         await prisma.followUp.update({
           where: { id: fu.id },

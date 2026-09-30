@@ -328,10 +328,9 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
 
     const { typingService } = await import('../../src/services/typing.service');
     const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({
-      status: 'sent',
+      success: true,
+      bubblesSent: 1,
       chatId: '6281234567890',
-      messageCount: 1,
-      totalTypingMs: 100,
     } as any);
 
     vi.spyOn(prisma.followUp, 'update').mockResolvedValue({ id: 'fu-custom-enter-1', status: 'SENT' } as any);
