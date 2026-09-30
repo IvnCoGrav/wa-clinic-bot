@@ -2,7 +2,7 @@ import { reservationCoreService } from '../../services/reservation-core.service'
 import { BabyDetail } from '../../utils/reservation-text-parser';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { parseIndonesianDate, applyBookingTimeToDate } from '../../utils/indonesian-date-parser';
-import { formatWibDateYYYYMMDD, formatWibTime } from '../../utils/wib-time';
+import { buildCustomerReservationIntake } from '../../services/reservation-intake';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { GoalTracker } from '../state/goal-tracker';
 
@@ -436,19 +436,17 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
 
     // Audit 337101 (same-day dispatch trap): permintaan hari ini DILARANG
     // dijanjikan kedatangan langsung (slot & rute belum terverifikasi admin).
-    // Deteksi: teks booking menyebut sekarang/hari ini, ATAU tanggal parsed
-    // jatuh pada hari kalender yang sama. Status 'pending' + catatan
-    // [SAME_DAY_REQUEST] agar admin memprioritaskan cek rute.
-    const bookingLower = (bookingDate || '').toLowerCase();
-    const sameDayByText = bookingLower.includes('sekarang') || bookingLower.includes('hari ini');
-    function isSameWibCalendarDay(d1: Date, d2: Date): boolean {
-      const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
-      const w1 = new Date(d1.getTime() + WIB_OFFSET_MS);
-      const w2 = new Date(d2.getTime() + WIB_OFFSET_MS);
-      return w1.getUTCFullYear() === w2.getUTCFullYear() && w1.getUTCMonth() === w2.getUTCMonth() && w1.getUTCDate() === w2.getUTCDate();
-    }
-    const sameDayByDate = isSameWibCalendarDay(parsedDate, new Date());
-    const isSameDay = sameDayByText || sameDayByDate;
+    // #157a: kontrak intake kanonis di seam `reservation-intake` (same-day →
+    // pending + [SAME_DAY_REQUEST] + requestId) — SAMA dengan jalur form WA,
+    // tanpa duplikasi logika.
+    const intake = buildCustomerReservationIntake({
+      tenantId,
+      customerId,
+      treatmentDetail,
+      bookingDate: parsedDate,
+      sameDayText: isSameDayRequestText(bookingDate),
+    });
+    const isSameDay = intake.isSameDay;
 
     // Persistensi momProfile ke catatan reservasi (raw_text) agar bidan & admin
     // mengetahui usia kehamilan pasien — tanpa migrasi kolom baru (pola notes→raw_text).
@@ -477,19 +475,19 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       treatmentCategory: treatmentCategory as any,
       treatmentDetail,
       bookingDate: parsedDate,
-      rawText: isSameDay ? `[SAME_DAY_REQUEST] Perlu cek rute terapis hari ini\n${effectiveRawText}` : effectiveRawText,
+      rawText: isSameDay ? `${intake.sameDayTag}\n${effectiveRawText}` : effectiveRawText,
       babies,
       customerName: effectiveName || customerName,
       address: effectiveAddress || undefined,
       purchaseValue,
       source: 'AGENT',
-      status: isSameDay ? 'pending' : 'confirmed',
+      status: intake.status,
       // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama.
       // FIX 173f: sertakan JAM WIB (HH:MM) agar dua booking treatment sama pada
       // slot BERBEDA (pagi & sore) tidak saling menimpa via short-circuit
       // idempoten. Tanggal memakai kanonis WIB (bukan UTC slice) agar stabil
-      // di sekitar tengah malam WIB.
-      requestId: `${tenantId}:${customerId}:${formatWibDateYYYYMMDD(parsedDate)}:${formatWibTime(parsedDate)}:${treatmentDetail}`,
+      // di sekitar tengah malam WIB. (#157a: disatukan di reservation-intake.)
+      requestId: intake.requestId,
     });
 
     const summary = `Reservasi ${treatmentDetail} untuk ${effectiveName || 'Bunda'} pada ${bookingDate} berhasil dicatat (${isSameDay ? 'menunggu cek jadwal hari ini' : 'terjadwal'}).`;

@@ -154,7 +154,7 @@ export class ConversationStateMachine {
       let hasPriorConfirmed = false;
       try {
         const confirmedCount = await prisma.reservation.count({
-          where: { customer_id: customer.id, status: { in: ['confirmed', 'completed'] }, tenant_id: tenantId },
+          where: { customer_id: customer.id, status: { in: ['confirmed', 'en_route', 'completed'] }, tenant_id: tenantId },
         });
         hasPriorConfirmed = confirmedCount > 0;
       } catch (err: any) {}
@@ -340,6 +340,20 @@ export class ConversationStateMachine {
         let savedOk = false;
         try {
           const { reservationCoreService } = await import('../services/reservation-core.service');
+          // #157a: jalur form WA WAJIB memakai kontrak intake kanonis yang sama
+          // dengan V3 tool — same-day → `pending` + penanda [SAME_DAY_REQUEST]
+          // (awareness admin / KB-2), plus requestId kanonis (idempotency:
+          // redelivery webhook / double-submit tidak menggandakan baris).
+          const { buildCustomerReservationIntake } = await import('../services/reservation-intake');
+          const { isSameDayRequestText } = await import('../utils/date-confirmation');
+          const intake = buildCustomerReservationIntake({
+            tenantId,
+            customerId: customer.id,
+            treatmentDetail: parsed.treatmentDetail || '',
+            bookingDate: parsed.bookingDate,
+            sameDayText: isSameDayRequestText(incomingText),
+          });
+          const rawTextWithTag = intake.sameDayTag ? `${intake.sameDayTag}\n${incomingText}` : incomingText;
           await reservationCoreService.saveReservation({
             tenantId,
             customerId: customer.id,
@@ -347,7 +361,7 @@ export class ConversationStateMachine {
             bookingDate: parsed.bookingDate,
             treatmentCategory: parsed.treatmentCategory,
             treatmentDetail: parsed.treatmentDetail,
-            rawText: incomingText,
+            rawText: rawTextWithTag,
             babies: parsed.babies || [],
             customerName: parsed.name,
             kecamatan: parsed.kec,
@@ -358,7 +372,8 @@ export class ConversationStateMachine {
             kelurahan: undefined,
             address: parsed.address || undefined,
             source: 'BOT',
-            status: 'confirmed',
+            status: intake.status,
+            requestId: intake.requestId,
           });
           savedOk = true;
 
