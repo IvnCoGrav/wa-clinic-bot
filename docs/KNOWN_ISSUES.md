@@ -3,6 +3,25 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 180. [Navigasi] Gerbang pra-navigasi sadar akurasi — sisa scope & verifikasi (2026-10-01)
+
+- **Konteks:** perbaikan fondasional insiden Bidan tersasar 2026-09-30 (Fase 0-4 dieksekusi).
+  Plan: `docs/plans/MAPS_NAVIGATION_INCIDENT_AUDIT_AND_FIXING_PLAN.md`.
+- **180a — Gerbang bersifat klien (OPEN, by design):** `NavigationPreflightModal` mencegah
+  pembukaan peta dari CTA aplikasi, tetapi tautan langsung (share teks `mapsUrl`, deep-link
+  manual) masih bisa dibuka tanpa gate. Fondasional penuh butuh backend mengirim URL yang
+  berbeda/ber-token untuk non-gps_pin (blast radius lintas endpoint). Ditunda.
+- **180b — Uji perangkat nyata & deploy BELUM (OPEN):** perilaku modal/amber CTA & alur
+  "Minta Shareloc" belum diuji di HP Bidan maupun produksi. Wajib uji lapangan sebelum klaim selesai.
+- **180c — `shareLocationText` legacy masih dirender di StaffToday (OPEN):** jalur lama
+  (bukan `locationSource`) belum dihapus; kandidat konsolidasi ke `getSharelocRequestText` DB.
+- **180d — Forensik insiden belum diverifikasi DB prod (OPEN):** kronologi koordinat Bunda Ifa
+  (29-30 Sep) tidak dapat dibuktikan dari repo (log 2026-09-30 absen, Postgres lokal mati).
+  Query verifikasi disertakan di plan Fase 0.
+- **Catatan proses:** saat eksekusi, beberapa file source (non-dashboard) ter-revert ke HEAD
+  oleh proses eksternal (writer paralel/git) di tengah sesi; perubahan di-apply ulang &
+  diverifikasi via `git status`/`tsc`. Waspadai bila mengedit repo ini dengan agen paralel aktif.
+
 ## 179. [Keamanan] PII pasien & kunci API lama masih ada di HISTORI git repo PUBLIK — DIBIARKAN (keputusan user 2026-10-01)
 
 - **Konteks:** repo `IvnCoGrav/wa-clinic-bot` **publik** (dibuat 2026-07-21). Audit read-only menemukan data sensitif yang sudah dihapus dari working tree tetapi **masih ada di histori git** (dapat dibaca via `git clone`/commit lama).

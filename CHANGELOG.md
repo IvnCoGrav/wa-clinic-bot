@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-01 - Navigasi: Gerbang Pra-Keberangkatan Sadar Akurasi (Insiden Bidan Tersasar)
+
+- **Konteks:** insiden 2026-09-30 — Bidan Thabita tersasar karena titik koordinat
+  pasien berstatus `manual_staff` (tebakan staf) namun tombol Navigasi tampil hijau
+  seragam & langsung membuka Google Maps. Audit: `docs/plans/MAPS_NAVIGATION_INCIDENT_AUDIT_AND_FIXING_PLAN.md`.
+- **Added — `buildMapsUrls(lat,lng,locationSource,fullAddress)` (`staff-reservation.service.ts`):**
+  titik `estimated_area`/`manual_staff` + ada alamat → `destination=<teks alamat>`
+  (via `URLSearchParams`) agar Google Maps memandu ke klaster/blok, bukan pin mati;
+  `gps_pin`/data lama tetap koordinat (kompatibel mundur). 3 call site meneruskan
+  `resolveLocationSource` + `buildAddressText`.
+- **Added — `needsNavigationPreflight(locationSource)` + `getGoogleMapsDirectionUrl(...,locationSource)`
+  (`geoUtils.ts`):** sinkron dengan backend; gerbang deterministik hanya `gps_pin` yang lolos.
+- **Added — `NavigationPreflightModal.tsx`:** modal pengaman pra-navigasi titik estimasi
+  (3 aksi: minta shareloc / tetap buka peta / batal), presentational murni.
+- **Added — `StaffToday.tsx`:** CTA sadar akurasi (amber "Navigasi (Estimasi)" untuk non-presisi)
+  di kartu/header/modal; `handleStartNavigation` memblokir pembukaan peta non-presisi hingga
+  bidan melewati modal; `handleRequestShareloc` mengisi composer chat dari template DB.
+- **Added — Template DB `STAFF_SHARELOC_REQUEST`** (`followup-templates.ts` + editor
+  `FollowUpTemplates.tsx`) + `StaffReservationService.getSharelocRequestText` +
+  endpoint `GET /api/staff/shareloc-template`. **Tanpa hardcode teks bisnis.**
+- **Added — Widget CS (`LiveChatDispatchWidget.tsx`):** badge peringatan + tombol
+  "Minta Shareloc" saat `locationSource !== 'gps_pin'`; endpoint dispatch mengirim
+  `locationSource`, `customerAddress`, `sharelocText`.
+- **Tests:** `tests/unit/navigation-accuracy-preflight.test.ts` (14, adversarial).
+
 #### 2026-09-30 - Dispatch: Kontrol Keberangkatan (Deprecate Tracking GPS + Status `en_route` + ETA)
 
 - **Konteks:** tracking GPS kontinu tidak andal di PWA (OS membekukan browser saat
