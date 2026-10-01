@@ -3,6 +3,24 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 179. [Keamanan] PII pasien & kunci API lama masih ada di HISTORI git repo PUBLIK — DIBIARKAN (keputusan user 2026-10-01)
+
+- **Konteks:** repo `IvnCoGrav/wa-clinic-bot` **publik** (dibuat 2026-07-21). Audit read-only menemukan data sensitif yang sudah dihapus dari working tree tetapi **masih ada di histori git** (dapat dibaca via `git clone`/commit lama).
+- **Bukti (terverifikasi `git log -S`/`cat-file`):**
+  - `.env` asli ter-commit di commit awal `8869ea8` (**2026-07-22**) memuat `LLM_API_KEY`, `DATABASE_URL`, `WAHA_API_KEY` dll.
+  - Kunci SumoPod `sk-znFVk...` (di `.env`, sejak 2026-07-22) & `sk-xPRgk...` (di scripts, sejak `e1d5adbb` 2026-08-30).
+  - PII 282 customer + rekam medis: `scripts/db_customers.json`, `scripts/db_reservations.json`, `docs/spreadsheet_booking_data.tsv`, `scripts/cleanup-bunda-*.sql`, `src/scripts/fix-bunda-gita.ts`, dll.
+- **Status kunci SumoPod (dikonfirmasi user 2026-10-01):** kunci aktif hanya `...2NSw` (server `LLM_API_KEY` = `sk-7vs...2NSw`, terverifikasi). Kedua kunci bocor (`znFVk`, `xPRgk`) **sudah NONAKTIF** → risiko SumoPod praktis nihil.
+- **Keputusan user (2026-10-01):** WAHA key, DATABASE_URL, ADMIN_API_KEY **DIBIARKAN** (tidak dirotasi). Purge histori git **DITUNDA** ("biarkan saja dulu").
+- **Risiko yang masih terbuka:** PII pasien (nama/HP/rekam medis) masih dapat dibaca publik dari histori → potensi pelanggaran UU PDP. Kunci lama mati → risiko kredensial rendah.
+- **Opsi mitigasi bila kelak dieksekusi (jangan sekarang — ada penulis paralel aktif, rewrite+force-push berisiko menghilangkan commit orang lain):**
+  - **A.** Jadikan repo **private** (stop kebocoran seketika; catatan: server `git pull` perlu token/SSH).
+  - **B.** `git-filter-repo` purge path sensitif + force-push (destruktif; WAJIB di jendela sepi + backup mirror — sudah dibuat di `%TEMP%\wa-clinic-mirror-backup.git`).
+  - **C.** Minta GitHub purge cache commit lama (cache commit tetap bisa diakses via SHA beberapa minggu).
+  - Rekomendasi urutan: A dulu (stop bocor) → B/C saat sepi.
+- **Daftar path histori untuk purge (bila opsi B dijalankan):** `.env`, `docs/spreadsheet_booking_data.tsv`, `scripts/{db_customers.json,db_reservations.json,import_booking_data.sql,import-bookings.ts,export-db.sh,add-customers*.sh,add-remaining*.sh,cleanup-bunda-*.sql,test-customer-case-*.ts,verify-db-live.js}`, `src/scripts/{fix-bunda-gita.ts,sync-export-data.ts}`, `tests/unit/sync-export-data.test.ts`.
+- **Referensi plan lengkap:** `docs/plans/SECRET_ROTATION_PLAN.md`.
+
 ## 178. [Katalog] Fase A unifikasi (A1/A2 selesai, A3 dibatalkan, A4 ditunda) (2026-09-30)
 
 - **Konteks:** Eksekusi Backlog §8.1 Fase A setelah audit read-only (Mandat Validasi Plan).
