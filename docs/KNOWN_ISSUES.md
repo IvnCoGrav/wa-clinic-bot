@@ -22,22 +22,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   oleh proses eksternal (writer paralel/git) di tengah sesi; perubahan di-apply ulang &
   diverifikasi via `git status`/`tsc`. Waspadai bila mengedit repo ini dengan agen paralel aktif.
 
-## 179. [Keamanan] PII pasien & kunci API lama masih ada di HISTORI git repo PUBLIK — DIBIARKAN (keputusan user 2026-10-01)
+## 179. [Keamanan] Purge HISTORI git repo PUBLIK — PII pasien & kunci API lama DIHAPUS (RESOLVED 2026-10-01)
 
 - **Konteks:** repo `IvnCoGrav/wa-clinic-bot` **publik** (dibuat 2026-07-21). Audit read-only menemukan data sensitif yang sudah dihapus dari working tree tetapi **masih ada di histori git** (dapat dibaca via `git clone`/commit lama).
-- **Bukti (terverifikasi `git log -S`/`cat-file`):**
+- **Bukti awal (terverifikasi `git log -S`/`cat-file`):**
   - `.env` asli ter-commit di commit awal `8869ea8` (**2026-07-22**) memuat `LLM_API_KEY`, `DATABASE_URL`, `WAHA_API_KEY` dll.
-  - Kunci SumoPod `sk-znFVk...` (di `.env`, sejak 2026-07-22) & `sk-xPRgk...` (di scripts, sejak `e1d5adbb` 2026-08-30).
+  - Dua kunci SumoPod (di `.env`, sejak 2026-07-22 & di scripts sejak 2026-08-30) — nilai lengkap sudah di-purge dari histori.
   - PII 282 customer + rekam medis: `scripts/db_customers.json`, `scripts/db_reservations.json`, `docs/spreadsheet_booking_data.tsv`, `scripts/cleanup-bunda-*.sql`, `src/scripts/fix-bunda-gita.ts`, dll.
-- **Status kunci SumoPod (dikonfirmasi user 2026-10-01):** kunci aktif hanya `...2NSw` (server `LLM_API_KEY` = `sk-7vs...2NSw`, terverifikasi). Kedua kunci bocor (`znFVk`, `xPRgk`) **sudah NONAKTIF** → risiko SumoPod praktis nihil.
-- **Keputusan user (2026-10-01):** WAHA key, DATABASE_URL, ADMIN_API_KEY **DIBIARKAN** (tidak dirotasi). Purge histori git **DITUNDA** ("biarkan saja dulu").
-- **Risiko yang masih terbuka:** PII pasien (nama/HP/rekam medis) masih dapat dibaca publik dari histori → potensi pelanggaran UU PDP. Kunci lama mati → risiko kredensial rendah.
-- **Opsi mitigasi bila kelak dieksekusi (jangan sekarang — ada penulis paralel aktif, rewrite+force-push berisiko menghilangkan commit orang lain):**
-  - **A.** Jadikan repo **private** (stop kebocoran seketika; catatan: server `git pull` perlu token/SSH).
-  - **B.** `git-filter-repo` purge path sensitif + force-push (destruktif; WAJIB di jendela sepi + backup mirror — sudah dibuat di `%TEMP%\wa-clinic-mirror-backup.git`).
-  - **C.** Minta GitHub purge cache commit lama (cache commit tetap bisa diakses via SHA beberapa minggu).
-  - Rekomendasi urutan: A dulu (stop bocor) → B/C saat sepi.
-- **Daftar path histori untuk purge (bila opsi B dijalankan):** `.env`, `docs/spreadsheet_booking_data.tsv`, `scripts/{db_customers.json,db_reservations.json,import_booking_data.sql,import-bookings.ts,export-db.sh,add-customers*.sh,add-remaining*.sh,cleanup-bunda-*.sql,test-customer-case-*.ts,verify-db-live.js}`, `src/scripts/{fix-bunda-gita.ts,sync-export-data.ts}`, `tests/unit/sync-export-data.test.ts`.
+- **Status kunci SumoPod (dikonfirmasi user 2026-10-01):** kunci aktif berbeda dari kedua kunci bocor (diverifikasi panjang+prefix di server). Kedua kunci bocor (`znFVk`, `xPRgk`) **sudah NONAKTIF** → risiko SumoPod praktis nihil.
+- **TINDAKAN DIEKSEKUSI (2026-10-01, persetujuan eksplisit user "lanjut push dan ker server live"):**
+  1. **Backup mirror** dibuat: `%TEMP%\wa-clinic-mirror-backup.git` + `%TEMP%\wa-clinic-mirror-20261001_074103.git`.
+  2. **`git filter-repo --invert-paths`** menghapus 17 path sensitif dari **seluruh** histori (`.env`, `db_customers.json`, `db_reservations.json`, `spreadsheet_booking_data.tsv`, `cleanup-bunda-*.sql`, `fix-bunda-gita.ts`, `sync-export-data.ts`, dll).
+  3. **Redaksi 25 nomor HP pasien nyata** di 29 file (docs/test/src) → nomor sintetis `6288xxxxxxxxx` (panjang & format valid; sandbox/test sintetis tidak diubah).
+  4. **`git filter-repo --replace-text`** mengganti semua nomor pasien + 2 kunci SumoPod (placeholder) di **seluruh** histori.
+  5. **Force-push** ke `origin`: `master`, `feat/staff-chat-window-lifecycle`, dan semua tag (v1.1.0–v1.4.0, pre-merge-local-20260929). Commit lama (mis. `88d18425`, `1b16d006`, `8869ea8`) tidak lagi ada di remote.
+  6. **Verifikasi clone fresh** dari GitHub (759 commit): **0 nomor pasien**, **0 kunci**, **`.env` tidak ada** di seluruh histori.
+  7. **Server live** (`/opt/wa-clinic-bot`) di-`fetch` + `reset --hard origin/master` → `8650050d`; `app` di-rebuild + force-recreate; `health=200`, `ready=200` (`database CONNECTED`, `waha WORKING`); WAHA tidak disentuh.
+- **⚠️ RISIKO SISA (WAJIB DITINDAKLANJUTI):** GitHub masih menyimpan **cache commit lama** — commit pra-rewrite masih dapat diakses via URL SHA langsung selama beberapa minggu (mis. `github.com/IvnCoGrav/wa-clinic-bot/commit/8869ea8...`). Untuk purge cache ini **perlu kontak GitHub Support** (request "remove cached views / purge") atau **hapus & buat ulang repo**. Selama cache belum dibersihkan, PII lama masih berpotensi diakses.
+- **Catatan operasional:** deploy server wajib force-recreate app (plain `up -d` kadang tidak recreate). Karena histori di-rewrite, setiap clone server lain harus di-`reset --hard origin/master` (bukan `pull`) atau re-clone.
 - **Referensi plan lengkap:** `docs/plans/SECRET_ROTATION_PLAN.md`.
 
 ## 178. [Katalog] Fase A unifikasi (A1/A2 selesai, A3 dibatalkan, A4 ditunda) (2026-09-30)
