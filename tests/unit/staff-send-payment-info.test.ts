@@ -262,4 +262,49 @@ describe('StaffReservationService.sendPaymentInfo', () => {
     expect(text).toContain('Bunda N');
     expect(text).not.toContain('{daftar_layanan}');
   });
+
+  it('should still send invoice/payment info for an already COMPLETED (forceUnpaid) reservation', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      id: 'res-301',
+      tenant_id: DEFAULT_TENANT_ID,
+      assigned_staff_id: 'staff-1',
+      status: 'completed',
+      purchase_occurred_at: null,
+      treatment_detail: 'Pijat Bayi Ceria',
+      purchase_value: 120000,
+      customer: {
+        name: 'Bunda Rani',
+        ongkir: 15000,
+        conversations: [{ id: 'conv-301', tenant_id: DEFAULT_TENANT_ID }],
+      },
+      assigned_staff: { id: 'staff-1', name: 'Bidan Rina' },
+    } as any);
+
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: DEFAULT_TENANT_ID,
+      name: 'Kala Spa',
+      settings: {
+        paymentInfo: {
+          qrisImageUrl: null,
+          bankAccounts: [{ bank: 'BCA', accountNumber: '555666', accountName: 'PT Kala' }],
+        },
+      },
+    } as any);
+
+    const spy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true } as any);
+
+    const result = await StaffReservationService.sendPaymentInfo({
+      reservationId: 'res-301',
+      staffId: 'staff-1',
+      tenantId: DEFAULT_TENANT_ID,
+      staffName: 'Bidan Rina',
+      isSupervisor: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].text).toContain('Bunda Rani');
+    expect(spy.mock.calls[0][0].text).toContain('Rp 135.000');
+    expect(spy.mock.calls[0][0].text).toContain('555666');
+  });
 });

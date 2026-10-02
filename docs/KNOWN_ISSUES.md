@@ -3,6 +3,89 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 195. [Meta Performance] Sisa debt dashboard performa iklan CAC/LTV (2026-10-02)
+
+- **Konteks:** Modul `src/services/meta-performance-analytics.service.ts` + route
+  `GET /api/admin/meta-performance` + Tab performa di `MetaClickCatcher.tsx`.
+  Plan: `docs/plans/META_PERFORMANCE_SALES_DASHBOARD_REVISI_PLAN.md`.
+- **195a — Migrasi RBAC belum di-apply (OPEN, butuh deploy):** file
+  `prisma/migrations/20261002000000_allow_meta_performance_for_advertiser/migration.sql`
+  (seed `role_api_scopes` advertiser GET). Terapkan `npx prisma migrate deploy`
+  SETELAH backup. Drift check:
+  `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script`
+  → harus kosong (migrasi ini data-only). Belum dijalankan lokal (Postgres
+  `localhost:5432` mati, lihat #173k).
+- **195b — Batas `take 5000` per query (OPEN, skala):** agregasi in-memory setelah
+  fetch (agar offline-safe & tanpa `groupBy` yang tidak dimock di `tests/setup.ts`).
+  Tenant > 5000 reservasi/ad_click per periode → angka ter-truncate (flag
+  `revenueBasis.truncated`). Fondasional berikut: agregasi SQL (`groupBy`/`$queryRaw`)
+  + paginasi berbasis kursor.
+- **195c — Indeks analytics (OPEN, performa):** predikat `ad_clicks(tenant_id, createdAt)`,
+  `reservations(tenant_id, created_at)`, `landing_page_views(tenant_id, createdAt)`
+  belum punya indeks komposit khusus (mirip #169a). Uji `EXPLAIN` di produksi
+  sebelum menambah.
+- **195d — `pending/hold` tidak dihitung revenue (by-design, keputusan produk):**
+  hanya `status NOT IN ('cancelled','rejected')` yang masuk `totalFee`; pending/hold
+  ditampilkan terpisah agar tidak mengulang #179. Bila bisnis ingin memasukkannya,
+  buka Confirmation Gate.
+- **195e — Definisi `first-ever` vs `is_repeat_order` (by-design):** dashboard memakai
+  first-ever kanonis; flag `reservation.is_repeat_order` TIDAK diselaraskan (masih
+  dihitung saat create). Bila kelak ingin menyatukan, sentuh `computeIsRepeatOrder`
+  (`reservation-core.service.ts`) — blast radius reservasi.
+- **195f — Bundle frontend:** panel performa di-lazy-load; chunk `MetaClickCatcher`
+  naik 43.4→45.3 kB (+4.4%, di bawah ambang 10%). Recharts tetap di chunk `vendor-charts`.
+
+## 194. [Ongkir + Live Engine] Fase 0-1 selesai; Fase 4 (model live) TERBUKTI MISDIAGNOSIS (OPEN, 2026-10-02)
+
+- **Konteks:** audit plan "Otomatisasi Ongkir saat Lokasi Terkonfirmasi" (Turn-3
+  & Turn-5/6 pelanggan 6287883887456). Investigasi read-only live + kode.
+- **194a — RESOLVED (Fase 1, akar Turn-3):** akar BUKAN gate ongkir, melainkan
+  typo dobel-k "Tambak kemerakkan krian" yang lolos ke gate kecamatan-luas
+  (23 desa Krian) karena `hasAnyKelurahanInText`/`isBetterMatch` tidak
+  typo-aware. Desa "Tambak Kemerakan" SUDAH ada di gazetteer (baris 3253).
+  Fix: `src/integrations/google-maps/geocoding.ts` (gate typo-aware + margin
+  spesifisitas 0.15) + tutup kebocoran `message` di
+  `src/v3/tools/calculate-delivery.tool.ts` (feeText di-gate `showFeeNominal`).
+  `showFeeNominal` sengaja TIDAK dilonggarkan ke `Boolean(kecamatan)` (kontrak
+  779408 + `calculate-delivery-precise-fee.test.ts`).
+- **194b — MISDIAGNOSIS plan Fase 4 (BELUM diperbaiki, menunggu keputusan):**
+  Klaim plan "tenant_ai_config INTENT_CLASSIFICATION → glm-5.3-flash, max_tokens
+  1024" TERBUKTI SALAH. Dump live (`tenant_ai_config`): `ACTIVE_LLM_PROVIDER=KENARI`;
+  `CHAT_REPLY=Kenari/deepseek-v4-1-flash/1024`; `INTENT_CLASSIFICATION=Kenari/
+  deepseek-v4-1-flash/1024`; `GLOBAL_BOT_ENABLED=false`. Saran plan "alihkan ke
+  deepseek-v4-1-flash" = NO-OP (sudah model itu). Menyetelnya di endpoint SumoPod
+  malah di-remap ke glm-5.3-flash (`ai-models.config.ts:129-132`).
+  `CHAT_REPLY_DEEP` ternyata DIPAKAI (n=8), jadi bukan dead config.
+- **194c — Bukti latensi nyata (OPEN):** telemetri `llm_audit_logs` (951 baris,
+  s/d 2026-10-01): `CHAT_REPLY` avg **46,7 dtk**, max **368 dtk**, **8 turn
+  completion=0**; `CHAT_REPLY_DEEP` avg 55,9 dtk max 366 dtk (completion mentok
+  1024). Naikkan max_tokens BUKAN solusi (completion puncak hanya 661). Akar
+  dicurigai latensi/timeout provider Kenari, bukan token cap. **Log jsonl
+  (`logs/llm-*.jsonl`) TIDAK persisten di server** (folder kosong) — observability
+  hilang; `llm_audit_logs` (DB) adalah satu-satunya jejak.
+- **194d — Belum diperbaiki:** (1) `GLOBAL_BOT_ENABLED=false` di produksi —
+  verifikasi apakah sengaja; (2) transkrip Turn-5/6 pelanggan 6287883887456 TIDAK
+  ditemukan di `customers`/`messages` (nomor/tenant tidak cocok) — perlu nomor
+  kanonik; (3) `/opt/wa-clinic-bot/logs` tidak dipersist ke volume.
+- **Catatan server:** plan menyebut IP `43.173.11.79`; runbook resmi
+  (`server-access`) = `43.157.197.148:1403`. Gunakan yang resmi.
+
+## 193. [Pembayaran] Divergensi definisi "Lunas" lintas layanan (OPEN, 2026-10-02)
+
+- **Konteks:** Perbaikan invariant `getCompletedTasks` (lihat CHANGELOG 2026-10-02)
+  menyatukan definisi lunas di jalur **staff PWA** = murni `purchase_occurred_at`.
+  Namun dua layanan lain masih memakai definisi longgar yang menganggap status
+  `completed`/`CONFIRMED` sebagai lunas.
+- **193a — `financial-analytics.service.ts` (OPEN):** `isLunas` masih menyertakan
+  `status==='completed'`. Laporan keuangan bisa menandai kunjungan `forceUnpaid`
+  sebagai LUNAS → **omzet/CSV berpotensi lebih tinggi dari kas riil**.
+- **193b — `staff-notification.service.ts` (OPEN):** `isLunas = status==='CONFIRMED'
+  || status==='COMPLETED'` → notifikasi/briefing staf menyebut "LUNAS" untuk
+  kunjungan yang belum dibayar.
+- **Rencana:** satukan ke satu seam kanonik (mis. helper `isReservationPaid(r)`) dan
+  pakai di ketiga jalur. Blast radius = laporan keuangan + notif → butuh Confirmation
+  Gate & test snapshot terpisah. JANGAN tambal per-kasus.
+
 ## 192. [Navigasi + Copilot] Re-apply fitur navigasi hilang + normalizer link & observabilitas prompt (2026-10-02)
 
 - **Konteks:** `tests/unit/navigation-accuracy-preflight.test.ts` (untracked) merah 6/14

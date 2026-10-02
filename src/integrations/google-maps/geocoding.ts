@@ -150,7 +150,12 @@ export class GeocodingService {
     current: { score: number; level: 'kelurahan' | 'kecamatan'; matchedSpan: string } | null
   ): boolean {
     if (!current) return true;
-    if (candidate.score !== current.score) {
+    // Skor berdekatan (≤0.15 = toleransi typo isKelTypo) dianggap IMBANG agar
+    // spesifisitas menang atas eksak-ness pendek: kelurahan "Tambak Kemerakan"
+    // (skor ≈0.94–0.97) DILARANG dibajak token "krian" (skor 1.0) yang merupakan
+    // kelurahan sekaligus kecamatan (dual-admin) dalam "Tambak kemerakkan krian".
+    const margin = 0.15;
+    if (Math.abs(candidate.score - current.score) > margin) {
       return candidate.score > current.score;
     }
     if (candidate.level !== current.level) {
@@ -161,7 +166,10 @@ export class GeocodingService {
     if (candWords !== currWords) {
       return candWords > currWords; // prefer spans with more words
     }
-    return candidate.matchedSpan.length > current.matchedSpan.length; // prefer longer spans (character length)
+    if (candidate.matchedSpan.length !== current.matchedSpan.length) {
+      return candidate.matchedSpan.length > current.matchedSpan.length; // prefer longer spans
+    }
+    return candidate.score > current.score;
   }
 
   /**
@@ -378,12 +386,23 @@ export class GeocodingService {
         return kelKey === cleanNorm;
       });
 
+      // Typo-aware (data-driven): gate kecamatan-luas DILARANG membajak query yang
+      // menyebut kelurahan riil walau ada 1 typo huruf (mis. "tambak kemerakkan"
+      // vs kanonis "Tambak Kemerakan" — dobel-k). Bandingkan tiap span n-gram kata
+      // query (tanpa spasi) dengan nama kelurahan (tanpa spasi) Levenshtein ≤1,
+      // toleransi yang sama dengan findBestGazetteerMatch (isKelTypo).
+      const querySpansSpaceless = this.generateCandidateSpans(lower)
+        .map((s) => s.replace(/\s+/g, ''))
+        .filter((s) => s.length >= 5);
       hasAnyKelurahanInText = dataForGate.some((entry: any) => {
         const kelLower = entry.Kelurahan_Desa.toLowerCase().trim();
         if (kelLower.length < 3) return false;
         if (['sidoarjo', 'surabaya', 'kota', 'desa'].includes(kelLower)) return false;
         const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
-        return reg.test(lower);
+        if (reg.test(lower)) return true;
+        const kelKey = kelLower.replace(/\s+/g, '');
+        if (kelKey.length < 5) return false;
+        return querySpansSpaceless.some((s) => isTypoAtMostOne(s, kelKey));
       });
     } catch (_) {}
 

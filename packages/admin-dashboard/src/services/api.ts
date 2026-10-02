@@ -83,6 +83,20 @@ export function fetchMetaSummary<T = any>(params: { startDate?: string; endDate?
   return apiRequest(`/api/admin/debug/meta-summary${qs ? `?${qs}` : ''}`);
 }
 
+/**
+ * Laporan performa Meta Ads to Sales (CAC/LTV, funnel, kanal, journey, leakage).
+ * (GET /api/admin/meta-performance) — bukan di bawah `/debug` agar advertiser bisa
+ * diberi akses baca via seed role_api_scopes.
+ */
+export function fetchMetaPerformance<T = any>(params: { startDate?: string; endDate?: string; spend?: number } = {}): Promise<T> {
+  const q = new URLSearchParams();
+  if (params.startDate) q.set('startDate', params.startDate);
+  if (params.endDate) q.set('endDate', params.endDate);
+  if (params.spend !== undefined && params.spend !== null) q.set('spend', String(params.spend));
+  const qs = q.toString();
+  return apiRequest(`/api/admin/meta-performance${qs ? `?${qs}` : ''}`);
+}
+
 /** Live test koneksi Meta CAPI (POST /api/admin/debug/meta-capi-test). */
 export function testCapiEvent<T = any>(body: {
   eventName?: string;

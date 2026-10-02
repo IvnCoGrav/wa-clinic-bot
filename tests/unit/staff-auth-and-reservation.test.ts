@@ -451,6 +451,153 @@ describe('Staff Auth & Reservation Services', () => {
       expect(completed[0].conversationId).toBe('conv-done-1');
     });
 
+    it('should keep TAGIH_DI_TEMPAT for a completed visit that was forceUnpaid (no payment recorded)', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-done-unpaid',
+          treatment_detail: 'Pijat Bayi Ceria',
+          treatment_category: 'BABY',
+          booking_date: yesterday,
+          status: 'completed',
+          purchase_value: 130000,
+          purchase_occurred_at: null,
+          payment_method: null,
+          proof_url: null,
+          customer: {
+            name: 'Bunda Sari',
+            kelurahan: 'Gayungan',
+            kecamatan: 'Gayungan',
+            kota: 'Surabaya',
+            distance_km: 2.0,
+            ongkir: 10000,
+            children: [],
+            conversations: [{ id: 'conv-done-unpaid' }],
+          },
+          children: [],
+        },
+      ]);
+
+      const completed = await StaffReservationService.getCompletedTasks('staff-1', 'default-tenant');
+      expect(completed).toHaveLength(1);
+      expect(completed[0].status).toBe('completed');
+      expect(completed[0].pricing.paymentStatus).toBe('TAGIH_DI_TEMPAT');
+      expect(completed[0].pricing.paymentStatusLabel).toContain('Belum Lunas');
+      expect(completed[0].pricing.proofUrl).toBeNull();
+      expect(completed[0].pricing.paymentMethod).toBeNull();
+    });
+
+    it('should expose proofUrl/paymentMethod for a completed AND paid visit', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-done-proof',
+          treatment_detail: 'Pijat Bayi Ceria',
+          treatment_category: 'BABY',
+          booking_date: yesterday,
+          status: 'completed',
+          purchase_value: 130000,
+          purchase_occurred_at: yesterday,
+          payment_method: 'TRANSFER',
+          proof_url: 'https://cdn.example.com/proof/res-done-proof.jpg',
+          customer: {
+            name: 'Bunda Tia',
+            kelurahan: 'Gayungan',
+            kecamatan: 'Gayungan',
+            kota: 'Surabaya',
+            distance_km: 2.0,
+            ongkir: 10000,
+            children: [],
+            conversations: [{ id: 'conv-done-proof' }],
+          },
+          children: [],
+        },
+      ]);
+
+      const completed = await StaffReservationService.getCompletedTasks('staff-1', 'default-tenant');
+      expect(completed[0].pricing.paymentStatus).toBe('LUNAS');
+      expect(completed[0].pricing.paymentMethod).toBe('TRANSFER');
+      expect(completed[0].pricing.proofUrl).toBe('https://cdn.example.com/proof/res-done-proof.jpg');
+    });
+
+    it('should treat uppercase COMPLETED without payment as TAGIH_DI_TEMPAT', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-done-upper',
+          treatment_detail: 'Pijat Tradisional',
+          treatment_category: 'MOMS',
+          booking_date: yesterday,
+          status: 'COMPLETED',
+          purchase_value: 90000,
+          purchase_occurred_at: null,
+          payment_method: null,
+          proof_url: null,
+          customer: {
+            name: 'Bunda Uli',
+            kelurahan: 'Waru',
+            kecamatan: 'Waru',
+            kota: 'Sidoarjo',
+            distance_km: 3.0,
+            ongkir: 8000,
+            children: [],
+            conversations: [{ id: 'conv-done-upper' }],
+          },
+          children: [],
+        },
+      ]);
+
+      const completed = await StaffReservationService.getCompletedTasks('staff-1', 'default-tenant');
+      expect(completed[0].pricing.paymentStatus).toBe('TAGIH_DI_TEMPAT');
+    });
+
+    it('should preserve an existing proof_url when recording payment without a new photo', async () => {
+      const now = new Date();
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-pay-preserve',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        status: 'completed',
+        purchase_value: 100000,
+        purchase_occurred_at: null,
+        payment_method: 'TRANSFER',
+        proof_url: 'https://cdn.example.com/proof/old-proof.jpg',
+        customer: { id: 'cust-1', name: 'Bunda Lala', conversations: [{ id: 'conv-pay-1' }] },
+      });
+
+      (prisma.reservation.update as any).mockResolvedValue({
+        id: 'res-pay-preserve',
+        status: 'completed',
+        purchase_value: 100000,
+        purchase_occurred_at: now,
+      });
+
+      const result = await StaffReservationService.recordPayment({
+        reservationId: 'res-pay-preserve',
+        staffId: 'staff-1',
+        staffName: 'Bidan Yusi F',
+        tenantId: 'default-tenant',
+        paymentMethod: 'TRANSFER',
+        amount: 100000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(prisma.reservation.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'res-pay-preserve' },
+          data: expect.objectContaining({
+            proof_url: 'https://cdn.example.com/proof/old-proof.jpg',
+          }),
+        })
+      );
+    });
+
     it('should assert conversation ownership based on active task today', async () => {
       (prisma.conversation.findUnique as any).mockResolvedValue({
         customer_id: 'cust-1',

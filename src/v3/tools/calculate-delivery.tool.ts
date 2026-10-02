@@ -666,11 +666,23 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     // disebut kecuali customer menyebutkannya (Rule 11). Cukup label kelurahan/
     // lokasi terbaik; kecamatan tetap tersedia sebagai field terstruktur.
     const targetAreaLabel = resolved.kelurahan || resolved.kecamatan || locationText;
+    // Informasi Hiding Rule 2: `message` dibaca LLM Call 2 dan TIDAK disanitasi
+    // oleh applyFeeInformationHiding (yang hanya meng-omit field numerik). Maka
+    // nominal ongkir & jarak km HANYA boleh masuk `message` bila showFeeNominal
+    // membuka fee. Mode konsultasi tersembunyi = kalimat jangkauan murni tanpa
+    // angka (cegah kebocoran lewat string).
+    const feeText = showFeeNominal
+      ? (ongkirPromo === 0
+          ? `Layanan GRATIS ongkir (masih dalam jangkauan hingga ${deliveryResult.freeTierKm ?? 5} km).`
+          : `Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.`)
+      : '';
     // Mandat total otomatis (audit 315036): recap grand total ikut di `message`
     // (payload LLM) pada mode transaksional, selaras dengan cabang URL-Maps.
     const textMessageBase = isOutOfCoverage
       ? `Area ${targetAreaLabel} di luar batas jangkauan layanan homecare klinik (${distanceKm} km, maks ${maxCoverageKm} km).`
-      : `Area ${targetAreaLabel} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
+      : showFeeNominal
+        ? `Area ${targetAreaLabel} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km). ${feeText}`
+        : `Area ${targetAreaLabel} masuk dalam area jangkauan layanan homecare Bidan kami.`;
     const mainOutput: CalculateDeliveryOutput = {
       success: true,
       isPrecise: resolvedIsPrecise,

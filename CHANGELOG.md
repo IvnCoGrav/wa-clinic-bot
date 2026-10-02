@@ -4,6 +4,108 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Meta Ads Performance & Sales Dashboard (CAC/LTV) — Fase 0–4
+
+- **Konteks:** Modul analitik performa iklan Meta to Sales, dipisah tegas dari
+  observability CAPI. Rencana: `docs/plans/META_PERFORMANCE_SALES_DASHBOARD_REVISI_PLAN.md`
+  (revisi fondasional atas 7 cacat plan awal hasil audit kode nyata).
+- **Added (backend) — `src/services/meta-performance-analytics.service.ts` (baru):**
+  kontrak kanonis CAC vs LTV (first-ever = `MIN(created_at)` reservasi qualifying,
+  BUKAN flag `is_repeat_order`), seam omzet kanonis `purchase_value`→katalog fallback
+  (`resolveTreatmentValue`) + snapshot ongkir (`resolveDeliveryFeeSnapshot`, anti-#179),
+  atribusi kanal `CTWA_NATIVE` vs `PROMO_CTA` via `ctwa_clid`, journey/lead-time WIB +
+  bracket, leakage diagnostics, `tenantId` wajib, `SANDBOX_EXCLUDE`
+  (`is_sandbox_test`/`is_internal_staff`), batas `take 5000` + flag `truncated`,
+  cache `responseCacheService` 30s, degrade-silent offline (ZERO report).
+  `MetaPerformanceQuerySchema` (zod).
+- **Added (API) — `GET /api/admin/meta-performance`** di
+  `src/routes/admin/meta-attribution.subroute.ts` (di luar prefix `/debug` yang
+  Super-Admin only, agar advertiser dapat membaca); validasi 400 + fallback 200 ZERO.
+- **Added (RBAC seed) — migrasi `20261002000000_allow_meta_performance_for_advertiser`:**
+  `role_api_scopes` advertiser → GET prefix ini (tenant-aware, idempoten).
+  **Belum di-apply** (lihat KNOWN_ISSUES #180a).
+- **Added (frontend) — Tab "Performa Iklan & Penjualan"** di
+  `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx` (panel lazy-load) +
+  komponen `components/meta-performance/*` (SpendCalculator, KpiGrid, FunnelBars,
+  ChannelTable, CampaignTable, JourneyHistogram lazy-recharts, LeakageGrid).
+  Reuse `StatCard`-pola, `Pagination`, `useUiFeedback`, preset tanggal. Tanpa rute baru,
+  tanpa dependency baru.
+- **Added (test) — `tests/unit/meta-performance-analytics.test.ts`** (9, adversarial):
+  split CAC/LTV (termasuk order pertama cancelled tak dihitung new), sandbox/staff
+  exclusion, isolasi tenant, fallback harga katalog, ROAS/CAC, journey/lead-time,
+  offline ZERO report.
+- **Verifikasi:** root `tsc`/build exit 0; dashboard `vite build` hijau (chunk
+  MetaClickCatcher 43.4→45.3 kB, panel lazy); unit baru 9/9; full suite 4502 passed
+  (3 timeout flaky saat run paralel padat — lulus 61/61 saat dijalankan terpisah).
+- **Sisa:** KNOWN_ISSUES #180 (migrasi RBAC belum di-apply, drift check lokal terblokir
+  DB offline, batas truncation & indeks analytics, `pending/hold` di luar revenue).
+
+#### 2026-10-02 - Fase 0-3: Ongkir Transparan saat Kelurahan Typo + Tutup Kebocoran `message`
+
+- **Konteks (audit Turn-3, Bunda Chyntia Krian):** bot hanya menjawab "masuk
+  area jangkauan" tanpa ongkir. Investigasi read-only membantah diagnosis plan
+  awal: gate ongkir BUKAN akar masalah. Akar sebenarnya = query typo dobel-k
+  "Tambak kemerakkan krian" melewati gate kecamatan-luas (23 ambiguitas Krian)
+  lalu memicu permintaan kelurahan ulang. Desa "Tambak Kemerakan" SUDAH ada di
+  gazetteer (`surabaya_sidoarjo_subdistricts.json:3253`). Detail: KNOWN_ISSUES #194.
+- **Fixed (fondasional) — `src/integrations/google-maps/geocoding.ts`:**
+  (1) `hasAnyKelurahanInText` kini typo-aware (bandingkan tiap span n-gram kata
+  query tanpa spasi vs nama kelurahan, Levenshtein ≤1) sehingga gate
+  kecamatan-luas tidak membajak kelurahan riil yang beda 1 huruf.
+  (2) `isBetterMatch` memakai margin 0.15 agar spesifisitas menang saat skor
+  berdekatan: kelurahan "Tambak Kemerakan" (0.97, 2 kata) tidak lagi kalah dari
+  token dual-admin "Krian" (kelurahan+kecamatan, skor 1.0) → tidak lagi memicu
+  ambiguitas kelurahan-luas.
+- **Fixed (fondasional) — `src/v3/tools/calculate-delivery.tool.ts`:** `message`
+  (dibaca LLM Call 2) tidak disanitasi `applyFeeInformationHiding` (hanya field
+  numerik di-omit). Nominal ongkir & jarak km kini HANYA masuk `message` bila
+  `showFeeNominal` (gate kode); mode konsultasi tersembunyi = kalimat jangkauan
+  murni tanpa angka. `showFeeNominal` TIDAK dilonggarkan ke level kecamatan
+  (kontrak 779408 & test precise-fee dipertahankan).
+- **Fase 2 (verifikasi, tanpa perubahan kode):** guard `!isEstimatedCentroid`
+  pada lifecycle `ongkirStatus` DIPERTAHANKAN (estimasi sentroid tidak boleh
+  mengunci QUOTED). Kelurahan sudah dipersist murni dari `toolResult` geocoder
+  (bukan substring mentah) — `tool-pipeline.ts:580-593`. Test baru:
+  `v3/tool-pipeline.test.ts` typo dobel-k → `location.kelurahan='Tambak Kemerakan'`
+  & `ongkirStatus='QUOTED'`.
+- **Fase 3.1 (`core-persona.layer.ts`):** Aturan Emas #2 diberi klausul
+  PENGECUALIAN SAH — menyampaikan jarak & ongkir promo resmi `calculate_delivery`
+  saat lokasi terkonfirmasi bukan pelanggaran; menebak harga paket tanpa tool
+  tetap dilarang. Lapis sekunder saja; otoritas tetap gerbang kode.
+- **Tests (+15):** `geocoding.test.ts` 4 kasus typo/urutan/ejaan-benar/"Krian"
+  polos tetap ambigu; `calculate-delivery-precise-fee.test.ts` typo→ongkir
+  terbuka; `calculate-delivery-centroid.test.ts` mode tersembunyi bebas `Rp`/`km`;
+  `v3/tool-pipeline.test.ts` persist+QUOTED.
+- **Verifikasi:** 139/139 test calculate-delivery+geocoding hijau; batch prompt/
+  tool-pipeline 114/114 hijau; `npm run build` (tsc) exit 0. 3 suite lain
+  (ai-model-settings/reservation-silent-failure/capi) merah HANYA pada full-suite
+  paralel, lulus terisolasi (flakiness pra-eksisting).
+
+#### 2026-10-02 - Staf PWA: Akses Bukti Pembayaran & Invoice Pasca Kunjungan Selesai
+
+- **Konteks:** Tombol catat bayar / unggah bukti / kirim tagihan WA hilang setelah
+  terapis memencet "Selesai" pada kunjungan `forceUnpaid` (tagih di tempat). Audit
+  read-only membuktikan `getCompletedTasks` memaksa `status==='completed'` menjadi
+  LUNAS, sehingga aksi pembayaran lenyap dari Riwayat Selesai & Detail.
+- **Fixed (backend) — `src/services/staff-reservation.service.ts`:** invariant
+  `isLunas` di `getCompletedTasks` kini murni `Boolean(purchase_occurred_at)`
+  (sebelumnya `|| status==='completed'`, inkonsisten dengan `getTodayTasks`/
+  `getUpcomingSchedule`). Kontrak `StaffTaskPricing` diperluas `paymentMethod` +
+  `proofUrl` (select `payment_method`/`proof_url` ditambah di 3 mapper).
+- **Fixed (backend) — `recordPayment`:** bukti bayar lama TIDAK lagi tertimpa NULL
+  saat merekam ulang tanpa foto baru (`proofUrl` diinisialisasi dari
+  `reservation.proof_url`).
+- **Added (PWA) — `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`:**
+  tombol aksi pembayaran universal tanpa gate jendela chat: kartu Riwayat Selesai
+  (`Catat Bayar` / `Kirim Tagihan` / `Bukti Bayar`), modal Detail Pasien, pill
+  `Lunas` kini interaktif (pratinjau bukti / unggah ulang).
+- **Fixed (PWA) — sinkron state:** `handleSubmitPayment` memperbarui `tasks` +
+  `completedTasks` + `upcomingTasks` + `selectedTask` + `detailModalTask` serentak;
+  cerminan `isLunas` di `handleSendPaymentInfo` tak lagi menganggap `completed` = lunas.
+- **Test:** `staff-auth-and-reservation.test.ts` (+4: completed-unpaid→TAGIH,
+  completed-paid→LUNAS+proof, COMPLETED kapital, preserve proof),
+  `staff-send-payment-info.test.ts` (+1: invoice tetap terkirim pasca-completed).
+
 #### 2026-10-02 - Navigasi Accuracy-Aware (re-apply) + Normalizer Link Copilot
 
 - **Konteks:** fitur navigasi accuracy-aware (plan insiden Bidan tersasar) ternyata

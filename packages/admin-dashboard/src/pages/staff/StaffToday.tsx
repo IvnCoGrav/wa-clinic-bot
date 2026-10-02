@@ -153,6 +153,8 @@ interface StaffTaskPricing {
   totalFee: number;
   paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
   paymentStatusLabel: string;
+  paymentMethod?: string | null;
+  proofUrl?: string | null;
 }
 
 interface StaffTask {
@@ -1762,7 +1764,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
 
     const patientName = task.customerName || 'Bunda';
-    const isLunas = task.pricing?.paymentStatus === 'LUNAS' || task.status === 'completed';
+    const isLunas = task.pricing?.paymentStatus === 'LUNAS';
 
     const confirmTitle = isLunas ? 'Konfirmasi Tagihan (Status: Lunas)' : 'Kirim Info Pembayaran ke WhatsApp';
     const confirmMessage = isLunas
@@ -1984,36 +1986,31 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
       if (res.success) {
         toast(`Pembayaran Rp ${paymentModalTask.pricing.totalFee.toLocaleString('id-ID')} berhasil dicatat!`, 'success');
-        
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.reservationId === paymentModalTask.reservationId
-              ? {
-                  ...t,
-                  pricing: {
-                    ...t.pricing,
-                    paymentStatus: 'LUNAS',
-                    paymentStatusLabel: 'Lunas',
-                  },
-                }
-              : t
-          )
-        );
 
-        if (selectedTask?.reservationId === paymentModalTask.reservationId) {
-          setSelectedTask((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  pricing: {
-                    ...prev.pricing,
-                    paymentStatus: 'LUNAS',
-                    paymentStatusLabel: 'Lunas',
-                  },
-                }
-              : null
-          );
-        }
+        const targetId = paymentModalTask.reservationId;
+        const newProofUrl: string | null = res.data?.proofUrl ?? proofImageB64 ?? null;
+        const newMethod: string | null = res.data?.paymentMethod ?? paymentMethod;
+        const applyLunas = (t: StaffTask): StaffTask =>
+          t.reservationId === targetId
+            ? {
+                ...t,
+                pricing: {
+                  ...t.pricing,
+                  paymentStatus: 'LUNAS',
+                  paymentStatusLabel: 'Lunas',
+                  paymentMethod: newMethod,
+                  proofUrl: newProofUrl ?? t.pricing.proofUrl ?? null,
+                },
+              }
+            : t;
+
+        // Sinkronisasi reaktif menyeluruh: kartu Hari Ini, Riwayat Selesai,
+        // Jadwal Mendatang, drawer chat terpilih, dan modal detail pasien.
+        setTasks((prev) => prev.map(applyLunas));
+        setCompletedTasks((prev) => prev.map(applyLunas));
+        setUpcomingTasks((prev) => prev.map(applyLunas));
+        setSelectedTask((prev) => (prev ? applyLunas(prev) : null));
+        setDetailModalTask((prev) => (prev ? applyLunas(prev) : null));
 
         setPaymentModalTask(null);
         setProofImageB64(null);
@@ -2995,10 +2992,23 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
 
                           {isLunas ? (
-                            <span className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (task.pricing.proofUrl) {
+                                  setZoomImageUrl(task.pricing.proofUrl);
+                                } else {
+                                  setPaymentModalTask(task);
+                                }
+                              }}
+                              className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-full shadow-xs transition-all active:scale-95 flex items-center gap-1"
+                              title={task.pricing.proofUrl ? 'Lihat bukti pembayaran yang tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
+                            >
                               <CheckCircle2 size={12} />
                               <span>SUDAH LUNAS — JANGAN TAGIH</span>
-                            </span>
+                              {task.pricing.proofUrl && <span className="text-[9px] font-bold">• BUKTI</span>}
+                            </button>
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <button
@@ -4190,6 +4200,58 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   <span>Chat</span>
                                 </button>
                               )}
+
+                              {/* Aksi pembayaran pasca-selesai (tanpa gate jendela chat):
+                                  tagih di tempat → catat bayar; lunas → lihat/ganti bukti. */}
+                              {item.pricing.paymentStatus === 'TAGIH_DI_TEMPAT' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPaymentModalTask(item);
+                                    }}
+                                    className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all active:scale-95 border border-amber-300"
+                                    title="Catat pembayaran / unggah bukti transfer pasien"
+                                  >
+                                    <CreditCard size={12} className="text-amber-700" />
+                                    <span>Catat Bayar</span>
+                                  </button>
+                                  {item.conversationId && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSendPaymentInfo(item);
+                                      }}
+                                      disabled={isSendingPaymentInfo}
+                                      className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 disabled:opacity-50"
+                                      title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
+                                    >
+                                      <MessageSquare size={12} />
+                                      <span>Kirim Tagihan</span>
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.pricing.proofUrl) {
+                                      setZoomImageUrl(item.pricing.proofUrl);
+                                    } else {
+                                      setPaymentModalTask(item);
+                                    }
+                                  }}
+                                  className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
+                                  title={item.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
+                                >
+                                  <CheckCircle2 size={12} />
+                                  <span>{item.pricing.proofUrl ? 'Bukti Bayar' : 'Unggah Bukti'}</span>
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => setDetailModalTask(item)}
@@ -4801,6 +4863,51 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     <CreditCard size={12} />
                     <span>TAGIH DI TEMPAT</span>
                   </span>
+                )}
+              </div>
+
+              {/* Aksi pembayaran pasca-selesai (tanpa gate jendela chat) */}
+              <div className="pt-2 flex flex-wrap gap-2">
+                {detailModalTask.pricing.paymentStatus === 'TAGIH_DI_TEMPAT' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentModalTask(detailModalTask)}
+                      className="flex-1 min-w-[160px] py-2.5 px-3 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
+                      title="Catat pembayaran & unggah bukti transfer pasien"
+                    >
+                      <CreditCard size={14} className="text-amber-700" />
+                      <span>Catat Pembayaran & Unggah Bukti</span>
+                    </button>
+                    {detailModalTask.conversationId && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendPaymentInfo(detailModalTask)}
+                        disabled={isSendingPaymentInfo}
+                        className="flex-1 min-w-[160px] py-2.5 px-3 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 disabled:opacity-50"
+                        title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
+                      >
+                        <MessageSquare size={14} />
+                        <span>Kirim Tagihan & QRIS ke WA</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (detailModalTask.pricing.proofUrl) {
+                        setZoomImageUrl(detailModalTask.pricing.proofUrl);
+                      } else {
+                        setPaymentModalTask(detailModalTask);
+                      }
+                    }}
+                    className="flex-1 min-w-[160px] py-2.5 px-3 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
+                    title={detailModalTask.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>{detailModalTask.pricing.proofUrl ? 'Lihat Bukti Pembayaran' : 'Unggah Bukti Pembayaran'}</span>
+                  </button>
                 )}
               </div>
             </div>

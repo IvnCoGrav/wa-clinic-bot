@@ -189,4 +189,32 @@ describe('Geocoding Service Local Database & Ambiguity Unit Tests', () => {
       expect(res).toBeDefined();
     });
   });
+
+  // === Audit Turn-3 (Bunda Chyntia, Krian): toleransi typo kelurahan dobel-k ===
+  // Gate kecamatan-luas DILARANG membajak kelurahan riil yang hanya beda 1 huruf.
+  describe('Typo toleransi kelurahan (Tambak Kemerakan)', () => {
+    it('"Tambak kemerakkan krian" (dobel-k) tetap resolve ke kelurahan kanonis', async () => {
+      const res = await geocodingService.geocodeText('Tambak kemerakkan krian');
+      expect(res.kelurahan).toBe('Tambak Kemerakan');
+      expect(res.kecamatan).toBe('Krian');
+      expect((res.ambiguityResults || []).length).toBe(0);
+    });
+
+    it('urutan dibalik "krian tambak kemerakkan" juga resolve', async () => {
+      const res = await geocodingService.geocodeText('krian tambak kemerakkan');
+      expect(res.kelurahan).toBe('Tambak Kemerakan');
+    });
+
+    it('ejaan benar tetap presisi', async () => {
+      const res = await geocodingService.geocodeText('Tambak Kemerakan Krian Sidoarjo');
+      expect(res.isPrecise).toBe(true);
+      expect(res.kelurahan).toBe('Tambak Kemerakan');
+    });
+
+    it('"Krian" polos TETAP ambigu (tidak dibajak typo-match)', async () => {
+      const res = await geocodingService.geocodeText('Krian');
+      expect(res.isPrecise).toBe(false);
+      expect((res.ambiguityResults || []).length).toBeGreaterThan(1);
+    });
+  });
 });

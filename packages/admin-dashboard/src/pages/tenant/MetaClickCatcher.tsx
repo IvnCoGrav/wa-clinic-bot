@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
+
+// Panel performa dimuat lazy agar chunk halaman observability tetap ringan.
+const MetaPerformancePanel = React.lazy(() => import('../../components/meta-performance/MetaPerformancePanel'));
 import {
   MousePointerClick,
   RefreshCw,
@@ -212,6 +215,8 @@ const pageViewSourceLabel = (source: string) => PAGEVIEW_SOURCE_LABELS[source] ?
 // -------------------------------------------------------------------------------- Page
 export const MetaClickCatcher: React.FC = () => {
   const { toast } = useUiFeedback();
+
+  const [activeTab, setActiveTab] = useState<'performance' | 'observability'>('performance');
 
   // Summary
   const [summary, setSummary] = useState<MetaSummary | null>(null);
@@ -457,6 +462,34 @@ export const MetaClickCatcher: React.FC = () => {
         </button>
       </div>
 
+      {/* Tab Navigation: Performa (CAC/LTV) vs Observability Teknis */}
+      <div className="flex flex-wrap gap-1.5 border-b border-[#e9edef]">
+        <button
+          type="button"
+          onClick={() => setActiveTab('performance')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            activeTab === 'performance'
+              ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
+              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+          }`}
+        >
+          📊 Performa Iklan &amp; Penjualan (CAC &amp; ROI)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('observability')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            activeTab === 'observability'
+              ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
+              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+          }`}
+        >
+          🛠️ Log Klik &amp; Observability CAPI
+        </button>
+      </div>
+
+      {activeTab === 'observability' && (
+        <>
       {summary?.dbNote && (
         <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-amber-600" />
@@ -548,8 +581,10 @@ export const MetaClickCatcher: React.FC = () => {
           </div>
         </section>
       )}
+        </>
+      )}
 
-      {/* ---------------- 2. Filter Bar ---------------- */}
+      {/* ---------------- 2. Filter Bar (tanggal dipakai bersama kedua tab) ---------------- */}
       <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
         {/* Preset Shortcuts */}
         <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[#f0f2f5]">
@@ -600,6 +635,8 @@ export const MetaClickCatcher: React.FC = () => {
             <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
             <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
           </div>
+          {activeTab === 'observability' && (
+            <>
           <div className="space-y-1">
             <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
             <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
@@ -619,6 +656,11 @@ export const MetaClickCatcher: React.FC = () => {
               className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
+            </>
+          )}
+          {activeTab === 'performance' && (
+            <p className="text-xs text-[#8696a0] self-center">Filter status &amp; pencarian hanya berlaku pada tab Observability. Ubah rentang tanggal untuk memperbarui laporan.</p>
+          )}
           <div className="flex items-center gap-2">
             <button onClick={handleApplyFilters} className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
               <Search size={13} /> <span>Terapkan</span>
@@ -630,6 +672,8 @@ export const MetaClickCatcher: React.FC = () => {
         </div>
       </section>
 
+      {activeTab === 'observability' && (
+        <>
       {/* ---------------- 3. Ad Click Log Table ---------------- */}
       <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
@@ -1075,6 +1119,21 @@ export const MetaClickCatcher: React.FC = () => {
           )}
         </div>
       </section>
+
+        </>
+      )}
+
+      {activeTab === 'performance' && (
+        <Suspense
+          fallback={
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
+              <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat panel performa...
+            </div>
+          }
+        >
+          <MetaPerformancePanel startDate={startDate} endDate={endDate} />
+        </Suspense>
+      )}
 
       {/* ---------------- 5. Human-Friendly Detail Modal Inspector ---------------- */}
       {selectedItem && (

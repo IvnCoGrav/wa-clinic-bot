@@ -48,6 +48,10 @@ export interface StaffTaskPricing {
   totalFee: number;
   paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
   paymentStatusLabel: string;
+  /** Metode pembayaran tercatat (CASH/TRANSFER/QRIS) bila sudah lunas. */
+  paymentMethod?: string | null;
+  /** URL bukti transfer/QRIS yang diunggah terapis (null bila belum ada). */
+  proofUrl?: string | null;
 }
 
 export interface StaffTaskItem {
@@ -461,6 +465,8 @@ export class StaffReservationService {
           updated_at: true,
           otw_sent_at: true,
           arrived_at: true,
+          payment_method: true,
+          proof_url: true,
           assigned_staff: {
             select: {
               id: true,
@@ -632,6 +638,8 @@ export class StaffReservationService {
           totalFee,
           paymentStatus,
           paymentStatusLabel,
+          paymentMethod: (r as any).payment_method ?? null,
+          proofUrl: (r as any).proof_url ?? null,
         };
 
         return {
@@ -767,6 +775,8 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          payment_method: true,
+          proof_url: true,
           customer: {
             select: {
               name: true,
@@ -922,6 +932,8 @@ export class StaffReservationService {
           totalFee,
           paymentStatus,
           paymentStatusLabel,
+          paymentMethod: (r as any).payment_method ?? null,
+          proofUrl: (r as any).proof_url ?? null,
         };
 
         return {
@@ -1073,7 +1085,11 @@ export class StaffReservationService {
         // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
         const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
         const totalFee = treatmentFee + deliveryFee;
-        const isLunas = !!r.purchase_occurred_at || r.status === 'completed' || r.status === 'COMPLETED';
+        // Invariant: LUNAS murni dari catatan pembayaran aktual (purchase_occurred_at).
+        // Status 'completed' TIDAK menyiratkan lunas — kunjungan bisa diselesaikan
+        // via forceUnpaid (tagih di tempat). Tanpa ini, tombol aksi pembayaran hilang
+        // pada riwayat selesai (lihat implementation_plan revisi audit).
+        const isLunas = Boolean(r.purchase_occurred_at);
         const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
         const paymentStatusLabel = isLunas ? 'Lunas (Selesai)' : 'Belum Lunas';
 
@@ -1083,6 +1099,8 @@ export class StaffReservationService {
           totalFee,
           paymentStatus,
           paymentStatusLabel,
+          paymentMethod: (r as any).payment_method ?? null,
+          proofUrl: (r as any).proof_url ?? null,
         };
 
         return {
@@ -1568,8 +1586,10 @@ export class StaffReservationService {
       const now = new Date();
 
       // Simpan bukti foto transfer/QRIS jika ada (dikompres max 800px agar
-      // ringan & hemat kuota MQL, tetap terbaca jelas)
-      let proofUrl: string | null = null;
+      // ringan & hemat kuota MQL, tetap terbaca jelas).
+      // Revisi audit: PERTAHANKAN bukti lama bila tidak ada gambar baru —
+      // merekam ulang pembayaran tanpa foto TIDAK boleh menghapus bukti bayar.
+      let proofUrl: string | null = (reservation as any).proof_url ?? null;
       if (proofImageB64 && proofImageB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = proofImageB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);

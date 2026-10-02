@@ -28,6 +28,10 @@ describe('calculate_delivery — centroid fallback kecamatan + detail spesifik',
     // Mode konsultasi: distanceKm disembunyikan dari payload LLM → cek internal.
     expect(res.__internalDistanceKm).toBeCloseTo(9.5, 2);
     expect(String(res.message || '').toLowerCase()).not.toContain('kelurahan');
+    // Rule 2 Information Hiding: `message` dibaca LLM Call 2 dan TIDAK disanitasi
+    // applyFeeInformationHiding — mode centroid tersembunyi HARUS bebas nominal/km.
+    expect(String(res.message || '')).not.toMatch(/Rp\s*[\d.]+/);
+    expect(String(res.message || '')).not.toMatch(/\d+\s*km/);
   });
 
   it('"Jambangan" polos (tanpa detail) → tetap minta kelurahan (success:false)', async () => {

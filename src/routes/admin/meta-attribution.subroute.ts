@@ -4,6 +4,11 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { capiService, capiBreaker } from '../../services/capi.service';
 import { memoryAdClicks } from '../tracking.route';
+import {
+  getMetaPerformanceReport,
+  buildZeroMetaPerformanceReport,
+  MetaPerformanceQuerySchema,
+} from '../../services/meta-performance-analytics.service';
 
 /**
  * META CLICK CATCHER & CAPI DEBUG — observability atribusi iklan Meta Ads.
@@ -417,6 +422,55 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           dbNote,
         },
       });
+    }
+  );
+
+  /**
+   * GET /api/admin/meta-performance
+   * Laporan performa iklan Meta to Sales (CAC/LTV, funnel, kanal, journey, leakage).
+   *
+   * Prefix SENGAJA di luar `/api/admin/debug` (yang Super-Admin only,
+   * admin.route.ts:198-215) agar peran advertiser bisa diberi akses baca via
+   * seed `role_api_scopes` (migrasi 20261002000000_allow_meta_performance_for_advertiser).
+   *
+   * Kontrak kanonis ada di src/services/meta-performance-analytics.service.ts.
+   * Degrade-silent (200 + dbNote) konsisten dengan endpoint meta lainnya.
+   */
+  fastify.get(
+    '/api/admin/meta-performance',
+    async (request: FastifyRequest<{ Querystring: any }>, reply: FastifyReply) => {
+      const query: any = request.query || {};
+      // tenantId dari konteks request (bukan hardcode default tersembunyi).
+      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      const parsed = MetaPerformanceQuerySchema.safeParse({
+        tenantId,
+        startDate: typeof query.startDate === 'string' && query.startDate ? query.startDate : undefined,
+        endDate: typeof query.endDate === 'string' && query.endDate ? query.endDate : undefined,
+        adSpend:
+          query.spend !== undefined && query.spend !== null && String(query.spend).trim() !== ''
+            ? Number(query.spend)
+            : undefined,
+      });
+      if (!parsed.success) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Parameter startDate/endDate harus format YYYY-MM-DD dan spend harus berupa angka valid.',
+        });
+      }
+      try {
+        const data = await getMetaPerformanceReport(parsed.data);
+        return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        const startDate = parsed.data.startDate || new Date().toISOString().slice(0, 10);
+        const endDate = parsed.data.endDate || startDate;
+        return reply.status(200).send({
+          success: true,
+          data: buildZeroMetaPerformanceReport(tenantId, startDate, endDate, {
+            adSpend: parsed.data.adSpend,
+            dbNote: `DB offline: ${String(err?.message || err).slice(0, 160)}`,
+          }),
+        });
+      }
     }
   );
 

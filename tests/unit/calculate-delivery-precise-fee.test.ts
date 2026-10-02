@@ -84,4 +84,23 @@ describe('calculate_delivery — ongkir saat lokasi presisi (kontrak sesi 779408
     expect(res.ongkirPromo).toBeUndefined();
     expect(res.message).not.toMatch(/Rp\s*[\d.]+/);
   });
+
+  it('typo dobel-k "Tambak kemerakkan krian" → kelurahan ter-resolve & nominal dibuka', async () => {
+    vi.spyOn(deliveryService, 'calculateDelivery').mockResolvedValue({
+      distanceKm: 22.93,
+      ongkir: 25000,
+      normalPrice: 35000,
+      promoPrice: 25000,
+      isOutOfCoverage: false,
+      maxCoverageKm: 30,
+      freeTierKm: 5,
+      messageTemplate: '',
+    } as any);
+
+    const res: any = await executeCalculateDelivery({ locationText: 'Tambak kemerakkan krian' });
+    expect(res.success).toBe(true);
+    expect(res.kelurahan).toBe('Tambak Kemerakan');
+    expect(res.ongkirPromo).toBe(25000);
+    expect(String(res.message || '')).toMatch(/Rp\s*25\.000/);
+  });
 });

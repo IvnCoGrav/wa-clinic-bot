@@ -162,6 +162,28 @@ describe('ToolExecutionPipeline — eksekusi & state reducer (tanpa LLM)', () =>
     expect(out.updatedSession.ongkirStatus).toBe('QUOTED');
   });
 
+  // Audit Turn-3 (Bunda Chyntia, Krian): kelurahan dari geocoder (bukan
+  // substring mentah) tersimpan & ongkir ditandai QUOTED — walau query typo.
+  it('calculate_delivery typo dobel-k "Tambak kemerakkan krian" → kelurahan tersimpan & ongkirStatus QUOTED', async () => {
+    const input = baseInput({
+      cleanIncomingText: 'Tambak kemerakkan krian',
+      toolCalls: [
+        {
+          id: 'call-5c',
+          function: {
+            name: 'calculate_delivery',
+            arguments: JSON.stringify({ locationText: 'Tambak kemerakkan krian' }),
+          },
+        },
+      ],
+    });
+    const out = await ToolExecutionPipeline.execute(input);
+    const delivery = out.executedTools.find((t: any) => t.name === 'calculate_delivery')!;
+    expect(delivery.result.success).toBe(true);
+    expect(out.updatedSession.location?.kelurahan).toBe('Tambak Kemerakan');
+    expect(out.updatedSession.ongkirStatus).toBe('QUOTED');
+  });
+
   // RC-4 (sesi 535222): router menggabungkan kecamatan basi + kelurahan baru
   // ("Buduran Bungurasih") padahal sesi sudah mengenal "Buduran". Guard
   // deterministik harus memakai hanya entitas baru ("Bungurasih").
