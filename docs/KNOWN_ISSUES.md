@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 181. [Infra] Migrasi server produksi ke IP baru + sinkron live (2026-10-02)
+
+- **Konteks:** server produksi dipindah dari IP lama `43.157.197.148` (hostname `VM-20-65-ubuntu`) ke IP baru **`43.173.11.79`** (hostname `VM-25-104-ubuntu`). DNS `app.kalababyspa.online` kini mengarah ke IP baru.
+- **Temuan:** server lama `app` sudah `Exited (1)` (mati); server baru menjalankan `app` healthy + tambahan container `hermes-agent` & `hermes-9router`.
+- **Kustomisasi server baru yang TIDAK ada di git (harus dijaga):** blok `Caddyfile` untuk `hermes.kalababyspa.online` (`reverse_proxy hermes-agent:9119`) & `router.kalababyspa.online` (`reverse_proxy hermes-9router:20128`); file `.watchdog.env`, `backups/`, `Caddyfile.bak`. `git reset --hard` akan menghapus ini → WAJIB backup + restore blok Caddy.
+- **Tindakan 2026-10-02:** backup Caddyfile+`.env` ke `~/backups/`, `git fetch`+`reset --hard origin/master` (`353c756b` → `4dbd41b9`), restore blok kustom Caddy, `caddy reload`, `docker compose build app` + `up -d --no-deps --force-recreate app`, `prisma migrate deploy` (no pending). Verifikasi: `app healthy`, `/ready` (`database CONNECTED`, `waha WORKING`), `/cta` 200, hermes 302, router 307. WAHA tidak disentuh.
+- **181a — SSH config lokal (RESOLVED):** `~/.ssh/config` punya `Host klinik-server` (IP lama) & `Host klinik-server-baru` (IP baru). Keduanya berfungsi.
+- **181b — Script deploy (RESOLVED):** `scripts/deploy-live.js` & `scripts/deploy-to-server.js` diarahkan ke `43.173.11.79` (commit `4dbd41b9`).
+- **181c — IP lama masih tersebar (OPEN):** IP `43.157.197.148` masih muncul di banyak docs/CHANGELOG/script lama. Idealnya dipindah ke env `DEPLOY_HOST` (lihat #134/#133).
+- **181d — Deploy runbook WAJIB pakai IP baru (OPEN/ops):** semua deploy ke depan harus ke `43.173.11.79`. `git pull` di server live akan konflik karena histori sudah di-rewrite → gunakan `fetch` + `reset --hard origin/master` + restore blok Caddy.
+
 ## 180. [Navigasi] Gerbang pra-navigasi sadar akurasi — sisa scope & verifikasi (2026-10-01)
 
 - **Konteks:** perbaikan fondasional insiden Bidan tersasar 2026-09-30 (Fase 0-4 dieksekusi).
