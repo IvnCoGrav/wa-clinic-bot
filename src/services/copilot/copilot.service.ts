@@ -99,6 +99,68 @@ export function sanitizeCopilotAnswer(answer: string): string {
     .trim();
 }
 
+/**
+ * Normalizer deterministik tautan Live Chat (KNOWN_ISSUES #191e-a).
+ *
+ * Akar: otak Hermes (agent framework) kadang menyalin placeholder
+ * `conversationId=` tanpa mengisi nilainya dari data tool. Prompt saja tidak
+ * cukup (LLM probabilistik). Gerbang ini mengisi HANYA bila tidak ambigu:
+ *  - link kosong + tepat SATU conversationId unik di baris → isi id itu;
+ *  - else bila segmen teks sebelum link memuat tepat satu nama customer yang
+ *    unik di baris → isi id baris tersebut;
+ *  - else biarkan kosong (JANGAN mengarang) + warning.
+ */
+export function repairCopilotChatLinks(answer: string, rows: any[]): string {
+  if (!answer || typeof answer !== 'string') return answer;
+  const distinctConvIds = [
+    ...new Set(
+      (rows || [])
+        .map((r) => r?.conversationId)
+        .filter((v) => typeof v === 'string' && v.trim().length > 0)
+    ),
+  ] as string[];
+  const nameToId = new Map<string, string>();
+  const idCountByLowerName = new Map<string, number>();
+  for (const r of rows || []) {
+    const name = (r?.customerName || '').toString().toLowerCase().replace(/\b(bunda|ibu|mbak|bu|kak)\b/gi, ' ').trim();
+    const id = r?.conversationId;
+    if (name && typeof id === 'string' && id.trim()) {
+      nameToId.set(name, id);
+      idCountByLowerName.set(name, (idCountByLowerName.get(name) || 0) + 1);
+    }
+  }
+
+  const linkRe = /\[([^\]]+)\]\(\/admin\/live-chat\?conversationId=([^)]*)\)/g;
+  return answer.replace(linkRe, (full, label: string, convId: string, offset: number) => {
+    if (convId && convId.trim()) return full; // sudah terisi — jangan sentuh
+    // 1. Unik deterministik: tepat satu conversationId di data.
+    if (distinctConvIds.length === 1) {
+      return `[${label}](/admin/live-chat?conversationId=${distinctConvIds[0]})`;
+    }
+    // 2. Kaitkan nama unik TERDEKAT sebelum link (bukan yang pertama cocok —
+    //    daftar bernomor: nama baris ini muncul paling dekat dengan link-nya).
+    if (nameToId.size > 0) {
+      const before = answer.slice(Math.max(0, offset - 200), offset).toLowerCase();
+      let best: { name: string; id: string; pos: number } | null = null;
+      for (const [name, id] of nameToId.entries()) {
+        if (idCountByLowerName.get(name) !== 1) continue;
+        const nameTokens = name.match(/[a-z]{3,}/g) || [];
+        if (nameTokens.length === 0) continue;
+        const positions = nameTokens.map((t) => before.lastIndexOf(t));
+        if (positions.some((p) => p < 0)) continue;
+        const pos = Math.min(...positions);
+        if (!best || pos > best.pos) best = { name, id, pos };
+      }
+      if (best) {
+        return `[${label}](/admin/live-chat?conversationId=${best.id})`;
+      }
+    }
+    // 3. Ambigu → biarkan kosong, catat (jangan karang link menyesatkan).
+    console.warn(JSON.stringify({ event: 'COPILOT_LINK_UNREPAIRABLE', label, candidates: distinctConvIds.length }));
+    return full;
+  });
+}
+
 export interface RouterPriorStep {
   tool: string;
   count: number;
@@ -356,6 +418,22 @@ export class CopilotService {
         }));
         const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps, history, params.activeContext);
 
+        // Fase 6 (#191e-b): observabilitas biaya prompt — ukur bagian yang KITA
+        // kendalikan (menu tool + histori + prior) vs overhead framework Hermes
+        // (±16k token di sisi :8642, di luar kendali repo). Estimasi ~4 char/token.
+        try {
+          console.log(JSON.stringify({
+            event: 'COPILOT_PROMPT_SIZE',
+            kind: 'router',
+            iteration,
+            chars: routerPrompt.length,
+            estTokens: Math.ceil(routerPrompt.length / 4),
+            toolMenuChars: toolMenu.length,
+            historyTurns: history.length,
+            priorSteps: priorSteps.length,
+          }));
+        } catch {}
+
         llmCalls++;
         let toolName: string | null = null;
         let toolArgs: Record<string, any> = {};
@@ -511,6 +589,18 @@ export class CopilotService {
         .join('\n');
       const summarizePrompt = buildSummarizePrompt(message, labeled, styleConfig?.summarizeTone ?? null);
 
+      // Fase 6 (#191e-b): ukur ukuran prompt summarize (data rows + gaya).
+      try {
+        console.log(JSON.stringify({
+          event: 'COPILOT_PROMPT_SIZE',
+          kind: 'summarize',
+          chars: summarizePrompt.length,
+          estTokens: Math.ceil(summarizePrompt.length / 4),
+          labeledRowsChars: labeled.length,
+          toolsUsed: collected.map((c) => c.tool),
+        }));
+      } catch {}
+
       llmCalls++;
       // Jalur Hermes dulu (bila aktif); gagal → jatuh ke summarize internal di bawah.
       let hermesSummary: string | null = null;
@@ -570,8 +660,9 @@ export class CopilotService {
 
         rawAnswer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
       }
-      // Normalizer deterministik: buang sisa UUID yang lolos dari LLM.
-      const answer = sanitizeCopilotAnswer(rawAnswer);
+      // Normalizer deterministik: buang sisa UUID yang lolos dari LLM, lalu
+      // perbaiki tautan Live Chat kosong dari data tool (anti link menyesatkan).
+      const answer = repairCopilotChatLinks(sanitizeCopilotAnswer(rawAnswer), unionRows);
 
       // Validator grounding atas UNION semua hasil tool (halusinasi silang-sumber).
       const grounded = this.validateGrounding(answer, unionRows);

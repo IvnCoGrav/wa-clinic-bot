@@ -58,6 +58,16 @@ export interface LiveChatDispatchWidgetProps {
    * audit + guard conversation tetap berlaku).
    */
   onInsertText?: (text: string) => void;
+  /**
+   * Provenance akurasi lokasi pasien (dari server). Bila BUKAN `gps_pin`,
+   * CS diingatkan meminta shareloc presisi (insiden Bidan tersasar 2026-09-30).
+   */
+  locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
+  /**
+   * Fase 4: pemicu 1-klik minta shareloc. Parent menyusun draf (tenant-aware) &
+   * memasukkannya ke composer; widget tidak mengirim apa pun sendiri.
+   */
+  onRequestShareloc?: () => void;
 }
 
 function formatStale(sec: number | null | undefined): string {
@@ -76,6 +86,8 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
   onRefresh,
   onContactStaff,
   onInsertText,
+  locationSource,
+  onRequestShareloc,
 }) => {
   const { toast } = useUiFeedback();
   const [mapOpen, setMapOpen] = useState(false);
@@ -169,6 +181,22 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-md px-2 py-1"
           >
             <Copy size={12} /> Salin Pesan Keterlambatan Pasien
+          </button>
+        </div>
+      )}
+
+      {locationSource && locationSource !== 'gps_pin' && onRequestShareloc && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 space-y-1.5">
+          <div className="flex items-start gap-1.5 font-semibold">
+            <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+            <span>Lokasi pasien masih berstatus estimasi (belum ada shareloc presisi). Minta shareloc agar Bidan tidak tersasar.</span>
+          </div>
+          <button
+            type="button"
+            onClick={onRequestShareloc}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md px-2 py-1"
+          >
+            <Send size={12} /> Minta Shareloc
           </button>
         </div>
       )}

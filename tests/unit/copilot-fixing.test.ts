@@ -30,7 +30,7 @@ vi.mock('../../src/integrations/llm/llm-gateway', () => ({
   getLlmEndpointConfig: () => ({ model: 'test', fallbackModel: 'test', baseUrl: 'http://x', apiKey: 'k', timeoutMs: 1000 }),
 }));
 
-import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer, buildDegradedAnswer, buildSummarizePrompt, formatWaitTime, withDeadline, isCopilotDeadlineError } from '../../src/services/copilot/copilot.service';
+import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer, buildDegradedAnswer, buildSummarizePrompt, formatWaitTime, withDeadline, isCopilotDeadlineError, repairCopilotChatLinks } from '../../src/services/copilot/copilot.service';
 import {
   resolveReservationDateFilter,
   isValidIsoDate,
@@ -1005,5 +1005,48 @@ describe('Fase 3 — gaya to-the-point dari DB + kontrak link kanonis', () => {
     const p = buildSummarizePrompt('anak habis vaksin boleh spa?', '[]', null);
     // Anti-hardcode: angka SOP TIDAK boleh ditulis di prompt.
     expect(p).not.toMatch(/\b[23]\s*hari\b/);
+  });
+});
+
+describe('repairCopilotChatLinks — normalizer tautan kosong (#191e-a)', () => {
+  it('link kosong + tepat satu conversationId → diisi', () => {
+    const rows = [{ customerName: 'Bunda Ririn', conversationId: 'conv-abc' }];
+    const out = repairCopilotChatLinks('Chat ini [Buka Chat](/admin/live-chat?conversationId=)', rows);
+    expect(out).toContain('/admin/live-chat?conversationId=conv-abc');
+  });
+
+  it('link kosong + banyak conversationId TANPA nama → biarkan kosong (jangan karang)', () => {
+    const rows = [
+      { customerName: '', conversationId: 'conv-1' },
+      { customerName: '', conversationId: 'conv-2' },
+    ];
+    const out = repairCopilotChatLinks('Data: [Buka Chat](/admin/live-chat?conversationId=)', rows);
+    expect(out).toContain('conversationId=)');
+    expect(out).not.toContain('conv-1');
+    expect(out).not.toContain('conv-2');
+  });
+
+  it('link kosong + banyak conversationId + nama unik sebelum link → dikaitkan', () => {
+    const rows = [
+      { customerName: 'Bunda Ririn', conversationId: 'conv-ririn' },
+      { customerName: 'Bunda Dewi', conversationId: 'conv-dewi' },
+    ];
+    const out = repairCopilotChatLinks(
+      '- Bunda Ririn menunggu [Buka Chat](/admin/live-chat?conversationId=)\n- Bunda Dewi [Buka Chat](/admin/live-chat?conversationId=)',
+      rows
+    );
+    expect(out).toContain('conversationId=conv-ririn');
+    expect(out).toContain('conversationId=conv-dewi');
+  });
+
+  it('link sudah terisi → tidak diubah', () => {
+    const rows = [{ customerName: 'Bunda Ririn', conversationId: 'conv-abc' }];
+    const out = repairCopilotChatLinks('[Buka Chat](/admin/live-chat?conversationId=conv-xyz)', rows);
+    expect(out).toContain('conversationId=conv-xyz');
+  });
+
+  it('tanpa link → tidak berubah', () => {
+    const out = repairCopilotChatLinks('Tidak ada data.', []);
+    expect(out).toBe('Tidak ada data.');
   });
 });

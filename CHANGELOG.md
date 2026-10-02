@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Navigasi Accuracy-Aware (re-apply) + Normalizer Link Copilot
+
+- **Konteks:** fitur navigasi accuracy-aware (plan insiden Bidan tersasar) ternyata
+  HILANG dari tree — hanya tes + modal untracked tersisa; `navigation-accuracy-preflight`
+  merah 6/14. Kode di-apply ulang + ditambah normalizer link Copilot. Detail: KNOWN_ISSUES #192.
+- **Backend — `buildMapsUrls`** (`staff-reservation.service.ts`): param
+  `locationSource`+`fullAddress`; titik non-presisi (`manual_staff`/`estimated_area`) +
+  alamat → `destination=<teks alamat>` via `URLSearchParams` (Google Maps memandu ke
+  blok/klaster); NaN koordinat → `{null,null}`. 3 caller diperbarui.
+- **Frontend — `geoUtils.ts`:** `needsNavigationPreflight(source)` baru +
+  `getGoogleMapsDirectionUrl(...,locationSource)`. `StaffToday.tsx`: 4 tombol navigasi
+  jadi CTA amber "Navigasi (Estimasi)" + `NavigationPreflightModal` untuk titik non-presisi
+  (aksi: salin draf shareloc / tetap buka peta). `LiveChatDispatchWidget`: badge amber +
+  tombol "Minta Shareloc" 1-klik (sisip ke composer, kirim manual).
+- **Copilot — `repairCopilotChatLinks`** (`copilot.service.ts`): mengisi tautan
+  `[Buka Chat]` kosong secara deterministik (1 conversationId unik / nama unik terdekat);
+  ambigu → dibiarkan kosong. Menutup #191e-a.
+- **Observabilitas** — event `COPILOT_PROMPT_SIZE`; temuan: overhead 16k token = framework
+  Hermes (menu tool kita hanya ~2.5k char), bukan prompt repo (#191e-b, out-of-scope).
+- **Tests:** navigasi 14/14; Copilot 128 hijau. `tsc` + dashboard build exit 0.
+
 #### 2026-10-02 - Copilot: Indikator Progres + Anggaran Turn 120s (pasca-diagnosis Hermes)
 
 - **Konteks:** investigasi live membuktikan integrasi Hermes SUDAH jalan

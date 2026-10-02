@@ -3399,6 +3399,32 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     toast('Draf posisi Bidan disisipkan. Tekan Kirim untuk mengirim.', 'info');
   };
 
+  // Fase 4 (plan 2026-10-02): derivasi provenance akurasi lokasi dari data
+  // customer-detail (state, bukan tebakan). `null` = tak diketahui (netral).
+  const dispatchLocationSource = ((): 'gps_pin' | 'estimated_area' | 'manual_staff' | null => {
+    const c: any = customerDetailData;
+    if (!c) return null;
+    if (c.location_source === 'gps_pin' || c.location_source === 'estimated_area' || c.location_source === 'manual_staff') {
+      return c.location_source;
+    }
+    const src = c.preferences?.location_source || c.preferences?.source;
+    if (src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') return 'gps_pin';
+    if (src === 'geocoding' || src === 'url_text_geocoded' || src === 'gazetteer') return 'estimated_area';
+    if (src === 'manual_staff') return 'manual_staff';
+    return null;
+  })();
+
+  // Fase 4: susun draf permintaan shareloc lalu sisipkan ke composer (CS tetap
+  // menekan Kirim). Draf dari data pasien; tanpa hardcode tarif/SOP.
+  const handleRequestSharelocFromDispatch = () => {
+    const name = (customerDetailData?.name || selectedChat?.customerName || '').trim() || 'Bunda';
+    const draft =
+      `Halo ${name}, Bidan kami izin konfirmasi untuk persiapan treatment. ` +
+      `Boleh minta tolong kirimkan shareloc WhatsApp terkini dan patokan rumahnya ya Bun ` +
+      `agar Bidan tidak tersasar? Terima kasih Bunda 🤗`;
+    handleInsertDispatchDraft(draft);
+  };
+
   const handleGenerateAndInsertInvoice = async (resItem: any) => {
     let currentServices = clinicServices;
     if (currentServices.length === 0) {
@@ -5767,6 +5793,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     }
                   }}
                   onInsertText={handleInsertDispatchDraft}
+                  locationSource={dispatchLocationSource}
+                  onRequestShareloc={handleRequestSharelocFromDispatch}
                 />
               </div>
             </div>
@@ -5814,6 +5842,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 }
               }}
               onInsertText={handleInsertDispatchDraft}
+              locationSource={dispatchLocationSource}
+              onRequestShareloc={handleRequestSharelocFromDispatch}
             />
           </div>
         </div>

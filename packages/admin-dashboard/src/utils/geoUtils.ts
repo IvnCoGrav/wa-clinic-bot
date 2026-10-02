@@ -163,18 +163,40 @@ export function checkTravelTimeSufficiency(
 }
 
 /**
+ * Insiden Bidan tersasar (2026-09-30): titik NON-presisi (`manual_staff`/
+ * `estimated_area`/belum diketahui) DILARANG membuka Google Maps langsung —
+ * WAJIB lewat gerbang konfirmasi pra-navigasi. Hanya `gps_pin` yang presisi.
+ * Murni & deterministik (berbasis state provenance, bukan tebakan teks).
+ */
+export function needsNavigationPreflight(source?: string | null): boolean {
+  return source !== 'gps_pin';
+}
+
+/**
  * Menghasilkan URL navigasi Google Maps yang selalu valid dengan fallback berjenjang.
+ *
+ * `locationSource` (opsional): bila titik NON-presisi (`manual_staff`/
+ * `estimated_area`) DAN ada `fallbackText` (alamat lengkap), `destination`
+ * memakai TEKS alamat agar Google Maps memandu ke klaster/blok perumahan —
+ * bukan pin mati di area umum. Pemanggil lama (3 arg) tetap byte-identik.
  */
 export function getGoogleMapsDirectionUrl(
   lat?: number | null,
   lng?: number | null,
-  fallbackText?: string | null
+  fallbackText?: string | null,
+  locationSource?: string | null
 ): string {
+  const isNonPrecise = locationSource === 'manual_staff' || locationSource === 'estimated_area';
+  const hasText = !!fallbackText && fallbackText.trim().length > 0;
+  if (isNonPrecise && hasText) {
+    const query = new URLSearchParams({ api: '1', destination: fallbackText!.trim(), travelmode: 'two-wheeler' });
+    return `https://www.google.com/maps/dir/?${query.toString()}`;
+  }
   if (lat != null && lng != null && isValidLatLng(lat, lng)) {
     return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`;
   }
-  if (fallbackText && fallbackText.trim().length > 0) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackText.trim())}`;
+  if (hasText) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackText!.trim())}`;
   }
   // Default search ke Surabaya/Sidoarjo jika kosong
   return `https://www.google.com/maps/search/?api=1&query=Sidoarjo`;

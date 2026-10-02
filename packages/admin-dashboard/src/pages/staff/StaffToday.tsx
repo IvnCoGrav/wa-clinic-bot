@@ -80,7 +80,9 @@ import {
   getCurrentDeviceLocation,
   isWithinDepartWindow,
   formatWibClock,
+  needsNavigationPreflight,
 } from '../../utils/geoUtils';
+import { NavigationPreflightModal } from '../../components/staff/NavigationPreflightModal';
 
 interface StaffTaskChild {
   name: string;
@@ -1511,6 +1513,53 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   //  2. Di luar jendela ±60 mnt dari jam booking → mode intip (tanpa pesan).
   //  3. Dalam jendela → GPS sekali-tembak → hitung ETA (Haversine) → kirim OTW
   //     + status "dalam perjalanan" LANGSUNG (tanpa konfirmasi sekunder di jalan).
+  // Gerbang pengaman pra-navigasi (insiden Bidan tersasar 2026-09-30): titik
+  // NON-presisi (manual_staff/estimated_area/belum diketahui) DILARANG membuka
+  // Google Maps langsung — munculkan modal konfirmasi + opsi minta shareloc.
+  const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
+
+  /** Buka peta LANGSUNG bila presisi; bila estimasi → tampilkan gerbang dulu. */
+  const requestNavigation = (task: StaffTask, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const navUrl = task.navigationUrl || task.mapsUrl || '';
+    if (needsNavigationPreflight(task.address?.locationSource)) {
+      setPreflightTask(task);
+      return;
+    }
+    handleStartNavigation(task, navUrl);
+  };
+
+  const buildSharelocDraft = (task: StaffTask): string => {
+    const name = (task.customerName || '').trim() || 'Bunda';
+    const waktu = task.bookingDate ? formatTime(task.bookingDate) : 'sesuai kesepakatan';
+    const patokan = (task.address?.landmark || '').trim();
+    return (
+      `Halo ${name}, Bidan kami izin konfirmasi untuk persiapan treatment jam ${waktu}. ` +
+      `Boleh minta tolong kirimkan shareloc WhatsApp terkini${patokan ? ` dan patokan rumah (${patokan})` : ''} ya Bun ` +
+      `agar Bidan tidak tersasar? Terima kasih Bunda 🤗`
+    );
+  };
+
+  const handleRequestShareloc = async () => {
+    const task = preflightTask;
+    if (!task) return;
+    const draft = buildSharelocDraft(task);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(draft);
+        toast('Draf permintaan shareloc disalin. Tempel ke chat Bunda & tekan Kirim.', 'success');
+      } else {
+        toast('Clipboard tidak tersedia. Salin manual dari modal.', 'info');
+      }
+    } catch {
+      toast('Gagal menyalin draf shareloc.', 'error');
+    }
+    setPreflightTask(null);
+  };
+
   const handleStartNavigation = async (task: StaffTask, navUrl: string, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -3021,12 +3070,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 navUrl ? (
                                   <button
                                     type="button"
-                                    onClick={(e) => handleStartNavigation(task, navUrl, e)}
-                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
-                                    title="Buka ulang peta navigasi"
+                                    onClick={(e) => requestNavigation(task, e)}
+                                    className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer ${
+                                      needsNavigationPreflight(task.address?.locationSource)
+                                        ? 'text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300'
+                                        : 'text-white bg-[#008069] hover:bg-[#00a884]'
+                                    }`}
+                                    title={needsNavigationPreflight(task.address?.locationSource) ? 'Titik estimasi — konfirmasi patokan dulu' : 'Buka ulang peta navigasi'}
                                   >
                                     <Navigation size={15} />
-                                    <span>Navigasi</span>
+                                    <span>{needsNavigationPreflight(task.address?.locationSource) ? 'Navigasi (Estimasi)' : 'Navigasi'}</span>
                                   </button>
                                 ) : (
                                   <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
@@ -3081,7 +3134,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   disabled={isSendingOtw}
                                   onClick={(e) => {
                                     if (navUrl) {
-                                      handleStartNavigation(task, navUrl, e);
+                                      requestNavigation(task, e);
                                     } else if (!isOtwAllowed(task)) {
                                       e.stopPropagation();
                                       toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
@@ -3090,9 +3143,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     }
                                   }}
                                   className={`flex items-center justify-center space-x-1.5 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
-                                    navUrl || isOtwAllowed(task)
-                                      ? 'text-white bg-[#008069] hover:bg-[#00a884]'
-                                      : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
+                                    navUrl && needsNavigationPreflight(task.address?.locationSource)
+                                      ? 'text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300'
+                                      : navUrl || isOtwAllowed(task)
+                                        ? 'text-white bg-[#008069] hover:bg-[#00a884]'
+                                        : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
                                   }`}
                                   title={
                                     navUrl
@@ -3201,9 +3256,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       {(selectedTask.navigationUrl || selectedTask.mapsUrl) && (
                         <button
                           type="button"
-                          onClick={(e) => handleStartNavigation(selectedTask, selectedTask.navigationUrl || selectedTask.mapsUrl || '#', e)}
-                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-xs transition-all active:scale-95 cursor-pointer"
-                          title="Buka Peta Navigasi Google Maps & Mulai Perjalanan"
+                          onClick={(e) => requestNavigation(selectedTask, e)}
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg shadow-xs transition-all active:scale-95 cursor-pointer ${
+                            needsNavigationPreflight(selectedTask.address?.locationSource)
+                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                              : 'bg-[#008069] hover:bg-[#00a884] text-white'
+                          }`}
+                          title={needsNavigationPreflight(selectedTask.address?.locationSource) ? 'Titik estimasi — konfirmasi patokan dulu' : 'Buka Peta Navigasi Google Maps & Mulai Perjalanan'}
                         >
                           <Navigation size={16} />
                         </button>
@@ -3267,7 +3326,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             onClick={() => {
                               const nav = selectedTask.navigationUrl || selectedTask.mapsUrl;
                               if (nav) {
-                                handleStartNavigation(selectedTask, nav);
+                                requestNavigation(selectedTask);
                                 return;
                               }
                               if (!isOtwAllowed(selectedTask)) {
@@ -4766,11 +4825,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               {(detailModalTask.navigationUrl || detailModalTask.mapsUrl) && (
                 <button
                   type="button"
-                  onClick={(e) => handleStartNavigation(detailModalTask, detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#', e)}
-                  className="flex-1 py-3 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
+                  onClick={(e) => requestNavigation(detailModalTask, e)}
+                  className={`flex-1 py-3 px-4 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95 ${
+                    needsNavigationPreflight(detailModalTask.address?.locationSource)
+                      ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                      : 'bg-[#008069] hover:bg-[#00a884] text-white'
+                  }`}
                 >
                   <Navigation size={14} />
-                  <span>Buka Peta Navigasi</span>
+                  <span>{needsNavigationPreflight(detailModalTask.address?.locationSource) ? 'Buka Peta (Estimasi)' : 'Buka Peta Navigasi'}</span>
                 </button>
               )}
               <button
@@ -5752,6 +5815,31 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           </button>
         </nav>
       )}
+
+      {/* Gerbang pengaman pra-navigasi (insiden Bidan tersasar): mencegah
+          titik estimasi membuka Google Maps tanpa konfirmasi patokan. */}
+      <NavigationPreflightModal
+        open={!!preflightTask}
+        task={
+          preflightTask
+            ? {
+                customerName: preflightTask.customerName,
+                address: {
+                  fullText: preflightTask.address.fullText,
+                  landmark: preflightTask.address.landmark,
+                  addressDetail: preflightTask.address.addressDetail,
+                },
+              }
+            : null
+        }
+        onClose={() => setPreflightTask(null)}
+        onProceedNavigation={() => {
+          const task = preflightTask;
+          setPreflightTask(null);
+          if (task) handleStartNavigation(task, task.navigationUrl || task.mapsUrl || '#');
+        }}
+        onRequestShareloc={handleRequestShareloc}
+      />
     </div>
   );
 };

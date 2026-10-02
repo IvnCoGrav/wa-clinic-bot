@@ -3,6 +3,34 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 192. [Navigasi + Copilot] Re-apply fitur navigasi hilang + normalizer link & observabilitas prompt (2026-10-02)
+
+- **Konteks:** `tests/unit/navigation-accuracy-preflight.test.ts` (untracked) merah 6/14
+  karena implementasinya HILANG dari tree (`buildMapsUrls` masih 2 arg,
+  `needsNavigationPreflight` tak ada, `getGoogleMapsDirectionUrl` 3 arg) — klaim
+  "EXECUTED" di plan/CHANGELOG tidak didukung kode (pernah ter-revert, lihat #180). Kode
+  di-apply ulang; 14/14 hijau.
+- **192a — RESOLVED (navigasi):** `buildMapsUrls(lat,lng,locationSource,fullAddress)` +
+  `getGoogleMapsDirectionUrl(...,locationSource)` memakai TEKS alamat sebagai `destination`
+  untuk titik non-presisi (via `URLSearchParams`); `needsNavigationPreflight(source)` baru;
+  NaN koordinat → `{null,null}` (guard `Number.isFinite`). 3 caller `staff-reservation`
+  meneruskan `resolveLocationSource`+`buildAddressText`.
+- **192b — RESOLVED (UI):** modal `NavigationPreflightModal` (sudah ada, untracked) kini
+  ter-wire di 4 titik `StaffToday.tsx` (tombol amber untuk estimasi, hijau untuk `gps_pin`);
+  `LiveChatDispatchWidget` mendapat prop `locationSource`+`onRequestShareloc` (badge + tombol
+  1-klik). Semua jalur pakai composer human-in-the-loop — tidak ada kirim otomatis.
+- **192c — #191e-a RESOLVED:** `repairCopilotChatLinks(answer, rows)` (murni) mengisi tautan
+  `[Buka Chat]` kosong HANYA bila 1 conversationId unik, atau nama unik terdekat sebelum
+  link; ambigu → dibiarkan kosong + `COPILOT_LINK_UNREPAIRABLE`. 5 tes adversarial.
+- **192d — #191e-b TERUKUR (bukan diperbaiki):** event `COPILOT_PROMPT_SIZE` mencatat ukuran
+  prompt. Hasil: router ~838 token (75% = **menu tool** 2530 char); data rows hanya 163 char.
+  Artinya overhead `prompt_tokens: 16230` berasal dari **framework Hermes** (skills/system
+  prompt sisi `:8642`) — DI LUAR kendali repo. Tidak ada cap yang diturunkan (data tak
+  membenarkan); reduksi harus di sisi host/Hermes.
+- **Sisa OPEN:** (1) uji perangkat HP Bidan + deploy (butuh lapangan, #180b); (2) verifikasi
+  DB prod Bunda Ifa (#180d); (3) draf shareloc masih inline di UI — idealnya DB-driven
+  (Confirmation Gate G0-i dipilih interim); (4) reduksi overhead Hermes sisi-host.
+
 ## 191. [Copilot–Hermes] Integrasi TERBUKTI jalan; akar masalah = latensi, bukan koneksi (2026-10-02)
 
 - **Konteks:** tindak lanjut #187. Keluhan awal "sistem tidak pernah memanggil Hermes".

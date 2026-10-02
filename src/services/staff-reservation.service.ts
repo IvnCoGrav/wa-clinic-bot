@@ -160,16 +160,35 @@ function looksLikeStreetAddress(value: string): boolean {
  * Fase 165d: sumber TUNGGAL URL peta kartu tugas (dulu diduplikasi di
  * getTodayTasks / getUpcomingSchedule / getCompletedTasks dengan format
  * "maps.google.com/?q=" vs "maps/search/?api=1&query=" yang divergen).
+ *
+ * Insiden Bidan tersasar (2026-09-30): untuk titik NON-presisi
+ * (`manual_staff`/`estimated_area`), koordinat hanya menunjuk area umum
+ * perumahan → Google Maps memandu ke gang/blok salah. Bila ada teks alamat
+ * lengkap, `navigationUrl` memakai TEKS alamat sebagai `destination` (Google
+ * Maps memandu ke klaster/blok). Titik `gps_pin` dan pemanggil lama tanpa
+ * `locationSource` tetap byte-identik dengan perilaku semula.
  */
 export function buildMapsUrls(
   lat?: number | null,
-  lng?: number | null
+  lng?: number | null,
+  locationSource?: string | null,
+  fullAddress?: string | null
 ): { mapsUrl: string | null; navigationUrl: string | null } {
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
     return { mapsUrl: null, navigationUrl: null };
   }
+  const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+  const useAddressText =
+    (locationSource === 'manual_staff' || locationSource === 'estimated_area') &&
+    typeof fullAddress === 'string' &&
+    fullAddress.trim().length > 0;
+  if (useAddressText) {
+    // Bangun via URLSearchParams (anti-template rapuh + encoding aman).
+    const query = new URLSearchParams({ api: '1', destination: fullAddress!.trim(), travelmode: 'two-wheeler' });
+    return { mapsUrl, navigationUrl: `https://www.google.com/maps/dir/?${query.toString()}` };
+  }
   return {
-    mapsUrl: `https://maps.google.com/?q=${lat},${lng}`,
+    mapsUrl,
     navigationUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`,
   };
 }
@@ -578,8 +597,9 @@ export class StaffReservationService {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
-        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng);
         const addressText = buildAddressText(cust || {});
+        const locationSource = resolveLocationSource(cust);
+        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
           distanceKm: cust?.distance_km ?? null,
@@ -868,8 +888,9 @@ export class StaffReservationService {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
-        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng);
         const addressText = buildAddressText(cust || {});
+        const locationSource = resolveLocationSource(cust);
+        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
           distanceKm: cust?.distance_km ?? null,
@@ -1036,7 +1057,8 @@ export class StaffReservationService {
         rows.map(async (r) => {
         const cust = r.customer;
         const addressText = buildAddressText(cust || {});
-        const { mapsUrl, navigationUrl } = buildMapsUrls(cust?.lat, cust?.lng);
+        const locationSource = resolveLocationSource(cust);
+        const { mapsUrl, navigationUrl } = buildMapsUrls(cust?.lat, cust?.lng, locationSource, addressText);
 
         const distanceKm = cust?.distance_km ?? null;
 
