@@ -36,8 +36,6 @@ const SECRET_RULES: SecretRule[] = [
       /sk-external-test/i,
       /sk-dummy/i,
       /sk-sample/i,
-      /[REVOKED_KEY]/i, // Old revoked key in audit docs
-      /[REVOKED_KEY]/i, // Old revoked key in audit docs
       /sk-8ff19ada8ced4e29/i,       // Old revoked key in audit docs
     ],
   },

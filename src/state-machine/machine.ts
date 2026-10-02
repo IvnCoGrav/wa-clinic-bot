@@ -756,6 +756,111 @@ export class ConversationStateMachine {
       }
     }
 
+    // --- 6a. PENGIRIMAN GAMBAR PRICELIST (DETERMINISTIK, SETELAH TEKS) ---
+    // Gerbang keputusan ada di V3 (`evaluatePricelistTrigger`). Di sini murni
+    // eksekusi fisik meniru live-chat.service: cek cut-off, resolusi per-provider,
+    // sandbox guard, retry 2x, alert saat gagal. Ditempatkan SETELAH balasan teks
+    // agar teks utama tidak tertahan; HANYA saat tidak eskalasi/human-handling.
+    if ((v3Result as any).sendPricelistImage && !v3Result.isEscalated && !activeConversation.is_human_handling) {
+      try {
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+        if (isCutOff) {
+          console.log(`[PRICELIST SKIP] Outbound cut-off aktif untuk tenant ${tenantId}; gambar pricelist tidak dikirim.`);
+        } else {
+          const gateway = await resolveGatewayForTenant(tenantId);
+          const { resolvePricelistImageTarget, getPricelistImageUrl } = await import('../services/pricelist-config.service');
+          const target = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+          const { getBrandIdentityAsync } = await import('../config/brand');
+          const brand = await getBrandIdentityAsync(tenantId);
+          const caption = `Pricelist ${brand.businessName} 🌸`;
+          // Rate-limit force-resend (anti-spam): cegah kirim ulang berturut-turut
+          // < 10 menit. Hanya berlaku untuk forceResend (minta eksplisit berulang);
+          // post-delivery pertama sudah dijaga kuota pricelist_sent.
+          let cooldownBlocked = false;
+          if ((v3Result as any).forcePricelistResend) {
+            try {
+              const recent = await messageService.getRecentMessages(activeConversation.id, 12, tenantId);
+              const tenMinAgo = Date.now() - 10 * 60 * 1000;
+              cooldownBlocked = recent.some((m: any) =>
+                (m?.payload_raw?.type === 'image') &&
+                /pricelist/i.test(m?.content || '') &&
+                new Date(m?.created_at || m?.createdAt || 0).getTime() > tenMinAgo
+              );
+            } catch {}
+          }
+          if (cooldownBlocked) {
+            console.log(`[PRICELIST SKIP] Force-resend dari ${customer.phone} dalam < 10 menit; dilewati (rate-limit).`);
+          } else if (!target) {
+            console.warn(`[PRICELIST WARN] Gambar pricelist tidak bisa di-resolve untuk tenant ${tenantId} & provider ${gateway.providerType}.`);
+          } else {
+            const chatId = `${customer.phone}@c.us`;
+            messageService.registerInFlightBotOutbound(chatId, caption, tenantId, 60000);
+            messageService.registerInFlightBotOutbound(chatId, `[IMAGE: ${caption}]`, tenantId, 60000);
+
+            let sendOk = false;
+            let sentMessageId: string | undefined;
+            if (customer.is_sandbox_test) {
+              console.log(`[SANDBOX OUTBOUND] sendImageMessage -> ${customer.phone} | target: "${target}" | caption: "${caption}"`);
+              sendOk = true;
+            } else {
+              let attempts = 0;
+              const maxAttempts = 2;
+              while (attempts < maxAttempts) {
+                attempts++;
+                const sendResult = await gateway.sendImageMessage(customer.phone, target, caption);
+                if (sendResult.success) { sendOk = true; sentMessageId = sendResult.messageId; break; }
+                if (attempts < maxAttempts) await new Promise((r) => setTimeout(r, 2000));
+              }
+            }
+
+            if (sendOk) {
+              try {
+                await prisma.customer.update({ where: { id: customer.id }, data: { pricelist_sent: true } });
+              } catch {}
+              customer.pricelist_sent = true;
+              try {
+                const pathMod = await import('path');
+                const rawUrl = await getPricelistImageUrl(tenantId);
+                let mediaUrl = rawUrl;
+                if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://') && !rawUrl.startsWith('/media/')) {
+                  mediaUrl = `/media/asset/${pathMod.basename(rawUrl)}`;
+                }
+                const ext = pathMod.extname(target || mediaUrl).toLowerCase();
+                const mimetype = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+                await messageService.logMessage({
+                  tenantId,
+                  conversationId: activeConversation.id,
+                  direction: Direction.OUTBOUND,
+                  content: caption,
+                  waMessageId: sentMessageId,
+                  senderType: 'BOT',
+                  senderName: `Bot (${brand.businessName})`,
+                  deliveryStatus: 'sent',
+                  payloadRaw: { type: 'image', caption, media: { url: mediaUrl, hdUrl: mediaUrl, caption, mimetype } },
+                });
+              } catch (logErr: any) {
+                console.warn('[PRICELIST LOG ERROR] Gagal mencatat gambar pricelist ke DB:', logErr?.message || logErr);
+              }
+            } else {
+              console.warn(`[PRICELIST ERROR] Gagal mengirim gambar pricelist ke ${customer.phone} setelah retry.`);
+              try {
+                const { alertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+                await alertService.notifyAlert({
+                  type: AlertType.THIRD_PARTY_OUTAGE,
+                  severity: AlertSeverity.CRITICAL,
+                  provider: gateway.providerType,
+                  message: `Gagal mengirim gambar pricelist ke ${customer.phone} via ${gateway.providerType}. Periksa gateway/media.`,
+                });
+              } catch {}
+            }
+          }
+        }
+      } catch (pricelistErr: any) {
+        console.error('[PRICELIST ERROR] Gagal memproses pengiriman gambar pricelist:', pricelistErr?.message || pricelistErr);
+      }
+    }
+
     // --- 6b. PENETAPAN FLAG HUMAN_HANDLING (SETELAH pengiriman) ---
     // Plan anti-silent-drop: flag baru aktif SETELAH balasan (termasuk closing
     // schedule-check) terkirim, sehingga shouldAbort() tidak membatalkannya.

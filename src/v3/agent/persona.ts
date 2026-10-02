@@ -127,6 +127,22 @@ export function extractFastIntents(text: string): string[] {
     if (!intents.includes('ask_price')) intents.push('ask_price');
   }
 
+  // Gambar pricelist eksplisit (Trigger B — permintaan FILE katalog/gambar oleh
+  // customer, terpisah dari ask_price yang menanyakan NOMINAL). Token
+  // data-driven (hasAnyWord), BUKAN regex hafalan: 'pricelist'/'price list'
+  // sudah masuk hasExplicitCostWord untuk ask_price, sedangkan intent ini
+  // khusus memicu pengiriman GAMBAR (bypass kuota 1x via force-resend).
+  const hasPricelistToken =
+    lower.includes('pricelist') ||
+    lower.includes('price list') ||
+    lower.includes('price-list') ||
+    (lower.includes('daftar') && hasAnyWord(['harga', 'tarif', 'layanan', 'paket'])) ||
+    (lower.includes('katalog') && hasAnyWord(['harga', 'tarif', 'layanan', 'paket'])) ||
+    (lower.includes('menu') && hasAnyWord(['harga', 'layanan', 'treatment', 'paket']));
+  if (hasPricelistToken) {
+    intents.push('ask_pricelist_image');
+  }
+
   return [...new Set(intents)];
 }
 

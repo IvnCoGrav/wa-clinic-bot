@@ -50,6 +50,7 @@ import {
   parseTreatmentItems as parseNumberedTreatments,
 } from '../../utils/durationCalculator';
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
+import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
 
 interface TaskChild {
   name: string;
@@ -142,6 +143,7 @@ export const TodayTreatments: React.FC = () => {
 
   // Modals
   const [showMetricsModal, setShowMetricsModal] = useState(false);
+  const [showFleetMap, setShowFleetMap] = useState(false);
   const [detailModalTask, setDetailModalTask] = useState<TreatmentTask | null>(null);
 
   // Delegation / Reassign Modal
@@ -394,7 +396,16 @@ export const TodayTreatments: React.FC = () => {
 
   // Summary Metrics
   const totalCount = tasks.length;
-  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t)).length;
+  // Fase 4 (plan 2026-10-02): data peta sebaran — seluruh jadwal pada tanggal aktif.
+  const fleetTasks: FleetMapTask[] = tasks.map((t) => ({
+    reservationId: t.reservationId,
+    customerName: t.customerName,
+    staffName: t.assignedStaff?.name || null,
+    timeLabel: t.bookingDate ? new Date(t.bookingDate).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : null,
+    status: t.status,
+    lat: t.address?.lat ?? null,
+    lng: t.address?.lng ?? null,
+  }));  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t)).length;
   const completedCount = tasks.filter((t) => isTaskCompletedOrPast(t)).length;
   const otwCount = tasks.filter((t) => t.status.toLowerCase() === 'otw').length;
   const lunasCount = tasks.filter((t) => t.pricing.paymentStatus === 'LUNAS').length;
@@ -888,6 +899,15 @@ export const TodayTreatments: React.FC = () => {
             <BarChart3 size={16} className="text-[#008069]" />
           </button>
 
+          {/* Fase 4 (plan 2026-10-02): Peta Sebaran Armada Hari Ini */}
+          <button
+            onClick={() => setShowFleetMap(true)}
+            className="p-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] transition shadow-xs active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            title="Peta Sebaran Hari Ini"
+          >
+            <MapPin size={16} className="text-[#008069]" />
+          </button>
+
           {/* Reload Button */}
           <button
             onClick={() => fetchTasks()}
@@ -1327,6 +1347,7 @@ export const TodayTreatments: React.FC = () => {
       {/* ========================================================================= */}
       {/* MODAL DETAIL LENGKAP CUSTOMER & TREATMENT */}
       {/* ========================================================================= */}
+      <FleetMapModal open={showFleetMap} onClose={() => setShowFleetMap(false)} tasks={fleetTasks} />
       {detailModalTask &&
         createPortal(
           <div
@@ -1547,8 +1568,7 @@ export const TodayTreatments: React.FC = () => {
       {/* MODAL DETAIL REKAP RESERVASI */}
       {/* ========================================================================= */}
       {showMetricsModal &&
-        createPortal(
-          <div
+        createPortal(          <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
             onClick={() => setShowMetricsModal(false)}
           >

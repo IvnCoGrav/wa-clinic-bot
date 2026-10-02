@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Map, RefreshCw, AlertTriangle, Phone, Radar } from 'lucide-react';
+import { Copy, Map, RefreshCw, AlertTriangle, Phone, Radar, Send } from 'lucide-react';
 import { useUiFeedback } from '../common/UiFeedback';
 import { DispatchMapModal } from './DispatchMapModal';
 
@@ -52,6 +52,12 @@ export interface LiveChatDispatchWidgetProps {
   staffName?: string | null;
   onRefresh?: () => void;
   onContactStaff?: () => void;
+  /**
+   * Fase 3 (plan 2026-10-02): sisipkan draf ke composer chat CS.
+   * SENGAJA tidak mengirim langsung — CS tetap menekan Kirim (human-in-the-loop,
+   * audit + guard conversation tetap berlaku).
+   */
+  onInsertText?: (text: string) => void;
 }
 
 function formatStale(sec: number | null | undefined): string {
@@ -69,6 +75,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
   staffName,
   onRefresh,
   onContactStaff,
+  onInsertText,
 }) => {
   const { toast } = useUiFeedback();
   const [mapOpen, setMapOpen] = useState(false);
@@ -267,22 +274,34 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       )}
 
       {!isStandby && (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={copyReadyText}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
-          >
-            <Copy size={13} /> Salin Teks Jawaban Pasien
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] border border-[#e9edef] rounded-lg px-2 py-2"
-            title="Lihat peta"
-          >
-            <Map size={13} /> Peta
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={copyReadyText}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
+            >
+              <Copy size={13} /> Salin Teks Jawaban Pasien
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] border border-[#e9edef] rounded-lg px-2 py-2"
+              title="Lihat peta"
+            >
+              <Map size={13} /> Peta
+            </button>
+          </div>
+          {onInsertText && (data?.readyText || '').trim() && (
+            <button
+              type="button"
+              onClick={() => onInsertText((data?.readyText || '').trim())}
+              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg px-2 py-2"
+              title="Sisipkan draf posisi Bidan ke kotak pesan (perlu tekan Kirim)"
+            >
+              <Send size={13} /> Sisipkan ke Kotak Pesan
+            </button>
+          )}
         </div>
       )}
 

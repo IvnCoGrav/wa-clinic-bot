@@ -2,6 +2,8 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
+import { getClinicLocationAsync } from '../config/clinic-location';
+import { resolveHumanAreaName } from './staff-trip-tracking.service';
 import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import {
@@ -331,6 +333,15 @@ export function evaluateChatWindowForBooking(
 }
 
 export class StaffReservationService {
+  /**
+   * Radius (km) titik berangkat dianggap "klinik". Di luar radius ini, URL
+   * koordinat presisi Bidan disembunyikan dari pasien.
+   *
+   * TODO(tenant-aware): pindahkan ke `ClinicPolicy` bila tiap tenant butuh ambang
+   * berbeda (Confirmation Gate). Dicatat di docs/KNOWN_ISSUES.md.
+   */
+  static readonly PRIVACY_NEAR_CLINIC_KM = 1.5;
+
   /**
    * Menghitung rentang waktu 00:00:00 s/d 23:59:59 dalam zona waktu WIB untuk tanggal tertentu (hari ini, besok, atau spesifik YYYY-MM-DD).
    */
@@ -1151,9 +1162,27 @@ export class StaffReservationService {
       etaMinutes?: number | null;
       arrivalWib?: string | null;
       departMapsUrl?: string | null;
+      /** Koordinat keberangkatan presisi (untuk privacy geofence). */
+      departLat?: number | null;
+      departLng?: number | null;
     }
   ): Promise<string> {
     const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
+
+    // Privacy geofence (plan 2026-10-02): titik presisi rumah Bidan TIDAK boleh
+    // bocor ke pasien. Bila berangkat dari luar radius klinik → ganti URL koordinat
+    // dengan nama area manusiawi. Tenant-aware via `getClinicLocationAsync`.
+    const departure = await StaffReservationService.resolveDepartureShare(tenantId, {
+      departMapsUrl: params.departMapsUrl,
+      departLat: params.departLat,
+      departLng: params.departLng,
+    });
+    const effectiveParams = {
+      ...params,
+      departMapsUrl: departure.shareUrl,
+      departAreaText: departure.areaText,
+    };
+
     try {
       // 1. Ambil template kustom tenant dari DB
       const customTpl = await prisma.followUpTemplate.findUnique({
@@ -1183,19 +1212,21 @@ export class StaffReservationService {
         clinicName,
         etaMinutes: params.etaMinutes,
         arrivalWib: params.arrivalWib,
-        departMapsUrl: params.departMapsUrl,
+        departMapsUrl: effectiveParams.departMapsUrl,
       });
       // Bila template admin SUDAH memakai placeholder ETA/lokasi, jangan tambah blok
       // otomatis (anti-duplikasi).
       const templateHasEtaPlaceholder = /\{\{?(etaMinutes|arrivalWib|departMapsUrl)\}\}?/i.test(templateText);
-      return templateHasEtaPlaceholder ? rendered : StaffReservationService.appendEtaBlock(rendered, params);
+      return templateHasEtaPlaceholder
+        ? rendered
+        : StaffReservationService.appendEtaBlock(rendered, effectiveParams);
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error rendering OTW template:', err.message);
       const fallback = StaffReservationService.renderStaffTripMessage(
         `Halo Bunda {patientName}, saya {therapistName} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
         { patientName: params.patientName, therapistName, clinicName: 'klinik' }
       );
-      return StaffReservationService.appendEtaBlock(fallback, params);
+      return StaffReservationService.appendEtaBlock(fallback, effectiveParams);
     }
   }
 
@@ -1207,11 +1238,17 @@ export class StaffReservationService {
    */
   private static appendEtaBlock(
     message: string,
-    params: { etaMinutes?: number | null; arrivalWib?: string | null; departMapsUrl?: string | null }
+    params: {
+      etaMinutes?: number | null;
+      arrivalWib?: string | null;
+      departMapsUrl?: string | null;
+      departAreaText?: string | null;
+    }
   ): string {
     const hasEta = params.etaMinutes != null || !!params.arrivalWib;
     const hasLoc = !!params.departMapsUrl;
-    if (!hasEta && !hasLoc) return message;
+    const hasArea = !hasLoc && !!params.departAreaText;
+    if (!hasEta && !hasLoc && !hasArea) return message;
 
     const lines: string[] = [];
     if (hasEta) {
@@ -1221,6 +1258,7 @@ export class StaffReservationService {
       lines.push(`⏱️ ${parts.join(' ')}`);
     }
     if (hasLoc) lines.push(`📍 Titik berangkat Bidan: ${params.departMapsUrl}`);
+    else if (hasArea) lines.push(`📍 Berangkat menuju lokasi Bunda (${params.departAreaText})`);
     const block = lines.join('\n');
 
     // Sematkan sebelum tanda tangan (baris terakhir `~ Nama`), bila ada.
@@ -1231,6 +1269,48 @@ export class StaffReservationService {
       return `${head}\n${block}${sig}`;
     }
     return `${message}\n${block}`;
+  }
+
+  /**
+   * Gerbang privasi domisili Bidan (plan 2026-10-02).
+   *
+   * Bila terapis berangkat dari luar radius klinik (rumah/kost pribadi), URL
+   * koordinat presisi disembunyikan dan diganti nama area manusiawi. URL hanya
+   * dikirim bila titik berangkat berada di sekitar klinik.
+   *
+   * Tenant-aware: koordinat pembanding dari `getClinicLocationAsync` (overlay
+   * `Tenant.settings.clinicLocation`), bukan env global langsung.
+   * Fail-open: koordinat clinic/berangkat tak valid → biarkan URL apa adanya.
+   */
+  private static async resolveDepartureShare(
+    tenantId: string,
+    params: { departMapsUrl?: string | null; departLat?: number | null; departLng?: number | null }
+  ): Promise<{ shareUrl: string | null; areaText: string | null }> {
+    const url = params.departMapsUrl || null;
+    if (!url) return { shareUrl: null, areaText: null };
+
+    const lat = Number(params.departLat);
+    const lng = Number(params.departLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      // Tanpa koordinat presisi, titik tidak dapat dinilai → kompatibel mundur:
+      // pertahankan URL (pemanggil lama tidak mengirim lat/lng).
+      return { shareUrl: url, areaText: null };
+    }
+
+    try {
+      const clinic = await getClinicLocationAsync(tenantId);
+      const distanceKm = calculateHaversineDistance(
+        { lat, lng },
+        { lat: clinic.lat, lng: clinic.lng }
+      );
+      if (distanceKm <= StaffReservationService.PRIVACY_NEAR_CLINIC_KM) {
+        return { shareUrl: url, areaText: null };
+      }
+      return { shareUrl: null, areaText: resolveHumanAreaName(lat, lng) };
+    } catch {
+      // Fail-open: jangan pernah memblok pesan OTW karena kegagalan privasi.
+      return { shareUrl: url, areaText: null };
+    }
   }
 
   /**

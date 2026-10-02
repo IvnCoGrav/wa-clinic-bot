@@ -3,6 +3,141 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 185. [Maps & OTW] Dispatch tracking in-memory + privacy geofence global (2026-10-02)
+
+- **Konteks:** plan "Pembaruan Fitur Maps & OTW Terapis" (Fase 1). Perbaikan:
+  (a) `POST /api/staff/reservations/:id/otw` kini mengisi memori trip CS via
+  `recordTripPing` + SSE `staff.telemetry_updated` (`today.subroute.ts`);
+  (b) `TRIP_PING_TTL_SEC` 600 → 7200 (`staff-trip-tracking.service.ts:25`);
+  (c) privacy geofence `StaffReservationService.resolveDepartureShare` +
+  `PRIVACY_NEAR_CLINIC_KM` menyembunyikan URL koordinat rumah Bidan dari pasien.
+- **185a — Sesi trip in-memory (OPEN, sengaja):** `StaffTripTrackingService`
+  menyimpan `Map` di proses. TTL 2 jam mengamankan ping terakhir, tetapi record
+  HILANG saat restart server / multi-instans. Ke-live-an WAJIB dibaca dari
+  `lastUpdateSec`/`isFresh` (widget), bukan dari ada-tidaknya record. Migrasi
+  Redis (`SETEX`, key `redisKey` sudah disiapkan) BELUM dilakukan.
+- **185b — `PRIVACY_NEAR_CLINIC_KM = 1.5` global (OPEN, tenant-aware pending):**
+  ambang di `StaffReservationService` masih konstanta global; target pindah ke
+  `ClinicPolicy`/`Tenant.settings`. Koordinat pembanding sudah tenant-aware
+  (`getClinicLocationAsync`). Perlu form admin + migrasi bila tiap tenant beda.
+- **185c — Fase 2-4 plan SELESAI (2026-10-02):** 1-tap `MULAI JALAN` tanpa confirm
+  sekunder (safety-gate `NavigationPreflightModal` untuk titik estimasi TETAP
+  dipertahankan), kotak patokan kuning, badge bayar kontras (nominal dari
+  `pricing.totalFee`, tanpa hardcode), drawer Radar OTW <1280px, tombol
+  "Sisipkan ke Kotak Pesan" (draf, bukan auto-send), dan modal Peta Sebaran
+  (`FleetMapModal` + `computeFleetView` murni). Belum ada verifikasi visual di
+  perangkat nyata (uji manual Bidan & CS disarankan).
+
+## 184. [Pricelist] Pemulihan pengiriman gambar otomatis V3 (2026-10-02)
+
+- **Konteks:** eksekutor gambar pricelist (`STEP 1` di `machine.ts`) terhapus pada
+  housekeeping `b708c2fc`. Audit menemukan itu memang **dead code / zombie** sebelum
+  penghapusan: `git grep sendPricelistImage b708c2fc^` hanya menemukan definisi tipe +
+  `if (result.sendPricelistImage)`, TANPA satu pun setter `= true` di jalur V3 — jadi
+  fitur sudah mati sebelum `b708c2fc`, bukan diputus oleh commit itu. Klaim "759 customer
+  sejak September tidak menerima" tidak dapat dibuktikan dari repo (butuh verifikasi DB
+  produksi — lihat 184c).
+- **Fix (fondasional):** intent semantik `ask_pricelist_image` di `extractFastIntents`
+  (token data-driven, bukan regex hafalan) + gerbang murni `evaluatePricelistTrigger`
+  (`src/v3/agent/pipeline/pricelist-gate.ts`, zero LLM/regex) + `resolvePricelistImageTarget`
+  provider-aware di `pricelist-config.service.ts` + eksekutor di `machine.ts` (mengikuti
+  pola `live-chat.service`: cut-off, sandbox guard, retry 2x, alert, log DB).
+- **184a — `Customer.pricelist_sent` masih kolom DEPRECATED (OPEN, sengaja):**
+  `prisma/schema.prisma:101-104` menandai kolom ini sebagai state sesi yang idealnya di
+  `Conversation.session_data`. Plan ini mempertahankan dual-read/write kolom legacy untuk
+  kompatibilitas; migrasi staged (dual-read → backfill → drop) BELUM dilakukan.
+- **184b — Rate-limit & kuota keras (OPEN, tuning):** force-resend dibatasi 1x/10 menit
+  via query pesan terakhir (bukan token kuota persisten). Bila perlu kebijakan berbeda
+  per-tenant, pindahkan ke config tenant.
+- **184c — Verifikasi DB produksi BELUM (OPEN):** `pricelist_image_url` tenant default &
+  keberadaan file `storage/media/outbound/default-tenant/1ffe6393673a4037b8d7df83895e2ed1.png`
+  harus diverifikasi di server. WABA memerlukan `PUBLIC_BASE_URL` (tidak ada di `.env` lokal;
+  cek di server). Jalankan simulasi `npm run chat` di staging sebelum klaim selesai.
+
+## 183. [Copilot–Hermes] Fase 0 recon dari dalam hermes-agent (2026-10-02)
+
+- **Konteks:** sesi agen Hermes sandbox ternyata berjalan DI DALAM container `hermes-agent`
+  produksi (`hostname befddf2b2ef0 = 172.19.0.3`, `getent hosts hermes-agent` sama). Agen
+  menolak SSH (batasan "tanpa sentuh produksi" + tanpa kredensial) — disiplin benar.
+  Tanpa akses Docker daemon, 4 dari 7 perintah mustahil dari sana; 3 berhasil + probing API.
+- **183a — Kedua container BELUM se-network (TERBUKTI):** `curl
+  http://wa-clinic-bot-app-1:3000/ready` dari dalam hermes-agent → exit 6 (host tidak
+  resolve). `hermes-net` belum menghubungkan keduanya (atau belum ada). Perlu 1 aksi sisi
+  host: buat/sambungkan network (`docker network connect hermes-net wa-clinic-bot-app-1`).
+- **183b — Port 9119 = `hermes dashboard`, login-walled:** proses PID 138
+  `hermes dashboard --host 0.0.0.0 --port 9119 --no-open` (uvicorn). `/` → 302 `/login`;
+  `/api/health` → 200 publik (`auth_required:true`, cocok untuk liveness);
+  `/api/sessions`, `/api/models` → 401; Basic auth pakai `HERMES_DASHBOARD_BASIC_AUTH_*`
+  → tetap 401 (auth-nya provider password/OAuth lain). `/api/status` → 200 tanpa auth
+  (BELUM terverifikasi endpoint nyata vs fallback index — jangan dijadikan dasar).
+- **183c — Endpoint "ask" programatik BELUM terbukti:** dashboard API belum menunjukkan
+  endpoint yang menerima prompt dan mengembalikan teks. Kandidat Fase 4 berurutan:
+  (i) dashboard API dengan auth yang benar; (ii) fallback micro-bridge loopback-only yang
+  memanggil `hermes -z` (`v0.21.5` terkonfirmasi di container) + secret + rate-limit;
+  (iii) MCP ditunda. Keputusan menunggu user.
+- **183d — Bind 0.0.0.0 (CATATAN, pra-eksisting):** dashboard bind ke semua interface;
+  Caddy meneruskan `hermes.kalababyspa.online` → 9119 (login-walled). Pastikan tidak ada
+  mapping host yang membuka 9119 mentah ke internet.
+- **183e — Secret & backup BELUM (host-side):** `HERMES_BRIDGE_SECRET` tidak ada di env
+  container; `/opt/data/backups/` hanya berisi `config/` (backup `~/backups/` yang dimaksud
+  ada di host, bukan container). Keduanya menunggu aksi host.
+- **Batasan ditegakkan:** agen tidak SSH, tidak menulis file produksi, tidak menambah server
+  MCP, tidak menampilkan secret. Tetap berlaku sampai user mencabut eksplisit per-aksi.
+
+## 182. [Copilot] Hardening internal (internal-only, Hermes ditunda) (2026-10-02)
+
+- **Konteks:** Keluhan admin "AI Copilot kaku / tak jawab sesuai maksud". Audit read-only
+  memetakan 3 akar konkret: (1) menu status tool tidak memuat `rejected`/`en_route` sehingga
+  router LLM tak pernah bisa menjawab "siapa yang saya tolak"; (2) jendela analisa chat
+  (`query_stalled_inquiries`) hanya 5 pesan & tanpa info jam yang pernah ditawarkan admin;
+  (3) gaya ringkasan kaku tanpa tuas tenant-aware + kontrak link salah (`/#/livechat`).
+  Rencana Hermes-as-Copilot (plan awal) DITOLAK sebagai pengganti penuh (duplikasi tool,
+  hilang grounding/deadline/audit) — dieksekusi internal-only dulu.
+- **182a — Fase 1 RESOLVED (fondasional):** `RESERVATION_STATUS_VALUES` +
+  deskripsi status `query_reservations_by_filter` kini memuat `rejected`/`en_route`
+  (`copilot-tools.ts`). Test: kontrak menu + filter DB `status:'rejected'` + router semantik
+  "yang saya tolak besok" (3).
+- **182b — Fase 2 RESOLVED:** `query_stalled_inquiries` ambil 8 pesan (dari 5) + field
+  `offeredTime` dari balasan OUTBOUND (reuse `extractTimeOfDayHint` kanonik, tanpa regex baru).
+  `buildDegradedAnswer` menampilkan `offeredTime` + `waitingMinutes` manusiawi. Test (4).
+- **182c — Fase 3 RESOLVED (fondasional):** `buildSummarizePrompt` murni + `formatWaitTime` +
+  loader `loadCopilotStyle` dari `Tenant.settings.copilot.styleTone` (tenant-aware, tanpa migrasi
+  schema). Kontrak link dikoreksi ke kanonis `/admin/live-chat?conversationId=` (bukan hash lama).
+  Angka SOP TIDAK dihardcode ke prompt (harus dari `ClinicPolicy`/tool). Test (4).
+- **182d — Tone DB belum di-seed / belum ada UI (OPEN):** `Tenant.settings.copilot.styleTone`
+  belum diisi di produksi dan belum ada form admin untuk menyetelnya → saat ini memakai default
+  netral. Kandidat: Tab kecil di modul Copilot/Settings (Modularity-First, bukan page baru).
+- **182e — `offeredTime` hanya jam terakhir yang ketemu (OPEN, by-design):** bila admin
+  menawarkan beberapa jam, hanya yang pertama ditemukan pada pesan terbaru yang ditampilkan.
+  Bila perlu riwayat tawaran lengkap → simpan sebagai state sesi (blast radius lebih besar).
+- **182f — Full-suite flaky pra-eksisting (OPEN, BUKAN regresi):** `npm test` penuh menampilkan
+  ~7-8 gagal di `navigation-accuracy-preflight`, `scan-secrets`, dan sesekali
+  `staff-auth-and-reservation`/`reservation-silent-failure-audit`. Diverifikasi LEBIH DULU
+  sebagai pra-eksisting (gagal juga tanpa perubahan ini) dan keempat file LULUS saat dijalankan
+  terisolasi (46 test) → indikasi polusi lintas-file/paralel, bukan akibat perubahan Copilot.
+  Perlu investigasi terpisah bila ingin suite penuh 100% stabil.
+- **Catatan Hermes:** arah yang disetujui = Hermes sebagai otak (router + perangkum) di atas 6
+  pintu tool yang sama + satpam grounding tetap hidup; Fase 0 (spike `hermes-net`/9119/8000/RAM)
+  dan Fase 4 ditunda sampai user menyiapkan sisi Hermes. Jangan eksekusi ulang plan awal
+  (bridge `/ask` + `/copilot/data/*` + `SKILL.md` berisi SOP/harga) karena melanggar mandat
+  non-hardcode & menghapus hard guards.
+
+## 183. [Slot Overlap A5] Forensik produksi belum diverifikasi (2026-10-02)
+
+- **Konteks:** Audit fixing plan A5 (triase slot tumpang jadwal) menandai klaim
+  "spam alert Telegram tiap 3 menit + kasus Bunda Irlandia/Firda 4 Okt + Bunda Adera
+  2 Okt jam 10:00" sebagai **dugaan berbasis kode, belum forensik**. `logs/app-*.log`
+  lokal (s/d 23 Sep 2026) memuat **0 baris** `Slot overlap sweep`/`SLOT OVERLAP`.
+- **Bukti yang sudah terverifikasi (kode):** bypass throttle `AlertType.DAILY_OPS_REPORT`
+  nyata di `alert.service.ts:93`; partisi kaku `dayWib__staffId` nyata di
+  `slot-overlap.service.ts`; `tenantId: ''` nyata (kini diperbaiki).
+- **Tindakan yang BELUM (OPEN/ops):** di server prod, ambil 20 baris log
+  `Slot overlap sweep` + query reservasi 3–4 Okt & `staff.active` untuk membuktikan
+  klaim. Bila log tidak ada, catat sebagai dugaan berbasis kode.
+- **Perbaikan v2 sudah dieksekusi** (lihat #176 A5 RESOLVED v2) tanpa menunggu
+  forensik, karena akar masalah terverifikasi di kode; forensik ini hanya menutup
+  klaim volume/spam, bukan memblokir fix.
+
 ## 181. [Infra] Migrasi server produksi ke IP baru + sinkron live (2026-10-02)
 
 - **Konteks:** server produksi dipindah dari IP lama `43.157.197.148` (hostname `VM-20-65-ubuntu`) ke IP baru **`43.173.11.79`** (hostname `VM-25-104-ubuntu`). DNS `app.kalababyspa.online` kini mengarah ke IP baru.
@@ -123,14 +258,37 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   mengeksekusi lock. Test: `reservation-idempotency-request-id.test.ts` (15).
 - **A4 (Google Calendar) — KEPUTUSAN: tetap mock.** Isu GCal (#173g/#173h, #157e)
   tetap OPEN/ditunda sampai GCal benar-benar diaktifkan.
-- **A5 (notifikasi slot tertumpuk tiap 3 menit) — RESOLVED:**
+- **A5 (notifikasi slot tertumpuk) — RESOLVED v2 (triase fondasional):**
   `src/services/slot-overlap.service.ts` (`findOverlappingSlots` murni +
   `sweepOverlappingSlots` tenant-scoped) + `runSlotOverlapSweep` (cron.service) +
-  registrasi `app.ts`. Kirim 1 notifikasi agregat ke ADMIN (Web Push + alert
-  `DAILY_OPS_REPORT`) bila ada slot tumpang tindih. **Peringatan dini, BUKAN blokir**
-  (sesuai permintaan: admin belum terbiasa, pembelajaran bertahap). Env:
-  `ENABLE_SLOT_OVERLAP_SWEEP` (default on) + `SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES`
-  (default 3). Test: `tests/unit/slot-overlap-sweep.test.ts`.
+  registrasi `app.ts`. **Peringatan dini, BUKAN blokir.**
+  - **Triase 4 kategori** (state-based, bukan hafalan kalimat):
+    `STAFF_DOUBLE_BOOKED` (CRITICAL, 1 Bidan >1 pasien), `CUSTOMER_DOUBLE_BOOKED`
+    (WARNING, 1 pasien >1 pesanan lintas Bidan — menutup blind spot lama),
+    `UNASSIGNED_OVERCAPACITY` (CRITICAL, peak-concurrent > `Staff.active=true`),
+    `UNASSIGNED_PENDING_ACTION` (INFO, antrean tanpa Bidan beririsan tapi kuota cukup).
+  - Kapasitas global pakai `prisma.staff.count({ active: true })` (sumber tunggal);
+    kuota tak diketahui (DB error) → audit kapasitas DILEWATI (fail-safe, tidak menebak).
+  - **Dedup alarm PERSISTEN** via `AdminNotificationLog.idempotency_key`
+    (prefix `slot_overlap:v1:<fingerprint>:<severity>:`; `startsWith` + window
+    `sent_at`), cooldown 60m/240m/720m per CRITICAL/WARNING/INFO. Map memori hanya
+    fallback saat DB offline. Bukan `Map` in-memory sebagai mekanisme utama.
+  - Pesan actionable: tanggal WIB panjang (`Intl` id-ID), jam, kategori, daftar nama
+    pasien (dari DB, bukan hardcode), link `ADMIN_DASHBOARD_URL/admin/reservations?date=`.
+  - `pending` dikecualikan dari audit kapasitas/Bidan (selaras keputusan #173e) namun
+    tetap dihitung untuk duplikasi pasien.
+  - Env: `ENABLE_SLOT_OVERLAP_SWEEP` (default on) +
+    `SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES` (**default 15**, sebelumnya 3). Test:
+    `tests/unit/slot-overlap-sweep.test.ts` (19, termasuk dedup & overcapacity).
+  - **Sisa (OPEN, minor):** staf cuti/tidak-tersedia-per-hari belum dimodelkan (hanya
+    `active`); audit kapasitas dihitung per-hari WIB (slot melintasi tengah malam
+    dipotong per hari); forensik log produksi klaim spam 4 Okt belum diverifikasi —
+    lihat #182.
+  - **Deep-link `?date=` (RESOLVED):** `Reservations.tsx` kini membaca
+    `?date=YYYY-MM-DD` (helper `readInitialDateFromQuery` pakai `URLSearchParams` +
+    validasi overflow tanggal), membuka mode `day` pada tanggal tsb. Web Push `url`
+    diselaraskan ke `?date=<hari paling awal>`. Rebuild `packages/admin-dashboard`
+    (`npm run build`) agar tampil di produksi.
 - **A6 (hapus 2 entri gazetteer koordinat salah) — RESOLVED.** Lihat #175f.
 
 ## 175. [Audit Dataset Wilayah] Koreksi kecamatan + ejaan dieksekusi; phantom & konflik sumber OPEN (2026-09-30)

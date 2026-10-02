@@ -7,6 +7,7 @@ import {
   isValidLatLng,
   chooseZoom,
   computeMapView,
+  computeFleetView,
   tileUrl,
   shouldPulseTherapistMarker,
   ROUTE_DOT_RADIUS_PX,
@@ -172,5 +173,48 @@ describe('dispatchMap route & pulse (adversarial)', () => {
     expect(shouldPulseTherapistMarker(true, false)).toBe(false);
     expect(shouldPulseTherapistMarker(false, true)).toBe(false);
     expect(shouldPulseTherapistMarker(false, false)).toBe(false);
+  });
+});
+
+/**
+ * computeFleetView (plan 2026-10-02, Fase 4) — peta sebaran armada harian.
+ * Adversarial: banyak titik, indeks marker harus memetakan ke task asal.
+ */
+describe('computeFleetView (adversarial)', () => {
+  const w = 640;
+  const h = 400;
+
+  it('memetakan N titik valid + index asal tetap sinkron dengan input', () => {
+    // index 1 adalah titik invalid → marker harus tetap menunjuk index 0 dan 2.
+    const points: LatLng[] = [
+      { lat: -7.34, lng: 112.74 },
+      { lat: NaN, lng: 112.75 } as any,
+      { lat: -7.37, lng: 112.7 },
+    ];
+    const view = computeFleetView(points, w, h);
+    expect(view.markers).toHaveLength(2);
+    expect(view.markers.map((m) => m.index).sort()).toEqual([0, 2]);
+    for (const m of view.markers) {
+      expect(Number.isFinite(m.x)).toBe(true);
+      expect(Number.isFinite(m.y)).toBe(true);
+    }
+    expect(view.tiles.length).toBeGreaterThan(0);
+  });
+
+  it('tanpa titik valid / dimensi 0 → fallback center & tidak throw', () => {
+    const empty = computeFleetView([], w, h);
+    expect(empty.markers).toHaveLength(0);
+    expect(empty.tiles).toHaveLength(0);
+    expect(Number.isFinite(empty.center.lat)).toBe(true);
+
+    const zero = computeFleetView([{ lat: -7.3, lng: 112.7 }], 0, 0);
+    expect(zero.tiles).toHaveLength(0);
+  });
+
+  it('titik identik → zoom maksimum (CLUSTER koordinat sama tidak crash)', () => {
+    const p: LatLng = { lat: -7.34, lng: 112.74 };
+    const view = computeFleetView([p, { ...p }, { ...p }], w, h);
+    expect(view.markers).toHaveLength(3);
+    expect(view.zoom).toBe(MAX_ZOOM);
   });
 });

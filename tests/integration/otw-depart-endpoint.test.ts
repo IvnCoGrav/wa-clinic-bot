@@ -6,6 +6,7 @@ import { prisma } from '../../src/db/client';
 import { queueService } from '../../src/services/queue.service';
 import { liveChatService } from '../../src/services/live-chat.service';
 import { StaffReservationService } from '../../src/services/staff-reservation.service';
+import { staffTripTrackingService } from '../../src/services/staff-trip-tracking.service';
 
 const ADMIN_KEY = 'test_admin_key_otw_depart';
 const TENANT = 'default-tenant';
@@ -72,6 +73,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    staffTripTrackingService.clearAll();
     vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(staffSession as any);
     vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValue({ success: true } as any);
     vi.mocked(prisma.reservation.update).mockResolvedValue({ id: RES_ID, status: 'en_route' } as any);
@@ -146,6 +148,35 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it('FASE 1: OTW dengan koordinat → trip memory CS terisi (bukan blind spot)', async () => {
+    staffTripTrackingService.clearAll();
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/staff/reservations/${RES_ID}/otw`,
+      headers: staffHeaders,
+      payload: { customText: '', markEnRoute: true, etaMinutes: 12, arrivalWib: '09:42', lat: -7.3, lng: 112.7 },
+    });
+    expect(res.statusCode).toBe(200);
+    const trip = staffTripTrackingService.getTrip(TENANT, RES_ID);
+    expect(trip).not.toBeNull();
+    expect(trip?.lat).toBe(-7.3);
+    expect(trip?.lng).toBe(112.7);
+  });
+
+  it('FASE 1: OTW tanpa koordinat → trip memory tetap kosong (kompatibel mundur)', async () => {
+    staffTripTrackingService.clearAll();
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/staff/reservations/${RES_ID}/otw`,
+      headers: staffHeaders,
+      payload: { customText: '' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(staffTripTrackingService.getTrip(TENANT, RES_ID)).toBeNull();
+  });
 });
 
 describe('getOtwMessageText — blok ETA/lokasi (murni render)', () => {
@@ -196,5 +227,55 @@ describe('getOtwMessageText — blok ETA/lokasi (murni render)', () => {
     expect(text).toContain('ETA 12 menit (09:42)');
     // Blok otomatis TIDAK ditambahkan (placeholder sudah dipakai admin).
     expect(text).not.toContain('Titik berangkat Bidan:');
+  });
+
+  it('ADVERSARIAL privasi: berangkat dari rumah (>1.5km klinik) → URL koordinat TIDAK bocor', async () => {
+    vi.mocked(prisma.followUpTemplate.findUnique).mockResolvedValue(null as any);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({ name: 'Klinik Uji' } as any);
+    const text = await StaffReservationService.getOtwMessageText(TENANT, {
+      patientName: 'Rina',
+      therapistName: 'Dewi',
+      etaMinutes: 12,
+      arrivalWib: '09:42',
+      departMapsUrl: 'https://maps.google.com/?q=-7.2,112.6',
+      departLat: -7.2,
+      departLng: 112.6,
+    });
+    expect(text).not.toContain('-7.2,112.6');
+    expect(text).not.toContain('Titik berangkat Bidan:');
+    expect(text).toContain('Berangkat menuju lokasi Bunda');
+    const lines = text.split('\n').filter((l) => l.trim());
+    expect(lines[lines.length - 1]).toContain('~ Dewi');
+  });
+
+  it('privasi: berangkat dari klinik (<=1.5km) → URL koordinat tetap dikirim', async () => {
+    vi.mocked(prisma.followUpTemplate.findUnique).mockResolvedValue(null as any);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({ name: 'Klinik Uji' } as any);
+    const text = await StaffReservationService.getOtwMessageText(TENANT, {
+      patientName: 'Rina',
+      therapistName: 'Dewi',
+      etaMinutes: 12,
+      arrivalWib: '09:42',
+      departMapsUrl: 'https://maps.google.com/?q=-7.34886,112.751677',
+      departLat: -7.34886,
+      departLng: 112.751677,
+    });
+    expect(text).toContain('Titik berangkat Bidan: https://maps.google.com/?q=-7.34886,112.751677');
+  });
+
+  it('ADVERSARIAL privasi: template kustom ber-placeholder {departMapsUrl} tetap tidak bocor', async () => {
+    vi.mocked(prisma.followUpTemplate.findUnique).mockResolvedValue({
+      text: 'Halo {patientName}, saya OTW. Lokasi: {departMapsUrl}',
+    } as any);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({ name: 'Klinik Uji' } as any);
+    const text = await StaffReservationService.getOtwMessageText(TENANT, {
+      patientName: 'Rina',
+      therapistName: 'Dewi',
+      departMapsUrl: 'https://maps.google.com/?q=-7.2,112.6',
+      departLat: -7.2,
+      departLng: 112.6,
+    });
+    expect(text).not.toContain('-7.2,112.6');
+    expect(text).toContain('Lokasi:');
   });
 });

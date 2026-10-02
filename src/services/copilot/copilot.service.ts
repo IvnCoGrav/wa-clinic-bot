@@ -169,6 +169,8 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
       if (r.status) bits.push(String(r.status));
       if (r.staff) bits.push(String(r.staff));
       if (r.requestedTime) bits.push(`minta ${r.requestedTime}`);
+      if (r.offeredTime) bits.push(`ditawari ${r.offeredTime}`);
+      if (typeof r.waitingMinutes === 'number') bits.push(formatWaitTime(r.waitingMinutes));
       if (r.lastMessage) bits.push(`"${String(r.lastMessage).slice(0, 60)}"`);
       return `- ${name}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
     });
@@ -183,6 +185,70 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
 
 /** Penanda error khusus batas waktu Copilot (bukan kegagalan LLM nyata). */
 const COPILOT_DEADLINE_ERROR = 'COPILOT_DEADLINE_EXCEEDED';
+
+/** Gaya ringkasan Copilot yang bersumber dari DB per-tenant (bukan hardcode). */
+export interface CopilotStyleConfig {
+  summarizeTone: string;
+}
+
+/**
+ * Bangun prompt ringkasan (murni, deterministik, mudah diuji).
+ *
+ * Gaya bahasa (`styleTone`) DISUNTIK dari DB per-tenant bila tersedia; jika null,
+ * dipakai default netral. Kontrak link Live Chat WAJIB kanonis
+ * `/admin/live-chat?conversationId=` — BUKAN format hash lama `/#/livechat`
+ * (renderer `AdminCopilotPanel` hanya mengaktifkan tautan kanonis).
+ */
+export function buildSummarizePrompt(
+  message: string,
+  labeledRows: string,
+  styleTone: string | null
+): string {
+  const tone = styleTone && styleTone.trim() ? styleTone.trim() : 'ringkas, profesional, langsung ke inti, tanpa basa-basi.';
+  return `Berikut data riil dari database (JSON) dari beberapa sumber untuk menjawab pertanyaan admin: "${message}".
+Rangkum dalam bahasa Indonesia dengan gaya berikut (WAJIB dipatuhi): ${tone}
+Ketentuan struktur:
+1. Kelompokkan data secara terstruktur bila ada beberapa kategori berbeda (mis. sudah terjadwal vs belum masuk sistem / menunggu konfirmasi). Header kelompok WAJIB jelas.
+2. DILARANG menambah nama, nomor HP, atau jadwal yang TIDAK ada di data.
+3. DILARANG mencantumkan ID teknis internal (customerId/UUID).
+4. Bila ada waktu tunggu (waitingMinutes), ubah menjadi bahasa manusiawi (mis. "menunggu 15 menit", "sekitar 2 jam").
+5. Bila ada field "offeredTime", sebutkan "sudah ditawari <offeredTime>".
+6. Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
+7. Untuk pedoman medis/SOP/katalog, kutip HANYA dari baris berlabel sumber dan sebutkan judul sumbernya; JANGAN mengarang angka (harga, durasi, ketersediaan slot) yang tidak ada di data.
+Data:
+${labeledRows.slice(0, 8000)}`;
+}
+
+/** Ubah menit tunggu jadi frasa manusia (deterministik, tanpa LLM). */
+export function formatWaitTime(minutes: number): string {
+  const m = Number(minutes);
+  if (!Number.isFinite(m) || m < 0) return 'baru saja';
+  if (m < 60) return `${Math.floor(m)} menit`;
+  const hours = Math.floor(m / 60);
+  if (hours < 24) return `${hours} jam`;
+  const days = Math.floor(hours / 24);
+  return `${days} hari`;
+}
+
+/**
+ * Ambil nada ringkasan Copilot dari DB per-tenant. Sumber kebenaran:
+ * `Tenant.settings.copilot.styleTone` (tanpa migrasi schema — `settings` sudah Json).
+ * Gagal/DB offline → null senyap (prompt memakai default netral). Bukan hardcode bisnis.
+ */
+export async function loadCopilotStyle(tenantId: string): Promise<CopilotStyleConfig | null> {
+  try {
+    const { prisma } = await import('../../db/client');
+    const tenant = await (prisma as any).tenant?.findUnique?.({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const tone = tenant?.settings?.copilot?.styleTone;
+    if (typeof tone === 'string' && tone.trim()) return { summarizeTone: tone.trim() };
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Jalankan promise LLM dengan batas waktu keras (wall-clock). Berbeda dari
@@ -227,6 +293,8 @@ export class CopilotService {
       const { extractBalancedJson } = await import('../../utils/json-extract');
 
       const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
+      // Gaya ringkasan tenant-aware dari DB (settings) — null = default netral.
+      const styleConfig = await loadCopilotStyle(tenantId);
 
       const toolMenu = COPILOT_TOOLS.map(
         (t) => `- ${t.name}: ${t.description}\n  args: ${JSON.stringify(t.parameters)}`
@@ -380,16 +448,7 @@ export class CopilotService {
       const labeled = collected
         .map((c) => `[${c.tool}] ${JSON.stringify(stripInternalIds(c.rows)).slice(0, 3000)}`)
         .join('\n');
-      const summarizePrompt = `Berikut data riil dari database (JSON) dari beberapa sumber untuk menjawab pertanyaan admin: "${message}".
-Rangkum dalam bahasa Indonesia yang rapi, profesional, dan mudah dibaca oleh tim admin klinik:
-1. Kelompokkan data secara terstruktur bila ada beberapa kategori berbeda (mis. sudah terjadwal vs belum terjadwal / menunggu konfirmasi).
-2. DILARANG menambah nama, nomor HP, atau jadwal yang TIDAK ada di data.
-3. DILARANG mencantumkan ID teknis internal (customerId/UUID).
-4. Bila ada waktu tunggu (waitingMinutes), ubah menjadi bahasa manusiawi (mis. "menunggu 15 menit", "sekitar 2 jam").
-5. Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
-6. Untuk pedoman medis/SOP/katalog, kutip HANYA dari baris berlabel sumber dan sebutkan judul sumbernya; JANGAN mengarang angka (harga, durasi, ketersediaan slot) yang tidak ada di data.
-Data:
-${labeled.slice(0, 8000)}`;
+      const summarizePrompt = buildSummarizePrompt(message, labeled, styleConfig?.summarizeTone ?? null);
 
       llmCalls++;
       let summaryResp: any;

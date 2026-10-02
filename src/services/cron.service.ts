@@ -633,17 +633,21 @@ export class CronService {
       const tenantIds = await getAllTenantIds();
       let groups = 0;
       let reservations = 0;
+      let deduped = 0;
       for (const tenantId of tenantIds) {
         try {
           const res = await sweepOverlappingSlots(tenantId);
           groups += res.overlappingGroups;
           reservations += res.reservationCount;
+          if (res.deduped) deduped++;
         } catch (e: any) {
           console.warn(`[Cron Service] Slot overlap sweep tenant ${tenantId} skipped:`, e?.message);
         }
       }
       if (groups > 0) {
-        console.log(`[Cron Service] Slot overlap sweep: ${groups} grup bertumpuk (${reservations} reservasi).`);
+        console.log(
+          `[Cron Service] Slot overlap sweep: ${groups} grup bertumpuk (${reservations} reservasi). Alarm didedup: ${deduped}.`
+        );
       }
     } catch (err) {
       console.error('[Cron Service] Error running slot overlap sweep:', (err as Error).message);

@@ -3,7 +3,7 @@ import { Direction } from '@prisma/client';
 import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName } from '../../utils/wib-time';
 import { isDummyOrTestContact } from '../../utils/dummy-filter';
 import { maskPhoneNumber } from '../../utils/pii-masker';
-import { hasScheduleSignal, extractTimeHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
+import { hasScheduleSignal, extractTimeHint, extractTimeOfDayHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
 import { hasBookingCommitSignal } from '../../utils/date-confirmation';
 
 /**
@@ -39,6 +39,22 @@ const MAX_ROWS = 20;
 import { ACTIVE_RESERVATION_STATUSES } from '../../domain/reservation-status';
 export { ACTIVE_RESERVATION_STATUSES };
 
+/**
+ * Seluruh status reservasi yang dikenali kontrak tool. Menu status DILARANG
+ * menyempit: bila `rejected`/`en_route` absen dari deskripsi, router LLM tidak
+ * pernah bisa memilihnya walau data & filter DB mampu (akar "siapa yang saya tolak"
+ * selalu kosong). Ini kontrak domain, bukan katalog bisnis.
+ */
+export const RESERVATION_STATUS_VALUES = [
+  'confirmed',
+  'en_route',
+  'pending',
+  'hold',
+  'completed',
+  'cancelled',
+  'rejected',
+] as const;
+
 /** Validasi string tanggal "YYYY-MM-DD" (bukan kalimat bebas dari LLM). */
 export function isValidIsoDate(value: unknown): boolean {
   if (typeof value !== 'string') return false;
@@ -71,7 +87,7 @@ export const queryReservationsByFilter: CopilotTool = {
     'Gunakan untuk pertanyaan "jadwal besok", "siapa terapis X hari ini", dsb.',
   parameters: {
     date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB). Kosong = jadwal aktif mendatang.' },
-    status: { type: 'string', description: 'confirmed | pending | hold | completed | cancelled. Kosong = jadwal aktif (confirmed/pending/hold).' },
+    status: { type: 'string', description: `${RESERVATION_STATUS_VALUES.join(' | ')}. Kosong = jadwal aktif (confirmed/en_route/pending/hold). Gunakan "rejected" untuk pertanyaan penolakan/pembatalan.` },
     staffName: { type: 'string', description: 'Nama terapis (sebagian). Kosong = semua.' },
   },
   run: async (tenantId, args) => {
@@ -374,7 +390,8 @@ export const queryStalledInquiries: CopilotTool = {
           orderBy: { created_at: 'desc' },
           // Ambil beberapa pesan terakhir: sinyal jadwal bisa muncul di turn
           // customer sebelum balasan bot terakhir (bukan hanya pesan terakhir).
-          take: 5,
+          // 8 pesan agar alur negosiasi (minta → ditawari jam → diam) terbaca utuh.
+          take: 8,
           select: { direction: true, content: true, created_at: true },
         },
       },
@@ -419,6 +436,15 @@ export const queryStalledInquiries: CopilotTool = {
         if (!dateOk) continue;
       }
 
+      // Jam yang PERNAH ditawarkan admin (dari teks balasan OUTBOUND) — agar admin
+      // tahu titik percakapan berhenti ("sudah ditawari jam 10, belum balas").
+      // Reuse detektor jam kanonik; bukan regex per-kasus.
+      const offeredTime =
+        msgs
+          .filter((m) => (m.direction as any) === Direction.OUTBOUND && typeof m.content === 'string')
+          .map((m) => extractTimeOfDayHint(m.content as string))
+          .find((h) => h) || null;
+
       const booking = (c.session_data as any)?.booking;
       rows.push({
         customerId: cust.id,
@@ -426,6 +452,7 @@ export const queryStalledInquiries: CopilotTool = {
         conversationId: c.id,
         treatment: c.last_discussed_treatment || null,
         requestedTime: booking?.requestedTimeHint || booking?.preferredDate || textHint || null,
+        offeredTime,
         lastMessage: lastReal.content,
         lastInboundAt: lastReal.created_at,
         waitingMinutes: Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000),

@@ -348,7 +348,7 @@ if (require.main === module) {
     // A5 — Sapuan slot jadwal bertumpuk (peringatan dini ke admin, bukan blokir).
     // Default aktif; env 'false' menonaktifkan. Tidak dijalankan langsung saat boot.
     if (process.env.ENABLE_SLOT_OVERLAP_SWEEP !== 'false') {
-      const intervalMinutes = Math.max(1, Number(process.env.SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES ?? 3) || 3);
+      const intervalMinutes = Math.max(1, Number(process.env.SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES ?? 15) || 15);
       import('./services/cron.service').then(({ CronService }) => {
         const cron = new CronService();
         trackInterval(() => cron.runSlotOverlapSweep(), intervalMinutes * 60 * 1000);

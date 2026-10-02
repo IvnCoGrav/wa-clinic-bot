@@ -10,6 +10,7 @@ import { CartManager } from '../state/cart-manager';
 import { ToolExecutionPipeline } from './pipeline/tool-pipeline';
 import { DeliveryFastPath } from './pipeline/delivery-fast-path';
 import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
+import { evaluatePricelistTrigger } from './pipeline/pricelist-gate';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
 import { telemetryService } from '../../services/telemetry.service';
 import { wrapCustomerMessage } from '../../utils/prompt-injection-sanitizer';
@@ -90,6 +91,10 @@ export interface AgentRunnerOutput {
   contextSummary?: string;
   modelUsed?: string;
   provider?: string;
+  /** Gerbang pricelist: kirim gambar pricelist pada turn ini (deterministik). */
+  sendPricelistImage?: boolean;
+  /** Force-resend pricelist (customer minta eksplisit) — menembus kuota 1x. */
+  forcePricelistResend?: boolean;
 }
 export class V3AgentRunner {
   public static async processMessage(input: AgentRunnerInput): Promise<AgentRunnerOutput> {
@@ -444,6 +449,28 @@ export class V3AgentRunner {
       if (!turn.perCallLogged) {
         await tel.traceExecution({ reply: finalReply, status: 'SUCCESS', tools: turn.executedTools });
       }
+
+      // Gerbang pricelist deterministik (Trigger A: post-delivery; Trigger B: minta eksplisit).
+      // Sumber intent = preExtractedIntents (sudah dihitung di machine.ts) atau
+      // extractFastIntents; kuota 1x dibaca dari status customer riil (DB/cache).
+      let pricelistVerdict = { send: false, forceResend: false };
+      try {
+        let dbPricelistSent = false;
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          const cust = await customerService.getCustomerById(customerId, tenantId).catch(() => null);
+          dbPricelistSent = !!(cust as any)?.pricelist_sent;
+        } catch {}
+        const intentsForGate = (input.preExtractedIntents && input.preExtractedIntents.length > 0)
+          ? input.preExtractedIntents
+          : extractFastIntents(cleanIncomingText);
+        pricelistVerdict = evaluatePricelistTrigger({
+          intents: intentsForGate,
+          executedTools: turn.executedTools as any,
+          pricelistSent: dbPricelistSent,
+        });
+      } catch {}
+
       return {
         replyText: finalReply,
         executedTools: turn.executedTools,
@@ -463,6 +490,8 @@ export class V3AgentRunner {
         contextSummary: lastContextSummary || undefined,
         modelUsed: turn.selectedModel,
         provider: turn.provider || generatorModelConfig?.provider || AiModelConfigService.getActiveProvider(tenantId),
+        sendPricelistImage: guard.isEscalated ? false : pricelistVerdict.send,
+        forcePricelistResend: pricelistVerdict.forceResend,
       };
     } catch (err: any) {
       // Outage LLM total (Fase B): TANPA balasan generik — eskalasi sunyi.

@@ -62,6 +62,32 @@ import { ReservationDetailModal } from '../../components/modals/ReservationDetai
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { useAuth } from '../../contexts/AuthContext';
 
+/**
+ * Baca deep-link tanggal dari query `?date=YYYY-MM-DD` (mis. dari notifikasi
+ * tumpang jadwal). Mengembalikan Date lokal atau null bila tak ada/tidak valid.
+ * Parsing pakai URLSearchParams + validasi angka (bukan regex hafalan).
+ */
+function readInitialDateFromQuery(): Date | null {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('date');
+    if (!raw) return null;
+    const parts = raw.split('-');
+    if (parts.length !== 3) return null;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const d = Number(parts[2]);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const parsed = new Date(y, m - 1, d);
+    if (isNaN(parsed.getTime())) return null;
+    // Tolak overflow (mis. 2026-02-31 → 3 Mar) agar hanya tanggal valid diterima.
+    if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export const Reservations: React.FC = () => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
@@ -90,9 +116,11 @@ export const Reservations: React.FC = () => {
   const [submittingLocation, setSubmittingLocation] = useState(false);
   const adminHouseFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Calendar View State
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('table');
+  // Calendar View State — deep-link `?date=YYYY-MM-DD` (notifikasi tumpang jadwal)
+  // membuka mode "day" pada tanggal terkait; tanpa param → hari ini, mode tabel.
+  const deepLinkDate = useMemo(() => readInitialDateFromQuery(), []);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => deepLinkDate ?? new Date());
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => (deepLinkDate ? 'day' : 'table'));
   const [filterState, setFilterState] = useState<CalendarFilterState>({
     searchQuery: '',
     category: 'all',

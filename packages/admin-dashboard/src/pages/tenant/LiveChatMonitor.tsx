@@ -67,6 +67,7 @@ import {
   Copy,
   BellOff,
   MessageSquareDot,
+  Radar,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -436,6 +437,8 @@ export const LiveChatMonitor: React.FC = () => {
   // Widget pemantauan perjalanan terapis (OTW) untuk CS.
   const [dispatchTrip, setDispatchTrip] = useState<DispatchTripData | null>(null);
   const [dispatchLoading, setDispatchLoading] = useState(false);
+  // Fase 3 (plan 2026-10-02): drawer radar OTW untuk laptop <1280px.
+  const [dispatchDrawerOpen, setDispatchDrawerOpen] = useState(false);
   const loadDispatchTripRef = useRef<((reservationId: string) => void) | null>(null);
 
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
@@ -3381,6 +3384,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   };
 
+  // Fase 3 (plan 2026-10-02): sisipkan draf posisi Bidan dari widget dispatch ke
+  // kotak pesan. SENGAJA tidak mengirim — CS menekan Kirim manual (human-in-the-loop).
+  const handleInsertDispatchDraft = (text: string) => {
+    const draft = (text || '').trim();
+    if (!draft) return;
+    composerRef.current?.setText(draft);
+    replyTextRef.current = draft;
+    setHasReplyText(true);
+    if (selectedIdRef.current) {
+      saveConversationDraft(selectedIdRef.current, draft);
+    }
+    setDispatchDrawerOpen(false);
+    toast('Draf posisi Bidan disisipkan. Tekan Kirim untuk mengirim.', 'info');
+  };
+
   const handleGenerateAndInsertInvoice = async (resItem: any) => {
     let currentServices = clinicServices;
     if (currentServices.length === 0) {
@@ -4713,6 +4731,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                     {/* Header actions: In-chat search + Unread toggle + Bot Release/Takeover */}
                     <div className="shrink-0 flex items-center gap-1.5">
+                      {dispatchTrip && !dispatchTrip.arrivedAt && !['completed', 'cancelled', 'rejected'].includes(String(dispatchTrip.status || '')) && (
+                        <button
+                          type="button"
+                          onClick={() => setDispatchDrawerOpen(true)}
+                          title="Buka Radar OTW Bidan"
+                          className="xl:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-xs font-bold shadow-2xs active:scale-95 transition"
+                        >
+                          <Radar size={14} />
+                          <span className="hidden sm:inline">Radar OTW</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleToggleReadStatus(selectedChat)}
@@ -5737,10 +5766,56 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       toast('Nomor Bidan belum tersedia.', 'info');
                     }
                   }}
+                  onInsertText={handleInsertDispatchDraft}
                 />
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Fase 3 (plan 2026-10-02): Drawer Radar OTW untuk laptop <1280px. Menggunakan
+          widget yang SAMA; hanya wadah yang berbeda agar tak ada duplikasi logika. */}
+      {dispatchDrawerOpen && dispatchTrip && (
+        <div
+          data-modal-active="true"
+          className="fixed inset-0 z-50 flex justify-end bg-black/40 xl:hidden"
+          onClick={() => setDispatchDrawerOpen(false)}
+        >
+          <div
+            className="h-full w-full max-w-sm bg-[#f8fafc] shadow-2xl p-3 overflow-y-auto animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-sm font-bold text-[#111b21] flex items-center gap-1.5">
+                <Radar size={16} className="text-[#008069]" /> Radar OTW Bidan
+              </span>
+              <button
+                type="button"
+                onClick={() => setDispatchDrawerOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[#e9edef] text-[#54656f]"
+                aria-label="Tutup radar OTW"
+              >
+                ✕
+              </button>
+            </div>
+            <LiveChatDispatchWidget
+              data={dispatchTrip}
+              loading={dispatchLoading}
+              staffName={dispatchTrip.staffName || null}
+              onRefresh={() => {
+                if (dispatchReservationId) loadDispatchTrip(dispatchReservationId);
+              }}
+              onContactStaff={() => {
+                if (dispatchTrip.staffPhone) {
+                  window.location.href = `tel:${dispatchTrip.staffPhone}`;
+                } else {
+                  toast('Nomor Bidan belum tersedia.', 'info');
+                }
+              }}
+              onInsertText={handleInsertDispatchDraft}
+            />
+          </div>
         </div>
       )}
 

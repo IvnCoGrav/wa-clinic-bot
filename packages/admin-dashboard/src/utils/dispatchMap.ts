@@ -194,6 +194,86 @@ export function tileUrl(t: TileRef): string {
   return `https://tile.openstreetmap.org/${t.z}/${t.x}/${t.y}.png`;
 }
 
+/** Marker generik untuk peta armada (banyak titik, tanpa makna therapist/customer). */
+export interface FleetMarker {
+  x: number;
+  y: number;
+  /** Indeks titik pada input — menghubungkan marker ke data bisnis. */
+  index: number;
+}
+
+export interface FleetView {
+  zoom: number;
+  width: number;
+  height: number;
+  center: LatLng;
+  tiles: TileRef[];
+  markers: FleetMarker[];
+}
+
+/**
+ * Proyeksi N titik pasien untuk peta sebaran armada harian. Murni (tanpa
+ * DOM/React/network) sehingga dapat diuji adversarial. Titik invalid dibuang.
+ */
+export function computeFleetView(
+  points: LatLng[],
+  width: number,
+  height: number
+): FleetView {
+  const valid: Array<{ point: LatLng; index: number }> = [];
+  points.forEach((p, index) => {
+    if (isValidLatLng(p)) valid.push({ point: p, index });
+  });
+
+  if (valid.length === 0 || width <= 0 || height <= 0) {
+    return { zoom: 13, width, height, center: DEFAULT_CENTER, tiles: [], markers: [] };
+  }
+
+  const zoom = chooseZoom(valid.map((v) => v.point), width, height);
+  const xs = valid.map((v) => lngToWorldX(v.point.lng, zoom));
+  const ys = valid.map((v) => latToWorldY(v.point.lat, zoom));
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const left = centerX - width / 2;
+  const top = centerY - height / 2;
+
+  const maxIndex = Math.pow(2, zoom) - 1;
+  const minTx = Math.floor(left / TILE_SIZE);
+  const maxTx = Math.floor((left + width) / TILE_SIZE);
+  const minTy = Math.floor(top / TILE_SIZE);
+  const maxTy = Math.floor((top + height) / TILE_SIZE);
+
+  const tiles: TileRef[] = [];
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    if (ty < 0 || ty > maxIndex) continue;
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      const wrappedX = ((tx % (maxIndex + 1)) + (maxIndex + 1)) % (maxIndex + 1);
+      tiles.push({
+        x: wrappedX,
+        y: ty,
+        z: zoom,
+        left: tx * TILE_SIZE - left,
+        top: ty * TILE_SIZE - top,
+      });
+    }
+  }
+
+  const markers: FleetMarker[] = valid.map((v) => ({
+    x: lngToWorldX(v.point.lng, zoom) - left,
+    y: latToWorldY(v.point.lat, zoom) - top,
+    index: v.index,
+  }));
+
+  return {
+    zoom,
+    width,
+    height,
+    center: { lat: worldYToLat(centerY, zoom), lng: worldXToLng(centerX, zoom) },
+    tiles,
+    markers,
+  };
+}
+
 /**
  * Marker Bidan boleh berdenyut hanya bila titik Bidan ADA dan data live (segar).
  * Data basi → titik diam (konsisten dengan dot status widget).

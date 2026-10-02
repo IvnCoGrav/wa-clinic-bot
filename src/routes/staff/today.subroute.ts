@@ -459,6 +459,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           etaMinutes,
           arrivalWib,
           departMapsUrl,
+          departLat,
+          departLng,
         });
       } else {
         // Jaring pengaman: teks kustom dari modal terapis tetap wajib bertanda tangan.
@@ -487,6 +489,37 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           ...(nextStatus ? { status: nextStatus } : {}),
         },
       });
+
+      // Fase 1 (plan 2026-10-02): sambungkan titik keberangkatan Bidan ke memori
+      // pemantauan CS. Tanpa ini, peta/motor & sisa km di widget CS kosong.
+      // Fail-open: kegagalan tracking TIDAK boleh menggagalkan pengiriman WA OTW.
+      if (departLat != null && departLng != null) {
+        try {
+          const departRecord = staffTripTrackingService.recordTripPing(
+            tenantId,
+            id,
+            staffId,
+            { lat: departLat, lng: departLng, accuracy: Number.isFinite(Number(body.accuracy)) ? Number(body.accuracy) : null },
+            { arrivalStreak: 0, delayLevel: 'none' }
+          );
+          getLiveChatHub()
+            .publish({
+              type: 'staff.telemetry_updated',
+              tenantId,
+              payload: {
+                reservationId: id,
+                staffId,
+                lat: departRecord.lat,
+                lng: departRecord.lng,
+                areaName: departRecord.areaName,
+                updatedAt: departRecord.updatedAt,
+              },
+            })
+            .catch(() => {});
+        } catch (tripErr: any) {
+          console.warn('[STAFF OTW] trip ping skipped:', tripErr?.message || tripErr);
+        }
+      }
 
       // Audit trail
       await auditService.logAdminAction({

@@ -51,6 +51,7 @@ import {
   BellRing,
   QrCode,
   Copy,
+  Home,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import {
@@ -70,6 +71,7 @@ import { compressImageFile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
+import { formatClinicalAge } from '../../utils/clinicalAge';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 import {
@@ -1502,12 +1504,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Kontrol keberangkatan saat Bidan klik "Navigasi" (plan 2026-09-30, NAVIGASI_DEPART_CONTROL_REVISI_PLAN).
-  // Tracking GPS kontinu DI-DEPRECATE (tidak andal di PWA). Alur:
+  // Kontrol keberangkatan saat Bidan menekan tombol utama "MULAI JALAN"
+  // (plan 2026-10-02 — unifikasi 1-tap). Tracking GPS kontinu DI-DEPRECATE
+  // (tidak andal di PWA). Alur:
   //  1. Buka Google Maps SINKRON (selalu; anti popup-blocker).
-  //  2. Di luar jendela ±60 mnt dari jam booking → mode intip (tanpa modal/pesan).
-  //  3. Dalam jendela → GPS sekali-tembak → hitung ETA (Haversine) → modal konfirmasi
-  //     menampilkan estimasi tiba. Bila disetujui → kirim OTW + status "dalam perjalanan".
+  //  2. Di luar jendela ±60 mnt dari jam booking → mode intip (tanpa pesan).
+  //  3. Dalam jendela → GPS sekali-tembak → hitung ETA (Haversine) → kirim OTW
+  //     + status "dalam perjalanan" LANGSUNG (tanpa konfirmasi sekunder di jalan).
   const handleStartNavigation = async (task: StaffTask, navUrl: string, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -1533,14 +1536,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     let arrivalWib: string | null = null;
     let departLat: number | null = null;
     let departLng: number | null = null;
-    let departMapsUrl: string | null = null;
     const destLat = task.address?.lat;
     const destLng = task.address?.lng;
     try {
       const pos = await getCurrentDeviceLocation(10000);
       departLat = pos.lat;
       departLng = pos.lng;
-      departMapsUrl = `https://maps.google.com/?q=${pos.lat},${pos.lng}`;
       if (destLat != null && destLng != null) {
         const km = calculateHaversineKm(pos.lat, pos.lng, destLat, destLng);
         etaMinutes = estimateTravelMinutesKm(km);
@@ -1550,17 +1551,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       // GPS ditolak/tidak tersedia → OTW tetap bisa dikirim tanpa blok ETA.
     }
 
-    const patientName = task.customerName || 'Bunda';
-    const etaLine = etaMinutes != null && arrivalWib ? `\nEstimasi tiba ±${arrivalWib} WIB (~${etaMinutes} menit).` : '';
-    const yes = await confirm({
-      title: 'Kirim Pesan OTW?',
-      message: `Kirim pesan OTW (sedang menuju lokasi) ke WhatsApp ${patientName}?${etaLine}`,
-      confirmText: 'Kirim OTW',
-      cancelText: 'Hanya Lihat Peta',
-    });
-    if (!yes) return;
-
-    // 3. Kirim OTW + status "dalam perjalanan" (fire-and-forget).
+    // 3. Kirim OTW + status "dalam perjalanan" (fire-and-forget, dengan toast bila gagal).
     (async () => {
       try {
         const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
@@ -1581,12 +1572,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           setTasks((prev) => prev.map(updateOtw));
           setUpcomingTasks((prev) => prev.map(updateOtw));
           setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+          toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'} 🛵`, 'success');
         } else {
           toast(`Gagal kirim OTW: ${res?.error || 'kesalahan tidak diketahui'}`, 'error');
         }
       } catch (err) {
-        // Silent: guard 2 jam / tanpa percakapan cukup ditelan.
-        console.warn('[NAV-OTW] OTW send skipped:', (err as any)?.message || err);
+        // Guard 2 jam / tanpa percakapan / offline → beri tahu, bukan diam.
+        toast(`Gagal kirim OTW: ${(err as any)?.message || 'periksa koneksi'}`, 'error');
       }
     })();
   };
@@ -2885,21 +2877,46 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
                         </div>
 
-                        {/* Data Pasien Bayi / Anak */}
+                        {/* Kotak Patokan Rumah (plan 2026-10-02): kontras tinggi agar
+                            Bidan langsung hafal ciri pagar/rumah sebelum mengetuk pintu. */}
+                        {(task.address.landmark || task.address.addressDetail) && (
+                          <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-900">
+                            <Home size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">
+                                Patokan Rumah
+                              </p>
+                              {task.address.landmark && (
+                                <p className="text-[12px] font-bold leading-snug">{task.address.landmark}</p>
+                              )}
+                              {task.address.addressDetail && (
+                                <p className="text-[11px] text-amber-800 leading-snug">{task.address.addressDetail}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Data Pasien Bayi / Anak (plan 2026-10-02 — quick-peek klinis:
+                            usia terhitung presisi dari birthDate bila tersedia, fallback
+                            ke teks usia mentah. Bidan langsung hafal sebelum mengetuk pintu.) */}
                         {task.children && task.children.length > 0 && (
                           <div className="mb-2 flex flex-wrap gap-1.5">
-                            {task.children.map((child, i) => (
-                              <span
-                                key={i}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-[11px] font-medium border border-[#00a884]/20"
-                              >
-                                <Baby size={11} />
-                                <span>{formatPatientName(child.name)}</span>
-                                {child.rawAgeText && (
-                                  <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
-                                )}
-                              </span>
-                            ))}
+                            {task.children.map((child, i) => {
+                              const computedAge = child.birthDate ? formatClinicalAge(child.birthDate) : '';
+                              const ageLabel = computedAge || (child.rawAgeText ? formatChildAgeText(child.rawAgeText) : '');
+                              return (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-[11px] font-medium border border-[#00a884]/20"
+                                >
+                                  <Baby size={11} />
+                                  <span>{formatPatientName(child.name)}</span>
+                                  {ageLabel && (
+                                    <span className="text-[#667781]">({ageLabel})</span>
+                                  )}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -2929,9 +2946,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
 
                           {isLunas ? (
-                            <span className="text-[10px] font-bold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-full border border-[#00a884]/30 flex items-center gap-1">
-                              <CheckCircle2 size={11} />
-                              <span>Lunas</span>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1">
+                              <CheckCircle2 size={12} />
+                              <span>SUDAH LUNAS — JANGAN TAGIH</span>
                             </span>
                           ) : (
                             <div className="flex items-center gap-1.5">
@@ -2950,22 +2967,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   e.stopPropagation();
                                   setPaymentModalTask(task);
                                 }}
-                                className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-0.5 rounded-full border border-amber-300 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                                className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-rose-600 hover:bg-rose-700 px-2.5 py-1 rounded-full border border-rose-700 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
                                 title="Klik untuk mencatat pembayaran transaksi ini"
                               >
-                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                <CreditCard size={11} className="text-amber-700" />
-                                <span>Tagih di Tempat</span>
+                                <CreditCard size={12} />
+                                <span>TAGIH TUNAI: {formatRupiah(task.pricing.totalFee)}</span>
                               </button>
                             </div>
                           )}
                         </div>
 
-                        {/* Quick Action Buttons: Chat, Navigasi, Infokan OTW */}
+                        {/* Quick Action Buttons (plan 2026-10-02 — unifikasi 1-tap):
+                            Chat + aksi utama tunggal. Tombol "Navigasi" & "Infokan OTW"
+                            digabung menjadi [ MULAI JALAN ] agar Bidan tak bingung. */}
                         {(() => {
                           const isChatHidden = (task.status === 'completed' && !isChatWindowOpen(task)) || task.chatWindow?.reason === 'CLOSED_AFTER_COMPLETE';
+                          const navUrl = task.navigationUrl || task.mapsUrl;
+                          const isTerminal = task.status === 'completed';
+                          const isArrived = !isTerminal && (task.arrivedAt || isScheduleOverdue(task));
+                          const isOtw = !isTerminal && !isArrived && !!task.otwSentAt;
+                          const colsClass = isChatHidden
+                            ? (isOtw ? 'grid-cols-2' : 'grid-cols-1')
+                            : (isOtw ? 'grid-cols-3' : 'grid-cols-2');
                           return (
-                            <div className={`grid ${isChatHidden ? 'grid-cols-2' : 'grid-cols-3'} gap-2 pt-2 mt-1`}>
+                            <div className={`grid ${colsClass} gap-2 pt-2 mt-1`}>
                               {!isChatHidden && (
                                 isChatWindowOpen(task) ? (
                                   <button
@@ -2991,101 +3016,103 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 )
                               )}
 
-                          {task.navigationUrl || task.mapsUrl ? (
-                            <button
-                              type="button"
-                              onClick={(e) => handleStartNavigation(task, task.navigationUrl || task.mapsUrl || '#', e)}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
-                              title="Buka Peta Navigasi Google Maps & Mulai Perjalanan"
-                            >
-                              <Navigation size={15} />
-                              <span>Navigasi</span>
-                            </button>
-                          ) : (
-                            <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
-                              Tanpa Peta
-                            </div>
-                          )}
+                              {/* Mode sudah OTW: tombol Navigasi (buka peta ulang) tetap tersedia */}
+                              {isOtw && (
+                                navUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleStartNavigation(task, navUrl, e)}
+                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
+                                    title="Buka ulang peta navigasi"
+                                  >
+                                    <Navigation size={15} />
+                                    <span>Navigasi</span>
+                                  </button>
+                                ) : (
+                                  <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
+                                    Tanpa Peta
+                                  </div>
+                                )
+                              )}
 
-                          {/* 3-State Operational Action: Infokan OTW -> Sudah Sampai -> Selesai Tindakan */}
-                          {/* Anti-OTW Trap: jika jadwal sudah terlewat (overdue), bypass langsung ke tombol Selesai */}
-                          {task.status === 'completed' ? (
-                            <div className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
-                              <CheckCircle2 size={15} />
-                              <span>Selesai</span>
+                              {/* Aksi operasional 3-state */}
+                              {isTerminal || isArrived ? (
+                                <button
+                                  type="button"
+                                  disabled={completingVisitId === task.reservationId || isTerminal}
+                                  onClick={(e) => handleCompleteVisit(task, e)}
+                                  className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-60 ${
+                                    isTerminal
+                                      ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                                      : 'text-white bg-[#008069] hover:bg-[#00a884]' + (completingVisitId === task.reservationId ? '' : ' animate-action-pulse')
+                                  }`}
+                                  title={isTerminal ? 'Kunjungan telah selesai' : 'Tandai tindakan selesai dan kunjungan tuntas'}
+                                >
+                                  {completingVisitId === task.reservationId ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 size={15} />
+                                      <span>Selesai</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : isOtw ? (
+                                <button
+                                  type="button"
+                                  disabled={sendingArrivalId === task.reservationId}
+                                  onClick={(e) => handleRecordArrival(task, e)}
+                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                                  title="Infokan ke pasien dan klinik bahwa Anda sudah sampai di lokasi"
+                                >
+                                  {sendingArrivalId === task.reservationId ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  ) : (
+                                    <>
+                                      <MapPin size={15} />
+                                      <span>Sampai</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                /* Default: SATU tombol besar — buka peta + kirim OTW sekaligus */
+                                <button
+                                  type="button"
+                                  disabled={isSendingOtw}
+                                  onClick={(e) => {
+                                    if (navUrl) {
+                                      handleStartNavigation(task, navUrl, e);
+                                    } else if (!isOtwAllowed(task)) {
+                                      e.stopPropagation();
+                                      toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
+                                    } else {
+                                      handleSendOtw(task, e);
+                                    }
+                                  }}
+                                  className={`flex items-center justify-center space-x-1.5 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
+                                    navUrl || isOtwAllowed(task)
+                                      ? 'text-white bg-[#008069] hover:bg-[#00a884]'
+                                      : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
+                                  }`}
+                                  title={
+                                    navUrl
+                                      ? 'Buka peta navigasi & otomatis infokan OTW ke pasien'
+                                      : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
+                                  }
+                                >
+                                  {isSendingOtw ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  ) : (
+                                    <>
+                                      <Navigation2 size={15} />
+                                      <span>MULAI JALAN (OTW &amp; PETA)</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </div>
-                          ) : task.arrivedAt || isScheduleOverdue(task) ? (
-                            <button
-                              type="button"
-                              disabled={completingVisitId === task.reservationId}
-                              onClick={(e) => handleCompleteVisit(task, e)}
-                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50 ${
-                                completingVisitId === task.reservationId ? '' : 'animate-action-pulse'
-                              }`}
-                              title="Tandai tindakan selesai dan kunjungan tuntas"
-                            >
-                              {completingVisitId === task.reservationId ? (
-                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                              ) : (
-                                <>
-                                  <CheckCircle2 size={15} />
-                                  <span>Selesai</span>
-                                </>
-                              )}
-                            </button>
-                          ) : task.otwSentAt ? (
-                            <button
-                              type="button"
-                              disabled={sendingArrivalId === task.reservationId}
-                              onClick={(e) => handleRecordArrival(task, e)}
-                              className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
-                              title="Infokan ke pasien dan klinik bahwa Anda sudah sampai di lokasi"
-                            >
-                              {sendingArrivalId === task.reservationId ? (
-                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                              ) : (
-                                <>
-                                  <MapPin size={15} />
-                                  <span>Sampai</span>
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isSendingOtw}
-                              onClick={(e) => {
-                                if (!isOtwAllowed(task)) {
-                                  e.stopPropagation();
-                                  toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
-                                  return;
-                                }
-                                handleSendOtw(task, e);
-                              }}
-                              className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
-                                isOtwAllowed(task)
-                                  ? 'text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30'
-                                  : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
-                              }`}
-                              title={
-                                isOtwAllowed(task)
-                                  ? 'Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi'
-                                  : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
-                              }
-                            >
-                              {isSendingOtw ? (
-                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
-                              ) : (
-                                <>
-                                  <Navigation2 size={15} />
-                                  <span>Infokan OTW</span>
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
+                          );
+                        })()}
 
                         {/* Bar Terapis Penanggung Jawab & Delegasi (Khusus Supervisor / Mode Tim) */}
                         {isSupervisor && (
@@ -3235,23 +3262,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                              <MapPin size={16} />
                            )}
                          </button>
-                       ) : (
-                         <button
-                           onClick={() => {
-                             if (!isOtwAllowed(selectedTask)) {
-                               toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
-                               return;
-                             }
-                             handleSendOtw(selectedTask);
-                           }}
-                           disabled={sendingOtwId === selectedTask.reservationId}
-                           className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
-                            isOtwAllowed(selectedTask)
-                              ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border-[#00a884]/30'
-                              : 'bg-[#f0f2f5] text-[#667781] border-[#e9edef]'
-                          }`}
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const nav = selectedTask.navigationUrl || selectedTask.mapsUrl;
+                              if (nav) {
+                                handleStartNavigation(selectedTask, nav);
+                                return;
+                              }
+                              if (!isOtwAllowed(selectedTask)) {
+                                toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
+                                return;
+                              }
+                              handleSendOtw(selectedTask);
+                            }}
+                            disabled={sendingOtwId === selectedTask.reservationId}
+                            className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
+                             isOtwAllowed(selectedTask) || selectedTask.navigationUrl || selectedTask.mapsUrl
+                               ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border-[#00a884]/30'
+                               : 'bg-[#f0f2f5] text-[#667781] border-[#e9edef]'
+                           }`}
                           title={
-                            isOtwAllowed(selectedTask)
+                            selectedTask.navigationUrl || selectedTask.mapsUrl
+                              ? 'Buka peta navigasi & otomatis infokan OTW'
+                              : isOtwAllowed(selectedTask)
                               ? 'Kirim info menuju lokasi (OTW) ke WhatsApp pasien'
                               : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`
                           }

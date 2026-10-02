@@ -21,8 +21,16 @@
 import { haversineKm, findNearestSubdistrict } from '../utils/gazetteer';
 import { POPULAR_LANDMARKS } from '../config/landmarks';
 
-/** TTL sesi trip (detik). 10 menit — selaras dengan auto-expiry anti-lupa. */
-export const TRIP_PING_TTL_SEC = 600;
+/**
+ * TTL sesi trip (detik). 2 jam (plan 2026-10-02 — sebelumnya 10 menit).
+ *
+ * Catatan penting: TTL panjang HANYA mengamankan agar ping terakhir tidak hilang
+ * saat perjalanan >10 menit. Kontrak "live" tetap dibaca dari `lastUpdateSec`
+ * (lihat `LiveChatDispatchWidget.isFresh`), bukan dari ada-tidaknya record.
+ * Sesi in-memory hilang saat restart/multi-instans — calon Redis `SETEX`
+ * (lihat `redisKey`). Dicatat di docs/KNOWN_ISSUES.md.
+ */
+export const TRIP_PING_TTL_SEC = 7200;
 
 /** #162e: grace setelah jadwal+durasi lewat sebelum sesi trip auto-close (1 jam). */
 export const TRIP_AUTO_CLOSE_GRACE_MS = 60 * 60 * 1000;

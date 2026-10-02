@@ -4,6 +4,84 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Slot Overlap A5 v2: Triase Fondasional + Dedup Persisten (fondasional)
+
+- **Konteks:** audit fixing plan A5 (slot tumpang jadwal) menemukan 4 cacat
+  arsitektural: partisi kaku `dayWib__staffId` (2 pesanan unassigned jam sama
+  dilabeli "bentrok" palsu), blind spot duplikasi pasien lintas Bidan, spam alert
+  tiap 3 menit (bypass throttle `DAILY_OPS_REPORT`), format pesan tanpa tanggal/nama.
+  Revisi v2 menyentuh akar di Data/State/Dedup, bukan tambahan larangan prompt.
+- **Changed — triase 4 kategori** (`src/services/slot-overlap.service.ts`):
+  `STAFF_DOUBLE_BOOKED` (CRITICAL, 1 Bidan >1 pasien), `CUSTOMER_DOUBLE_BOOKED`
+  (WARNING, 1 pasien >1 pesanan lintas Bidan — menutup blind spot),
+  `UNASSIGNED_OVERCAPACITY` (CRITICAL, peak-concurrent sweep-line >
+  `Staff.active=true`), `UNASSIGNED_PENDING_ACTION` (INFO, kuota cukup).
+- **Changed — kuota dari DB** (`prisma.staff.count({ active: true })`, sumber
+  tunggal, bukan angka hardcode); DB error → audit kapasitas dilewati (fail-safe).
+- **Fixed — dedup alarm persisten** via `AdminNotificationLog.idempotency_key`
+  (prefix `slot_overlap:v1:<fingerprint>:<severity>:`), cooldown 60m/240m/720m
+  per CRITICAL/WARNING/INFO; Map memori hanya fallback offline. Menutup
+  bypass throttle tanpa mengubah throttle global.
+- **Fixed — `tenantId` keluaran** kini diisi tenant pemanggil (sebelumnya `''`).
+- **Changed — pesan actionable:** tanggal WIB panjang (`Intl` id-ID), jam, kategori,
+  daftar nama pasien dari DB, link `ADMIN_DASHBOARD_URL/...` (tanpa URL hardcode).
+- **Changed — `pending`** dikecualikan dari audit kapasitas/Bidan (selaras #173e),
+  tetap dihitung untuk duplikasi pasien.
+- **Changed — interval cron** `SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES` default 3→15.
+- **Added — deep-link kalender:** `packages/admin-dashboard/.../Reservations.tsx`
+  membaca `?date=YYYY-MM-DD` (`URLSearchParams` + validasi overflow) → buka mode
+  `day` pada tanggal tumpang jadwal; Web Push `url` diselaraskan ke
+  `/admin/reservations?date=<hari>`.
+- **Tests:** `tests/unit/slot-overlap-sweep.test.ts` (19: triase, overcapacity,
+  dedup, tenantId, format, deep-link URL). `tsc` + dashboard build exit 0; suite
+  penuh 4416 pass (7 gagal pra-eksisting, lihat #182f).
+- **Sisa (OPEN):** staf cuti belum dimodelkan; forensik log prod #183.
+
+#### 2026-10-02 - Pricelist: Pemulihan Pengiriman Gambar Otomatis V3 (fondasional)
+
+- **Konteks:** eksekutor gambar pricelist (STEP 1 `machine.ts`) terhapus pada housekeeping
+  `b708c2fc`, dan sejak itu fitur mati (executor zombie tanpa setter). Diperbaiki dengan
+  gerbang keputusan deterministik V3, bukan regex hafalan kalimat.
+- **Added — intent semantik `ask_pricelist_image`:** `extractFastIntents`
+  (`src/v3/agent/persona.ts`) mengenali permintaan FILE katalog/pricelist via token
+  data-driven (`hasAnyWord`/`includes`), terpisah dari `ask_price` (nominal). Mendukung
+  multi-frasa ("pricelist ga masuk kak", "katalog harganya ada?", "menu treatmentnya").
+- **Added — modul gerbang murni `evaluatePricelistTrigger`**
+  (`src/v3/agent/pipeline/pricelist-gate.ts`): zero LLM, zero regex. Trigger A post-delivery
+  (`calculate_delivery.success && !isOutOfCoverage` + kuota `pricelist_sent=false`), Trigger B
+  permintaan eksplisit (force-resend).
+- **Restored — `resolvePricelistImageTarget`** (`pricelist-config.service.ts`): resolusi
+  provider-aware (WAHA path lokal / WABA URL publik via `mediaService`), deteksi URL dengan
+  `URL` API standar.
+- **Wiring:** `AgentRunnerOutput.sendPricelistImage`/`forcePricelistResend` dihitung dari
+  `preExtractedIntents` + `executedTools` + status customer; eksekusi fisik di `machine.ts`
+  meniru `live-chat.service` (cut-off, sandbox guard, retry 2x, alert, log DB), dengan
+  rate-limit force-resend 10 menit + brand tenant-aware `getBrandIdentityAsync`.
+- **Tests:** `tests/unit/pricelist-trigger.test.ts` (11, adversarial multi-frasa +
+  out-of-coverage + resolver WAHA/WABA). `tsc` exit 0; `state-machine.test.ts` hijau.
+
+#### 2026-10-02 - Copilot Admin: Pintu Penolakan, Analisa Chat Lebih Luas, Gaya To-The-Point (internal)
+
+- **Konteks:** admin melaporkan AI Copilot "kaku, tidak menjawab maksud" (contoh nyata:
+  "siapa yang saya tolak untuk besok" & "siapa yang besok ada omongan jadwal tapi belum
+  masuk sistem"). Audit read-only menemukan 3 akar: menu status tool tak memuat `rejected`,
+  jendela chat `query_stalled_inquiries` sempit (5 pesan), dan gaya ringkasan tak punya tuas
+  tenant-aware + kontrak link salah. Rencana Hermes-as-pengganti DITOLAK (duplikasi tool,
+  hilang grounding/deadline/audit); eksekusi internal-only. Detail: KNOWN_ISSUES #182.
+- **Fixed — pintu penolakan:** `RESERVATION_STATUS_VALUES` + deskripsi `status`
+  `query_reservations_by_filter` (`src/services/copilot/copilot-tools.ts`) kini memuat
+  `rejected` & `en_route`. Router LLM dapat menjawab "siapa yang saya tolak".
+- **Improved — analisa chat:** `query_stalled_inquiries` mengambil 8 pesan terakhir (dari 5)
+  dan mengekspos `offeredTime` (jam yang pernah ditawarkan admin, reuse `extractTimeOfDayHint`).
+  `buildDegradedAnswer` menampilkan `offeredTime` + `waitingMinutes` manusiawi.
+- **Improved — gaya tenant-aware:** fungsi murni `buildSummarizePrompt` + `formatWaitTime` +
+  `loadCopilotStyle` (`src/services/copilot/copilot.service.ts`) membaca nada dari
+  `Tenant.settings.copilot.styleTone` (tanpa migrasi). Kontrak link dikoreksi ke kanonis
+  `/admin/live-chat?conversationId=` (renderer `AdminCopilotPanel` hanya mengaktifkan kanonis).
+  Angka SOP tidak dihardcode ke prompt.
+- **Tests:** `tests/unit/copilot-fixing.test.ts` +11 (kontrak status, `offeredTime`,
+  `buildSummarizePrompt`/`formatWaitTime`). `npm run build` exit 0.
+
 #### 2026-10-01 - Navigasi: Gerbang Pra-Keberangkatan Sadar Akurasi (Insiden Bidan Tersasar)
 
 - **Konteks:** insiden 2026-09-30 — Bidan Thabita tersasar karena titik koordinat

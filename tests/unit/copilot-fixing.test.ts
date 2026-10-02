@@ -30,7 +30,7 @@ vi.mock('../../src/integrations/llm/llm-gateway', () => ({
   getLlmEndpointConfig: () => ({ model: 'test', fallbackModel: 'test', baseUrl: 'http://x', apiKey: 'k', timeoutMs: 1000 }),
 }));
 
-import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer, buildDegradedAnswer, withDeadline, isCopilotDeadlineError } from '../../src/services/copilot/copilot.service';
+import { copilotService, buildRouterPrompt, stripInternalIds, sanitizeCopilotAnswer, buildDegradedAnswer, buildSummarizePrompt, formatWaitTime, withDeadline, isCopilotDeadlineError } from '../../src/services/copilot/copilot.service';
 import {
   resolveReservationDateFilter,
   isValidIsoDate,
@@ -892,5 +892,118 @@ describe('Fase budget — wall-clock guard & degradasi jujur (anti "Gagal menghu
     expect(res.success).toBe(true);
     expect(res.answer).toBe('Ringkasan rapi.');
     expect(res.llmCalls).toBe(3);
+  });
+});
+
+describe('Fase 1 — pintu penolakan (rejected) & kontrak status domain lengkap', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.reservationFindMany.mockResolvedValue([]);
+  });
+
+  it('kontrak status menu memuat SELURUH status domain (rejected & en_route)', () => {
+    const desc = getCopilotTool('query_reservations_by_filter')!.parameters.status.description;
+    // Akar: menu sempit bikin router LLM tak pernah bisa memilih status rejected
+    // ("siapa yang saya tolak") walau data & filter DB mampu.
+    expect(desc).toContain('rejected');
+    expect(desc).toContain('en_route');
+    expect(desc).not.toContain('confirmed | pending | hold | completed | cancelled.');
+  });
+
+  it('status rejected diteruskan apa adanya ke filter DB (tenant-scoped)', async () => {
+    await queryReservationsByFilter.run('tenant-a', { date: '2026-09-28', status: 'rejected' });
+    const call = h.reservationFindMany.mock.calls[0][0];
+    expect(call.where.status).toBe('rejected');
+    expect(call.where.tenant_id).toBe('tenant-a');
+  });
+
+  it('router semantik: "yang saya tolak besok" → status rejected diteruskan', async () => {
+    h.callChat
+      .mockResolvedValueOnce(
+        llmReply('{"tool":"query_reservations_by_filter","args":{"date":"2026-09-28","status":"rejected"}}')
+      )
+      .mockResolvedValueOnce(llmReply('{"tool":null,"args":{}}'));
+    const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'siapa yang saya tolak untuk besok?' });
+    expect(res.toolsUsed).toEqual(['query_reservations_by_filter']);
+    expect(h.reservationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: 'rejected', tenant_id: 'tenant-a' }) })
+    );
+  });
+});
+
+describe('Fase 2 — jendela analisa chat lebih lebar + offeredTime (anti-robot/amnesia)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.conversationFindMany.mockResolvedValue([]);
+  });
+
+  it('mengambil 8 pesan terakhir untuk analisa alur (bukan 5)', async () => {
+    await queryStalledInquiries.run('tenant-a', {});
+    const call = h.conversationFindMany.mock.calls[0][0];
+    expect(call.select.messages.take).toBe(8);
+  });
+
+  it('menyertakan offeredTime dari balasan admin (jam yang pernah ditawarkan)', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [] },
+        messages: [
+          { direction: 'INBOUND', content: 'besok bisa?', created_at: new Date(Date.now() - 60000) },
+          { direction: 'OUTBOUND', content: 'Untuk besok kami ada jam 10 pagi ya Bunda', created_at: new Date(Date.now() - 120000) },
+        ],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0].offeredTime).toBe('jam 10 pagi');
+  });
+
+  it('offeredTime null bila admin tidak pernah menyebut jam', async () => {
+    h.conversationFindMany.mockResolvedValue([
+      {
+        id: 'conv-2',
+        session_data: null,
+        last_discussed_treatment: null,
+        customer: { id: 'c1', name: 'Bunda Dewi', phone: '6285712345678', reservations: [] },
+        messages: [
+          { direction: 'INBOUND', content: 'besok bisa?', created_at: new Date(Date.now() - 60000) },
+          { direction: 'OUTBOUND', content: 'Baik Bunda kami cek dulu', created_at: new Date(Date.now() - 120000) },
+        ],
+      },
+    ]);
+    const res = await queryStalledInquiries.run('tenant-a', {});
+    expect(res.rows[0].offeredTime).toBeNull();
+  });
+});
+
+describe('Fase 3 — gaya to-the-point dari DB + kontrak link kanonis', () => {
+  it('formatWaitTime: menit & jam dalam bahasa manusia (bukan angka mentah)', () => {
+    expect(formatWaitTime(5)).toContain('5 menit');
+    expect(formatWaitTime(90)).toContain('1 jam');
+    expect(formatWaitTime(1500)).toContain('hari');
+  });
+
+  it('tanpa nada DB → fallback default; prompt tetap memuat kontrak link kanonis', () => {
+    const p = buildSummarizePrompt('siapa minta besok', '[]', null);
+    // Kontrak link WAJIB kanonis (bukan format hash lama /#/livechat).
+    expect(p).toContain('/admin/live-chat?conversationId=');
+    expect(p).not.toContain('/#/livechat');
+    // Aturan anti-halusinasi tetap ada sebagai lapis sekunder.
+    expect(p).toContain('DILARANG menambah nama');
+  });
+
+  it('nada DB disuntikkan ke prompt (tenant-aware), bukan hardcode', () => {
+    const tone = 'RINGKAS: sajikan 2 kelompok saja, tanpa pembuka.';
+    const p = buildSummarizePrompt('q', '[]', tone);
+    expect(p).toContain(tone);
+  });
+
+  it('SOP vaksin dijawab dari data DB, prompt tidak menghardcode angka jeda', () => {
+    const p = buildSummarizePrompt('anak habis vaksin boleh spa?', '[]', null);
+    // Anti-hardcode: angka SOP TIDAK boleh ditulis di prompt.
+    expect(p).not.toMatch(/\b[23]\s*hari\b/);
   });
 });
