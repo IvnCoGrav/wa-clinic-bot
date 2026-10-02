@@ -198,12 +198,15 @@ export function parseTreatmentsFromDetail(
       matchedService = findBySubstringFallback(cleanName, DEFAULT_CLINIC_SERVICES_FALLBACK);
     }
 
-    let price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
+    let price = matchedService ? (matchedService.promoPrice ?? (matchedService as any).price ?? matchedService.originalPrice ?? 0) : 0;
 
-    if (parts.length === 1 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0) {
-      price = initialPurchaseValue;
-    } else if (price === 0 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0 && i === 0) {
-      price = initialPurchaseValue;
+    // initialPurchaseValue hanya fallback bila katalog belum ready / tidak cocok (anti-race harga 0),
+    // bukan menimpa promo katalog yang valid.
+    const catalogIsLive = catalog && catalog.length > 0;
+    if (!matchedService || !catalogIsLive) {
+      if (typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0 && (i === 0 || parts.length === 1)) {
+        price = initialPurchaseValue;
+      }
     }
 
     const category = matchedService ? matchedService.category : 'BABY';

@@ -166,7 +166,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         const subtotal = parsedItems.reduce((s, t) => s + (Number(t.price) || 0), 0);
         setTreatmentPrice(subtotal);
       } else {
-        const fallbackName = stripBufferMetadata(initialData.treatmentName) || 'Pijat Bayi Ceria (Rileksasi)';
+        const fallbackName = stripBufferMetadata(initialData.treatmentName) || '';
         const rawFallback = (initialData as any).treatmentPrice;
         const fallbackPrice = rawFallback != null && String(rawFallback) !== '' ? Number(rawFallback) : 0;
         setSelectedTreatments([{

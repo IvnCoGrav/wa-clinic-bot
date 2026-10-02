@@ -30,9 +30,9 @@ export function classifyPatientEntity(params: {
 
   if (cat === 'MOMS') return 'MOM';
   if (gest) return 'MOM';
-  if (cat === 'BABY' || cat === 'KIDS') return hasName || Boolean(ageText) ? 'CHILD' : 'AMBIGUOUS';
-  if (cat === 'BOTH') return hasName && ageText ? 'AMBIGUOUS' : 'AMBIGUOUS';
-  return hasName && ageText ? 'CHILD' : 'AMBIGUOUS';
+  if (cat === 'BABY' || cat === 'KIDS') return hasName || Boolean(ageText && String(ageText).trim()) ? 'CHILD' : 'AMBIGUOUS';
+  if (cat === 'BOTH' || cat === 'BUNDLE') return hasName ? 'CHILD' : 'AMBIGUOUS';
+  return hasName ? 'CHILD' : 'AMBIGUOUS';
 }
 
 export interface ParsedReservation {
@@ -438,10 +438,12 @@ export function parseReservationText(rawText: string): ParseResult {
     bookingDate = tryParseIndonesianDate(fullDateToParse);
   }
 
-  // Normalisasi Nomor HP: hilangkan non-digit, 08xx -> 628xx
+  // Normalisasi Nomor HP tunggal (08xx/8xx/62xx -> 62xx).
   let normalizedPhone = phone.replace(/\D/g, '');
   if (normalizedPhone.startsWith('0')) {
     normalizedPhone = '62' + normalizedPhone.substring(1);
+  } else if (/^8\d{7,13}$/.test(normalizedPhone)) {
+    normalizedPhone = '62' + normalizedPhone;
   }
 
   // Ekstrak rincian pembayaran jika ada di dalam teks

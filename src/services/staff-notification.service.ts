@@ -188,7 +188,7 @@ export class StaffNotificationService {
       const purchaseValue = reservation.purchase_value || 0;
       const ongkir = cust?.ongkir || 0;
       const totalFee = purchaseValue || (ongkir > 0 ? ongkir : 0);
-      const isLunas = reservation.status === 'CONFIRMED' || reservation.status === 'COMPLETED';
+      const isLunas = Boolean((reservation as any).purchase_occurred_at);
       const paymentStatusLabel = isLunas ? 'LUNAS (Transfer)' : 'TAGIH DI TEMPAT (Cash/QRIS)';
 
       // 7. Catatan / Preferensi Pasien

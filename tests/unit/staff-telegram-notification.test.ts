@@ -45,6 +45,7 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
       treatment_category: 'Baby Spa',
       booking_date: new Date('2026-08-22T10:00:00.000+07:00'),
       status: 'CONFIRMED',
+      purchase_occurred_at: new Date('2026-08-22T08:00:00.000+07:00'),
       purchase_value: 185000,
       customer: {
         id: 'cust-1',

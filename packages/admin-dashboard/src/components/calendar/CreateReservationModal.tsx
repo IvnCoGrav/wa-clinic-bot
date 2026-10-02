@@ -44,7 +44,7 @@ import {
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
-import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
+import { getWibDateKey, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -702,10 +702,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
       setAssignedStaffId(res.assigned_staff_id || (res as any).assigned_staff?.id || '');
 
-       // Jika membuka hold untuk diedit/dilengkapi, default 'confirmed'
-       const validStatus = res.status === 'hold'
-         ? 'confirmed'
-         : (['pending', 'confirmed', 'completed', 'cancelled'].includes(res.status) ? res.status : 'confirmed');
+       // Hold tetap 'hold' saat dibuka; flip ke confirmed hanya saat Simpan ditekan.
+       const validStatus = (['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status) ? res.status : 'confirmed');
       setStatus(validStatus as any);
       const extractedNotes = res.notes || (() => {
         if (!res.raw_text) return '';
@@ -891,12 +889,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       prefillTreatmentMatchedRef.current = false;
       return;
     }
-    if (mode === 'edit') return;
 
-    // 1. Data anak dari chat (jika state masih kosong)
+    // 1. Data anak dari chat (jika state masih kosong) — berlaku juga untuk mode edit hold.
     if (initialBabies && initialBabies.length > 0 && babies.length === 0) {
-      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
+      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: (b as any).ageText || (b as any).age || '' })));
     }
+    if (mode === 'edit') return;
 
     // 2. Catatan awal dari chat
     if (initialNotes && !notes.trim()) {
@@ -918,7 +916,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   }, [
     isOpen,
-    mode,
     initialBabies,
     initialNotes,
     initialTreatmentCategory,
@@ -1395,7 +1392,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const buildCreatePayload = (force = false) => {
     let fullBookingIso: string | undefined = undefined;
     if (bookingDate && bookingTime) {
-      fullBookingIso = new Date(`${bookingDate}T${bookingTime}:00`).toISOString();
+      fullBookingIso = buildWibIso(bookingDate, bookingTime);
     }
     const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
     const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
@@ -1487,7 +1484,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     let fullBookingIso: string | undefined = undefined;
     if (bookingDate && bookingTime) {
-      fullBookingIso = new Date(`${bookingDate}T${bookingTime}:00`).toISOString();
+      fullBookingIso = buildWibIso(bookingDate, bookingTime);
     }
 
     // Serialize clean treatment string — hanya nama layanan + label total waktu (tanpa nama bayi/usia)

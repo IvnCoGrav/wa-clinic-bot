@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
+import { buildWibIso } from '../../utils/dateWib';
 
 interface QuickHoldModalProps {
   isOpen: boolean;
@@ -143,8 +144,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
     setPendingOverlapSubmit(null);
     setSubmitting(true);
     try {
-      const combinedDateTime = new Date(`${bookingDate}T${bookingTime}:00`);
-      if (isNaN(combinedDateTime.getTime())) {
+      if (!bookingDate || !bookingTime) {
         toast('Format tanggal dan jam tidak valid.', 'error');
         setSubmitting(false);
         return;
@@ -157,7 +157,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
             customerId: customerId || undefined,
             customerPhone: customerPhone || undefined,
             customerName: customerName || undefined,
-            bookingDate: combinedDateTime.toISOString(),
+            bookingDate: buildWibIso(bookingDate, bookingTime),
             durationMinutes: holdDuration,
             treatmentCategory: 'BABY',
             treatmentDetail: `[HOLD] Slot Ditawarkan (BABY) [${holdDuration}m]`,

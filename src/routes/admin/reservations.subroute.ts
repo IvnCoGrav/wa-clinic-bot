@@ -1015,9 +1015,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * PATCH /api/admin/reservation/:id/release-hold
-   * Melepas slot hold -> HAPUS permanen (bukan cancel, agar tidak menumpuk tulisan cancel di DB)
-   */
+    * PATCH /api/admin/reservation/:id/release-hold
+    * Melepas slot hold -> transisi ke cancelled (audit utuh) + hook LTV/follow-up.
+    */
   fastify.patch(
     '/api/admin/reservation/:id/release-hold',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
@@ -1057,16 +1057,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (reservation.status !== 'hold') {
           return reply.status(400).send({ success: false, error: 'Hanya reservasi berstatus hold yang dapat dilepas.' });
         }
-        await prisma.reservation.delete({ where: { id: reservation.id } });
+        const cancelled = await prisma.reservation.update({ where: { id: reservation.id }, data: { status: 'cancelled' } });
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          await customerService.recalculateCustomerLtv(reservation.customer_id, tenantId);
+        } catch {}
+        try {
+          const { followUpService } = await import('../../services/follow-up.service');
+          await followUpService.onReservationCancelled(reservation.id, tenantId);
+        } catch {}
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
-          action: 'DELETE_HOLD_RESERVATION',
+          action: 'RELEASE_HOLD_RESERVATION',
           targetId: id,
-          payload: { previousStatus: 'hold', deleted: true },
+          payload: { previousStatus: 'hold', newStatus: 'cancelled' },
           ipAddress: request.ip,
         });
-        return reply.status(200).send({ success: true, data: reservation, deleted: true });
+        return reply.status(200).send({ success: true, data: cancelled, deleted: false });
       } catch (err: any) {
         const mem2 = memoryReservations.get(id);
         if (mem2) {
@@ -1122,6 +1130,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       if (!customer) {
         return reply.status(404).send({ error: 'Customer tidak ditemukan.' });
       }
+      // QA sandbox labeling: nomor dummy via jalur manual tetap ditandai sandbox.
+      try {
+        const ph = String((customer as any)?.phone || '');
+        if (/^6289999/.test(ph) && !(customer as any)?.is_sandbox_test) {
+          await prisma.customer.update({ where: { id: customerId }, data: { is_sandbox_test: true } });
+        }
+      } catch {}
 
       // Validasi aturan Add-on: Tidak bisa berdiri sendiri tanpa layanan utama
       const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
@@ -1406,6 +1421,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (!existing) {
           throw new Error('Reservation not found');
         }
+        const { canTransition, isHoldActive, isHoldActiveByCreated } = await import('../../domain/reservation-status');
+        if (!canTransition(existing.status, 'confirmed')) {
+          return reply.status(409).send({ success: false, code: 'ILLEGAL_TRANSITION', error: `Transisi ${existing.status} → confirmed ditolak.` });
+        }
+        if (existing.status === 'hold') {
+          const holdOk = isHoldActive(existing.booking_date as any) && isHoldActiveByCreated((existing as any).created_at as any);
+          if (!holdOk) {
+            return reply.status(409).send({ success: false, code: 'HOLD_EXPIRED', error: 'Hold sudah kedaluwarsa, buat reservasi baru.' });
+          }
+        }
 
         let calendarEventId: string | null = null;
         try {
@@ -1420,6 +1445,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           data: {
             status: 'confirmed',
             google_calendar_event_id: calendarEventId,
+            needs_staff_verification: false,
           },
         });
 
@@ -2095,6 +2121,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
+        const { canTransition: canT2, isHoldActive: isHA2, isHoldActiveByCreated: isHAC2 } = await import('../../domain/reservation-status');
+        if (!canT2(existing.status, status)) {
+          return reply.status(409).send({ success: false, code: 'ILLEGAL_TRANSITION', error: `Transisi ${existing.status} → ${status} ditolak.` });
+        }
+        if (existing.status === 'hold' && status === 'confirmed') {
+          const holdOk2 = isHA2(existing.booking_date as any) && isHAC2((existing as any).created_at as any);
+          if (!holdOk2) {
+            return reply.status(409).send({ success: false, code: 'HOLD_EXPIRED', error: 'Hold sudah kedaluwarsa.' });
+          }
+        }
         // Guard anti-completed prematur: forceComplete terpisah dari `force`
         // (yang dipakai bypass STAFF_COLLISION di bawah).
         if (status === 'completed' && isPrematureCompletion(existing.booking_date) && !(request.body as any)?.forceComplete) {
@@ -2946,8 +2982,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           customer: { is_sandbox_test: false },
           OR: [
             { purchase_occurred_at: { not: null } },
-            { status: 'completed' },
-            { purchase_value: { gt: 0 } },
           ],
         },
         orderBy: { created_at: 'desc' },
@@ -3070,7 +3104,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             }
           }
 
-          const value = calculatedValue ?? getCatalogFallbackPrice();
+          const value = calculatedValue ?? 0;
 
           let distanceKm = r.customer?.distance_km ? `${r.customer.distance_km} km` : null;
           if (!distanceKm && r.raw_text) {

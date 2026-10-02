@@ -3,6 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 198. [Reservasi] Overhaul holistik Fase 0-8 (2026-10-03, EXECUTED)
+
+- Seams kanonis: `isReservationPaid` (murni purchase_occurred_at), `canTransition`, `SLOT_BUFFER_MIN=20`, `buildWibIso`, `money-contract`, `normalizePhoneID`.
+- Lunas vs Terjadwal disatukan (grid/modal/dialog/finance/notif); CAPI queue kini hanya purchase_occurred_at; fallback katalog 0 jujur.
+- Hold: guard `canTransition` + expiry ganda booking/created; release-hold jadi cancelled (audit utuh).
+- Sisa OPEN: snapshot `delivery_fee` vs `Customer.ongkir` dual-write belum dihapus total; kuota KB-3 Staff.active belum verifikasi prod; durasi katalog 60m hardcode di Invoice fallback lama perlu katalog penuh.
+
 ## 197. [Navigasi + RBAC] Restorasi menu CTA & Greetings WA + scope API advertiser (2026-10-02, RESOLVED sebagian)
 
 - **Konteks:** refaktor `49f6bdde` (14 Sep 2026) mengubah rute

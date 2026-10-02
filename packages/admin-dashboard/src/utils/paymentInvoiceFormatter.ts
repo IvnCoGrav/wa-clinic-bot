@@ -291,7 +291,7 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   if (effectiveDiscount > 0) {
     lines.push(`Promo ongkir = - ${formatThousand(effectiveDiscount)}`);
   }
-  lines.push(`Total = ${formatThousand(totalVal || treatmentPrice)}`);
+  lines.push(`Total = ${formatThousand(totalVal)}`);
   lines.push('');
   lines.push('H-1 sebelum treatment akan kami reminder kembali bunda 🥰');
   lines.push('Terimakasih.  ☺️');

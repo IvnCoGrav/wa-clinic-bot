@@ -223,9 +223,9 @@ export class FinancialAnalyticsService {
       const deliveryFee = resolveDeliveryFeeSnapshot(r as any);
       const totalFee = treatmentFee + deliveryFee;
 
-      const isCompleted = (r.status || '').toLowerCase() === 'completed' || (r.booking_date && new Date(r.booking_date).getTime() <= nowMs);
+      const isCompleted = (r.status || '').toLowerCase() === 'completed';
       const isCancelled = (r.status || '').toLowerCase() === 'cancelled';
-      const isLunas = Boolean(r.purchase_occurred_at || r.payment_method || (r.status || '').toLowerCase() === 'completed');
+      const isLunas = Boolean(r.purchase_occurred_at);
 
       if (isCancelled) {
         cancelledBookings++;

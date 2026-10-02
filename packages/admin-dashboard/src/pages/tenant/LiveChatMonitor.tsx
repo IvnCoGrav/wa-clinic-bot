@@ -3179,12 +3179,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   const handleConfirmPendingBooking = async (pendingRes: any) => {
     const dateStr = pendingRes.booking_date
-      ? new Date(pendingRes.booking_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      ? new Date(pendingRes.booking_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
       : 'jadwal terpilih';
     const ok = await confirm({
-      title: 'Konfirmasi Pembayaran & Jadwal?',
-      message: `Konfirmasi reservasi untuk ${pendingRes.customer?.name || selectedChat?.customerName || 'Bunda'} pada ${dateStr} (${pendingRes.treatment_detail || 'Treatment'}) menjadi Terkonfirmasi (Lunas)?`,
-      confirmText: 'Ya, Konfirmasi Lunas',
+      title: 'Konfirmasi Jadwal?',
+      message: `Konfirmasi reservasi untuk ${pendingRes.customer?.name || selectedChat?.customerName || 'Bunda'} pada ${dateStr} (${pendingRes.treatment_detail || 'Treatment'}) menjadi Terjadwal?`,
+      confirmText: 'Ya, Konfirmasi Jadwal',
       cancelText: 'Batal',
     });
     if (!ok) return;
@@ -3471,9 +3471,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       timeDisplay: timeStr,
       treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'Pijat Ceria',
       treatmentPrice: Number(resItem?.purchase_value ?? resItem?.treatment_price ?? 0) || 0,
-      treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? 'MOMS' : 'BABY',
+      treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? (resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' ? 'BUNDLE' : 'MOMS') : 'BABY',
       childName: firstBaby?.name || resItem?.child_name || '',
       childAge: firstBaby?.age || firstBaby?.ageText || firstBaby?.raw_age_text || firstBaby?.current_age || resItem?.child_age || '',
+      babies: Array.isArray(babySource) ? babySource.map((b: any) => ({ name: b?.name || '', ageText: b?.age || b?.ageText || b?.raw_age_text || b?.current_age || '' })).filter((b: any) => b.name) : [],
       bundaName: cleanBundaName(custData?.name || selectedChat?.customerName || '', custData?.kecamatan, custData?.kota),
       phone: custData?.phone || selectedChat?.customerPhone || '',
       address: custData?.address || custData?.preferences?.address || custData?.kelurahan || '',
@@ -6244,7 +6245,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           initialCustomerId={selectedChat?.customerId}
           initialTreatmentName={quickBookingExtracted?.treatmentName}
           initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
-          initialBabies={quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined}
+          initialBabies={quickBookingExtracted?.babies?.length ? quickBookingExtracted.babies : (quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined)}
           initialNotes={quickBookingExtracted?.treatmentName && quickBookingExtracted.treatmentName.trim() ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
           initialAddress={quickBookingExtracted?.address || (selectedChat as any)?.address || (selectedChat as any)?.preferences?.address || null}
           initialLandmark={(selectedChat as any)?.preferences?.landmark || (selectedChat as any)?.preferences?.address_notes || null}

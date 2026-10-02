@@ -14,6 +14,7 @@ export interface ExtractedScheduleData {
   treatmentCategory: 'BABY' | 'MOMS' | 'BUNDLE';
   childName: string;
   childAge: string;
+  babies: Array<{ name: string; ageText: string }>;
   bundaName: string;
   phone: string;
   address: string;
@@ -1050,6 +1051,18 @@ export function extractScheduleFromMessages(
     extractedCategory = 'MOMS';
   }
 
+  const splitBabies = (nameStr: string, ageStr: string): Array<{ name: string; ageText: string }> => {
+    const names = String(nameStr || '').split(/\s*(?:\+|,|&|\bdan\b|;)\s*/i).map((s) => s.trim()).filter(Boolean);
+    const ages = String(ageStr || '').split(/\s*(?:\+|,|&|\bdan\b|;)\s*/i).map((s) => s.trim()).filter(Boolean);
+    const n = Math.max(names.length, ages.length, names.length > 0 || ages.length > 0 ? 1 : 0);
+    const out: Array<{ name: string; ageText: string }> = [];
+    for (let i = 0; i < n; i++) {
+      const nm = names[i] || names[0] || '';
+      if (!nm) continue;
+      out.push({ name: nm, ageText: ages[i] || ages[0] || '' });
+    }
+    return out;
+  };
   return {
     bookingDate: extractedDate,
     dateDisplay: rawDateText,
@@ -1059,6 +1072,7 @@ export function extractScheduleFromMessages(
     treatmentCategory: extractedCategory,
     childName: extractedChildName,
     childAge: extractedChildAge,
+    babies: splitBabies(extractedChildName, extractedChildAge),
     bundaName: extractedBundaName,
     phone: extractedPhone,
     address: extractedAddress,

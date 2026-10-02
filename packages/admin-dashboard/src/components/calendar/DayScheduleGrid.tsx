@@ -4,6 +4,7 @@ import { Plus, User, Clock, MapPin, MessageCircle, CheckCircle2, AlertCircle } f
 import { QuickSlotTarget } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
+import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
 
 interface DayScheduleGridProps {
   selectedDate: Date;
@@ -72,11 +73,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   };
 
   const isSameDay = (d1: Date, d2: Date) => {
-    return (
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate()
-    );
+    return getWibDateKey(d1) === getWibDateKey(d2);
   };
 
   const formatHourLabel = (hour: number) => {
@@ -136,7 +133,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     let targetHour = 8;
     if (dayAppointments.length > 0) {
       const earliestHour = Math.min(
-        ...dayAppointments.map((r) => new Date(r.booking_date!).getHours())
+        ...dayAppointments.map((r) => getWibHoursAndMinutes(r.booking_date!).hours)
       );
       targetHour = Math.max(6, Math.min(earliestHour, 18));
     }
@@ -155,9 +152,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   // Clustering and layout for day events
   const eventsWithTiming = dayReservations
     .map((r) => {
-      const bDate = new Date(r.booking_date!);
+      const { hours, minutes } = getWibHoursAndMinutes(r.booking_date!);
       const duration = resolveReservationDuration(r);
-      const startMinutes = (bDate.getHours() - 6) * 60 + bDate.getMinutes();
+      const startMinutes = (hours - 6) * 60 + minutes;
       const endMinutes = startMinutes + duration;
       return { res: r, startMinutes, endMinutes, duration };
     })
@@ -437,7 +434,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           ) : res.status === 'confirmed' ? (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30">
                               <CheckCircle2 size={10} className="mr-0.5 text-emerald-600 dark:text-emerald-400" />
-                              Lunas
+                              {(res as any).purchase_occurred_at ? 'Terjadwal • Lunas' : 'Terjadwal'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30">

@@ -178,8 +178,13 @@ export class ReservationLifecycleService {
     // Gerbang entitas: usia gestasional (hamil/nifas) DILARANG masuk tabel children.
     // Single seam — semua jalur (create, merge, upgrade hold, admin) lewat sini.
     try {
+      let treatmentCategory: string | null = null;
+      try {
+        const dbRes = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { treatment_category: true } });
+        treatmentCategory = (dbRes as any)?.treatment_category || null;
+      } catch {}
       const childBabies = (babies || []).filter(
-        (b) => classifyPatientEntity({ name: b.name, ageText: b.age }) === 'CHILD'
+        (b) => classifyPatientEntity({ name: (b as any).name, ageText: (b as any).age ?? (b as any).ageText, treatmentCategory: (b as any).treatmentCategory || treatmentCategory }) === 'CHILD'
       );
       if (childBabies.length > 0) {
         const { childService } = await import('./child.service');
@@ -199,10 +204,12 @@ export class ReservationLifecycleService {
       await this.applyLifecycleLabels({ customerId, tenantId, chatId, reservationId });
     }
 
-    // 4. Google Contacts auto-sync (best-effort, berjalan setelah nama dan anak diperbarui)
+    // 4. Google Contacts auto-sync (best-effort dengan log jujur, jangan telan error).
     try {
       const { googleContactsService } = await import('./google-contacts.service');
-      googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'reservation' }).catch(() => {});
+      await googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'reservation' }).catch((e: any) => {
+        console.warn('[RESERVATION LIFECYCLE] googleContacts sync async failed:', e?.message);
+      });
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] googleContactsService.syncCustomer failed:', err?.message);
     }

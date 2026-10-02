@@ -66,6 +66,32 @@ export function isHoldActive(
   return t >= nowMs - ACTIVE_HOLD_WINDOW_MS;
 }
 
+/** Hold aktif berbasis created_at (untuk slot masa depan: hold H+7 tetap expired 2 jam setelah dibuat). */
+export function isHoldActiveByCreated(
+  createdAt: Date | string | null | undefined,
+  nowMs: number = Date.now()
+): boolean {
+  if (!createdAt) return false;
+  const t = new Date(createdAt).getTime();
+  if (Number.isNaN(t)) return false;
+  return nowMs - t <= ACTIVE_HOLD_WINDOW_MS;
+}
+
+/** Buffer slot tunggal (menit) — ganti semua +15/+20 tersebar. */
+export const SLOT_BUFFER_MIN = 20;
+
+/** Matriks transisi status legal (deterministik, tanpa tebak). */
+export function canTransition(from: string | null | undefined, to: string | null | undefined): boolean {
+  if (!from || !to || from === to) return false;
+  const f = String(from);
+  const t = String(to);
+  if (t === 'hold') return f === 'pending';
+  if (f === 'hold') return t === 'confirmed' || t === 'pending' || t === 'cancelled';
+  if (f === 'pending') return t === 'confirmed' || t === 'cancelled' || t === 'hold';
+  if (f === 'confirmed' || f === 'en_route') return t === 'completed' || t === 'cancelled';
+  return false;
+}
+
 /**
  * Guard "premature completion": reservasi TIDAK BOLEH ditandai `completed`
  * sebelum tanggal kunjungan tiba. Booking hari-H (same-day) tetap sah

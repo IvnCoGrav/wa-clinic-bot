@@ -4,6 +4,42 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Overhaul Holistik Reservasi (Fase 0-8, fondasional)
+
+- **Seams kanonis baru (Fase 0):** `isReservationPaid` (Lunas = murni
+  `purchase_occurred_at`), `canTransition` + `isHoldActiveByCreated` +
+  `SLOT_BUFFER_MIN=20` (`domain/reservation-status.ts`), `buildWibIso`
+  (`utils/dateWib.ts`), `effectiveOf/totalOf` (`utils/money-contract.ts`),
+  `normalizePhoneID` (`utils/phone-normalizer.ts`).
+- **Lunas vs Terjadwal sistemik (Fase 1):** badge grid `confirmed` → `Terjadwal`
+  (+ `Terjadwal • Lunas` hanya bila `purchase_occurred_at`); toast/tooltip modal &
+  dialog LiveChat tak lagi menyamakan Confirm=Lunas; `financial-analytics` &
+  `staff-notification` pakai `purchase_occurred_at` (bukan status).
+- **Composer WIB (Fase 2):** save `booking_date` modal/create/QuickHold pakai
+  `buildWibIso` (bukan zona browser); grid Day/Week pakai WIB; date-picker
+  Reservations pakai `getWibDateKey`; dialog konfirmasi pakai TZ Asia/Jakarta.
+- **Hold & status machine (Fase 3):** guard `canTransition` + expiry ganda
+  (`booking_date` + `created_at`) di `PATCH confirm/status`; release-hold kini
+  transisi `cancelled` (audit utuh) + LTV/follow-up hook; modal edit tak lagi
+  auto-flip hold→confirmed.
+- **Handoff LiveChat→Modal (Fase 4):** `ExtractedScheduleData.babies[]` (multi-anak
+  tidak lagi terpotong); quickBooking kirim semua bayi; kategori BUNDLE/BOTH tidak
+  lagi jatuh ke BABY; pre-fill anak juga di mode edit.
+- **Integritas anak/customer (Fase 5):** `classifyPatientEntity` BOTH/BUNDLE + nama
+  valid → CHILD; lifecycle meneruskan `treatment_category`; normalizer HP tunggal
+  08/8/62.
+- **Harga/invoice (Fase 6):** `treatmentParser` prioritaskan promo katalog (bukan
+  timpa `initialPurchaseValue`); hapus phantom `'Pijat Bayi Ceria (Rileksasi)'` +
+  `Total = totalVal || treatmentPrice`.
+- **Keuangan (Fase 7):** CAPI queue hanya `purchase_occurred_at`; value fallback 0
+  (tanpa throw); `needs_staff_verification` dibersihkan saat confirm; Google
+  Contacts error dilog jujur.
+- **Sandbox + docs (Fase 8):** jalur manual `POST /reservation` menandai
+  `6289999*` sebagai `is_sandbox_test`; entri KNOWN_ISSUES #198; test
+  `tests/unit/reservation-overhaul-p0.test.ts` (9 kasus, multi-frasa).
+- **Verifikasi:** `npm run typecheck` bersih; `npm test` 4515 lulus / 28 skip;
+  `vite build` dashboard (2450+ modul) hijau.
+
 #### 2026-10-02 - Fase 4: Stabilisasi Router NLU (glm-5.3-flash → netra) di Produksi
 
 - **Konteks:** audit transkrip live Bunda Chyntia (Krian, 6287883887456) di server

@@ -4,6 +4,7 @@ import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight
 import { QuickSlotTarget } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
+import { getWibHoursAndMinutes } from '../../utils/dateWib';
 
 interface WeekScheduleGridProps {
   selectedDate: Date;
@@ -43,9 +44,9 @@ function layoutEventsForDay(
   const eventsWithTiming = dayReservations
     .filter((r) => !!r.booking_date)
     .map((r) => {
-      const bDate = new Date(r.booking_date!);
+      const { hours, minutes } = getWibHoursAndMinutes(r.booking_date!);
       const duration = resolveReservationDuration(r);
-      const startMinutes = (bDate.getHours() - 6) * 60 + bDate.getMinutes();
+      const startMinutes = (hours - 6) * 60 + minutes;
       const endMinutes = startMinutes + duration;
       return { res: r, startMinutes, endMinutes, duration };
     })
@@ -639,7 +640,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                                 ) : res.status === 'confirmed' ? (
                                   <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30">
                                     <CheckCircle2 size={9} className="mr-0.5 text-emerald-600 dark:text-emerald-400" />
-                                    Lunas
+                                    {(res as any).purchase_occurred_at ? 'Terjadwal • Lunas' : 'Terjadwal'}
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30">

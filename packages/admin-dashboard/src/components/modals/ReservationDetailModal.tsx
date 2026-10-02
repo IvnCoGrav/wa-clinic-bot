@@ -257,7 +257,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const handleConfirmClick = async () => {
     if (!onConfirm) return;
     await onConfirm(displayReservation.id);
-    toast('Reservasi ditandai lunas & disinkronkan ke Google Calendar', 'success');
+    toast('Reservasi terkonfirmasi & terjadwal — disinkronkan ke Google Calendar', 'success');
     onUpdate();
   };
 
@@ -912,7 +912,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     <button
                       onClick={() => handleStatusChangeClick('confirmed')}
                       className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition cursor-pointer"
-                      title="Kembalikan ke status Terkonfirmasi / Lunas"
+                      title="Kembalikan ke status Terjadwal"
                     >
                       Ubah Status
                     </button>

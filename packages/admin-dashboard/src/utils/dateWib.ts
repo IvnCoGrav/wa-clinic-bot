@@ -78,3 +78,12 @@ export function getWibHoursAndMinutes(dateStr: string | Date): { hours: number; 
 export function getTodayWibDateKey(): string {
   return getWibDateKey(new Date());
 }
+
+/** Rakit ISO WIB dari date-key + jam (tanpa zona browser). Murni. */
+export function buildWibIso(dateKey: string, timeHHMM: string): string {
+  const d = String(dateKey || '').trim();
+  let t = String(timeHHMM || '09:00').trim().replace('.', ':');
+  if (/^\d{1,2}:\d{2}$/.test(t)) t = t.padStart(5, '0');
+  else t = '09:00';
+  return `${d}T${t}:00+07:00`;
+}

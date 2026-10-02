@@ -4,6 +4,7 @@ import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { getWibDateKey } from '../../utils/dateWib';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
@@ -979,7 +980,7 @@ export const Reservations: React.FC = () => {
                   <div className="relative flex items-center">
                     <input
                       type="date"
-                      value={selectedDate.toISOString().split('T')[0]}
+                      value={getWibDateKey(selectedDate)}
                       onChange={(e) => {
                         if (e.target.value) {
                            const [y, m, d] = e.target.value.split('-').map(Number);
