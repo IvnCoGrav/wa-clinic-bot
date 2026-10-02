@@ -30,6 +30,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
@@ -85,14 +86,7 @@ const getPaymentMethodLabel = (m?: string | null) => {
  */
 const getDetailedAddress = (res: Reservation): string | null => {
   if (!res) return null;
-  const raw = (res as any).raw_text as string | undefined;
-  if (raw) {
-    const mt = raw.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
-    const val = mt?.[1]?.trim();
-    if (val && val !== '-' && val.length > 3) return val;
-  }
-  const prefDetail = (res.customer?.preferences as any)?.address_detail || (res.customer?.preferences as any)?.address;
-  return typeof prefDetail === 'string' && prefDetail.trim() ? prefDetail.trim() : null;
+  return resolveStreetAddress(res) || null;
 };
 
 const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
@@ -389,6 +383,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         isOpen={true}
         mode="edit"
         initialReservation={reservation}
+        initialAddress={getDetailedAddress(reservation)}
+        initialLandmark={
+          ((reservation as any)?.customer?.preferences?.landmark
+            || (reservation as any)?.customer?.preferences?.address_notes
+            || (reservation as any)?.customer?.address_notes
+            || null) as string | null
+        }
         staffList={staffList}
         onClose={() => setIsEditing(false)}
         onSuccess={() => {

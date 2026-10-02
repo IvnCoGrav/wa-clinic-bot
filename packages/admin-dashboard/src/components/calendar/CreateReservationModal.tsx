@@ -45,6 +45,7 @@ import {
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { getWibDateKey, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
+import { resolveStreetAddress } from '../../utils/reservationAddress';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -169,11 +170,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (!isOpen) return;
     const prefAddress = selectedCustomerInfo?.preferences?.address || selectedCustomerInfo?.address || '';
     const prefLandmark = selectedCustomerInfo?.preferences?.landmark || selectedCustomerInfo?.preferences?.address_notes || selectedCustomerInfo?.address_notes || '';
+    // W3: fallback alamat jalan dari raw_text reservasi (edit reservasi lama yang
+    // alamatnya hanya hidup di formulir chat) — paritas dengan modal detail.
+    const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
     const isInitialCustomer =
       !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
-    setAddress(isInitialCustomer ? (initialAddress || prefAddress || '') : (prefAddress || ''));
+    setAddress(isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
     setLandmark(isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
-  }, [isOpen, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo]);
+  }, [isOpen, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
 
   // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
   const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
@@ -712,6 +716,24 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       })();
       setNotes(extractedNotes);
 
+      // W3: hidrasi alamat/patokan eksplisit saat edit (anti field kosong) — prioritas
+      // initialAddress (chat) → preferences → kolom legacy → raw_text form.
+      const editAddress =
+        initialAddress
+        || cust?.preferences?.address
+        || cust?.address
+        || (res as any).address
+        || resolveStreetAddress(res, cust)
+        || '';
+      if (editAddress) setAddress(editAddress);
+      const editLandmark =
+        initialLandmark
+        || cust?.preferences?.landmark
+        || cust?.preferences?.address_notes
+        || (res.customer as any)?.preferences?.landmark
+        || '';
+      if (editLandmark) setLandmark(editLandmark);
+
       // Children / babies pre-fill — fallback ke baby_details untuk reservasi lama
       const rawBabies = cust?.children || res.children || (res as any).baby_details || [];
       if (Array.isArray(rawBabies) && rawBabies.length > 0) {
@@ -736,7 +758,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       initializedEditIdRef.current = null;
       hydratedWithLiveCatalogRef.current = false;
     }
-  }, [isOpen, mode, initialReservation, services]);
+  }, [isOpen, mode, initialReservation, services, initialAddress, initialLandmark]);
 
   // Customer search
   const handleCustomerSearch = async (query: string) => {

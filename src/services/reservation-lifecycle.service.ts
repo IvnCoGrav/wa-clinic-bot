@@ -62,7 +62,9 @@ export class ReservationLifecycleService {
           kecamatan: kecamatan?.trim() || undefined,
           kota: kota?.trim() || undefined,
           kelurahan: kelurahan?.trim() || undefined,
-        }, tenantId).catch(() => {});
+        }, tenantId).catch((e: any) => {
+          console.warn('[RESERVATION LIFECYCLE] updateCustomerLocation failed (wilayah):', e?.message);
+        });
 
         // Integritas spasial: alamat lengkap (nama perumahan + blok + patokan)
         // WAJIB tersimpan di preferences.address/full_address — bukan di kolom
@@ -71,7 +73,9 @@ export class ReservationLifecycleService {
         if (address && address.trim()) {
           await customerService
             .updateCustomer(customerId, { address: address.trim() }, tenantId)
-            .catch(() => {});
+            .catch((e: any) => {
+              console.warn('[RESERVATION LIFECYCLE] updateCustomer(address) failed — alamat jalan tidak tersimpan:', e?.message);
+            });
         }
 
         // Background Auto-Distance Calculation jika customer belum memiliki distance_km

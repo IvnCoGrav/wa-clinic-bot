@@ -932,7 +932,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         (treatmentCategory as 'BABY' | 'KIDS' | 'MOMS' | 'BOTH');
 
       const rawNotes = notes ? `\nCatatan Hold: ${notes}` : '';
-      const rawText = `[Admin Quick Hold] Ditawarkan: ${parsedDate.toLocaleString('id-ID')}${rawNotes}`;
+      // W1: sertakan alamat jalan customer saat hold agar jejak alamat tidak hilang
+      // (sebelumnya rawText hanya memuat tanggal → edit/detail tanpa alamat).
+      const holdCustomer = await customerService.getCustomerById(customerId, tenantId).catch(() => null);
+      const holdAddress = holdCustomer
+        ? (((holdCustomer as any).preferences?.address) || ((holdCustomer as any).preferences?.full_address) || '').trim()
+        : '';
+      const rawText = `[Admin Quick Hold] Ditawarkan: ${parsedDate.toLocaleString('id-ID')}${holdAddress ? `\nAlamat: ${holdAddress}` : ''}${rawNotes}`;
 
       try {
         const { reservationCoreService, ReservationConflictError } = await import('../../services/reservation-core.service');
@@ -948,6 +954,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             assignedStaffId: assignedStaffId || null,
             rawText,
             customerName,
+            address: holdAddress || undefined,
             source: 'ADMIN_PANEL',
             force,
             status: 'hold',
@@ -1193,7 +1200,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             purchaseValue: finalPurchaseValue,
             // KB-6: snapshot ongkir per-reservasi.
             deliveryFee: parsedOngkir,
-            rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
+            rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${address?.trim() ? `\nAlamat: ${address.trim()}` : ''}${rawNotes}`,
             babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
             customerName: customer.name,
             kecamatan: customer.kecamatan || undefined,

@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Fix Alamat Hilang (W1-W5): Seam Tunggal + Anti-Kehilangan Jejak
+
+- **Akar masalah:** field "Alamat Lengkap" kosong saat edit/detail karena (a) edit
+  modal tak punya fallback `raw_text` (hanya baca `preferences.address`), (b)
+  quick-hold & admin-manual menulis `raw_text` TANPA alamat, (c) persist lifecycle
+  silent-fail `.catch(()=>{})`.
+- **W1:** quick-hold (`reservations.subroute.ts`) & admin-manual create kini
+  sertakan alamat ke `rawText` + teruskan `address` ke `saveReservation`.
+- **W2:** seam baca tunggal `resolveStreetAddress` (`src/utils/reservation-address.ts`
+  + `packages/.../utils/reservationAddress.ts`) dipakai DetailModal & CreateModal.
+- **W3:** edit modal hidrasi alamat/patokan eksplisit (initialAddress → preferences →
+  legacy → `raw_text`); DetailModal teruskan `initialAddress/initialLandmark`.
+- **W4:** lifecycle log jujur saat `updateCustomer`/`updateCustomerLocation` gagal.
+- **W5:** backfill produksi dijalankan (UPDATE 0 — semua customer dengan alamat di
+  raw sudah punya `preferences.address`; sisanya memang tanpa sumber, perlu input manual).
+- **Test:** `tests/unit/reservation-address-seam.test.ts` (7 kasus; paritas backend↔frontend).
+
 #### 2026-10-03 - Overhaul Holistik Reservasi (Fase 0-8, fondasional)
 
 - **Seams kanonis baru (Fase 0):** `isReservationPaid` (Lunas = murni
