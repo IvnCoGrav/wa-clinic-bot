@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, X, Send, Loader, ShieldCheck, MessageCircle } from 'lucide-react';
+import { Sparkles, X, Send, Loader, ShieldCheck, MessageCircle, Search, Brain, PenLine, ListChecks, Hourglass, type LucideIcon } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useCopilot } from '../../contexts/CopilotContext';
+import { getCopilotStatus, formatElapsedSeconds, type CopilotStage } from '../../utils/copilotStatus';
 
 /**
  * AdminCopilotPanel (Fase 6r, G3=B) — panel AI Copilot KONTEKSTUAL.
@@ -30,6 +31,15 @@ const QUICK_PROMPTS = [
   'Riwayat Bunda Devia sebelumnya apa?',
   'SOP jeda pijat setelah vaksin?',
 ];
+
+/** Ikon per tahap progres (indikasi visual proses berjalan, bukan macet). */
+const STAGE_ICON: Record<CopilotStage, LucideIcon> = {
+  searching: Search,
+  reasoning: Brain,
+  drafting: PenLine,
+  polishing: ListChecks,
+  finalizing: Hourglass,
+};
 
 /** Markdown inline minimal: tautan `[teks](url)` dan tebal `**teks**`. */
 const INLINE_RE = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*/g;
@@ -83,7 +93,9 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const startedAtRef = useRef<number | null>(null);
 
   // Deep-link Live Chat: sinkronkan selectedId (pola sama dengan useLiveChatNotification).
   const openLiveChat = (url: string) => {
@@ -100,7 +112,23 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, open]);
+  }, [messages, open, elapsedMs]);
+
+  // Timer progres: hanya aktif saat loading. Elapsed asli (bukan tick count)
+  // dihitung dari timestamp agar akurat walau tab di-throttle. Dibersihkan
+  // pada unmount / selesai.
+  useEffect(() => {
+    if (!loading) return;
+    startedAtRef.current = Date.now();
+    setElapsedMs(0);
+    const id = setInterval(() => {
+      if (startedAtRef.current != null) setElapsedMs(Date.now() - startedAtRef.current);
+    }, 500);
+    return () => {
+      clearInterval(id);
+      startedAtRef.current = null;
+    };
+  }, [loading]);
 
   const send = async (text: string) => {
     const msg = text.trim();
@@ -121,10 +149,11 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
             conversationId: conversationId || undefined,
             customerId: customerId || undefined,
           }),
-          // Anggaran backend satu turn = 60 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
+          // Anggaran backend satu turn = 120 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
           // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM
           // klien abort — mencegah "Gagal menghubungi Copilot" padahal server bekerja.
-          timeoutMs: 70000,
+          // Catatan: route Fastify punya rateLimit 30/menit; ini hanya batas klien.
+          timeoutMs: 125000,
         }
       );
       const data = res?.data;
@@ -204,13 +233,22 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
               </div>
             ))}
 
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-[#f8fafc] dark:bg-[#202c33] rounded-xl px-3 py-2 text-[12px] text-[#667781] flex items-center gap-2">
-                  <Loader size={12} className="animate-spin" /> Menganalisis data...
+            {loading && (() => {
+              const status = getCopilotStatus(elapsedMs);
+              const StageIcon = STAGE_ICON[status.stage];
+              return (
+                <div className="flex justify-start" aria-live="polite" aria-busy="true">
+                  <div className="bg-[#f8fafc] dark:bg-[#202c33] rounded-xl px-3 py-2 text-[12px] text-[#667781] dark:text-[#8696a0] flex items-center gap-2 tabular-nums">
+                    <span className="relative flex items-center justify-center">
+                      <Loader size={12} className="animate-spin text-[#008069]" />
+                      <StageIcon size={12} className="absolute text-[#008069] dark:text-[#00a884]" />
+                    </span>
+                    <span key={status.stage} className="animate-[fadeIn_200ms_ease-out]">{status.label}</span>
+                    <span className="ml-auto text-[10px] text-[#8696a0] dark:text-[#667781]">{formatElapsedSeconds(elapsedMs)}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           <div className="p-2.5 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center gap-2 shrink-0">

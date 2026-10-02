@@ -59,8 +59,13 @@ export const MAX_TOTAL_ROWS = 40;
  * frontend abort di 15 dtk → admin melihat kegagalan walau backend masih bekerja.
  * Gerbang ini memastikan jawaban (atau degradasi jujur) kembali SEBELUM timeout
  * klien. Override via env `COPILOT_TOTAL_BUDGET_MS`.
+ *
+ * Nilai 120 dtk: otak Hermes (agent framework) menelan overhead prompt besar
+ * (±16k token) sehingga loop 3 panggilan (2 router + 1 summarize) bisa 15–60 dtk.
+ * Dengan 60 dtk, turn berat sering berakhir sebagai jawaban degradasi. Frontend
+ * memakai timeout 125 dtk (margin di atas anggaran ini).
  */
-export const DEFAULT_TOTAL_BUDGET_MS = 60_000;
+export const DEFAULT_TOTAL_BUDGET_MS = 120_000;
 /** Sisa anggaran minimum untuk memulai panggilan LLM berikutnya (hindari call 1 dtk). */
 const MIN_CALL_BUDGET_MS = 1_500;
 

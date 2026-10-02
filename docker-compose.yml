@@ -59,6 +59,9 @@ services:
         limits:
           cpus: '2.0'
           memory: 1024M
+    networks:
+      - default
+      - hermes-net
 
   redis:
     image: redis:7-alpine
@@ -111,6 +114,9 @@ services:
       - caddy_config:/config
     depends_on:
       - app
+    networks:
+      - default
+      - hermes-net
 
   waha:
     image: devlikeapro/waha:noweb-2026.7.2
@@ -148,3 +154,8 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+
+networks:
+  default:
+  hermes-net:
+    external: true

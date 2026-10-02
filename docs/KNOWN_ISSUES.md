@@ -3,6 +3,38 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 191. [Copilot–Hermes] Integrasi TERBUKTI jalan; akar masalah = latensi, bukan koneksi (2026-10-02)
+
+- **Konteks:** tindak lanjut #187. Keluhan awal "sistem tidak pernah memanggil Hermes".
+  Investigasi live (server + kode deployed) membantah 2 asumsi (#187b "blocker jaringan") dan
+  menemukan akar sebenarnya.
+- **191a — TERBUKTI jalan (empiris, kode deployed + DB + Hermes nyata):**
+  `copilotService.chat` di container app mengembalikan
+  `{engine:"hermes", hermesFallback:false, tools:["query_unreplied_chats"], llmCalls:3}`.
+  Network sehat: app↔hermes-agent resolve (`172.19.0.3`), `/health` 200, `/v1/models` 200,
+  POST `/v1/chat/completions` 200. `grep -c v1/chat/completions /app/dist/...` = 1 (image
+  tidak basi). **#187b (blocker bind loopback) TIDAK berlaku lagi / tidak terkonfirmasi.**
+- **191b — Red herring yang terbantah:** (1) `grep POST di /opt/data/logs/gateway.log` = 0
+  **bukan bukti sah** — POST nyata yang kita kirim juga tidak tercatat di sana; access log
+  `/v1/chat/completions` tidak di gateway.log. (2) `GET /v1/models` (user-agent node) berasal
+  dari perintah verifikasi manual runbook #186c — adapter aplikasi **tidak pernah** GET
+  `/v1/models` (`hermes-adapter.ts:147` hanya POST completions).
+- **191c — AKAR MASALAH: latensi Hermes vs anggaran turn.** Satu turn = 56,7 dtk
+  (`prompt_tokens: 16230` per panggilan — overhead system/skill Hermes). Loop 3 panggilan
+  (2 router + 1 summarize) menembus `COPILOT_TOTAL_BUDGET_MS=60000` → `buildDegradedAnswer()`
+  → admin melihat teks `⏱️ Jawaban diambil sebagian...` (terkesan error). Diperbaiki:
+  `DEFAULT_TOTAL_BUDGET_MS` 60.000 → **120.000**; `.env.example` diselaraskan; timeout POST
+  frontend 70.000 → **125.000** (`AdminCopilotPanel.tsx`).
+- **191d — Indikator progres (RESOLVED):** panel Copilot dulu statis "Menganalisis data...".
+  Kini label bergilir berbasis elapsed (`packages/admin-dashboard/src/utils/copilotStatus.ts`
+  murni: mencari→menganalisis→menyusun→merapikan→menunggu model) + ikon + detik + `aria-live`.
+  Test `tests/unit/copilot-status.test.ts` (4).
+- **191e — Sisa tech debt (OPEN):** (1) model Hermes kadang tidak menyalin nilai
+  `conversationId` pada tautan `[Buka Chat](/admin/live-chat?conversationId=)` (kosong) —
+  instruction-following LLM eksternal, di luar kendali kode. (2) Upaya menurunkan overhead
+  prompt 16k token Hermes (akar latensi) BELUM dikerjakan. (3) `LLM_TIMEOUT_CHAT_MS=120000`
+  per-attempt; total wall-clock 120 dtk kini setara — pantau bila perlu turun.
+
 ## 190. [AI Scope] Pasien lama & legacy DIKUNCI PERMANEN ke CS (2026-10-02, KEPUTUSAN PERMANEN)
 
 - **KEPUTUSAN PRODUCT OWNER (PERMANEN — JANGAN DIUBAH TANPA PERSETUJUAN ULANG):**

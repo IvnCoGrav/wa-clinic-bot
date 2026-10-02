@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Copilot: Indikator Progres + Anggaran Turn 120s (pasca-diagnosis Hermes)
+
+- **Konteks:** investigasi live membuktikan integrasi Hermes SUDAH jalan
+  (`engine:"hermes", hermesFallback:false`); keluhan "tidak pernah dipanggil" adalah
+  red herring (grep log salah tempat). Akar sebenarnya = latensi turn (56,7 dtk) menembus
+  anggaran 60 dtk → jawaban degradasi "batas waktu". Detail: KNOWN_ISSUES #191.
+- **Changed — anggaran turn:** `DEFAULT_TOTAL_BUDGET_MS` 60.000 → **120.000**
+  (`src/services/copilot/copilot.service.ts`); timeout POST frontend 70.000 → **125.000**
+  (`packages/admin-dashboard/.../AdminCopilotPanel.tsx`); `.env.example` diselaraskan.
+- **Added — indikator progres bergilir:** util murni `copilotStatus.ts`
+  (`getCopilotStatus`/`formatElapsedSeconds`) memetakan elapsed → tahap
+  (mencari→menganalisis→menyusun→merapikan→menunggu model) + ikon + detik; panel memakai
+  `aria-live`. Mengganti teks statis "Menganalisis data..." agar proses panjang tidak
+  terkesan error.
+- **Tests:** `tests/unit/copilot-status.test.ts` (4, murni/offline). Copilot suite 86+ hijau;
+  `tsc` app exit 0; dashboard build exit 0.
+
 #### 2026-10-02 - Integritas AI Scope & Anti-Duplikasi Jadwal (fondasional)
 
 - **Konteks:** pasien lama terjawab bot & jadwal dobel. Audit menemukan 4 akar:
