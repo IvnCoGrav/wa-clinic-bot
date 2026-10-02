@@ -13,6 +13,7 @@ import {
   mergeNotesIntoRawText,
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
+import { isPrematureCompletion } from '../../domain/reservation-status';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { StaffReservationService } from '../../services/staff-reservation.service';
 import {
@@ -1521,6 +1522,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
+        // Guard anti-completed prematur: jangan tandai selesai jadwal > 24 jam
+        // ke depan (salah klik admin). forceComplete:true utk approval darurat.
+        if (isPrematureCompletion(existing.booking_date) && !(request.body as any)?.forceComplete) {
+          return reply.status(400).send({
+            success: false,
+            code: 'PREMATURE_COMPLETION_BLOCKED',
+            error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+          });
+        }
+
         const reservation = await prisma.reservation.update({
           where: { id },
           data: {
@@ -1568,6 +1579,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === tenantId) {
+          if (isPrematureCompletion(mock.booking_date) && !(request.body as any)?.forceComplete) {
+            return reply.status(400).send({
+              success: false,
+              code: 'PREMATURE_COMPLETION_BLOCKED',
+              error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+            });
+          }
           mock.status = 'completed';
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1659,6 +1677,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       if (!existing) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === tenantId) {
+          const completionMockDate = bookingDate !== undefined
+            ? (bookingDate ? new Date(bookingDate) : null)
+            : mock.booking_date;
+          if (
+            status === 'completed' &&
+            mock.status !== 'completed' &&
+            isPrematureCompletion(completionMockDate) &&
+            !(body as any)?.forceComplete
+          ) {
+            return reply.status(400).send({
+              success: false,
+              code: 'PREMATURE_COMPLETION_BLOCKED',
+              error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+            });
+          }
           if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
           if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
@@ -1769,6 +1802,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               conflict: staffConflicts[0],
             });
           }
+        }
+
+        // Guard anti-completed prematur (edit penuh): tolak menandai selesai
+        // jadwal > 24 jam ke depan sebelum tanggal kunjungan tiba.
+        const completionTargetDate = parsedBookingDate !== undefined ? parsedBookingDate : existing.booking_date;
+        if (isBecomingCompleted && isPrematureCompletion(completionTargetDate) && !(body as any)?.forceComplete) {
+          return reply.status(400).send({
+            success: false,
+            code: 'PREMATURE_COMPLETION_BLOCKED',
+            error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+          });
         }
 
         const updated = await prisma.reservation.update({
@@ -2051,6 +2095,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
+        // Guard anti-completed prematur: forceComplete terpisah dari `force`
+        // (yang dipakai bypass STAFF_COLLISION di bawah).
+        if (status === 'completed' && isPrematureCompletion(existing.booking_date) && !(request.body as any)?.forceComplete) {
+          return reply.status(400).send({
+            success: false,
+            code: 'PREMATURE_COMPLETION_BLOCKED',
+            error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+          });
+        }
+
         // Fase 3.2: reaktivasi (cancelled/hold → confirmed) WAJIB dicek bentrok
         // terapis. Tanpa ini, terapis bisa double-booked tanpa terdeteksi.
         const isReactivatingToConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
@@ -2136,6 +2190,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === tenantId) {
+          if (
+            status === 'completed' &&
+            mock.status !== 'completed' &&
+            isPrematureCompletion(mock.booking_date) &&
+            !(request.body as any)?.forceComplete
+          ) {
+            return reply.status(400).send({
+              success: false,
+              code: 'PREMATURE_COMPLETION_BLOCKED',
+              error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+            });
+          }
           mock.status = status;
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);

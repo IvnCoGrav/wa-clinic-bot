@@ -601,8 +601,15 @@ export class ReservationCoreService {
         const sameTreatment = Boolean(
           treatmentDetail && (primaryDetail === treatmentDetail || primaryIsHoldPlaceholder)
         );
-        const shouldMerge = exactConflicts.length > 0 && (sameTreatment || !treatmentDetail);
-        if (shouldMerge || (customerSameDayActive && sameTreatment)) {
+        // KEPUTUSAN PRODUCT OWNER (dikunci): kanal otomatis (BOT / AGENT /
+        // WEBHOOK) memperlakukan form berulang pada HARI KALENDER yang sama
+        // sebagai pemBARUAN reservasi yang sama — update baris lama, walau
+        // redaksi treatment sedikit berbeda. Mencegah duplikat slot (kasus
+        // Bunda Detya/Ismail). ADMIN_PANEL tetap butuh `force` (series manual).
+        const isAutomatedChannel = source === 'BOT' || source === 'AGENT' || source === 'WEBHOOK';
+        const shouldMerge = exactConflicts.length > 0 && (sameTreatment || !treatmentDetail || isAutomatedChannel);
+        const automatedSameDayMerge = isAutomatedChannel && customerSameDayActive;
+        if (shouldMerge || automatedSameDayMerge || (customerSameDayActive && sameTreatment)) {
           if (source === 'ADMIN_PANEL' && force) {
             console.log(
               `[RESERVATION CORE] Force override: admin membuat reservasi baru meski ${exactConflicts.length} konflik menit & ${sameDayReservations.length} same-day active.`,

@@ -349,12 +349,23 @@ export class ConversationService {
         return { released: false, updatedConversation: conversation };
       }
     }
-    if (
-      conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON ||
-      conversation.escalation_reason === 'LEGACY_CUSTOMER_MANUAL' ||
-      conversation.escalation_reason === 'EXISTING_PATIENT_MANUAL' ||
-      conversation.escalation_reason === ACTIVE_APPOINTMENT_ESCALATION_REASON
-    ) {
+    // KEBIJAKAN PERMANEN (dikunci product owner, JANGAN DIUBAH): pasien lama /
+    // loyal (repeat order / legacy) SELALU ditangani CS manusia dan TIDAK PERNAH
+    // di-auto-release otomatis ke bot. Sesi hanya bisa dilepas ke bot oleh aksi
+    // manual CS/admin (takeover/release). Himpunan reason ini deterministik
+    // (state-based), bukan pencocokan teks pesan.
+    const PERMANENT_CS_LOCK_REASONS = new Set<string>([
+      'EXISTING_PATIENT_MANUAL',
+      'LEGACY_CUSTOMER_MANUAL',
+      AI_ELIGIBILITY_ESCALATION_REASON, // 'LEGACY_AI_SCOPE_DISABLED' — kontak pra-cutoff = legacy
+    ]);
+    if (PERMANENT_CS_LOCK_REASONS.has(conversation.escalation_reason)) {
+      console.log(`[AUTO-RELEASE SCOPE-LOCK] Conversation ${conversation.id} (${conversation.escalation_reason}) pasien lama/legacy — KUNCI PERMANEN ke CS, no auto-release.`);
+      return { released: false, updatedConversation: conversation };
+    }
+    // JADWAL AKTIF: guard operasional (bukan "pasien lama") — sewa 48 jam agar
+    // tidak menggantung selamanya setelah kunjungan selesai.
+    if (conversation.escalation_reason === ACTIVE_APPOINTMENT_ESCALATION_REASON) {
       if (hoursEarly < 48) {
         console.log(`[AUTO-RELEASE SEWA] Conversation ${conversation.id} ${conversation.escalation_reason} ${hoursEarly.toFixed(1)}h <48h — belum release.`);
         return { released: false, updatedConversation: conversation };

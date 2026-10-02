@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Integritas AI Scope & Anti-Duplikasi Jadwal (fondasional)
+
+- **Konteks:** pasien lama terjawab bot & jadwal dobel. Audit menemukan 4 akar:
+  urutan gate vs auto-release salah, sewa 48 jam membuat pasien lama bocor ke
+  bot, status `completed` prematur mematikan guard jadwal aktif, dan merge
+  same-day berbasis string rapuh.
+- **Changed — kunci permanen pasien lama** (`src/services/conversation.service.ts`):
+  `EXISTING_PATIENT_MANUAL` / `LEGACY_CUSTOMER_MANUAL` / `LEGACY_AI_SCOPE_DISABLED`
+  TIDAK PERNAH auto-release ke bot (keputusan permanen product owner). Sesi hanya
+  dilepas manual oleh CS. (KNOWN_ISSUES #190.)
+- **Changed — urutan pipeline** (`src/routes/webhook.route.ts`,
+  `src/routes/waba-webhook.route.ts`): `checkAndApplyAutoRelease` dijalankan
+  SEBELUM `enforceAiScopeGate` di kedua kanal; WABA sebelumnya tidak memanggilnya.
+- **Changed — guard completed prematur** (`src/domain/reservation-status.ts`,
+  `src/routes/admin/reservations.subroute.ts`): `PATCH .../complete`, `.../status`,
+  `.../:id` menolak `completed` untuk jadwal > 24 jam ke depan dengan
+  `400 PREMATURE_COMPLETION_BLOCKED`; `forceComplete:true` untuk darurat.
+- **Changed — anti-duplikat slot** (`src/services/reservation-core.service.ts`):
+  kanal BOT/AGENT/WEBHOOK pada hari kalender sama → UPDATE baris primer, bukan
+  create kedua, walau redaksi treatment berbeda.
+- **Test:** `tests/unit/repeat-customer-scope-and-collision.test.ts` (10) +
+  regresi suite terkait. Build hijau.
+
 #### 2026-10-02 - Slot Overlap A5 v2: Triase Fondasional + Dedup Persisten (fondasional)
 
 - **Konteks:** audit fixing plan A5 (slot tumpang jadwal) menemukan 4 cacat

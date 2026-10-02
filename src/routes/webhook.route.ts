@@ -1125,6 +1125,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
 
 
+      // --- AUTO-RELEASE SEWA (dipindah ke SEBELUM scope gate) ---
+      // Wajib dievaluasi lebih dulu agar enforceAiScopeGate menerima state riil:
+      // pasien lama/legacy terkunci permanen; jadwal aktif menunggu 48 jam; sewa
+      // CS biasa mengikuti timeout config. Berlaku juga utk PARITAS WABA.
+      // (Anti-Label WAHA: hanya menyentuh is_human_handling + flag DB internal.)
+      {
+        const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, resolvedTenantId);
+        conversation = autoRelease.updatedConversation;
+      }
+
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
       // Evaluasi sebelum state machine / AI Router / LLM. Legacy customer yang
       // tidak eligible di-senyapkan (human handling + escalation khusus) — lihat
@@ -1217,11 +1227,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         (incomingMessage as any).cleanTextForAi = incomingMessage.text.body;
       }
 
-
-      // --- REVISI USER #4: EXPLICIT GUARD CLAUSE UNTUK HUMAN HANDLING ---
-      // Memeriksa apakah timeout auto-release 6 jam sudah terlampaui terlebih dahulu
-      const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, resolvedTenantId);
-      conversation = autoRelease.updatedConversation;
 
       // JIKA is_human_handling === true (dan belum timed out):
       if (conversation.is_human_handling) {

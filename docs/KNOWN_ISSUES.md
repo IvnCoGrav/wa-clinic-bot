@@ -3,6 +3,43 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 190. [AI Scope] Pasien lama & legacy DIKUNCI PERMANEN ke CS (2026-10-02, KEPUTUSAN PERMANEN)
+
+- **KEPUTUSAN PRODUCT OWNER (PERMANEN — JANGAN DIUBAH TANPA PERSETUJUAN ULANG):**
+  Customer loyal / pasien lama / kontak legacy TIDAK BOLEH ditangani AI. Sesi
+  mereka dikunci permanen di mode CS manusia (`is_human_handling=true`).
+  Alasan bisnis: AI belum tentu lebih pintar dari admin; menyerahkan customer
+  loyal ke bot berisiko menurunkan kualitas layanan.
+- **Implementasi (`src/services/conversation.service.ts`):** `escalation_reason`
+  bernilai `EXISTING_PATIENT_MANUAL`, `LEGACY_CUSTOMER_MANUAL`, atau
+  `LEGACY_AI_SCOPE_DISABLED` masuk `PERMANENT_CS_LOCK_REASONS` →
+  `checkAndApplyAutoRelease` SELALU `{released:false}` (tanpa batas jam). Sesi
+  hanya bisa dilepas ke bot oleh aksi MANUAL CS/admin (takeover/release).
+- **Paritas kanal (`src/routes/webhook.route.ts` & `waba-webhook.route.ts`):**
+  `checkAndApplyAutoRelease` dijalankan SEBELUM `enforceAiScopeGate` di kedua
+  kanal (sebelumnya WABA tidak memanggilnya sama sekali → celah bot menyahut
+  pasien lama).
+- **Konsekuensi diterima:** sesi pasien lama yang selesai pun tetap di mode CS
+  sampai ditutup manual oleh CS. Ini disengaja (lebih baik menggantung di CS
+  daripada salah kirim ke bot).
+- **Guard turunan lain (sesi ini):**
+  - **190a — Anti-completed prematur:** `PATCH .../complete`, `.../status`, dan
+    `.../:id` menolak menandai `completed` untuk `booking_date > now + 24 jam`
+    (helper `isPrematureCompletion` di `src/domain/reservation-status.ts`).
+    Flag `forceComplete:true` = darurat (TERPISAH dari `force` yang dipakai
+    bypass `STAFF_COLLISION`). Fallback in-memory juga di-guard.
+  - **190b — Anti-duplikat slot same-day kanal otomatis:** `BOT`/`AGENT`/`WEBHOOK`
+    pada hari kalender WIB sama = UPDATE baris primer (bukan create kedua),
+    walau redaksi `treatment_detail` berbeda (`reservation-core.service.ts`).
+    `ADMIN_PANEL` tetap 409 `DUPLICATE_BOOKING` tanpa `force` (series manual).
+  - **190c — Tech debt dicatat (OPEN):** penulis status `completed` lain di luar
+    admin API — `staff-reservation.service.ts` (`:1591`, `:2399`) dan
+    `reservation-series.service.ts:469` — BELUM diberi guard premature; perlu
+    diselaraskan di sesi lanjutan.
+  - **190d — Catatan konflik historis (#102):** keputusan #102 (Opsi D, merge
+    same-day walau treatment beda) kini dipersempit ke kanal otomatis; perilaku
+    dipertahankan dan diperluas ke BOT/AGENT agar konsisten mencegah duplikat.
+
 ## 185. [Maps & OTW] Dispatch tracking in-memory + privacy geofence global (2026-10-02)
 
 - **Konteks:** plan "Pembaruan Fitur Maps & OTW Terapis" (Fase 1). Perbaikan:

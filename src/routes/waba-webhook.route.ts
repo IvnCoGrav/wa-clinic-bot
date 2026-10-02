@@ -356,7 +356,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
-      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+      let conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
       // P0-5: abuse-detection simetris WABA (sebelumnya hanya WAHA)
       try {
@@ -367,6 +367,11 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           continue;
         }
       } catch {}
+
+      // --- AUTO-RELEASE SEWA (paritas WAHA): bersihkan sewa CS yang kedaluwarsa
+      // SEBELUM scope gate, agar gate menilai state riil (pasien lama tetap
+      // dikunci permanen; jadwal aktif menunggu 48 jam). ---
+      conversation = conversationService.checkAndApplyAutoRelease(conversation, tenantId).updatedConversation;
 
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
       const scopeGate = await enforceAiScopeGate({

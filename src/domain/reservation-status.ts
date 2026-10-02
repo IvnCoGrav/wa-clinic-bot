@@ -65,3 +65,22 @@ export function isHoldActive(
   if (Number.isNaN(t)) return false;
   return t >= nowMs - ACTIVE_HOLD_WINDOW_MS;
 }
+
+/**
+ * Guard "premature completion": reservasi TIDAK BOLEH ditandai `completed`
+ * sebelum tanggal kunjungan tiba. Booking hari-H (same-day) tetap sah
+ * diselesaikan kapan saja pada hari itu, sehingga hanya booking lebih dari
+ * 24 jam ke depan yang ditolak. Deterministik berbasis `booking_date`
+ * (bukan teks), tanpa dependency tambahan.
+ */
+export const PREMATURE_COMPLETION_TOLERANCE_MS = 24 * 60 * 60 * 1000;
+
+export function isPrematureCompletion(
+  bookingDate: Date | string | null | undefined,
+  nowMs: number = Date.now()
+): boolean {
+  if (!bookingDate) return false;
+  const t = new Date(bookingDate).getTime();
+  if (Number.isNaN(t)) return false;
+  return t > nowMs + PREMATURE_COMPLETION_TOLERANCE_MS;
+}
