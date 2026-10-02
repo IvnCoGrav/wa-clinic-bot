@@ -14,6 +14,7 @@ import { getRollingFollowUpMessage, getRollingVariant } from '../config/followup
 import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 import { ensureStaffSignature } from '../utils/staff-signature';
 import { computeCurrentAge } from '../utils/age-calculator';
+import { getBrandIdentityAsync } from '../config/brand';
 
 export interface StaffTaskChild {
   name: string;
@@ -1123,6 +1124,43 @@ export class StaffReservationService {
    * `{arrivalWib}`, `{departMapsUrl}`. Bila tak diberikan → diganti string kosong
    * (template lama tetap valid; tak ada placeholder menggantung).
    */
+  /**
+   * Helper internal untuk mendapatkan nama klinik yang sah dan manusiawi:
+   * 1. Prioritas per-tenant via Tenant.settings.brand.businessName
+   * 2. Fallback tenant.name dari database
+   * 3. Jaring pengaman deterministik: bila bernilai "Default Clinic" / kosong -> fallback "Kala Moms and Baby Spa"
+   */
+  private static async resolveClinicName(tenantId: string = DEFAULT_TENANT_ID): Promise<string> {
+    const FALLBACK_NAME = 'Kala Moms and Baby Spa';
+    try {
+      const brand = await getBrandIdentityAsync(tenantId);
+      if (brand?.businessName && !/default[\s_-]*clinic/i.test(brand.businessName)) {
+        return brand.businessName.trim();
+      }
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
+      if (tenant?.name && !/default[\s_-]*clinic/i.test(tenant.name)) {
+        return tenant.name.trim();
+      }
+    } catch {
+      // offline / DB error fallback
+    }
+    return FALLBACK_NAME;
+  }
+
+  /**
+   * Render terpadu pesan perjalanan terapis (OTW / tiba di lokasi):
+   * 1. Sanitasi nama pasien (anti-sapaan ganda "Bunda Bunda") + fallback "Bunda".
+   * 2. Substitusi placeholder template tenant (data-driven, bisa diedit Super Admin).
+   * 3. Jaring pengaman deterministik `Bunda Bunda` -> `Bunda`.
+   * 4. Jaring pengaman deterministik: singkirkan nama dummy "Default Clinic".
+   * 5. Sematkan tanda tangan `~ [Nama Terapis]` di baris paling bawah (idempoten).
+   *
+   * Placeholder OPSIONAL: `{etaMinutes}`, `{arrivalWib}`, `{departMapsUrl}`.
+   * Bila tak diberikan → diganti string kosong (template lama tetap valid; tak ada placeholder menggantung).
+   */
   private static renderStaffTripMessage(
     templateText: string,
     params: {
@@ -1136,15 +1174,21 @@ export class StaffReservationService {
   ): string {
     const cleanName = sanitizeCustomerNameForGreeting(params.patientName || '') || 'Bunda';
     const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
+    const clinicName = (!params.clinicName || /default[\s_-]*clinic/i.test(params.clinicName))
+      ? 'Kala Moms and Baby Spa'
+      : params.clinicName.trim();
+
     const rendered = templateText
       .replace(/\{\{?patientName\}\}?/gi, cleanName)
       .replace(/\{\{?name\}\}?/gi, cleanName)
       .replace(/\{\{?therapistName\}\}?/gi, therapistName)
-      .replace(/\{\{?clinicName\}\}?/gi, params.clinicName)
+      .replace(/\{\{?clinicName\}\}?/gi, clinicName)
       .replace(/\{\{?etaMinutes\}\}?/gi, params.etaMinutes != null ? String(params.etaMinutes) : '')
       .replace(/\{\{?arrivalWib\}\}?/gi, params.arrivalWib || '')
       .replace(/\{\{?departMapsUrl\}\}?/gi, params.departMapsUrl || '')
       .replace(/Bunda\s+Bunda/gi, 'Bunda')
+      // Sanitasi deterministik nama dummy "Default Clinic"
+      .replace(/\bDefault\s+Clinic\b/gi, clinicName)
       .trim();
     return ensureStaffSignature(rendered, therapistName);
   }
@@ -1152,26 +1196,25 @@ export class StaffReservationService {
   /**
    * Mengambil dan merender template pesan OTW (Menuju Lokasi) khusus tenant.
    * Mendukung kustomisasi dari Super Admin (`FollowUpTemplate` tipe `STAFF_OTW`).
+   *
+   * Sesuai mandat bisnis: pesan customer TIDAK boleh menambahkan estimasi tiba (ETA)
+   * atau nama landmark otomatis karena dapat memberikan harapan palsu / kebingungan
+   * pada pasien. Pesan dikirim secara personal & hangat dari Bidan ("Saya sudah...").
    */
   static async getOtwMessageText(
     tenantId: string = DEFAULT_TENANT_ID,
     params: {
       patientName: string;
       therapistName: string;
-      /** Plan 2026-09-30: blok estimasi/lokasi opsional (kontrol keberangkatan). */
       etaMinutes?: number | null;
       arrivalWib?: string | null;
       departMapsUrl?: string | null;
-      /** Koordinat keberangkatan presisi (untuk privacy geofence). */
       departLat?: number | null;
       departLng?: number | null;
     }
   ): Promise<string> {
     const therapistName = (params.therapistName || '').trim() || 'Bidan Terapis';
 
-    // Privacy geofence (plan 2026-10-02): titik presisi rumah Bidan TIDAK boleh
-    // bocor ke pasien. Bila berangkat dari luar radius klinik → ganti URL koordinat
-    // dengan nama area manusiawi. Tenant-aware via `getClinicLocationAsync`.
     const departure = await StaffReservationService.resolveDepartureShare(tenantId, {
       departMapsUrl: params.departMapsUrl,
       departLat: params.departLat,
@@ -1195,18 +1238,15 @@ export class StaffReservationService {
         },
       });
 
-      // 2. Ambil nama klinik tenant
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { name: true },
-      });
-      const clinicName = tenant?.name || 'Kala Spa Baby & Mom Homecare';
+      // 2. Ambil nama klinik tenant yang sah (anti "Default Clinic")
+      const clinicName = await StaffReservationService.resolveClinicName(tenantId);
 
+      // Default template OTW: pesan personal Bidan terapis, ramah & tanpa estimasi menit/landmark
       const templateText =
         customTpl?.text ||
-        `Halo Bunda {patientName}, saya {therapistName} dari {clinicName} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`;
+        `Halo Bunda {patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍`;
 
-      const rendered = StaffReservationService.renderStaffTripMessage(templateText, {
+      return StaffReservationService.renderStaffTripMessage(templateText, {
         patientName: params.patientName,
         therapistName,
         clinicName,
@@ -1214,19 +1254,12 @@ export class StaffReservationService {
         arrivalWib: params.arrivalWib,
         departMapsUrl: effectiveParams.departMapsUrl,
       });
-      // Bila template admin SUDAH memakai placeholder ETA/lokasi, jangan tambah blok
-      // otomatis (anti-duplikasi).
-      const templateHasEtaPlaceholder = /\{\{?(etaMinutes|arrivalWib|departMapsUrl)\}\}?/i.test(templateText);
-      return templateHasEtaPlaceholder
-        ? rendered
-        : StaffReservationService.appendEtaBlock(rendered, effectiveParams);
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error rendering OTW template:', err.message);
-      const fallback = StaffReservationService.renderStaffTripMessage(
-        `Halo Bunda {patientName}, saya {therapistName} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
-        { patientName: params.patientName, therapistName, clinicName: 'klinik' }
+      return StaffReservationService.renderStaffTripMessage(
+        `Halo Bunda {patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍`,
+        { patientName: params.patientName, therapistName, clinicName: 'Kala Moms and Baby Spa' }
       );
-      return StaffReservationService.appendEtaBlock(fallback, effectiveParams);
     }
   }
 
@@ -1334,11 +1367,7 @@ export class StaffReservationService {
         },
       });
 
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { name: true },
-      });
-      const clinicName = tenant?.name || 'Kala Spa Baby & Mom Homecare';
+      const clinicName = await StaffReservationService.resolveClinicName(tenantId);
 
       const templateText =
         customTpl?.text ||
@@ -1353,7 +1382,7 @@ export class StaffReservationService {
       console.error('[STAFF RESERVATION] Error rendering arrival template:', err.message);
       return StaffReservationService.renderStaffTripMessage(
         `Halo Bunda {patientName}, saya {therapistName} sudah sampai di depan rumah/lokasi Bunda ya 🙏`,
-        { patientName: params.patientName, therapistName, clinicName: 'klinik' }
+        { patientName: params.patientName, therapistName, clinicName: 'Kala Moms and Baby Spa' }
       );
     }
   }

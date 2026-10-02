@@ -54,6 +54,60 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   harus diverifikasi di server. WABA memerlukan `PUBLIC_BASE_URL` (tidak ada di `.env` lokal;
   cek di server). Jalankan simulasi `npm run chat` di staging sebelum klaim selesai.
 
+## 189. [Staff Trip] Eliminasi blok ETA/Landmark di pesan OTW + Resolusi Default Clinic (2026-10-02, RESOLVED)
+
+- **Masalah:**
+  1. Pesan OTW menyematkan blok `⏱️ Estimasi tiba ±...` dan `📍 Berangkat menuju lokasi Bunda (Grand City Mall Surabaya)` ke pesan WhatsApp customer. Hal ini menimbulkan ekspektasi waktu berlebih dan membingungkan customer karena landmark departure diambil dari geofence GPS Bidan terdekat (Grand City Mall).
+  2. Pesan OTW / kedatangan terapis memunculkan identitas dummy "dari Default Clinic" karena baris `default-tenant` pada tabel `tenants` di database bernilai `name = 'Default Clinic'`.
+- **Akar Masalah:**
+  1. `appendEtaBlock` pada `StaffReservationService` secara sepihak menyuntikkan teks estimasi menit dan nama landmark ke pesan WhatsApp pasien.
+  2. Database `tenants.name` belum diperbarui dari nilai seed bawaan ("Default Clinic"), dan fallback kode tidak memanggil `getBrandIdentityAsync`.
+- **Solusi Fondasional:**
+  1. Template OTW disesuaikan persis instruksi pemilik bisnis:
+     `Halo Bunda {patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍\n\n~ {therapistName}`
+  2. `appendEtaBlock` dilepas dari pembuatan pesan WhatsApp customer di `getOtwMessageText`. Telemetri GPS & estimasi waktu tetap tercatat secara internal di memory `staffTripTrackingService` untuk keperluan monitoring dispatch CS tanpa mengotori chat pasien.
+  3. `resolveClinicName(tenantId)` diintegrasikan dengan prioritas `getBrandIdentityAsync(tenantId)` (`settings.brand.businessName`), `tenant.name`, dan sanitasi deterministik terhadap nama dummy "Default Clinic" dengan fallback `"Kala Moms and Baby Spa"`.
+  4. Baris `tenants` di live DB diperbarui: `name = 'Kala Moms and Baby Spa'`, dan `follow_up_templates` tipe `STAFF_OTW` diperbarui ke template baru.
+
+## 187. [Copilot–Hermes] Blocker bind :8642 loopback + komit terverifikasi (2026-10-02)
+
+- **Konteks:** laporan agen Hermes + verifikasi independen repo (read-only, lokal).
+  Komit `e05569ea` ADA dan lengkap (adapter 2 mode + observability engine +
+  `RESERVATION_STATUS_VALUES`/`offeredTime` via `53337c53`); tree bersih kecuali 3 file
+  WIP navigasi tak-terdaftar (pra-eksisting, bukan bagian ini).
+- **187a — Network TERSAMBUNG (dilaporkan agen, belum verifikasi independen):** app ↔
+  hermes-agent resolve (172.19.0.3); `/ready` pasca-network: database CONNECTED, waha
+  WORKING. Menutup #183a dari sisi laporan.
+- **187b — BLOCKER: :8642 bind 127.0.0.1 (0100007F, TERBUKTI):** dari dalam hermes-agent
+  `/v1/models` OK; dari app cross-container connection refused. Otak Hermes belum bisa
+  dipanggil sampai `API_SERVER_HOST=0.0.0.0` + recreate hermes-agent (sisi VPS/Hermes,
+  bukan repo bot).
+- **187c — Mode bridge GUGUR terkonfirmasi:** `POST :9119/ask` → halaman login HTML
+  (bukan JSON); dashboard cookie-only. Adapter mode bridge tetap sebagai kode cadangan
+  tak terpakai; primer satu-satunya = openai `:8642`.
+- **187d — Risiko recreate (dicatat sebelum keputusan):** restart singkat
+  `hermes.kalababyspa.online` + interupsi kerja Hermes lain + sesi agen sandbox (di dalam
+  container itu) akan mati — laporan final dulu sebelum recreate. Pasca-recreate wajib:
+  dashboard kembali, `:8642` 200 dari app, `docker ps` pastikan 8642 TIDAK ter-publish
+  ke host (Bearer key tetap syarat).
+- **Keputusan: OPSI (a) DISETUJUI user (2026-10-02):** ubah bind + recreate lalu
+  aktivasi bertahap, dengan pengaman (#187d). Runbook diberikan; eksekusi di host
+  oleh user (agen sandbox tak bisa: tanpa daemon + sesi di dalam container target).
+
+## 188. [Infra] Insiden `default` network lepas saat tambah `hermes-net` (2026-10-02, RESOLVED)
+
+- **Konteks:** saat menambahkan `networks: [hermes-net]` ke service `app`/`caddy` di
+  `/opt/wa-clinic-bot/docker-compose.yml`, service KEHILANGAN default network (perilaku
+  Compose: service dengan `networks:` eksplisit tidak lagi ikut default) → app tak bisa
+  mencapai postgres/redis/waha → `/ready` NOT_READY (database FAILED, waha DISCONNECTED).
+- **Perbaikan:** kedua service memakai `networks: [default, hermes-net]` + top-level
+  `networks: {default:, hermes-net: {external: true}}`; recreate app → `/ready` READY
+  (CONNECTED/WORKING). Backup pra-ubah: `*.bak.20261002-H*` di kedua compose dir.
+- **Pelajaran:** `docker compose config` hanya validasi sintaks, bukan semantik jaringan;
+  setiap edit `networks:` wajib diikuti cek `/ready` + `getent` dua arah.
+- **Status akhir aktivasi:** `live:200` (app → hermes-agent:8642 Bearer OK); 4 container
+  di `hermes-net`; `COPILOT_ENGINE=hermes` aktif di app. Sisa: uji dashboard 5 skenario.
+
 ## 185. [Copilot–Hermes] Temuan API OpenAI-compatible :8642 — rencana disederhanakan (2026-10-02)
 
 - **Konteks:** recon lanjutan dari dalam hermes-agent (read-only + uji in-memory; tanpa tulis

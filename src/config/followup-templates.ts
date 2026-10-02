@@ -192,12 +192,12 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
 
   // 14. Pesan Terapis Menuju Lokasi Pasien (OTW)
   STAFF_OTW: [
-    ({ name, therapistName, clinicName }: any) =>
-      `Halo Bunda ${name || '{name}'}, saya ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
-    ({ name, therapistName, clinicName }: any) =>
-      `Selamat pagi/siang Bunda ${name || '{name}'}! 🛵 ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sedang menuju ke rumah Bunda untuk jadwal treatment hari ini ya. Sampai jumpa sebentar lagi Bunda! 🥰`,
-    ({ name, therapistName, clinicName }: any) =>
-      `Halo Bunda ${name || '{name}'}! ✨ ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah OTW ke lokasi Bunda. Mohon disiapkan tempat yang nyaman untuk perawatan ya Bunda. Terimakasih! 🙏`,
+    ({ name }: any) =>
+      `Halo Bunda ${name || '{name}'} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍`,
+    ({ name }: any) =>
+      `Halo Bunda ${name || '{name}'} 😊\n\nSaya sudah dalam perjalanan menuju ke rumah Bunda untuk jadwal treatment hari ini ya 🚗💨\nMohon ditunggu, Bun. Sampai jumpa sebentar lagi 🤍`,
+    ({ name }: any) =>
+      `Halo Bunda ${name || '{name}'} 😊\n\nSaya sudah dalam perjalanan menuju lokasi rumah Bunda untuk perawatannya yaa 🛵💨\nMohon ditunggu ya Bun, sampai bertemu sebentar lagi 🤍`,
   ],
 
   // 14b. Pesan Terapis Tiba di Lokasi Pasien (Sudah Sampai)

@@ -1456,7 +1456,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     const staffSignature = staff?.name || 'Bidan Terapis';
 
     try {
-      let otwMessage = `Halo Bunda, saya ${staffSignature} dari klinik sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵\n\n~ ${staffSignature}`;
+      let otwMessage = `Halo Bunda ${patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍\n\n~ ${staffSignature}`;
       try {
         const tplRes = await apiRequest(`/api/staff/otw-template?patientName=${encodeURIComponent(patientName)}`);
         if (tplRes.success && tplRes.text) {
