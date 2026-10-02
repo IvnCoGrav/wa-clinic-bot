@@ -1,6 +1,7 @@
 import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tools';
 import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
 import { parsePositiveInt } from '../../utils/env-numeric';
+import { requestHermesRouter, requestHermesSummarize, resolveHermesConfig } from './hermes-adapter';
 
 /**
  * copilot.service.ts (Fase 6r + fixing plan) — AI Clinic Copilot in-system.
@@ -35,6 +36,14 @@ export interface CopilotChatResult {
   /** Observabilitas/audit: jumlah baris per tool yang dieksekusi. */
   rowCounts?: Record<string, number>;
   error?: string;
+  /**
+   * Observabilitas engine (untuk uji Hermes): engine yang dikonfigurasi turn ini.
+   * `hermesFallback=true` berarti engine=hermes tetapi ada panggilan Hermes yang
+   * gagal sehingga LLM internal dipakai — jawaban tetap valid, namun BUKAN bukti
+   * Hermes bekerja (lihat panduan uji).
+   */
+  engine: 'hermes' | 'internal';
+  hermesFallback?: boolean;
 }
 
 const MAX_HISTORY_TURNS = 10;
@@ -286,6 +295,15 @@ export class CopilotService {
     /** Batasi timeout LLM ke sisa anggaran (agar attempt tak melewati deadline). */
     const callTimeout = (cfgTimeout: number) => Math.max(minCallBudget, Math.min(cfgTimeout, remainingMs()));
     let timedOut = false;
+    // Jejak fallback Hermes → internal (observabilitas uji; lihat interface).
+    let hermesFallback = false;
+    // resolveHermesConfig murni baca env (tanpa throw) → aman sebelum try.
+    const hermesCfg = resolveHermesConfig();
+    const useHermes = hermesCfg.engine === 'hermes';
+    const engineTag = (): Pick<CopilotChatResult, 'engine' | 'hermesFallback'> => ({
+      engine: hermesCfg.engine,
+      hermesFallback,
+    });
 
     try {
       const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
@@ -295,6 +313,19 @@ export class CopilotService {
       const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
       // Gaya ringkasan tenant-aware dari DB (settings) — null = default netral.
       const styleConfig = await loadCopilotStyle(tenantId);
+      // Fase 4 (tanpa-MCP): Hermes sebagai otak (router + summarize). Default
+      // `internal` → perilaku identik pra-Fase 4; fallback per-panggilan bila
+      // Hermes gagal. Tangan (tool) + satpam (grounding/budget/audit) SELALU di sini.
+      // (hermesCfg/useHermes/engineTag didefinisikan sebelum try agar semua
+      // return termasuk catch memakai jejak engine yang sama.)
+      const hermesOpts = {
+        baseUrl: hermesCfg.baseUrl,
+        secret: hermesCfg.secret,
+        mode: hermesCfg.mode,
+        openaiUrl: hermesCfg.openaiUrl,
+        openaiKey: hermesCfg.openaiKey,
+        openaiModel: hermesCfg.openaiModel,
+      };
 
       const toolMenu = COPILOT_TOOLS.map(
         (t) => `- ${t.name}: ${t.description}\n  args: ${JSON.stringify(t.parameters)}`
@@ -321,43 +352,64 @@ export class CopilotService {
         const routerPrompt = buildRouterPrompt(message, toolMenu, new Date(), priorSteps, history, params.activeContext);
 
         llmCalls++;
-        let routerResp: any;
-        try {
-          routerResp = await withDeadline(
-            () =>
-              callChatCompletionsWithFallback({
-                model: cfg.model,
-                fallbackModel: cfg.fallbackModel,
-                baseUrl: cfg.baseUrl,
-                apiKey: cfg.apiKey,
-                timeoutMs: callTimeout(cfg.timeoutMs),
-                payload: {
-                  messages: [{ role: 'user', content: routerPrompt }],
-                  temperature: 0,
-                  max_tokens: 200,
-                },
-              }),
-            remainingMs()
-          );
-        } catch (e: any) {
-          if (isCopilotDeadlineError(e)) {
-            timedOut = true;
-            break; // anggaran habis → keluar loop, degradasi di bawah
-          }
-          throw e;
-        }
-
-        const rawRouter = routerResp?.data?.choices?.[0]?.message?.content || '';
-        const parsed = extractBalancedJson(rawRouter, 'tool');
         let toolName: string | null = null;
         let toolArgs: Record<string, any> = {};
-        if (parsed) {
+        let hermesRouted = false;
+        // Jalur Hermes dulu (bila aktif); gagal → jatuh ke router internal di bawah.
+        if (useHermes) {
           try {
-            const obj = JSON.parse(parsed);
-            toolName = obj.tool || null;
-            toolArgs = obj.args || {};
+            const d = await requestHermesRouter(routerPrompt, {
+              ...hermesOpts,
+              timeoutMs: callTimeout(cfg.timeoutMs),
+            });
+            if (d) {
+              toolName = d.tool;
+              toolArgs = d.args;
+              hermesRouted = true;
+            }
           } catch {
-            toolName = null;
+            hermesRouted = false;
+          }
+        }
+        if (!hermesRouted) {
+          // Jejak uji: engine=hermes tetapi router jatuh ke internal.
+          if (useHermes) hermesFallback = true;
+          let routerResp: any;
+          try {
+            routerResp = await withDeadline(
+              () =>
+                callChatCompletionsWithFallback({
+                  model: cfg.model,
+                  fallbackModel: cfg.fallbackModel,
+                  baseUrl: cfg.baseUrl,
+                  apiKey: cfg.apiKey,
+                  timeoutMs: callTimeout(cfg.timeoutMs),
+                  payload: {
+                    messages: [{ role: 'user', content: routerPrompt }],
+                    temperature: 0,
+                    max_tokens: 200,
+                  },
+                }),
+              remainingMs()
+            );
+          } catch (e: any) {
+            if (isCopilotDeadlineError(e)) {
+              timedOut = true;
+              break; // anggaran habis → keluar loop, degradasi di bawah
+            }
+            throw e;
+          }
+
+          const rawRouter = routerResp?.data?.choices?.[0]?.message?.content || '';
+          const parsed = extractBalancedJson(rawRouter, 'tool');
+          if (parsed) {
+            try {
+              const obj = JSON.parse(parsed);
+              toolName = obj.tool || null;
+              toolArgs = obj.args || {};
+            } catch {
+              toolName = null;
+            }
           }
         }
 
@@ -367,7 +419,7 @@ export class CopilotService {
         if (!tool) {
           // Tool tak dikenal (halusinasi nama tool) → hentikan loop, jangan lempar.
           if (collected.length === 0) {
-            return { success: false, answer: 'Tool tidak dikenali.', toolsUsed: [], grounded: false, error: 'UNKNOWN_TOOL', llmCalls };
+            return { success: false, answer: 'Tool tidak dikenali.', toolsUsed: [], grounded: false, error: 'UNKNOWN_TOOL', llmCalls, ...engineTag() };
           }
           break;
         }
@@ -403,6 +455,7 @@ export class CopilotService {
             error: COPILOT_DEADLINE_ERROR,
             llmCalls,
             rowCounts,
+            ...engineTag(),
           };
         }
         return {
@@ -412,6 +465,7 @@ export class CopilotService {
           grounded: true,
           llmCalls,
           rowCounts,
+          ...engineTag(),
         };
       }
 
@@ -427,6 +481,7 @@ export class CopilotService {
           grounded: true,
           llmCalls,
           rowCounts,
+          ...engineTag(),
         };
       }
 
@@ -440,6 +495,7 @@ export class CopilotService {
           grounded: true,
           llmCalls,
           rowCounts,
+          ...engineTag(),
         };
       }
 
@@ -451,56 +507,77 @@ export class CopilotService {
       const summarizePrompt = buildSummarizePrompt(message, labeled, styleConfig?.summarizeTone ?? null);
 
       llmCalls++;
-      let summaryResp: any;
-      try {
-        summaryResp = await withDeadline(
-          () =>
-            callChatCompletionsWithFallback({
-              model: cfg.model,
-              fallbackModel: cfg.fallbackModel,
-              baseUrl: cfg.baseUrl,
-              apiKey: cfg.apiKey,
-              timeoutMs: callTimeout(cfg.timeoutMs),
-              payload: {
-                messages: [
-                  ...history.map((h) => ({ role: h.role, content: h.content })),
-                  { role: 'user', content: summarizePrompt },
-                ],
-                temperature: 0.2,
-                max_tokens: 400,
-              },
-            }),
-          remainingMs()
-        );
-      } catch (e: any) {
-        // Batas waktu pada tahap ringkasan → tetap sajikan data mentah (degradasi jujur),
-        // bukan pesan "layanan AI gangguan" yang menyesatkan.
-        if (isCopilotDeadlineError(e)) {
-          return {
-            success: true,
-            answer: buildDegradedAnswer(collected),
-            toolsUsed,
-            grounded: true,
-            llmCalls,
-            rowCounts,
-          };
+      // Jalur Hermes dulu (bila aktif); gagal → jatuh ke summarize internal di bawah.
+      let hermesSummary: string | null = null;
+      if (useHermes) {
+        try {
+          hermesSummary = await requestHermesSummarize(summarizePrompt, {
+            ...hermesOpts,
+            timeoutMs: callTimeout(cfg.timeoutMs),
+          });
+        } catch {
+          hermesSummary = null;
         }
-        throw e;
       }
+      let rawAnswer: string;
+      if (hermesSummary) {
+        rawAnswer = hermesSummary.trim() || 'Tidak ada ringkasan.';
+      } else {
+        // Jejak uji: engine=hermes tetapi summarize jatuh ke internal.
+        if (useHermes) hermesFallback = true;
+        let summaryResp: any;
+        try {
+          summaryResp = await withDeadline(
+            () =>
+              callChatCompletionsWithFallback({
+                model: cfg.model,
+                fallbackModel: cfg.fallbackModel,
+                baseUrl: cfg.baseUrl,
+                apiKey: cfg.apiKey,
+                timeoutMs: callTimeout(cfg.timeoutMs),
+                payload: {
+                  messages: [
+                    ...history.map((h) => ({ role: h.role, content: h.content })),
+                    { role: 'user', content: summarizePrompt },
+                  ],
+                  temperature: 0.2,
+                  max_tokens: 400,
+                },
+              }),
+            remainingMs()
+          );
+        } catch (e: any) {
+          // Batas waktu pada tahap ringkasan → tetap sajikan data mentah (degradasi jujur),
+          // bukan pesan "layanan AI gangguan" yang menyesatkan.
+          if (isCopilotDeadlineError(e)) {
+            return {
+              success: true,
+              answer: buildDegradedAnswer(collected),
+              toolsUsed,
+              grounded: true,
+              llmCalls,
+              rowCounts,
+              ...engineTag(),
+            };
+          }
+          throw e;
+        }
 
-      const rawAnswer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
+        rawAnswer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
+      }
       // Normalizer deterministik: buang sisa UUID yang lolos dari LLM.
       const answer = sanitizeCopilotAnswer(rawAnswer);
 
       // Validator grounding atas UNION semua hasil tool (halusinasi silang-sumber).
       const grounded = this.validateGrounding(answer, unionRows);
 
-      return { success: true, answer, toolsUsed, grounded, llmCalls, rowCounts };
+      return { success: true, answer, toolsUsed, grounded, llmCalls, rowCounts, ...engineTag() };
     } catch (err: any) {
       return {
         success: false,
         answer: 'Copilot sedang tidak tersedia (gangguan layanan AI). Silakan coba lagi.',
         toolsUsed: [],
+        ...engineTag(),
         grounded: false,
         error: err?.message || String(err),
       };

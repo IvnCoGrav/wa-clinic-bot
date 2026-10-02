@@ -54,6 +54,83 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   harus diverifikasi di server. WABA memerlukan `PUBLIC_BASE_URL` (tidak ada di `.env` lokal;
   cek di server). Jalankan simulasi `npm run chat` di staging sebelum klaim selesai.
 
+## 185. [Copilot–Hermes] Temuan API OpenAI-compatible :8642 — rencana disederhanakan (2026-10-02)
+
+- **Konteks:** recon lanjutan dari dalam hermes-agent (read-only + uji in-memory; tanpa tulis
+  produksi — verifier konfirmasi 0 mutasi file). Peta: `/api/*` → 401 seragam (cookie
+  `no_cookie`, enumerasi tanpa sesi mustahil); `/api/health` + `/api/status` publik;
+  `/openapi.json`, `/docs`, `/ws` → 302 `/login`; form login `basic` (username/password/next)
+  — Basic header tetap 401 (cookie-based, bukan HTTP Basic).
+- **185a — TEMUAN KUNCI: API server OpenAI-compatible di 127.0.0.1:8642 (RESOLVED
+  sebagai fakta):** `/health` 200; `/v1/models` 401→200 dengan `Bearer API_SERVER_KEY`
+  (kunci di `/opt/data/.env`, 64 hex — nilai tidak dicatat); `/v1/chat/completions` ADA
+  (405 pada GET = POST-only). Call penuh SENGAJA tidak dijalankan (hindari tulis state sesi)
+  → verifikasi live ditunda sampai network tersambung, dari sisi app.
+- **185b — Dashboard :9119 DITOLAK untuk pemakaian programatik:** cookie-only + 401
+  seragam + tanpa endpoint ask. Automasi login cookie = rapuh → jangan dipakai adapter.
+- **185c — Micro-bridge jadi RENCANA B (draf tervalidasi in-memory):** seluruh path
+  (401/400/404/405/502/rate-limit, secret tak bocor ke log) lolos uji in-memory; teks draf
+  hanya ada di laporan agen (gagal tulis disk: `/tmp` di luar WRITE_SAFE_ROOT,
+  `/opt/data` dilarang batasan). Diambil ulang bila :8642 gagal verifikasi.
+  Catatan agen: `:8642` tak bisa memilih skill — penegakan skill tetap butuh
+  `hermes -z --skills` (jalur bridge). Namun prompt router/summarize Fastify (Fase 1–3)
+  sudah self-contained → skill untuk :8642 bersifat defense-in-depth, bukan syarat.
+- **185d — Keputusan arsitektur revisi (ADAPTIF, menunggu konfirmasi user):** primer =
+  `:8642/v1/chat/completions` sebagai otak Hermes (murah, tanpa spawn, OpenAI-compatible
+  → perubahan adapter kecil); bridge = cadangan. Dashboard API = tidak dipakai.
+- **185e — Temuan keamanan OPERASIONAL (OPEN, sisi host):** `/api/status` publik tanpa
+  auth membocorkan versi/state gateway/platform/`listener_base` → pertimbangkan menutup;
+  `hermes dashboard` bind 0.0.0.0 di container → verifikasi tidak ada publish port mentah
+  ke host/Caddy (`docker ps` kolom PORTS + Caddyfile). Keduanya butuh cek host.
+- **Prasyarat tak berubah:** backup `~/backups/`; `hermes-net` + connect kedua container
+  (blok perintah host sudah disiapkan agen); `API_SERVER_KEY`/`HERMES_BRIDGE_SECRET` ke
+  sisi Fastify; verifikasi live 1 request kecil dari container app pasca-network.
+
+## 186. [Copilot–Hermes] Adapter mode :8642 OpenAI-compatible (2026-10-02, BELUM AKTIF)
+
+- **Konteks:** persetujuan user "bantu saja" pasca temuan #185. Adapter diperluas mendukung
+  2 mode otak (`HERMES_BRAIN_MODE=openai|bridge`, default `openai`); sisi repo selesai +
+  teruji; aktivasi menunggu prasyarat host (network, key, model, verifikasi live).
+- **186a — RESOLVED (draf):** `hermes-adapter.ts` mode `openai` → `POST
+  {openaiUrl}/v1/chat/completions` (Bearer `HERMES_OPENAI_KEY`, model
+  `HERMES_OPENAI_MODEL`; router: temperature 0 / 300 token + parse JSON seimbang;
+  summarize: 0.2 / 600 token). Fail-closed tanpa key/model. Tanpa dependency baru
+  (reuse `extractBalancedJson`). Wiring service tak berubah bentuk (opts diperluas).
+- **186b — Test:** `copilot-hermes-contract.test.ts` +6 (URL/Bearer/body, fail-closed,
+  non-200/hang, summarize). Suite Copilot total **105 hijau**; `npm run build` exit 0.
+- **186c — PRASYARAT AKTIVASI (OPEN, sisi host/VPS):** (1) backup `~/backups/`;
+  (2) `hermes-net` + connect + `getent` dua arah; (3) salin `API_SERVER_KEY` (64 hex,
+  last4 …bca4) → env Fastify sebagai `HERMES_OPENAI_KEY`; model RESOLVED = satu-satunya
+  `hermes-agent` (default di kode, tanpa isi manual); (4) 1 request verifikasi kecil dari
+  container app pasca-network; (5) baru `COPILOT_ENGINE=hermes`. Tanpa ini adapter selalu
+  fallback internal (aman). Blok perintah host eksak disiapkan agen Hermes (ada pada user).
+- **186d — Uji 5 skenario dashboard (OPEN):** menunggu aktivasi + klik-uji manual user.
+- **186e — Observabilitas engine (RESOLVED):** `CopilotChatResult` kini membawa
+  `engine: 'hermes'|'internal'` + `hermesFallback?: boolean` di SEMUA return (termasuk
+  degradasi & error) agar uji membedakan "Hermes bekerja" vs "fallback sunyi". UI
+  dashboard belum menampilkan badge engine (opsional, butuh rebuild bila diminta).
+
+## 184. [Copilot–Hermes] Fase 4 draf adapter tanpa-MCP (2026-10-02, BELUM AKTIF)
+
+- **Konteks:** keputusan user "setuju" (tanpa-MCP; batasan produksi dipertahankan dengan
+  1 pengecualian network connect/disconnect). Draf adapter ditulis + diuji di repo lokal;
+  **TIDAK aktif** (default `COPILOT_ENGINE=internal`) dan TIDAK menyentuh produksi.
+- **184a — RESOLVED (draf):** `src/services/copilot/hermes-adapter.ts` (kontrak
+  `POST {base}/ask {kind,prompt}` + Bearer + timeout + fail-closed tanpa secret) +
+  wiring per-panggilan di `copilot.service.ts` (router & summarize via Hermes bila
+  `COPILOT_ENGINE=hermes`, fallback ke LLM internal per-panggilan). Tangan (6 tools) +
+  satpam (strip UUID, grounding, budget, audit) SELALU di Fastify. Env didokumentasikan
+  di `.env.example` (tanpa nilai secret).
+- **184b — Test:** `copilot-hermes-adapter.test.ts` (4: wiring + fallback) +
+  `copilot-hermes-contract.test.ts` (8: kontrak HTTP, Bearer, timeout, fail-closed).
+  Suite Copilot total 99 hijau; `npm run build` exit 0. Test sempat menemukan 3 bug nyata
+  (double-slash URL, payload tanpa key `tool` lolos, fetch abaikan abort) — diperbaiki.
+- **184c — PRASYARAT AKTIVASI (OPEN, sisi host/VPS):** backup `~/backups/`; sambungkan
+  `hermes-net` (masih exit 6, lihat #183a); pecahkan auth dashboard `:9119` ATAU pasang
+  micro-bridge loopback pelaksana kontrak `/ask`; isi `HERMES_BRIDGE_SECRET` di kedua sisi;
+  baru set `COPILOT_ENGINE=hermes`. Tanpa prasyarat ini adapter selalu fallback internal.
+- **184d — Uji 5 skenario dashboard (OPEN):** menunggu aktivasi + klik-uji manual oleh user.
+
 ## 183. [Copilot–Hermes] Fase 0 recon dari dalam hermes-agent (2026-10-02)
 
 - **Konteks:** sesi agen Hermes sandbox ternyata berjalan DI DALAM container `hermes-agent`

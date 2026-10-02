@@ -60,6 +60,35 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Tests:** `tests/unit/pricelist-trigger.test.ts` (11, adversarial multi-frasa +
   out-of-coverage + resolver WAHA/WABA). `tsc` exit 0; `state-machine.test.ts` hijau.
 
+#### 2026-10-02 - Copilot Admin: Adapter Mode :8642 OpenAI-Compatible (Nonaktif Default)
+
+- **Konteks:** temuan API `:8642` (KNOWN_ISSUES #185) — otak Hermes primer tanpa bridge.
+  Detail prasyarat: KNOWN_ISSUES #186.
+- **Added — mode `openai` di `hermes-adapter.ts` (`HERMES_BRAIN_MODE`, default `openai`):**
+  router & summarize via `POST {HERMES_OPENAI_URL}/v1/chat/completions`
+  (`HERMES_OPENAI_KEY` + `HERMES_OPENAI_MODEL`, fail-closed bila kosong).
+  Mode `bridge` (/ask) dipertahankan sebagai cadangan.
+- **Docs — `.env.example`:** `HERMES_BRAIN_MODE`/`HERMES_OPENAI_URL`/`HERMES_OPENAI_KEY`/
+  `HERMES_OPENAI_MODEL` (tanpa nilai secret).
+- **Tests:** `copilot-hermes-contract.test.ts` +6. Suite Copilot **105 hijau**;
+  `npm run build` exit 0.
+
+#### 2026-10-02 - Copilot Admin: Draf Adapter Hermes Tanpa-MCP (Nonaktif Default)
+
+- **Konteks:** keputusan tanpa-MCP; Hermes sebagai otak (router + summarize) via kontrak
+  `POST /ask`, tangan + satpam tetap di Fastify. Detail: KNOWN_ISSUES #184 (prasyarat
+  aktivasi VPS masih OPEN).
+- **Added — `src/services/copilot/hermes-adapter.ts`:** `resolveHermesConfig()`
+  (`COPILOT_ENGINE` default `internal`), `requestHermesRouter`/`requestHermesSummarize`
+  (Bearer + timeout + fail-closed tanpa secret, tanpa dependency baru).
+- **Changed — `copilot.service.ts`:** bila `COPILOT_ENGINE=hermes`, router & summarize
+  mencoba Hermes dulu lalu fallback per-panggilan ke LLM internal; grounding, budget,
+  dan audit tidak berubah. Tanpa env = perilaku identik pra-Fase 4.
+- **Docs — `.env.example`:** variabel `COPILOT_ENGINE`/`HERMES_BRIDGE_URL`/
+  `HERMES_BRIDGE_SECRET` (tanpa nilai secret).
+- **Tests:** `copilot-hermes-adapter.test.ts` (4) + `copilot-hermes-contract.test.ts` (8).
+  Suite Copilot 99 hijau; `npm run build` exit 0.
+
 #### 2026-10-02 - Copilot Admin: Pintu Penolakan, Analisa Chat Lebih Luas, Gaya To-The-Point (internal)
 
 - **Konteks:** admin melaporkan AI Copilot "kaku, tidak menjawab maksud" (contoh nyata:
