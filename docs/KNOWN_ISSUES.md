@@ -3,6 +3,61 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 197. [Navigasi + RBAC] Restorasi menu CTA & Greetings WA + scope API advertiser (2026-10-02, RESOLVED sebagian)
+
+- **Konteks:** refaktor `49f6bdde` (14 Sep 2026) mengubah rute
+  `/admin/customer-service` menjadi redirect ke `/admin/settings?tab=cs` dan
+  menghapus menu sidebar "Customer Service & CTA" tanpa pengganti. Handler
+  `subTab==='cs'` (`Settings.tsx`) menjadi *orphaned* — hanya bisa dibuka via URL
+  manual; `lazy(CustomerService)` di `App.tsx` menjadi *dead import*.
+- **197a �?" RESOLVED:** rute `/admin/customer-service` dikembalikan sebagai halaman
+  protektif langsung (`App.tsx`), alias `/admin/cs` → redirect ke sana. Menu
+  "CTA & Greetings WA" (ikon `Headphones`) dikembalikan di grup sidebar
+  "Marketing & Ads" (`Layout.tsx`). Gateway sekunder ditambah sebagai kartu di blok
+  `META_MARKETING` `Settings.tsx` (pemicu `setSearchParams({ tab: 'cs' })`).
+- **197b �?" RESOLVED:** allowlist RBAC advertiser (`rolePermissions.ts`) ditambah
+  `/admin/customer-service` TANPA membuka `/admin/settings` (mencegah bocornya QR
+  WAHA/CAPI/AI scope ke media buyer).
+- **197c �?" OPEN (butuh deploy):** role `advertiser` sudah "managed" di
+  `role_api_scopes`, sehingga `GET/POST /api/admin/customer-service` default-deny →
+  403 `FORBIDDEN_ROLE_SCOPE` sebelum migrasi seed
+  `20261002000001_allow_customer_service_for_advertiser` di-apply
+  (`npx prisma migrate deploy` setelah backup). Sampai saat itu menu tampil tetapi
+  halaman gagal memuat/menyimpan untuk advertiser.
+- **197d �?" OPEN (keputusan produk/keamanan):** seed `197c` memberi advertiser akses
+  TULIS ke endpoint yang juga menulis `cs_name`/`whatsapp_number` tenant. Bila tidak
+  diinginkan, pecah endpoint atau batasi advertiser ke GET saja (buka Confirmation Gate).
+
+## 196. [Server] Host LAMA (legacy) DOWN 35 jam + network hermes-net hilang (RESOLVED sebagian, 2026-10-02)
+
+- **KOREKSI PENTING:** insiden ini terjadi di server **LAMA/legacy**
+  (`43.157.197.148`, runbook lama) — BUKAN produksi. Produksi sebenarnya =
+  `43.173.11.79` (alias SSH `klinik-server-baru`), sehat & bot aktif. Deploy
+  Fase 0-3 + Fase 4 di server baru sudah benar via host itu.
+- **Konteks:** saat memperbarui host lama ditemukan
+  `app` + `waha` sudah `Exited` 35 jam (SIGTERM eksternal, bukan crash — log app
+  sehat sampai detik terakhir; DB/redis/caddy tetap jalan).
+- **196a — RESOLVED (blocker deploy):** compose baru (commit Hermes) mewajibkan
+  network eksternal `hermes-net` yang TIDAK ADA di server → `up` gagal. Diperbaiki
+  manual `docker network create hermes-net`. **Catatan:** fix ini hanya di server,
+  tidak di repo — host fresh akan gagal lagi. Pertimbangkan: (i) dokumentasikan di
+  runbook, atau (ii) jadikan network non-external / optional di compose.
+  `hermes-agent` sendiri TIDAK berjalan di mana pun (port 8642 kosong); Copilot
+  berjalan mode degraded. Bukan blocker bot WA.
+- **196b — RESOLVED (WAHA):** sesi `default` (6285794210526) sempat loop
+  `conflict type=replaced` (±9x). Sembuh setelah `POST /sessions/default/restart`
+  → status WORKING, tanpa QR ulang. Penyebab pasti tak diketahui (diduga sesi basi
+  35 jam). Pantau: bila loop kembali, kemungkinan kredensial disupersede dan butuh
+  scan QR dari HP klinik.
+- **196c — OPEN (bot masih MATI secara logika):** `tenant_ai_config.
+  GLOBAL_BOT_ENABLED=false` → walau container sehat, bot tidak auto-reply.
+  Perlu keputusan admin untuk mengaktifkan.
+- **196d — OPEN (sekuriti):** nilai `WAHA_WEBHOOK_SECRET` sempat tercetak di output
+  observasi sesi ini. Disarankan rotasi via `.env` + restart (belum dikerjakan).
+- **Hasil deploy:** rev `13c24e0c`, `app (healthy)`, migrasi `All successfully
+  applied`, dashboard ikut ter-build. WAHA tidak di-restart paksa (hanya start
+  dari kondisi mati).
+
 ## 195. [Meta Performance] Sisa debt dashboard performa iklan CAC/LTV (2026-10-02)
 
 - **Konteks:** Modul `src/services/meta-performance-analytics.service.ts` + route
@@ -48,14 +103,39 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   `src/v3/tools/calculate-delivery.tool.ts` (feeText di-gate `showFeeNominal`).
   `showFeeNominal` sengaja TIDAK dilonggarkan ke `Boolean(kecamatan)` (kontrak
   779408 + `calculate-delivery-precise-fee.test.ts`).
-- **194b — MISDIAGNOSIS plan Fase 4 (BELUM diperbaiki, menunggu keputusan):**
-  Klaim plan "tenant_ai_config INTENT_CLASSIFICATION → glm-5.3-flash, max_tokens
-  1024" TERBUKTI SALAH. Dump live (`tenant_ai_config`): `ACTIVE_LLM_PROVIDER=KENARI`;
-  `CHAT_REPLY=Kenari/deepseek-v4-1-flash/1024`; `INTENT_CLASSIFICATION=Kenari/
-  deepseek-v4-1-flash/1024`; `GLOBAL_BOT_ENABLED=false`. Saran plan "alihkan ke
-  deepseek-v4-1-flash" = NO-OP (sudah model itu). Menyetelnya di endpoint SumoPod
-  malah di-remap ke glm-5.3-flash (`ai-models.config.ts:129-132`).
-  `CHAT_REPLY_DEEP` ternyata DIPAKAI (n=8), jadi bukan dead config.
+- **194b — KOREKSI: vonis "MISDIAGNOSIS" DIBATALKAN (salah server).**
+  Dump `KENARI/deepseek-v4-1-flash/GLOBAL_BOT_ENABLED=false` di atas berasal dari
+  server LAMA (43.157.197.148, ternyata host lawas). Server BARU/produksi
+  (43.173.11.79, alias SSH `klinik-server-baru`) justru MEMBENARKAN plan:
+  `ACTIVE_LLM_PROVIDER=SUMOPOD`; `INTENT_CLASSIFICATION=SumoPod/glm-5.3-flash/
+  1024`; `CHAT_REPLY=SumoPod/deepseek-v4-flash-0731:netra/1024`;
+  `GLOBAL_BOT_ENABLED=true`. Saran plan kini legitimate di server baru.
+  (Detail validasi Turn-5/6 di 194e.)
+- **194e — VALIDASI Turn-5/6 di server baru (TERBUKTI, 2026-10-02):** transkrip
+  Bunda Chyntia (6287883887456) persis seperti plan: 09:34 tanya Krian →
+  09:40 "Tambak kemerakkan krian" dibalas `inCoverageNoFee` TANPA ongkir →
+  09:43 tanya ongkir → 09:43/09:45 dua kali "Beda pijat ceria dan pulih?"
+  dijawab 1x benar + 1x fallback "Kami pastikan informasinya...".
+  Telemetri `llm_audit_logs`: dua turn gagal = `INTENT_CLASSIFICATION/
+  glm-5.3-flash` latensi 28,2 dtk & 32,7 dtk dengan `completion_tokens` TEPAT
+  1024 (cap!). Turn sukses memakai fallback `deepseek-chat` (8 dtk) dan
+  `deepseek-v4-flash-0731:netra` CHAT_REPLY (1,8 dtk). Jadi Fase 4
+  (naikkan max_tokens router / alihkan router ke netra) evidence-backed —
+  BELUM dieksekusi atas permintaan user (latensi bukan prioritas).
+  Catatan tambahan: balasan ongkir 09:43:43 tersimpan terpotong
+  ("ongkirnya *Rp 25.00") — dugaan truncasi pengiriman, belum diinvestigasi.
+  `Customer.kelurahan` Chyntia = NULL (hanya kecamatan Krian) — konsisten Poin C.
+- **194f — Fase 4 DIEKSEKUSI di server baru/produksi (2026-10-02):** via Admin API
+  `PATCH /api/admin/ai-models/INTENT_CLASSIFICATION` →
+  `SumoPod/deepseek-v4-flash-0731:netra`, `max_tokens` 1024→2048 (audit trail
+  tercatat; DB `tenant_ai_config` terverifikasi). Alasan: router `glm-5.3-flash`
+  reasoning menghabiskan token & mentok 1024 → fallback canned. Validasai sandbox
+  ("Tambak kemerakkan krian"): balasan ongkir Rp 25.000 muncul, TIDAK ada lagi
+  canned fallback. **Catatan OPEN:** saat pengujian, SumoPod/netra sempat timeout
+  transien (retry sukses) dan circuit-breaker 25 dtk memicu fallback
+  `deepseek-chat` (tetap menghasilkan balasan benar). Latensi SumoPod intermittent
+  = isu infra terpisah (user: bukan prioritas). `CHAT_REPLY_DEEP` (glm-5.3-flash)
+  di DB tidak punya caller runtime di `src` — diabaikan.
 - **194c — Bukti latensi nyata (OPEN):** telemetri `llm_audit_logs` (951 baris,
   s/d 2026-10-01): `CHAT_REPLY` avg **46,7 dtk**, max **368 dtk**, **8 turn
   completion=0**; `CHAT_REPLY_DEEP` avg 55,9 dtk max 366 dtk (completion mentok

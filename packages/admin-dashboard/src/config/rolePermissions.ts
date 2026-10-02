@@ -311,6 +311,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/landing',
       '/admin/meta-click-catcher',
       '/admin/meta-capi-queue',
+      '/admin/customer-service',
       '/admin/ai-evaluations',
     ],
     defaultRedirect: '/admin/overview',

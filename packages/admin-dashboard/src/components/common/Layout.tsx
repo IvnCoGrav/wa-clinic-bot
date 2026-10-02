@@ -225,6 +225,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { name: 'Landing Page', path: '/admin/landing', icon: Globe },
         { name: 'Meta Click Catcher', path: '/admin/meta-click-catcher', icon: MousePointerClick },
         { name: 'Meta CAPI Queue', path: '/admin/meta-capi-queue', icon: BadgeCheck, badge: capiPendingCount },
+        { name: 'CTA & Greetings WA', path: '/admin/customer-service', icon: Headphones },
       ],
     },
     {

@@ -912,6 +912,31 @@ export const Settings: React.FC = () => {
             savingMediaRetention={savingMediaRetention}
             handleSaveMediaRetention={handleSaveMediaRetention}
           />
+
+          {/* Gateway: CTA & Greetings WA (konsolidasi dari rute /admin/customer-service) */}
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                  <MessageCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111b21]">Template Greetings &amp; Format Tracking CTA</h3>
+                  <p className="text-xs text-[#667781] mt-0.5 leading-relaxed">
+                    Kelola teks sapaan WhatsApp pembuka, format pelacakan Promo [%ID%], dan pembuat link CTA iklan otomatis.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearchParams({ tab: 'cs' }, { replace: true })}
+                className="min-h-[36px] px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069]/40 transition-all text-xs font-bold text-white shadow-xs flex items-center gap-1.5 shrink-0"
+              >
+                <span>Buka Pengaturan Greetings &amp; CTA</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

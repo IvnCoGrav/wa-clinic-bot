@@ -4,6 +4,55 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-02 - Fase 4: Stabilisasi Router NLU (glm-5.3-flash → netra) di Produksi
+
+- **Konteks:** audit transkrip live Bunda Chyntia (Krian, 6287883887456) di server
+  produksi `43.173.11.79`. Dua turn gagal: task `INTENT_CLASSIFICATION`
+  (Call 1 Router) memakai `glm-5.3-flash` dengan `completion_tokens` TEPAT 1024
+  (cap) dan latensi 28–33 dtk → output kosong → fallback canned
+  "Kami pastikan informasinya...". Bukti: `llm_audit_logs`.
+- **Fixed (data/config, tenant-aware) — server produksi via Admin API**
+  `PATCH /api/admin/ai-models/INTENT_CLASSIFICATION`:
+  `glm-5.3-flash` → `deepseek-v4-flash-0731:netra` (model router kanonik,
+  non-reasoning), `max_tokens` 1024 → 2048. Audit trail admin tercatat;
+  `tenant_ai_config` terverifikasi. Tidak ada perubahan kode (default kode
+  memang sudah netra — DB sempat drift).
+- **Validasi sandbox** ("Tambak kemerakkan krian"): balasan memuat ongkir
+  promo *Rp 25.000* (normal *Rp 35.000*), TANPA canned fallback kosong.
+- **Catatan:** SumoPod/netra sempat timeout transien → circuit-breaker 25 dtk
+  fallback `deepseek-chat` (hasil tetap benar). Latensi SumoPod = isu infra
+  terpisah. Detail: KNOWN_ISSUES #194e/#194f.
+
+#### 2026-10-02 - Restorasi Navigasi "CTA & Greetings WA" + Scope API Advertiser
+
+- **Konteks:** refaktor `49f6bdde` (14 Sep 2026) mengubah `/admin/customer-service`
+  menjadi redirect ke `/admin/settings?tab=cs` dan menghapus menu sidebar-nya tanpa
+  pengganti, sehingga handler `subTab==='cs'` menjadi *orphaned* (hanya bisa dibuka
+  via URL manual) dan `lazy(CustomerService)` di `App.tsx` menjadi *dead import*.
+  Audit read-only membantah klaim plan lama ("rute masih berfungsi normal"): rute itu
+  kini `Navigate` polos. Detail: KNOWN_ISSUES #197.
+- **Fixed (routing) — `packages/admin-dashboard/src/App.tsx`:** `/admin/customer-service`
+  dikembalikan sebagai halaman protektif langsung (`ProtectedRoute > Layout >
+  CustomerService`, menghidupkan kembali lazy import), alih-alih redirect-only yang
+  membuat `advertiser` mustahil lolos guard (`ProtectedRoute` menilai `pathname` tanpa
+  query). Alias `/admin/cs` → `/admin/customer-service`.
+- **Fixed (navigasi) — `components/common/Layout.tsx`:** menu "CTA & Greetings WA"
+  (ikon `Headphones`, reuse import eksisting) dikembalikan di grup "Marketing & Ads".
+- **Fixed (RBAC) — `config/rolePermissions.ts`:** tambah `/admin/customer-service` ke
+  allowlist `advertiser` TANPA membuka `/admin/settings` (cegah kebocoran QR WAHA /
+  token CAPI / AI scope). Kategori `ALL_MODULES` sengaja tidak diubah (kategori editor
+  role ≠ grup sidebar).
+- **Added (UI) — `pages/tenant/Settings.tsx`:** kartu gateway kontekstual di blok
+  `META_MARKETING` (Impeccable, `setSearchParams({ tab: 'cs' })`, reuse
+  `MessageCircle`/`ArrowRight`, tanpa native alert).
+- **Added (DB, belum di-apply) — migrasi
+  `20261002000001_allow_customer_service_for_advertiser`:** seed `role_api_scopes`
+  advertiser `GET,POST` untuk `/api/admin/customer-service` (tenant-aware, idempoten).
+  Wajib: role advertiser sudah "managed" → default-deny 403 sebelum seed ini.
+- **Verifikasi:** root `npm run build` (`tsc`) exit 0; dashboard `vite build` hijau
+  (chunk `CustomerService` 10.65 kB ter-split dari lazy import baru; tanpa dependency
+  baru). Uji navigasi manual & scope API live tertunda ke deploy (lihat #197c/#197d).
+
 #### 2026-10-02 - Meta Ads Performance & Sales Dashboard (CAC/LTV) — Fase 0–4
 
 - **Konteks:** Modul analitik performa iklan Meta to Sales, dipisah tegas dari

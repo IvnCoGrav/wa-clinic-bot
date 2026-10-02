@@ -128,8 +128,14 @@ export const App: React.FC = () => {
             } />
             <Route path="/admin/labels" element={<Navigate to="/admin/customers?tab=labels" replace />} />
             <Route path="/admin/customer-labels" element={<Navigate to="/admin/customers?tab=labels" replace />} />
-            <Route path="/admin/customer-service" element={<Navigate to="/admin/settings?tab=cs" replace />} />
-            <Route path="/admin/cs" element={<Navigate to="/admin/settings?tab=cs" replace />} />
+            <Route path="/admin/customer-service" element={
+              <ProtectedRoute>
+                <Layout>
+                  <CustomerService />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/cs" element={<Navigate to="/admin/customer-service" replace />} />
 
             <Route path="/admin/financial-analytics" element={
               <ProtectedRoute>

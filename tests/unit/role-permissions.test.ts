@@ -39,17 +39,20 @@ describe('RBAC Role Permissions (rolePermissions.ts)', () => {
       expect(hasAccess('admin_cs', '/admin/persona')).toBe(false);
     });
 
-    it('should allow advertiser to access ads & reporting but block customer/livechat/settings', () => {
+    it('should allow advertiser to access ads, reporting, and CTA/Greetings but block customer/livechat/settings', () => {
       expect(hasAccess('advertiser', '/admin/overview')).toBe(true);
       expect(hasAccess('advertiser', '/admin/landing')).toBe(true);
       expect(hasAccess('advertiser', '/admin/meta-click-catcher')).toBe(true);
       expect(hasAccess('advertiser', '/admin/meta-capi-queue')).toBe(true);
       expect(hasAccess('advertiser', '/admin/ai-evaluations')).toBe(true);
+      // CTA & Greetings WA: halaman mandiri (BUKAN lewat /admin/settings yang sensitif)
+      expect(hasAccess('advertiser', '/admin/customer-service')).toBe(true);
 
       // Blocked for advertiser
       expect(hasAccess('advertiser', '/admin/customers')).toBe(false);
       expect(hasAccess('advertiser', '/admin/reservations')).toBe(false);
       expect(hasAccess('advertiser', '/admin/live-chat')).toBe(false);
+      // /admin/settings TETAP diblokir (QR WAHA, token CAPI, AI scope)
       expect(hasAccess('advertiser', '/admin/settings')).toBe(false);
       expect(hasAccess('advertiser', '/admin/debug')).toBe(false);
     });
