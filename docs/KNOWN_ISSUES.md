@@ -3,6 +3,36 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 209. [LLM/Call 1] Insiden "Waru" — degenerasi intermiten netra TANPA thinking (FIXED, 2026-10-03)
+
+- **Gejala:** customer `6281390541340` kirim `Waru` → bot balas kaleng
+  "Kami pastikan informasinya..." → admin tarik pesan + takeover manual. Gejala
+  sama seperti #207, tetapi **pemicu BEDA**.
+- **Bukti (llm-2026-10-03, entry `llm_1791021530410_783b04`):** model
+  `deepseek-v4-flash-0731:netra`, `tool_choice` forced `calculate_delivery`,
+  `toolsCalled: []`, `completion_tokens` = 2048 (cap), `thinking` **TIDAK**
+  terkirim (gate #207 aktif). Stream memuat `<DSML invoke ...>` +
+  `"locationText": "Waru"` lengkap, lalu loop `candidateTreatmentName` hingga
+  terpotong. Event: 1× `V3_AGENT_SANITIZER_REJECTED`, 0× salvage/recovery.
+- **Akar (2 lapis warisan #207):** (1) `extractBalancedJson` butuh kurung
+  seimbang → stream `finish_reason=length` selalu gagal → salvage buta; padahal
+  `locationText` sudah lengkap. (2) Tanpa retry — Call 1 gagal sekali langsung
+  vonis mati. Temuan tambahan: model mengarang `candidateTreatmentName`
+  ("Kala Baby – Pijat Ceria") yang tak disebut customer.
+- **Fixed:** (1) `salvagePartialDsmlArgs` (`dsml-tool-salvage.ts`) memungut
+  pasangan `"key": value` LENGKAP saja dari stream terpotong (dedup first-wins,
+  batas aman 40 pasang/8 KB); (2) gate verbatim `isCandidateTreatmentVerbatim`
+  (`tool-pipeline.ts`) buang treatment karangan; (3) retry Call 1 TEPAT 1× via
+  `shouldRetryCall1` + `MAX_CALL1_RETRIES` (`generation-stage.ts`) dengan
+  `tool_choice='auto'`, pemicu deterministik (`finish_reason=length` atau
+  completion ≥ cap−16 + nol tool + DSML).
+- **Test:** `call1-dsml-salvage` (8), `candidate-treatment-verbatim-gate` (5),
+  `call1-retry-gate` (7). Verifikasi: typecheck bersih; suite penuh; sandbox live.
+- **Sisa OPEN (observability):** degenerasi intermiten netra adalah watak
+  provider (SumoPod) — mitigasi (salvage+retry) bersifat pemulihan, bukan
+  penghapusan. Bila frekuensi naik, pertimbangkan pindah Call 1 ke GLM
+  (gate #207 otomatis mengirim `thinking` yang tepat) via preset `FAST_ECONOMICAL`.
+
 ## 208. [Copilot 2.0] Single-tenant owner + explainer + SSE (2026-10-03, EXECUTED)
 
 - **ADR-001:** Copilot 2.0 KHUSUS tenant `default-tenant` (owner); tenant lain deprecated via

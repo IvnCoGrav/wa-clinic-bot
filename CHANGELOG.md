@@ -34,6 +34,25 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   `tests/integration/copilot-tenant-gate.test.ts` (route inject). Registry tool diselaraskan 6→7.
   Verifikasi: 4.627 test hijau (28 skip), `tsc` bersih, dashboard build hijau.
 
+#### 2026-10-03 - Fix Call 1 degenerasi intermiten: partial salvage + retry 1x + gate treatment (insiden "Waru")
+
+- **Akar:** netra via SumoPod masih bisa gagap intermiten TANPA flag `thinking`
+  (bukti `llm_1791021530410_783b04`: completion 2048 cap, `toolsCalled: []`,
+  `locationText: "Waru"` lengkap tapi stream terpotong). `extractBalancedJson`
+  butuh kurung seimbang → selalu gagal; tanpa retry → langsung fallback buntu.
+- **Fixed — partial salvage (`dsml-tool-salvage.ts`):** `salvagePartialDsmlArgs`
+  memungut pasangan `"key": value` utuh dari stream terpotong (dedup first-wins,
+  batas 40 pasang/8 KB, tanpa rekonstruksi nilai hilang).
+- **Fixed — gate treatment karangan (`tool-pipeline.ts`):** `isCandidateTreatmentVerbatim`
+  membuang `candidateTreatmentName` yang tak disebut customer (cermin gate P1-3).
+- **Fixed — retry Call 1 (`generation-stage.ts`):** `shouldRetryCall1` +
+  `MAX_CALL1_RETRIES=1` → retry SEKALI dengan `tool_choice='auto'` hanya saat
+  degenerasi (finish=length / completion ≥ cap−16 + nol tool + DSML); turn sehat
+  tidak pernah retry. Log `CALL1_DEGENERATE_RETRIED`.
+- **Test:** `call1-dsml-salvage` (8), `candidate-treatment-verbatim-gate` (5),
+  `call1-retry-gate` (7). Verifikasi: typecheck bersih; suite penuh; sandbox live
+  4 kasus (`Wonokusumo`, `Waru`, typo, konteks).
+
 #### 2026-10-03 - Fix Call 1 netra: provider-aware thinking flag + salvage DSML + recovery state (insiden "Wonokusumo")
 
 - **Akar (multi-layer):** `generation-stage.ts:567` mengirim `thinking: { type: 'disabled' }`

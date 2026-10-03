@@ -69,6 +69,90 @@ export const SAME_DAY_DISCLAIMER =
   'Kalau hari ini kemungkinan jadwal kami penuh bunda. Untuk memastikan, kami coba cek jadwal dulu ya bund 😊🙏';
 
 /**
+ * Fase 2 (insiden Waru 6281390541340, 2026-10-03): batas retry Call 1 —
+ * TEPAT 1x, anti infinite loop. Dijalankan hanya saat degenerasi terdeteksi.
+ */
+export const MAX_CALL1_RETRIES = 1;
+
+/**
+ * Gate deterministik retry Call 1 (pure, testable). Retry HANYA bila:
+ *   - nol tool valid terparse, DAN
+ *   - output mentah memuat artefak DSML, DAN
+ *   - terindikasi terpotong: `finish_reason === 'length'` ATAU completion
+ *     menyentuh plafon (≥ maxTokens − 16).
+ * Turn sehat tidak pernah memicu retry → nol biaya tambahan.
+ */
+export function shouldRetryCall1(input: {
+  finishReason?: string | null;
+  completionTokens?: number;
+  maxTokens?: number;
+  parsedCount: number;
+  hasDsml: boolean;
+}): boolean {
+  if (input.parsedCount > 0) return false;
+  if (!input.hasDsml) return false;
+  const capped =
+    typeof input.maxTokens === 'number' && input.maxTokens > 0 &&
+    typeof input.completionTokens === 'number' && input.completionTokens >= input.maxTokens - 16;
+  return input.finishReason === 'length' || capped;
+}
+
+/**
+ * Parse respons Call 1 → tool calls (terstruktur atau hasil salvage DSML).
+ * Murni terhadap `data` (tanpa I/O); logging dilakukan pemanggil.
+ */
+function parseCall1Data(data: any): {
+  assistantMessage: any;
+  toolCalls: any;
+  parsedCalls: any[];
+  cleanContent: string;
+  reasoning: string | null;
+  finishReason: string | null;
+  completionTokens?: number;
+  hasDsml: boolean;
+  salvagedFromDsml: boolean;
+} {
+  const choice = data?.choices?.[0];
+  const assistantMessage = choice?.message;
+  let toolCalls = assistantMessage?.tool_calls;
+  const { reasoning, cleanContent } = extractReasoningAndCleanContent(assistantMessage);
+  const rawContent = typeof assistantMessage?.content === 'string' ? assistantMessage.content : '';
+  const hasDsml = /DSML/i.test(rawContent);
+  let salvagedFromDsml = false;
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    const salvaged = salvageToolCallsFromDsml(rawContent);
+    if (salvaged.length > 0) {
+      toolCalls = salvaged;
+      salvagedFromDsml = true;
+      if (assistantMessage && typeof assistantMessage === 'object') {
+        assistantMessage.tool_calls = salvaged;
+      }
+    }
+  }
+  const parsedCalls = Array.isArray(toolCalls)
+    ? toolCalls.map((tc: any) => {
+        let a: any = {};
+        try {
+          a = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {};
+        } catch {}
+        return { name: tc.function?.name || 'unknown', args: a, _raw: tc };
+      })
+    : ([] as any[]);
+  const usage = extractUsageTelemetry(data?.usage);
+  return {
+    assistantMessage,
+    toolCalls,
+    parsedCalls,
+    cleanContent,
+    reasoning,
+    finishReason: choice?.finish_reason ?? null,
+    completionTokens: usage.completionTokens,
+    hasDsml,
+    salvagedFromDsml,
+  };
+}
+
+/**
  * Ekstraksi Chain-of-Thought universal + pembersihan artefak tag `<think>`.
  * Mendukung dua bentuk keluaran model penalaran (DeepSeek R1/Reasoner, dsb):
  *   1. Properti native `reasoning_content`.
@@ -594,50 +678,75 @@ export class GenerationStage {
       return data;
     });
 
-    const choice = firstData?.choices?.[0];
-    const assistantMessage = choice?.message;
-    let toolCalls = assistantMessage?.tool_calls;
-    const { reasoning: callReasoning, cleanContent } = extractReasoningAndCleanContent(assistantMessage);
+    // Parse Call 1 (terstruktur atau salvage DSML — insiden "Wonokusumo").
+    let parsed = parseCall1Data(firstData);
+    if (parsed.salvagedFromDsml) {
+      console.warn(JSON.stringify({
+        event: 'CALL1_DSML_TOOL_SALVAGED',
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        tools: parsed.parsedCalls.map((s: any) => s.name),
+        timestamp: new Date().toISOString(),
+      }));
+    }
+
+    // Fase 2 (insiden Waru): degenerasi intermiten netra tanpa `thinking` —
+    // stream terpotong walau tool tak terparse. Retry TEPAT 1x dengan
+    // tool_choice 'auto' agar model bisa menjawab teks; hasilnya masuk alur
+    // parse/salvage yang sama. Turn sehat tidak pernah memicu retry.
+    if (
+      shouldRetryCall1({
+        finishReason: parsed.finishReason,
+        completionTokens: parsed.completionTokens,
+        maxTokens: call1MaxTokens,
+        parsedCount: parsed.parsedCalls.length,
+        hasDsml: parsed.hasDsml,
+      })
+    ) {
+      const retryStartedAt = Date.now();
+      try {
+        const retryData = await GenerationStage.executeChatCompletion({
+          payload: { ...firstPayload, tool_choice: 'auto' },
+          tenantId: turn.tenantId,
+          phone: turn.phone,
+          conversationId: turn.conversationId,
+          baseUrl: (turn as any).routerBaseUrl || turn.baseUrl,
+          apiKey: (turn as any).routerApiKey || turn.apiKey,
+          selectedModel: call1Model,
+        });
+        tel.addUsage((retryData as any)?.usage);
+        const retryModel = (retryData as any)?.__actualModel || call1Model;
+        await tel.auditUsage((retryData as any)?.usage, retryStartedAt, retryModel, (turn as any).routerBaseUrl || turn.baseUrl, undefined, 'INTENT_CLASSIFICATION');
+        const retryParsed = parseCall1Data(retryData);
+        console.warn(JSON.stringify({
+          event: 'CALL1_DEGENERATE_RETRIED',
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          firstCompletion: parsed.completionTokens,
+          retryTools: retryParsed.parsedCalls.map((t: any) => t.name),
+          retryFinishReason: retryParsed.finishReason,
+          timestamp: new Date().toISOString(),
+        }));
+        if (retryParsed.parsedCalls.length > 0) {
+          parsed = retryParsed;
+        }
+      } catch (retryErr: any) {
+        console.warn(JSON.stringify({ event: 'CALL1_DEGENERATE_RETRY_ERROR', tenantId: turn.tenantId, conversationId: turn.conversationId, error: retryErr?.message || String(retryErr), timestamp: new Date().toISOString() }));
+      }
+    }
+
+    const assistantMessage = parsed.assistantMessage;
+    let toolCalls = parsed.toolCalls;
+    const cleanContent = parsed.cleanContent;
+    const callReasoning = parsed.reasoning;
     let reasoning = turn.reasoning;
     if (!reasoning && callReasoning) {
       reasoning = callReasoning;
       turn.reasoning = reasoning;
     }
 
-    // Fase 2 (defense-in-depth, insiden "Wonokusumo" 2026-10-03): bila model
-    // TIDAK mengembalikan `tool_calls` terstruktur tetapi memuntahkan sintaks
-    // tool-call DSML ke `content` (lazim pada netra via gateway), pulihkan
-    // panggilan secara deterministik. Keamanan anti-halusinasi tetap dijaga
-    // gerbang verbatim eksisting di tool-pipeline (locationText di-cross-check
-    // ke teks customer asli). Tanpa invoke yang bisa dibaca → array kosong.
-    if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-      const rawContent = typeof (assistantMessage as any)?.content === 'string' ? (assistantMessage as any).content : '';
-      const salvaged = salvageToolCallsFromDsml(rawContent);
-      if (salvaged.length > 0) {
-        toolCalls = salvaged;
-        if (assistantMessage && typeof assistantMessage === 'object') {
-          (assistantMessage as any).tool_calls = salvaged;
-        }
-        console.warn(JSON.stringify({
-          event: 'CALL1_DSML_TOOL_SALVAGED',
-          tenantId: turn.tenantId,
-          conversationId: turn.conversationId,
-          tools: salvaged.map((s) => s.function.name),
-          timestamp: new Date().toISOString(),
-        }));
-      }
-    }
-
     // Tracing Call 1 (Tool Routing): latensi bersih model + token/biaya per-call
-    let parsedCalls = Array.isArray(toolCalls)
-      ? toolCalls.map((tc: any) => {
-          let a: any = {};
-          try {
-            a = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {};
-          } catch {}
-          return { name: tc.function?.name || 'unknown', args: a, _raw: tc };
-        })
-      : [] as any;
+    let parsedCalls = parsed.parsedCalls;
     // Atomic Routing: 1 turn = 1 tool utama (mitigasi parallel spraying).
     // Prioritas berpegang pada gate sistem (bukan hafalan pola): coverage la
     // pembatas jangkauan (luar area → tolak) setara kunci keamanan bisnis,

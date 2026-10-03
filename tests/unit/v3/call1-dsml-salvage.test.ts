@@ -38,11 +38,17 @@ describe('Call 1 DSML tool-call salvage', () => {
     expect(JSON.parse(calls[0].function.arguments).symptoms).toBe('bayi batuk pilek');
   });
 
-  it('JSON terpotong (finish_reason=length) → dibuang, BUKAN ditebak', () => {
+  it('JSON terpotong: pasangan lengkap dipungut, key rusak di ujung dibuang', () => {
+    // Kontrak baru (insiden Waru): stream `finish_reason=length` memungut
+    // pasangan UTUH saja; key terpotong ("isDontKnow2" tanpa nilai) dibuang.
     const raw =
       O('DSML') + ' invoke name="calculate_delivery"\n' +
       '{ "locationText": "Wonokusumo", "isDontKnow": false, "isDontKnow2": false';
-    expect(salvageToolCallsFromDsml(raw)).toHaveLength(0);
+    const calls = salvageToolCallsFromDsml(raw);
+    expect(calls).toHaveLength(1);
+    const args = JSON.parse(calls[0].function.arguments);
+    expect(args.locationText).toBe('Wonokusumo');
+    expect(args.isDontKnow).toBe(false);
   });
 
   it('tanpa artefak DSML → array kosong (teks natural tak disentuh)', () => {
@@ -57,5 +63,52 @@ describe('Call 1 DSML tool-call salvage', () => {
     const calls = salvageToolCallsFromDsml(raw);
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0].function.arguments).note).toBe('alamat {patokan} masjid');
+  });
+
+  // Insiden Waru (6281390541340, 2026-10-03): netra gagap intermiten tanpa
+  // `thinking` — stream `finish_reason=length` TAK PERNAH seimbang, padahal
+  // `"locationText": "Waru"` sudah lengkap. Salvage parsial WAJIB memungut
+  // pasangan yang utuh saja, tanpa merekonstruksi yang hilang.
+  it('stream terpotong: memungut pasangan lengkap (locationText) — partial salvage', () => {
+    const raw =
+      O('DSML') + ' invoke name="calculate_delivery">\n' +
+      '{\n' +
+      '  "locationText": "Waru",\n' +
+      '  "asksDeliveryFee": false,\n' +
+      '  "commitment": "EXPLORING"\n' +
+      '  , "candidateTreatmentName": "Kala Baby – Pijat Ceria"\n' +
+      '  , "streetDetail": ""\n' +
+      '  , "candidateTreatmentName": ""\n' +
+      '  , "candidateTrea';
+    const calls = salvageToolCallsFromDsml(raw);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].function.name).toBe('calculate_delivery');
+    const args = JSON.parse(calls[0].function.arguments);
+    expect(args.locationText).toBe('Waru');
+    expect(args.asksDeliveryFee).toBe(false);
+    expect(args.commitment).toBe('EXPLORING');
+  });
+
+  it('partial salvage: string terpotong di tengah tidak diambil (bukan ditebak)', () => {
+    const raw =
+      O('DSML') + ' invoke name="calculate_delivery">\n' +
+      '{ "locationText": "Waru", "candidateTreatmentName": "Kala Ba';
+    const calls = salvageToolCallsFromDsml(raw);
+    expect(calls).toHaveLength(1);
+    const args = JSON.parse(calls[0].function.arguments);
+    expect(args.locationText).toBe('Waru');
+    expect(args.candidateTreatmentName).toBeUndefined();
+  });
+
+  it('partial salvage tidak menyerap key berulang berlebihan (dedup first-wins)', () => {
+    const loop = Array.from({ length: 50 }, () => '  , "candidateTreatmentName": ""').join('\n');
+    const raw =
+      O('DSML') + ' invoke name="calculate_delivery">\n' +
+      '{ "locationText": "Waru", "asksDeliveryFee": false\n' + loop;
+    const calls = salvageToolCallsFromDsml(raw);
+    expect(calls).toHaveLength(1);
+    const args = JSON.parse(calls[0].function.arguments);
+    expect(args.locationText).toBe('Waru');
+    expect(Object.keys(args)).toContain('candidateTreatmentName');
   });
 });

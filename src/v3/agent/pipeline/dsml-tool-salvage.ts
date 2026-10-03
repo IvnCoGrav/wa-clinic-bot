@@ -52,6 +52,81 @@ function extractBalancedJson(text: string, start: number): string | null {
   return null;
 }
 
+/** Batas aman partial salvage agar stream looping raksasa tak meledak. */
+const PARTIAL_MAX_PAIRS = 40;
+const PARTIAL_MAX_SCAN = 8192;
+
+/**
+ * Salvage PARSIAL untuk stream yang TERPOTONG (`finish_reason: length`):
+ * `extractBalancedJson` mustahil berhasil karena kurung tak pernah ditutup,
+ * padahal pasangan awal (mis. `"locationText": "Waru"`) sudah lengkap. Fungsi
+ * ini memungut HANYA pasangan `"key": value` yang benar-benar utuh (string
+ * bertutup + escape-aware, angka, boolean, null), lalu BERHENTI di titik rusak.
+ * DILARANG merekonstruksi nilai yang hilang/terpotong. Mengembalikan null bila
+ * tak ada satu pun pasangan lengkap.
+ *
+ * Insiden Waru (6281390541340, 2026-10-03).
+ */
+export function salvagePartialDsmlArgs(bodyText: string): Record<string, unknown> | null {
+  if (!bodyText || typeof bodyText !== 'string') return null;
+  const text = bodyText.slice(0, PARTIAL_MAX_SCAN);
+  const out: Record<string, unknown> = {};
+  let i = 0;
+  let pairs = 0;
+
+  const skipWs = (): void => {
+    // Lewati whitespace, pemisah koma, dan kurung pembuka (kita mulai dari `{`).
+    while (i < text.length && /[\s,{]/.test(text[i])) i++;
+  };
+  // Baca string literal mulai di `text[i]` (harus `"`). Memajukan `i` melewati
+  // penutup kutip. Mengembalikan null bila tak tertutup (terpotong).
+  const readString = (): string | null => {
+    if (text[i] !== '"') return null;
+    let j = i + 1;
+    let raw = '';
+    let escaped = false;
+    while (j < text.length) {
+      const ch = text[j];
+      if (escaped) { raw += ch; escaped = false; j++; continue; }
+      if (ch === '\\') { raw += ch; escaped = true; j++; continue; }
+      if (ch === '"') {
+        i = j + 1;
+        try { return JSON.parse(`"${raw}"`); } catch { return null; }
+      }
+      raw += ch;
+      j++;
+    }
+    return null; // tak tertutup → terpotong
+  };
+
+  while (i < text.length && pairs < PARTIAL_MAX_PAIRS) {
+    skipWs();
+    const key = readString();
+    if (key === null) break; // key terpotong / bukan string
+    skipWs();
+    if (text[i] !== ':') break;
+    i++;
+    skipWs();
+
+    if (text[i] === '"') {
+      const val = readString();
+      if (val === null) break; // nilai string terpotong
+      if (!(key in out)) out[key] = val;
+    } else {
+      const m = /^(true|false|null|-?\d+(?:\.\d+)?)/.exec(text.slice(i));
+      if (!m) break; // nilai rusak/terpotong
+      const raw = m[1];
+      if (!(key in out)) {
+        out[key] = raw === 'true' ? true : raw === 'false' ? false : raw === 'null' ? null : Number(raw);
+      }
+      i += raw.length;
+    }
+    pairs++;
+  }
+
+  return pairs > 0 ? out : null;
+}
+
 /**
  * Ekstrak pemanggilan tool dari teks mentah berisi DSML.
  *
@@ -76,7 +151,7 @@ export function salvageToolCallsFromDsml(content: string): SalvagedToolCall[] {
 
     let args: Record<string, unknown> | null = null;
 
-    // Bentuk 1: JSON langsung.
+    // Bentuk 1: JSON langsung (utuh, balanced).
     const braceIdx = after.indexOf('{');
     if (braceIdx !== -1) {
       const rawJson = extractBalancedJson(after, braceIdx);
@@ -87,6 +162,12 @@ export function salvageToolCallsFromDsml(content: string): SalvagedToolCall[] {
             args = parsed as Record<string, unknown>;
           }
         } catch { args = null; }
+      }
+      // Bentuk 1b (insiden Waru): JSON terpotong `finish_reason=length` —
+      // kurung tak pernah ditutup, tetapi pasangan awal lengkap. Pungut
+      // pasangan utuh saja (fail-safe, tanpa rekonstruksi).
+      if (!args) {
+        args = salvagePartialDsmlArgs(after.slice(braceIdx));
       }
     }
 

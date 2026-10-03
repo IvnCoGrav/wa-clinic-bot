@@ -78,6 +78,23 @@ export function filterSymptomsPresentInText(symptoms: any[], cleanIncomingText: 
 }
 
 /**
+ * P1-4 (insiden Waru 2026-10-03): gate verbatim `candidateTreatmentName`.
+ * Router LLM kadang mengarang nama treatment pada `calculate_delivery`
+ * (mis. "Kala Baby – Pijat Ceria") padahal customer tak pernah menyebutnya.
+ * Cermin P1-3 `specificTreatmentName`: teruskan HANYA bila muncul di teks
+ * customer turn ini (normalisasi tanda baca). Mengembalikan true = boleh teruskan.
+ */
+export function isCandidateTreatmentVerbatim(candidateName: unknown, cleanIncomingText: string | undefined): boolean {
+  if (typeof candidateName !== 'string' || !candidateName.trim()) return false;
+  const normHay = (cleanIncomingText || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normHay) return false;
+  const normNeedle = candidateName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normNeedle) return false;
+  if (normHay.includes(normNeedle)) return true;
+  return normNeedle.split(' ').some((tok: string) => tok.length >= 4 && normHay.includes(tok));
+}
+
+/**
  * Stage 2 & 3 — ToolExecutionPipeline: validasi argumen tool, pengayaan
  * kontekstual otomatis, eksekusi via registry, dan reduksi mutasi session
  * (state reducer terpusat — bukan mutasi tersebar).
@@ -363,6 +380,14 @@ export class ToolExecutionPipeline {
         // saat customer membandingkan lokasi ("kalau ke X?").
         const carryOver = ToolExecutionPipeline.shouldCarryOverDeliveryFee(session);
         fnArgs.asksDeliveryFee = priceIntent.asksPrice || carryOver;
+        // P1-4 (insiden Waru): buang candidateTreatmentName karangan LLM yang
+        // tidak muncul di pesan customer turn ini (cegah halusinasi treatment).
+        if (
+          typeof fnArgs.candidateTreatmentName === 'string' &&
+          !isCandidateTreatmentVerbatim(fnArgs.candidateTreatmentName, cleanIncomingText)
+        ) {
+          delete fnArgs.candidateTreatmentName;
+        }
       }
       if (fnName === 'get_catalog_and_price') {
         // P1-3: gate specificTreatmentName — hanya teruskan bila muncul di pesan user turn ini
