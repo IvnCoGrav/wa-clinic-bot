@@ -26,9 +26,11 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
   const cookieHeader = request.headers['cookie'] || '';
   const sessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
   const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
-  const apiKey = (request.headers['x-api-key'] || request.headers['x-admin-api-key'] || (request.query as any)?.apiKey || (request.query as any)?.key) as string | undefined;
+  // D.3 (audit #199): DILARANG menerima kredensial via query string (?apiKey/
+  // ?key/?token) — berisiko bocor ke access log/proxy/riwayat browser. Hanya
+  // cookie sesi, header X-API-KEY, atau Authorization: Bearer yang diizinkan.
+  const apiKey = (request.headers['x-api-key'] || request.headers['x-admin-api-key']) as string | undefined;
   const authHeader = request.headers['authorization'];
-  const queryToken = (request.query as any)?.token;
 
   const { AdminSessionService, SessionStoreUnavailable } = await import('../services/admin-session.service');
   // DB sesi tak tersedia → dianggap belum terotentikasi di lapis media (deny aman,
@@ -54,10 +56,6 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
   };
   if (sessionCookie && (await adminSessionValid(sessionCookie))) return true;
   if (staffCookie && (await staffSessionValid(staffCookie))) return true;
-  if (queryToken) {
-    if (await adminSessionValid(queryToken)) return true;
-    if (await staffSessionValid(queryToken)) return true;
-  }
   const adminKey = process.env.ADMIN_API_KEY;
   if (apiKey && adminKey && safeCompare(apiKey, adminKey)) return true;
   if (authHeader && authHeader.startsWith('Bearer ') && adminKey && safeCompare(authHeader.slice(7), adminKey)) return true;

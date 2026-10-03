@@ -140,16 +140,20 @@ export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_I
     // Tidak ada data di DB -> seed dari file/default lalu simpan
     const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
     console.warn(`[SEED] Delivery tiers kosong untuk tenant ${tenantId}; seeding dari ${activeDeliveryTiers.length > 0 ? 'file delivery_tiers_custom.json' : 'DEFAULT_TIERS (code default)'} (${source.length} tier). Set nilai via admin API / DB untuk produksi.`);
-    await prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } });
-    await prisma.deliveryTier.createMany({
-      data: source.map((t, idx) => ({
-        tenant_id: tenantId,
-        max_dist: t.maxDist,
-        fee: t.fee,
-        promo_discount: t.promoDiscount,
-        sort_order: idx + 1,
-      })),
-    });
+    // D.1 (audit #199): hapus+isi atomik dalam SATU transaksi — cegah tier
+    // kosong/setengah bila proses terputus di tengah.
+    await prisma.$transaction([
+      prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } }),
+      prisma.deliveryTier.createMany({
+        data: source.map((t, idx) => ({
+          tenant_id: tenantId,
+          max_dist: t.maxDist,
+          fee: t.fee,
+          promo_discount: t.promoDiscount,
+          sort_order: idx + 1,
+        })),
+      }),
+    ]);
     return source;
   } catch (err) {
     // DB offline -> fallback file
@@ -163,19 +167,22 @@ export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_I
  */
 export async function saveDeliveryTiersToDb(tiers: DeliveryTier[], tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
   try {
-    await prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } });
-    await prisma.deliveryTier.createMany({
-      data: tiers
-        .slice()
-        .sort((a, b) => a.maxDist - b.maxDist)
-        .map((t, idx) => ({
-          tenant_id: tenantId,
-          max_dist: t.maxDist,
-          fee: t.fee,
-          promo_discount: t.promoDiscount,
-          sort_order: idx + 1,
-        })),
-    });
+    // D.1 (audit #199): hapus+isi atomik dalam SATU transaksi.
+    await prisma.$transaction([
+      prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } }),
+      prisma.deliveryTier.createMany({
+        data: tiers
+          .slice()
+          .sort((a, b) => a.maxDist - b.maxDist)
+          .map((t, idx) => ({
+            tenant_id: tenantId,
+            max_dist: t.maxDist,
+            fee: t.fee,
+            promo_discount: t.promoDiscount,
+            sort_order: idx + 1,
+          })),
+      }),
+    ]);
     // Juga update fallback file (legacy compat)
     saveDeliveryTiers(tiers);
     return true;

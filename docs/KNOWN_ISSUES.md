@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 203. [Data/Integrasi/Keamanan] Fase D fixing plan (2026-10-03, EXECUTED)
+
+Keputusan user: D.1, D.2, D.3 disetujui.
+
+- **D.1 — seed katalog/tier ATOMIK (EXECUTED):** `saveServicesToDb` (`treatment-catalog.service.ts`) + `saveDeliveryTiersToDb`/`getDeliveryTiersFromDb` (`delivery.service.ts`) kini `deleteMany`+`createMany` dalam satu `prisma.$transaction` — cegah katalog/tier kosong/setengah bila proses terputus. Test: `tests/unit/v3-catalog-atomic-seed.test.ts`. Catatan: test menulis `delivery_tiers_custom.json` → di-`mock fs.writeFileSync` agar tidak merusak data test lain (ditemukan saat verifikasi).
+- **D.2 — CAPI tenant-scope + hapus hardcode (EXECUTED):** lookup `customer`/`adClick`/`reservation.raw_text` (`capi.service.ts`) kini menyertakan `tenant_id`; nilai transaksi kategori TIDAK lagi memakai angka baku `100000/70000/60000` — bila tak ketemu di katalog → `undefined` (Meta terima event tanpa nilai) daripada nominal salah. Test: `tests/unit/capi-value-no-hardcode.test.ts`. OPEN: `hashedState` masih literal `'jawa timur'` (konstanta domain, bukan uang) — dibiarkan.
+- **D.3 — keamanan akses (EXECUTED):** (1) fallback secret baku `'my_webhook_secret_key'` di `waha/client.ts:startSession` DIHAPUS — bila `WAHA_WEBHOOK_SECRET` kosong, `customHeaders` tidak dipasang (validasi webhook fail-closed di app). (2) `media.route.ts` TIDAK lagi menerima kredensial via query string (`?apiKey/?key/?token`) — hanya cookie sesi / `X-API-KEY` / `Authorization: Bearer`. Test: `tests/unit/media-query-auth-ban.test.ts`. (3) Label WAHA: diverifikasi NOL pemanggilan bisnis `addLabel/removeLabel` (hanya definisi `@deprecated` + stub sandbox) — ban sudah lestari.
+- **CATATAN ROTASI:** `WAHA_WEBHOOK_SECRET` pernah tercetak di observasi (KNOWN_ISSUES #196d) — rotasi tetap disarankan, dilakukan manual oleh user (jangan cetak nilai ke log/chat).
+
 ## 202. [Kontrak Booking/Output] Fase C lanjutan — keputusan user dieksekusi (2026-10-03, EXECUTED)
 
 Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2) `provide_location` word-boundary; (3) tanggal word-boundary DITUNDA; (4) kontrak nominal lama DIPERTAJAM.

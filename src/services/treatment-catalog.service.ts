@@ -985,18 +985,16 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
     const catalog = getTenantCatalog(tenantId);
     const list = Array.from(catalog.values());
 
-    await prisma.clinicService.deleteMany({ where: { tenant_id: tenantId } });
-    await prisma.clinicService.createMany({
-      data: list.map((s, idx) => {
-        let metaDesc = s.description;
-        if (s.bundleItemIds && s.bundleItemIds.length > 0 && !metaDesc.includes('[BUNDLE:')) {
-          metaDesc = `[BUNDLE:${s.bundleItemIds.join(',')}] ${metaDesc}`;
-        }
-        if (s.isAddon && !metaDesc.includes('[ADDON]')) {
-          metaDesc = `[ADDON] ${metaDesc}`;
-        }
+    const rows = list.map((s, idx) => {
+      let metaDesc = s.description;
+      if (s.bundleItemIds && s.bundleItemIds.length > 0 && !metaDesc.includes('[BUNDLE:')) {
+        metaDesc = `[BUNDLE:${s.bundleItemIds.join(',')}] ${metaDesc}`;
+      }
+      if (s.isAddon && !metaDesc.includes('[ADDON]')) {
+        metaDesc = `[ADDON] ${metaDesc}`;
+      }
 
-        return {
+      return {
           tenant_id: tenantId,
           service_id: s.id,
           name: s.name,
@@ -1011,8 +1009,14 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
           is_active: s.isActive,
           sort_order: idx,
         };
-      }),
     });
+
+    // D.1 (audit #199): hapus+isi atomik dalam SATU transaksi — cegah katalog
+    // kosong/setengah bila proses terputus di tengah (crash/restart).
+    await prisma.$transaction([
+      prisma.clinicService.deleteMany({ where: { tenant_id: tenantId } }),
+      prisma.clinicService.createMany({ data: rows }),
+    ]);
 
     // Legacy compat
     saveServices();

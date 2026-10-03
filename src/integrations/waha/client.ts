@@ -1250,7 +1250,13 @@ export class WahaClient implements IWahaClient {
 
     try {
       const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://host.docker.internal:3000/webhook';
-      const secret = process.env.WAHA_WEBHOOK_SECRET || 'my_webhook_secret_key';
+      // D.3 (audit #199): DILARANG fallback secret baku yang mudah ditebak.
+      // Bila WAHA_WEBHOOK_SECRET kosong, JANGAN pasang customHeader (validasi
+      // webhook akan fail-closed di sisi app) — jangan pernah mengirim default publik.
+      const secret = process.env.WAHA_WEBHOOK_SECRET;
+      if (!secret) {
+        console.warn('[WAHA] WAHA_WEBHOOK_SECRET tidak diset — webhook tanpa x-webhook-secret (validasi custom-header tidak aktif).');
+      }
       const configBody = {
         config: {
           noweb: { markOnline: true, store: { enabled: true, fullSync: true } },
@@ -1258,7 +1264,7 @@ export class WahaClient implements IWahaClient {
             {
               url: webhookUrl,
               events: ['message', 'message.any', 'message.reaction', 'message.ack', 'message.revoked', 'message.edited', 'session.status', 'label.chat.added', 'label.chat.deleted'],
-              customHeaders: [{ name: 'x-webhook-secret', value: secret }]
+              ...(secret ? { customHeaders: [{ name: 'x-webhook-secret', value: secret }] } : {}),
             }
           ]
         }

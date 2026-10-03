@@ -227,19 +227,16 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
       return Math.min(...vals);
     };
     if (cleanLower.includes('moms') || cleanLower.includes('ibu') || cleanLower.includes('hamil') || cleanLower.includes('nifas') || cleanLower.includes('laktasi')) {
-      const v = pickCategoryFallback('MOMS');
-      if (v !== undefined) return v;
-      return 100000;
+      // D.2 (audit #199): DILARANG fallback angka baku. Bila kategori tidak
+      // ketemu di katalog, kembalikan undefined (Meta terima event tanpa nilai)
+      // daripada mengirim nominal salah.
+      return pickCategoryFallback('MOMS');
     }
     if (cleanLower.includes('kids') || cleanLower.includes('anak')) {
-      const v = pickCategoryFallback('KIDS');
-      if (v !== undefined) return v;
-      return 70000;
+      return pickCategoryFallback('KIDS');
     }
     if (cleanLower.includes('baby') || cleanLower.includes('bayi') || cleanLower.includes('pijat') || cleanLower.includes('homecare')) {
-      const v = pickCategoryFallback('BABY');
-      if (v !== undefined) return v;
-      return 60000;
+      return pickCategoryFallback('BABY');
     }
 
     return undefined;
@@ -681,7 +678,10 @@ export class CapiService {
       try {
         const { prisma } = await import('../db/client');
         const dbCust = await prisma.customer.findFirst({
-          where: customer.id ? { id: customer.id } : { phone: customer.phone },
+          where: {
+            ...(customer.id ? { id: customer.id } : { phone: customer.phone }),
+            ...(tenantId ? { tenant_id: tenantId } : {}),
+          },
         });
         if (dbCust) {
           fullCustomer = { ...dbCust, ...customer };
@@ -689,6 +689,7 @@ export class CapiService {
         if (!effectiveAdClick && (fullCustomer?.id || fullCustomer?.phone)) {
           effectiveAdClick = await prisma.adClick.findFirst({
             where: {
+              ...(tenantId ? { tenant_id: tenantId } : {}),
               OR: [
                 ...(fullCustomer?.id ? [{ customerId: fullCustomer.id }] : []),
                 ...(fullCustomer?.phone ? [{ phone: fullCustomer.phone }] : []),
@@ -729,7 +730,11 @@ export class CapiService {
         try {
           const { prisma } = await import('../db/client');
           const latestRes = await prisma.reservation.findFirst({
-            where: { customer_id: fullCustomer.id, status: { not: 'cancelled' } },
+            where: {
+              customer_id: fullCustomer.id,
+              status: { not: 'cancelled' },
+              ...(tenantId ? { tenant_id: tenantId } : {}),
+            },
             orderBy: { created_at: 'desc' },
           });
           if (latestRes?.raw_text) {
