@@ -20,6 +20,9 @@ services:
       start_period: 60s
     volumes:
       - ./storage:/app/storage
+      # Persistensi log forensik (app-*.log + llm-*.jsonl) ke host agar tidak
+      # hilang saat recreate container — audit turn-by-turn butuh JSONL (KNOWN_ISSUES #194c/#199).
+      - ./logs:/app/logs
     # Forward SEMUA var dari .env server ke container app (LLM/ORS/Redis/admin keys dll).
     # Nilai di blok `environment` di bawah tetap MENIMPA env_file — jadi var jaringan
     # (DATABASE_URL, WAHA_BASE_URL, PORT, HOST) aman memakai nilai container.
