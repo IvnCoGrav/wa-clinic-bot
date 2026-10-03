@@ -205,8 +205,9 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
     expect(call.include.messages.take).toBe(1);
   });
 
-  it('registry tool konsisten (whitelist 6 tool)', () => {
+  it('registry tool konsisten (whitelist 7 tool)', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'explain_conversation_state',
       'get_customer_history',
       'lookup_catalog_and_policy',
       'query_reservations_by_filter',
@@ -436,8 +437,9 @@ describe('Fase B1 — query_stalled_inquiries (state-based)', () => {
     expect(h.conversationFindMany.mock.calls[0][0].where.tenant_id).toBe('tenant-a');
   });
 
-  it('registry memuat 6 tool', () => {
+  it('registry memuat 7 tool', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
+      'explain_conversation_state',
       'get_customer_history',
       'lookup_catalog_and_policy',
       'query_reservations_by_filter',

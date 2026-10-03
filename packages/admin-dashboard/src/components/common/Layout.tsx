@@ -963,8 +963,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <ThemeToggle />
             </div>
 
-            {/* AI Copilot Toggle Button (Icon Only) — Aktif di Live Chat untuk mobile & desktop */}
-            {isLiveChat && (
+            {/* AI Copilot Toggle Button (Icon Only) — Aktif di Live Chat untuk mobile & desktop.
+                ADR-001: disembunyikan untuk tenant non-owner (copilotEnabled=false). */}
+            {isLiveChat && user?.copilotEnabled !== false && (
               <button
                 type="button"
                 onClick={() => setCopilotOpen(!copilotOpen)}

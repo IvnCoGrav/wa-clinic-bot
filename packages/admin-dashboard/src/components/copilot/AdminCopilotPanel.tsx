@@ -4,6 +4,7 @@ import { Sparkles, X, Send, Loader, ShieldCheck, MessageCircle, Search, Brain, P
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useCopilot } from '../../contexts/CopilotContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getCopilotStatus, formatElapsedSeconds, type CopilotStage } from '../../utils/copilotStatus';
 
 /**
@@ -89,11 +90,13 @@ const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void
 export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; customerId?: string | null }> = ({ conversationId, customerId }) => {
   const { toast } = useUiFeedback();
   const { open, setOpen } = useCopilot();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [streamStage, setStreamStage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startedAtRef = useRef<number | null>(null);
 
@@ -130,49 +133,137 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     };
   }, [loading]);
 
+  /**
+   * Konsumsi SSE `POST /api/admin/copilot/stream`.
+   *
+   * Kontrak backend (lihat copilot.subroute.ts): `tool_start` → `tool_result`
+   * (progres nyata pipeline) → `chunk` (jawaban final SUDAH tervalidasi) → `done`.
+   * Token mentah model tidak dialirkan, jadi tidak ada risiko menampilkan halusinasi.
+   * Dipakai fetch + ReadableStream (bukan apiRequest) karena respons berupa stream,
+   * bukan JSON. Header CSRF disamakan dengan apiRequest agar lolos guard cookie.
+   */
+  const runStreaming = async (
+    msg: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    assistantIndex: number
+  ) => {
+    const res = await fetch('/api/admin/copilot/stream', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({
+        message: msg,
+        history,
+        conversationId: conversationId || undefined,
+        customerId: customerId || undefined,
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const e: any = new Error(res.status === 403 ? 'Fitur Copilot tidak tersedia.' : 'stream tidak tersedia');
+      e.status = res.status;
+      throw e;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let acc = '';
+    let toolsUsed: string[] = [];
+    let grounded: boolean | undefined;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        let ev = 'message';
+        let dataStr = '';
+        for (const line of raw.split('\n')) {
+          if (line.startsWith('event:')) ev = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataStr += line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        let payload: any = {};
+        try {
+          payload = JSON.parse(dataStr);
+        } catch {
+          continue;
+        }
+        if (ev === 'tool_start') {
+          const toolName = String(payload.tool || '');
+          toolsUsed = toolsUsed.includes(toolName) ? toolsUsed : [...toolsUsed, toolName];
+          setStreamStage(`Mengecek ${toolName.replace(/_/g, ' ')}...`);
+        } else if (ev === 'chunk') {
+          acc = payload.text || acc;
+          setMessages((prev) => prev.map((m, i) => (i === assistantIndex ? { ...m, content: acc } : m)));
+        } else if (ev === 'done') {
+          if (typeof payload?.grounded === 'boolean') grounded = payload.grounded;
+          if (Array.isArray(payload?.toolsUsed) && payload.toolsUsed.length) toolsUsed = payload.toolsUsed;
+          if (payload?.answer && !acc) {
+            acc = payload.answer;
+            setMessages((prev) => prev.map((m, i) => (i === assistantIndex ? { ...m, content: acc } : m)));
+          }
+        }
+      }
+    }
+    if (!acc) acc = 'Tidak ada jawaban.';
+    setMessages((prev) => prev.map((m, i) => (i === assistantIndex ? { ...m, content: acc, toolsUsed, grounded } : m)));
+  };
+
   const send = async (text: string) => {
     const msg = text.trim();
     if (!msg || loading) return;
     setInput('');
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    setMessages((prev) => [...prev, { role: 'user', content: msg }]);
+    const assistantIndex = history.length + 1;
+    // Placeholder user + assistant (assistant diisi progresif via stream).
+    setMessages((prev) => [...prev, { role: 'user', content: msg }, { role: 'assistant', content: '' }]);
     setLoading(true);
+    setStreamStage(null);
     try {
-      const res = await apiRequest<{ success: boolean; data: { answer: string; toolsUsed: string[]; grounded: boolean } }>(
-        '/api/admin/copilot/chat',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            message: msg,
-            history,
-            // Konteks pasien aktif agar pertanyaan deiktik ("pasien ini") ter-grounding.
-            conversationId: conversationId || undefined,
-            customerId: customerId || undefined,
-          }),
-          // Anggaran backend satu turn = 120 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
-          // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM
-          // klien abort — mencegah "Gagal menghubungi Copilot" padahal server bekerja.
-          // Catatan: route Fastify punya rateLimit 30/menit; ini hanya batas klien.
-          timeoutMs: 125000,
-        }
-      );
-      const data = res?.data;
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data?.answer || 'Tidak ada jawaban.',
-          toolsUsed: data?.toolsUsed,
-          grounded: data?.grounded,
-        },
-      ]);
-    } catch (err: any) {
-      toast(err.message || 'Copilot gagal menjawab', 'error');
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Gagal menghubungi Copilot. Coba lagi.' }]);
+      await runStreaming(msg, history, assistantIndex);
+    } catch {
+      // Fallback non-streaming (mis. proxy memblokir SSE): perilaku lama tetap utuh.
+      try {
+        const res = await apiRequest<{ success: boolean; data: { answer: string; toolsUsed: string[]; grounded: boolean } }>(
+          '/api/admin/copilot/chat',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              message: msg,
+              history,
+              conversationId: conversationId || undefined,
+              customerId: customerId || undefined,
+            }),
+            // Anggaran backend satu turn = 120 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
+            // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM klien abort.
+            timeoutMs: 125000,
+          }
+        );
+        const data = res?.data;
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === assistantIndex
+              ? { role: 'assistant', content: data?.answer || 'Tidak ada jawaban.', toolsUsed: data?.toolsUsed, grounded: data?.grounded }
+              : m
+          )
+        );
+      } catch (err: any) {
+        toast(err.message || 'Copilot gagal menjawab', 'error');
+        setMessages((prev) =>
+          prev.map((m, i) => (i === assistantIndex ? { role: 'assistant', content: 'Gagal menghubungi Copilot. Coba lagi.' } : m))
+        );
+      }
     } finally {
       setLoading(false);
+      setStreamStage(null);
     }
   };
+
+  // ADR-001: sembunyikan panel untuk tenant non-owner (gerbang UI; backend tetap
+  // otoritas via 403 + guard service).
+  if (user?.copilotEnabled === false) return null;
 
   return (
     <>
@@ -243,7 +334,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                       <Loader size={12} className="animate-spin text-[#008069]" />
                       <StageIcon size={12} className="absolute text-[#008069] dark:text-[#00a884]" />
                     </span>
-                    <span key={status.stage} className="animate-[fadeIn_200ms_ease-out]">{status.label}</span>
+                    <span key={streamStage || status.stage} className="animate-[fadeIn_200ms_ease-out]">{streamStage || status.label}</span>
                     <span className="ml-auto text-[10px] text-[#8696a0] dark:text-[#667781]">{formatElapsedSeconds(elapsedMs)}</span>
                   </div>
                 </div>

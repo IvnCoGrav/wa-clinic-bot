@@ -6,6 +6,7 @@ import type { StaffSessionWithStaff } from '../../services/staff-auth.service';
 import { verifyPassword } from '../../utils/bcrypt';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isCopilotTenantAllowed } from '../../config/copilot-tenant';
 
 export async function authAdminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService, SessionStoreUnavailable } = await import(
@@ -191,6 +192,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
                 phone: staff.phone,
                 role: frontendRole,
                 tenantId: DEFAULT_TENANT_ID,
+                copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
               },
               data: {
                 expiresAt: result.expiresAt,
@@ -246,6 +248,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           name: adminSession.adminIdentity,
           role: 'super_admin',
           tenantId: DEFAULT_TENANT_ID,
+          copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
         },
       });
     }
@@ -276,6 +279,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           phone: staffSession.staff.phone,
           role: staffRole === 'THERAPIST' ? 'therapist' : staffRole.toLowerCase(),
           tenantId: DEFAULT_TENANT_ID,
+          copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
         },
       });
     }
@@ -328,6 +332,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           name: identity,
           role: 'super_admin',
           tenantId: DEFAULT_TENANT_ID,
+          copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
         },
       });
     }
@@ -344,6 +349,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           name: (request as any).adminIdentity || 'Super Admin',
           role: 'super_admin',
           tenantId: DEFAULT_TENANT_ID,
+          copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
         },
       });
     }
@@ -364,6 +370,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
             name: session.adminIdentity,
             role: 'super_admin',
             tenantId: DEFAULT_TENANT_ID,
+            copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
           },
         });
       }
@@ -393,6 +400,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
             phone: session.staff.phone,
             role,
             tenantId: DEFAULT_TENANT_ID,
+            copilotEnabled: isCopilotTenantAllowed(DEFAULT_TENANT_ID),
           },
         });
       }

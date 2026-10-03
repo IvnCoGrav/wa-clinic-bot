@@ -47,6 +47,10 @@ process.env.ENABLE_LIFECYCLE_LABELS = 'true';
 // set a mock key explicitly.
 process.env.LLM_API_KEY = '';
 process.env.OPENAI_API_KEY = '';
+// ADR-001: wildcard test-wide agar suite lama (tenantId arbitrer) tidak terblokir
+// gerbang single-tenant. Perilaku default (owner-only / fail-closed) diuji EKSPLISIT
+// di tests/unit/copilot-single-tenant-gate.test.ts dengan raw allowlist sendiri.
+process.env.COPILOT_ALLOWED_TENANT_IDS = '*';
 process.env.AI_MODEL_ROUTER = '';
 process.env.AI_MODEL_FALLBACK_CHAIN = ''; // blanking rantai fallback supaya test legacy (model-fallback) deterministik
 process.env.LLM_FALLBACK_BASE_URL = ''; // pastikan test tidak mencoba tembak external API

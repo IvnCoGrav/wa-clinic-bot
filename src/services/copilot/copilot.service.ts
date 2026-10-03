@@ -2,6 +2,7 @@ import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tool
 import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
 import { parsePositiveInt } from '../../utils/env-numeric';
 import { requestHermesRouter, requestHermesSummarize, resolveHermesConfig } from './hermes-adapter';
+import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/copilot-tenant';
 
 /**
  * copilot.service.ts (Fase 6r + fixing plan) — AI Clinic Copilot in-system.
@@ -24,7 +25,21 @@ export interface CopilotChatParams {
    * mengetik ulang nama/nomor. ID selalu divalidasi ulang tenant-scoped oleh tool.
    */
   activeContext?: { customerId?: string; conversationId?: string };
+  /**
+   * Callback progres deterministik (dipakai endpoint SSE). Dipanggil di titik
+   * nyata pipeline (mulai/selesai tool) — bukan simulasi. Tata kelola grounding
+   * tetap utuh: event hanya membawa nama tool + jumlah baris, TANPA isi data mentah.
+   */
+  onEvent?: (event: CopilotProgressEvent) => void;
 }
+
+/**
+ * Event progres Copilot (untuk streaming SSE). Sengaja minimal & non-PII:
+ * hanya identitas tool + jumlah baris — bukan isi baris (yang bisa memuat data pasien).
+ */
+export type CopilotProgressEvent =
+  | { type: 'tool_start'; tool: string }
+  | { type: 'tool_result'; tool: string; count: number };
 
 export interface CopilotChatResult {
   success: boolean;
@@ -372,6 +387,21 @@ export class CopilotService {
       hermesFallback,
     });
 
+    // ADR-001: gerbang single-tenant lapis-2 — tolak tenant non-owner SEBELUM
+    // biaya tool/LLM. Route sudah menolak lebih dulu (403); guard ini melindungi
+    // pemanggil lain (mis. test/internal) agar tidak ada jalur samping.
+    if (!isCopilotTenantAllowed(tenantId)) {
+      return {
+        success: false,
+        answer: 'Fitur Copilot tidak tersedia untuk tenant ini.',
+        toolsUsed: [],
+        grounded: false,
+        error: COPILOT_DEPRECATED_ERROR,
+        llmCalls: 0,
+        ...engineTag(),
+      };
+    }
+
     try {
       const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
       const { callChatCompletionsWithFallback } = await import('../../integrations/llm/model-fallback');
@@ -511,7 +541,9 @@ export class CopilotService {
         if (seenSignatures.has(signature)) break; // anti-loop: tool+args identik
         seenSignatures.add(signature);
 
+        params.onEvent?.({ type: 'tool_start', tool: tool.name });
         const toolResult: CopilotToolResult = await tool.run(tenantId, toolArgs);
+        params.onEvent?.({ type: 'tool_result', tool: tool.name, count: (toolResult.rows || []).length });
         collected.push({ tool: tool.name, args: toolArgs, rows: toolResult.rows || [] });
         totalRows += (toolResult.rows || []).length;
 

@@ -5,6 +5,8 @@ export interface User {
   phone?: string;
   role: 'super_admin' | 'tenant_admin' | 'admin_cs' | 'advertiser' | 'therapist';
   tenantId: string;
+  /** ADR-001: apakah fitur AI Copilot 2.0 tersedia untuk tenant user ini. */
+  copilotEnabled?: boolean;
 }
 
 export interface BabyDetail {

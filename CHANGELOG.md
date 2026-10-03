@@ -4,6 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - AI Clinic Copilot 2.0 (single-tenant owner): gerbang tenant + tool penjelas + SSE (ADR-001)
+
+- **Keputusan ADR-001:** fitur Copilot 2.0 KHUSUS tenant owner (`default-tenant`); tenant lain
+  deprecated. Gerbang deterministik fail-closed di 3 lapis: route 403, guard service, UI
+  sembunyikan. Query tool TETAP tenant-scoped (anti-IDOR) — single-tenant bukan alasan melepas filter.
+- **Fase 1 — gerbang single-tenant:** `src/config/copilot-tenant.ts`
+  (`parseCopilotAllowlist`/`isCopilotTenantAllowed`, wildcard `*` eksplisit, default owner-only),
+  dipasang di `copilot.subroute.ts` (`/chat` + `/stream`) & `copilot.service.ts`; UI
+  `AdminCopilotPanel` + tombol `Layout` via `user.copilotEnabled` (`/api/admin/auth/me`).
+  Env baru `COPILOT_ALLOWED_TENANT_IDS`.
+- **Fase 2 — Pilar 3 Explainability:** tool `explain_conversation_state` (+`buildConversationExplanation`)
+  — status bot/CS diturunkan dari kolom RIIL `Conversation` (`is_human_handling`, `escalation_reason`,
+  `current_state`, `session_data`) + 5 pesan terakhir; HP dimask (`maskPhoneNumber`), UUID dibuang,
+  sandbox/dummy disaring. Plan awal menyebut kolom fiktif `metadata/medicalAlert/botInterruptedAt`
+  → DIKOREKSI ke skema nyata (verifikasi `prisma/schema.prisma:172-212`).
+- **Fase 2 — seed SOP owner:** `scripts/seed-copilot-sop-owner.ts` idempoten/non-destruktif
+  (ClinicPolicy: `post_vaccine_rules` 48-72 jam, `fever_contraindication` 37.8°C,
+  `reservation_status_rules`; KnowledgeChunk audit jadwal & stalled inquiry; `styleTone` di
+  `Tenant.settings`). Angka bisnis dari DB, bukan hardcode TS. DP/reschedule SENGAJA tidak di-seed
+  (belum ada angka resmi → dilarang mengarang; plan awal menulis 37.5°C, dikoreksi ke 37.8°C SOP v1.1).
+- **Fase 3 — persona DB-driven:** gaya copilot disimpan di `Tenant.settings.copilot.styleTone`
+  (bukan `SOUL.md` server — pelanggaran SaaS-readiness jika persona di file). Fallback Hermes→internal
+  tetap teruji.
+- **Fase 4 — streaming SSE:** `POST /api/admin/copilot/stream` (POST, BUKAN `GET ?q=` — anti-bocor
+  PII di URL/access log). Event `tool_start`/`tool_result` dari pipeline nyata → `chunk` (jawaban
+  SUDAH tervalidasi grounding) → `done`. UI konsumsi via fetch `ReadableStream`, fallback ke `/chat`.
+- **Test:** `tests/unit/copilot-single-tenant-gate.test.ts`, `tests/unit/copilot-explainer.test.ts`,
+  `tests/integration/copilot-tenant-gate.test.ts` (route inject). Registry tool diselaraskan 6→7.
+  Verifikasi: 4.627 test hijau (28 skip), `tsc` bersih, dashboard build hijau.
+
 #### 2026-10-03 - Fix Call 1 netra: provider-aware thinking flag + salvage DSML + recovery state (insiden "Wonokusumo")
 
 - **Akar (multi-layer):** `generation-stage.ts:567` mengirim `thinking: { type: 'disabled' }`

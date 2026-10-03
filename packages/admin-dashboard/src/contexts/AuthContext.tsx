@@ -133,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             phone: data.user.phone,
             role: data.user.role || 'super_admin',
             tenantId: data.user.tenantId || 'default-tenant',
+            copilotEnabled: data.user.copilotEnabled !== false,
           };
           setUser(freshUser);
           try {
@@ -230,6 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phone: data.user.phone,
           role: data.user.role,
           tenantId: data.user.tenantId || 'default-tenant',
+          copilotEnabled: data.user.copilotEnabled !== false,
         };
         setUser(authUser);
         const role = data.role || data.user.role;

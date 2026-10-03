@@ -619,6 +619,155 @@ export const lookupCatalogAndPolicy: CopilotTool = {
   },
 };
 
+/**
+ * Tool 7: penjelas status percakapan (Pilar 3 — Explainability).
+ *
+ * Menjawab pertanyaan diagnostik admin/CS: "kenapa nomor X dialihkan ke CS?",
+ * "kenapa bot diam di chat ini?", "status percakapan Bunda Y?".
+ *
+ * Grounding penuh dari KOLOM RIIL (bukan `metadata` fiktif):
+ * - `Conversation.is_human_handling` → bot aktif vs diambil alih manusia,
+ * - `Conversation.escalation_reason` / `current_state` (termasuk `HUMAN_HANDLING`),
+ * - `Conversation.human_handling_since`, `last_message_at`,
+ * - `Conversation.session_data` (state mesin bot v3: booking, keluhan aktif),
+ * - 5 `Message` terakhir (arah + isi) sebagai kronologi.
+ *
+ * Keamanan: tenant-scoped (anti-IDOR), saring sandbox/dummy, nomor HP DISAMARKAN
+ * (`maskPhoneNumber`). Definisi status murni dari state DB — TANPA pencocokan kata
+ * kunci kalimat.
+ */
+export const explainConversationState: CopilotTool = {
+  name: 'explain_conversation_state',
+  description:
+    'Menjelaskan status satu percakapan: apakah bot masih aktif atau sudah diambil alih manusia ' +
+    '(CS/bidan), alasan eskalasi, state mesin bot, waktu, dan 5 pesan terakhir. ' +
+    'Gunakan untuk "kenapa nomor X dialihkan ke CS", "kenapa bot diam", "status chat ini".',
+  parameters: {
+    phone: { type: 'string', description: 'Nomor HP pasien (sebagian). Opsional bila customerName diisi.' },
+    customerName: { type: 'string', description: 'Nama pasien (sebagian). Opsional bila phone diisi.' },
+  },
+  run: async (tenantId, args) => {
+    const phone = args.phone ? String(args.phone).trim() : '';
+    const name = args.customerName ? String(args.customerName).trim() : '';
+    if (!phone && !name) {
+      return {
+        tool: 'explain_conversation_state',
+        args,
+        count: 0,
+        rows: [],
+        note: 'Sebutkan nomor HP atau nama pasien untuk dijelaskan statusnya.',
+      };
+    }
+
+    const where: any = { tenant_id: tenantId, is_sandbox_test: false };
+    if (phone) where.phone = { contains: phone };
+    if (name) where.name = { contains: name, mode: 'insensitive' };
+
+    const customers = await prisma.customer.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        conversations: {
+          orderBy: { last_message_at: 'desc' },
+          take: 3,
+          select: {
+            id: true,
+            current_state: true,
+            previous_state: true,
+            is_human_handling: true,
+            human_handling_since: true,
+            escalation_reason: true,
+            last_message_at: true,
+            session_data: true,
+            last_discussed_treatment: true,
+            messages: {
+              where: { sender_type: { not: 'INTERNAL_NOTE' } },
+              orderBy: { created_at: 'desc' },
+              take: 5,
+              select: { direction: true, sender_type: true, content: true, created_at: true },
+            },
+          },
+        },
+      },
+      orderBy: { updated_at: 'desc' },
+      take: 3,
+    });
+
+    const rows: any[] = [];
+    for (const c of customers as any[]) {
+      // Saring kontak dummy/test di level aplikasi (pola nomor tak bisa diindeks DB).
+      if (isDummyOrTestContact(c.phone, c.name, false)) continue;
+      const convs: any[] = c.conversations || [];
+      if (convs.length === 0) {
+        rows.push({
+          customerName: c.name || 'Bunda',
+          phone: maskPhoneNumber(c.phone),
+          statusBot: 'BELUM_ADA_PERCAKAPAN',
+          statusLabel: 'Belum ada percakapan tercatat.',
+          escalationReason: null,
+          currentState: null,
+          humanHandlingSince: null,
+          lastActivityAt: null,
+          lastMessages: [],
+        });
+        continue;
+      }
+      for (const conv of convs) {
+        rows.push(buildConversationExplanation(c, conv));
+        if (rows.length >= MAX_ROWS) break;
+      }
+      if (rows.length >= MAX_ROWS) break;
+    }
+
+    return { tool: 'explain_conversation_state', args, count: rows.length, rows };
+  },
+};
+
+/**
+ * Bentuk penjelasan deterministik dari state DB (murni — mudah diuji).
+ * Status bot diturunkan dari kolom, bukan tebakan teks:
+ * - `is_human_handling` → DIAMBIL_ALIH_MANUSIA,
+ * - `current_state === 'COMPLETED'` → SELESAI,
+ * - selain itu → BOT_AKTIF.
+ */
+export function buildConversationExplanation(customer: any, conv: any): any {
+  const session = conv?.session_data && typeof conv.session_data === 'object' ? conv.session_data : {};
+  const messages: any[] = (conv?.messages || []).slice(0, 5).map((m: any) => ({
+    direction: m.direction,
+    sender: m.sender_type || (m.direction === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
+    content: typeof m.content === 'string' ? m.content.slice(0, 300) : null,
+    at: m.created_at,
+  }));
+
+  let statusBot = 'BOT_AKTIF';
+  if (conv?.is_human_handling === true || conv?.current_state === 'HUMAN_HANDLING') {
+    statusBot = 'DIAMBIL_ALIH_MANUSIA';
+  } else if (conv?.current_state === 'COMPLETED') {
+    statusBot = 'SELESAI';
+  }
+
+  return {
+    customerName: customer?.name || 'Bunda',
+    phone: maskPhoneNumber(customer?.phone),
+    conversationId: conv?.id || null,
+    statusBot,
+    isHumanHandling: conv?.is_human_handling === true,
+    escalationReason: conv?.escalation_reason || null,
+    currentState: conv?.current_state || null,
+    previousState: conv?.previous_state || null,
+    humanHandlingSince: conv?.human_handling_since || null,
+    lastActivityAt: conv?.last_message_at || null,
+    lastDiscussedTreatment: conv?.last_discussed_treatment || null,
+    // Sinyal state mesin bot yang aman & relevan (tanpa PII/ID teknis).
+    booking: session.booking || null,
+    cartItemCount: Array.isArray(session.cartItems) ? session.cartItems.length : 0,
+    pendingLocation: session.pendingLocation || null,
+    lastMessages: messages,
+  };
+}
+
 export const COPILOT_TOOLS: CopilotTool[] = [
   queryReservationsByFilter,
   queryUnrepliedChats,
@@ -626,6 +775,7 @@ export const COPILOT_TOOLS: CopilotTool[] = [
   queryStalledInquiries,
   getCustomerHistory,
   lookupCatalogAndPolicy,
+  explainConversationState,
 ];
 
 export function getCopilotTool(name: string): CopilotTool | undefined {
