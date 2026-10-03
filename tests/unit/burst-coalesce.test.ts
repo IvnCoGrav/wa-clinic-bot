@@ -133,7 +133,35 @@ describe('BurstCoalesceService', () => {
     expect(burstCoalesceService.pendingCount()).toBe(0);
   });
 
-  it('4. text di state AWAITING_LOCATION → TIDAK di-merge (handled=false)', async () => {
+  it('4. 2 bubble alamat di state AWAITING_LOCATION → DICOALESCE jadi 1 job (insiden double-ongkir)', async () => {
+    const enqueueSpy = vi.spyOn(queueService, 'enqueueMessage').mockResolvedValue(undefined as any);
+    const logSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue(undefined as any);
+
+    const opts = {
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-1',
+      phone: '628980297189',
+      conversation: makeConv(ConversationState.AWAITING_LOCATION),
+    };
+
+    // Burst 2 bubble alamat (kasus Velicia: "Taman wisata Regency" + "Gadung").
+    const r1 = await burstCoalesceService.maybeCoalesce({ ...opts, incomingMessage: makeMsg('m1', 'Taman wisata Regency') });
+    const r2 = await burstCoalesceService.maybeCoalesce({ ...opts, incomingMessage: makeMsg('m2', 'Gadung') });
+
+    expect(r1.handled).toBe(true);
+    expect(r2.handled).toBe(true);
+    expect(burstCoalesceService.pendingCount()).toBe(1);
+    expect(logSpy).toHaveBeenCalledTimes(2); // tiap bubble asli tetap di-log audit
+
+    await settle(80);
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy.mock.calls[0][0].incomingMessage.text.body).toBe('Taman wisata Regency\nGadung');
+    expect(enqueueSpy.mock.calls[0][0].incomingMessage._mergedCount).toBe(2);
+    expect(burstCoalesceService.pendingCount()).toBe(0);
+  });
+
+  it('4b. state HUMAN_HANDLING tetap TIDAK di-coalesce (handled=false)', async () => {
     vi.spyOn(queueService, 'enqueueMessage').mockResolvedValue(undefined as any);
     const logSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue(undefined as any);
 
@@ -141,12 +169,11 @@ describe('BurstCoalesceService', () => {
       tenantId: DEFAULT_TENANT_ID,
       customerId: 'cust-1',
       phone: '628123456789',
-      conversation: makeConv(ConversationState.AWAITING_LOCATION),
-      incomingMessage: makeMsg('m1', 'di jambangan bund'),
+      conversation: makeConv(ConversationState.HUMAN_HANDLING),
+      incomingMessage: makeMsg('m1', 'halo admin'),
     });
 
     expect(r.handled).toBe(false);
-    // Tidak ada log dari service (caller/machine yang log) & tidak ada buffer.
     expect(logSpy).not.toHaveBeenCalled();
     expect(burstCoalesceService.pendingCount()).toBe(0);
   });

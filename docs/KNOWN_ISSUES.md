@@ -3,6 +3,37 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 204. [Tool Masking/Burst/QoS] Double-ongkir Velicia — guard anti-redundansi lokasi (2026-10-03, EXECUTED)
+
+- **Gejala:** customer Velicia lovitasari (628980297189) mengirim alamat 2 bubble
+  beruntun (`Taman wisata Regency` → `Gadung`, selisih ~5 dtk). Bot menghitung
+  ongkir 2x (pesan identik), salah satunya ditarik admin.
+- **Akar masalah (2 lapis, terverifikasi kode):**
+  1. `burst-coalesce.service.ts` mengecualikan `AWAITING_LOCATION` dari state merge
+     → 2 bubble menjadi 2 job terpisah.
+  2. `tool-masker.ts:hasNewLocationEntity("Gadung")` = true (Gadung ada di gazetteer
+     `surabaya_sidoarjo_subdistricts.json`) tanpa cek `session.location`/`ongkirStatus`
+     → `calculate_delivery` bocor pada job ke-2.
+- **Perbaikan fondasional (EXECUTED):**
+  1. Guard deterministik `isRedundantLocationRepeat()` + `getDetectedLocationEntities()`
+     di `tool-masker.ts` — cabut fisik `calculate_delivery` bila seluruh entitas wilayah
+     pesan SUDAH tercakup `session.location` yang ter-resolve + `ongkirStatus QUOTED/CONFIRMED`.
+     Bebas hafalan frasa: deduksi murni dari state + perbandingan entitas gazetteer;
+     sinyal "alamat baru" = adanya entitas yang belum dikenal (bukan daftar "pindah ke/ganti ke").
+     Google Maps/koordinat dideteksi via API `URL` + validasi rentang lat/lng.
+  2. `burst-coalesce.service.ts` → `COALESCEABLE_STATES` (+`AWAITING_LOCATION`,
+     `LOCATION_CONFIRMED`); `HUMAN_HANDLING`/`RESERVATION_SENT` tetap tidak di-merge.
+- **Test:** `tests/unit/velicia-double-ongkir.test.ts` (13, adversarial varian/typo),
+  `tests/unit/burst-coalesce.test.ts` (#4/#4b), `tests/unit/tool-masker.test.ts` (26).
+- **Sisa OPEN:**
+  - **Bukti insiden tidak di repo:** klaim timeline/pesan identik 100% belum diverifikasi
+    dari log (repo tanpa `logs/*.jsonl`). Wajib validasi via `messages`/`logs` produksi.
+  - **Tradeoff merge multi-intent:** burst `AWAITING_LOCATION` yang mencampur alamat +
+    intent lain dalam <7,5 dtk kini menjadi 1 turn (parallel_tool_calls=false) — intent
+    kedua bisa tak terlayani tuntas. Diterima demi fragmen alamat; pantau regresi.
+  - **Defense-in-depth outbound:** masih belum ada dedup balasan identik berurutan;
+    guard masker hanya mencegah, bukan menyerap duplikasi bila tool tetap dipanggil.
+
 ## 203. [Data/Integrasi/Keamanan] Fase D fixing plan (2026-10-03, EXECUTED)
 
 Keputusan user: D.1, D.2, D.3 disetujui.

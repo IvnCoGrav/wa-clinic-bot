@@ -85,41 +85,41 @@ function isBroadRegionText(text: string): boolean {
   return false;
 }
 
-export function hasNewLocationEntity(text: string | undefined): boolean {
+/**
+ * Ekstraksi entitas wilayah kanonis (data-driven, word-boundary) dari data
+ * gazetteer + coverage/outside cities. Sumber tunggal dipakai `hasNewLocationEntity`
+ * (boolean) dan guard anti-redundansi ongkir. Mengembalikan nama kanonis (casing
+ * asli dataset) tanpa duplikat — BUKAN hafalan kalimat, murni pencarian dataset.
+ */
+export function getDetectedLocationEntities(text: string | undefined): string[] {
   const input = text || '';
   const lower = input.toLowerCase();
-  if (!lower.trim()) return false;
-  // Pencocokan KATA UTUH (word-boundary) — bukan substring mentah. Mencegah
-  // kata berimbuhan bahasa Indonesia (tertarik→Tarik, batuk→Batu,
-  // antarkan→?, sekarang→Karang, kembali→Bali) dihaluskan jadi nama daerah.
-  // Normalisasi hanya spasi (regex tokenisasi teknis, non-semantik).
+  const found = new Set<string>();
+  if (!lower.trim()) return [];
   const textNormalized = ' ' + lower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
   const textWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
-  try {
-    if (findPopularLandmark(input) || resolveArteryCorridor(input)) return true;
-  } catch {}
+
   // 1. Gazetteer kelurahan/desa: kata utuh (single) / frasa berbatas (multi).
   try {
-    for (const [areaLower] of getGazetteerAreas().entries()) {
+    for (const [areaLower, orig] of getGazetteerAreas().entries()) {
       if (areaLower.length >= 4) {
         if (areaLower.includes(' ')) {
-          if (textNormalized.includes(' ' + areaLower + ' ')) return true;
+          if (textNormalized.includes(' ' + areaLower + ' ')) found.add(orig);
         } else if (textWords.has(areaLower)) {
-          return true;
+          found.add(orig);
         }
       }
     }
   } catch {}
   // 2. Gazetteer kecamatan: kata utuh / frasa berbatas.
   try {
-    const kecNames = getGazetteerKecamatanNames() || [];
-    for (const n of kecNames) {
+    for (const n of getGazetteerKecamatanNames() || []) {
       if (n && n.length >= 4) {
         const nl = n.toLowerCase();
         if (nl.includes(' ')) {
-          if (textNormalized.includes(' ' + nl + ' ')) return true;
+          if (textNormalized.includes(' ' + nl + ' ')) found.add(n);
         } else if (textWords.has(nl)) {
-          return true;
+          found.add(n);
         }
       }
     }
@@ -130,63 +130,173 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
   try {
     const toks = Array.from(textWords).filter((t) => t.length >= 5);
     if (toks.length > 0) {
-      for (const [areaLower] of getGazetteerAreas().entries()) {
+      for (const [areaLower, orig] of getGazetteerAreas().entries()) {
         if (areaLower.length >= 5 && !areaLower.includes(' ')) {
-          if (toks.some((t) => Math.abs(t.length - areaLower.length) <= 1 && isTypoAtMostOne(t, areaLower))) return true;
+          if (toks.some((t) => Math.abs(t.length - areaLower.length) <= 1 && isTypoAtMostOne(t, areaLower))) found.add(orig);
         }
       }
       for (const n of getGazetteerKecamatanNames() || []) {
         const nl = String(n || '').toLowerCase();
         if (nl.length >= 5 && !nl.includes(' ')) {
-          if (toks.some((t) => Math.abs(t.length - nl.length) <= 1 && isTypoAtMostOne(t, nl))) return true;
+          if (toks.some((t) => Math.abs(t.length - nl.length) <= 1 && isTypoAtMostOne(t, nl))) found.add(n);
         }
       }
     }
   } catch {}
-  // 4. Token inti kecamatan (kata utuh saja) — anti-amnesia domisili parsial.
+  // 4. Kota luar cakupan (kata utuh: "bali" tidak cocok dengan "kembali").
+  try {
+    for (const c of getOutsideCities() || []) {
+      const name = String(c || '').toLowerCase();
+      if (name.length >= 3) {
+        if (name.includes(' ')) {
+          if (textNormalized.includes(' ' + name + ' ')) found.add(String(c));
+        } else if (textWords.has(name)) {
+          found.add(String(c));
+        }
+      }
+    }
+  } catch {}
+  // 5. Kota cakupan utama (kata utuh).
+  try {
+    for (const c of getCoverageCities() || []) {
+      const name = String(c || '').toLowerCase();
+      if (name.length >= 3) {
+        if (name.includes(' ')) {
+          if (textNormalized.includes(' ' + name + ' ')) found.add(String(c));
+        } else if (textWords.has(name)) {
+          found.add(String(c));
+        }
+      }
+    }
+  } catch {}
+  return Array.from(found);
+}
+
+export function hasNewLocationEntity(text: string | undefined): boolean {
+  const input = text || '';
+  const lower = input.toLowerCase();
+  if (!lower.trim()) return false;
+  const textWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
+  // 0. Landmark populer / koridor arteri (sumber terpisah dari gazetteer).
+  try {
+    if (findPopularLandmark(input) || resolveArteryCorridor(input)) return true;
+  } catch {}
+  // 1. Entitas wilayah kanonis (gazetteer + coverage/outside) — word-boundary.
+  if (getDetectedLocationEntities(input).length > 0) return true;
+  // 2. Token inti kecamatan (kata utuh saja) — anti-amnesia domisili parsial.
   try {
     for (const tok of getKecamatanCoreTokens()) {
       if (textWords.has(tok)) return true;
     }
   } catch {}
-  // 5. Kota luar cakupan (kata utuh: "bali" tidak cocok dengan "kembali").
-  try {
-    const outside = getOutsideCities() || [];
-    for (const c of outside) {
-      const name = String(c || '').toLowerCase();
-      if (name.length >= 3) {
-        if (name.includes(' ')) {
-          if (textNormalized.includes(' ' + name + ' ')) return true;
-        } else if (textWords.has(name)) {
-          return true;
-        }
-      }
-    }
-  } catch {}
-  // 6. Kota cakupan utama (kata utuh).
-  try {
-    const coverage = getCoverageCities() || [];
-    for (const c of coverage) {
-      const name = String(c || '').toLowerCase();
-      if (name.length >= 3) {
-        if (name.includes(' ')) {
-          if (textNormalized.includes(' ' + name + ' ')) return true;
-        } else if (textWords.has(name)) {
-          return true;
-        }
-      }
-    }
-  } catch {}
-  // 7. Link Google Maps.
+  // 3. Link Google Maps.
   if (lower.includes('google.com/maps') || lower.includes('goo.gl') || lower.includes('share.google') || lower.includes('maps.app')) {
     return true;
   }
-  // 8. Penanda jalan/perumahan (kata utuh).
+  // 4. Penanda jalan/perumahan (kata utuh).
   const STREET_MARKERS = new Set([
     'jl', 'jln', 'jalan', 'gang', 'gg', 'perum', 'perumahan',
     'komplek', 'kompleks', 'blok', 'cluster', 'ruko', 'patokan',
   ]);
   return Array.from(textWords).some((w) => STREET_MARKERS.has(w));
+}
+
+/**
+ * Deteksi pinpoint presisi BARU (link Google Maps / koordinat GPS). Menggunakan
+ * API standar `URL` (bukan regex hafalan URL) + validasi pasangan angka
+ * lat/lng (format teknis mesin, non-semantik).
+ */
+function isPreciseNewPinpoint(text: string): boolean {
+  const coordMatch = text.match(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return true;
+  }
+  for (const token of text.split(/\s+/)) {
+    if (!/^https?:\/\//i.test(token)) continue;
+    try {
+      const url = new URL(token);
+      const host = url.hostname.toLowerCase();
+      const path = url.pathname.toLowerCase();
+      if (
+        host.includes('maps.google') ||
+        host.includes('maps.app.goo.gl') ||
+        host.includes('goo.gl') ||
+        host.includes('share.google') ||
+        (host.includes('google') && path.includes('/maps'))
+      ) {
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+/**
+ * Anti-Redundant Location Guard (insiden double-ongkir Velicia lovitasari):
+ * true bila pesan customer HANYA mengulang entitas wilayah yang SUDAH tercatat
+ * di session.location yang sudah ter-resolve, dan ongkir sudah QUOTED/CONFIRMED.
+ *
+ * Deterministik & berbasis STATE (bukan hafalan frasa "pindah ke"/"ganti ke"):
+ * - Pesan dengan entitas wilayah yang SEMUANYA sudah dikenal → redundant.
+ * - Pesan tanpa entitas baru namun seluruh katanya tercakup rawText lama → redundant.
+ * - Entitas wilayah BARU / link Maps / koordinat GPS → false (tool tetap tersedia).
+ * Selama false → calculate_delivery di-mask fisik (cegah hitung ulang ongkir).
+ */
+export function isRedundantLocationRepeat(
+  text: string | undefined,
+  session: CustomerGoalSession | null | undefined
+): boolean {
+  const input = (text || '').trim();
+  if (!input || !session?.location) return false;
+  // Hanya saat lokasi sudah ter-resolve (presisi/out-of-coverage) & ongkir terlapor.
+  if (!isLocationFullyResolved(session)) return false;
+  const isQuoted =
+    session.ongkirStatus === 'QUOTED' ||
+    session.ongkirStatus === 'CONFIRMED' ||
+    typeof session.location.distanceKm === 'number';
+  if (!isQuoted) return false;
+  // Pinpoint presisi baru selalu lolos.
+  if (isPreciseNewPinpoint(input)) return false;
+
+  const knownTokens = new Set<string>();
+  const addTokens = (val?: string) => {
+    if (!val) return;
+    val.toLowerCase().split(/[^a-z0-9]+/).forEach((t) => {
+      if (t.length >= 3) knownTokens.add(t);
+    });
+  };
+  addTokens(session.location.kelurahan);
+  addTokens(session.location.kecamatan);
+  addTokens(session.location.kota);
+  addTokens(session.location.rawText);
+  if (knownTokens.size === 0) return false;
+
+  // Prioritaskan perbandingan ENTITAS WILAYAH: bila ada entitas baru → BUKAN redundant.
+  // Token dianggap "sudah dikenal" bila persis ada di sesi ATAU typo-1-huruf dari
+  // token sesi (mencegah tetangga fuzzy gazetteer — mis. "gading"≈"gadung" —
+  // dianggap alamat baru).
+  const isTokenKnown = (tok: string): boolean => {
+    if (knownTokens.has(tok)) return true;
+    for (const k of knownTokens) {
+      if (k.length >= 5 && Math.abs(k.length - tok.length) <= 1 && isTypoAtMostOne(tok, k)) return true;
+    }
+    return false;
+  };
+  const detected = getDetectedLocationEntities(input);
+  if (detected.length > 0) {
+    return detected.every((entity) => {
+      const entityTokens = entity.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+      return entityTokens.length > 0 && entityTokens.every(isTokenKnown);
+    });
+  }
+
+  // Tanpa entitas gazetteer: redundant HANYA bila seluruh kata pesan
+  // seluruhnya tercakup rawText lokasi lama (mis. fragmen "regency").
+  const inputWords = input.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  if (inputWords.length === 0) return false;
+  return inputWords.every(isTokenKnown);
 }
 
 export interface ToolMaskingEvaluation {
@@ -482,7 +592,12 @@ export function evaluateToolMasking(
     try { return isPureLeadGreeting(cleanIncomingText).isLeadGreeting; } catch { return false; }
   })();
   const isShortCompositeResponse = isAskedLocationRecentlyForMask && !isLocationFullyResolved(session) && customerWordsForMask.length > 0 && customerWordsForMask.length <= 4 && !isPureInterestOnly;
-  const hasLocationEntity = hasNewLocationEntity(cleanIncomingText) || isShortCompositeResponse;
+  const rawHasLocation = hasNewLocationEntity(cleanIncomingText) || isShortCompositeResponse;
+  // Hard Code-Level Guard (insiden double-ongkir Velicia): jika pesan HANYA
+  // mengulang wilayah yang sudah tersimpan + ongkir sudah QUOTED, maka BUKAN
+  // entitas lokasi baru → cabut calculate_delivery secara fisik.
+  const isRedundant = isRedundantLocationRepeat(cleanIncomingText, session);
+  const hasLocationEntity = rawHasLocation && !isRedundant;
   if (!hasLocationEntity) {
     maskedToolNames.push('calculate_delivery');
   }

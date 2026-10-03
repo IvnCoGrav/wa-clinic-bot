@@ -13,9 +13,12 @@ import { queueService } from './queue.service';
  * - Saat timer habis → buffer digabung jadi satu incomingMessage lalu di-enqueue (1 LLM call → 1 balasan).
  *
  * Batasan (sesuai keputusan desain):
- * - Hanya pesan TEXT, dan hanya saat conversation ada di state open-ended
- *   (INITIAL / AWAITING_INTEREST / COMPLETED). State yang menunggu input spesifik
- *   (AWAITING_LOCATION, LOCATION_CONFIRMED, RESERVATION_SENT, HUMAN_HANDLING) TIDAK di-merge.
+ * - Hanya pesan TEXT, dan hanya saat conversation ada di state coalesceable
+ *   (INITIAL / AWAITING_LOCATION / LOCATION_CONFIRMED / AWAITING_INTEREST / COMPLETED).
+ *   AWAITING_LOCATION & LOCATION_CONFIRMED DICOALESCE agar burst pengetikan alamat
+ *   bertahap ("Taman wisata Regency" lalu "Gadung") menjadi satu turn (insiden
+ *   double-ongkir Velicia). State yang menunggu input spesifik lain
+ *   (RESERVATION_SENT, HUMAN_HANDLING) TIDAK di-merge.
  * - Pesan non-text (location/media) TIDAK di-merge: flush buffer tertunda dulu, lalu pesan tsb
  *   diproses normal (handled=false).
  * - Nonaktif secara default: env BURST_COALESCE_MS = 0 → semua pesan passthrough (behavior lama).
@@ -47,8 +50,10 @@ interface PendingBuffer {
   timer: NodeJS.Timeout;
 }
 
-const OPEN_ENDED_STATES = new Set<ConversationState>([
+const COALESCEABLE_STATES = new Set<ConversationState>([
   ConversationState.INITIAL,
+  ConversationState.AWAITING_LOCATION,
+  ConversationState.LOCATION_CONFIRMED,
   ConversationState.AWAITING_INTEREST,
   ConversationState.COMPLETED,
 ]);
@@ -112,8 +117,8 @@ export class BurstCoalesceService {
       return { handled: false };
     }
 
-    // 3. State bukan open-ended → flush buffer lalu passthrough (jangan tunda balasan state menunggu input).
-    if (!OPEN_ENDED_STATES.has(conversation.current_state)) {
+    // 3. State bukan coalesceable → flush buffer lalu passthrough (jangan tunda balasan state menunggu input).
+    if (!COALESCEABLE_STATES.has(conversation.current_state)) {
       if (existing) {
         await this.flush(key);
       }
