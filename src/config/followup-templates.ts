@@ -41,6 +41,7 @@ export type FollowUpTemplateType =
   | 'MILESTONE_6M'
   | 'MILESTONE_9M'
   | 'MILESTONE_12M'
+  | 'WINBACK_60D'
   | 'STAFF_OTW'
   | 'STAFF_ARRIVAL'
   | 'STAFF_TRIP_STATUS'
@@ -188,6 +189,27 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Selamat ulang tahun utk si kecil, Bunda ${name}! 🎂 Di usia 12 bulan anak mulai berjalan lancar. Kami siap dampingi pijat stimulasi & tumbuh kembang bareng Bidan. Yuk booking! ✨`,
     ({ name }) =>
       `Pagi Bunda ${name}! 🥳 Si kecil sudah 1 tahun — usia emas eksplorasi & berjalan. Pijat rutin tetap bantu jaga kelenturan & kualitas tidurnya. Mau Bidan jadwalkan bulan ini? 😊`,
+  ],
+
+  // 13b. Re-engagement Pelanggan Dormant (>60 Hari) — WINBACK_60D
+  // Sapaan silaturahmi untuk MQL/legacy yang sudah lama tidak berinteraksi.
+  // Ringkas (2–3 kalimat), kata ganti "Bidan kami", tanpa angka durasi eksplisit.
+  WINBACK_60D: [
+    ({ name, babyName }) => {
+      const greeting = formatGreetingBunda(name);
+      const child = babyName || 'si kecil';
+      return `Halo ${greeting}! 😊 Gimana kabarnya ${child}? Sudah lama Bidan kami tidak dengar kabar Bunda, semoga sekeluarga sehat selalu ya. Kalau butuh pijat relaksasi atau stimulasi tumbuh kembang, Bidan kami siap bantu kapan saja 🙏🥰`;
+    },
+    ({ name, babyName }) => {
+      const greeting = formatGreetingBunda(name);
+      const child = babyName || 'si kecil';
+      return `Selamat pagi ${greeting}! 🌸 Gimana kabar ${child} sekarang? Sudah lama Bidan kami tidak bersilaturahmi, semoga rutinitas Bunda dan keluarga menyenangkan selalu. Kalau butuh homecare atau konsultasi tumbuh kembang, pintu kami selalu terbuka ✨`;
+    },
+    ({ name, babyName }) => {
+      const greeting = formatGreetingBunda(name);
+      const child = babyName || 'si kecil';
+      return `Halo ${greeting}! ✨ Semoga Bunda dan ${child} selalu sehat dan bahagia ya. Sudah lama tidak jumpa, Bidan kami cuma ingin menyapa dan menanyakan kabar. Kalau si kecil butuh pijat relaksasi di rumah, kabari Bidan ya 🤗`;
+    },
   ],
 
   // 14. Pesan Terapis Menuju Lokasi Pasien (OTW)

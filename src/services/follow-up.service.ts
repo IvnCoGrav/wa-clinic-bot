@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES, getRollingVariant } from '../config/followup-templates';
+import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES, getRollingVariant, getWibDateKey } from '../config/followup-templates';
 import { typingService } from './typing.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { wabaTemplateService } from './waba-template.service';
@@ -19,6 +19,13 @@ const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 
 const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
+
+// WINBACK_60D (re-engagement pelanggan dormant). Ambang dormansi & cooldown
+// memakai basis last_message_at (termasuk outbound) supaya WINBACK tidak
+// menyerobot rangkaian NEXT_TREATMENT yang masih berjalan (hingga +3 bulan).
+const WINBACK_DORMANT_DAYS = parsePositiveInt(process.env.WINBACK_DORMANT_DAYS, 60);
+const WINBACK_ENQUEUE_LIMIT = parsePositiveInt(process.env.WINBACK_ENQUEUE_LIMIT, 10);
+const WINBACK_LOST_GRACE_DAYS = parsePositiveInt(process.env.WINBACK_LOST_GRACE_DAYS, 7);
 
 // Offset hari jadwal NO_PURCHASE per stage (stage 1, 2, 3 â†’ +3, +7, +14 hari).
 export const NO_PURCHASE_STAGE_DAYS: readonly number[] = [3, 7, 14];
@@ -41,9 +48,10 @@ export const CANCEL_REASON = {
 export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
   NEXT_TREATMENT: 1, // Prioritas #1: Pasien pasca treatment / repeat order bernilai tinggi LTV
   NO_PURCHASE: 2,    // Prioritas #2: Lead baru yang belum pernah purchase
-  REMINDER_H1: 3,
-  REVIEW_H1_BABY: 4,
-  REVIEW_H1_MOMS: 5,
+  WINBACK_60D: 3,    // Prioritas #3: Re-engagement kontak dormant MQL/legacy (>60 hari)
+  REMINDER_H1: 4,
+  REVIEW_H1_BABY: 5,
+  REVIEW_H1_MOMS: 6,
 };
 
 export class FollowUpService {
@@ -512,8 +520,15 @@ export class FollowUpService {
 
   /**
    * Dipanggil saat reservasi baru dibuat (status pending).
-   * Membatalkan semua follow-up pending/queued untuk customer ini,
-   * dan menandai is_repeat_order jika ada follow-up pending yang aktif.
+   * Membatalkan semua follow-up pending/queued untuk customer ini karena
+   * customer telah maju ke tahap reservasi.
+   *
+   * PENTING (single source of truth): method ini DILARANG menyentuh
+   * `Reservation.is_repeat_order`. Kolom itu adalah domain eksklusif
+   * `reservation-core.service.ts` (`computeIsRepeatOrder`) yang menurunkannya
+   * dari ordinal riwayat `confirmed/en_route/completed`. Mutasi di sini pernah
+   * menyebabkan transaksi PERTAMA pasien (order #1) salah tertandai repeat
+   * order hanya karena follow-up NO_PURCHASE_1 masih aktif (lihat CHANGELOG).
    */
   public async onReservationCreated(customerId: string, reservationId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
@@ -529,14 +544,6 @@ export class FollowUpService {
       } catch (_) {}
 
       if (activeFollowUps && activeFollowUps.length > 0) {
-        // Tandai reservasi ini sebagai repeat order
-        try {
-          await prisma.reservation?.update?.({
-            where: { id: reservationId },
-            data: { is_repeat_order: true },
-          });
-        } catch (_) {}
-
         // Batalkan semua follow-up aktif tersebut
         try {
           await prisma.followUp?.updateMany?.({
@@ -548,7 +555,7 @@ export class FollowUpService {
             data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null },
           });
         } catch (_) {}
-        console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId}. Set is_repeat_order = true.`);
+        console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId} (reservation ${reservationId}).`);
       }
     } catch (err) {
       console.error('[FollowUp Service] Error handling reservation creation event:', err);
@@ -1599,6 +1606,8 @@ export class FollowUpService {
         templateType = 'REVIEW_H1_BABY';
       } else if (fu.type === 'REVIEW_H1_MOMS') {
         templateType = 'REVIEW_H1_MOMS';
+      } else if (fu.type === 'WINBACK_60D') {
+        templateType = 'WINBACK_60D';
       }
 
       const cleanName = sanitizeCustomerNameForGreeting(fu.customer?.name);
@@ -1883,6 +1892,151 @@ export class FollowUpService {
   }
 
   /**
+   * Hitung slot jadwal WINBACK_60D pada jam kerja 09:30–16:00 WIB, disisipkan ke
+   * kuota harian GLOBAL (FOLLOWUP_MAX_PER_DAY, default 25) — tanpa kuota khusus
+   * terpisah. Beban hari dihitung dari baris PENDING/QUEUED yang sudah ada.
+   */
+  private async buildWinbackScheduleSlots(tenantId: string, count: number, now: Date): Promise<Date[]> {
+    const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 25);
+    const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const startY = nowWib.getUTCFullYear();
+    const startM = nowWib.getUTCMonth();
+    let startD = nowWib.getUTCDate();
+    // Jika jam kerja hari ini sudah lewat (>= 16:00 WIB), mulai dari besok.
+    if (nowWib.getUTCHours() >= 16) startD += 1;
+
+    const startOfTodayUtc = new Date(
+      Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate()) - 7 * 60 * 60 * 1000
+    );
+
+    let existing: Array<{ scheduled_at: Date }> = [];
+    try {
+      existing = (await prisma.followUp.findMany({
+        where: {
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+          scheduled_at: { gte: startOfTodayUtc },
+        },
+        select: { scheduled_at: true },
+      })) as any;
+    } catch {
+      existing = [];
+    }
+
+    const loadByDate = new Map<string, number>();
+    for (const e of existing || []) {
+      if (!e?.scheduled_at) continue;
+      const key = getWibDateKey(e.scheduled_at);
+      if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + 1);
+    }
+
+    const slots: Date[] = [];
+    let dayIndex = 0;
+    const step = Math.max(5, Math.floor(390 / maxPerDay)); // 09:30–16:00 = 390 menit
+
+    for (let i = 0; i < count; i++) {
+      // Cari hari pertama (mulai hari ini/besok) yang bebannya masih < kuota global.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const key = new Date(Date.UTC(startY, startM, startD + dayIndex)).toISOString().slice(0, 10);
+        if ((loadByDate.get(key) || 0) < maxPerDay) break;
+        dayIndex++;
+      }
+      const key = new Date(Date.UTC(startY, startM, startD + dayIndex)).toISOString().slice(0, 10);
+      const slotIndex = loadByDate.get(key) || 0;
+      const offset = Math.min(389, slotIndex * step);
+      // 09:30 WIB = 02:30 UTC
+      slots.push(new Date(Date.UTC(startY, startM, startD + dayIndex, 2, 30 + offset, 0, 0)));
+      loadByDate.set(key, slotIndex + 1);
+    }
+
+    return slots;
+  }
+
+  /**
+   * Generator antrean WINBACK_60D (re-engagement pelanggan dormant MQL/legacy).
+   *
+   * Kandidat = semua kondisi AND (tenant-scoped, offline-safe):
+   *  - status 'active', belum dihapus, bukan sandbox/internal/admin-held/bypass
+   *      (memakai seam kanonis buildNonBypassCustomerWhere + isDummyOrTestContact)
+   *  - is_mql = true ATAU is_legacy_source = true
+   *  - dormant: last_message_at (aktivitas apa pun, termasuk outbound) <= now - 60 hari
+   *  - antrean kosong: tidak ada FollowUp PENDING/QUEUED tipe apa pun (guard
+   *      deterministik anti-tumpang-tindih dengan rangkaian NEXT_TREATMENT)
+   *  - tanpa jadwal depan: tidak ada Reservation booking_date >= now (kecuali cancelled)
+   *  - idempoten: tidak ada WINBACK_60D non-cancelled dalam 60 hari terakhir
+   *
+   * Jadwal disisipkan ke kuota harian global pada jam kerja, status awal QUEUED.
+   */
+  public async enqueueDormantWinbackFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
+    try {
+      const now = new Date();
+      const dormantCutoff = new Date(now.getTime() - WINBACK_DORMANT_DAYS * 24 * 60 * 60 * 1000);
+
+      const base = buildNonBypassCustomerWhere() as any;
+      const candidates = (await prisma.customer.findMany({
+        where: {
+          tenant_id: tenantId,
+          ...base,
+          status: 'active',
+          deleted_at: null,
+          is_internal_staff: false,
+          is_hold_labeled: false,
+          OR: [{ is_mql: true }, { is_legacy_source: true }],
+          conversations: { every: { last_message_at: { lte: dormantCutoff } } },
+          follow_ups: {
+            none: {
+              OR: [
+                { status: { in: ['PENDING', 'QUEUED'] } },
+                {
+                  type: 'WINBACK_60D',
+                  status: { notIn: ['CANCELLED', 'SKIPPED'] },
+                  created_at: { gte: dormantCutoff },
+                },
+              ],
+            },
+          },
+          reservations: {
+            none: { booking_date: { gte: now }, status: { not: 'cancelled' } },
+          },
+        },
+        select: { id: true, phone: true, name: true },
+        take: WINBACK_ENQUEUE_LIMIT,
+      })) as any[];
+
+      const filtered = (candidates || []).filter((c: any) => !isDummyOrTestContact(c.phone, c.name));
+      if (filtered.length === 0) return 0;
+
+      const schedule = await this.buildWinbackScheduleSlots(tenantId, filtered.length, now);
+
+      let created = 0;
+      for (let i = 0; i < filtered.length; i++) {
+        try {
+          await prisma.followUp.create({
+            data: {
+              tenant_id: tenantId,
+              customer_id: filtered[i].id,
+              type: 'WINBACK_60D',
+              stage: 1,
+              scheduled_at: schedule[i] || now,
+              status: 'QUEUED',
+            },
+          });
+          created++;
+        } catch (_) {}
+      }
+
+      if (created > 0) {
+        console.log(`[FollowUp Service] Queued ${created} WINBACK_60D follow-up(s) for tenant ${tenantId} (dormant >= ${WINBACK_DORMANT_DAYS} hari).`);
+      }
+      return created;
+    } catch (err: any) {
+      console.warn('[FollowUp Service] enqueueDormantWinbackFollowUps failed:', err?.message || err);
+      return 0;
+    }
+  }
+
+  /**
    * Mengecek customer yang statusnya 'active' dan telah dikirimi follow-up NEXT_TREATMENT Stage 3
    * lebih dari LOST_CUSTOMER_GRACE_DAYS hari yang lalu, serta tidak melakukan booking baru sejak saat itu.
    */
@@ -1943,6 +2097,82 @@ export class FollowUpService {
           });
           console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no new reservation ${LOST_CUSTOMER_GRACE_DAYS} days after Stage 3 follow-up).`);
         }
+      }
+
+      // --- WINBACK_60D: grace period terpisah (default 7 hari) ---
+      // Bila WINBACK_60D sudah SENT > WINBACK_LOST_GRACE_DAYS hari dan customer TIDAK
+      // membalas (inbound setelah sent_at) DAN TIDAK membuat reservasi baru -> 'lost'.
+      // Catatan: di sini inbound MEMANG dipakai, karena yang diukur adalah respons
+      // SETELAH winback terkirim (bukan penentu dormansi awal).
+      try {
+        const winbackThreshold = new Date();
+        winbackThreshold.setDate(winbackThreshold.getDate() - WINBACK_LOST_GRACE_DAYS);
+
+        const sentWinbacksRaw = (await prisma.followUp.findMany({
+          where: {
+            type: 'WINBACK_60D',
+            status: 'SENT',
+            sent_at: { lte: winbackThreshold },
+            tenant_id: tenantId,
+            customer: { status: 'active', is_sandbox_test: false },
+          },
+          select: { id: true, customer_id: true, sent_at: true, type: true },
+        })) as any[];
+
+        // Guard tipe (defense-in-depth): query DB sudah memfilter type WINBACK_60D,
+        // namun tetap saring di JS agar baris non-WINBACK tidak ikut terproses.
+        const sentWinbacks = (sentWinbacksRaw || []).filter(
+          (f) => !f?.type || f.type === 'WINBACK_60D'
+        );
+
+        const winbackCustomers = Array.from(
+          new Set((sentWinbacks || []).map((f) => f?.customer_id).filter(Boolean))
+        );
+
+        if (winbackCustomers.length > 0) {
+          const recentRes = (await prisma.reservation
+            .findMany({
+              where: {
+                tenant_id: tenantId,
+                customer_id: { in: winbackCustomers },
+                created_at: { gte: winbackThreshold },
+              },
+              select: { customer_id: true, created_at: true },
+            })
+            .catch(() => [])) as any[];
+
+          const convs = (await prisma.conversation
+            .findMany({
+              where: { tenant_id: tenantId, customer_id: { in: winbackCustomers } },
+              select: { customer_id: true, last_customer_message_at: true },
+            })
+            .catch(() => [])) as any[];
+
+          for (const f of sentWinbacks || []) {
+            if (!f?.sent_at) continue;
+            const sentMs = new Date(f.sent_at).getTime();
+            const respondedViaReservation = (recentRes || []).some(
+              (r) => r.customer_id === f.customer_id && new Date(r.created_at).getTime() > sentMs
+            );
+            const respondedViaChat = (convs || []).some(
+              (c) =>
+                c.customer_id === f.customer_id &&
+                c.last_customer_message_at &&
+                new Date(c.last_customer_message_at).getTime() > sentMs
+            );
+            if (respondedViaReservation || respondedViaChat) continue;
+
+            try {
+              await prisma.customer.update({
+                where: { id: f.customer_id },
+                data: { status: 'lost' },
+              });
+              console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no response/reservation ${WINBACK_LOST_GRACE_DAYS} days after WINBACK_60D).`);
+            } catch (_) {}
+          }
+        }
+      } catch (wbErr: any) {
+        console.warn('[FollowUp Service] WINBACK lost-check failed:', wbErr?.message || wbErr);
       }
     } catch (err) {
       console.error('[FollowUp Service] Error checking and setting lost customers:', err);

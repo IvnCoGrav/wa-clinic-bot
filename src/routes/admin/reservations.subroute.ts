@@ -3099,7 +3099,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             where: {
               tenant_id: tenantId,
               customer_id: { in: customerIds },
-              status: { in: ['confirmed', 'completed'] },
+              // Selaras dengan kanonis `computeIsRepeatOrder` (reservation-core):
+              // status riwayat = confirmed/en_route/completed.
+              status: { in: ['confirmed', 'en_route', 'completed'] },
             },
             select: { id: true, customer_id: true, created_at: true },
             orderBy: [{ customer_id: 'asc' }, { created_at: 'asc' }],
@@ -3120,10 +3122,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
           const orderNumber = orderNumberByReservation.get(r.id) ?? 1;
-          const isRepeatOrder =
-            (r as any).is_repeat_order != null
-              ? Boolean((r as any).is_repeat_order)
-              : orderNumber > 1;
+          // Otoritas new-vs-repeat = ordinal riwayat transaksi nyata (orderNumber),
+          // BUKAN flag `Reservation.is_repeat_order` yang bisa terkontaminasi
+          // (mis. mutasi lama di follow-up.service). Order #1 SELALU 'new'.
+          // Selaras dengan computeIsRepeatOrder (reservation-core) &
+          // resolveNewVsRepeatContext (capi.service).
+          const isRepeatOrder = orderNumber > 1;
 
           // Sanitize treatment_detail on the fly (hapus part yang berisi placeholder teks template)
           let sanitizedTreatmentDetail = r.treatment_detail || '';
@@ -3235,9 +3239,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           select: { target_id: true, action: true, created_at: true },
           orderBy: { created_at: 'desc' },
         });
+        // leadAuditLogs diurutkan created_at DESC → log TERBARU dieksekusi admin
+        // harus menang. Tanpa cek `has()`, iterasi akan menimpa dengan log TERTUA
+        // (bug: aksi reject/outlier terbaru hilang).
         const sentMap = new Map<string, string>();
         for (const a of leadAuditLogs) {
-          if (a.target_id) sentMap.set(a.target_id, a.action);
+          if (a.target_id && !sentMap.has(a.target_id)) {
+            sentMap.set(a.target_id, a.action);
+          }
         }
         const processedCustomerIds: string[] = Array.from(sentMap.keys());
 
@@ -3251,6 +3260,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               { mql_bubble_count: { gte: 5 } },
             ],
             id: { notIn: processedCustomerIds },
+            // Anti-duplikasi Lead vs Purchase: customer yang SUDAH closing
+            // (punya reservasi confirmed/en_route/completed) tidak dimoderasi
+            // lagi sebagai Lead — sudah terkonversi ke Purchase. Syarat berbasis
+            // state DB (bukan string match), tahan terhadap paginasi/date-range.
+            reservations: {
+              none: {
+                tenant_id: tenantId,
+                status: { in: ['confirmed', 'en_route', 'completed'] },
+              },
+            },
           },
           include: {
             adClick: true,
@@ -3305,7 +3324,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (processedCustomerIds.length > 0) {
           try {
             const processedCustomers = await prisma.customer.findMany({
-              where: { tenant_id: tenantId, id: { in: processedCustomerIds.slice(0, 50) } },
+              where: {
+                tenant_id: tenantId,
+                id: { in: processedCustomerIds.slice(0, 50) },
+                // Sama seperti daftar unsent: sembunyikan baris Lead bagi customer
+                // yang sudah closing (agar tidak tampil ganda Lead + Purchase).
+                reservations: {
+                  none: {
+                    tenant_id: tenantId,
+                    status: { in: ['confirmed', 'en_route', 'completed'] },
+                  },
+                },
+              },
               include: { adClick: true },
             });
             for (const c of processedCustomers as any[]) {

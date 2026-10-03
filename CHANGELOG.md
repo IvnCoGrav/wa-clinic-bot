@@ -4,6 +4,69 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - WINBACK_60D: re-engagement pelanggan dormant MQL/legacy (>60 hari)
+
+- **Fitur baru:** antrean `WINBACK_60D` untuk menyapa kembali pelanggan MQL/legacy yang
+  sudah >60 hari tidak berinteraksi, dengan 3 varian template rolling, auto-lost grace 7
+  hari, dan pacing menyisip ke kuota harian global (tanpa kuota khusus).
+- **Skema (migrasi aman):** `FollowUpType += WINBACK_60D` (append-only, non-blocking) —
+  `prisma/schema.prisma:355-361` + `prisma/migrations/20261003000000_add_winback_60d_type/migration.sql`
+  (satu statement `ALTER TYPE ... ADD VALUE IF NOT EXISTS`).
+- **Template engine (`src/config/followup-templates.ts`):** tipe `WINBACK_60D` + 3 varian
+  ringkas (2–3 kalimat, kata ganti "Bidan kami", maks 2× "Bunda", frasa "sudah lama" tanpa
+  angka durasi). Sapaan `{name}`/`{babyName}` disanitasi lewat engine existing.
+- **Eksekutor (`src/services/follow-up.service.ts`):** cabang `WINBACK_60D` di
+  `executeFollowUp` (cegah fallback ke `NO_PURCHASE_1`); prioritas `WINBACK_60D = 3`
+  (setelah NEXT_TREATMENT & NO_PURCHASE).
+- **Generator antrean (`enqueueDormantWinbackFollowUps`, dipanggil dari
+  `cron.service.ts` `runMorningJobs`):** kandidat AND = status `active`, bukan
+  sandbox/internal/admin-held/bypass/dummy (seam `buildNonBypassCustomerWhere` +
+  `isDummyOrTestContact`), `is_mql OR is_legacy_source`, dormant `last_message_at <= now-60h`,
+  **antrean kosong** (tidak ada FollowUp PENDING/QUEUED tipe apa pun — guard anti-tumpang-tindih
+  dengan rangkaian NEXT_TREATMENT), tanpa reservasi depan (`booking_date >= now` non-cancelled),
+  dan belum ada WINBACK_60D non-cancelled dalam 60 hari. Status awal `QUEUED`, stage 1,
+  jadwal 09:30–16:00 WIB disisipkan ke `FOLLOWUP_MAX_PER_DAY`.
+- **Auto-lost 7 hari:** `checkAndSetLostCustomers` diperluas — WINBACK_60D SENT >7 hari tanpa
+  respons inbound (`last_customer_message_at`) maupun reservasi baru → `customer.status='lost'`.
+  Jalur NEXT_TREATMENT (grace 3 hari) tidak diubah.
+- **Env baru (`.env.example`):** `WINBACK_DORMANT_DAYS=60`, `WINBACK_ENQUEUE_LIMIT=10`,
+  `WINBACK_LOST_GRACE_DAYS=7`.
+- **Dashboard (`packages/admin-dashboard`):** tab kategori "Re-engagement" + entri `TYPE_CONFIG`,
+  badge amber, filter tipe, dan stage terkunci 1 di modal edit. Tanpa page/rute baru.
+- **Test:** `tests/unit/winback-60d.test.ts` (9 kasus: 3 varian + fallback nama, bentuk query
+  kandidat, filter dummy, dan auto-lost inbound/reservasi). Regresi suite follow-up: 76 test hijau.
+  Verifikasi: `tsc` bersih, dashboard build hijau.
+- **Catatan:** WABA sengaja tidak disertakan (tenant tidak memakai provider WABA).
+
+#### 2026-10-03 - Fix duplikasi Meta CAPI Queue & status 'Repeat Order' palsu untuk pasien baru
+
+- **Akar (multi-layer):**
+  1. `followUpService.onReservationCreated` memutasi `Reservation.is_repeat_order = true`
+     setiap kali pasien baru (yang punya follow-up `NO_PURCHASE` aktif) melakukan booking
+     pertama → transaksi #1 salah ditandai repeat di DB.
+  2. `GET /api/admin/capi-queue` memprioritaskan flag DB korup di atas ordinal transaksi.
+  3. `sentMap` moderasi Lead mengiterasi log `created_at DESC` tanpa cek `has()` → log
+     TERBARU tertimpa log TERTUA, sehingga aksi reject/outlier hilang dari tampilan.
+  4. Lead tidak dide-duplikasi terhadap Purchase → customer closing tampil 2x (Lead + Purchase).
+- **Fixed:**
+  - `src/services/follow-up.service.ts`: hapus mutasi `is_repeat_order`; method HANYA
+    membatalkan follow-up aktif (`CANCELLED` / `RESERVATION_CREATED`).
+  - `src/routes/admin/reservations.subroute.ts`: otoritas `isRepeatOrder = orderNumber > 1`;
+    ordinal diselaraskan ke kanonis `confirmed/en_route/completed`; `sentMap` newest-wins;
+    query Lead (unsent & riwayat) mengecualikan customer yang sudah punya reservasi aktif
+    (`reservations: { none: {...} }`) — deduplikasi Lead vs Purchase berbasis state DB.
+  - `packages/admin-dashboard/.../MetaCapiQueue.tsx`: filter Tipe Event (Semua / Purchase / Lead).
+- **Data healing live (default-tenant):** normalisasi deterministik `is_repeat_order = (seq > 1)`
+  atas riwayat `confirmed/en_route/completed`. `UPDATE 142` (64 first-order salah `true`
+  + 78 repeat salah `false`), backup CSV 142 baris, verifikasi ulang: 0 sisa salah dua arah.
+- **Test:** 2 file baru (`follow-up-lead-repeat`, `capi-queue-attribution`, 8 test) + koreksi
+  2 test lama yang mengunci perilaku bug (`follow-up-schedule`, judul `follow-up-engine`).
+  Verifikasi: `tsc` bersih, dashboard build hijau, suite penuh **4.672 hijau** (28 skip).
+- **OPEN:** audit log `Bunda Lady` (`8cb25bf5-…`) tidak memuat `MQL_LEAD_EVENT_REJECTED`
+  (hanya 3× `SENT`) → tidak bisa tampil `ignored_outlier`; menunggu keputusan reject manual
+  (lihat `docs/KNOWN_ISSUES.md` #211). Deploy fix ke server belum dilakukan (working tree
+  memuat fitur WINBACK_60D/landing yang belum di-commit).
+
 #### 2026-10-03 - Copilot SOP: pencarian kalimat-alami + seed prosedural + rekonsiliasi MANUAL_BOOK
 
 - **Akar:** `lookup_catalog_and_policy` memakai `contains` kalimat utuh → pertanyaan bahasa alami

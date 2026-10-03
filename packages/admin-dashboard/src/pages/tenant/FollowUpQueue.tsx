@@ -444,6 +444,12 @@ export const FollowUpQueue: React.FC = () => {
         color: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
       };
     }
+    if (type === 'WINBACK_60D') {
+      return {
+        label: `Re-engagement (>60 Hari)`,
+        color: 'bg-amber-50 text-amber-700 border-amber-200',
+      };
+    }
     return { label: `${type} #${stage}`, color: 'bg-slate-500/10 text-slate-600 border-slate-500/20' };
   };
 
@@ -683,6 +689,7 @@ export const FollowUpQueue: React.FC = () => {
             <option value="REVIEW_H1_MOMS">Review H+1 Treatment Moms</option>
             <option value="NO_PURCHASE">Belum Purchase (+3, +7, +14 Hari)</option>
             <option value="NEXT_TREATMENT">Treatment Lanjutan (+1, +2, +3 Bulan)</option>
+            <option value="WINBACK_60D">Re-engagement Pelanggan Lama (&gt;60 Hari)</option>
           </select>
         </div>
 
@@ -1162,6 +1169,8 @@ export const FollowUpQueue: React.FC = () => {
                         <option value={2}>Bulan ke-2</option>
                         <option value={3}>Bulan ke-3</option>
                       </>
+                    ) : editModal.item?.type === 'WINBACK_60D' ? (
+                      <option value={1}>Re-engagement (Sekali)</option>
                     ) : (
                       <>
                         <option value={1}>Tahap 1</option>

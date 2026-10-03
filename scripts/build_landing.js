@@ -1,0 +1,1386 @@
+import fs from 'fs';
+import path from 'path';
+
+// 1. Baca data katalog layanan
+const servicesRaw = JSON.parse(fs.readFileSync('services_custom.json', 'utf8'));
+const activeServices = servicesRaw.filter((s) => s.isActive).map((s) => {
+  let cleanDesc = s.description.replace(/\[BUNDLE:[^\]]+\]\s*/g, '').replace(/\[ADDON\]\s*/g, '').trim();
+  return {
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    serviceType: s.serviceType || 'STANDARD',
+    ageLabel: s.ageTier?.label || '',
+    durationMinutes: s.durationMinutes,
+    originalPrice: s.originalPrice,
+    promoPrice: s.promoPrice,
+    price: s.promoPrice || s.originalPrice,
+    description: cleanDesc,
+    bundleItemIds: s.bundleItemIds || []
+  };
+});
+
+const serviceLookup = {};
+activeServices.forEach((s) => { serviceLookup[s.id] = s.name; });
+
+activeServices.forEach((s) => {
+  if (s.bundleItemIds && s.bundleItemIds.length > 0) {
+    s.bundledNames = s.bundleItemIds.map((id) => serviceLookup[id] || id);
+  } else {
+    s.bundledNames = [];
+  }
+});
+
+// Category metadata
+const categoryMeta = {
+  BABY: { label: 'Bayi (0 - 24 Bulan)', badge: 'Baby Care', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  KIDS: { label: 'Anak (2 - 8 Tahun)', badge: 'Kids Care', color: 'bg-sky-50 text-sky-800 border-sky-200' },
+  MOMS: { label: 'Ibu Hamil & Nifas', badge: 'Moms Care', color: 'bg-amber-50 text-amber-800 border-amber-200' },
+  BUNDLE: { label: 'Paket Hemat Bundle', badge: 'Paket Hemat', color: 'bg-purple-50 text-purple-800 border-purple-200' },
+  ADD_ON: { label: 'Terapi Tambahan (Add-On)', badge: 'Terapi Medis', color: 'bg-teal-50 text-teal-800 border-teal-200' }
+};
+
+// 2. Generate Full HTML
+const html = `<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kala Moms and Baby Spa — Layanan Homecare Bidan Resmi</title>
+  <meta name="description" content="Layanan homecare pijat dan terapi bayi, anak, dan ibu hamil/nifas langsung ke rumah di Surabaya & Sidoarjo oleh Bidan resmi ber-STR.">
+  
+  <!-- Tailwind CSS via allowlisted gstatic -->
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: #111b21;
+      background-color: #f8fafc;
+    }
+
+    .brand-primary { color: #008069; }
+    .bg-brand-primary { background-color: #008069; }
+    .bg-brand-primary:hover { background-color: #00a884; }
+    .border-brand-primary { border-color: #008069; }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .card-transition {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .card-transition:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.08), 0 4px 12px -4px rgba(0, 0, 0, 0.03);
+    }
+
+    /* Pulse animation for WA status */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .status-pulse {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col bg-[#f8fafc]">
+
+  <!-- Top Announcement Bar -->
+  <div class="bg-[#008069] text-white text-xs sm:text-sm font-medium py-2 px-4 text-center tracking-wide flex items-center justify-center gap-2">
+    <span class="inline-block w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+    <span>🌿 <strong>Promo Spesial Homecare:</strong> Seluruh harga promo aktif! <strong>Gratis Ongkir hingga 5 km</strong> area Surabaya & Sidoarjo</span>
+  </div>
+
+  <!-- Header / Navigation -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#e9edef] transition-all">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between gap-4">
+      
+      <!-- Brand Logo -->
+      <a href="#hero" class="flex items-center gap-3 group">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#008069] shadow-xs group-hover:scale-105 transition-transform">
+          <svg class="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-base sm:text-lg font-bold text-[#111b21] tracking-tight">Kala Moms & Baby Spa</span>
+            <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              Official Homecare
+            </span>
+          </div>
+          <p class="text-xs text-[#54656f]">Dilayani Bidan Ber-STR Resmi • Datang ke Rumah</p>
+        </div>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <nav class="hidden lg:flex items-center gap-6 text-sm font-semibold text-[#54656f]">
+        <a href="#katalog" class="hover:text-[#008069] transition-colors">Katalog Layanan</a>
+        <a href="#bundle" class="hover:text-[#008069] transition-colors">Paket Hemat</a>
+        <a href="#ongkir" class="hover:text-[#008069] transition-colors">Cek Ongkir</a>
+        <a href="#sop" class="hover:text-[#008069] transition-colors">Standar Medis</a>
+        <a href="#testimoni" class="hover:text-[#008069] transition-colors">Testimoni</a>
+        <a href="#faq" class="hover:text-[#008069] transition-colors">FAQ</a>
+      </nav>
+
+      <!-- Right Actions: WA Button & Phone Setting -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Settings button for target WA -->
+        <button onclick="openPhoneModal()" title="Ubah Nomor WhatsApp Klinik" class="p-2 sm:p-2.5 rounded-xl border border-[#e9edef] text-[#54656f] hover:text-[#008069] hover:bg-emerald-50 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+
+        <!-- Main CTA WhatsApp Header -->
+        <a id="header-wa-btn" href="#" onclick="openGeneralWaChat()" class="inline-flex items-center gap-2 bg-[#008069] hover:bg-[#00a884] text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-semibold text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98]">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+          </svg>
+          <span class="hidden sm:inline">Chat Bidan Yusi</span>
+          <span class="sm:hidden">Chat WA</span>
+        </a>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section id="hero" class="relative overflow-hidden pt-8 pb-14 sm:pt-12 sm:pb-20 bg-gradient-to-b from-emerald-50/50 via-white to-[#f8fafc]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto">
+        <!-- Trust badge -->
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold bg-emerald-50 text-[#008069] border border-emerald-200 mb-6 shadow-2xs">
+          <span class="w-2 h-2 rounded-full bg-[#008069]"></span>
+          <span>100% Ditangani Bidan Ber-STR Aktif • Homecare Surabaya & Sidoarjo</span>
+        </div>
+
+        <h1 class="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-[#111b21] tracking-tight leading-tight sm:leading-tight mb-4">
+          Perawatan Pijat & Terapi Spesialis Ibu & Bayi <span class="text-[#008069]">Langsung di Rumah</span>
+        </h1>
+
+        <p class="text-sm sm:text-base lg:text-lg text-[#54656f] leading-relaxed mb-8">
+          Tanpa antre, bebas macet, dan steril standar medis. Bidan bersertifikasi kami hadir mendampingi pemulihan Bunda pasca salin serta mengoptimalkan stimulasi tumbuh kembang si kecil.
+        </p>
+
+        <!-- CTA Buttons -->
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-10">
+          <a href="#katalog" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#008069] hover:bg-[#00a884] text-white px-6 py-3.5 rounded-xl font-bold text-sm sm:text-base shadow-sm transition-all active:scale-[0.98]">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+            </svg>
+            <span>Lihat 39 Pilihan Layanan</span>
+          </a>
+          <button onclick="openGeneralWaChat()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-[#111b21] border border-[#d1d7db] px-6 py-3.5 rounded-xl font-bold text-sm sm:text-base transition-all active:scale-[0.98]">
+            <svg class="w-5 h-5 text-[#008069]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>
+            </svg>
+            <span>Konsultasi Keluhan Si Kecil</span>
+          </button>
+        </div>
+
+        <!-- 4 Trust Highlights -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-left">
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-[#008069] flex items-center justify-center font-bold text-sm mb-2">🩺</div>
+            <h4 class="text-xs sm:text-sm font-bold text-[#111b21]">Bidan Ber-STR</h4>
+            <p class="text-xs text-[#54656f] mt-0.5 leading-snug">Tenaga medis resmi berlisensi, paham anatomi bayi.</p>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-[#008069] flex items-center justify-center font-bold text-sm mb-2">🏠</div>
+            <h4 class="text-xs sm:text-sm font-bold text-[#111b21]">Langsung ke Rumah</h4>
+            <p class="text-xs text-[#54656f] mt-0.5 leading-snug">Bunda & bayi santai tanpa macet & bebas stres.</p>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-[#008069] flex items-center justify-center font-bold text-sm mb-2">🌿</div>
+            <h4 class="text-xs sm:text-sm font-bold text-[#111b21]">Alami & Steril</h4>
+            <p class="text-xs text-[#54656f] mt-0.5 leading-snug">Alat steril UV & minyak alami hypoallergenic.</p>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-[#008069] flex items-center justify-center font-bold text-sm mb-2">🛵</div>
+            <h4 class="text-xs sm:text-sm font-bold text-[#111b21]">Gratis Ongkir 5 km</h4>
+            <p class="text-xs text-[#54656f] mt-0.5 leading-snug">Jangkauan 30 km Surabaya & Sidoarjo.</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Main Section: Katalog Layanan Interaktif -->
+  <section id="katalog" class="py-10 sm:py-14 bg-white border-t border-b border-[#e9edef]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <!-- Section Title -->
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-wider text-[#008069]">Daftar Menu Treatment</span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-[#111b21] tracking-tight mt-1">
+            Katalog Layanan & Tarif Homecare
+          </h2>
+          <p class="text-sm text-[#54656f] mt-1">
+            Semua harga sudah termasuk kedatangan bidan langsung ke rumah Anda.
+          </p>
+        </div>
+
+        <!-- Quick counter -->
+        <div class="text-xs sm:text-sm text-[#54656f] bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl flex items-center gap-2 self-start md:self-auto">
+          <span>Menampilkan:</span>
+          <strong id="service-count-badge" class="text-[#008069]">39 Layanan</strong>
+        </div>
+      </div>
+
+      <!-- Search & Filters Container -->
+      <div class="bg-slate-50/80 p-4 sm:p-5 rounded-2xl border border-[#e9edef] mb-8 space-y-4">
+        
+        <!-- Live Search Input -->
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Ketik nama layanan atau keluhan (misal: bapil, batuk, gtm, cukur, oksitosin, selapan, yoga)..."
+            class="w-full pl-10 pr-10 py-3 bg-white border border-[#d1d7db] rounded-xl text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-hidden focus:border-[#008069] focus:ring-2 focus:ring-emerald-100 transition-all shadow-2xs"
+            oninput="handleSearch()"
+          >
+          <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" id="categoryTabContainer">
+          <button onclick="setCategory('ALL')" class="category-btn active px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-[#008069] text-white shadow-2xs" data-category="ALL">
+            🌟 Semua Layanan (39)
+          </button>
+          <button onclick="setCategory('BABY')" class="category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300" data-category="BABY">
+            👶 Bayi (0 - 24 Bulan) (9)
+          </button>
+          <button onclick="setCategory('KIDS')" class="category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300" data-category="KIDS">
+            👧 Anak (2 - 8 Tahun) (7)
+          </button>
+          <button onclick="setCategory('MOMS')" class="category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300" data-category="MOMS">
+            🤰 Ibu Hamil & Nifas (9)
+          </button>
+          <button onclick="setCategory('BUNDLE')" class="category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300" data-category="BUNDLE">
+            🎁 Paket Bundle Hemat (11)
+          </button>
+          <button onclick="setCategory('ADD_ON')" class="category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300" data-category="ADD_ON">
+            ➕ Terapi Add-On (3)
+          </button>
+        </div>
+
+        <!-- Quick Filter Chips by Needs/Symptoms -->
+        <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200">
+          <span class="text-xs font-semibold text-[#54656f] mr-1">Filter Keluhan Cepat:</span>
+          <button onclick="filterByTag('bapil')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            🤧 Bapil / Batuk Pilek
+          </button>
+          <button onclick="filterByTag('lahap')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            🥣 Susah Makan (GTM)
+          </button>
+          <button onclick="filterByTag('ceria')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            😴 Susah Tidur & Pegal
+          </button>
+          <button onclick="filterByTag('oksitosin')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            🤱 Lancarkan ASI / Oksitosin
+          </button>
+          <button onclick="filterByTag('persalinan')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            🤰 Persiapan Lahir (Yoga/Perineum/Induksi)
+          </button>
+          <button onclick="filterByTag('selapan')" class="tag-chip text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#54656f] hover:bg-emerald-50 hover:text-[#008069] transition-all">
+            ✂️ Tradisi Selapanan & Cukur
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Services Cards Grid -->
+      <div id="servicesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Rendered dynamically by JavaScript -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden text-center py-16 px-4">
+        <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#111b21]">Tidak ada layanan yang cocok</h3>
+        <p class="text-xs text-[#54656f] mt-1 max-w-sm mx-auto">Coba gunakan kata kunci pencarian yang lain atau pilih kategori Semua Layanan.</p>
+        <button onclick="resetFilters()" class="mt-4 px-4 py-2 text-xs font-bold text-[#008069] bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">
+          Reset Filter Pencarian
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Interactive Delivery Ongkir Calculator -->
+  <section id="ongkir" class="py-12 sm:py-16 bg-[#f8fafc]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="max-w-3xl mx-auto bg-white rounded-3xl border border-[#e9edef] p-6 sm:p-8 shadow-sm">
+        
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200 mb-2">
+            🛵 Estimasi Transparan
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-[#111b21] tracking-tight">
+            Kalkulator Ongkos Kirim Bidan
+          </h2>
+          <p class="text-xs sm:text-sm text-[#54656f] mt-1">
+            Titik klinik kami berada di <strong>Waru, Sidoarjo</strong>. Kami melayani seluruh area Surabaya & Sidoarjo hingga jarak 30 km.
+          </p>
+        </div>
+
+        <!-- Interactive Distance Slider -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <label for="distanceRange" class="text-xs font-semibold text-[#111b21]">Pilih Perkiraan Jarak dari Waru:</label>
+            <span class="text-base sm:text-lg font-bold text-[#008069] bg-emerald-50 px-3 py-0.5 rounded-lg border border-emerald-200" id="distanceLabel">
+              4 km
+            </span>
+          </div>
+
+          <input 
+            type="range" 
+            id="distanceRange" 
+            min="1" 
+            max="30" 
+            value="4" 
+            class="w-full h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#008069]"
+            oninput="handleDistanceChange(this.value)"
+          >
+
+          <div class="flex justify-between text-xs text-[#8696a0]">
+            <span>1 km (Waru)</span>
+            <span>10 km (Wonokromo/Gedangan)</span>
+            <span>20 km (Pusat/Sidoarjo Kota)</span>
+            <span>30 km (Batas Jangkauan)</span>
+          </div>
+
+          <!-- Quick Area Buttons -->
+          <div class="pt-2">
+            <span class="text-xs text-[#54656f] font-medium block mb-2">Klik contoh area Anda:</span>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="setSampleDistance(3, 'Waru / Sedati')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Waru / Sedati (3 km)
+              </button>
+              <button onclick="setSampleDistance(6, 'Rungkut / Rungkut Mapan')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Rungkut (6 km)
+              </button>
+              <button onclick="setSampleDistance(9, 'Wonokromo / Gedangan')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Wonokromo / Gedangan (9 km)
+              </button>
+              <button onclick="setSampleDistance(13, 'Sukodono / Gayungan')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Sukodono (13 km)
+              </button>
+              <button onclick="setSampleDistance(18, 'Sidoarjo Kota / Jambangan')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Sidoarjo Kota (18 km)
+              </button>
+              <button onclick="setSampleDistance(24, 'Krian / Surabaya Barat')" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                Krian (24 km)
+              </button>
+            </div>
+          </div>
+
+          <!-- Calculation Result Display Card -->
+          <div class="mt-6 bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 text-center transition-all" id="ongkirResultCard">
+            <span class="text-xs font-bold uppercase tracking-wider text-[#008069]">Hasil Perhitungan Ongkir</span>
+            <div class="text-2xl sm:text-3xl font-extrabold text-[#111b21] mt-1" id="ongkirFeeText">
+              GRATIS ONGKIR! (Rp 0)
+            </div>
+            <p class="text-xs text-[#54656f] mt-1" id="ongkirNoteText">
+              Jarak hingga 5 km bebas ongkir homecare sepeser pun.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SOP Medis & Keamanan Section -->
+  <section id="sop" class="py-12 sm:py-16 bg-white border-t border-[#e9edef]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-2xl mx-auto mb-10">
+        <span class="text-xs font-bold uppercase tracking-wider text-[#008069]">Keamanan & Kredibilitas</span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-[#111b21] tracking-tight mt-1">
+          4 Standar Medis Klinis Bidan Kami
+        </h2>
+        <p class="text-xs sm:text-sm text-[#54656f] mt-1">
+          Kesehatan buah hati dan Bunda adalah prioritas utama kami dengan kepatuhan kode etik kebidanan.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        
+        <div class="p-5 rounded-2xl border border-[#e9edef] bg-slate-50/50">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-[#008069] flex items-center justify-center font-bold text-lg mb-3">
+            ✓
+          </div>
+          <h3 class="text-sm font-bold text-[#111b21]">1. Bidan Ber-STR Aktif</h3>
+          <p class="text-xs text-[#54656f] mt-1 leading-relaxed">
+            Bukan terapis pijat umum. Seluruh terapis adalah bidan lulusan kebidanan terdaftar dengan Surat Tanda Registrasi resmi.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-2xl border border-[#e9edef] bg-slate-50/50">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-[#008069] flex items-center justify-center font-bold text-lg mb-3">
+            🛡️
+          </div>
+          <h3 class="text-sm font-bold text-[#111b21]">2. Skrining Kontraindikasi</h3>
+          <p class="text-xs text-[#54656f] mt-1 leading-relaxed">
+            Menolak memijat jika bayi demam tinggi (>38°C) atau pasca imunisasi &lt; 48 jam demi keselamatan medis anak.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-2xl border border-[#e9edef] bg-slate-50/50">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-[#008069] flex items-center justify-center font-bold text-lg mb-3">
+            ✨
+          </div>
+          <h3 class="text-sm font-bold text-[#111b21]">3. Higienitas & Alat Steril</h3>
+          <p class="text-xs text-[#54656f] mt-1 leading-relaxed">
+            Membawa perlak/underpad steril, mencuci tangan antiseptik sebelum memegang bayi, dan alat cukur/tindik sekali pakai/steril.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-2xl border border-[#e9edef] bg-slate-50/50">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-[#008069] flex items-center justify-center font-bold text-lg mb-3">
+            🌿
+          </div>
+          <h3 class="text-sm font-bold text-[#111b21]">4. Minyak Alami Khusus Bayi</h3>
+          <p class="text-xs text-[#54656f] mt-1 leading-relaxed">
+            Menggunakan minyak organik murni cold-pressed (VCO & almond oil) yang hypoallergenic dan aman tertelan si kecil.
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Testimoni Pelanggan -->
+  <section id="testimoni" class="py-12 sm:py-16 bg-[#f8fafc] border-t border-[#e9edef]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-2xl mx-auto mb-10">
+        <span class="text-xs font-bold uppercase tracking-wider text-[#008069]">Cerita Bunda</span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-[#111b21] tracking-tight mt-1">
+          Pengalaman Nyata Bunda di Surabaya & Sidoarjo
+        </h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <div class="bg-white p-5 rounded-2xl border border-[#e9edef] shadow-2xs flex flex-col justify-between">
+          <div>
+            <div class="flex text-amber-400 text-sm mb-2">★★★★★</div>
+            <p class="text-xs sm:text-sm text-[#54656f] italic leading-relaxed">
+              "Anakku usia 10 bulan bapil batuk berdahak sampai rewel susah tidur semalaman. Dipijat Pulih Ceria sama Bidan Yusi langsung tidur nyenyak, lendirnya keluar gampang. Seneng banget gak perlu repot keluar rumah!"
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-100 text-[#008069] font-bold text-xs flex items-center justify-center">
+              BA
+            </div>
+            <div>
+              <h5 class="text-xs font-bold text-[#111b21]">Bunda Amanda</h5>
+              <p class="text-xs text-[#8696a0]">Rungkut, Surabaya • Pijat Pulih Ceria</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-[#e9edef] shadow-2xs flex flex-col justify-between">
+          <div>
+            <div class="flex text-amber-400 text-sm mb-2">★★★★★</div>
+            <p class="text-xs sm:text-sm text-[#54656f] italic leading-relaxed">
+              "Pesen Paket Selapan Full (cukur gundul + pijat + mandi). Bidan telaten banget, alat cukurnya steril, si kecil waktu dicukur malah ketawa-tawa gak nangis. Pulang-pulang wangi seger. Puas banget!"
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-100 text-[#008069] font-bold text-xs flex items-center justify-center">
+              BS
+            </div>
+            <div>
+              <h5 class="text-xs font-bold text-[#111b21]">Bunda Sarah</h5>
+              <p class="text-xs text-[#8696a0]">Waru, Sidoarjo • Paket Selapan Full</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-[#e9edef] shadow-2xs flex flex-col justify-between">
+          <div>
+            <div class="flex text-amber-400 text-sm mb-2">★★★★★</div>
+            <p class="text-xs sm:text-sm text-[#54656f] italic leading-relaxed">
+              "Habis lahiran SC badan capek dan payudara keras bengkak ASI mampet. Bidan datang bantu Breast Care & Oksitosin. Punggung langsung enteng dan ASI deres lagi. Recommended buat new moms!"
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-100 text-[#008069] font-bold text-xs flex items-center justify-center">
+              BD
+            </div>
+            <div>
+              <h5 class="text-xs font-bold text-[#111b21]">Bunda Dian</h5>
+              <p class="text-xs text-[#8696a0]">Gedangan, Sidoarjo • Laktasi & Oksitosin</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FAQ Section (Accordion) -->
+  <section id="faq" class="py-12 sm:py-16 bg-white border-t border-[#e9edef]">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center mb-10">
+        <span class="text-xs font-bold uppercase tracking-wider text-[#008069]">Tanya Jawab</span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-[#111b21] tracking-tight mt-1">
+          Pertanyaan yang Sering Diajukan
+        </h2>
+      </div>
+
+      <div class="space-y-3" id="faqAccordion">
+        
+        <div class="border border-[#e9edef] rounded-2xl overflow-hidden">
+          <button onclick="toggleFaq(this)" class="w-full px-5 py-4 text-left font-bold text-sm text-[#111b21] flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Bagaimana cara memesan layanan homecare ini?</span>
+            <span class="faq-icon text-[#008069] text-base">+</span>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 text-xs sm:text-sm text-[#54656f] leading-relaxed border-t border-slate-100 pt-3">
+            Cukup klik tombol "Pesan Sekarang" pada layanan yang Bunda inginkan di halaman ini, atau klik tombol chat WhatsApp. Anda akan otomatis terhubung ke Bidan kami via WhatsApp untuk konfirmasi jam dan alamat rumah.
+          </div>
+        </div>
+
+        <div class="border border-[#e9edef] rounded-2xl overflow-hidden">
+          <button onclick="toggleFaq(this)" class="w-full px-5 py-4 text-left font-bold text-sm text-[#111b21] flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Apa yang perlu Bunda siapkan di rumah sebelum Bidan datang?</span>
+            <span class="faq-icon text-[#008069] text-base">+</span>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 text-xs sm:text-sm text-[#54656f] leading-relaxed border-t border-slate-100 pt-3">
+            Bunda hanya perlu menyiapkan kasur/ruangan yang nyaman dan hangat, serta handuk si kecil. Seluruh peralatan perawatan medis, perlak steril, minyak pijat alami, dan aromaterapi dibawa lengkap oleh Bidan.
+          </div>
+        </div>
+
+        <div class="border border-[#e9edef] rounded-2xl overflow-hidden">
+          <button onclick="toggleFaq(this)" class="w-full px-5 py-4 text-left font-bold text-sm text-[#111b21] flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Bolehkah bayi dipijat saat batuk pilek atau rewel?</span>
+            <span class="faq-icon text-[#008069] text-base">+</span>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 text-xs sm:text-sm text-[#54656f] leading-relaxed border-t border-slate-100 pt-3">
+            Boleh sekali Bunda! Layanan <strong>Pijat Pulih Ceria</strong> kami dirancang khusus dengan titik akupresur dada/punggung dan double aromaterapi untuk melegakan hidung tersumbat, kembung, dan mengencerkan dahak si kecil. Pengecualian hanya jika suhu tubuh bayi sedang demam tinggi (>38°C).
+          </div>
+        </div>
+
+        <div class="border border-[#e9edef] rounded-2xl overflow-hidden">
+          <button onclick="toggleFaq(this)" class="w-full px-5 py-4 text-left font-bold text-sm text-[#111b21] flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Apakah ada diskon jika mengambil lebih dari satu layanan?</span>
+            <span class="faq-icon text-[#008069] text-base">+</span>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 text-xs sm:text-sm text-[#54656f] leading-relaxed border-t border-slate-100 pt-3">
+            Tentu Bunda! Kami menyediakan kategori <strong>Paket Hemat Bundle</strong> (seperti Paket Selapan, Paket Pra-Kelahiran, dan Duo Mom & Baby) dengan harga jauh lebih hemat dibandingkan pesan satuan. Anda juga bisa memilih beberapa layanan sekaligus ke keranjang jadwal di halaman ini.
+          </div>
+        </div>
+
+        <div class="border border-[#e9edef] rounded-2xl overflow-hidden">
+          <button onclick="toggleFaq(this)" class="w-full px-5 py-4 text-left font-bold text-sm text-[#111b21] flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Kapan waktu terbaik melakukan reservasi?</span>
+            <span class="faq-icon text-[#008069] text-base">+</span>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 text-xs sm:text-sm text-[#54656f] leading-relaxed border-t border-slate-100 pt-3">
+            Kami sarankan untuk reservasi H-1 atau H-2 agar mendapatkan pilihan jam kunjungan favorit Bunda (pagi hari jam 09.00 atau sore jam 15.00). Namun untuk kebutuhan mendesak same-day, Bunda tetap bisa menanyakan slot kosong langsung via WhatsApp.
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-[#111b21] text-white py-12 border-t border-slate-800 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+        
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-8 h-8 rounded-lg bg-[#008069] flex items-center justify-center font-bold">🌿</span>
+            <span class="text-base font-bold text-white">Kala Moms & Baby Spa</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed max-w-sm">
+            Layanan homecare bidan resmi terpercaya untuk pijat, mandi bayi, cukur selapanan, terapi bapil/GTM, dan perawatan laktasi & kehamilan di Surabaya dan Sidoarjo.
+          </p>
+          <p class="text-xs text-emerald-400 font-semibold mt-3">
+            📍 Base: Waru, Sidoarjo (Coverage Area &lt; 30 km)
+          </p>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">Jam Operasional Homecare</h4>
+          <ul class="text-xs text-slate-400 space-y-1.5">
+            <li>Senin – Minggu: 08.00 – 17.00 WIB</li>
+            <li>Reservasi WhatsApp: Setiap hari (24 Jam)</li>
+            <li>Layanan Homecare: Sesuai jadwal janji temu bidan</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">Kontak & Reservasi</h4>
+          <p class="text-xs text-slate-400 mb-3">
+            Klik tombol di bawah untuk langsung berkonsultasi dan reservasi jadwal bersama Bidan kami:
+          </p>
+          <button onclick="openGeneralWaChat()" class="inline-flex items-center gap-2 bg-[#008069] hover:bg-[#00a884] text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-colors">
+            💬 Hubungi Bidan via WhatsApp
+          </button>
+        </div>
+
+      </div>
+
+      <div class="pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
+        &copy; 2026 Kala Moms and Baby Spa. Seluruh hak cipta dilindungi. Layanan resmi homecare kebidanan.
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- Floating Multi-Service Cart Bar (Appears when 1+ services selected) -->
+  <div id="cartBar" class="hidden fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:max-w-md z-40 bg-[#111b21] text-white p-4 rounded-2xl shadow-xl border border-slate-700 animate-bounce-in">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-[#008069] text-white text-xs font-bold flex items-center justify-center" id="cartCountBadge">
+            1
+          </span>
+          <span class="text-xs font-bold text-white">Layanan Dipilih</span>
+        </div>
+        <div class="text-sm font-extrabold text-emerald-400 mt-0.5" id="cartTotalPrice">
+          Rp 0
+        </div>
+        <div class="text-[11px] text-slate-300" id="cartTotalDuration">
+          Estimasi: 0 Menit
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="openCartModal()" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors">
+          Rincian
+        </button>
+        <button onclick="checkoutCartWa()" class="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors">
+          <span>Booking WA</span>
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Detail Layanan -->
+  <div id="detailModal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <span id="modalCategoryBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800">
+          Kategori
+        </span>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <h3 id="modalTitle" class="text-xl font-extrabold text-[#111b21] mb-2 leading-snug">
+        Nama Layanan
+      </h3>
+
+      <div class="flex items-center gap-3 text-xs text-[#54656f] mb-4">
+        <span id="modalAgeBadge" class="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">0 - 24 Bulan</span>
+        <span>•</span>
+        <span id="modalDuration" class="font-semibold text-emerald-700">⏱️ 40 Menit</span>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-2xl mb-4 text-xs text-[#54656f] leading-relaxed" id="modalDescription">
+        Deskripsi lengkap.
+      </div>
+
+      <div id="modalBundledContainer" class="hidden mb-4">
+        <h5 class="text-xs font-bold text-[#111b21] mb-2">Termasuk dalam paket ini:</h5>
+        <div id="modalBundledList" class="space-y-1.5 text-xs text-slate-600">
+          <!-- Bundled list -->
+        </div>
+      </div>
+
+      <!-- Price Box in Modal -->
+      <div class="flex items-center justify-between p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl mb-5">
+        <div>
+          <span class="text-[11px] text-[#54656f] block">Tarif Promo Homecare</span>
+          <div class="text-xl font-extrabold text-[#008069]" id="modalPrice">Rp 0</div>
+          <span class="text-xs text-slate-400 line-through" id="modalOriginalPrice">Rp 0</span>
+        </div>
+        <div class="text-right">
+          <span class="text-xs font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+            Termasuk Kunjungan Bidan
+          </span>
+        </div>
+      </div>
+
+      <div class="flex gap-2.5">
+        <button id="modalAddToCartBtn" onclick="toggleCartFromModal()" class="flex-1 py-3 bg-white border border-[#008069] text-[#008069] font-bold text-xs rounded-xl hover:bg-emerald-50 transition-colors">
+          + Keranjang Jadwal
+        </button>
+        <button id="modalOrderWaBtn" onclick="orderModalWa()" class="flex-1 py-3 bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
+          <span>Pesan via WA</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Phone Number Settings (Bisa atur nomor WA klinik secara interaktif) -->
+  <div id="phoneModal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <h4 class="text-sm font-bold text-[#111b21]">Pengaturan Nomor WhatsApp</h4>
+        <button onclick="closePhoneModal()" class="text-slate-400 hover:text-slate-700 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="text-xs text-[#54656f] mb-3">
+        Masukkan nomor WhatsApp klinik tujuan agar seluruh tombol pemesanan di landing page ini langsung terhubung ke nomor tersebut.
+      </p>
+
+      <div class="space-y-3 mb-4">
+        <label for="waPhoneInput" class="text-xs font-semibold text-[#111b21]">Nomor WhatsApp (Awali 628...):</label>
+        <input 
+          type="text" 
+          id="waPhoneInput" 
+          placeholder="6281390541340"
+          class="w-full px-3.5 py-2.5 border border-[#d1d7db] rounded-xl text-xs font-mono text-[#111b21] focus:outline-hidden focus:border-[#008069]"
+        >
+        <span class="text-[11px] text-[#8696a0] block">Tersimpan di browser lokal Anda.</span>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="resetPhoneToDefault()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors">
+          Reset Default
+        </button>
+        <button onclick="saveCustomPhone()" class="flex-1 py-2.5 bg-[#008069] text-white text-xs font-bold rounded-xl hover:bg-[#00a884] transition-colors">
+          Simpan Nomor
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Rincian Keranjang Jadwal Multi-Layanan -->
+  <div id="cartModal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <h4 class="text-base font-bold text-[#111b21]">Rincian Keranjang Jadwal</h4>
+        <button onclick="closeCartModal()" class="text-slate-400 hover:text-slate-700 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="cartItemsList" class="space-y-2 mb-4">
+        <!-- Rendered cart items -->
+      </div>
+
+      <div class="p-4 bg-slate-50 rounded-2xl space-y-2 text-xs mb-5 border border-slate-200">
+        <div class="flex justify-between text-slate-600">
+          <span>Total Layanan:</span>
+          <span id="cartModalItemCount" class="font-bold text-slate-800">0 Layanan</span>
+        </div>
+        <div class="flex justify-between text-slate-600">
+          <span>Total Estimasi Pengerjaan:</span>
+          <span id="cartModalDuration" class="font-bold text-slate-800">0 Menit</span>
+        </div>
+        <div class="flex justify-between text-sm font-extrabold text-[#111b21] pt-2 border-t border-slate-200">
+          <span>Total Tarif:</span>
+          <span id="cartModalTotal" class="text-[#008069]">Rp 0</span>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold text-[#111b21] block mb-1">Nama Bunda & Si Kecil (Opsional):</label>
+          <input type="text" id="bookingCustomerName" placeholder="Contoh: Bunda Sarah & Adik Rayyan (5 bulan)" class="w-full px-3.5 py-2 text-xs border border-[#d1d7db] rounded-xl text-[#111b21]">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-[#111b21] block mb-1">Area / Alamat Rumah (Opsional):</label>
+          <input type="text" id="bookingCustomerAddress" placeholder="Contoh: Waru / Sedati / Rungkut" class="w-full px-3.5 py-2 text-xs border border-[#d1d7db] rounded-xl text-[#111b21]">
+        </div>
+      </div>
+
+      <div class="flex gap-2.5 mt-5">
+        <button onclick="clearCart()" class="py-3 px-4 bg-slate-100 text-rose-600 font-bold text-xs rounded-xl hover:bg-rose-50 transition-colors">
+          Kosongkan
+        </button>
+        <button onclick="checkoutCartWa()" class="flex-1 py-3 bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors">
+          <span>Kirim Pesanan ke WhatsApp</span>
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw Data & Interactive Script -->
+  <script>
+    // 39 Layanan Aktif Lengkap dari Basis Data Klinik Kala Spa
+    const CLINIC_SERVICES = ${JSON.stringify(activeServices, null, 2)};
+
+    const CATEGORY_META = ${JSON.stringify(categoryMeta, null, 2)};
+
+    // State Aplikasi
+    let currentCategory = 'ALL';
+    let searchQuery = '';
+    let selectedTag = '';
+    let cart = []; // Array of service IDs
+    let currentModalService = null;
+    let clinicPhone = localStorage.getItem('kala_wa_phone') || '6281390541340';
+
+    // Format Rupiah
+    function formatRp(num) {
+      return 'Rp ' + Number(num).toLocaleString('id-ID');
+    }
+
+    // Inisialisasi
+    document.addEventListener('DOMContentLoaded', () => {
+      renderServices();
+      handleDistanceChange(4);
+      updateWaButtonUrls();
+      document.getElementById('waPhoneInput').value = clinicPhone;
+    });
+
+    // Filtering & Pencarian
+    function setCategory(cat) {
+      currentCategory = cat;
+      selectedTag = '';
+      updateTabButtons();
+      renderServices();
+    }
+
+    function updateTabButtons() {
+      const btns = document.querySelectorAll('.category-btn');
+      btns.forEach(btn => {
+        const cat = btn.getAttribute('data-category');
+        if (cat === currentCategory) {
+          btn.className = 'category-btn active px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-[#008069] text-white shadow-2xs';
+        } else {
+          btn.className = 'category-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap bg-white text-[#54656f] border border-[#d1d7db] hover:border-emerald-300';
+        }
+      });
+    }
+
+    function handleSearch() {
+      searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (searchQuery.length > 0) {
+        clearBtn.classList.remove('hidden');
+      } else {
+        clearBtn.classList.add('hidden');
+      }
+      renderServices();
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      searchQuery = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      renderServices();
+    }
+
+    function filterByTag(tag) {
+      selectedTag = tag;
+      document.getElementById('searchInput').value = tag;
+      handleSearch();
+    }
+
+    function resetFilters() {
+      currentCategory = 'ALL';
+      searchQuery = '';
+      selectedTag = '';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      updateTabButtons();
+      renderServices();
+    }
+
+    // Render Service Cards
+    function renderServices() {
+      const grid = document.getElementById('servicesGrid');
+      const emptyState = document.getElementById('emptyState');
+      const counterBadge = document.getElementById('service-count-badge');
+
+      const filtered = CLINIC_SERVICES.filter(service => {
+        // Filter kategori
+        if (currentCategory !== 'ALL' && service.category !== currentCategory) {
+          return false;
+        }
+
+        // Filter search query
+        if (searchQuery) {
+          const matchName = service.name.toLowerCase().includes(searchQuery);
+          const matchDesc = service.description.toLowerCase().includes(searchQuery);
+          const matchAge = (service.ageLabel || '').toLowerCase().includes(searchQuery);
+          const matchBundle = (service.bundledNames || []).some(b => b.toLowerCase().includes(searchQuery));
+          if (!matchName && !matchDesc && !matchAge && !matchBundle) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      counterBadge.innerText = filtered.length + ' Layanan';
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      grid.innerHTML = filtered.map(s => {
+        const catInfo = CATEGORY_META[s.category] || { label: s.category, color: 'bg-slate-100 text-slate-700' };
+        const hasDiscount = s.originalPrice > s.price;
+        const discountAmount = s.originalPrice - s.price;
+        const inCart = cart.includes(s.id);
+
+        let bundleHtml = '';
+        if (s.bundledNames && s.bundledNames.length > 0) {
+          bundleHtml = \`
+            <div class="mt-2.5 pt-2 border-t border-slate-100 text-[11px] text-[#54656f]">
+              <span class="font-bold text-[#111b21]">Komposisi Paket:</span>
+              <div class="flex flex-wrap gap-1 mt-1">
+                \${s.bundledNames.map(b => \`<span class="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">\${b.replace(/Kala (Baby|Mom) – /, '')}</span>\`).join('')}
+              </div>
+            </div>
+          \`;
+        }
+
+        return \`
+          <div class="bg-white rounded-2xl border border-[#e9edef] p-5 flex flex-col justify-between card-transition shadow-2xs relative group">
+            
+            <div>
+              <!-- Top Badges: Category & Age -->
+              <div class="flex items-center justify-between gap-2 mb-2.5">
+                <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full \${catInfo.color}">
+                  \${catInfo.badge}
+                </span>
+                <span class="text-[11px] font-medium text-[#54656f] bg-slate-100 px-2 py-0.5 rounded-md">
+                  \${s.ageLabel || 'Semua Usia'}
+                </span>
+              </div>
+
+              <!-- Title -->
+              <h3 class="text-base font-bold text-[#111b21] group-hover:text-[#008069] transition-colors leading-snug">
+                \${s.name}
+              </h3>
+
+              <!-- Duration badge -->
+              <div class="flex items-center gap-2 mt-1.5 text-xs text-[#008069] font-semibold">
+                <span>⏱️ Durasi: \${s.durationMinutes} Menit</span>
+                \${s.serviceType === 'BUNDLE' ? '<span class="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded-md font-bold">Hemat Kombo</span>' : ''}
+              </div>
+
+              <!-- Description -->
+              <p class="text-xs text-[#54656f] mt-2.5 leading-relaxed line-clamp-3">
+                \${s.description}
+              </p>
+
+              \${bundleHtml}
+            </div>
+
+            <!-- Bottom Price & CTAs -->
+            <div class="mt-5 pt-3.5 border-t border-slate-100">
+              
+              <!-- Price display -->
+              <div class="flex items-baseline justify-between mb-3.5">
+                <div>
+                  <div class="text-lg font-extrabold text-[#008069]">
+                    \${formatRp(s.price)}
+                  </div>
+                  \${hasDiscount ? \`
+                    <div class="flex items-center gap-1.5 text-[11px]">
+                      <span class="text-slate-400 line-through">\${formatRp(s.originalPrice)}</span>
+                      <span class="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded-md">Hemat \${formatRp(discountAmount)}</span>
+                    </div>
+                  \` : ''}
+                </div>
+
+                <button onclick="openDetailModal('\${s.id}')" class="text-xs text-[#008069] font-semibold hover:underline">
+                  Info Detail →
+                </button>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center gap-2">
+                <button 
+                  onclick="toggleCart('\${s.id}')" 
+                  class="p-2.5 rounded-xl border \${inCart ? 'bg-emerald-50 border-[#008069] text-[#008069]' : 'border-[#d1d7db] text-[#54656f] hover:border-slate-400'} text-xs font-semibold transition-all"
+                  title="\${inCart ? 'Hapus dari keranjang' : 'Tambah ke keranjang jadwal'}"
+                >
+                  \${inCart ? '✓ Dipilih' : '+ Keranjang'}
+                </button>
+
+                <button 
+                  onclick="orderDirectWa('\${s.id}')" 
+                  class="flex-1 py-2.5 px-3 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-[0.98]"
+                >
+                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>
+                  </svg>
+                  <span>Pesan Sekarang</span>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        \`;
+      }).join('');
+    }
+
+    // Keranjang Jadwal Multi-Layanan
+    function toggleCart(serviceId) {
+      const idx = cart.indexOf(serviceId);
+      if (idx > -1) {
+        cart.splice(idx, 1);
+      } else {
+        cart.push(serviceId);
+      }
+      updateCartUi();
+      renderServices();
+    }
+
+    function updateCartUi() {
+      const cartBar = document.getElementById('cartBar');
+      if (cart.length === 0) {
+        cartBar.classList.add('hidden');
+        return;
+      }
+
+      cartBar.classList.remove('hidden');
+
+      const items = cart.map(id => CLINIC_SERVICES.find(s => s.id === id)).filter(Boolean);
+      const totalRp = items.reduce((sum, s) => sum + s.price, 0);
+      const totalDur = items.reduce((sum, s) => sum + s.durationMinutes, 0);
+
+      document.getElementById('cartCountBadge').innerText = cart.length;
+      document.getElementById('cartTotalPrice').innerText = formatRp(totalRp);
+      document.getElementById('cartTotalDuration').innerText = \`Total \${totalDur} Menit (\${items.length} Treatment)\`;
+    }
+
+    function openCartModal() {
+      const list = document.getElementById('cartItemsList');
+      const items = cart.map(id => CLINIC_SERVICES.find(s => s.id === id)).filter(Boolean);
+      const totalRp = items.reduce((sum, s) => sum + s.price, 0);
+      const totalDur = items.reduce((sum, s) => sum + s.durationMinutes, 0);
+
+      document.getElementById('cartModalItemCount').innerText = \`\${items.length} Treatment\`;
+      document.getElementById('cartModalDuration').innerText = \`\${totalDur} Menit\`;
+      document.getElementById('cartModalTotal').innerText = formatRp(totalRp);
+
+      list.innerHTML = items.map(item => \`
+        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div>
+            <div class="text-xs font-bold text-[#111b21]">\${item.name}</div>
+            <div class="text-[11px] text-[#54656f]">⏱️ \${item.durationMinutes} menit • \${formatRp(item.price)}</div>
+          </div>
+          <button onclick="toggleCart('\${item.id}'); openCartModal();" class="text-rose-500 hover:text-rose-700 text-xs font-bold p-1">
+            Hapus
+          </button>
+        </div>
+      \`).join('');
+
+      document.getElementById('cartModal').classList.remove('hidden');
+    }
+
+    function closeCartModal() {
+      document.getElementById('cartModal').classList.add('hidden');
+    }
+
+    function clearCart() {
+      cart = [];
+      updateCartUi();
+      renderServices();
+      closeCartModal();
+    }
+
+    // WhatsApp Message Builders
+    function buildWaUrl(text) {
+      const clean = clinicPhone.replace(/\\D/g, '');
+      return \`https://wa.me/\${clean}?text=\${encodeURIComponent(text)}\`;
+    }
+
+    function orderDirectWa(serviceId) {
+      const s = CLINIC_SERVICES.find(item => item.id === serviceId);
+      if (!s) return;
+
+      const msg = \`Halo Bidan Yusi, saya ingin reservasi treatment homecare:\n\n*Layanan:* \${s.name}\n*Durasi:* \${s.durationMinutes} Menit\n*Tarif:* \${formatRp(s.price)}\n\nBoleh dibantu cek ketersediaan jadwal kosong terdekat untuk ke rumah ya Bunda? Terima kasih 😊\`;
+      window.open(buildWaUrl(msg), '_blank');
+    }
+
+    function checkoutCartWa() {
+      const items = cart.map(id => CLINIC_SERVICES.find(s => s.id === id)).filter(Boolean);
+      if (items.length === 0) return;
+
+      const name = document.getElementById('bookingCustomerName')?.value.trim();
+      const addr = document.getElementById('bookingCustomerAddress')?.value.trim();
+
+      const totalRp = items.reduce((sum, s) => sum + s.price, 0);
+      const totalDur = items.reduce((sum, s) => sum + s.durationMinutes, 0);
+
+      let msg = \`Halo Bidan Yusi, saya ingin reservasi paket treatment homecare:\n\`;
+      if (name) msg += \`*Nama:* \${name}\n\`;
+      if (addr) msg += \`*Area/Rumah:* \${addr}\n\`;
+
+      msg += \`\n*Daftar Layanan Dipilih:*\n\`;
+      items.forEach((item, idx) => {
+        msg += \`\${idx + 1}. \${item.name} (\${item.durationMinutes}m) - \${formatRp(item.price)}\n\`;
+      });
+
+      msg += \`\n*Total Estimasi:* \${formatRp(totalRp)} (Total durasi: \${totalDur} menit)\`;
+      msg += \`\n\nBoleh dibantu cek jadwal kosong bidan yang tersedia untuk kunjungan ke rumah kami ya Bunda? Terima kasih 🙏😊\`;
+
+      window.open(buildWaUrl(msg), '_blank');
+      closeCartModal();
+    }
+
+    function openGeneralWaChat() {
+      const msg = \`Halo Bidan Yusi, saya tertarik dengan layanan homecare Kala Moms and Baby Spa. Boleh dibantu konsultasi layanan yang cocok untuk buah hati / ibu hamil & nifas ya Bunda? Terima kasih 😊\`;
+      window.open(buildWaUrl(msg), '_blank');
+    }
+
+    // Modal Detail Logic
+    function openDetailModal(serviceId) {
+      const s = CLINIC_SERVICES.find(item => item.id === serviceId);
+      if (!s) return;
+      currentModalService = s;
+
+      const catInfo = CATEGORY_META[s.category] || { badge: s.category, color: 'bg-emerald-50 text-emerald-800' };
+      document.getElementById('modalCategoryBadge').innerText = catInfo.badge;
+      document.getElementById('modalCategoryBadge').className = \`text-xs font-bold px-2.5 py-1 rounded-full \${catInfo.color}\`;
+      document.getElementById('modalTitle').innerText = s.name;
+      document.getElementById('modalAgeBadge').innerText = s.ageLabel || 'Semua Usia';
+      document.getElementById('modalDuration').innerText = \`⏱️ \${s.durationMinutes} Menit\`;
+      document.getElementById('modalDescription').innerText = s.description;
+      document.getElementById('modalPrice').innerText = formatRp(s.price);
+
+      const origElem = document.getElementById('modalOriginalPrice');
+      if (s.originalPrice > s.price) {
+        origElem.innerText = formatRp(s.originalPrice);
+        origElem.classList.remove('hidden');
+      } else {
+        origElem.classList.add('hidden');
+      }
+
+      const bundleContainer = document.getElementById('modalBundledContainer');
+      const bundleList = document.getElementById('modalBundledList');
+      if (s.bundledNames && s.bundledNames.length > 0) {
+        bundleContainer.classList.remove('hidden');
+        bundleList.innerHTML = s.bundledNames.map(b => \`
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-500 font-bold">✓</span>
+            <span>\${b}</span>
+          </div>
+        \`).join('');
+      } else {
+        bundleContainer.classList.add('hidden');
+      }
+
+      updateModalCartBtn();
+      document.getElementById('detailModal').classList.remove('hidden');
+    }
+
+    function updateModalCartBtn() {
+      if (!currentModalService) return;
+      const btn = document.getElementById('modalAddToCartBtn');
+      const inCart = cart.includes(currentModalService.id);
+      if (inCart) {
+        btn.innerText = '✓ Ada di Keranjang (Hapus)';
+        btn.className = 'flex-1 py-3 bg-emerald-50 border border-[#008069] text-[#008069] font-bold text-xs rounded-xl';
+      } else {
+        btn.innerText = '+ Tambah ke Keranjang';
+        btn.className = 'flex-1 py-3 bg-white border border-[#008069] text-[#008069] font-bold text-xs rounded-xl hover:bg-emerald-50';
+      }
+    }
+
+    function toggleCartFromModal() {
+      if (!currentModalService) return;
+      toggleCart(currentModalService.id);
+      updateModalCartBtn();
+    }
+
+    function orderModalWa() {
+      if (!currentModalService) return;
+      orderDirectWa(currentModalService.id);
+      closeDetailModal();
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.add('hidden');
+      currentModalService = null;
+    }
+
+    // Distance & Ongkir Logic
+    function handleDistanceChange(val) {
+      const km = parseInt(val, 10);
+      document.getElementById('distanceLabel').innerText = km + ' km';
+      document.getElementById('distanceRange').value = km;
+
+      let fee = 0;
+      let note = '';
+
+      if (km <= 5) {
+        fee = 0;
+        note = 'Jarak hingga 5 km bebas ongkir homecare (GRATIS)!';
+      } else if (km <= 7) {
+        fee = 5000;
+        note = 'Tarif normal Rp 15.000 dengan potongan diskon promo Rp 10.000.';
+      } else if (km <= 10) {
+        fee = 10000;
+        note = 'Tarif normal Rp 15.000 dengan potongan diskon promo Rp 5.000.';
+      } else if (km <= 15) {
+        fee = 15000;
+        note = 'Tarif normal Rp 25.000 dengan potongan diskon promo Rp 10.000.';
+      } else if (km <= 20) {
+        fee = 20000;
+        note = 'Tarif normal Rp 25.000 dengan potongan diskon promo Rp 5.000.';
+      } else if (km <= 25) {
+        fee = 25000;
+        note = 'Tarif normal Rp 35.000 dengan potongan diskon promo Rp 10.000.';
+      } else {
+        fee = 30000;
+        note = 'Tarif normal Rp 35.000 dengan potongan diskon promo Rp 5.000.';
+      }
+
+      const feeText = fee === 0 ? 'GRATIS ONGKIR! (Rp 0)' : formatRp(fee);
+      document.getElementById('ongkirFeeText').innerText = feeText;
+      document.getElementById('ongkirNoteText').innerText = note;
+    }
+
+    function setSampleDistance(km, label) {
+      handleDistanceChange(km);
+    }
+
+    // FAQ Accordion
+    function toggleFaq(btn) {
+      const content = btn.nextElementSibling;
+      const icon = btn.querySelector('.faq-icon');
+      const isHidden = content.classList.contains('hidden');
+
+      // Close all others
+      document.querySelectorAll('.faq-content').forEach(c => c.classList.add('hidden'));
+      document.querySelectorAll('.faq-icon').forEach(i => i.innerText = '+');
+
+      if (isHidden) {
+        content.classList.remove('hidden');
+        icon.innerText = '−';
+      } else {
+        content.classList.add('hidden');
+        icon.innerText = '+';
+      }
+    }
+
+    // Phone Settings Modal
+    function openPhoneModal() {
+      document.getElementById('phoneModal').classList.remove('hidden');
+    }
+
+    function closePhoneModal() {
+      document.getElementById('phoneModal').classList.add('hidden');
+    }
+
+    function saveCustomPhone() {
+      const val = document.getElementById('waPhoneInput').value.trim().replace(/\\D/g, '');
+      if (val.length < 9) {
+        alert('Mohon masukkan nomor WhatsApp yang valid (contoh: 6281390541340)');
+        return;
+      }
+      clinicPhone = val;
+      localStorage.setItem('kala_wa_phone', val);
+      closePhoneModal();
+      updateWaButtonUrls();
+      alert('Nomor WhatsApp klinik berhasil diperbarui: ' + val);
+    }
+
+    function resetPhoneToDefault() {
+      clinicPhone = '6281390541340';
+      localStorage.removeItem('kala_wa_phone');
+      document.getElementById('waPhoneInput').value = clinicPhone;
+      closePhoneModal();
+      updateWaButtonUrls();
+      alert('Nomor WhatsApp dikembalikan ke default: 6281390541340');
+    }
+
+    function updateWaButtonUrls() {
+      // Refresh general WA URL
+      const headerBtn = document.getElementById('header-wa-btn');
+      if (headerBtn) {
+        headerBtn.setAttribute('href', '#');
+      }
+    }
+
+    // Close modals on backdrop click or ESC
+    window.onclick = function(event) {
+      if (event.target === document.getElementById('detailModal')) closeDetailModal();
+      if (event.target === document.getElementById('phoneModal')) closePhoneModal();
+      if (event.target === document.getElementById('cartModal')) closeCartModal();
+    };
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeDetailModal();
+        closePhoneModal();
+        closeCartModal();
+      }
+    });
+  </script>
+
+</body>
+</html>
+`;
+
+// Tulis file ke target
+const artifactPath = path.join('C:\\Users\\Ivan\\.gemini\\antigravity\\brain\\99eb895a-b37f-4e15-b8a8-d1bfbc974d9f', 'landing_page.html');
+fs.writeFileSync(artifactPath, html, 'utf8');
+console.log('Successfully written artifact to:', artifactPath);
+
+// Tulis juga copy ke src/landing/public/layanan.html untuk persistensi di repo
+const publicPath = path.join(process.cwd(), 'src', 'landing', 'public', 'layanan.html');
+fs.writeFileSync(publicPath, html, 'utf8');
+console.log('Successfully written repo copy to:', publicPath);

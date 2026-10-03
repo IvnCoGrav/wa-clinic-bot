@@ -16,7 +16,8 @@ import {
   Clock,
   HeartHandshake,
   CalendarHeart,
-  UserCheck
+  UserCheck,
+  Users
 } from 'lucide-react';
 
 interface TemplateItem {
@@ -108,6 +109,11 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'MILESTONE',
     description: 'Edukasi milestone berjalan & MPASI usia 12 bulan.',
   },
+  WINBACK_60D: {
+    label: 'Re-engagement Pelanggan Lama (>60 Hari)',
+    category: 'WINBACK',
+    description: 'Sapaan silaturahmi untuk pelanggan MQL / riwayat lama yang sudah lebih dari 60 hari tidak berinteraksi.',
+  },
 };
 
 const CATEGORIES = [
@@ -117,6 +123,7 @@ const CATEGORIES = [
   { id: 'NO_PURCHASE', label: 'Belum Reservasi', icon: CalendarHeart },
   { id: 'NEXT_TREATMENT', label: 'Treatment Rutin', icon: UserCheck },
   { id: 'MILESTONE', label: 'Milestone Usia Bayi', icon: Sparkles },
+  { id: 'WINBACK', label: 'Re-engagement', icon: Users },
 ];
 
 const AVAILABLE_PLACEHOLDERS = [

@@ -3,6 +3,47 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 211. [FollowUp/WINBACK_60D] Batasan dormansi & guard reservasi yang diterima (2026-10-03, OPEN — by design)
+
+- **Fitur:** re-engagement `WINBACK_60D` (lihat CHANGELOG 2026-10-03). Keputusan desain
+  disepakati dengan pemilik; berikut batasan sadar yang dicatat agar tidak jadi bug report:
+- **Dormansi berbasis `last_message_at` (termasuk outbound), bukan inbound.** Konsekuensi:
+  customer yang baru dikirimi follow-up lain tidak dianggap dormant sampai 60 hari sejak
+  pesan outbound terakhir. Ini SENGAJA — mencegah WINBACK menyerobot rangkaian NEXT_TREATMENT
+  (hingga +3 bulan). Guard kedua (antrean PENDING/QUEUED kosong) menutup celah stage yang
+  menggantung tanpa terkirim. **Open:** bila kelak diinginkan "60 hari sejak interaksi
+  customer terakhir", perlu kolom/kueri inbound murni + rekonsiliasi dengan slip `last_message_at`.
+- **Guard reservasi disederhanakan (Opsi 3):** gugurkan bila ada `booking_date >= now AND
+  status != 'cancelled'`. Nuansa domain `hold` (jendela aktif 2 jam, `isActiveReservation`)
+  TIDAK dipakai di sini — sengaja, karena gate 60 hari sudah menyaring dan booking manual/
+  series tetap tercakup. **Open:** jika hold basi nyata mengganggu, harmonisasi ke seam
+  `src/domain/reservation-status.ts`.
+- **Sebaran jadwal memakai hitungan hari-WIB dari baris PENDING/QUEUED yang ada**, bukan
+  tabel kuota terpisah. Bila beban prediksi tidak akurat (mis. baris di-set di luar jam kerja),
+  slot bisa tumpang-tindih dengan `rescheduleOverdueFollowUps` — dipantau, bukan blocker.
+- **WABA tidak didukung** (tenant tidak memakai provider WABA). Bila kelak beralih ke WABA,
+  wajib menambah mapping `WabaTemplate` + consent gate sebelum mengaktifkan tipe ini.
+
+## 212. [CAPI Queue] State moderasi Lead hanya hidup di `audit_logs`; reject Bunda Lady tidak ada (2026-10-03, OPEN)
+
+- **Temuan:** audit live `audit_logs` untuk customer `8cb25bf5-ef72-45b3-b090-18aa946c7800`
+  ("Bunda Lady", item `lead_8cb25bf5-…`) HANYA memuat 3× `MQL_LEAD_EVENT_SENT`
+  (2026-09-24 + 2× 2026-10-03), **NOL** `MQL_LEAD_EVENT_REJECTED`. Premis plan bahwa
+  reject/outlier sudah pernah dieksekusi TIDAK terbukti di data.
+- **Dampak:** status moderasi Lead (approved/ignored_outlier) TIDAK punya kolom persisten —
+  berbeda dari Purchase yang memakai `reservations.purchase_review_status`. Ia hanya
+  direkonstruksi dari `audit_logs` (`MQL_LEAD_EVENT_SENT|REJECTED`). Bila penulisan audit
+  gagal / tidak terpanggil, aksi reject HILANG tanpa jejak dan item kembali "Terkirim".
+- **Catatan fix:** perbaikan `sentMap` newest-wins (`reservations.subroute.ts`) tetap benar
+  dan wajib untuk kasus SENT→REJECTED berurutan, tetapi TIDAK mengubah kasus Bunda Lady
+  (karena reject-nya memang belum pernah tercatat).
+- **OPEN / butuh keputusan pemilik:** (a) eksekusi reject ulang Bunda Lady via
+  `POST /api/admin/reservation/lead_8cb25bf5-…/reject-purchase` (menulis audit resmi), atau
+  (b) migrasi state moderasi Lead ke kolom persisten (mis. `Customer.mql_review_status`)
+  agar tidak bergantung audit log. Opsi (b) butuh migrasi + backfill (blast radius sedang).
+- **Deploy tertunda:** fix kode belum di-deploy ke server; working tree memuat fitur
+  WINBACK_60D & landing yang belum di-commit, sehingga deploy selektif perlu keputusan.
+
 ## 210. [SOP] Dokumen turunan divergen (`MANUAL_BOOK_ADMIN_RESERVASI.md`) dikarantina — Opsi A (2026-10-03, QUARANTINED)
 
 - **Temuan:** `docs/MANUAL_BOOK_ADMIN_RESERVASI.md` (326 baris, muncul di working tree + entri

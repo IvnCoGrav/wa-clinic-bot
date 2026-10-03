@@ -18,6 +18,12 @@ export class CronService {
       const { getAllTenantIds } = await import('./media.service');
       const tenantIds = await getAllTenantIds();
       for (const tenantId of tenantIds) {
+        try {
+          const wb = await followUpService.enqueueDormantWinbackFollowUps(tenantId);
+          if (wb > 0) console.log(`[Cron] Queued ${wb} WINBACK_60D follow-ups (tenant ${tenantId}).`);
+        } catch (e: any) {
+          console.warn('[Cron] enqueueDormantWinbackFollowUps failed:', e?.message);
+        }
         await followUpService.processDueFollowUps(tenantId);
         try {
           const rec = await followUpService.reconcileOrphanedCompletedFollowUps(tenantId);

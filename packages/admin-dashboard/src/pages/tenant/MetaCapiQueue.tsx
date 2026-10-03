@@ -384,6 +384,7 @@ export const MetaCapiQueue: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCustomerType, setFilterCustomerType] = useState<'all' | 'new' | 'repeat'>('all');
+  const [filterEventType, setFilterEventType] = useState<'all' | 'purchase' | 'lead'>('all');
   const [mode, setMode] = useState<'pending' | 'all'>('pending');
 
   // JSON Modal State
@@ -493,6 +494,12 @@ export const MetaCapiQueue: React.FC = () => {
     let list = items;
     if (mode === 'pending') list = list.filter((i) => i.purchase_review_status === 'pending');
     if (filterStatus !== 'all') list = list.filter((i) => i.purchase_review_status === filterStatus);
+    if (filterEventType !== 'all') {
+      list = list.filter((i) => {
+        const isLead = (i.eventType || 'Purchase') === 'Lead';
+        return filterEventType === 'lead' ? isLead : !isLead;
+      });
+    }
     if (filterCustomerType !== 'all') {
       list = list.filter((i) => {
         if (i.eventType && i.eventType !== 'Purchase') return false;
@@ -511,7 +518,7 @@ export const MetaCapiQueue: React.FC = () => {
       );
     }
     return list;
-  }, [items, mode, filterStatus, filterCustomerType, searchQuery]);
+  }, [items, mode, filterStatus, filterCustomerType, filterEventType, searchQuery]);
 
   const handleApprove = async (item: QueueItem, customPayload?: any) => {
     const effectivePayload = customPayload || customPayloads[item.id];
@@ -710,6 +717,15 @@ export const MetaCapiQueue: React.FC = () => {
               className="w-full bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
+          <select
+            value={filterEventType}
+            onChange={(e) => setFilterEventType(e.target.value as 'all' | 'purchase' | 'lead')}
+            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+          >
+            <option value="all">Semua Tipe Event</option>
+            <option value="purchase">🛒 Purchase (Transaksi)</option>
+            <option value="lead">🎯 Lead (Prospek MQL)</option>
+          </select>
           <select
             value={filterCustomerType}
             onChange={(e) => setFilterCustomerType(e.target.value as 'all' | 'new' | 'repeat')}

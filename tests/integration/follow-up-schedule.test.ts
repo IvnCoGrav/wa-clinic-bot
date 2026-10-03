@@ -99,14 +99,10 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
       })
     );
 
-    // Harus menandai reservasi baru sebagai repeat order
-    expect(reservationUpdateSpy).toHaveBeenCalledTimes(1);
-    expect(reservationUpdateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'res-111' },
-        data: { is_repeat_order: true }
-      })
-    );
+    // KOREKSI (bug lama): follow-up DILARANG menandai repeat order. Otoritas
+    // new-vs-repeat adalah reservation-core (computeIsRepeatOrder) berbasis
+    // ordinal riwayat confirmed/completed — bukan keberadaan follow-up aktif.
+    expect(reservationUpdateSpy).not.toHaveBeenCalled();
   });
 
   it('Reservation completion -> schedules 3 NEXT_TREATMENT follow-ups via createNextTreatmentFollowUps', async () => {
@@ -146,8 +142,14 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
       }
     };
 
-    // Mock findMany untuk mendeteksi followUp sent stage 3 ini
-    vi.mocked(prisma.followUp.findMany).mockResolvedValue([mockFollowUp] as any);
+    // Mock findMany faithful terhadap `where.type`: hanya query NEXT_TREATMENT
+    // yang mengembalikan baris stage-3; query WINBACK_60D mengembalikan [].
+    // (Mock sebelumnya mengembalikan baris yang sama untuk kedua query sehingga
+    // cabang WINBACK ikut menandai lost → 2x update, artefak mock.)
+    vi.mocked(prisma.followUp.findMany).mockImplementation(async (args: any) => {
+      if (args?.where?.type === 'NEXT_TREATMENT') return [mockFollowUp] as any;
+      return [] as any;
+    });
     // Mock reservation.findMany (batch) to return [] (no new reservation since min(sent_at))
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
 

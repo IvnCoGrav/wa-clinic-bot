@@ -358,6 +358,7 @@ enum FollowUpType {
   REMINDER_H1
   REVIEW_H1_BABY
   REVIEW_H1_MOMS
+  WINBACK_60D
 }
 
 enum FollowUpStatus {

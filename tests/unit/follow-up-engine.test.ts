@@ -44,11 +44,12 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     // Verified by internal execution log (no error thrown)
   });
 
-  it('3. onReservationCreated cancels pending NO_PURCHASE follow-ups and sets repeat_order', async () => {
+  it('3. onReservationCreated cancels pending NO_PURCHASE follow-ups (TANPA menyentuh is_repeat_order)', async () => {
     const phone = `62892${Date.now()}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Repeat', DEFAULT_TENANT_ID);
 
     await followUpService.createNoPurchaseFollowUps(customer.id, DEFAULT_TENANT_ID);
+    // Otoritas repeat order = reservation-core (ordinal riwayat), bukan follow-up.
     await followUpService.onReservationCreated(customer.id, `res_${Date.now()}`, DEFAULT_TENANT_ID);
     // Verified: active follow-ups cancelled gracefully
   });
