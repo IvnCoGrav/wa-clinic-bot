@@ -35,7 +35,7 @@ Prinsip: **"AI Membantu, Manusia Memutuskan".**
 
 - **AI Bot WhatsApp (Bidan):** menjawab konsultasi awal ibu & bayi dengan empati dan batasan SOP medis, menghitung estimasi ongkir dari tier/DB, merekam minat jadwal, membuat reservasi otomatis **hanya saat ada kesepakatan final**, mengalihkan ke admin (`HUMAN_HANDLING`) bila sensitif.
 - **Admin CS / Supervisor:** memvalidasi slot nyata, verifikasi alamat, tugaskan terapis/bidan, kelola pembayaran & konfirmasi akhir, takeover Live Chat saat sensitif/negosiasi.
-- **Hermes Agent (AI Copilot):** asisten internal di dashboard untuk rekap jadwal, chat menggantung, prospek stalled, riwayat pasien, katalog & SOP. **Catatan:** Copilot berjalan di atas 6 tool Fastify yang sama dengan grounding/budget/audit di backend; otak Hermes eksternal menambah overhead prompt (~16k token) sehingga satu turn bisa memakan waktu hingga ~120 detik dan menampilkan jawaban degradasi bila melewati anggaran. Bukan error — tunggu atau persempit pertanyaan (misal tambah tanggal).
+- **Hermes Agent (AI Copilot):** asisten internal di dashboard untuk rekap jadwal, chat menggantung, prospek stalled, riwayat pasien, katalog & SOP, serta penjelasan status bot-vs-CS. **Catatan:** Copilot berjalan di atas 7 tool Fastify yang sama dengan grounding/budget/audit di backend; otak Hermes eksternal menambah overhead prompt (~16k token) sehingga satu turn bisa memakan waktu hingga ~120 detik dan menampilkan jawaban degradasi bila melewati anggaran. Bukan error — tunggu atau persempit pertanyaan (misal tambah tanggal).
 
 > Nama brand/bidan di contoh dokumen ini ("Bidan Yusi", dsb.) adalah **contoh tampilan**. Sumber kebenaran brand = `tenants.name` + `TenantPersona` + `Tenant.settings.brand` di DB, bukan teks dokumen.
 
@@ -158,7 +158,7 @@ Admin: "Copilot, siapa saja pasien yang jadwalnya besok dan terapisnya?"
 Copilot: "Besok ada 3 reservasi aktif: 1. ... - 09:00 - Bidan ... [Buka Chat](/admin/live-chat?conversationId=...) ..."
 ```
 
-Tool nyata (bukan konsep): `query_reservations_by_filter` (filter tanggal YYYY-MM-DD WIB/status/nama terapis), `query_unreplied_chats` (pesan terakhir INBOUND), `query_stalled_inquiries` (minat jadwal state+teks, 8 pesan, `offeredTime` = jam terakhir yang pernah ditawarkan admin, `waitingMinutes` manusiawi), `query_unscheduled_prospects`. Nomor HP tidak diteruskan ke LLM (privasi); kontak sandbox/dummy disaring.
+Tool nyata (bukan konsep, 7 tool): `query_reservations_by_filter` (filter tanggal YYYY-MM-DD WIB/status/nama terapis), `query_unreplied_chats` (pesan terakhir INBOUND), `query_stalled_inquiries` (minat jadwal state+teks, 8 pesan, `offeredTime` = jam terakhir yang pernah ditawarkan admin, `waitingMinutes` manusiawi), `query_unscheduled_prospects`, `get_customer_history` (profil + riwayat pasien), `lookup_catalog_and_policy` (katalog & SOP), `explain_conversation_state` (status bot vs diambil-alih CS + alasan eskalasi). Nomor HP tidak diteruskan ke LLM (privasi); kontak sandbox/dummy disaring.
 
 Bisa jawab: jadwal relatif ("hari ini/besok/Senin"), chat menggantung, prospek tanya jadwal tapi belum booking (filter `date`/`sinceDays`), riwayat pasien, katalog & SOP (via `ClinicPolicy`/tool — angka SOP tidak di-hardcode di prompt).
 

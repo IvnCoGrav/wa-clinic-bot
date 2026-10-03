@@ -3,6 +3,24 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 210. [SOP] Dokumen turunan divergen (`MANUAL_BOOK_ADMIN_RESERVASI.md`) dikarantina — Opsi A (2026-10-03, QUARANTINED)
+
+- **Temuan:** `docs/MANUAL_BOOK_ADMIN_RESERVASI.md` (326 baris, muncul di working tree + entri
+  CHANGELOG pihak lain) adalah revisi yang MENURUNKAN akurasi dibanding `SOP_ADMIN_RESERVASI.md`
+  v1.1 (sudah diaudit lawan kode). 7 regresi faktual: status bayar `verified` fiktif (DB:
+  `pending/approved/ignored_outlier`), klaim sinkron GCal (masih mock), status series `cancelled`
+  hilang, ambang demam >38°C (resmi 37.8°C), jeda vaksin tunggal 3x24 jam (resmi 48–72 jam),
+  tepi diagram ilegal (`pending→rejected`, `[*]→hold/confirmed`), contoh pasien fiktif
+  ("Bunda Rina/Sarah/Maya" + jadwal — bahaya polusi grounding). Versi turun v1.1→"1.0",
+  Bab 8 + sangkalan "sumber kebenaran = DB" dibuang.
+- **Keputusan pemilik (Opsi A):** single source of truth = v1.1. MANUAL_BOOK diberi banner
+  SUPERSEDED + DILARANG jadi acuan operasional/seed/prompt sebelum 7 butir diperbaiki.
+- **Verifikasi anti-ruin:** tidak ada referensi kode/runtime ke MANUAL_BOOK (hanya entri CHANGELOG);
+  seed + `lookup_catalog_and_policy` membaca DB saja, bukan `docs/`. Perubahan ini docs-only
+  (banner + koreksi "6 tool"→7 di v1.1) — tanpa sentuh runtime, tanpa migrasi, tanpa redeploy.
+- **OPEN:** perbaikan 7 butir MANUAL_BOOK (rekonsiliasi ke v1.1) + ingest Bab 2–4 prosedural
+  (same-day/manual/hold/bayar/GPS/navigasi) menunggu persetujuan terpisah.
+
 ## 209. [LLM/Call 1] Insiden "Waru" — degenerasi intermiten netra TANPA thinking (FIXED, 2026-10-03)
 
 - **Gejala:** customer `6281390541340` kirim `Waru` → bot balas kaleng

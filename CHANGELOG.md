@@ -4,6 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Manual Book Operasional Admin & Manajemen Reservasi (`docs/MANUAL_BOOK_ADMIN_RESERVASI.md`)
+
+- **Dokumentasi resmi operasional & AI ingestion:** penyusunan manual book dwifungsi (admin CS & Hermes AI Copilot) untuk manajemen reservasi.
+- **Cakupan SOP:** siklus 7 status reservasi (`pending`, `hold`, `confirmed`, `en_route`, `completed`, `cancelled`, `rejected`), guard buffer 20 menit antar-slot, buffer 5 menit notifikasi penugasan terapis, pre-visit brief Telegram H-30 menit, SOP same-day booking, verifikasi alamat/GPS watermark foto rumah, dan format chunk intent-action Hermes Copilot.
+- **Koreksi status (Opsi A, KNOWN_ISSUES #210):** dokumen ini dinyatakan **SUPERSEDED** — mengandung 7 regresi faktual vs `SOP_ADMIN_RESERVASI.md` v1.1 (sumber kebenaran tunggal). Dilarang jadi acuan operasional/seed/prompt sebelum diperbaiki.
+
 #### 2026-10-03 - AI Clinic Copilot 2.0 (single-tenant owner): gerbang tenant + tool penjelas + SSE (ADR-001)
 
 - **Keputusan ADR-001:** fitur Copilot 2.0 KHUSUS tenant owner (`default-tenant`); tenant lain
