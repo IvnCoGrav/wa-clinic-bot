@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveLandingContent, defaultLandingContent, LandingContent } from '../services/landing-content.service';
+import { getPricelistPayload, serializePayloadForHtml } from '../services/pricelist.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 const RESERVED_SLUGS = new Set([
@@ -15,6 +16,7 @@ const RESERVED_SLUGS = new Set([
   'public',
   'assets',
   'favicon.ico',
+  'pricelist',
 ]);
 
 const ONLOAD_EVENTS = ['ViewContent', 'Search'];
@@ -37,6 +39,67 @@ function readLandingTemplate(): string {
   const htmlPath = path.join(__dirname, '../landing/public/go.html');
   templateCache = fs.readFileSync(htmlPath, 'utf-8');
   return templateCache;
+}
+
+// Pricelist: template dibaca sekali, tetapi data katalog DIINJEKSI per-request
+// (harga berubah via admin). Jangan cache HTML terhidrasi — hanya template mentah.
+let pricelistTemplateCache: string | null = null;
+
+function readPricelistTemplate(): string {
+  if (pricelistTemplateCache) return pricelistTemplateCache;
+  const htmlPath = path.join(__dirname, '../landing/public/pricelist.html');
+  pricelistTemplateCache = fs.readFileSync(htmlPath, 'utf-8');
+  return pricelistTemplateCache;
+}
+
+/**
+ * Hydrate pricelist HTML: suntik payload katalog terbaru ke <head> agar tampil
+ * instan (0 roundtrip) di in-app browser WhatsApp, tanpa FOUC.
+ */
+async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Promise<FastifyReply> {
+  const query = (request.query || {}) as Record<string, string>;
+  const slug = (query.slug || 'default').toLowerCase();
+
+  let tenantId = DEFAULT_TENANT_ID;
+  let whatsappFallback = '';
+  try {
+    const content = await resolveLandingContent(slug);
+    if (content) {
+      tenantId = content.tenant_id || DEFAULT_TENANT_ID;
+      whatsappFallback = content.whatsapp_number || '';
+    }
+  } catch (err: any) {
+    request.log.warn(`[PRICELIST] Resolusi konten slug '${slug}' gagal (fallback default): ${err.message}`);
+  }
+
+  let payloadJson: string;
+  let brandName = '';
+  try {
+    const payload = await getPricelistPayload(tenantId, { slug, whatsappFallback });
+    brandName = payload.brand?.businessName || '';
+    payloadJson = serializePayloadForHtml(payload);
+  } catch (err: any) {
+    request.log.error(err, '[PRICELIST] Gagal membangun payload dinamis');
+    return reply.status(500).send({ error: 'Pricelist data unavailable' });
+  }
+
+  let html: string;
+  try {
+    html = readPricelistTemplate();
+  } catch (err: any) {
+    request.log.error(err, 'Failed to load pricelist template');
+    return reply.status(404).send({ error: 'Pricelist template missing' });
+  }
+
+  const injection = `<script id="pricelist-data" type="application/json">${payloadJson}</script>\n</head>`;
+  html = html.replace('</head>', injection);
+  if (brandName) {
+    html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>Pricelist — ${brandName}</title>`);
+  }
+
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  return reply.type('text/html; charset=utf-8').status(200).send(html);
 }
 
 async function renderLanding(reply: FastifyReply, content: LandingContent, slug: string) {
@@ -432,6 +495,52 @@ export async function landingRoutes(fastify: FastifyInstance) {
     } catch {
       return reply.status(404).send({ error: 'Not Found' });
     }
+  });
+
+  // /pricelist & alias — serve landing page pricelist resmi (terhidrasi dari DB)
+  fastify.get('/pricelist', async (request: FastifyRequest, reply: FastifyReply) => {
+    return renderPricelist(reply, request);
+  });
+
+  // /api/pricelist — katalog JSON publik (tenant-aware via ?slug=)
+  fastify.get(
+    '/api/pricelist',
+    {
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => req.ip,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = (request.query || {}) as Record<string, string>;
+      const slug = (query.slug || 'default').toLowerCase();
+
+      let tenantId = DEFAULT_TENANT_ID;
+      let whatsappFallback = '';
+      try {
+        const content = await resolveLandingContent(slug);
+        if (content) {
+          tenantId = content.tenant_id || DEFAULT_TENANT_ID;
+          whatsappFallback = content.whatsapp_number || '';
+        }
+      } catch (err: any) {
+        request.log.warn(`[PRICELIST API] Resolusi slug '${slug}' gagal (fallback default): ${err.message}`);
+      }
+
+      const payload = await getPricelistPayload(tenantId, { slug, whatsappFallback });
+      return reply.status(200).send({ success: true, data: payload });
+    }
+  );
+
+  fastify.get('/pricelist.html', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.redirect('/pricelist');
+  });
+
+  fastify.get('/pricelist-baru.html', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.redirect('/pricelist');
   });
 
   // /:slug — landing per-slug (strict 404)

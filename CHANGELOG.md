@@ -4,7 +4,63 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Pricelist Landing Page Dinamis (Data-Driven, Tenant-Aware & Server-Side Hydration)
+
+- **Akar masalah:** `src/landing/public/pricelist.html` menyimpan nomor WhatsApp
+  (`const PHONE`) dan seluruh katalog/tarif (`const SECTIONS`, 39 layanan) sebagai
+  hardcode statis. Admin yang mengubah tarif/layanan via `POST/PUT /api/admin/services`
+  tidak tersinkron ke landing page; nomor WA & brand terkunci 1 klinik.
+- **Solusi fondasional (Single Source of Truth):**
+  - **Added** `src/services/pricelist.service.ts` — transformer data-driven:
+    `getPricelistPayload(tenantId)` menarik katalog aktif dari
+    `treatmentCatalogService.getAllServices(true, tenantId)`, brand dari
+    `getBrandIdentityAsync`, dan nomor WA dari `Tenant.whatsapp_number`
+    (fallback LandingPage → env). Mengelompokkan per kategori (BABY/KIDS/MOMS/
+    BUNDLE/ADD_ON/BOTH), **merge varian usia** (nama identik + prefix-age-suffix
+    dengan guard label-unik, mis. Pijat Ceria 0–6 & 7–24 bulan), dan membersihkan
+    prefix nama secara **generik** (turunan `brand.businessName` + kata kategori,
+    bukan daftar string hafalan). Tanpa data bisnis/nama/tarif hardcoded.
+  - **Changed** `src/routes/landing.route.ts` — `GET /pricelist` kini *server-side
+    hydration*: template dibaca sekali (cache), payload katalog terbaru disuntik ke
+    `<head>` sebagai `<script id="pricelist-data" type="application/json">` (escape
+    `\u003c` cegah breakout XSS `</script>`), + judul brand dinamis. Ditambah
+    endpoint publik **`GET /api/pricelist`** (`?slug=`, rate limit 60/menit/IP)
+    mengembalikan `{ success, data }` tenant-aware.
+  - **Changed** `src/landing/public/pricelist.html` — hapus `PHONE`/`SECTIONS`
+    hardcode; baca payload terinjeksi, update wordmark/tagline/footer/bot name
+    dinamis, dan *fallback* graceful `fetch('/api/pricelist')` bila dibuka statis.
+    Fitur Opsi C (slide-up drawer, format harga, template WA kontekstual) tetap utuh.
+- **Keamanan & Ketahanan:** nomor WA tidak lagi terkunci ke `6281390541340`;
+  multi-tenant terisolasi (tenant tanpa seed → katalog kosong, tanpa bocor default);
+  DB offline tetap menyajikan katalog in-memory tanpa 500.
+- **Test:** `tests/integration/pricelist-dynamic.test.ts` (12 kasus: transformer unit,
+  hidrasi HTML, API JSON, isolasi multi-tenant, adversarial XSS `</script>`, live
+  mutability harga, regresi `/go` + redirect + `/health`). Regresi landing suite
+  (37 test) & full suite (`4685 passed`) hijau; `npm run build` (tsc) bersih dan
+  `dist/landing/public/pricelist.html` ter-update.
+
+#### 2026-10-03 - Landing Page Pricelist Homecare: Implementasi Opsi C (Contextual Slide-Up Drawer)
+
+- **UX & Flow Chatbot (Opsi C):** Mengimplementasikan alur interaktif berbasis konteks in-chat
+  pada halaman pricelist `src/landing/public/pricelist.html` dan `pricelist-baru.html`:
+  - Default state: Bottom bar tersembunyi 100%, memberikan area pandang leluasa tanpa elemen mengambang
+    yang menutupi katalog saat scrolling di layar mobile.
+  - Interactive selection: Mengetuk baris layanan mengaktifkan highlight visual lembut dan memicu
+    animasi slide-up drawer kontekstual (`#ctaDrawer.active`).
+  - Drawer detail: Menampilkan kategori, target sasaran/usia, nama layanan, tarif promo (dengan harga coret),
+    durasi menit, tombol batal (`✕`), serta tombol CTA WhatsApp *"Lanjut Chat"*.
+  - Template pesan WA kontekstual: Otomatis menyusun pesan reservasi spesifik:
+    `Halo Bidan Yusi, saya mau ambil treatment *[Nama Layanan]* ([Sasaran], [Durasi] menit, [TarifPromo]) yaa. Boleh dibantu info jadwal kosong terdekat untuk homecare ke rumah? Terima kasih 🙏😊`
+    yang langsung menyambung percakapan bot pasca-pengecekan ongkir.
+  - Kartu konsultasi inline: Menambahkan kartu konsultasi ramah di atas footer bagi pelanggan yang membutuhkan
+    rekomendasi tanpa memilih baris tertentu.
+- **Routing & Servis:** Mendaftarkan endpoint publik `GET /pricelist` di `src/routes/landing.route.ts` beserta
+  redirect alias `/pricelist.html` & `/pricelist-baru.html` dan menambahkan `pricelist` ke `RESERVED_SLUGS`.
+- **Verifikasi & Test:** Menambahkan test case #11 di `tests/integration/landing-serving.test.ts` (11 test passing),
+  `npx tsc --noEmit` bersih tanpa error.
+
 #### 2026-10-03 - WINBACK_60D: re-engagement pelanggan dormant MQL/legacy (>60 hari)
+
 
 - **Fitur baru:** antrean `WINBACK_60D` untuk menyapa kembali pelanggan MQL/legacy yang
   sudah >60 hari tidak berinteraksi, dengan 3 varian template rolling, auto-lost grace 7

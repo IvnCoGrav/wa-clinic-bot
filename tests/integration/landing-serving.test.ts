@@ -148,4 +148,22 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     const res = await app.inject({ method: 'GET', url: '/assets/foo%20bar.js' });
     expect(res.statusCode).toBe(400);
   });
+
+  it('11. GET /pricelist menyajikan landing page pricelist resmi dan alias me-redirect', async () => {
+    const res = await app.inject({ method: 'GET', url: '/pricelist' });
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers['content-type'])).toContain('text/html');
+    expect(res.body).toContain('Pricelist Homecare');
+    expect(res.body).toContain('ctaDrawer');
+    expect(res.body).toContain('Pijat Pulih Ceria');
+
+    const redirectRes1 = await app.inject({ method: 'GET', url: '/pricelist.html' });
+    expect(redirectRes1.statusCode).toBe(302);
+    expect(redirectRes1.headers.location).toBe('/pricelist');
+
+    const redirectRes2 = await app.inject({ method: 'GET', url: '/pricelist-baru.html' });
+    expect(redirectRes2.statusCode).toBe(302);
+    expect(redirectRes2.headers.location).toBe('/pricelist');
+  });
 });
+

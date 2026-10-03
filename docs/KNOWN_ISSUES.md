@@ -5018,3 +5018,20 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
   ber-flag (tech debt).
 - **Catatan teknis:** `src/services/reservation-series.service.ts:229` error TS pre-existing
   (`babies` shape `{name,ageText}` vs `BabyDetail[]`) — BUKAN dari perubahan Fase 1 ini.
+
+## 127. [Pricelist Landing Dinamis] Chrome seksi + area layanan masih hardcode (2026-10-03)
+
+- **Konteks:** `src/services/pricelist.service.ts` + `GET /pricelist` kini menarik
+  katalog/tarif/nomor WA/brand dari DB (data bisnis 100% data-driven). Yang MASIH
+  di-hardcode di kode/template dan disepakati sebagai pengecualian Confirmation Gate:
+  1. Chrome UI seksi katalog (`SECTION_META`: ikon, label "Baby/Kids/Moms/...",
+     meta usia) — chrome presentasi, bukan data bisnis; kandidat dipindah ke konfigurasi
+     tenant (`Tenant.settings.pricelist`) bila sudah ada >1 tenant aktif.
+  2. Trust-line area layanan "📍 Surabaya & Sidoarjo" di `pricelist.html` — belum ada
+     kolom DB untuk coverage area. Perlu kolom `Tenant.service_areas`/`landing_content`.
+  3. Footer badge/deskripsi statis ("Bidan Profesional", "Alat steril", dst.) di template.
+- **Dampak:** Rendah untuk single-tenant saat ini; menghambat jika pricelist perlu
+  menampilkan area/chrome berbeda per cabang. BUKAN regresi fungsional.
+- **Rencana:** Pindahkan chrome + area ke `Tenant.settings`/`landing_content` saat
+  onboarding tenant kedua (butuh desain skema + UI admin).
+

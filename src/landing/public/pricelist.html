@@ -28,7 +28,7 @@
     margin:0;background:var(--cream);color:var(--ink);
     font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
     font-size:15px;line-height:1.45;
-    padding-bottom:calc(88px + env(safe-area-inset-bottom));
+    padding-bottom:calc(96px + env(safe-area-inset-bottom));
   }
   .wrap{max-width:880px;margin:0 auto;padding:0 14px}
   .brand-font{font-family:'Fredoka','Nunito',sans-serif}
@@ -41,7 +41,7 @@
   .hero h1.title{font-family:'Fredoka',sans-serif;font-weight:600;font-size:22px;margin:16px 0 4px}
   .trust-line{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:8px 0 0}
   .trust-line span{background:var(--peach-3);border:1px solid var(--line);color:var(--ink);font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px}
-  .hint{margin:12px auto 0;max-width:420px;font-size:13.5px;color:var(--muted)}
+  .hint{margin:12px auto 0;max-width:440px;font-size:13.5px;color:var(--muted);line-height:1.4}
 
   /* ---------- Sticky: cari + kategori ---------- */
   .sticky{
@@ -99,12 +99,16 @@
   .rows{margin-top:10px}
   .row{
     display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:11px 10px;margin:2px 0;border-top:1px dashed var(--line);
+    padding:11px 12px;margin:3px 0;border-top:1px dashed var(--line);
     border-radius:12px;cursor:pointer;user-select:none;
-    transition:background .15s,transform .1s;
+    transition:background .15s,transform .1s,box-shadow .15s;
   }
   .row:hover{background:var(--peach-3)}
   .row:active{background:var(--peach-2);transform:scale(.99)}
+  .row.selected{
+    background:#FFEFE5;
+    box-shadow:0 0 0 2px var(--accent);
+  }
   .label{flex:1;min-width:0;font-size:14px;font-weight:700;color:var(--ink)}
   .price{text-align:right;line-height:1.2;flex:0 0 auto}
   .promo{display:block;font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;color:var(--accent)}
@@ -119,8 +123,28 @@
   .empty p{margin:0 0 12px;color:var(--muted)}
   .empty button{height:44px;padding:0 20px;border:0;border-radius:999px;background:var(--peach);font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:var(--ink);cursor:pointer}
 
+  /* ---------- Card Konsultasi Bawah ---------- */
+  .consult-card{
+    margin-top:28px;background:#fff;border:1.5px solid var(--peach);border-radius:var(--radius);
+    padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;
+    box-shadow:0 2px 10px rgba(194,85,43,.06);
+  }
+  @media(max-width:540px){
+    .consult-card{flex-direction:column;text-align:center;gap:12px}
+  }
+  .consult-text b{display:block;font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:var(--ink);margin-bottom:2px}
+  .consult-text span{font-size:13px;color:var(--muted);line-height:1.35;display:block}
+  .consult-btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    height:44px;padding:0 18px;border-radius:999px;background:var(--wa);color:#fff;
+    text-decoration:none;font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;
+    flex:0 0 auto;white-space:nowrap;transition:transform .1s, background .15s;
+  }
+  .consult-btn:active{transform:scale(.97);background:#0e6e3a}
+  .consult-btn svg{width:18px;height:18px;fill:currentColor}
+
   /* ---------- Footer ---------- */
-  footer.trust{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  footer.trust{margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
   @media(min-width:720px){footer.trust{grid-template-columns:repeat(4,1fr)}}
   .badge{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 8px;text-align:center}
   .badge .ic{font-size:22px}
@@ -128,20 +152,80 @@
   .badge span{font-size:12px;color:var(--muted)}
   .foot-note{text-align:center;font-size:12px;color:var(--muted);margin:14px 0 0}
 
-  /* ---------- CTA bawah ---------- */
+  /* ---------- CTA Bawah (Slide-up Drawer Opsi C) ---------- */
   .cta{
-    position:fixed;left:0;right:0;bottom:0;z-index:40;
-    background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-    border-top:1px solid var(--line);
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(255,255,255,.98);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+    border-top:1.5px solid var(--peach);
+    box-shadow:0 -8px 28px rgba(194,85,43,.14);
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    transform:translateY(125%);
+    opacity:0;
+    pointer-events:none;
+    transition:transform .32s cubic-bezier(.16,1,.3,1), opacity .22s ease;
   }
-  .cta a{
-    max-width:880px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:9px;
-    height:52px;border-radius:999px;background:var(--wa);color:#fff;text-decoration:none;
-    font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;
+  .cta.active{
+    transform:translateY(0);
+    opacity:1;
+    pointer-events:auto;
   }
-  .cta a:active{transform:scale(.98)}
-  .cta svg{width:22px;height:22px;fill:currentColor}
+  .cta-inner{
+    max-width:880px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .cta-info{
+    flex:1;min-width:0;
+  }
+  .cta-top-row{
+    display:flex;align-items:center;gap:6px;font-size:11.5px;line-height:1;
+  }
+  .cta-pill{
+    background:var(--peach-3);color:var(--accent);font-weight:800;padding:2px 7px;border-radius:999px;font-size:11px;
+    border:1px solid var(--peach-2);
+  }
+  .cta-target{
+    color:var(--muted);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;
+  }
+  .cta-title{
+    font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25;margin:3px 0 2px;
+  }
+  .cta-pricing{
+    display:flex;align-items:baseline;gap:6px;font-size:12px;
+  }
+  .cta-promo{
+    font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;color:var(--accent);line-height:1;
+  }
+  .cta-orig{
+    font-size:11.5px;color:var(--muted);
+  }
+  .cta-dur{
+    font-size:11.5px;font-weight:800;color:var(--ink);background:var(--peach-3);padding:1px 6px;border-radius:999px;
+  }
+  .cta-actions{
+    display:flex;align-items:center;gap:8px;flex:0 0 auto;
+  }
+  .cta-close{
+    width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:#fff;
+    color:var(--muted);font-size:16px;font-weight:700;display:grid;place-items:center;cursor:pointer;
+    flex:0 0 auto;transition:background .15s, color .15s, transform .1s;
+  }
+  .cta-close:hover{background:var(--peach-3);color:var(--ink)}
+  .cta-close:active{transform:scale(.92)}
+  .cta-send{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    height:46px;padding:0 18px;border-radius:999px;background:var(--wa);color:#fff;
+    text-decoration:none;font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;
+    box-shadow:0 3px 12px rgba(18,140,74,.3);border:none;cursor:pointer;white-space:nowrap;
+    transition:transform .1s, background .15s;
+  }
+  .cta-send:active{transform:scale(.97);background:#0e6e3a}
+  .cta-send svg{width:20px;height:20px;fill:currentColor;flex:0 0 auto}
+
+  @media(max-width:360px){
+    .cta-send span{font-size:14px}
+    .cta-send{padding:0 14px;height:44px}
+    .cta-close{width:36px;height:36px}
+  }
 
   :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
@@ -151,7 +235,7 @@
 
 <div class="wrap">
   <header class="hero">
-    <!-- Ganti SVG ini dengan file logo Anda: <img src="logo.png" alt="Kala Moms and Baby Spa" width="160"> -->
+    <!-- Logo Kala Moms and Baby Spa -->
     <svg class="logo-mark" viewBox="0 0 60 60" fill="none" aria-hidden="true">
       <path d="M44 9A22 22 0 1 0 44 51A20 20 0 0 1 44 9" stroke="#FFBE9C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="31" cy="27" r="5.5" fill="#FFBE9C"/>
@@ -165,7 +249,7 @@
       <span>🏠 Datang ke rumah</span>
       <span>📍 Surabaya &amp; Sidoarjo</span>
     </div>
-    <p class="hint">Ketuk tarif layanan untuk reservasi via WhatsApp, atau konsultasi di tombol bawah.</p>
+    <p class="hint">Ketuk layanan yang Bunda inginkan untuk lanjut konsultasi jadwal via WhatsApp.</p>
   </header>
 </div>
 
@@ -189,6 +273,17 @@
     <button type="button" id="askBtn">Tanya lewat WhatsApp</button>
   </div>
 
+  <div class="consult-card">
+    <div class="consult-text">
+      <b>Butuh Rekomendasi Treatment?</b>
+      <span>Konsultasikan langsung keluhan Si Kecil atau Bunda dengan Bidan kami via WhatsApp.</span>
+    </div>
+    <a class="consult-btn" id="consultBtn" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+      <span>Tanya Bidan</span>
+    </a>
+  </div>
+
   <footer class="trust">
     <div class="badge"><div class="ic">🏠</div><b>Homecare</b><span>Datang ke rumah</span></div>
     <div class="badge"><div class="ic">🛡️</div><b>Bidan Profesional</b><span>Bersertifikasi STR</span></div>
@@ -198,114 +293,68 @@
   <p class="foot-note">Layanan Terbaik untuk Si Kecil dan Bunda · Kala Moms and Baby Spa</p>
 </main>
 
-<div class="cta">
-  <a id="mainWa" href="#" target="_blank" rel="noopener">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-    Tanya Jadwal via WhatsApp
-  </a>
+<!-- Slide-up Drawer Opsi C (muncul dinamis saat baris layanan diklik) -->
+<div class="cta" id="ctaDrawer" role="region" aria-label="Layanan Terpilih" aria-hidden="true">
+  <div class="cta-inner">
+    <div class="cta-info">
+      <div class="cta-top-row">
+        <span class="cta-pill" id="ctaCategory">-</span>
+        <span class="cta-target" id="ctaTarget">-</span>
+      </div>
+      <div class="cta-title" id="ctaTitle">-</div>
+      <div class="cta-pricing">
+        <span class="cta-promo" id="ctaPromo">-</span>
+        <span class="cta-orig" id="ctaOrig"><s>-</s></span>
+        <span class="cta-dur" id="ctaDur">⏱ - mnt</span>
+      </div>
+    </div>
+    <div class="cta-actions">
+      <button type="button" class="cta-close" id="ctaClose" aria-label="Batal pilih layanan" title="Batal pilih">✕</button>
+      <a class="cta-send" id="ctaSend" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        <span>Lanjut Chat</span>
+      </a>
+    </div>
+  </div>
 </div>
 
 <script>
-  const PHONE = '6281390541340';
-
-  /* ============ DATA ============
+  /* ============ DATA DINAMIS (Single Source of Truth: DB) ============
+     Payload katalog disuntik server ke #pricelist-data (server-side hydration).
+     Fallback: fetch('/api/pricelist') bila tag tidak ada (mis. dibuka statis).
      n = nama, d = keterangan, t = durasi, k = kata kunci pencarian
      v = pilihan [label/sasaran, harga promo, harga normal]            */
-  const SECTIONS = [
-    { id:'baby', tab:'👶 Baby', icon:'👶', title:'Kala Baby', meta:'Usia 0–24 bulan',
-      note:'Ketuk tarif usia bayi yang sesuai untuk reservasi via WhatsApp.',
-      items:[
-        { n:'Pijat Ceria', t:40, k:'pijat bayi newborn',
-          v:[['Newborn · 0–6 bulan',60000,80000],['7–24 bulan',70000,80000]] },
-        { n:'Pijat Pulih Ceria', d:'Terapi Batuk, Pilek & Flu', t:40, k:'bapil batuk pilek flu pulih',
-          v:[['Newborn · 0–6 bulan',65000,100000],['7–24 bulan',75000,100000]] },
-        { n:'Pijat Lahap', d:'Stimulasi Nafsu Makan (GTM)', t:40, k:'gtm susah makan nafsu makan lahap',
-          v:[['0–24 bulan',75000,100000]] },
-        { n:'Cukur Rambut', t:15, k:'cukur gundul',
-          v:[['0–24 bulan',25000,35000]] },
-        { n:'Memandikan Bayi', t:25, k:'mandi',
-          v:[['0–24 bulan',30000,40000]] },
-        { n:'Tindik Telinga', t:15, k:'tindik anting',
-          v:[['0–12 bulan',50000,70000]] },
-        { n:'Paket Pendampingan 14 Sesi', d:'Perawatan Tali Pusat, Mandi, Pijat', t:120, k:'paket tali pusat newborn',
-          v:[['0–6 bulan',600000,700000]] }
-      ]},
-    { id:'kids', tab:'👧 Kids', icon:'👧', title:'Kala Kids', meta:'Usia 2–8 tahun',
-      note:'Seluruh terapis membawa minyak hypoallergenic & alat steril.',
-      items:[
-        { n:'Pijat Ceria', t:40, k:'pijat anak',
-          v:[['2–4 tahun',75000,85000],['4–6 tahun',80000,90000],['6–8 tahun',90000,100000]] },
-        { n:'Pijat Lahap', d:'Penambah Nafsu Makan (GTM)', t:40, k:'gtm susah makan nafsu makan lahap',
-          v:[['2–8 tahun',80000,110000]] },
-        { n:'Pijat Pulih Ceria', d:'Terapi Batuk, Pilek & Flu', t:40, k:'bapil batuk pilek flu pulih',
-          v:[['2–4 tahun',85000,100000],['4–6 tahun',90000,110000],['6–8 tahun',100000,120000]] }
-      ]},
-    { id:'moms', tab:'🤰 Moms', icon:'🤰', title:'Kala Moms', meta:'Ibu hamil, bersalin & menyusui',
-      note:'Seluruh treatment dilakukan dengan posisi aman sesuai SOP kebidanan.',
-      items:[
-        { n:'Prenatal Gentle Yoga', t:30, k:'yoga hamil',
-          v:[['Trimester 2 & 3',50000,70000]] },
-        { n:'Perineum Massage', t:30, k:'perineum persiapan lahiran',
-          v:[['Min. 34–36 minggu',50000,70000]] },
-        { n:'Induksi Massage', d:'Akupresur rangsang kontraksi alami', t:40, k:'induksi kontraksi',
-          v:[['Hamil aterm · 37+ minggu',50000,70000]] },
-        { n:'Induksi Massage Fullbody', d:'Pijat seluruh tubuh + titik induksi', t:60, k:'induksi kontraksi full body',
-          v:[['Hamil aterm · 37+ minggu',105000,130000]] },
-        { n:'Oksitosin Massage (Punggung)', d:'Punggung & bahu, melancarkan ASI', t:40, k:'asi oksitosin menyusui',
-          v:[['Ibu menyusui',75000,90000]] },
-        { n:'Laktasi & Breast Care', d:'Atasi payudara bengkak & sumbatan', t:40, k:'asi payudara bengkak sumbat menyusui',
-          v:[['Ibu menyusui',85000,110000]] },
-        { n:'Pregnant / Prenatal Massage', d:'Relaksasi pegal ibu hamil, posisi aman', t:60, k:'pijat hamil',
-          v:[['Trimester 2 & 3',100000,120000]] },
-        { n:'Postpartum Recovery Massage', d:'Pemulihan tubuh pasca persalinan', t:60, k:'nifas pasca melahirkan sc normal',
-          v:[['Normal / SC',100000,130000]] },
-        { n:'Oksitosin Massage (Full Body)', d:'Relaksasi tubuh & stimulasi ASI', t:60, k:'asi oksitosin menyusui full body',
-          v:[['Ibu menyusui',105000,140000]] }
-      ]},
-    { id:'bundle', tab:'🎁 Bundle', icon:'🎁', title:'Kala Bundle', meta:'Paket hemat & tradisi',
-      note:'Lebih hemat dibanding memesan layanan satuan.',
-      items:[
-        { n:'Selapan: Cukur + Pijat Ceria', d:'Cukur bersih + pijat ceria bayi', t:55, k:'selapan paket cukur',
-          v:[['Bayi 0–12 bulan',80000,115000]] },
-        { n:'Selapan: Cukur + Pijat Pulih Ceria', d:'Cukur + pijat terapi bapil/kembung', t:55, k:'selapan paket cukur bapil',
-          v:[['Bayi 0–12 bulan',90000,135000]] },
-        { n:'Selapan Full: Cukur + Ceria + Mandi', d:'Paket komplit bersih wangi', t:80, k:'selapan paket cukur mandi',
-          v:[['Bayi 0–12 bulan',100000,155000]] },
-        { n:'Selapan Full: Cukur + Pulih Ceria + Mandi', d:'Cukur + pijat bapil + mandi higienis', t:80, k:'selapan paket cukur mandi bapil',
-          v:[['Bayi 0–12 bulan',110000,175000]] },
-        { n:'Pra-Kelahiran: Perineum + Yoga', d:'Elastisitas jalan lahir & relaksasi', t:60, k:'prakelahiran persiapan lahiran',
-          v:[['Hamil · 34–36 minggu',85000,140000]] },
-        { n:'Pra-Kelahiran: Yoga + Breast Care', d:'Gentle yoga + siapkan kolostrum ASI', t:70, k:'prakelahiran persiapan lahiran asi',
-          v:[['Hamil · min. 36 minggu',85000,180000]] },
-        { n:'Pra-Kelahiran: Perineum + Breast Care', d:'Persiapan lahiran normal & ASI lancar', t:70, k:'prakelahiran persiapan lahiran asi',
-          v:[['Hamil · min. 36 minggu',85000,180000]] },
-        { n:'Pra-Kelahiran Lengkap (3-in-1)', d:'Yoga + Perineum + Breast Care', t:100, k:'prakelahiran persiapan lahiran lengkap',
-          v:[['Hamil · min. 36 minggu',150000,250000]] },
-        { n:'Duo: Mom & Baby Ceria Newborn', d:'Postpartum massage + pijat bayi', t:100, k:'duo ibu bayi nifas',
-          v:[['1 ibu + 1 bayi',150000,190000]] },
-        { n:'Laktasi Booster (Punggung)', d:'Breast care + oksitosin punggung', t:80, k:'asi menyusui laktasi',
-          v:[['Ibu menyusui',140000,200000]] },
-        { n:'Laktasi Total (Full Body)', d:'Breast care + oksitosin seluruh tubuh', t:100, k:'asi menyusui laktasi full body',
-          v:[['Ibu menyusui',155000,250000]] }
-      ]},
-    { id:'addon', tab:'➕ Add-on', icon:'➕', title:'Kala Terapi (Add-on)', meta:'Terapi penunjang',
-      note:'Paling efektif diambil bersamaan dengan paket pijat bayi atau anak.',
-      items:[
-        { n:'Infrared (Sinar Moksa)', d:'Terapi hangat pelega saluran napas', t:15, k:'infrared moksa napas',
-          v:[['Bayi & anak',15000,25000]] },
-        { n:'Nebulizer Saline', d:'Uap NaCl 0,9% untuk mengencerkan lendir', t:20, k:'nebul uap lendir',
-          v:[['Bayi & anak',35000,45000]] },
-        { n:'Nebulizer + Obat', d:'Terapi uap + obat bronkodilator', t:20, k:'nebul uap obat',
-          v:[['Bayi & anak',50000,60000]] }
-      ]}
-  ];
+  let PHONE = '';
+  let SECTIONS = [];
+  let BOT_NAME = 'Bidan';
+
+  function applyBrand(b){
+    if(!b) return;
+    if(b.botDisplayName) BOT_NAME = b.botDisplayName;
+    const name = (b.businessName || '').trim();
+    if(!name) return;
+    const parts = name.split(/\s+/);
+    const wm = document.querySelector('.wordmark');
+    if(wm) wm.textContent = parts[0];
+    const tg = document.querySelector('.tagline');
+    if(tg) tg.textContent = parts.slice(1).join(' ');
+    const fn = document.querySelector('.foot-note');
+    if(fn) fn.textContent = 'Layanan Terbaik untuk Si Kecil dan Bunda · ' + name;
+  }
+
+  function applyPayload(data){
+    if(!data || !Array.isArray(data.sections) || data.sections.length === 0) return false;
+    PHONE = String(data.whatsapp_number || '').replace(/\D/g,'');
+    SECTIONS = data.sections;
+    applyBrand(data.brand);
+    return true;
+  }
 
   /* ============ HELPER ============ */
-  const rp = n => 'Rp' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const rp = n => 'Rp ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const waLink = text => 'https://wa.me/' + PHONE + '?text=' + encodeURIComponent(text);
-  const WA_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z"/></svg>';
 
-  let state = { cat:'all', q:'' };
+  let state = { cat:'all', q:'', selected:null };
 
   const $list = document.getElementById('list');
   const $tabs = document.getElementById('tabs');
@@ -313,6 +362,17 @@
   const $clear = document.getElementById('clear');
   const $count = document.getElementById('count');
   const $empty = document.getElementById('empty');
+
+  // Drawer elements (Opsi C)
+  const $ctaDrawer = document.getElementById('ctaDrawer');
+  const $ctaCategory = document.getElementById('ctaCategory');
+  const $ctaTarget = document.getElementById('ctaTarget');
+  const $ctaTitle = document.getElementById('ctaTitle');
+  const $ctaPromo = document.getElementById('ctaPromo');
+  const $ctaOrig = document.getElementById('ctaOrig');
+  const $ctaDur = document.getElementById('ctaDur');
+  const $ctaSend = document.getElementById('ctaSend');
+  const $ctaClose = document.getElementById('ctaClose');
 
   /* ============ RENDER ============ */
   function renderTabs(){
@@ -331,8 +391,9 @@
 
   function cardHTML(si, ii, item){
     const rows = item.v.map((v, vi) => {
-      const off = Math.round((v[2] - v[1]) / v[2] * 100);
-      return '<div class="row" data-s="' + si + '" data-i="' + ii + '" data-v="' + vi + '" role="button" tabindex="0" aria-label="Reservasi ' + item.n + ', ' + v[0] + '">' +
+      const off = v[2] > 0 ? Math.round((v[2] - v[1]) / v[2] * 100) : 0;
+      const isSel = state.selected && state.selected.s === si && state.selected.i === ii && state.selected.v === vi;
+      return '<div class="row' + (isSel ? ' selected' : '') + '" data-s="' + si + '" data-i="' + ii + '" data-v="' + vi + '" role="button" tabindex="0"' + (isSel ? ' aria-pressed="true"' : '') + ' aria-label="Pilih ' + item.n + ', ' + v[0] + '">' +
         '<div class="label">' + v[0] + '</div>' +
         '<div class="price"><span class="promo">' + rp(v[1]) + '</span>' +
         '<span class="orig"><s>' + rp(v[2]) + '</s><span class="off">-' + off + '%</span></span></div>' +
@@ -365,27 +426,69 @@
     $clear.classList.toggle('show', state.q.length > 0);
   }
 
-  /* ============ AKSI ============ */
-  function bookWa(item, v){
+  /* ============ OPSI C: DRAWER & SELECTION LOGIC ============ */
+  function selectRow(sIndex, iIndex, vIndex){
+    // Jika baris yang sama diklik lagi → toggle batalkan pilihan
+    if (state.selected && state.selected.s === sIndex && state.selected.i === iIndex && state.selected.v === vIndex) {
+      clearSelection();
+      return;
+    }
+
+    state.selected = { s: sIndex, i: iIndex, v: vIndex };
+
+    // Update DOM kelas .selected secara instan
+    document.querySelectorAll('.row.selected').forEach(r => {
+      r.classList.remove('selected');
+      r.removeAttribute('aria-pressed');
+    });
+    const targetRow = document.querySelector('.row[data-s="' + sIndex + '"][data-i="' + iIndex + '"][data-v="' + vIndex + '"]');
+    if (targetRow) {
+      targetRow.classList.add('selected');
+      targetRow.setAttribute('aria-pressed', 'true');
+    }
+
+    const sec = SECTIONS[sIndex];
+    const item = sec.items[iIndex];
+    const v = item.v[vIndex];
     const promo = rp(v[1]), orig = rp(v[2]);
-    const msg = 'Halo Bidan Yusi, saya melihat pricelist Kala Moms and Baby Spa dan ingin reservasi:\n\n' +
-      '• *Layanan:* ' + item.n + '\n' +
-      '• *Sasaran/Usia:* ' + v[0] + '\n' +
-      '• *Durasi:* ' + item.t + ' menit\n' +
-      '• *Tarif:* ' + promo + ' (Harga Promo, normal ' + orig + ')\n\n' +
-      'Boleh dibantu info jadwal kosong terdekat untuk homecare ke rumah ya Bunda? Terima kasih 🙏😊';
-    window.open(waLink(msg), '_blank', 'noopener');
+
+    // Update data drawer
+    $ctaCategory.textContent = sec.tab;
+    $ctaTarget.textContent = v[0];
+    $ctaTitle.textContent = item.n;
+    $ctaPromo.textContent = promo;
+    $ctaOrig.innerHTML = '<s>' + orig + '</s>';
+    $ctaDur.textContent = '⏱ ' + item.t + ' mnt';
+
+    // Buat pesan kontekstual WhatsApp untuk melanjutkan chat
+    const msg = 'Halo ' + BOT_NAME + ', saya mau ambil treatment *' + item.n + '* (' + v[0] + ', ' + item.t + ' menit, ' + promo + ') yaa. Boleh dibantu info jadwal kosong terdekat untuk homecare ke rumah? Terima kasih 🙏😊';
+    $ctaSend.href = waLink(msg);
+
+    // Buka Slide-up Drawer
+    $ctaDrawer.classList.add('active');
+    $ctaDrawer.setAttribute('aria-hidden', 'false');
   }
 
-  const GENERAL_MSG = 'Halo Bidan Yusi, saya melihat pricelist Kala Moms and Baby Spa dan ingin konsultasi jadwal treatment homecare ke rumah Bunda. Boleh dibantu info slot kosong ya? Terima kasih 😊';
-  document.getElementById('mainWa').href = waLink(GENERAL_MSG);
-  document.getElementById('askBtn').addEventListener('click', () => window.open(waLink(GENERAL_MSG), '_blank', 'noopener'));
+  function clearSelection(){
+    state.selected = null;
+    document.querySelectorAll('.row.selected').forEach(r => {
+      r.classList.remove('selected');
+      r.removeAttribute('aria-pressed');
+    });
+    $ctaDrawer.classList.remove('active');
+    $ctaDrawer.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ============ EVENT LISTENERS ============ */
+  function generalMsg(){
+    return 'Halo ' + BOT_NAME + ', saya ingin konsultasi mengenai pilihan treatment homecare yang sesuai untuk kebutuhan Si Kecil/Bunda. Boleh dibantu rekomendasinya ya? Terima kasih 😊';
+  }
+  $ctaClose.addEventListener('click', clearSelection);
 
   $list.addEventListener('click', e => {
     const row = e.target.closest('.row');
     if (!row) return;
-    const item = SECTIONS[+row.dataset.s].items[+row.dataset.i];
-    bookWa(item, item.v[+row.dataset.v]);
+    selectRow(+row.dataset.s, +row.dataset.i, +row.dataset.v);
   });
 
   $list.addEventListener('keydown', e => {
@@ -393,8 +496,7 @@
       const row = e.target.closest('.row');
       if (!row) return;
       e.preventDefault();
-      const item = SECTIONS[+row.dataset.s].items[+row.dataset.i];
-      bookWa(item, item.v[+row.dataset.v]);
+      selectRow(+row.dataset.s, +row.dataset.i, +row.dataset.v);
     }
   });
 
@@ -402,6 +504,7 @@
     const t = e.target.closest('.tab');
     if (!t) return;
     state.cat = t.dataset.cat;
+    clearSelection();
     renderTabs();
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -409,14 +512,45 @@
 
   $q.addEventListener('input', () => {
     state.q = $q.value.trim();
-    if (state.q && state.cat !== 'all') { state.cat = 'all'; renderTabs(); }  // cari ke semua kategori
+    clearSelection();
+    if (state.q && state.cat !== 'all') { state.cat = 'all'; renderTabs(); }
     render();
   });
 
   $clear.addEventListener('click', () => {
-    $q.value = ''; state.q = ''; render(); $q.focus();
+    $q.value = ''; state.q = ''; clearSelection(); render(); $q.focus();
   });
 
+  function refreshGeneralLinks(){
+    const consult = document.getElementById('consultBtn');
+    if(consult) consult.href = waLink(generalMsg());
+  }
+  document.getElementById('askBtn').addEventListener('click', () => window.open(waLink(generalMsg()), '_blank', 'noopener'));
+
+  // Hidrasi data: pakai payload server-side yang disuntik; jika tidak ada
+  // (mis. file dibuka statis), fallback graceful ke GET /api/pricelist.
+  function bootstrap(){
+    const el = document.getElementById('pricelist-data');
+    if(el){
+      try {
+        const data = JSON.parse(el.textContent || '{}');
+        if(applyPayload(data)) return;
+      } catch(e){}
+    }
+    fetch('/api/pricelist', { headers:{ 'Accept':'application/json' } })
+      .then(r => r.json())
+      .then(j => {
+        if(applyPayload(j && (j.data || j))){
+          refreshGeneralLinks();
+          renderTabs();
+          render();
+        }
+      })
+      .catch(() => {});
+  }
+
+  bootstrap();
+  refreshGeneralLinks();
   renderTabs();
   render();
 </script>
