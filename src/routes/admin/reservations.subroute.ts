@@ -130,8 +130,23 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         reservation = await prisma.reservation.findUnique({
           where: { id: reservationId },
           include: {
-            customer: { select: { name: true, lat: true, lng: true } },
+            customer: {
+              select: {
+                name: true,
+                phone: true,
+                lat: true,
+                lng: true,
+                kelurahan: true,
+                kecamatan: true,
+                kota: true,
+                ongkir: true,
+                distance_km: true,
+                preferences: true,
+                children: true,
+              },
+            },
             assigned_staff: { select: { name: true, phone: true } },
+            children: true,
           },
         });
       } catch {
@@ -227,6 +242,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               }
             : null,
           customerCoords: { lat: customerLat ?? null, lng: customerLng ?? null },
+          customer: {
+            name: reservation.customer?.name || null,
+            phone: reservation.customer?.phone || null,
+            kelurahan: reservation.customer?.kelurahan || null,
+            kecamatan: reservation.customer?.kecamatan || null,
+            kota: reservation.customer?.kota || null,
+            ongkir: reservation.customer?.ongkir ?? null,
+            distance_km: reservation.customer?.distance_km ?? null,
+            children: reservation.customer?.children || [],
+            preferences: {
+              address: (reservation.customer as any)?.preferences?.address || null,
+              full_address: (reservation.customer as any)?.preferences?.full_address || null,
+              landmark: (reservation.customer as any)?.preferences?.landmark || null,
+              address_notes: (reservation.customer as any)?.preferences?.address_notes || null,
+            },
+          },
+          treatmentDetail: reservation.treatment_detail || null,
+          children: reservation.children || [],
           remainingKm,
           etaMinutes,
           isStalledOutsideTarget,
@@ -1454,6 +1487,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             google_calendar_event_id: calendarEventId,
             needs_staff_verification: false,
           },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
+            children: true,
+          },
         });
 
         if (existing.booking_date) {
@@ -1569,6 +1607,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           where: { id },
           data: {
             status: 'completed',
+          },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
+            children: true,
           },
         });
 
@@ -2174,6 +2217,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const reservation = await prisma.reservation.update({
           where: { id },
           data: { status },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
+            children: true,
+          },
         });
 
         try {
@@ -2308,6 +2356,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const reservation = await prisma.reservation.update({
           where: { id },
           data: { booking_date: parsedDate },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
+            children: true,
+          },
         });
 
         try {

@@ -54,42 +54,53 @@ export interface LiveChatConversationItem {
   hasActiveHold?: boolean;
   hasUpcomingBooking?: boolean;
   hasPendingBooking?: boolean;
-  activeHoldReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
-  activeConfirmedReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
-  activePendingReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
+  activeHoldReservation?: LiveChatReservationItem | null;
+  activeConfirmedReservation?: LiveChatReservationItem | null;
+  activePendingReservation?: LiveChatReservationItem | null;
+}
+
+/**
+ * Snapshot reservasi ringkas untuk banner LiveChat. Field HARUS selaras dengan
+ * `formatReservationItem` (runtime) agar kontrak tipe tidak "berbohong" —
+ * `duration_minutes`/`purchase_value`/`raw_text`/`children` dipakai konsumen UI.
+ */
+export interface LiveChatReservationItem {
+  id: string;
+  booking_date: string | null;
+  status?: string | null;
+  treatment_category?: string | null;
+  treatment_detail?: string | null;
+  duration_minutes?: number | null;
+  purchase_value?: number | null;
+  payment_method?: string | null;
+  proof_url?: string | null;
+  delivery_fee?: number | null;
+  purchase_occurred_at?: string | null;
+  needs_staff_verification?: boolean;
+  raw_text?: string | null;
+  assigned_staff_id?: string | null;
+  assigned_staff?: { id: string; name: string } | null;
+  notes?: string | null;
+  customer_id?: string | null;
+  otw_sent_at?: string | null;
+  arrived_at?: string | null;
+  customer?: {
+    id?: string;
+    name?: string;
+    phone?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    children?: any[];
+    ongkir?: number;
+    distance_km?: number | null;
+    preferences?: {
+      address?: string | null;
+      full_address?: string | null;
+      landmark?: string | null;
+      address_notes?: string | null;
+    } | null;
+  };
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -172,6 +183,7 @@ export class LiveChatService {
         where: { id: { in: customerIds }, tenant_id: tenantId },
         include: {
           adClick: true,
+          children: true,
           reservations: {
             include: { assigned_staff: { select: { id: true, name: true } } },
             orderBy: { created_at: 'desc' },
@@ -304,7 +316,25 @@ export class LiveChatService {
     const conv = await conversationService.getConversationById(conversationId, tenantId);
     if (!conv) return null;
 
-    const cust = await customerService.getCustomerById(conv.customer_id, tenantId);
+    let cust = await customerService.getCustomerById(conv.customer_id, tenantId);
+    // Repository `findById` mengembalikan baris bare (tanpa relasi). Untuk detail
+    // percakapan, badge HOLD/Terjadwal & banner butuh `reservations`+`children`
+    // — hidrasi relasi bila belum ada (anti banner padam saat buka 1 chat).
+    if (cust && !Array.isArray((cust as any).reservations)) {
+      try {
+        const hydrated = await prisma.customer.findUnique({
+          where: { id: conv.customer_id },
+          include: {
+            children: true,
+            reservations: {
+              include: { assigned_staff: { select: { id: true, name: true } } },
+              orderBy: { created_at: 'desc' },
+            },
+          },
+        });
+        if (hydrated) cust = hydrated;
+      } catch {}
+    }
     const lastMessages = await messageService.getRecentMessages(conversationId, 3, tenantId);
     const unreadMap = await messageService.getUnreadCountsBatch([conversationId], tenantId);
 
@@ -1143,9 +1173,14 @@ export class LiveChatService {
         duration_minutes: (res as any).duration_minutes || 60,
         purchase_value: Number(res.purchase_value) || 0,
         payment_method: (res as any).payment_method || null,
-        assigned_staff_id: res.assigned_staff_id || null,
-        assigned_staff: res.assigned_staff ? { id: res.assigned_staff.id, name: res.assigned_staff.name } : null,
-        notes: res.notes || null,
+        proof_url: (res as any).proof_url || null,
+        delivery_fee: (res as any).delivery_fee ?? null,
+        purchase_occurred_at: res.purchase_occurred_at
+          ? (typeof res.purchase_occurred_at === 'string' ? res.purchase_occurred_at : (res.purchase_occurred_at as Date).toISOString())
+          : null,
+        needs_staff_verification: (res as any).needs_staff_verification ?? false,
+        raw_text: (res as any).raw_text || null,
+        notes: (res as any).notes || null,
         customer_id: res.customer_id || c.customer_id,
         otw_sent_at: res.otw_sent_at
           ? (typeof res.otw_sent_at === 'string' ? res.otw_sent_at : (res.otw_sent_at as Date).toISOString())
@@ -1162,6 +1197,16 @@ export class LiveChatService {
           kota: c.customer?.kota || null,
           children: c.customer?.children || [],
           ongkir: (c.customer as any)?.ongkir || 0,
+          distance_km: (c.customer as any)?.distance_km ?? null,
+          preferences: (() => {
+            const p = (c.customer as any)?.preferences || {};
+            return {
+              address: p.address || null,
+              full_address: p.full_address || null,
+              landmark: p.landmark || null,
+              address_notes: p.address_notes || null,
+            };
+          })(),
         },
       };
     };

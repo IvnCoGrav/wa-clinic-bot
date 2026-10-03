@@ -175,9 +175,18 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
     const isInitialCustomer =
       !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
-    setAddress(isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
-    setLandmark(isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
-  }, [isOpen, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
+    // F-B3: di mode edit, data DB/profil adalah OTORITAS — hasil ekstraksi chat
+    // (initialAddress) hanya fallback terakhir, agar banner ramping tidak menimpa
+    // alamat profil yang lengkap (bug Syarifa). Di create, chat tetap prioritas.
+    const addr = mode === 'edit'
+      ? (prefAddress || rawAddress || initialAddress || '')
+      : (isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
+    setAddress(addr);
+    const lm = mode === 'edit'
+      ? (prefLandmark || initialLandmark || '')
+      : (isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
+    setLandmark(lm);
+  }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
 
   // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
   const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
@@ -633,10 +642,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, [isOpen, initialSlotTarget, mode]);
 
   // Auto-populate customer if initialCustomer is provided
+  // F-B2: mode edit TIDAK memakai auto-populate dari prop (bisa ramping/sintetik);
+  // sumber kebenaran edit = efek hidrasi edit + fetch detail. auto-populate hanya create.
   useEffect(() => {
+    if (mode === 'edit') return;
     if (isOpen && initialCustomer) {
       handleSelectCustomer(initialCustomer);
-    } else if (isOpen && initialCustomerId && !customerId && mode !== 'edit') {
+    } else if (isOpen && initialCustomerId && !customerId) {
       apiRequest(`/api/admin/customers/${initialCustomerId}`)
         .then((res) => {
           const c = res?.customer || res?.data || res;
@@ -669,20 +681,35 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       } else if (res.customer_id) {
         setCustomerId(res.customer_id);
       }
-      // Deep hydration: jika customer kosong tapi customer_id ada, fetch penuh
-      if (!cust && res.customer_id) {
-        apiRequest(`/api/admin/customers/${res.customer_id}`)
+      // F-B1: deep hydration berbasis KELENGKAPAN (bukan truthiness). Bootstrap
+      // LiveChat membawa objek ramping (tanpa preferences/children/raw_text) tapi
+      // tetap truthy → dulu fetch dilewati. Bila customer/reservasi tidak lengkap,
+      // ambil 1x detail kanonik `GET /reservation/:id` (customer+children+baby_details).
+      const custHasLocation = Boolean(cust?.preferences?.address || cust?.preferences?.full_address || cust?.address);
+      const custHasChildren = Array.isArray(cust?.children) && cust.children.length > 0;
+      const resHasRaw = Boolean((res as any).raw_text);
+      const needsFullFetch = Boolean(res.id) && (!cust || (!custHasLocation && !custHasChildren) || !resHasRaw);
+      if (needsFullFetch) {
+        apiRequest(`/api/admin/reservation/${res.id}`)
           .then((r: any) => {
-            const c = r?.data || r?.customer || r;
+            const data = r?.data || r;
+            const c = data?.customer;
             if (c?.id) {
               setCustomerId(c.id);
               setSelectedCustomerInfo(c);
               setCustomerSearch(`${c.name || 'Bunda'} (${c.phone || ''})`);
               if (c.ongkir != null && !isNaN(Number(c.ongkir))) setOngkir(Number(c.ongkir));
-              if (c.children && c.children.length > 0) {
-                setBabies(c.children.map((child: any) => ({ name: child.name, ageText: child.current_age || child.raw_age_text || '' })));
-              }
             }
+            const fullBabies = (c?.children && c.children.length > 0)
+              ? c.children
+              : ((data?.children && data.children.length > 0) ? data.children : (data?.baby_details || []));
+            if (Array.isArray(fullBabies) && fullBabies.length > 0) {
+              setBabies(fullBabies.map((b: any) => ({ name: b.name || '', ageText: b.current_age || b.raw_age_text || b.age || b.ageText || '' })));
+            }
+            const fullAddress = resolveStreetAddress(data, c) || c?.preferences?.address || c?.address || '';
+            if (fullAddress) setAddress(fullAddress);
+            const fullLandmark = c?.preferences?.landmark || c?.preferences?.address_notes || (data?.customer as any)?.preferences?.landmark || '';
+            if (fullLandmark) setLandmark(fullLandmark);
           })
           .catch(() => {});
       }
@@ -928,8 +955,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setTreatmentCategory(initialTreatmentCategory);
     }
 
-    // 4. Auto-match treatment ke katalog dinamis database
-    if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && services.length > 0) {
+    // 4. Auto-match treatment ke katalog dinamis database.
+    // F-B4: tunggu katalog LIVE (jangan kunci ke fallback statis) agar harga/nama
+    // resmi DB yang dipakai, bukan fallback JSON.
+    const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
+    if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && isLiveCatalogReady) {
       const matched = matchCatalogService(initialTreatmentName, services as any);
       if (matched) {
         prefillTreatmentMatchedRef.current = true;

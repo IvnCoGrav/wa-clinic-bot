@@ -4,6 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Fix Alamat/Anak Hilang di LiveChat Edit (F-A..F-D)
+
+- **Akar:** payload banner LiveChat (`formatReservationItem`) memangkas `preferences`,
+  `raw_text`, `children`, `purchase_value`; batch query conversation tanpa `include
+  children`; auto-populate mode edit + prioritas chat menimpa data DB; fetch penyelamat
+  dilewati karena guard truthiness.
+- **F-A (backend):** `formatReservationItem` + subset `preferences`/`raw_text`/proof/ongkir;
+  batch conversation `include children`; `active-reservations` + `purchase_value/delivery/
+  raw/children/assigned_staff`; dispatch trip + alamat/patokan/anak/phone; respons PATCH
+  confirm/complete/status/set-date + include relasi; interface `LiveChatReservationItem`
+  jujur; `getConversationDetail` hidrasi relasi.
+- **F-B (frontend):** hidrasi edit berbasis KELENGKAPAN → fetch `GET /reservation/:id`;
+  auto-populate tak jalan di edit; prioritas DB/profil di edit; kunci prefill treatment
+  hanya saat katalog live.
+- **F-C (realtime):** SSE `conversation.updated` untuk chat terpilih memicu refetch
+  snapshot reservasi (banner/HOLD/OTW tak basi).
+- **F-D (test):** `tests/unit/livechat-payload-completeness.test.ts` (4 kasus, adversarial).
+- **Verifikasi:** typecheck bersih; suite 548 lulus (1 flaky gazetteer hijau terisolasi);
+  dashboard build hijau.
+
 #### 2026-10-03 - Fix Alamat Hilang (W1-W5): Seam Tunggal + Anti-Kehilangan Jejak
 
 - **Akar masalah:** field "Alamat Lengkap" kosong saat edit/detail karena (a) edit

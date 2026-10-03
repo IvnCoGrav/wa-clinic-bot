@@ -569,6 +569,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             duration_minutes: true,
             assigned_staff_id: true,
             is_repeat_order: true,
+            purchase_value: true,
+            payment_method: true,
+            proof_url: true,
+            delivery_fee: true,
+            needs_staff_verification: true,
+            raw_text: true,
+            otw_sent_at: true,
+            arrived_at: true,
+            assigned_staff: { select: { id: true, name: true } },
           },
         });
 

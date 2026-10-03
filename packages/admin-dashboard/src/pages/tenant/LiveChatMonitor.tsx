@@ -434,6 +434,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
+  // F-C: ref ke handler refetch reservasi customer aktif (dipanggil saat SSE
+  // conversation.updated tiba agar banner/HOLD/OTW tidak basi sampai refresh manual).
+  const reservationRefreshRef = useRef<(() => void) | null>(null);
   // Widget pemantauan perjalanan terapis (OTW) untuk CS.
   const [dispatchTrip, setDispatchTrip] = useState<DispatchTripData | null>(null);
   const [dispatchLoading, setDispatchLoading] = useState(false);
@@ -2284,6 +2287,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           const sorted = sortChats(updated);
           startTransition(() => setChats(sorted));
           chatsRef.current = sorted;
+          // F-C: bila event untuk chat yang sedang dibuka, segarkan snapshot reservasi
+          // (banner/HOLD/Terjadwal/OTW) — SSE tidak membawa snapshot reservasi.
+          if (payload.conversationId && payload.conversationId === selectedIdRef.current) {
+            reservationRefreshRef.current?.();
+          }
         } else if (type === 'message.updated' && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, content, isRevoked, isEdited } = payload;
           const matchesUpdated = (m: any) => {
@@ -3055,6 +3063,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       } catch {}
     }
   };
+
+  reservationRefreshRef.current = handleReservationUpdate;
 
   const handleOpenQuickReservation = async () => {
     if (!selectedChat) {
