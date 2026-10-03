@@ -1,23 +1,26 @@
 /**
- * scripts/seed-copilot-sop-owner.ts
+ * src/scripts/seed-copilot-sop-owner.ts
  *
  * Seed knowledge & SOP Copilot 2.0 KHUSUS tenant owner (ADR-001, single-tenant).
  * Mengimplementasikan spesifikasi `docs/SOP_ADMIN_RESERVASI.md` Bab 6 & 7 ke tabel
  * DB per-tenant — BUKAN menempel teks ke prompt runtime.
  *
  * Sifat:
- * - Idempoten & NON-destruktif: `ClinicPolicy` di-upsert (create bila belum ada,
- *   TIDAK menimpa kurasi admin yang sudah ada), `KnowledgeChunk` skip bila judul sama.
+ * - Idempoten & NON-destruktif: `ClinicPolicy` di-insert bila belum ada (TIDAK menimpa
+ *   kurasi admin), `KnowledgeChunk` skip bila judul sama.
  * - Angka operasional default mengikuti hasil audit SOP v1.1 (DB adalah sumber
  *   kebenaran; bila admin mengubah di DB, DB yang menang).
- * - Jalankan: `npx tsx scripts/seed-copilot-sop-owner.ts [--tenant=<id>]`.
+ * - Ditempatkan di `src/scripts/` agar terkompilasi ke `dist/scripts/` dan bisa
+ *   dijalankan DI DALAM container (image produksi tidak memuat `tsx`):
+ *   `docker compose exec -T app node dist/scripts/seed-copilot-sop-owner.js [--tenant=<id>]`
+ *   atau di dev: `npx tsx src/scripts/seed-copilot-sop-owner.ts [--tenant=<id>]`.
  *
  * Catatan jujur: kebijakan DP/uang muka & jam batas reschedule belum punya angka
  * resmi di dokumen terverifikasi → SENGAJA tidak di-seed (dilarang mengarang nilai
  * bisnis). Isi dulu via Settings admin, baru tambahkan di sini bila sudah baku.
  */
-import { prisma } from '../src/db/client';
-import { DEFAULT_TENANT_ID } from '../src/config/tenant';
+import { prisma } from '../db/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 interface PolicySeed {
   topic: string;

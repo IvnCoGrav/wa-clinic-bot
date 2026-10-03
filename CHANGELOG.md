@@ -19,7 +19,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   `current_state`, `session_data`) + 5 pesan terakhir; HP dimask (`maskPhoneNumber`), UUID dibuang,
   sandbox/dummy disaring. Plan awal menyebut kolom fiktif `metadata/medicalAlert/botInterruptedAt`
   → DIKOREKSI ke skema nyata (verifikasi `prisma/schema.prisma:172-212`).
-- **Fase 2 — seed SOP owner:** `scripts/seed-copilot-sop-owner.ts` idempoten/non-destruktif
+- **Fase 2 — seed SOP owner:** `src/scripts/seed-copilot-sop-owner.ts` idempoten/non-destruktif
   (ClinicPolicy: `post_vaccine_rules` 48-72 jam, `fever_contraindication` 37.8°C,
   `reservation_status_rules`; KnowledgeChunk audit jadwal & stalled inquiry; `styleTone` di
   `Tenant.settings`). Angka bisnis dari DB, bukan hardcode TS. DP/reschedule SENGAJA tidak di-seed

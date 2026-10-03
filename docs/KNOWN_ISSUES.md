@@ -10,13 +10,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   Gerbang 3 lapis (route 403 `COPILOT_TENANT_DEPRECATED`, guard service, UI `copilotEnabled`).
   Query tool TETAP tenant-scoped.
 - **EXECUTED:** `explain_conversation_state` + `buildConversationExplanation`; seed
-  `scripts/seed-copilot-sop-owner.ts`; `POST /api/admin/copilot/stream` (SSE); UI streaming +
+  `src/scripts/seed-copilot-sop-owner.ts`; `POST /api/admin/copilot/stream` (SSE); UI streaming +
   fallback `/chat`.
 - **OPEN (tech debt):**
   - **True token streaming belum ada:** SSE mengalirkan jawaban final yang SUDAH tervalidasi
     grounding (bukan token mentah model) — konsekuensi sadar demi menjaga gerbang anti-halusinasi.
     Umpan balik cepat disediakan lewat event `tool_start` dari pipeline nyata.
-  - **Wajib jalankan seed di server:** `npx tsx scripts/seed-copilot-sop-owner.ts` (idempoten).
+  - **Wajib jalankan seed di server** (image tanpa `tsx`):
+    `docker compose exec -T app node dist/scripts/seed-copilot-sop-owner.js` (idempoten).
     Angka demam mengikuti SOP v1.1 = **37.8°C** (plan awal menulis 37.5°C — dikoreksi ke nilai
     terverifikasi repo).
   - **DP/uang muka & jam batas reschedule belum di-seed:** belum ada angka baku → dilarang
