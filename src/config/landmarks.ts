@@ -783,10 +783,18 @@ const ARTERY_SORTED = [...ARTERY_CORRIDORS].sort((a, b) => b.key.length - a.key.
  */
 export function resolveArteryCorridor(text: string): ArteryCorridor | null {
   if (!text || typeof text !== 'string') return null;
-  const norm = text.toLowerCase().replace(/\s+/g, ' ').trim();
-  if (!norm) return null;
+  const lower = text.toLowerCase();
+  // Normalisasi tokenisasi teknis + pencocokan KATA UTUH (bukan substring mentah)
+  // agar nama jalan pendek tidak menyerobot di dalam kata lain yang lebih panjang.
+  const normalized = ' ' + lower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const words = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
+  if (!lower.trim()) return null;
   for (const c of ARTERY_SORTED) {
-    if (norm.includes(c.key)) return c;
+    if (c.key.includes(' ')) {
+      if (normalized.includes(' ' + c.key + ' ')) return c;
+    } else if (words.has(c.key)) {
+      return c;
+    }
   }
   return null;
 }

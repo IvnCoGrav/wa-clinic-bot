@@ -304,4 +304,49 @@ describe('Tool Masker Engine (Fase 2)', () => {
       expect(hasNewLocationEntity('Harganya berapa ya?')).toBe(false);
     });
   });
+
+  describe('5. Anti-false-positive substring wilayah (fondasional word-boundary)', () => {
+    it('kata berimbuhan bahasa Indonesia TIDAK boleh memicu lokasi (kasus "tertarik"→"Tarik")', () => {
+      expect(hasNewLocationEntity('Halo Bu Bidan, saya tertarik dengan layanan home-treatment')).toBe(false);
+      expect(hasNewLocationEntity('Promo[h9] Halo Bu Bidan, saya tertarik dengan layanan home-treatment')).toBe(false);
+      expect(hasNewLocationEntity('Saya sangat tertarik dengan promo ini')).toBe(false);
+      expect(hasNewLocationEntity('Penjelasannya sangat menarik')).toBe(false);
+      expect(hasNewLocationEntity('Anak saya batuk pilek semalaman')).toBe(false);
+      expect(hasNewLocationEntity('Bisa tolong antarkan minyaknya?')).toBe(false);
+      expect(hasNewLocationEntity('Mau booking untuk sekarang ya')).toBe(false);
+      expect(hasNewLocationEntity('saya kembali ke sini')).toBe(false);
+    });
+
+    it('nama daerah asli tetap terdeteksi dengan tepat', () => {
+      expect(hasNewLocationEntity('Rumah saya di Tarik')).toBe(true);
+      expect(hasNewLocationEntity('Saya tinggal di kecamatan Tarik Sidoarjo')).toBe(true);
+      expect(hasNewLocationEntity('Di Batu Malang')).toBe(true);
+      expect(hasNewLocationEntity('Di Sedati Pepe')).toBe(true);
+      expect(hasNewLocationEntity('Tenggilis Mejoyo Surabaya')).toBe(true);
+    });
+
+    it('jawaban pendek murni minat pasca-tanya-domisili TIDAK membuka calculate_delivery', () => {
+      const session: CustomerGoalSession = {
+        genderGreeting: 'Bunda',
+        cartItems: [{ name: 'Pijat Bayi Ceria', price: 60000, type: 'PRIMARY' }],
+      };
+      const history = [
+        { role: 'assistant', content: 'Rumah Bunda di kelurahan mana ya? Biar kami cekkan ongkirnya.' },
+      ];
+      const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'saya tertarik kak', history);
+      expect(result.maskedToolNames).toContain('calculate_delivery');
+    });
+
+    it('jawaban pendek lokasi (termasuk typo) pasca-tanya-domisili tetap membuka calculate_delivery', () => {
+      const session: CustomerGoalSession = {
+        genderGreeting: 'Bunda',
+        cartItems: [{ name: 'Pijat Bayi Ceria', price: 60000, type: 'PRIMARY' }],
+      };
+      const history = [
+        { role: 'assistant', content: 'Rumah Bunda di kelurahan mana ya? Biar kami cekkan ongkirnya.' },
+      ];
+      const result = evaluateToolMasking(ALL_V3_TOOLS, session, 'bngurasi berapa kak', history);
+      expect(result.maskedToolNames).not.toContain('calculate_delivery');
+    });
+  });
 });

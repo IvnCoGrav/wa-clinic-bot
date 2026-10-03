@@ -142,7 +142,9 @@ export function hasSpecificAddressDetail(query: string | null | undefined, stree
   const tokens = windowTokens.filter((t) => {
     if (t.length < 4 || stop.has(t) || kecTokens.includes(t)) return false;
     // Token yang sejatinya typo nama kecamatan itu sendiri (bukan detail alamat).
-    if (kecTokens.some((k) => isNearEqual(t, k) || (t.length >= 5 && (t.includes(k) || k.includes(t))))) return false;
+    // Pencocokan KATA UTUH (isNearEqual ≤1 edit) — bukan substring mentah yang
+    // bisa membuang detail sah / menyedot kata berimbuhan.
+    if (kecTokens.some((k) => isNearEqual(t, k))) return false;
     return true;
   });
   return tokens.length > 0;
@@ -246,11 +248,17 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
 // ---------------------------------------------------------------------------
 const OUTSIDE_CITY_NAMES = getOutsideCities();
 
-/** Sinyal awal kota luar via includes data-driven (bukan regex). */
+/** Sinyal awal kota luar via word-boundary data-driven (bukan regex, bukan substring mentah). */
 function textMentionsOutsideCity(text: string): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower) return false;
-  return OUTSIDE_CITY_NAMES.some((c) => lower.includes(c));
+  const normalized = ' ' + lower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const words = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
+  return OUTSIDE_CITY_NAMES.some((c) => {
+    const name = String(c || '').toLowerCase();
+    if (!name) return false;
+    return name.includes(' ') ? normalized.includes(' ' + name + ' ') : words.has(name);
+  });
 }
 
 /** Kota hasil geocoding di luar hierarki cakupan homecare — daftar dari config/coverage (env-driven). */
@@ -333,12 +341,26 @@ export function initKecamatanGazetteerSync(): void {
 }
 initKecamatanGazetteerSync();
 function findKecamatanInQuery(query: string): string | null {
-  const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4 && !KECAMATAN_TOKEN_SKIPLIST.has(t));
+  const rawLower = (query || '').toLowerCase();
+  const queryNormalized = ' ' + rawLower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const tokens = rawLower
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 4 && !KECAMATAN_TOKEN_SKIPLIST.has(t));
   if (tokens.length === 0) return null;
   for (const { lower, orig } of getKecamatanNames()) {
-    for (const t of tokens) {
-      if (t === lower || t.includes(lower) || lower.includes(t)) return orig;
-      if (lower.length >= 6 && isTypoAtMostOne(t, lower)) return orig;
+    if (lower.includes(' ')) {
+      // Frasa multi-kata (mis. "tenggilis mejoyo", "karang pilang") — berbatas kata.
+      if (queryNormalized.includes(' ' + lower + ' ')) return orig;
+    } else {
+      // Kata tunggal: WAJIB exact match kata utuh (bukan substring t.includes(lower)
+      // yang menghalusinasi "tertarik" → Kecamatan Tarik).
+      if (tokens.includes(lower)) return orig;
+      // Typo 1-huruf pada kata tunggal panjang (selisih panjang ≤1).
+      if (lower.length >= 6) {
+        for (const t of tokens) {
+          if (Math.abs(t.length - lower.length) <= 1 && isTypoAtMostOne(t, lower)) return orig;
+        }
+      }
     }
   }
   return null;

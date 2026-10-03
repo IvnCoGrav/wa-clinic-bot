@@ -3,6 +3,16 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 199. [Tool Masking/Geocoding] Perbaikan fondasional kebocoran substring wilayah (2026-10-03, EXECUTED sebagian)
+
+- **Gejala:** customer kirim `"Halo Bu Bidan, saya tertarik dengan layanan home-treatment"` dijawab bot `"Untuk area Kecamatan Tarik, ..."` (halusinasi domisili). Sesi Azri M Windyastuti (6289502290002) — **log mesin TIDAK tersedia** (repo hanya memuat `logs/*` s.d. 2026-09-29), root cause dibuktikan via kode + dataset.
+- **Akar masalah:** pencocokan substring mentah `lower.includes("tarik")` pada kata berimbuhan `"tertarik"` di `tool-masker.ts:hasNewLocationEntity` (bocorkan `calculate_delivery`) dan `calculate-delivery.tool.ts:findKecamatanInQuery` (`t.includes(lower)`) → halusinasi `Kecamatan Tarik`.
+- **Perbaikan fondasional (EXECUTED):** (1) `hasNewLocationEntity` → word-boundary (token `textWords` exact + frasa `textNormalized` berbatas spasi + typo `|Δlen|≤1`); (2) `findKecamatanInQuery` → exact token + typo `≥6`; (3) 3 matcher substring sejenis ditutup: `textMentionsOutsideCity`, `hasSpecificAddressDetail` (`t.includes(k)||k.includes(t)` → `isNearEqual`), `resolveArteryCorridor`; (4) gate `isShortCompositeResponse` diberi saringan `isPureLeadGreeting` agar jawaban pendek minat ("saya tertarik kak") pasca-tanya-domisili tidak membuka `calculate_delivery`. Test: `tests/unit/tool-masker.test.ts` + baru `tests/unit/calculate-delivery-substring-guard.test.ts` (red→green).
+- **Sisa OPEN (disengaja, butuh keputusan desain):**
+  - **Typo-tolerant 1-edit masih bisa menabrak kata umum:** `hasNewLocationEntity('warung dekat sini')` → `true` via `warung`≈`waung` (kelurahan) 1-edit. Ambigu secara semantik (typo sah vs kata umum); melarangnya butuh model/language-model, bukan daftar kata (dilarang mandat anti-overfit). Test adversarial tidak meng-assert kasus ini.
+  - **Typo kecamatan pendek nonaktif:** ambang typo dinaikkan (`lower.length >= 6` di tool, `≥5` di masker) → typo nama kecamatan <6 huruf (`tarik` 5, `waru` 4) tidak lagi cocok typo. Tradeoff sengaja (tekan false-positive), nama panjang (`menganti`,`sedati`) tetap jalan.
+  - **Perilaku parsial-inti berubah:** sebutan parsial ("di tenggilis kak") tidak lagi via `lower.includes(t)` → jatuh ke jalur broad-region tool (minta kelurahan), bukan langsung centroid; sesuai kontrak (presisi diputuskan tool).
+
 ## 198. [Reservasi] Overhaul holistik Fase 0-8 (2026-10-03, EXECUTED)
 
 - Seams kanonis: `isReservationPaid` (murni purchase_occurred_at), `canTransition`, `SLOT_BUFFER_MIN=20`, `buildWibIso`, `money-contract`, `normalizePhoneID`.

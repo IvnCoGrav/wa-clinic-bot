@@ -25,6 +25,7 @@ import { getGazetteerAreas, getGazetteerKecamatanNames } from '../../utils/gazet
 import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmarks';
 import { getOutsideCities, getCoverageCities } from '../../config/coverage';
 import { isTypoAtMostOne } from '../../utils/typo-match';
+import { isPureLeadGreeting } from '../../utils/lead-greeting-detector';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -68,84 +69,104 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
   const input = text || '';
   const lower = input.toLowerCase();
   if (!lower.trim()) return false;
+  // Pencocokan KATA UTUH (word-boundary) — bukan substring mentah. Mencegah
+  // kata berimbuhan bahasa Indonesia (tertarik→Tarik, batuk→Batu,
+  // antarkan→?, sekarang→Karang, kembali→Bali) dihaluskan jadi nama daerah.
+  // Normalisasi hanya spasi (regex tokenisasi teknis, non-semantik).
+  const textNormalized = ' ' + lower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const textWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
   try {
     if (findPopularLandmark(input) || resolveArteryCorridor(input)) return true;
   } catch {}
+  // 1. Gazetteer kelurahan/desa: kata utuh (single) / frasa berbatas (multi).
   try {
     for (const [areaLower] of getGazetteerAreas().entries()) {
-      if (areaLower.length >= 4 && lower.includes(areaLower)) return true;
+      if (areaLower.length >= 4) {
+        if (areaLower.includes(' ')) {
+          if (textNormalized.includes(' ' + areaLower + ' ')) return true;
+        } else if (textWords.has(areaLower)) {
+          return true;
+        }
+      }
     }
   } catch {}
+  // 2. Gazetteer kecamatan: kata utuh / frasa berbatas.
   try {
     const kecNames = getGazetteerKecamatanNames() || [];
     for (const n of kecNames) {
-      if (n && n.length >= 4 && lower.includes(n.toLowerCase())) return true;
+      if (n && n.length >= 4) {
+        const nl = n.toLowerCase();
+        if (nl.includes(' ')) {
+          if (textNormalized.includes(' ' + nl + ' ')) return true;
+        } else if (textWords.has(nl)) {
+          return true;
+        }
+      }
     }
   } catch {}
-  // Typo-tolerant 1-huruf terpusat (shared utils/typo-match): token ≥5 agar "sedti"(5)→"sedati"(6) tertangani, tetap aman vs "waru"(4)/"sby"(3) yang tertahan ≥5
+  // 3. Typo-tolerant 1-huruf terpusat (shared utils/typo-match) — HANYA token
+  // kata utuh mandiri, panjang selisih ≤1, agar "sedti"→"sedati" tertangani
+  // tanpa membocorkan kata berimbuhan panjang (tertarik vs tarik).
   try {
-    const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length >= 5);
+    const toks = Array.from(textWords).filter((t) => t.length >= 5);
     if (toks.length > 0) {
       for (const [areaLower] of getGazetteerAreas().entries()) {
-        if (areaLower.length >= 5 && toks.some((t) => isTypoAtMostOne(t, areaLower))) return true;
+        if (areaLower.length >= 5 && !areaLower.includes(' ')) {
+          if (toks.some((t) => Math.abs(t.length - areaLower.length) <= 1 && isTypoAtMostOne(t, areaLower))) return true;
+        }
       }
       for (const n of getGazetteerKecamatanNames() || []) {
         const nl = String(n || '').toLowerCase();
-        if (nl.length >= 5 && toks.some((t) => isTypoAtMostOne(t, nl))) return true;
+        if (nl.length >= 5 && !nl.includes(' ')) {
+          if (toks.some((t) => Math.abs(t.length - nl.length) <= 1 && isTypoAtMostOne(t, nl))) return true;
+        }
       }
     }
   } catch {}
-  // Plan regresi Fase 6 (anti-amnesia jawaban domisili): nama kecamatan yang
-  // disebut PARSIAL inti ("Di tenggilis kak" ⊂ "Tenggilis Mejoyo") TETAP
-  // membuka calculate_delivery — presisi (kelurahan vs kecamatan luas)
-  // diputuskan TOOL via jalur broad-region, bukan masker. Token inti ≥6
-  // huruf dicocokkan KATA UTUH (bukan substring) agar "Waru" (basecamp,
-  // 4 huruf) tetap tertutup anti-asumsi domisili. Fail-open di sini AMAN:
-  // tool sendiri memvalidasi & meminta detail bila terlalu luas.
+  // 4. Token inti kecamatan (kata utuh saja) — anti-amnesia domisili parsial.
   try {
     for (const tok of getKecamatanCoreTokens()) {
-      if (lower.split(/[^a-z0-9]+/).includes(tok)) return true;
+      if (textWords.has(tok)) return true;
     }
   } catch {}
+  // 5. Kota luar cakupan (kata utuh: "bali" tidak cocok dengan "kembali").
   try {
     const outside = getOutsideCities() || [];
     for (const c of outside) {
       const name = String(c || '').toLowerCase();
-      if (name.length >= 3 && lower.includes(name)) return true;
+      if (name.length >= 3) {
+        if (name.includes(' ')) {
+          if (textNormalized.includes(' ' + name + ' ')) return true;
+        } else if (textWords.has(name)) {
+          return true;
+        }
+      }
     }
   } catch {}
+  // 6. Kota cakupan utama (kata utuh).
   try {
     const coverage = getCoverageCities() || [];
     for (const c of coverage) {
       const name = String(c || '').toLowerCase();
-      if (name.length >= 3 && lower.includes(name)) return true;
+      if (name.length >= 3) {
+        if (name.includes(' ')) {
+          if (textNormalized.includes(' ' + name + ' ')) return true;
+        } else if (textWords.has(name)) {
+          return true;
+        }
+      }
     }
   } catch {}
-  const l = lower;
-  if (l.includes('google.com/maps') || l.includes('goo.gl') || l.includes('share.google') || l.includes('maps.app')) {
+  // 7. Link Google Maps.
+  if (lower.includes('google.com/maps') || lower.includes('goo.gl') || lower.includes('share.google') || lower.includes('maps.app')) {
     return true;
   }
-  // Token kata utuh (strip tepi non-alnum): presisi tanpa \b-regex.
-  const stripEdge = (t: string): string => {
-    let s = t;
-    while (s.length > 0) {
-      const c = s.charCodeAt(0);
-      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
-      s = s.slice(1);
-    }
-    while (s.length > 0) {
-      const c = s.charCodeAt(s.length - 1);
-      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
-      s = s.slice(0, -1);
-    }
-    return s;
-  };
+  // 8. Penanda jalan/perumahan (kata utuh).
   const STREET_MARKERS = new Set([
     'jl', 'jln', 'jalan', 'gang', 'gg', 'perum', 'perumahan',
     'komplek', 'kompleks', 'blok', 'cluster', 'ruko', 'patokan',
   ]);
-  const toks = lower.split(' ').map(stripEdge).filter((t) => t.length > 0);
-  return toks.some((t) => STREET_MARKERS.has(t));
+  return Array.from(textWords).some((w) => STREET_MARKERS.has(w));
 }
 
 export interface ToolMaskingEvaluation {
@@ -412,7 +433,14 @@ export function evaluateToolMasking(
     } catch { return false; }
   })();
   const customerWordsForMask = (cleanIncomingText || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const isShortCompositeResponse = isAskedLocationRecentlyForMask && !isLocationFullyResolved(session) && customerWordsForMask.length > 0 && customerWordsForMask.length <= 4;
+  // Saringan murni-minat deterministik: jawaban pendek pasca-tanya-domisili yang
+  // sejatinya sapaan/minat pembuka ("saya tertarik kak") DILARANG membuka
+  // calculate_delivery — memakai detektor lead-greeting yang sudah ada (bukan
+  // daftar hafalan baru). Jawaban lokasi/typo ("bngurasi berapa kak") tetap lolos.
+  const isPureInterestOnly = (() => {
+    try { return isPureLeadGreeting(cleanIncomingText).isLeadGreeting; } catch { return false; }
+  })();
+  const isShortCompositeResponse = isAskedLocationRecentlyForMask && !isLocationFullyResolved(session) && customerWordsForMask.length > 0 && customerWordsForMask.length <= 4 && !isPureInterestOnly;
   const hasLocationEntity = hasNewLocationEntity(cleanIncomingText) || isShortCompositeResponse;
   if (!hasLocationEntity) {
     maskedToolNames.push('calculate_delivery');
