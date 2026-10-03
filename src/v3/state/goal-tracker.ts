@@ -217,6 +217,11 @@ export class GoalTracker {
           symptoms: prefs.symptoms || []
         } : undefined),
         children: Array.isArray(prefs.children) ? PatientProfileExtractor.normalizeChildrenSlots(prefs.children) : undefined,
+        // Insiden Demak 2026-10-03: kandidat lokasi Google menunggu verifikasi
+        // customer — DILARANG amnesia lintas-turn agar afirmasi berikutnya
+        // masih bisa mempromosikannya.
+        pendingLocation: prefs.pendingLocation && typeof prefs.pendingLocation === 'object'
+          ? prefs.pendingLocation : undefined,
         selectedTreatment: prefs.selectedTreatmentName || prefs.selectedTreatment || undefined,
         booking: prefs.booking || undefined,
         cartItems: Array.isArray(prefs.cartItems) ? prefs.cartItems : undefined,

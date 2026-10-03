@@ -37,6 +37,16 @@ export interface ToolExecutionContext {
   priceDiscussedSnapshot?: boolean;
   /** Teks pesan user terkini (anti-halusinasi hari save_reservation). */
   recentUserTexts?: string[];
+  /** Kandidat lokasi Google menunggu verifikasi customer (insiden Demak 2026-10-03). */
+  pendingLocationSnapshot?: {
+    kelurahan?: string;
+    kecamatan?: string;
+    kota?: string;
+    lat?: number;
+    lng?: number;
+  };
+  /** Teks pesan user turn ini (evaluasi afirmasi kandidat lokasi). */
+  incomingText?: string;
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -51,6 +61,8 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         cartSnapshot: ctx.cartSnapshot,
         preferredDate: ctx.preferredDateSnapshot,
         priceDiscussed: ctx.priceDiscussedSnapshot,
+        pendingLocation: ctx.pendingLocationSnapshot,
+        incomingText: ctx.incomingText,
       };
       return await executeCalculateDelivery(input);
     }

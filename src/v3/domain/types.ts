@@ -98,6 +98,20 @@ export interface CustomerGoalSession {
   customerName?: string;
   genderGreeting: 'Bunda' | 'Bapak';
   location?: LocationState;
+  /**
+   * Kandidat lokasi Google yang MENUNGGU verifikasi customer (insiden Demak
+   * 2026-10-03): Google mengusulkan kelurahan/kecamatan, tapi DILARANG dikunci
+   * sebagai lokasi sebelum customer mengonfirmasi. Diisi oleh calculate-delivery
+   * saat geocode mengembalikan `candidateFrom:'google'`; dipromosikan ke
+   * `location` hanya setelah afirmasi customer (state-gated, bukan teks prompt).
+   */
+  pendingLocation?: {
+    kelurahan?: string;
+    kecamatan?: string;
+    kota?: string;
+    lat?: number;
+    lng?: number;
+  };
   /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
   targetAudience?: TargetAudienceType;
   /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */

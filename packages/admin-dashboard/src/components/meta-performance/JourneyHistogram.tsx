@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
-import { Timer } from 'lucide-react';
+import { Timer, Info } from 'lucide-react';
 import { MetaPerformanceReport, fmtNum } from './types';
 
 const COLORS = ['#008069', '#12a58a', '#4cc0a8', '#8dd8c8', '#c2e7e0'];
@@ -15,6 +15,7 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
         <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
           <Timer size={16} className="text-[#008069]" /> Distribusi Siklus Konversi
         </h3>
+        <p className="text-[11px] text-[#8696a0]">Jarak hari dari touch iklan (klik teratribusi) hingga reservasi pertama pasien.</p>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={journey} margin={{ top: 8, right: 8, left: -18, bottom: 4 }}>
@@ -38,6 +39,9 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
         <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
           <Timer size={16} className="text-[#008069]" /> Lead Time Pemesanan
+          <span title="Berbasis order: menghitung total janji temu fisik yang dipesan pada rentang ini." className="text-[#8696a0] cursor-help">
+            <Info size={13} />
+          </span>
         </h3>
         <div className="space-y-2.5 pt-1">
           {lead.map((b) => (

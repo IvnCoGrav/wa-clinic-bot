@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import axios from 'axios';
 import { getStringSimilarity } from '../../utils/similarity';
 import { isTypoAtMostOne } from '../../utils/typo-match';
 import { measure } from '../../utils/timer';
@@ -6,6 +7,7 @@ import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-
 import { findPopularLandmark } from '../../config/landmarks';
 import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict, getGazetteerCanonicalCities } from '../../utils/gazetteer';
 import { normalizeToponymAbbreviations, extractCityScope } from '../../utils/toponym-normalizer';
+import { CircuitBreaker } from '../../utils/circuit-breaker';
 dotenv.config();
 
 interface AddressComponent {
@@ -72,6 +74,19 @@ export interface ResolvedLocation {
   ambiguityResults?: any[];
   zipcode?: string;
   matchedSpan?: string;
+  /**
+   * Kandidat dari tier Google (Jl/nama jalan tak ada di gazetteer). WAJIB
+   * masih diverifikasi customer (isPrecise:false) — Google memberi kandidat,
+   * gazetteer mengesahkan, customer memutuskan. Lihat insiden Demak 2026-10-03.
+   */
+  candidateFrom?: 'google';
+  isLandmarkMatch?: boolean;
+}
+
+interface GoogleGeocodeComponent {
+  long_name: string;
+  short_name: string;
+  types: string[];
 }
 
 /**
@@ -80,9 +95,19 @@ export interface ResolvedLocation {
  */
 export class GeocodingService {
   private apiKey: string;
+  /** Circuit breaker tier kandidat Google (rute v2 geocode) — cooldown 30s. */
+  private googleGeocodeBreaker: CircuitBreaker<[string], any>;
 
   constructor() {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+    this.googleGeocodeBreaker = new CircuitBreaker<[string], any>(
+      async (url: string) => {
+        const response = await axios.get(url, { timeout: 2500 });
+        return response.data;
+      },
+      async () => null,
+      { name: 'Google Geocoding (kandidat)', cooldownPeriodMs: 30000 }
+    );
   }
 
   /**
@@ -820,13 +845,22 @@ export class GeocodingService {
       console.error('[LOCAL GEOCODING ERROR]', e);
     }
 
-    // 3. LLM Fallback: coba resolve via LLM jika gazetteer gagal
+    // 3. Tier kandidat Google (insiden Demak 2026-10-03): nama jalan/kawasan
+    // yang tidak ada di gazetteer (mis. "Jl. Demak") diselesaikan Google, lalu
+    // DIAHKAN oleh gazetteer (kelurahan+kecamatan wajib eksis) dan tetap
+    // berstatus kandidat (isPrecise:false) untuk diverifikasi customer.
+    const googleCandidate = await this.googleResolveCandidate(locationText, cityScope);
+    if (googleCandidate) {
+      return googleCandidate;
+    }
+
+    // 4. LLM Fallback: coba resolve via LLM jika gazetteer gagal
     const llmResult = await this.llmResolveLocation(locationText, cityScope);
     if (llmResult) {
       return llmResult;
     }
 
-    // 4. Return kecamatan-only fallback jika ada (dari match kecamatan tanpa kelurahan)
+    // 5. Return kecamatan-only fallback jika ada (dari match kecamatan tanpa kelurahan)
     if (kecamatanOnlyFallback) {
       return kecamatanOnlyFallback;
     }
@@ -835,6 +869,107 @@ export class GeocodingService {
     return {
       isPrecise: false,
     };
+  }
+
+  /**
+   * Tier kandidat Google (fondasional insiden Demak 2026-10-03).
+   *
+   * Kontrak: Google HANYA memberi kandidat jalan→kelurahan, DIKSAHKAN gazetteer,
+   * dan TIDAK PERNAH dipakai untuk memvonis. Aturan deterministik:
+   *  1. Tanpa API key / key mock → null (fail-closed, degradasi ke tanya netral).
+   *  2. Bias teritori DATA-DRIVEN: user tak sebut kota cakupan → tempel
+   *     ", Surabaya, Jawa Timur, Indonesia" (soft bias) tapi hasilnya
+   *     DILARANG presisi (wajib konfirmasi).
+   *  3. Kota respons di luar cakupan (mis. Kab. Demak Jateng) → tolak.
+   *  4. cityScope user (mis. Surabaya) ≠ kota respons → tolak (anti-kembaran kota,
+   *     tanpa daftar kota hardcode — keputusan dari data gazetteer).
+   *  5. Kelurahan+kecamatan hasil Google WAJIB eksis di gazetteer (otoritas).
+   *  6. partial_match → tetap kandidat (wajib konfirmasi), tidak pernah presisi.
+   */
+  private async googleResolveCandidate(
+    locationText: string,
+    cityScope?: string | null
+  ): Promise<ResolvedLocation | null> {
+    const key = this.apiKey || process.env.GOOGLE_MAPS_API_KEY || '';
+    // Fail-closed: tanpa key/kunci mock → tier mati (bukan mengarang).
+    if (!key || key.startsWith('mock') || key === '<ISI_MANUAL_DI_ENV_JANGAN_HARDCODE>') {
+      return null;
+    }
+    // Offline deterministik (mandat test): tier network hanya boleh berjalan di
+    // test bila axios di-mock penuh DAN opt-in eksplisit. Tanpa opt-in, tidak
+    // ada panggilan network nyata dari unit test.
+    if (process.env.NODE_ENV === 'test' && process.env.GOOGLE_GEOCODE_ALLOW_TEST !== '1') {
+      return null;
+    }
+    const query = (locationText || '').trim();
+    if (query.length < 3) return null;
+
+    const coverageCities = getGazetteerCanonicalCities();
+    const scopeLower = (cityScope || '').toLowerCase();
+    // User TIDAK menyebut kota cakupan → soft-bias ke Surabaya (perilaku kode
+    // lama yang ikut terbuang saat dekomisioning), tapi hasilnya tetap kandidat.
+    const biased = !scopeLower || !coverageCities.some((c) => c.toLowerCase() === scopeLower);
+    const queryText = biased ? `${query}, Surabaya, Jawa Timur, Indonesia` : query;
+
+    try {
+      const url =
+        'https://maps.googleapis.com/maps/api/geocode/json' +
+        `?address=${encodeURIComponent(queryText)}` +
+        '&language=id&region=id&components=country:ID' +
+        `&key=${encodeURIComponent(key)}`;
+      const data: any = await this.googleGeocodeBreaker.execute(url);
+      if (!data || data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
+        return null;
+      }
+
+      const coverageSet = new Set(coverageCities.map((c) => c.toLowerCase()));
+      for (const result of data.results.slice(0, 3)) {
+        const comps: GoogleGeocodeComponent[] = result.address_components || [];
+        const pick = (...types: string[]): string | null => {
+          for (const c of comps) {
+            if (types.some((t) => c.types.includes(t))) return c.long_name;
+          }
+          return null;
+        };
+        // Kota/kabupaten respons (administrative_area_level_2) — penentu luar-cakupan.
+        const resKota = pick('administrative_area_level_2') || pick('locality') || pick('administrative_area_level_1');
+        const resKotaLower = (resKota || '').toLowerCase();
+        if (!resKotaLower) continue;
+        // (3) kota respons di luar cakupan → tolak (mis. Kab. Demak, Jateng).
+        if (!coverageSet.has(resKotaLower)) continue;
+        // (4) scope user eksplisit tak cocok dengan kota respons → tolak.
+        if (cityScope && `${cityScope}`.toLowerCase() !== resKotaLower) continue;
+
+        const kel = pick('administrative_area_level_4', 'sublocality_level_2', 'sublocality', 'neighborhood');
+        const kec = pick('administrative_area_level_3', 'sublocality_level_1');
+        if (!kel || !kec) continue;
+
+        // (5) otoritas gazetteer: kelurahan+kecamatan WAJIB eksis di dataset.
+        // WAJIB isPrecise (kelurahan eksak) — DILARANG menerima fallback
+        // kecamatan-saja, agar kelurahan Google fiktif (mis. "WilayahFiktif" →
+        // "Semampir") tidak lolos sebagai kandidat sah.
+        const authorized = this.crossCheckGazetteer(kel, kec, resKota, resKota, true);
+        if (!authorized || authorized.isPrecise !== true || !authorized.kelurahan) continue;
+
+        // (6) Google tak pernah memvonis: selalu kandidat untuk konfirmasi.
+        return {
+          isPrecise: false,
+          isFuzzyMatch: true,
+          candidateFrom: 'google',
+          kelurahan: authorized.kelurahan,
+          kecamatan: authorized.kecamatan,
+          kota: authorized.kota,
+          lat: authorized.lat,
+          lng: authorized.lng,
+          formattedAddress: authorized.formattedAddress,
+          zipcode: authorized.zipcode,
+        };
+      }
+      return null;
+    } catch (e: any) {
+      console.warn(`[GOOGLE GEOCODE CANDIDATE] gagal resolve "${locationText}": ${e?.message || e}`);
+      return null;
+    }
   }
 
   private mockReverseGeocode(lat: number, lng: number): ResolvedLocation {
@@ -1078,7 +1213,7 @@ OUTPUT JSON:
       console.log(`[LLM GEOCODE] Resolved "${locationText}" → ${JSON.stringify(parsed)}`);
 
       // Cross-check ke gazetteer untuk ambil koordinat
-      const gazetteerResult = this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota, cityScope);
+      const gazetteerResult = this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota, cityScope, false, locationText);
       if (gazetteerResult) {
         gazetteerResult.isLlmResolved = true;
       }
@@ -1097,7 +1232,8 @@ OUTPUT JSON:
     kecamatan?: string | null,
     kota?: string | null,
     cityScope?: string | null,
-    authoritative = false
+    authoritative = false,
+    originalLocationText?: string
   ): ResolvedLocation | null {
     try {
       const data = getGazetteerData();
@@ -1184,7 +1320,30 @@ OUTPUT JSON:
 
       // Fallback: cari berdasarkan kecamatan saja — isPrecise false TANPA koordinat (kontrak tipe)
       if (kecamatan) {
-        const kecLower = kecamatan.toLowerCase();
+        const kecLower = kecamatan.toLowerCase().trim();
+        // Guard anti-halusinasi (insiden Demak 2026-10-03): bila kelurahan inferensi
+        // TIDAK eksis di gazetteer, DILARANG blind-fallback ke kecamatan tebakan LLM
+        // yang tidak pernah disebut customer. Contoh: "Daerah Demak surabaya" →
+        // LLM menebak kelurahan "Demak" + kecamatan "Semampir" (keduanya fiktif dari
+        // input) → tanpa guard, bot mengklaim "area Kecamatan Semampir". Guard hanya
+        // berlaku pada jalur inferensi (authoritative=false), bukan lookup kamus.
+        if (!authoritative && originalLocationText) {
+          const locTokens = originalLocationText
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(Boolean);
+          const kecWords = kecLower.split(/\s+/).filter(Boolean);
+          const allKecWordsMentioned = kecWords.length > 0 && kecWords.every((w) => {
+            if (w.length <= 2) return locTokens.includes(w);
+            return locTokens.includes(w) || locTokens.some((t) => isTypoAtMostOne(t, w));
+          });
+          const kecPhraseMentioned = kecLower.includes(' ')
+            && ` ${locTokens.join(' ')} `.includes(` ${kecLower} `);
+          if (!allKecWordsMentioned && !kecPhraseMentioned) {
+            console.log(`[LLM GEOCODE] Cross-check guard: kelurahan "${kelurahan}" tak ada di gazetteer & kecamatan "${kecamatan}" TIDAK disebut customer di "${originalLocationText}" → tolak halusinasi`);
+            return null;
+          }
+        }
         // Respect cityScope/kota if provided
         const effectiveKota = kota || cityScope;
         let matches = data.filter((d: any) => d.Kecamatan.toLowerCase() === kecLower);

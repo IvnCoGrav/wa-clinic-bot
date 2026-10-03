@@ -1,5 +1,5 @@
 import React from 'react';
-import { GitCompareArrows } from 'lucide-react';
+import { GitCompareArrows, Info, AlertCircle } from 'lucide-react';
 import { MetaPerformanceReport, fmtRupiah, fmtNum } from './types';
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -11,14 +11,24 @@ const CHANNEL_LABEL: Record<string, string> = {
 export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ report }) => {
   const rows = report.channelComparison;
   if (!rows || rows.length === 0) return null;
+  const ctwa = rows.find((r) => r.channel === 'CTWA_NATIVE');
   return (
     <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
       <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
         <GitCompareArrows size={16} className="text-[#008069]" /> Komparasi Kanal (Bawah Funnel)
+        <span title="Berbasis customer: menghitung total kontak/customer unik yang diatribusikan ke iklan." className="text-[#8696a0] cursor-help">
+          <Info size={13} />
+        </span>
       </h3>
       <p className="text-[11px] text-[#8696a0]">
         LP/PageView tidak dapat diatribusikan ke customer (tidak menyimpan nomor WA), sehingga komparasi ini murni pada kanal yang memiliki jejak AdClick.
       </p>
+      {ctwa && ctwa.leads === 0 && (
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+          <AlertCircle size={13} className="text-amber-600 mt-0.5 shrink-0" />
+          CTWA Native bernilai 0 karena seluruh traffic dikirim ke Landing Page (Promo CTA). Iklan Click-to-WhatsApp Native belum diaktifkan.
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -42,7 +52,7 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
                 <td className="py-2.5 px-3 text-right font-mono">{fmtRupiah(r.initialRevenue)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtRupiah(r.aov)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">
-                  {r.meanJourneyDays !== null ? `${r.meanJourneyDays.toFixed(1)} hr` : '-'}
+                  {r.meanJourneyDays !== null ? `${r.meanJourneyDays.toFixed(1)} hari` : '-'}
                 </td>
               </tr>
             ))}

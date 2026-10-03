@@ -73,7 +73,28 @@ export interface MetaPerformanceReport {
     outOfCoverageCount: number;
     topRegions: Array<{ region: string; count: number }>;
     followUpRecovery: { sent: number; byStatus: Record<string, number> };
+    mqlDropOff: {
+      mqlTotal: number;
+      converted: number;
+      dropped: number;
+      outOfCoverage: number;
+      cancelled: number;
+      noReservation: number;
+    };
   };
+  retentionCohorts: Array<{
+    cohort: string;
+    size: number;
+    returned30: number | null;
+    returned60: number | null;
+    returned90: number | null;
+  }>;
+  therapistCapacity: {
+    activeTherapists: number;
+    bookingCount: number;
+    utilizationPct: number | null;
+    band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
+  } | null;
 }
 
 export const fmtRupiah = (v?: number | null): string =>

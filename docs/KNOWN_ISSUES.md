@@ -3,6 +3,78 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 206. [Geocoding] Halusinasi kecamatan "Demak Surabaya" → tier kandidat Google + guard + verifikasi (2026-10-03, EXECUTED)
+
+- **Gejala:** customer 62816331804 kirim "Daerah Demak surabaya" → bot balas
+  "Untuk area Kecamatan **Semampir**..."; follow-up "Daerah Demak Jaya" → bot
+  balas "Kecamatan **Sukomanunggal**...". Dua pesan ditarik admin, sesi ke human.
+- **Root cause (3 lapis):**
+  1. `crossCheckGazetteer` (geocoding.ts) BLIND FALLBACK: kelurahan tebakan LLM
+     ("Demak") tak ada di gazetteer, tapi kode tetap memakai kecamatan tebakan
+     ("Semampir") yang **tidak pernah disebut customer**.
+  2. `resolveArteryCorridor` (landmarks.ts) tak terhubung ke jalur `geocodeText`.
+  3. Kamus gazetteer 560 baris hanya berisi kelurahan/kecamatan — **tidak ada
+     nama jalan**; "Demak" sebagai Jl. Demak (Gundih/Tembok Dukuh, Bubutan)
+     memang tak ada datanya, sedangkan Google memiliki indeks jalan.
+- **Fix fondasional (3 lapis, tanpa hafalan kalimat):**
+  1. **Guard anti-halusinasi** di `crossCheckGazetteer(kelurahan, kecamatan, ...,
+     originalLocationText)`: fallback kecamatan-saja DITOLAK bila kecamatan tidak
+     disebut customer di teks aslinya (token/frasa + toleransi typo). Berlaku HANYA
+     jalur inferensi (`authoritative=false`), bukan lookup kamus.
+  2. **Tier kandidat Google** (`googleResolveCandidate`): Google memberi kandidat
+     jalan→kelurahan, gazetteer MENGESAHKAN (kelurahan+kecamatan wajib eksis),
+     customer yang memutuskan. Bias teritori data-driven (tak sebut kota → tempel
+     "Surabaya, Jawa Timur"); kota respons di luar cakupan (mis. Kab. Demak,
+     Jateng) DITOLAK; `partial_match` tetap kandidat. Fail-closed tanpa API key.
+     Nol dependency baru (`axios` sudah ada) + CircuitBreaker eksisting.
+  3. **Verifikasi customer deterministik** (`confirmFuzzyLocation` + state
+     `session.pendingLocation`): kandidat Google TIDAK PERNAH presisi; bot menanya
+     "Apakah yang Bunda maksud Kel. X, Kec. Y?", afirmasi customer
+     (`isLocationConfirmationAffirmative`, state-gated) mempromosikan kandidat
+     tanpa geocode ulang. Mengaktifkan kembali seam cross-turn `pending_*` yang
+     selama ini idle.
+- **Test:** `tests/unit/demak-geocoding-hallucination.test.ts` (guard) +
+  `tests/unit/google-geocode-tier.test.ts` (kandidat/guard kota/partial/fail-closed/
+  konfirmasi). Regression gate: 4597 passed, `tsc` bersih.
+- **OPEN (tech debt):**
+  - **Key Google global satu untuk semua tenant** (belum ada kolom key per-tenant di
+    `Tenant`) → kuota/biaya berbagi; idealnya per-tenant + UI Settings (butuh migrasi).
+  - Tier network Google hanya aktif bila `GOOGLE_MAPS_API_KEY` diisi (bukan mock);
+    tanpa key sistem degradasi ke tanya netral (fail-closed), bukan mengarang.
+  - `ARTERY_CORRIDORS` masih hardcode-TS (utang lama #2374/#2383) — tidak diperluas
+    untuk Demak karena tier Google menggantikan kebutuhan daftar koridor manual.
+
+## 205. [Dashboard Meta] Audit dashboard performa marketing �?" semua fase dieksekusi (2026-10-03, EXECUTED)
+
+Audit plan bertahap (Fase 1 bugfix / 2 alignment+spend / 3 UTM hygiene / 4 business engine).
+Fase 0 (investigasi prasyarat) + Fase 1, 2.1, 2.2, 3.1, 3.2, 4.1, 4.2, 4.3 DIEKSEKUSI.
+Regression gate: 4589 test passed, `tsc` backend bersih, build dashboard bersih.
+
+- **Fase 1 EXECUTED:** `conversionRates` skala 0-100 (test kunci), label `Omset dari iklan:`,
+  satuan `hari`. (KpiGrid, ChannelTable, service.)
+- **Fase 2.1 EXECUTED:** persistensi biaya iklan di `MetaPerformancePanel` �?" kunci tenant-aware
+  `meta_spend:{tenantId}:{start}_{end}`, tenant dari `report.meta.tenantId` (cache
+  `meta_perf_tenant`), restore saat rentang berubah.
+- **Fase 2.2 EXECUTED:** tooltip definisi (event-based Funnel, customer-based Kanal, order-based
+  Lead Time) + catatan definisi distribusi siklus.
+- **Fase 3.1 EXECUTED:** `sanitizeUtmCampaign`/`sanitizeUtmSource` �?" makro `{{...}}` �+'
+  `(macro UTM belum dirender)` (1 baris), kosong �+' `(tanpa campaign)`, source hanya trim
+  (TIDAK memetakan alias `ig`/`th` �?" butuh tabel mapping per-tenant, belum ada).
+- **Fase 3.2 EXECUTED:** badge peringatan saat CTWA Native = 0 (traffic via Landing Page).
+- **Fase 4.1 EXECUTED (fondasional):** `TherapistUtilizationCard` + `therapistCapacity` di service.
+  Kapasitas = `Staff.count({ active: true })` x jumlah hari (DB-driven, sejalan KB-3
+  `reservation-core.service.ts:139,196`), BUKAN asumsi `3 terapis x 4 slot` di plan.
+  OPEN: ambang pita utilisasi 65/85% masih **provisional** (konvensi industri) �?" butuh kalibrasi ADR;
+  utilisasi = booking/hari-terapis (bukan okupansi jam; belum ada tabel slot/jam terstruktur).
+- **Fase 4.2 EXECUTED (state-derived):** `mqlDropOff` diturunkan dari STATE/DB nyata
+  (converted/cancelled/outOfCoverage/noReservation), BUKAN parsing teks chat. OPEN: alasan halus
+  (mis. `HARGA_ONGKIR`, `JADWAL_PENUH`) TIDAK diturunkan karena schema tidak punya field alasan
+  pembatalan/capacity-exceeded yang dipersist �?" butuh taksonomi DB bila diinginkan (dilarang tebak teks).
+- **Fase 4.3 EXECUTED:** `CohortRetentionTable` + `retentionCohorts` (repeat 30/60/90 hari sejak
+  first-ever, kalender WIB; `null` bila jendela belum matang agar tidak menyesatkan).
+  Pembedaan newborn/kids sengaja TIDAK dipaksakan di kohort (butuh join `Child` per customer, di luar
+  scope agregat ini).
+
 ## 204. [Tool Masking/Burst/QoS] Double-ongkir Velicia — guard anti-redundansi lokasi (2026-10-03, EXECUTED)
 
 - **Gejala:** customer Velicia lovitasari (628980297189) mengirim alamat 2 bubble

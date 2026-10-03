@@ -9,6 +9,8 @@ import { FunnelBars } from './FunnelBars';
 import { ChannelTable } from './ChannelTable';
 import { CampaignTable } from './CampaignTable';
 import { LeakageGrid } from './LeakageGrid';
+import { TherapistUtilizationCard } from './TherapistUtilizationCard';
+import { CohortRetentionTable } from './CohortRetentionTable';
 
 const JourneyHistogram = React.lazy(() => import('./JourneyHistogram'));
 
@@ -16,6 +18,10 @@ interface Props {
   startDate: string;
   endDate: string;
 }
+
+const TENANT_STORAGE_KEY = 'meta_perf_tenant';
+const spendKey = (tenant: string, startDate: string, endDate: string) =>
+  `meta_spend:${tenant}:${startDate}_${endDate}`;
 
 /**
  * Panel Performa Iklan & Penjualan (Tab performance). Logika kalkulasi berada di
@@ -26,6 +32,15 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
   const [report, setReport] = useState<MetaPerformanceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [spendInput, setSpendInput] = useState('');
+  // Tenant hanya diketahui setelah load pertama (dari report.meta.tenantId);
+  // cache di localStorage agar kunci biaya iklan tenant-aware & bertahan reload.
+  const [tenant, setTenant] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(TENANT_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
 
   const load = useCallback(
     async (spend: string) => {
@@ -38,8 +53,17 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           endDate,
           spend: valid ? parsed : undefined,
         });
-        if (res?.success && res.data) setReport(res.data as MetaPerformanceReport);
-        else toast('Gagal memuat laporan performa iklan.', 'error');
+        if (res?.success && res.data) {
+          const data = res.data as MetaPerformanceReport;
+          setReport(data);
+          const tid = data.meta?.tenantId;
+          if (tid) {
+            setTenant(tid);
+            try {
+              localStorage.setItem(TENANT_STORAGE_KEY, tid);
+            } catch {}
+          }
+        } else toast('Gagal memuat laporan performa iklan.', 'error');
       } catch (err: any) {
         toast(`Gagal memuat performa iklan: ${err.message}`, 'error');
       } finally {
@@ -48,6 +72,25 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
     },
     [startDate, endDate],
   );
+
+  // Pulihkan biaya iklan tersimpan saat tenant/rentang berubah (tanpa menimpa ketikan).
+  useEffect(() => {
+    if (!tenant) return;
+    try {
+      const saved = localStorage.getItem(spendKey(tenant, startDate, endDate));
+      setSpendInput(saved ?? '');
+    } catch {}
+  }, [tenant, startDate, endDate]);
+
+  // Simpan biaya iklan per tenant+rentang.
+  useEffect(() => {
+    if (!tenant) return;
+    try {
+      const key = spendKey(tenant, startDate, endDate);
+      if (spendInput.trim() === '') localStorage.removeItem(key);
+      else localStorage.setItem(key, spendInput);
+    } catch {}
+  }, [tenant, startDate, endDate, spendInput]);
 
   useEffect(() => {
     const t = setTimeout(() => load(spendInput), spendInput === '' ? 0 : 400);
@@ -94,6 +137,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       ) : report ? (
         <>
           <KpiGrid report={report} />
+          <TherapistUtilizationCard report={report} />
           <FunnelBars report={report} />
           <ChannelTable report={report} />
           <Suspense
@@ -106,6 +150,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
             <JourneyHistogram report={report} />
           </Suspense>
           <CampaignTable report={report} />
+          <CohortRetentionTable report={report} />
           <LeakageGrid report={report} />
         </>
       ) : (

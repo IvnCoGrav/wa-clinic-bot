@@ -83,6 +83,31 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
             ))}
           </p>
         </div>
+
+        {d.mqlDropOff && d.mqlDropOff.mqlTotal > 0 && (
+          <div className="border-t border-[#f0f2f5] pt-3 space-y-2">
+            <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+              <MessageSquareWarning size={16} className="text-[#008069]" /> Alasan Gagal Closing (MQL)
+            </h3>
+            <p className="text-[11px] text-[#8696a0]">
+              {fmtNum(d.mqlDropOff.dropped)} dari {fmtNum(d.mqlDropOff.mqlTotal)} MQL belum closing. Diklasifikasikan dari state/DB
+              (bukan tebakan teks chat).
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {([
+                ['Sudah Closing', d.mqlDropOff.converted, 'text-[#008069]'],
+                ['Tanpa Reservasi', d.mqlDropOff.noReservation, 'text-[#111b21]'],
+                ['Batal', d.mqlDropOff.cancelled, 'text-amber-700'],
+                ['Di Luar Area', d.mqlDropOff.outOfCoverage, 'text-rose-600'],
+              ] as const).map(([label, val, cls]) => (
+                <div key={label} className="flex items-center justify-between rounded-lg border border-[#e9edef] bg-[#f8fafc] px-2.5 py-1.5 text-[11px]">
+                  <span className="text-[#5b6b73]">{label}</span>
+                  <span className={`font-mono font-bold ${cls}`}>{fmtNum(val)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

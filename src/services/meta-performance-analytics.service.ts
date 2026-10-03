@@ -150,7 +150,37 @@ export interface MetaPerformanceReport {
     outOfCoverageCount: number;
     topRegions: Array<{ region: string; count: number }>;
     followUpRecovery: { sent: number; byStatus: Record<string, number> };
+    /**
+     * Drop-off MQL diturunkan dari STATE/DB nyata (bukan parsing teks chat):
+     * pembelian terdeteksi = punya reservasi qualifying; `outOfCoverage` &
+     * `cancelled` dari flag/status DB; sisanya `noReservation`.
+     * Alasan halus (mis. "harga ongkir") TIDAK diturunkan karena butuh field alasan
+     * pembatalan yang belum ada di schema (lihat KNOWN_ISSUES #205).
+     */
+    mqlDropOff: {
+      mqlTotal: number;
+      converted: number;
+      dropped: number;
+      outOfCoverage: number;
+      cancelled: number;
+      noReservation: number;
+    };
   };
+  /** Kohort retensi repeat order pasien iklan (minggu anchor = first-ever). */
+  retentionCohorts: Array<{
+    cohort: string;
+    size: number;
+    returned30: number | null;
+    returned60: number | null;
+    returned90: number | null;
+  }>;
+  /** Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif per hari). */
+  therapistCapacity: {
+    activeTherapists: number;
+    bookingCount: number;
+    utilizationPct: number | null;
+    band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
+  } | null;
 }
 
 // ── Helper teknis ───────────────────────────────────────────────────────────
@@ -189,6 +219,45 @@ function isSandboxed(customer: any): boolean {
 function isQualifyingStatus(status: string | null | undefined): boolean {
   const s = (status || '').toLowerCase();
   return s !== 'cancelled' && s !== 'rejected';
+}
+
+// ── Sanitasi teknis label UTM ───────────────────────────────────────────────
+// Murni pembersihan mesin (bukan pemetaan alias merek — itu wewenang DB/config
+// per-tenant). Cegah makro Meta yang belum ter-render (`{{ad.id}}`) bocor mentah
+// ke dashboard dan pecah menjadi banyak baris.
+const UTM_MACRO_RE = /\{\{[^}]*\}\}/;
+function isUnrenderedUtmMacro(raw: string | null | undefined): boolean {
+  return typeof raw === 'string' && UTM_MACRO_RE.test(raw);
+}
+function sanitizeUtmCampaign(raw: string | null | undefined): string {
+  const t = (raw ?? '').trim();
+  if (!t) return '(tanpa campaign)';
+  return isUnrenderedUtmMacro(t) ? '(macro UTM belum dirender)' : t;
+}
+function sanitizeUtmSource(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t || isUnrenderedUtmMacro(t)) return null;
+  return t;
+}
+
+// ── Kohort retensi & kapasitas ──────────────────────────────────────────────
+const RETENTION_WINDOWS_DAYS = [30, 60, 90] as const;
+
+/** Kunci tanggal kalender WIB (YYYY-MM-DD) untuk Date apa pun. */
+function wibDateKey(date: Date): string {
+  return new Date(date.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * Pita utilisasi terapis. Ambang 65/85 adalah konvensi kapasitas industri
+ * (headroom aman untuk scale iklan) — BUKAN data bisnis hardcode yang
+ * disembunyikan; ditandai provisional untuk kalibrasi ADR.
+ */
+function capacityBandFor(utilizationPct: number | null): 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN' {
+  if (utilizationPct === null || !Number.isFinite(utilizationPct)) return 'UNKNOWN';
+  if (utilizationPct < 65) return 'AMAN';
+  if (utilizationPct <= 85) return 'OPTIMAL';
+  return 'PENUH';
 }
 
 const JOURNEY_BRACKETS: Array<{ key: string; label: string; test: (d: number) => boolean }> = [
@@ -269,7 +338,10 @@ export function buildZeroMetaPerformanceReport(
       outOfCoverageCount: 0,
       topRegions: [],
       followUpRecovery: { sent: 0, byStatus: {} },
+      mqlDropOff: { mqlTotal: 0, converted: 0, dropped: 0, outOfCoverage: 0, cancelled: 0, noReservation: 0 },
     },
+    retentionCohorts: [],
+    therapistCapacity: null,
   };
 }
 
@@ -337,7 +409,7 @@ export async function getMetaPerformanceReport(
           where: { tenant_id: tenantId, created_at: { gte: start, lte: end } },
           select: {
             id: true, customer_id: true, created_at: true, booking_date: true, status: true, purchase_value: true,
-            treatment_detail: true, treatment_category: true, delivery_fee: true,
+            treatment_detail: true, treatment_category: true, delivery_fee: true, assigned_staff_id: true,
             customer: { select: { id: true, created_at: true, ongkir: true, is_mql: true, mql_triggered_at: true, is_sandbox_test: true, is_internal_staff: true, kecamatan: true, kota: true, is_out_of_coverage: true } },
           },
           orderBy: { created_at: 'asc' },
@@ -468,8 +540,9 @@ export async function getMetaPerformanceReport(
   const campaignAgg = new Map<string, { source: string | null; clicks: number; chats: number }>();
 
   for (const a of rangeClicks) {
-    const key = a.utmCampaign || '(tanpa campaign)';
-    const entry = campaignAgg.get(key) || { source: a.utmSource || a.utmMedium || null, clicks: 0, chats: 0 };
+    const key = sanitizeUtmCampaign(a.utmCampaign);
+    const src = sanitizeUtmSource(a.utmSource) ?? sanitizeUtmSource(a.utmMedium);
+    const entry = campaignAgg.get(key) || { source: src, clicks: 0, chats: 0 };
     entry.clicks += 1;
     if (a.matchedAt) entry.chats += 1;
     campaignAgg.set(key, entry);
@@ -489,7 +562,7 @@ export async function getMetaPerformanceReport(
   for (const customerId of cohortCustomerIds) {
     const ad = earliestAdByCustomer.get(customerId);
     const ch = ad ? channelOf(ad) : 'PROMO_CTA';
-    const camp = ad?.utmCampaign || '(tanpa campaign)';
+    const camp = sanitizeUtmCampaign(ad?.utmCampaign);
     const cust = customerMap.get(customerId);
 
     const ce = channelAgg.get(ch) || { leads: new Set<string>(), mql: 0, buyers: 0, initialRevenue: 0, journey: [] as number[] };
@@ -667,19 +740,132 @@ export async function getMetaPerformanceReport(
     if (st === 'SENT') followUpSent += 1;
   }
 
+  // Skala persen 0-100 (konsisten dengan adRevenueSharePct & fmtPct di dashboard).
   const conversionRates = {
-    lpToClick: safeDiv(totalClicks, pageViews),
-    clickToChat: safeDiv(matchedChats, totalClicks),
-    chatToMql: safeDiv(mqlLeads, matchedChats),
-    mqlToBuyer: safeDiv(newCustomers, mqlLeads),
+    lpToClick: pageViews > 0 ? round2((totalClicks / pageViews) * 100) : 0,
+    clickToChat: totalClicks > 0 ? round2((matchedChats / totalClicks) * 100) : 0,
+    chatToMql: matchedChats > 0 ? round2((mqlLeads / matchedChats) * 100) : 0,
+    mqlToBuyer: mqlLeads > 0 ? round2((newCustomers / mqlLeads) * 100) : 0,
   };
 
+  // ── Kohort retensi repeat order (window 30/60/90 hari sejak anchor) ────────
+  // `returnedN` = null bila jendela belum matang (anchor terlalu dekat dgn `now`)
+  // agar UI tidak menampilkan 0% menyesatkan. Return memakai tanggal kalender WIB.
+  const nowMs = Date.now();
+  const retentionCustomerIds = new Set<string>([...cohortCustomerIds, ...customerMap.keys()]);
+  const todayKey = wibDateKey(new Date(nowMs));
+  const retentionResByCustomer = new Map<string, any[]>();
+  for (const r of [...historyReservations, ...rangeReservations]) {
+    if (!r.customer_id || !retentionCustomerIds.has(r.customer_id)) continue;
+    const arr = retentionResByCustomer.get(r.customer_id) || [];
+    arr.push(r);
+    retentionResByCustomer.set(r.customer_id, arr);
+  }
+  const retentionAgg = new Map<string, { size: number; r30: number; r60: number; r90: number }>();
+  for (const [customerId, anchorRow] of firstEverByCustomer) {
+    const anchorKey = wibDateKey(new Date(anchorRow.created_at));
+    const anchorDayMs = Date.parse(`${anchorKey}T00:00:00Z`);
+    const bucket = retentionAgg.get(anchorKey) || { size: 0, r30: 0, r60: 0, r90: 0 };
+    bucket.size += 1;
+    for (const r of retentionResByCustomer.get(customerId) || []) {
+      if (!isQualifying(r)) continue;
+      const ordKey = wibDateKey(new Date(r.created_at));
+      if (ordKey <= anchorKey) continue; // repeat = SETELAH anchor (WIB)
+      const delta = Math.round((Date.parse(`${ordKey}T00:00:00Z`) - anchorDayMs) / MS_PER_DAY);
+      if (delta <= 30) bucket.r30 += 1;
+      if (delta <= 60) bucket.r60 += 1;
+      if (delta <= 90) bucket.r90 += 1;
+    }
+    retentionAgg.set(anchorKey, bucket);
+  }
+  const maturity = (window: number) => {
+    const cutoff = wibDateKey(new Date(nowMs - window * MS_PER_DAY));
+    return { mature: (k: string) => k <= cutoff, todayKey };
+  };
+  const m30 = maturity(30);
+  const m60 = maturity(60);
+  const m90 = maturity(90);
+  const retentionCohorts = Array.from(retentionAgg.entries())
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([cohort, v]) => ({
+      cohort,
+      size: v.size,
+      returned30: m30.mature(cohort) ? v.r30 : null,
+      returned60: m60.mature(cohort) ? v.r60 : null,
+      returned90: m90.mature(cohort) ? v.r90 : null,
+    }));
+
+  // ── Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif/hari) ─────
+  let therapistCapacity: MetaPerformanceReport['therapistCapacity'] = null;
+  let activeTherapists: number | null = null;
+  try {
+    const staffModel = (prisma as any).staff;
+    if (staffModel && typeof staffModel.count === 'function') {
+      const n = await staffModel.count({ where: { tenant_id: tenantId, active: true } });
+      if (typeof n === 'number') activeTherapists = n;
+    }
+  } catch {
+    // Enrichment opsional — DB offline → kapasitas tidak ditampilkan (bukan error kritis).
+    activeTherapists = null;
+  }
+  const rangeDayKeys = new Set<string>();
+  for (let t = start.getTime(); t <= end.getTime(); t += MS_PER_DAY) {
+    rangeDayKeys.add(wibDateKey(new Date(t)));
+  }
+  const bookingCount = rangeReservations.filter(
+    (r) => isQualifying(r) && r.booking_date && rangeDayKeys.has(wibDateKey(new Date(r.booking_date))),
+  ).length;
+  if (activeTherapists !== null) {
+    const capacity = activeTherapists * rangeDayKeys.size;
+    const utilizationPct = capacity > 0 ? round2((bookingCount / capacity) * 100) : null;
+    therapistCapacity = {
+      activeTherapists,
+      bookingCount,
+      utilizationPct,
+      band: capacityBandFor(utilizationPct),
+    };
+  }
   const coverageNote = pageViews === 0 && totalClicks > 0
     ? 'Belum ada PageView terinstrumentasi pada rentang ini (LP belum pasang tracker/beacon). Klik CTA = superset.'
     : pageViews > 0 && totalClicks > pageViews
       ? 'CTR parsial — sebagian klik dari link langsung / LP tanpa tracker (coverage gap).'
       : 'PageView = LP terinstrumentasi (subset); Klik CTA = superset (termasuk direct/cta). Data sebelum beacon tidak di-backfill.';
   const ctrNote = pageViews > 0 && totalClicks > pageViews ? 'CTR parsial (klik > view).' : undefined;
+
+  // ── Drop-off MQL (state/DB-derived) ────────────────────────────────────────
+  const allQualifyingResByCustomer = new Map<string, any[]>();
+  for (const r of [...historyReservations, ...rangeReservations]) {
+    if (!r.customer_id) continue;
+    const arr = allQualifyingResByCustomer.get(r.customer_id) || [];
+    arr.push(r);
+    allQualifyingResByCustomer.set(r.customer_id, arr);
+  }
+  const mqlCustomerIds = new Set<string>();
+  for (const c of cohortCustomers) if (c.is_mql) mqlCustomerIds.add(c.id);
+  for (const a of matchedAds) {
+    const c = customerMap.get(a.customerId);
+    if (a.customerId && c?.is_mql) mqlCustomerIds.add(a.customerId);
+  }
+  let converted = 0;
+  let outOfCoverage = 0;
+  let cancelled = 0;
+  let noReservation = 0;
+  for (const cid of mqlCustomerIds) {
+    const res = (allQualifyingResByCustomer.get(cid) || []).filter((r) => !isSandboxed(r.customer));
+    if (res.some((r) => isQualifyingStatus(r.status))) converted += 1;
+    else if (res.some((r) => String(r.status).toLowerCase() === 'cancelled')) cancelled += 1;
+    else if (customerMap.get(cid)?.is_out_of_coverage) outOfCoverage += 1;
+    else noReservation += 1;
+  }
+  const mqlTotal = mqlCustomerIds.size;
+  const mqlDropOff = {
+    mqlTotal,
+    converted,
+    dropped: mqlTotal - converted,
+    outOfCoverage,
+    cancelled,
+    noReservation,
+  };
 
   const report: MetaPerformanceReport = {
     meta: {
@@ -723,7 +909,10 @@ export async function getMetaPerformanceReport(
       outOfCoverageCount,
       topRegions,
       followUpRecovery: { sent: followUpSent, byStatus: followUpByStatus },
+      mqlDropOff,
     },
+    retentionCohorts,
+    therapistCapacity,
   };
 
   if (errors.length === 0) {
@@ -733,4 +922,4 @@ export async function getMetaPerformanceReport(
 }
 
 /** Ekspor helper murni untuk pengujian unit (tanpa DB). */
-export const _internal = { wibDayStart, wibDayEnd, median, mean, safeDiv, safeDivOrUndef, JOURNEY_BRACKETS, LEADTIME_BRACKETS };
+export const _internal = { wibDayStart, wibDayEnd, median, mean, safeDiv, safeDivOrUndef, sanitizeUtmCampaign, sanitizeUtmSource, JOURNEY_BRACKETS, LEADTIME_BRACKETS };

@@ -45,7 +45,7 @@ export const KpiGrid: React.FC<{ report: MetaPerformanceReport }> = ({ report })
       <Card
         label="Omset Repeat (LTV)"
         value={fmtRupiah(k.repeatRevenue)}
-        sub={`Total iklan ${fmtRupiah(k.totalAdRevenue)}`}
+        sub={`Omset dari iklan: ${fmtRupiah(k.totalAdRevenue)}`}
         icon={<Repeat size={15} />}
       />
       <Card
@@ -57,7 +57,7 @@ export const KpiGrid: React.FC<{ report: MetaPerformanceReport }> = ({ report })
       <Card label="Total Omset Klinik" value={fmtRupiah(k.totalClinicRevenue)} sub={`Iklan ${fmtRupiah(k.totalAdRevenue)}`} icon={<Wallet size={15} />} />
       <Card
         label="Journey Konversi"
-        value={j.medianDays !== null ? `${j.medianDays} hr` : '-'}
+        value={j.medianDays !== null ? `${j.medianDays} hari` : '-'}
         sub={j.meanDays !== null ? `rata-rata ${j.meanDays.toFixed(1)} hari` : 'belum ada data'}
         icon={<Timer size={15} />}
       />

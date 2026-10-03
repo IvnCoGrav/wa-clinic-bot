@@ -34,6 +34,7 @@ function install(fx: {
   conversations?: any[];
   followUps?: any[];
   pageViews?: number;
+  staffCount?: number;
 }) {
   const byTenant = (arr: any[], where: any) =>
     (arr || []).filter((r) => !where?.tenant_id || r.tenant_id === where.tenant_id);
@@ -47,6 +48,9 @@ function install(fx: {
   });
   (prisma.customer.findMany as any).mockImplementation((args: any) =>
     Promise.resolve(byTenant(fx.customers || [], args?.where)),
+  );
+  (prisma.staff.count as any).mockImplementation(() =>
+    fx.staffCount === undefined ? Promise.reject(new Error('Database offline')) : Promise.resolve(fx.staffCount),
   );
   (prisma as any).conversation = { findMany: vi.fn(() => Promise.resolve(fx.conversations || [])) };
   (prisma as any).followUp = { findMany: vi.fn(() => Promise.resolve(fx.followUps || [])) };
@@ -136,6 +140,19 @@ describe('meta-performance-analytics: CAC/LTV kanonis', () => {
     expect(noSpend.kpiSummary.initialRoas).toBeUndefined();
   });
 
+  it('mengembalikan conversionRates dalam skala persen 0-100 (bukan rasio 0-1)', async () => {
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    // pageViews 100, totalClicks 4, matchedChats 3, mqlLeads 1, newCustomers 2
+    expect(r.funnel.conversionRates.lpToClick).toBe(4);
+    expect(r.funnel.conversionRates.clickToChat).toBe(75);
+    expect(r.funnel.conversionRates.chatToMql).toBe(33.33);
+    expect(r.funnel.conversionRates.mqlToBuyer).toBe(200);
+    for (const v of Object.values(r.funnel.conversionRates)) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(v)).toBe(true);
+    }
+  });
+
   it('memetakan kanal CTWA_NATIVE vs PROMO_CTA berdasarkan ctwa_clid', async () => {
     const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
     const native = r.channelComparison.find((c) => c.channel === 'CTWA_NATIVE')!;
@@ -167,6 +184,169 @@ describe('meta-performance-analytics: CAC/LTV kanonis', () => {
     expect(campA.initialRevenue).toBe(200000);
     expect(r.leakageDiagnostics.followUpRecovery.sent).toBe(1);
     expect(r.leakageDiagnostics.followUpRecovery.byStatus.FAILED).toBe(1);
+  });
+});
+
+describe('meta-performance-analytics: sanitasi UTM teknis', () => {
+  const click = (over: Record<string, unknown>) => ({
+    tenant_id: T,
+    customerId: null,
+    matchedAt: null,
+    ctwa_clid: null,
+    utmCampaign: null,
+    utmSource: null,
+    utmMedium: null,
+    createdAt: '2026-08-04T02:00:00.000Z',
+    ...over,
+  });
+
+  beforeEach(() => {
+    install({
+      rangeClicks: [
+        click({ utmCampaign: '{{ad.id}}', utmSource: '{{site_source_name}}' }),
+        click({ utmCampaign: '{{adset.id}}', utmSource: '{{site_source_name}}' }),
+        click({ utmCampaign: '   ', utmSource: '' }),
+        click({ utmCampaign: 'promo-agustus', utmSource: '  meta  ' }),
+        click({ utmCampaign: 'promo-juli', utmSource: 'ig' }),
+      ],
+      matchedAds: [],
+      rangeReservations: [],
+      historyReservations: [],
+      customers: [],
+    });
+  });
+
+  it('tidak meloloskan label makro {{...}} mentah & menggabungkan makro jadi satu baris', async () => {
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    expect(r.campaignBreakdown.every((c) => !c.utmCampaign.includes('{{'))).toBe(true);
+    const macroRows = r.campaignBreakdown.filter((c) => c.utmCampaign.includes('macro'));
+    expect(macroRows.length).toBe(1);
+    expect(macroRows[0].clicks).toBe(2);
+    expect(macroRows[0].source).toBeNull();
+  });
+
+  it('menggabungkan campaign kosong ke (tanpa campaign)', async () => {
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    const empty = r.campaignBreakdown.find((c) => c.utmCampaign === '(tanpa campaign)')!;
+    expect(empty.clicks).toBe(1);
+    expect(empty.source).toBeNull();
+  });
+
+  it('hanya trim source (tanpa memetakan alias ke merek)', async () => {
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    expect(r.campaignBreakdown.find((c) => c.utmCampaign === 'promo-agustus')!.source).toBe('meta');
+    // 'ig' dipertahankan apa adanya — bukan diubah menjadi 'Instagram' oleh kode.
+    expect(r.campaignBreakdown.find((c) => c.utmCampaign === 'promo-juli')!.source).toBe('ig');
+  });
+});
+
+describe('meta-performance-analytics: retensi & kapasitas', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const mkRes = (id: string, cid: string, createdAt: string, bookingDate: string | null, customer: any) => ({
+    id,
+    tenant_id: T,
+    customer_id: cid,
+    created_at: createdAt,
+    booking_date: bookingDate,
+    status: 'confirmed',
+    purchase_value: 100000,
+    treatment_detail: 'Pijat Bayi',
+    treatment_category: 'BABY',
+    delivery_fee: 0,
+    assigned_staff_id: null,
+    customer,
+  });
+  const mkAd = (cid: string, at: string, customer: any) => ({
+    tenant_id: T, customerId: cid, matchedAt: at, ctwa_clid: 'x', utmCampaign: 'c', utmSource: 'meta', utmMedium: 'ctwa', createdAt: at, customer,
+  });
+
+  it('menghitung kohort retensi 30/60/90 hari & null saat jendela belum matang', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-15T00:00:00.000Z'));
+    const cNew = cust('new', T, { created_at: '2026-08-01T01:00:00.000Z' });
+    const cLate = cust('late', T, { created_at: '2026-09-20T01:00:00.000Z' });
+    const history = [
+      mkRes('n0', 'new', '2026-08-01T05:00:00.000Z', null, cNew),
+      mkRes('n1', 'new', '2026-08-10T05:00:00.000Z', null, cNew),
+      mkRes('n2', 'new', '2026-09-25T05:00:00.000Z', null, cNew),
+      mkRes('l0', 'late', '2026-09-20T05:00:00.000Z', null, cLate),
+      mkRes('l1', 'late', '2026-09-25T05:00:00.000Z', null, cLate),
+    ];
+    install({
+      rangeClicks: [mkAd('new', '2026-08-01T02:00:00.000Z', cNew), mkAd('late', '2026-09-20T02:00:00.000Z', cLate)],
+      matchedAds: [mkAd('new', '2026-08-01T02:00:00.000Z', cNew), mkAd('late', '2026-09-20T02:00:00.000Z', cLate)],
+      rangeReservations: [],
+      historyReservations: history,
+      customers: [cNew, cLate],
+    });
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+
+    const aug = r.retentionCohorts.find((c) => c.cohort === '2026-08-01')!;
+    expect(aug.size).toBe(1);
+    expect(aug.returned30).toBe(1);
+    expect(aug.returned60).toBe(2);
+    // Jendela 90 hari dari 1 Agu baru matang 30 Okt; per 15 Okt → belum matang.
+    expect(aug.returned90).toBeNull();
+
+    const sep = r.retentionCohorts.find((c) => c.cohort === '2026-09-20')!;
+    expect(sep.size).toBe(1);
+    expect(sep.returned30).toBeNull();
+    expect(sep.returned60).toBeNull();
+    expect(sep.returned90).toBeNull();
+  });
+
+  it('menghitung utilisasi terapis dari jumlah Staff aktif (DB-driven, bukan konstanta)', async () => {
+    const c = cust('a', T);
+    install({
+      rangeClicks: [],
+      matchedAds: [],
+      rangeReservations: [mkRes('r1', 'a', '2026-08-02T03:00:00.000Z', '2026-08-05T03:00:00.000Z', c)],
+      historyReservations: [mkRes('r1', 'a', '2026-08-02T03:00:00.000Z', null, c)],
+      customers: [c],
+      staffCount: 3,
+    });
+    const r = await getMetaPerformanceReport({ tenantId: T, startDate: '2026-08-01', endDate: '2026-08-10' });
+    expect(r.therapistCapacity).not.toBeNull();
+    expect(r.therapistCapacity!.activeTherapists).toBe(3);
+    expect(r.therapistCapacity!.bookingCount).toBe(1);
+    expect(r.therapistCapacity!.utilizationPct).toBe(3.33); // 1 / (3 * 10 hari)
+    expect(r.therapistCapacity!.band).toBe('AMAN');
+  });
+
+  it('therapistCapacity null saat DB offline (enrichment opsional, tanpa throw)', async () => {
+    install({ rangeClicks: [], matchedAds: [], rangeReservations: [], historyReservations: [], customers: [] });
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    expect(r.therapistCapacity).toBeNull();
+  });
+
+  it('menurunkan drop-off MQL dari state (converted/cancelled/outOfCoverage/noReservation)', async () => {
+    const cConv = cust('conv', T, { is_mql: true });
+    const cNo = cust('nores', T, { is_mql: true });
+    const cCancel = cust('cancel', T, { is_mql: true });
+    const cOoc = cust('ooc', T, { is_mql: true, is_out_of_coverage: true });
+    const ads = [cConv, cNo, cCancel, cOoc].map((c) => mkAd(c.id, '2026-08-02T02:00:00.000Z', c));
+    const rows = [
+      mkRes('rc', 'conv', '2026-08-03T03:00:00.000Z', null, cConv),
+      { ...mkRes('rx', 'cancel', '2026-08-03T03:00:00.000Z', null, cCancel), status: 'cancelled' },
+    ];
+    install({
+      rangeClicks: ads,
+      matchedAds: ads,
+      rangeReservations: rows,
+      historyReservations: rows,
+      customers: [cConv, cNo, cCancel, cOoc],
+    });
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    const d = r.leakageDiagnostics.mqlDropOff;
+    expect(d.mqlTotal).toBe(4);
+    expect(d.converted).toBe(1);
+    expect(d.cancelled).toBe(1);
+    expect(d.outOfCoverage).toBe(1);
+    expect(d.noReservation).toBe(1);
+    expect(d.dropped).toBe(3);
   });
 });
 

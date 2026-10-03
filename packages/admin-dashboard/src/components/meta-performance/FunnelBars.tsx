@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, MousePointerClick, MessageSquare, Target, Users } from 'lucide-react';
+import { Eye, MousePointerClick, MessageSquare, Target, Users, Info } from 'lucide-react';
 import { MetaPerformanceReport, fmtNum, fmtPct } from './types';
 
 interface Stage {
@@ -33,6 +33,9 @@ export const FunnelBars: React.FC<{ report: MetaPerformanceReport }> = ({ report
     <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-4">
       <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
         <Target size={16} className="text-[#008069]" /> Corong Konversi Iklan
+        <span title="Berbasis event: menghitung interaksi klik & chat masuk pada rentang ini." className="text-[#8696a0] cursor-help">
+          <Info size={13} />
+        </span>
       </h3>
       <div className="space-y-2.5">
         {stages.map((s) => (

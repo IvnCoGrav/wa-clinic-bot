@@ -1,4 +1,5 @@
 import { geocodingService, hasStreetAddressDetail } from '../../integrations/google-maps/geocoding';
+import type { ResolvedLocation } from '../../integrations/google-maps/geocoding';
 import { getGazetteerCoordinates } from '../../utils/gazetteer';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
@@ -6,6 +7,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { getCoverageCities, getInsideRegions, getOutsideCities } from '../../config/coverage';
 import { TEMPLATES } from '../../config/persona';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../../utils/google-maps-url-resolver';
+import { isLocationConfirmationAffirmative } from '../state/location-helpers';
 
 export interface CartSnapshotItem {
   name: string;
@@ -42,6 +44,22 @@ export interface CalculateDeliveryInput {
    * output HANYA konfirmasi jangkauan (tanpa nominal) agar LLM tak membocorkan.
    */
   asksDeliveryFee?: boolean;
+  /**
+   * Kandidat lokasi Google yang MENUNGGU verifikasi customer (insiden Demak
+   * 2026-10-03). Bila diisi + pesan customer afirmatif → promosikan kandidat
+   * menjadi lokasi presisi tanpa geocode ulang. Bila pesan negatif/lokasi baru
+   * → kandidat dibuang dan alur normal berjalan. Decision dari STATE, bukan
+   * pencocokan kalimat.
+   */
+  pendingLocation?: {
+    kelurahan?: string;
+    kecamatan?: string;
+    kota?: string;
+    lat?: number;
+    lng?: number;
+  };
+  /** Teks pesan user turn ini (untuk evaluasi afirmasi kandidat lokasi). */
+  incomingText?: string;
 }
 
 export interface ScheduleCtaOptions {
@@ -175,6 +193,19 @@ export interface CalculateDeliveryOutput {
   __internalOngkirPromo?: number;
   /** Internal-only: jarak km asli bila disembunyikan dari payload LLM. */
   __internalDistanceKm?: number;
+  /**
+   * Internal-only: kandidat lokasi Google yang menunggu verifikasi customer
+   * (insiden Demak 2026-10-03). Dibaca tool-pipeline untuk menulis
+   * `session.pendingLocation`, lalu di-STRIP dari payload LLM (prefix
+   * `__internal`) agar model tak menganggapnya lokasi final.
+   */
+  __internalPendingLocation?: {
+    kelurahan?: string;
+    kecamatan?: string;
+    kota?: string;
+    lat?: number;
+    lng?: number;
+  };
 }
 
 /**
@@ -506,12 +537,64 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
   }
 
   try {
-    let resolved = await geocodingService.geocodeText(compositeQuery);
-    
-    if (!resolved.isPrecise && compositeQuery !== locationText) {
-      const locResolved = await geocodingService.geocodeText(locationText);
-      if (locResolved.isPrecise) {
-        resolved = locResolved;
+    // Verifikasi kandidat lokasi Google (insiden Demak 2026-10-03): bila turn
+    // sebelumnya menitipkan kandidat (session.pendingLocation) dan pesan
+    // customer turn ini AFIRMATIF ("iya/ya betul"), promosikan kandidat menjadi
+    // lokasi presisi TANPA geocode ulang. State-gated (bukan pola kalimat):
+    // kandidat yang negatif/kosong → dibuang, alur normal (geocode) berjalan.
+    const pendingLoc = input.pendingLocation;
+    let resolved: ResolvedLocation;
+    const pendingAffirmed = Boolean(
+      pendingLoc?.kelurahan &&
+      isLocationConfirmationAffirmative(input.incomingText)
+    );
+    if (pendingAffirmed) {
+      resolved = {
+        isPrecise: true,
+        kelurahan: pendingLoc!.kelurahan,
+        kecamatan: pendingLoc!.kecamatan,
+        kota: pendingLoc!.kota,
+        lat: pendingLoc!.lat,
+        lng: pendingLoc!.lng,
+        formattedAddress: `${pendingLoc!.kelurahan}, ${pendingLoc!.kecamatan || ''}, ${pendingLoc!.kota || ''}`.replace(/, \s*$/, ''),
+      };
+      console.log(JSON.stringify({ event: 'V3_LOCATION_CANDIDATE_CONFIRMED', tenantId, kelurahan: pendingLoc!.kelurahan, timestamp: new Date().toISOString() }));
+    } else {
+      resolved = await geocodingService.geocodeText(compositeQuery);
+
+      if (!resolved.isPrecise && compositeQuery !== locationText) {
+        const locResolved = await geocodingService.geocodeText(locationText);
+        if (locResolved.isPrecise) {
+          resolved = locResolved;
+        }
+      }
+
+      // Kandidat Google (nama jalan, mis. "Jl. Demak") — Google memberi
+      // kandidat, gazetteer mengesahkan (sudah di crossCheckGazetteer), tapi
+      // DILARANG dikunci sebagai lokasi sebelum customer mengonfirmasi.
+      // Kembalikan pertanyaan verifikasi (bukan pernyataan) + titipkan
+      // kandidat ke sesi via field internal.
+      if (!resolved.isPrecise && (resolved as any).candidateFrom === 'google' && resolved.kelurahan && resolved.kecamatan) {
+        return {
+          success: false,
+          isPrecise: false,
+          isOutOfCoverage: false,
+          kelurahan: resolved.kelurahan,
+          kecamatan: resolved.kecamatan,
+          kota: resolved.kota,
+          suggestedTemplateReply: TEMPLATES.confirmFuzzyLocation({
+            kelurahan: resolved.kelurahan,
+            kecamatan: resolved.kecamatan,
+          }),
+          message: `Lokasi "${compositeQuery}" terdeteksi mengarah ke Kelurahan ${resolved.kelurahan}, Kec. ${resolved.kecamatan}, ${resolved.kota || ''}. Mohon KONFIRMASI ke customer apakah sudah benar (misal: "Apakah yang Bunda maksud kelurahan ${resolved.kelurahan}, Kec. ${resolved.kecamatan}? 😊"). DILARANG mengeluarkan nominal km atau tarif ongkir sebelum customer mengonfirmasi!`,
+          __internalPendingLocation: {
+            kelurahan: resolved.kelurahan,
+            kecamatan: resolved.kecamatan,
+            kota: resolved.kota,
+            lat: resolved.lat,
+            lng: resolved.lng,
+          },
+        } as any;
       }
     }
 

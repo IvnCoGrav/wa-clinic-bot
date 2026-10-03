@@ -4,6 +4,14 @@
 **Status:** Pending keputusan untuk cleanup  
 **Dokumentasi oleh:** AI Assistant
 
+> **UPDATE 2026-10-03:** Tier kandidat geocoding Google DIHIDUPKAN kembali secara
+> terbatas di `geocoding.ts` (`googleResolveCandidate`) setelah insiden halusinasi
+> "Demak Surabaya" → Semampir. Kontraknya berbeda dari integrasi lama: Google
+> HANYA memberi kandidat jalan→kelurahan, DIKSAHKAN gazetteer (kelurahan wajib
+> eksis), dan WAJIB diverifikasi customer — tidak pernah presisi otomatis.
+> `reverseGeocode` teks tetap murni gazetteer; Distance Matrix (jarak) tetap aktif.
+> Lihat `KNOWN_ISSUES.md` #206.
+
 ---
 
 ## Ringkasan

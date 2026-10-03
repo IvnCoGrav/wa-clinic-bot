@@ -435,6 +435,11 @@ export class ToolExecutionPipeline {
             session.booking?.preferredDate || session.booking?.requestedTimeHint || undefined;
           // Audit 694493: gate mode konsultasi vs transaksional untuk calculate_delivery.
           toolContext.priceDiscussedSnapshot = Boolean(session.priceDiscussed);
+          // Insiden Demak 2026-10-03: kandidat lokasi menunggu verifikasi + teks
+          // turn ini diteruskan agar tool dapat mempromosikan kandidat saat
+          // customer afirmatif (state-gated, bukan pola kalimat).
+          toolContext.pendingLocationSnapshot = (session as any).pendingLocation;
+          toolContext.incomingText = cleanIncomingText;
           // Audit 833178: jejak pesan user untuk Day Evidence Gate
           // save_reservation (anti "Besok" karangan — tanpa bukti = tolak).
           toolContext.recentUserTexts = [
@@ -603,6 +608,22 @@ export class ToolExecutionPipeline {
       try {
         fnArgs.symptoms = filterSymptomsPresentInText(fnArgs.symptoms, cleanIncomingText);
       } catch { /* gate best-effort — jangan menggagalkan persist */ }
+    }
+
+    // Insiden Demak 2026-10-03: rekonsiliasi kandidat lokasi Google menunggu
+    // verifikasi. Kandidat baru ditulis ke sesi; kandidat usang (turn ini tidak
+    // menghasilkan kandidat — entah sudah dipromosikan presisi atau dialihkan ke
+    // alamat lain) DIBERSIHKAN agar tidak dipromosikan kelak.
+    if (fnName === 'calculate_delivery') {
+      if (toolResult.__internalPendingLocation) {
+        session = await GoalTracker.updateGoalSession(conversationId, {
+          pendingLocation: toolResult.__internalPendingLocation,
+        } as any, tenantId);
+      } else if ((session as any).pendingLocation) {
+        session = await GoalTracker.updateGoalSession(conversationId, {
+          pendingLocation: undefined,
+        } as any, tenantId);
+      }
     }
 
     if (fnName === 'calculate_delivery' && toolResult.success) {
