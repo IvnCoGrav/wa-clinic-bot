@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 200. [Ops/State/Tenant] Fixing plan eksekusi Fase A–B (2026-10-03, EXECUTED)
+
+- **Fase A (ops):**
+  - Host LAMA (legacy, 43.157.197.148) di-`stop` (waha/app/caddy) untuk cegah rebut sesi WA (`conflict type=replaced`). Host LIVE = `klinik-server-baru` (43.173.11.79, DNS `app.kalababyspa.online`).
+  - Log forensik kini persist ke host via volume `./logs:/app/logs` (`docker-compose.yml`). Sebelumnya `logs/` tidak ada di server → JSONL hilang saat recreate.
+  - Audit trail `llm_audit_logs` DB hanya metadata (model/token/latency), BUKAN isi prompt/reply. Berkas forensik lengkap tetap butuh JSONL + tabel `messages` (bukti insiden Azri 3 Okt ditemukan di `messages`: inbound `tertarik` → outbound ditarik → balasan benar pasca-deploy).
+- **Fase B (state + tenant):**
+  - **P0-2 FIXED:** `goal-tracker.getGoalSession()` kini memulihkan `discussedTreatments`, `isMultiChildUnconfirmed`, `feverContraindication` (sebelumnya terbuang → amnesia lintas-reload). Test: `tests/unit/v3-session-persist-drift.test.ts`.
+  - **P0-1 PARTIAL:** `wahaTenantService.resolveTenantBySession` kini **fail-closed untuk session tak dikenal** (DB hidup) → webhook `UNKNOWN_TENANT_REJECTED` + alert CRITICAL. **DB offline tetap fallback `default-tenant` + alert** — keputusan sadar demi ketersediaan ingress (hanya 1 tenant terdaftar; drop massal saat DB blip lebih merugikan). Mode strict multi-tenant menunggu infra karantina. Test: `tests/unit/tenant-resolve-failclosed.test.ts`.
+  - **OPEN:** WABA `wabaTenantService` belum fail-closed (cache tanpa TTL, 3 pemanggil termasuk jalur HMAC) — tindak lanjut terpisah.
+
 ## 199. [Tool Masking/Geocoding] Perbaikan fondasional kebocoran substring wilayah (2026-10-03, EXECUTED sebagian)
 
 - **Gejala:** customer kirim `"Halo Bu Bidan, saya tertarik dengan layanan home-treatment"` dijawab bot `"Untuk area Kecamatan Tarik, ..."` (halusinasi domisili). Sesi Azri M Windyastuti (6289502290002) — **log mesin TIDAK tersedia** (repo hanya memuat `logs/*` s.d. 2026-09-29), root cause dibuktikan via kode + dataset.

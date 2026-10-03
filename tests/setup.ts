@@ -77,6 +77,7 @@ vi.mock('../src/db/client', () => {
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
         findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockImplementation(() => {
           const p = Promise.reject(new Error('Database offline'));
           (p as any).catch = p.catch.bind(p);

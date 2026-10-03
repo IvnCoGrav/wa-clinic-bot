@@ -4,12 +4,18 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
  * Resolve tenant dari WAHA session id yang tertera di payload webhook.
  * Sumber kebenaran: kolom tenants.waha_session_id (provider WAHA).
  *
- * Berbeda dari WabaTenantService (yang memakai cache tanpa TTL), resolver ini
- * memakai TTL 5 menit agar perubahan/penghapusan tenant di DB ter-invalidate
- * tanpa perlu restart proses (temuan audit PLAN 8 FASE 2a).
+ * Cache TTL 5 menit agar perubahan/penghapusan tenant ter-invalidate tanpa restart.
  *
- * Sifat FASE 2a: ADITIF — bila session tidak ditemukan atau DB offline,
- * kembalikan DEFAULT_TENANT_ID. Perilaku single-tenant tidak berubah.
+ * P0-1 (audit #199): FAIL-CLOSED untuk session TAK DIKENAL.
+ * - Session ditemukan  → id tenant pemilik (normal).
+ * - Session TIDAK ketemu (DB hidup) → null. Pemanggil WAJIB tolak + alert;
+ *   DILARANG memproses di bawah DEFAULT_TENANT_ID (vektor kebocoran lintas-tenant).
+ * - DB offline → fallback DEFAULT_TENANT_ID + alert CRITICAL. Keputusan sadar:
+ *   menjaga ketersediaan ingress (jangan drop SEMUA pesan saat DB blip) karena
+ *   saat ini hanya ada satu tenant (default-tenant) yang terdaftar; risiko
+ *   lintas-tenant = nol sampai multi-tenant benar-benar aktif. Mode strict
+ *   multi-tenant (tolak saat DB offline) menunggu infrastruktur karantina —
+ *   lihat docs/KNOWN_ISSUES.md.
  */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -21,18 +27,9 @@ interface CacheEntry {
 const tenantCache = new Map<string, CacheEntry>();
 
 export class WahaTenantService {
-  /**
-   * Mencari tenant_id pemilik WAHA session tertentu.
-   * Jika tidak ditemukan (atau DB offline), fallback ke DEFAULT_TENANT_ID.
-   *
-   * CATATAN (CG-01 / R1): fail-closed DITUNDA — mengubah ini menjadi tolak
-   * di titik awal ingress berdampak luas (ACK/label/typing ikut ter-drop) dan
-   * butuh infrastruktur quarantine + penanganan per jenis event. Lihat
-   * docs/KNOWN_ISSUES.md #103.
-   */
-  public async resolveTenantBySession(session: string | undefined | null): Promise<string> {
+  public async resolveTenantBySession(session: string | undefined | null): Promise<string | null> {
     if (!session || session.trim().length === 0) {
-      return DEFAULT_TENANT_ID;
+      return null;
     }
 
     const cached = tenantCache.get(session);
@@ -46,16 +43,31 @@ export class WahaTenantService {
         where: { waha_session_id: session },
         select: { id: true },
       });
-      const tenantId = tenant?.id || DEFAULT_TENANT_ID;
-      tenantCache.set(session, { tenantId, expiresAt: Date.now() + CACHE_TTL_MS });
-      if (!tenant) {
-        console.warn(`[WAHA TENANT] session ${session} tidak ditemukan. Fallback ke ${DEFAULT_TENANT_ID}.`);
+      if (!tenant?.id) {
+        console.warn(`[WAHA TENANT] session ${session} tidak ditemukan. FAIL-CLOSED (tidak fallback ke ${DEFAULT_TENANT_ID}).`);
+        await this.raiseAlert('session tidak dikenal', session);
+        return null;
       }
-      return tenantId;
+      tenantCache.set(session, { tenantId: tenant.id, expiresAt: Date.now() + CACHE_TTL_MS });
+      return tenant.id;
     } catch (err) {
-      console.warn('[WAHA TENANT] DB unavailable, fallback ke default tenant:', (err as Error).message);
+      console.warn('[WAHA TENANT] DB unavailable saat resolusi tenant. Fallback default (availability) + alert:', (err as Error).message);
+      await this.raiseAlert('DB offline — fallback availability', session);
       return DEFAULT_TENANT_ID;
     }
+  }
+
+  /** Alert non-blocking (best-effort) untuk anomali resolusi tenant. */
+  private async raiseAlert(reason: string, session: string): Promise<void> {
+    try {
+      const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+      await alertService.notifyAlert({
+        type: AlertType.SECURITY_BREACH_ATTEMPT,
+        severity: AlertSeverity.CRITICAL,
+        message: `[WAHA TENANT] ${reason}: ${session}.`,
+        metadata: { provider: 'WAHA', reason, session },
+      });
+    } catch { /* alert best-effort — jangan menggagalkan ingress */ }
   }
 
   /** Reset cache (dipakai unit test). */

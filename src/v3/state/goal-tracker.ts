@@ -220,6 +220,12 @@ export class GoalTracker {
         selectedTreatment: prefs.selectedTreatmentName || prefs.selectedTreatment || undefined,
         booking: prefs.booking || undefined,
         cartItems: Array.isArray(prefs.cartItems) ? prefs.cartItems : undefined,
+        // P0-2 (audit #199): field episodik yang sebelumnya TERBUANG saat
+        // rehidrasi dari session_data — menyebabkan amnesia lintas-reload
+        // (kaset rusak, gerbang multi-anak mati, kontraindikasi demam hilang).
+        discussedTreatments: Array.isArray(prefs.discussedTreatments) ? prefs.discussedTreatments : undefined,
+        isMultiChildUnconfirmed: prefs.isMultiChildUnconfirmed === true ? true : undefined,
+        feverContraindication: prefs.feverContraindication === true ? true : undefined,
         ongkirStatus: prefs.ongkirStatus || undefined,
         totalPrice: typeof prefs.totalPrice === 'number' ? prefs.totalPrice : undefined,
         priceDiscussed: prefs.priceDiscussed === true ? true : undefined,

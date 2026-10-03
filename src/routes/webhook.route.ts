@@ -114,21 +114,26 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
       }
 
-      // --- PLAN 8 FASE 4: Tenant enforcement (was FASE 2a log-only) ---
-      // Resolve tenant dari WAHA session id; hasilnya dipakai di SELURUH jalur
-      // downstream menggantikan DEFAULT_TENANT_ID. Bila session tidak dikenal /
-      // DB offline → fallback DEFAULT_TENANT_ID (perilaku single-tenant tidak berubah).
-      // CATATAN (CG-01 / R1): fail-closed DITUNDA — lihat docs/KNOWN_ISSUES.md #103.
+      // --- PLAN 8 FASE 4 + P0-1 (audit #199): Tenant enforcement ---
+      // Resolve tenant dari WAHA session id. Bila session TIDAK DIKENAL → DITOLAK
+      // (200 ack tanpa proses) + alert — DILARANG fallback diam ke DEFAULT_TENANT_ID
+      // (vektor lintas-tenant). DB offline → resolver mengembalikan DEFAULT_TENANT_ID
+      // demi ketersediaan + alert CRITICAL (lihat waha-tenant.service.ts).
       let resolvedTenantId = DEFAULT_TENANT_ID;
       try {
         const eventSession = (event as any)?.session as string | undefined;
-        resolvedTenantId = await wahaTenantService.resolveTenantBySession(eventSession);
+        const resolved = await wahaTenantService.resolveTenantBySession(eventSession);
+        if (!resolved) {
+          console.warn(`[WAHA TENANT] session=${eventSession} tidak dapat di-resolve → webhook DITOLAK (fail-closed).`);
+          return reply.status(200).send({ status: 'UNKNOWN_TENANT_REJECTED' });
+        }
+        resolvedTenantId = resolved;
         if (eventSession && resolvedTenantId !== DEFAULT_TENANT_ID) {
           console.log(`[WAHA TENANT] session=${eventSession} → tenant=${resolvedTenantId}`);
         }
       } catch (tenantErr: any) {
-        console.warn('[WAHA TENANT] resolusi tenant gagal (non-fatal, fallback default):', tenantErr?.message);
-        resolvedTenantId = DEFAULT_TENANT_ID;
+        console.warn('[WAHA TENANT] resolusi tenant gagal → DITOLAK (fail-closed):', tenantErr?.message);
+        return reply.status(200).send({ status: 'TENANT_RESOLUTION_FAILED' });
       }
 
       if (event.event === 'label.chat.added' || event.event === 'label.chat.deleted') {
