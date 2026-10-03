@@ -6,6 +6,29 @@ import { buildCustomerReservationIntake } from '../../services/reservation-intak
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { GoalTracker } from '../state/goal-tracker';
 
+/** C.1 (audit #199): true bila alamat memuat detail presisi (bukan sekadar kota luas). */
+function hasPreciseLocationDetail(address: string): boolean {
+  if (!address || !address.trim()) return false;
+  const lower = address.toLowerCase().trim();
+  const cities = ['surabaya', 'sidoarjo', 'gresik', 'sby', 'sda'];
+  let s = lower;
+  const prefixes = ['rumah d ', 'rumah di ', 'daerah ', 'wilayah ', 'di ', 'ke ', 'kecamatan ', 'kec ', 'kota ', 'kabupaten '];
+  let stripped = true;
+  while (stripped) {
+    stripped = false;
+    for (const p of prefixes) {
+      if (s.startsWith(p)) { s = s.slice(p.length).trim(); stripped = true; break; }
+    }
+  }
+  const parts = s.split(/[^a-z0-9]+/).filter(Boolean);
+  const directions = ['barat', 'timur', 'selatan', 'utara', 'pusat'];
+  // Hanya nama kota (atau kota + arah) → tidak presisi.
+  if (cities.includes(s)) return false;
+  if (parts.length === 2 && cities.includes(parts[0]) && directions.includes(parts[1])) return false;
+  // Ada koma, angka rumah, atau >1 token selain kota → dianggap presisi.
+  return parts.length >= 1;
+}
+
 export interface SaveReservationChild {
   name?: string;
   ageMonths?: number;
@@ -342,9 +365,10 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     // reservasi. Tool TIDAK PERNAH menolak booking karena data belum lengkap.
     let effectiveName = (customerName && customerName.trim()) || '';
     let effectiveAddress = (address && address.trim()) || '';
-    if (conversationId && (!effectiveName || !effectiveAddress)) {
+    let gateSession: any = null;
+    if (conversationId) {
       try {
-        const gateSession = await GoalTracker.getGoalSession(conversationId, tenantId);
+        gateSession = await GoalTracker.getGoalSession(conversationId, tenantId);
         if (!effectiveName && gateSession.customerName && !isGenericCustomerName(gateSession.customerName)) {
           effectiveName = gateSession.customerName;
         }
@@ -356,6 +380,10 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
         }
       } catch (_) {}
     }
+    // C.1: lokasi presisi bila ada kelurahan/kecamatan/kota terstruktur di sesi.
+    const structuredPrecise = Boolean(
+      gateSession?.location?.kelurahan || gateSession?.location?.kecamatan || gateSession?.location?.kota
+    );
 
     // Fail-closed Prasyarat Lokasi (Homecare Clinic Safety):
     // Jika conversationId ada dan effectiveAddress kosong (tidak ada alamat fisik
@@ -372,6 +400,37 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
         success: false,
         summary: 'Lokasi customer belum diketahui',
         message: 'Lokasi/wilayah Bunda belum diketahui. Untuk layanan homecare, tanyakan terlebih dahulu daerah/kelurahan/kecamatan rumah Bunda dengan ramah agar tim Bidan dapat memastikan jangkauan dan ketersediaan rute.',
+      };
+    }
+
+    // C.1 (audit #199): alamat efektif hanyalah nama KOTA LUAS (mis. "Surabaya")
+    // tanpa kelurahan/kecamatan presisi → TAHAN reservasi (jangan kunci jadwal
+    // dengan rute yang tak terverifikasi). Bila hanya sampai sini, catat untuk
+    // admin (notifikasi in-app) agar bisa ditindaklanjuti, lalu minta detail.
+    if (conversationId && !structuredPrecise && !hasPreciseLocationDetail(effectiveAddress)) {
+      console.warn(JSON.stringify({
+        event: 'V3_TOOL_RESERVATION_LOCATION_IMPRECISE',
+        tenantId,
+        conversationId,
+        addressPreview: effectiveAddress.slice(0, 60),
+        timestamp: new Date().toISOString(),
+      }));
+      try {
+        const { notificationDeliveryService } = await import('../../services/notification-delivery.service');
+        await notificationDeliveryService.send({
+          tenantId,
+          channel: 'SYSTEM',
+          recipient: 'admin',
+          type: 'ALERT_URGENT',
+          title: 'Reservasi tertahan: lokasi terlalu luas',
+          messageContent: `Percakapan ${conversationId} mencoba booking dengan lokasi hanya "${effectiveAddress}" (belum ada kelurahan/kecamatan presisi). Mohon follow-up.`,
+          metadata: { conversationId, address: effectiveAddress },
+        });
+      } catch { /* notifikasi best-effort — jangan menggagalkan arah balasan */ }
+      return {
+        success: false,
+        summary: 'Lokasi terlalu luas',
+        message: `Lokasi "${effectiveAddress}" masih terlalu luas untuk mengunci jadwal homecare. Tanyakan dengan ramah kelurahan/desa atau patokan terdekat agar tim Bidan dapat memastikan rute dan jadwalnya.`,
       };
     }
 

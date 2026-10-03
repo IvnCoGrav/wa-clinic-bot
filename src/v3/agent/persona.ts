@@ -111,11 +111,19 @@ export function extractFastIntents(text: string): string[] {
   if (hasAnyWord(['batuk', 'pilek', 'bapil', 'grok', 'demam', 'kembung', 'kolik', 'rewel', 'gtm', 'diare', 'makan', 'lahap', 'sulit makan', 'doyan makan'])) {
     intents.push('consult_symptom');
   }
-  // Lokasi via gazetteer resmi (data-driven, mencakup desa perbatasan baru)
+  // Lokasi via gazetteer resmi (data-driven, mencakup desa perbatasan baru).
+  // C.2a (audit #199): pencocokan KATA UTUH (word-boundary) — bukan substring
+  // mentah yang menghalusinasi "tertarik"/"batuk"/"sekarang"/"kembali" menjadi
+  // nama daerah (kelas bug "tertarik"→Kecamatan Tarik).
   try {
     const gazetteer = getGazetteerAreas();
+    const textWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
+    const textNormalized = ' ' + lower.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
     for (const [areaLower] of gazetteer.entries()) {
-      if (areaLower.length >= 4 && lower.includes(areaLower)) {
+      if (areaLower.length < 4) continue;
+      if (areaLower.includes(' ')) {
+        if (textNormalized.includes(' ' + areaLower + ' ')) { intents.push('provide_location'); break; }
+      } else if (textWords.has(areaLower)) {
         intents.push('provide_location');
         break;
       }

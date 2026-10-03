@@ -65,6 +65,26 @@ function getKecamatanCoreTokens(): Set<string> {
   return set;
 }
 
+/** C.1: true bila teks hanyalah nama kota/kabupaten general (bukan alamat presisi). */
+function isBroadRegionText(text: string): boolean {
+  let s = (text || '').toLowerCase().trim();
+  if (!s) return false;
+  const prefixes = ['rumah d ', 'rumah di ', 'daerah ', 'wilayah ', 'di ', 'ke ', 'kecamatan ', 'kec ', 'kota ', 'kabupaten '];
+  let stripped = true;
+  while (stripped) {
+    stripped = false;
+    for (const p of prefixes) {
+      if (s.startsWith(p)) { s = s.slice(p.length).trim(); stripped = true; break; }
+    }
+  }
+  const cities = getCoverageCities() || [];
+  if (cities.includes(s)) return true;
+  const parts = s.split(/\s+/).filter(Boolean);
+  const directions = ['barat', 'timur', 'selatan', 'utara', 'pusat'];
+  if (parts.length === 2 && cities.includes(parts[0]) && directions.includes(parts[1])) return true;
+  return false;
+}
+
 export function hasNewLocationEntity(text: string | undefined): boolean {
   const input = text || '';
   const lower = input.toLowerCase();
@@ -353,6 +373,22 @@ export function evaluateToolMasking(
     session.location?.rawText
   );
 
+  // C.1 (audit #199): lokasi PRESISI — kelurahan/kecamatan/kota sah, ATAU
+  // rawText yang BUKAN sekadar nama kota luas (mis. "Surabaya" polos). Kota
+  // luas saja tidak cukup untuk mengunci reservasi (rute bidan tak terverifikasi).
+  const hasPreciseLocation = Boolean(
+    session.location?.kelurahan ||
+    session.location?.kecamatan ||
+    session.location?.kota
+  ) || (() => {
+    const raw = (session.location?.rawText || '').trim();
+    if (!raw) return false;
+    try {
+      // Data-driven: tolak bila rawText hanyalah nama kota/kabupaten general.
+      return !isBroadRegionText(raw);
+    } catch { return true; }
+  })();
+
   // 3. Panggil isDateConfirmed dengan signature ASLI: isDateConfirmed(bookingDate, evidence)
   const dateVerdict = isDateConfirmed(candidateDate, evidenceTexts);
 
@@ -387,6 +423,11 @@ export function evaluateToolMasking(
   } else if (!hasLocation) {
     isSaveReservationAllowed = false;
     reason = 'LOCATION_EMPTY: Lokasi/domisili customer belum diketahui';
+  } else if (!hasPreciseLocation) {
+    // C.1: rawText hanya nama kota luas ("Surabaya") tapi kelurahan/kecamatan
+    // presisi belum ada → TAHAN reservasi, minta detail lokasi dulu.
+    isSaveReservationAllowed = false;
+    reason = 'LOCATION_IMPRECISE: Lokasi terlalu luas (butuh kelurahan/kecamatan presisi untuk kunci jadwal)';
   } else if (availabilityInquiry && !session.bookingCommitConfirmed) {
     // Customer menanyakan ketersediaan slot ("sabtu jam 10 kosong gak") tanpa
     // komitmen lengket lintas-turn → DILARANG buka save_reservation.

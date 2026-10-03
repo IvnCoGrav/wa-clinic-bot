@@ -156,7 +156,12 @@ export class ContextGrounder {
       const loc = (session as any)?.location;
       if (loc && (loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText)) {
         const label = loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText;
-        const dist = loc.distanceKm != null ? ` (${loc.distanceKm} km, rute aktif)` : '';
+        // C.3 (audit #199): jarak km disuntik HANYA untuk lokasi PRESISI
+        // (kelurahan/kecamatan/kota terstruktur) — bukan rawText kota luas.
+        // Pertajam kontrak lama 779408: jangan bocorkan angka jarak dari label
+        // wilayah kasar (anti "sebut jarak tanpa ditanya").
+        const isPrecise = Boolean(loc.kelurahan || loc.kecamatan || loc.kota);
+        const dist = (isPrecise && loc.distanceKm != null) ? ` (${loc.distanceKm} km, rute aktif)` : '';
         return `[LOKASI TERKUNCI]: ${label}${dist}\n${summary}`;
       }
       return summary;

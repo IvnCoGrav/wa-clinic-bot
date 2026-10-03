@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 202. [Kontrak Booking/Output] Fase C lanjutan — keputusan user dieksekusi (2026-10-03, EXECUTED)
+
+Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2) `provide_location` word-boundary; (3) tanggal word-boundary DITUNDA; (4) kontrak nominal lama DIPERTAJAM.
+
+- **#1 C.1 — gate lokasi presisi save_reservation (EXECUTED):** masker `tool-masker.ts` kini `LOCATION_IMPRECISE` bila lokasi hanya `rawText` kota luas (tanpa kelurahan/kecamatan/kota). Safety-net tool `save-reservation.tool.ts` menolak + **notifikasi admin (channel SYSTEM)** via `notificationDeliveryService` (tidak spam WA/Telegram). Test: `tests/unit/v3-save-masker-rawtext.test.ts`.
+- **#2 C.2a — `extractFastIntents` provide_location word-boundary (EXECUTED):** `persona.ts` tidak lagi substring (`tertarik`→`tarik`). Test: `tests/unit/v3-location-intent-parity.test.ts`.
+- **#3 C.2b — tanggal word-boundary (DITUNDA sesuai rekomendasi):** menyentuh pemaksa `save_reservation`; butuh red-team booking khusus sebelum diubah.
+- **#4 C.3 — pertajam kontrak lama 779408 (EXECUTED):** kontrak "lokasi presisi → nominal dibuka" DIPERTAHANKAN & dikunci test; ditutup satu celah: `distanceKm` tidak lagi disuntik ke grounding [LOKASI TERKUNCI] / ringkasan bila lokasi hanya `rawText` kota luas (`context-grounder.ts`, `conversation-summarizer.ts`). Test: `tests/unit/v3-fee-hiding-contract.test.ts`.
+
 ## 201. [Kontrak Booking/Output] Fase C fixing plan — status + batas konfirmasi (2026-10-03)
 
 - **C.4 FIXED & live-ready — gate verbatim gejala:** `filterSymptomsPresentInText()` di `tool-pipeline.ts` menyaring `fnArgs.symptoms` agar HANYA yang muncul di pesan user turn ini yang dipersist. Cegah gejala karangan LLM menjadi fakta sesi. Test: `tests/unit/v3-llm-symptom-persist.test.ts` (5).

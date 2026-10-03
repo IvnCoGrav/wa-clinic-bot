@@ -38,7 +38,10 @@ export class V3ConversationSummarizer {
     // cek keyword regex), selaras dengan phase directive ONGKIR_QUOTED di Call 1.
     if (session.location?.kelurahan || session.location?.distanceKm != null) {
       const locLabel = session.location.kelurahan || session.location.kecamatan || 'lokasi Bunda';
-      const distLabel = session.location.distanceKm != null ? `, ~${session.location.distanceKm} km` : '';
+      // C.3 (audit #199): jarak km hanya untuk lokasi PRESISI (kelurahan/
+      // kecamatan/kota terstruktur) — bukan rawText kota luas.
+      const isPreciseLoc = Boolean(session.location.kelurahan || session.location.kecamatan || session.location.kota);
+      const distLabel = (isPreciseLoc && session.location.distanceKm != null) ? `, ~${session.location.distanceKm} km` : '';
       const promo = session.location.ongkirPromo;
       // Rule 2 (Strict Information Hiding): nominal ongkir HANYA disebut di
       // ringkasan prompt bila customer sudah pernah menanyakan biaya/ongkir
