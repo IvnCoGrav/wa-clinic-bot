@@ -96,6 +96,62 @@ const CHUNK_SEEDS: ChunkSeed[] = [
     keywords: 'chat menggantung, belum dibalas, prospek tertunda, follow up, stalled inquiry',
     documentName: 'SOP_ADMIN_RESERVASI#Chunk3',
   },
+  {
+    sourceType: 'DOCUMENT',
+    title: 'Status Reservasi: Arti, Transisi & Slot',
+    content:
+      'Tujuh status: pending (menunggu verifikasi; aktif administratif tapi dikecualikan audit overcapacity), ' +
+      'hold (kunci max 2 jam sejak dibuat + gugur tengah malam WIB → cancelled), confirmed (jadwal pasti, slot ' +
+      'terkunci), en_route (terapis OTW), completed (selesai; ditolak bila tanggal >24 jam ke depan), cancelled ' +
+      '(slot bebas), rejected (ditolak klinik). Transisi legal: pending→confirmed/cancelled/hold; ' +
+      'hold→confirmed/pending/cancelled; confirmed/en_route→completed/cancelled. Buffer antar slot 20 menit.',
+    keywords: 'status reservasi, arti hold, arti pending, confirmed, slot dilepas, transisi status, hold kedaluwarsa, overcapacity',
+    documentName: 'SOP_ADMIN_RESERVASI#Chunk1',
+  },
+  {
+    sourceType: 'DOCUMENT',
+    title: 'SOP Same-Day Booking (Hari-H)',
+    content:
+      'Booking hari-H dari bot berstatus pending + tag [SAME_DAY_REQUEST] + badge Hari Ini-Perlu Cek, dengan ' +
+      'notifikasi Web Push + Telegram. Tindakan: buka Day View hari ini, cek terapis kosong di jam diminta; ada ' +
+      '→ pilih terapis, Simpan, confirmed; penuh → sapa via Live Chat, tawarkan geser jam/besok. Intake tanpa ' +
+      'tanggal hanya boleh pending (anti ghost booking).',
+    keywords: 'same-day, hari ini, perlu cek, booking dadakan, slot hari ini, same day request',
+    documentName: 'SOP_ADMIN_RESERVASI#3.2',
+  },
+  {
+    sourceType: 'DOCUMENT',
+    title: 'Input Manual, Hold & Verifikasi Pembayaran',
+    content:
+      'Reservasi manual: + Tambah Reservasi (atau klik jam kosong kalender), pilih pasien, kategori/layanan ' +
+      '(durasi dari katalog DB, jam WIB), alamat + ongkir snapshot, terapis boleh kosong. Hold: pending→hold, ' +
+      'bukti transfer→confirmed, batal/lepas→cancelled (tercatat). Review bayar DB: pending→approved/' +
+      'ignored_outlier. Lunas = purchase_occurred_at ada. CAPI Purchase hanya untuk yang approved (moderasi).',
+    keywords: 'tambah reservasi manual, hold slot, release hold, lepas hold, bukti transfer, lunas, purchase, CAPI, ongkir snapshot',
+    documentName: 'SOP_ADMIN_RESERVASI#3.3-3.4-3.7',
+  },
+  {
+    sourceType: 'DOCUMENT',
+    title: 'Penugasan Terapis, GPS & Reschedule',
+    content:
+      'Pilih/ubah terapis → notifikasi Telegram ditunda 5 menit (batal otomatis bila diganti lagi). Pre-Visit ' +
+      'Brief H-30 menit ke Telegram terapis. Alamat: tempel link shareloc (gps_pin vs estimated_area), tulis ' +
+      'patokan, unggah foto rumah (watermark GPS + waktu). Reschedule: ubah tanggal/jam, cek bentrok; GCal ' +
+      'masih mock (jangan klaim sinkron). Series: active/paused/completed/cancelled, sesi bertambah per kunjungan.',
+    keywords: 'tugaskan terapis, ganti terapis, pre-visit brief, shareloc, gps pin, foto rumah, watermark, reschedule, ganti jadwal, series, paket sesi',
+    documentName: 'SOP_ADMIN_RESERVASI#3.5-3.6-3.8-3.9',
+  },
+  {
+    sourceType: 'DOCUMENT',
+    title: 'Navigasi Reservasi: Tabel vs Kalender',
+    content:
+      'Halaman /admin/reservations: Table View untuk audit/rekap/cari/ekspor (filter teks, status Upcoming/Aktif, ' +
+      'Pending, Confirmed, Hold, En Route, Completed, Cancelled, Rejected, kategori, terapis; aksi detail/bukti ' +
+      'bayar/maps/deep-link Live Chat; deep-link ?date=YYYY-MM-DD). Calendar View Day (per-jam 08:00-18:00 WIB ' +
+      'per terapis), Week (7 hari), Month, Quick Slot (klik jam kosong → form terisi otomatis).',
+    keywords: 'tabel reservasi, kalender reservasi, filter status, quick slot, day view, week view, rekap jadwal',
+    documentName: 'SOP_ADMIN_RESERVASI#Bab4',
+  },
 ];
 
 function resolveTenantId(): string {

@@ -1,13 +1,11 @@
 # 📘 Buku Panduan Operasional Admin: Manajemen Reservasi & Sistem Klinik
 
-> **⚠️ SUPERSEDED — DOKUMEN INI BUKAN SUMBER KEBENARAN.**
-> Dokumen ini adalah draf turunan yang **belum diaudit** dan mengandung regresi faktual
-> dibanding `docs/SOP_ADMIN_RESERVASI.md` **v1.1** (sumber kebenaran tunggal — sudah diaudit
-> lawan kode/DB). DILARANG menjadikannya acuan operasional, acuan seed Knowledge Base, atau
-> bahan prompt AI sebelum 7 butir regresi diperbaiki (ambang demam 37.8°C, status bayar
-> `verified` yang fiktif, klaim sinkron GCal, status series `cancelled` yang hilang, okupansi
-> slot `pending`, tepi diagram transisi ilegal, contoh pasien fiktif). Rujukan:
-> `docs/KNOWN_ISSUES.md` #210. Keputusan pemilik produk: Opsi A (single source of truth = v1.1).
+> **ℹ️ DOKUMEN PENDAMPING (telah direkonsiliasi ke v1.1 pada 2026-10-03).**
+> 7 butir regresi faktual telah diperbaiki (ambang demam 37.8°C, status bayar DB,
+> GCal mock, status series `cancelled`, okupansi `pending`, tepi diagram legal, contoh fiktif
+> ditandai). Namun sumber kebenaran tunggal untuk kode & AI tetap `docs/SOP_ADMIN_RESERVASI.md`
+> **v1.1** + database. Dokumen ini untuk dibaca manusia; DILARANG menjadikannya sumber seed
+> Knowledge Base AI (menghindari duplikasi/konflik chunk). Rujukan: `docs/KNOWN_ISSUES.md` #210.
 
 > **Status Dokumen**: Panduan Resmi Operasional (SOP Admin & Knowledge Base AI Copilot)  
 > **Versi**: 1.0 (Oktober 2026)  
@@ -69,7 +67,7 @@ Di dalam sistem ini, setiap reservasi memiliki status resmi yang mengatur keters
 
 | Status | Arti & Perilaku Sistem | Apakah Menempati Slot? |
 | :--- | :--- | :---: |
-| **`pending`** | **Menunggu Verifikasi Admin**. Reservasi baru masuk dari AI bot (terutama booking same-day) atau draf input yang belum difinalisasi. Pasien belum menerima konfirmasi resmi. | **Ya (Aktif)** |
+| **`pending`** | **Menunggu Verifikasi Admin**. Reservasi baru masuk dari AI bot (terutama booking same-day) atau draf input yang belum difinalisasi. Pasien belum menerima konfirmasi resmi. Aktif administratif, **TAPI dikecualikan dari audit overcapacity** (keputusan by-design) — jangan anggap slot terkunci keras. | **Ya (Aktif adm.)** |
 | **`hold`** | **Terkunci Sementara**. Pasien meminta waktu untuk transfer atau berembuk. Berlaku maksimal **2 jam** (atau hingga tengah malam hari pembuatan). Jika melewati batas, sistem otomatis melepas slot ini. | **Ya (Aktif)** |
 | **`confirmed`** | **Jadwal Pasti**. Pasien dan klinik telah sepakat, terapis dijadwalkan, slot terkunci penuh. Pasien sudah dijadwalkan menerima reminder H-1. | **Ya (Aktif)** |
 | **`en_route`** | **Terapis Sedang Menuju Lokasi (OTW)**. Dipicu saat terapis/admin menekan tombol OTW. Sistem mencatat timestamp keberangkatan dan menginformasikan ke pasien jika diaktifkan. | **Ya (Aktif)** |
@@ -83,14 +81,11 @@ Di dalam sistem ini, setiap reservasi memiliki status resmi yang mengatur keters
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending: Booking Bot / Draf Input
-    [*] --> hold: Pasien Minta Kunci Slot
-    [*] --> confirmed: Booking Langsung Sah
+    [*] --> pending: Booking Bot / Draf Input (satu-satunya pintu masuk; tanpa tanggal hanya boleh pending)
     
     pending --> confirmed: Admin Verifikasi & Setujui
     pending --> hold: Menunggu Pembayaran
     pending --> cancelled: Pasien Batal
-    pending --> rejected: Kapasitas Penuh / Ditolak
 
     hold --> confirmed: Pembayaran Diterima
     hold --> pending: Perlu Penyesuaian
@@ -107,6 +102,12 @@ stateDiagram-v2
     cancelled --> [*]: Slot Bebas Kembali
     rejected --> [*]: Slot Bebas Kembali
 ```
+
+> [!CAUTION]
+> Diagram di atas diselaraskan ke matriks legal `canTransition`: `pending → confirmed/cancelled/hold`;
+> `hold → confirmed/pending/cancelled`; `confirmed/en_route → completed/cancelled`. Intake tanpa
+> tanggal **hanya boleh `pending`** (anti ghost booking); `hold`/`confirmed` langsung dari awal
+> dan `pending → rejected` **ditolak backend**.
 
 > [!IMPORTANT]
 > **Aturan Bentrok Slot & Buffer 20 Menit (`SLOT_BUFFER_MIN`)**:  
@@ -199,13 +200,15 @@ Agar terapis homecare tidak tersesat di lapangan:
 1. **Pemeriksaan Bukti Pembayaran**:
    * Buka detail reservasi, klik tab **Pembayaran**.
    * Admin dapat melihat thumbnail bukti transfer atau mengunggah struk pembayaran jika dikirim via chat.
-2. **Status Verifikasi Pembayaran**:
-   * **`pending`**: Bukti belum dicek.
-   * **`verified`**: Nominal transfer dan rekening tujuan sudah cocok.
+2. **Status Verifikasi Pembayaran** (nilai resmi DB — tidak ada status `verified`):
+   * **`pending`**: Bukti belum dicek / antre moderasi.
+   * **`approved`**: Nominal dan rekening cocok, disetujui admin.
+   * **`ignored_outlier`**: Ditahan sebagai outlier, tidak dikirim ke Meta.
+   * **Lunas = `purchase_occurred_at` terisi**, bukan status `confirmed`/`completed`.
 3. **Snapshot Ongkir (`delivery_fee`)**:
    * Nilai ongkir tersimpan permanen pada data reservasi tersebut (*snapshot*), sehingga tidak akan berubah meskipun di masa depan ada penyesuaian tarif tier ongkir klinik.
 4. **Event Meta CAPI (Purchase)**:
-   * Saat pembayaran terverifikasi, sistem dapat mengirim sinyal konversi `Purchase` ke Meta CAPI untuk optimasi iklan klinik secara akurat.
+   * Antrean moderasi: hanya pembayaran `approved` yang mengirim sinyal konversi `Purchase` ke Meta CAPI. Jangan janjikan pengiriman instan.
 
 ---
 
@@ -215,7 +218,7 @@ Agar terapis homecare tidak tersesat di lapangan:
 1. Buka detail reservasi pasien.
 2. Ubah **Tanggal** atau **Jam Kunjungan**.
 3. Sistem akan memeriksa apakah terapis yang sama tersedia di jam baru:
-   * Jika **tersedia**: Jadwal tersimpan, Google Calendar disinkronkan, status tetap `confirmed`.
+   * Jika **tersedia**: Jadwal tersimpan, status tetap `confirmed`. (Catatan: Google Calendar saat ini mode mock — jangan klaim sinkron kalender sungguhan ke pasien.)
    * Jika **bentrok**: Sistem akan memunculkan peringatan merah bahwa jam tersebut sudah terisi. Admin dapat mengganti nama terapis lain atau memilih jam alternatif.
 
 #### Jika Pasien Membatalkan Kunjungan:
@@ -237,6 +240,7 @@ Untuk program perawatan berkala (seperti Paket Terapi Tumbuh Kembang 4 Sesi atau
    * **`active`**: Masih ada sesi kunjungan yang berjalan.
    * **`completed`**: Seluruh total sesi telah selesai dikerjakan.
    * **`paused`**: Dijeda sementara (misal: pasien sedang ke luar kota).
+   * **`cancelled`**: Seri dibatalkan (slot sisa dilepas).
 
 ---
 
@@ -248,7 +252,7 @@ Halaman Reservasi (`/admin/reservations`) menyediakan dua cara pandang kerja:
 * Cocok untuk: **Audit cepat, rekap harian, pencarian pasien, dan ekspor data**.
 * Dilengkapi filter:
   * Pencarian teks (Nama bunda, nomor telepon, nama anak).
-  * Filter status: *Upcoming (Aktif)*, *Pending*, *Confirmed*, *Hold*, *Completed*, *Cancelled*.
+  * Filter status: *Upcoming (Aktif)*, *Pending*, *Confirmed*, *Hold*, *En Route*, *Completed*, *Cancelled*, *Rejected*.
   * Filter kategori layanan (Baby / Kids / Moms) dan Filter terapis.
   * Tombol aksi cepat: Lihat detail, upload bukti bayar, navigasi maps, dan tautan langsung ke Live Chat.
 
@@ -263,6 +267,11 @@ Halaman Reservasi (`/admin/reservations`) menyediakan dua cara pandang kerja:
 ## 5. Integrasi AI Copilot (Hermes Agent) untuk Admin
 
 Di sisi kanan dashboard (atau lewat panel Copilot di Live Chat), admin dapat berinteraksi langsung dengan **Hermes Copilot**:
+
+> [!CAUTION]
+> Contoh percakapan di bawah **FIKTIF SEMATA untuk ilustrasi format** (nama, treatment, jam, dan
+> terapis karangan). JANGAN mengutipnya sebagai data pasien nyata, dan JANGAN memasukkannya ke
+> Knowledge Base/seed AI.
 
 ```
 +-------------------------------------------------------------------------+
@@ -290,9 +299,9 @@ Di sisi kanan dashboard (atau lewat panel Copilot di Live Chat), admin dapat ber
 Semua admin wajib memahami batasan berikut agar pelayanan aman dan profesional:
 
 1. **Aturan Pasca Imunisasi**:  
-   Bayi yang baru menerima vaksin/imunisasi **TIDAK BOLEH** dipijat minimal **3 x 24 jam (3 hari)** setelah vaksin, atau sampai demam benar-benar reda.
+   Bayi yang baru menerima vaksin/imunisasi **TIDAK BOLEH** dipijat minimal **48–72 jam (2–3 hari)** setelah vaksin, dengan syarat si kecil sudah fit dan tidak demam. Operasional menerapkan **3 hari sebagai batas aman**. Pijat sangat disarankan dilakukan SEBELUM imunisasi. Acuan resmi: `ClinicPolicy post_vaccine_rules` di DB.
 2. **Aturan Bayi Kuning / Sakit Akut**:  
-   Bayi dengan demam > 38°C, muntah terus-menerus, sesak nafas, atau tali pusat bernanah harus diarahkan langsung ke dokter spesialis anak (Sp.A) / faskes darurat, **bukan** diberikan treatment spa/massage.
+   Bayi dengan demam **37.8°C ke atas**, muntah terus-menerus, sesak nafas, atau tali pusat bernanah harus diarahkan langsung ke dokter spesialis anak (Sp.A) / faskes darurat, **bukan** diberikan treatment spa/massage.
 3. **Kapasitas Maksimal Bersamaan**:  
    Jumlah reservasi aktif pada jam yang sama **tidak boleh melebihi jumlah terapis aktif** yang bertugas hari itu.
 4. **Kerahasiaan Data Pasien (Privasi Medis)**:  
@@ -308,7 +317,7 @@ Semua admin wajib memahami batasan berikut agar pelayanan aman dan profesional:
 * **ID Intent**: `RESERVATION_STATUS_HANDLING`
 * **Trigger Pertanyaan**: Status reservasi, arti hold, cara konfirmasi, kapan slot dilepas.
 * **Instruksi Copilot**:
-  * Status aktif yang menempati slot adalah: `confirmed`, `en_route`, `pending`, `hold`.
+  * Status aktif yang menempati slot adalah: `confirmed`, `en_route`, `pending`, `hold` — dengan catatan `pending` dikecualikan dari audit overcapacity (aktif administratif, bukan kunci keras).
   * Status `hold` otomatis kedaluwarsa setelah 2 jam atau tengah malam hari pembuatan.
   * Status `pending` pada hari-H bertanda `[SAME_DAY_REQUEST]` membutuhkan verifikasi ketersediaan terapis oleh staf.
   * Reservasi tidak boleh diubah ke `completed` sebelum tanggal kunjungan tiba.

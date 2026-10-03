@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Copilot SOP: pencarian kalimat-alami + seed prosedural + rekonsiliasi MANUAL_BOOK
+
+- **Akar:** `lookup_catalog_and_policy` memakai `contains` kalimat utuh → pertanyaan bahasa alami
+  selalu 0 baris, padahal data SOP ada (45 chunk + 9 policy + 39 layanan). Bukan data hilang,
+  bukan salah Hermes — murni recall pencarian.
+- **Fixed — tokenisasi generik (`copilot-tools.ts`):** `extractSearchTokens` (token huruf ≥4,
+  unik, maks 8 — tanpa daftar kata hafalan) + `buildTextSearchOr` (frasa utuh + tiap token,
+  per field) untuk ClinicService/ClinicPolicy/KnowledgeChunk.
+- **Seed prosedural v1.1:** 5 KnowledgeChunk baru (status+transisi, same-day, manual/hold/bayar,
+  assignment/GPS/reschedule/series, navigasi tabel/kalender). Idempoten berdasar judul.
+- **MANUAL_BOOK 7-butir direkonsiliasi** ke v1.1 (status bayar DB, GCal mock, series+cancelled,
+  pending qualified, demam 37.8°C, vaksin 48–72 jam, diagram legal, contoh fiktif) + banner
+  pendamping non-seed; v1.1 + DB tetap kanonis (KNOWN_ISSUES #210).
+- **Test:** 10 kasus baru (tokenisasi + 3 parafrase adversarial). Verifikasi: 4.655 test hijau
+  (28 skip), `tsc` bersih.
+
 #### 2026-10-03 - Manual Book Operasional Admin & Manajemen Reservasi (`docs/MANUAL_BOOK_ADMIN_RESERVASI.md`)
 
 - **Dokumentasi resmi operasional & AI ingestion:** penyusunan manual book dwifungsi (admin CS & Hermes AI Copilot) untuk manajemen reservasi.

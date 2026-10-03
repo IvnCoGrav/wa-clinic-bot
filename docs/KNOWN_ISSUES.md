@@ -15,6 +15,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   Bab 8 + sangkalan "sumber kebenaran = DB" dibuang.
 - **Keputusan pemilik (Opsi A):** single source of truth = v1.1. MANUAL_BOOK diberi banner
   SUPERSEDED + DILARANG jadi acuan operasional/seed/prompt sebelum 7 butir diperbaiki.
+- **Reparasi 2026-10-03 (EXECUTED):** 7 butir direkonsiliasi ke v1.1 (status bayar DB +
+  lunas + CAPI moderasi; GCal mock; series +`cancelled`; okupansi `pending` qualified; demam
+  37.8°C; vaksin 48–72 jam; diagram tepi legal + caution; contoh pasien ditandai FIKTIF;
+  filter +En Route/Rejected). Banner → dokumen pendamping non-seed; v1.1 + DB tetap kanonis.
 - **Verifikasi anti-ruin:** tidak ada referensi kode/runtime ke MANUAL_BOOK (hanya entri CHANGELOG);
   seed + `lookup_catalog_and_policy` membaca DB saja, bukan `docs/`. Perubahan ini docs-only
   (banner + koreksi "6 tool"→7 di v1.1) — tanpa sentuh runtime, tanpa migrasi, tanpa redeploy.

@@ -40,6 +40,8 @@ import {
   queryStalledInquiries,
   getCustomerHistory,
   lookupCatalogAndPolicy,
+  extractSearchTokens,
+  buildTextSearchOr,
   hasScheduleIntentSignal,
   matchesInquiryDate,
   getCopilotTool,
@@ -804,6 +806,76 @@ describe('lookup_catalog_and_policy — katalog layanan & SOP (tenant-scoped)', 
     const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'xyz', type: 'ALL' });
     expect(res.rows).toEqual([]);
     expect(res.count).toBe(0);
+  });
+});
+
+describe('extractSearchTokens / buildTextSearchOr — pencarian kalimat alami (fondasional)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.clinicServiceFindMany.mockResolvedValue([]);
+    h.knowledgeChunkFindMany.mockResolvedValue([]);
+    h.clinicPolicyFindMany.mockResolvedValue([]);
+  });
+
+  it('kalimat → token unik ≥4 huruf, lowercase, urutan terjaga, maks 8', () => {
+    expect(extractSearchTokens('SOP jeda pijat setelah vaksin?')).toEqual(['jeda', 'pijat', 'setelah', 'vaksin']);
+  });
+
+  it('dedupe + buang kata pendek (<4 huruf)', () => {
+    expect(extractSearchTokens('vaksin vaksin dan di si')).toEqual(['vaksin']);
+  });
+
+  it('kosong / tanpa token valid → []', () => {
+    expect(extractSearchTokens('')).toEqual([]);
+    expect(extractSearchTokens('a b c')).toEqual([]);
+  });
+
+  it('batas 8 token (anti-ledakan OR)', () => {
+    const many = 'alpha beta gamma delta epsilon zeta eta theta iota kappa';
+    expect(extractSearchTokens(many)).toHaveLength(8);
+  });
+
+  it('buildTextSearchOr: frasa utuh + tiap token, per field', () => {
+    const or = buildTextSearchOr(['title', 'content'], 'jeda vaksin');
+    expect(or).toContainEqual({ title: { contains: 'jeda vaksin', mode: 'insensitive' } });
+    expect(or).toContainEqual({ title: { contains: 'jeda', mode: 'insensitive' } });
+    expect(or).toContainEqual({ content: { contains: 'vaksin', mode: 'insensitive' } });
+  });
+
+  it('query kosong → OR kosong (perilaku tanpa filter tetap)', () => {
+    expect(buildTextSearchOr(['title'], '')).toEqual([]);
+    expect(buildTextSearchOr(['title'], '   ')).toEqual([]);
+  });
+
+  // Adversarial: 3 parafrase SOP yang berbeda kalimat HARUS semuanya bisa recall
+  // lewat token generik (bukan hafalan kalimat, bukan keyword bisnis).
+  const sopParaphrases = [
+    'SOP jeda pijat setelah vaksin?',
+    'bayi habis imunisasi kemarin boleh spa hari ini?',
+    'Mending mana pijat sebelum atau sesudah imunisasi?',
+  ];
+
+  for (const q of sopParaphrases) {
+    it(`"${q}" → where memuat frasa + semua token generik`, async () => {
+      await lookupCatalogAndPolicy.run('tenant-a', { query: q, type: 'POLICY' });
+      const where = h.clinicPolicyFindMany.mock.calls[0][0].where;
+      expect(where.tenant_id).toBe('tenant-a');
+      const ors = where.OR as any[];
+      expect(ors.length).toBeGreaterThan(1);
+      expect(ors).toContainEqual({ topic: { contains: q, mode: 'insensitive' } });
+      for (const t of extractSearchTokens(q)) {
+        expect(ors).toContainEqual({ topic: { contains: t, mode: 'insensitive' } });
+      }
+    });
+  }
+
+  it('kalimat panjang tetap mengembalikan baris DB (recall, bukan 0-rows)', async () => {
+    h.clinicPolicyFindMany.mockResolvedValue([
+      { topic: 'post_vaccine_rules', title: 'Jeda Aman', factual_summary: 'Jeda 48-72 jam setelah vaksin.', suggested_reply: 'x' },
+    ]);
+    const res = await lookupCatalogAndPolicy.run('tenant-a', { query: 'SOP jeda pijat setelah vaksin?', type: 'POLICY' });
+    expect(res.count).toBe(1);
+    expect(res.rows[0].source).toContain('post_vaccine_rules');
   });
 });
 

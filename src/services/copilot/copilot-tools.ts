@@ -541,23 +541,70 @@ export const getCustomerHistory: CopilotTool = {
 };
 
 /**
+ * Tokenisasi query bahasa alami menjadi kata kunci generik (murni, deterministik).
+ *
+ * BUKAN daftar hafalan kata/frasa: teks APA PUN dipecah menjadi token huruf (≥4 huruf,
+ * unik, maks 8). Membuat pertanyaan kalimat ("SOP jeda pijat setelah vaksin?") cocok
+ * dengan baris DB ("...jeda...vaksin...") tanpa pencocokan kalimat-per-kalimat
+ * (anti-overfitting) dan tanpa regex gatekeeper intent.
+ */
+export function extractSearchTokens(query: string, maxTokens = 8): string[] {
+  const tokens = String(query || '').toLowerCase().match(/[a-z]{4,}/g) || [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tokens) {
+    if (!seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+      if (out.length >= maxTokens) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Bangun klausa OR Prisma untuk pencarian teks: frasa utuh (presisi) + tiap token
+ * (recall). Murni — mudah diuji. Dipakai `lookup_catalog_and_policy` agar bahasa
+ * alami admin tetap grounding ke DB.
+ */
+export function buildTextSearchOr(fields: string[], query: string): any[] {
+  const q = String(query || '').trim();
+  const likes: string[] = [];
+  if (q) likes.push(q);
+  for (const t of extractSearchTokens(q)) {
+    if (!likes.some((l) => l.toLowerCase() === t)) likes.push(t);
+  }
+  const or: any[] = [];
+  for (const f of fields) {
+    for (const l of likes) {
+      or.push({ [f]: { contains: l, mode: 'insensitive' as const } });
+    }
+  }
+  return or;
+}
+
+/**
  * Tool 6: katalog layanan resmi & SOP/kebijakan klinik (grounding medis).
  * Sumber: `ClinicService` (harga/durasi), `ClinicPolicy` (SOP), `KnowledgeChunk` (FAQ/dokumen).
  * Semua tenant-scoped, `take` dibatasi. Row TANPA `customerName` (bukan entitas pasien).
+ *
+ * Pencarian memakai frasa + token generik (`buildTextSearchOr`) sehingga pertanyaan
+ * kalimat alami ("SOP jeda pijat setelah vaksin?") tetap cocok ke baris DB — TANPA
+ * menghafal kalimat pengguna.
  */
 export const lookupCatalogAndPolicy: CopilotTool = {
   name: 'lookup_catalog_and_policy',
   description:
     'Mencari katalog layanan resmi (harga normal/promo, durasi, usia) dan dokumen SOP/kebijakan klinik ' +
-    '(mis. jeda pasca vaksin, penanganan komplain). Gunakan untuk pertanyaan SOP/prosedur/layanan.',
+    '(mis. jeda pasca vaksin, penanganan komplain). Terima pertanyaan kalimat alami; query dipecah otomatis. ' +
+    'Gunakan untuk pertanyaan SOP/prosedur/layanan.',
   parameters: {
-    query: { type: 'string', description: 'Topik SOP atau nama layanan yang dicari.' },
+    query: { type: 'string', description: 'Topik SOP atau nama layanan; boleh kalimat alami.' },
     type: { type: 'string', description: 'TREATMENT | POLICY | ALL (default ALL).' },
   },
   run: async (tenantId, args) => {
     const q = args.query ? String(args.query).trim() : '';
     const type = (args.type ? String(args.type).toUpperCase() : 'ALL') as 'TREATMENT' | 'POLICY' | 'ALL';
-    const like = { contains: q, mode: 'insensitive' as const };
 
     const wantTreatments = type === 'TREATMENT' || type === 'ALL';
     const wantPolicy = type === 'POLICY' || type === 'ALL';
@@ -566,19 +613,19 @@ export const lookupCatalogAndPolicy: CopilotTool = {
     const [services, policies, chunks] = await Promise.all([
       wantTreatments
         ? prisma.clinicService.findMany({
-            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: [{ name: like }, { description: like }] } : {}) },
+            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: buildTextSearchOr(['name', 'description'], q) } : {}) },
             take: 8,
           })
         : Promise.resolve([] as any[]),
       wantPolicy
         ? prisma.clinicPolicy.findMany({
-            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: [{ topic: like }, { title: like }, { factual_summary: like }] } : {}) },
+            where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: buildTextSearchOr(['topic', 'title', 'factual_summary'], q) } : {}) },
             take: 8,
           })
         : Promise.resolve([] as any[]),
       wantKnowledge
         ? prisma.knowledgeChunk.findMany({
-            where: { tenant_id: tenantId, ...(q ? { OR: [{ title: like }, { content: like }, { keywords: like }] } : {}) },
+            where: { tenant_id: tenantId, ...(q ? { OR: buildTextSearchOr(['title', 'content', 'keywords'], q) } : {}) },
             take: 8,
           })
         : Promise.resolve([] as any[]),
