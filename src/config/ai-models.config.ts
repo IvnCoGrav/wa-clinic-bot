@@ -288,6 +288,23 @@ export const AI_PRESET_PROFILES = {
 
 export type AiPresetId = keyof typeof AI_PRESET_PROFILES;
 
+/**
+ * Capability gate: apakah provider/model mendukung parameter `thinking`.
+ *
+ * Hanya keluarga GLM (model penalaran) yang memerlukan `thinking: { type:
+ * 'disabled' }` untuk mematikan mode reasoning. Model DeepSeek/OpenAI-compatible
+ * di gateway SumoPod TIDAK mengenal parameter ini — mengirimnya memicu
+ * degenerasi grammar (model memuntahkan tag DSML mentah dan terjebak looping
+ * repetisi hingga `max_tokens` habis → tool call gagal di-parse → fallback
+ * buntu). Insiden: percakapan Bunda Lyaa "Wonokusumo" (2026-10-03).
+ *
+ * Fail-safe (default aman): model/provider tak dikenal → JANGAN kirim param.
+ */
+export function supportsThinkingParam(provider: string | undefined, modelName: string | undefined): boolean {
+  const haystack = `${provider || ''} ${modelName || ''}`.toLowerCase();
+  return haystack.includes('glm');
+}
+
 // Registry per-tenant: Map<tenantId, Map<AiTaskType, AiTaskModelConfig>>.
 // Default tenant di-seed dari env pada saat modul dimuat.
 const tenantRegistries: Map<string, Map<AiTaskType, AiTaskModelConfig>> = new Map();

@@ -68,6 +68,22 @@ const PRESET_CARDS = [
 const SUMOPOD_MODELS = ['glm-5.3-flash', 'MiniMax-M2.7-highspeed', 'qwen3.7-flash-2026-07-15', 'gpt-4o-mini', 'deepseek-v4-flash-0731:netra'];
 const KENARI_MODELS = ['deepseek-v4-1-flash', 'gemini-2-5-flash-lite', 'muse-spark-1-3-contributor'];
 
+/**
+ * Ekspektasi perilaku model untuk badge Call 1 — diselaraskan dengan capability
+ * gate backend (`supportsThinkingParam`): HANYA keluarga GLM yang menerima flag
+ * `thinking: disabled`. Label statis lama ("Latensi Kilat" + "Thinking Nonaktif")
+ * menyesatkan saat router di-set ke DeepSeek netra (insiden "Wonokusumo"
+ * 2026-10-03). Ini ekspektasi, bukan status live.
+ */
+export function describeModelBehavior(model: string): { latency: string; thinking: string; thinkingSent: boolean } {
+  const m = (model || '').toLowerCase();
+  if (m.includes('glm')) return { latency: '⚡ Latensi Kilat (~1.1s)', thinking: '🔒 Thinking Mode: Nonaktif (didukung)', thinkingSent: true };
+  if (m.includes('netra') || m.includes('deepseek')) return { latency: '🧠 Sedang (~2.4s)', thinking: '🚫 Thinking: Tidak dikirim', thinkingSent: false };
+  if (m.includes('qwen')) return { latency: '⚡ Cepat (~1.3s)', thinking: '🚫 Thinking: Tidak dikirim', thinkingSent: false };
+  if (m.includes('minimax')) return { latency: '⚡ Cepat (~1.2s)', thinking: '🚫 Thinking: Tidak dikirim', thinkingSent: false };
+  return { latency: '⏱️ Standar (~2s)', thinking: '🚫 Thinking: Tidak dikirim', thinkingSent: false };
+}
+
 // Kartu Mode Darurat Kenari — hanya dirender saat activeProvider === 'KENARI'
 // (derive mengembalikan 'FAILOVER_SUMOPOD' yang tak ada di PRESET_CARDS).
 const FAILOVER_CARD = {
@@ -557,9 +573,10 @@ export const AiModelSettingsPanel: React.FC = () => {
               {/* Card Call 1: Router */}
               {(() => {
                 const routerConfig = configs.find((c) => c.task === 'INTENT_CLASSIFICATION');
-                const defaultRouterModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'glm-5.3-flash';
+                const defaultRouterModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'deepseek-v4-flash-0731:netra';
                 const currentModel = routerConfig?.modelName || defaultRouterModel;
                 const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
+                const behavior = describeModelBehavior(currentModel);
                 return (
                   <div className="p-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] shadow-xs flex flex-col justify-between">
                     <div>
@@ -572,17 +589,17 @@ export const AiModelSettingsPanel: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3 leading-relaxed">
-                        Mengevaluasi pemanggilan tool (ongkir, katalog, SOP) secara atomik. Mode thinking dinonaktifkan agar latensi kilat (~1.2s) dan hemat token.
+                        Mengevaluasi pemanggilan tool (ongkir, katalog, SOP) secara atomik. Parameter thinking hanya dikirim ke model yang mendukungnya (GLM); model DeepSeek/Qwen tidak menerimanya.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-emerald-300 font-medium">
-                          ⚡ Latensi Kilat (~1.2s)
+                          {behavior.latency}
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#202c33] text-slate-700 dark:text-slate-300 font-medium">
-                          🔒 Thinking Mode: Nonaktif
+                          {behavior.thinking}
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-[#2a2414] text-amber-700 dark:text-amber-300 font-medium">
-                          💰 Paling Hemat Token
+                          💰 Hemat Token
                         </span>
                       </div>
                     </div>
@@ -612,7 +629,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               {/* Card Call 2: Persona Generator */}
               {(() => {
                 const chatConfig = configs.find((c) => c.task === 'CHAT_REPLY');
-                const defaultChatModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'gpt-4o-mini';
+                const defaultChatModel = activeProvider === 'KENARI' ? 'deepseek-v4-1-flash' : 'glm-5.3-flash';
                 const currentModel = chatConfig?.modelName || defaultChatModel;
                 const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
                 return (

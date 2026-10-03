@@ -5,8 +5,9 @@ import { ALL_V3_TOOLS } from '../../tools/tool-registry';
 import { PersonaPromptBuilder, extractFastIntents, PERSONA_STABLE_PREFIX_MARKER } from '../persona';
 import { buildCacheableSystemPrompt, buildCachedMessages } from '../../../integrations/llm/prompt-cache';
 import { CustomerGoalSession } from '../../state/goal-tracker';
-import { AiModelConfigService } from '../../../config/ai-models.config';
+import { AiModelConfigService, supportsThinkingParam } from '../../../config/ai-models.config';
 import { ContextGrounder, GroundingOutput } from './context-grounder';
+import { salvageToolCallsFromDsml } from './dsml-tool-salvage';
 import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
 
 const GLM_TIMEOUT_MS = Math.max(1000, parseInt(process.env.LLM_TIMEOUT_GLM_MS || '60000', 10) || 60000);
@@ -556,6 +557,13 @@ export class GenerationStage {
 
     const call1Model = turn.routerModel || turn.selectedModel;
     const call1MaxTokens = resolveMaxTokensForTask('INTENT_CLASSIFICATION', turn.tenantId);
+    // Provider-aware capability gate (insiden "Wonokusumo" 2026-10-03): flag
+    // `thinking` HANYA untuk keluarga GLM. Model DeepSeek/OpenAI-compatible di
+    // gateway tidak mengenalnya → mengirimnya memicu looping DSML hingga token
+    // habis, tool call gagal di-parse, lalu fallback buntu. Nilai model tetap
+    // dari tenant_ai_config (tenant-aware); gate ini murni kapabilitas provider.
+    const call1RouterCfg = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION', turn.tenantId);
+    const call1SupportsThinking = supportsThinkingParam(call1RouterCfg.provider, call1Model);
     const firstPayload: any = {
       model: call1Model,
       messages,
@@ -564,7 +572,7 @@ export class GenerationStage {
       parallel_tool_calls: false, // MANDAT ATOMIC ROUTING (audit 993955): 1 turn WhatsApp = maksimal 1 tool utama.
       temperature: 0.2,
       ...(call1MaxTokens ? { max_tokens: call1MaxTokens } : {}),
-      thinking: { type: 'disabled' }, // Nonaktifkan thinking mode pada Call 1 agar latensi kilat (~1.2s) & token hemat
+      ...(call1SupportsThinking ? { thinking: { type: 'disabled' } } : {}),
     };
 
     const firstStartedAt = Date.now();
@@ -594,6 +602,30 @@ export class GenerationStage {
     if (!reasoning && callReasoning) {
       reasoning = callReasoning;
       turn.reasoning = reasoning;
+    }
+
+    // Fase 2 (defense-in-depth, insiden "Wonokusumo" 2026-10-03): bila model
+    // TIDAK mengembalikan `tool_calls` terstruktur tetapi memuntahkan sintaks
+    // tool-call DSML ke `content` (lazim pada netra via gateway), pulihkan
+    // panggilan secara deterministik. Keamanan anti-halusinasi tetap dijaga
+    // gerbang verbatim eksisting di tool-pipeline (locationText di-cross-check
+    // ke teks customer asli). Tanpa invoke yang bisa dibaca → array kosong.
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+      const rawContent = typeof (assistantMessage as any)?.content === 'string' ? (assistantMessage as any).content : '';
+      const salvaged = salvageToolCallsFromDsml(rawContent);
+      if (salvaged.length > 0) {
+        toolCalls = salvaged;
+        if (assistantMessage && typeof assistantMessage === 'object') {
+          (assistantMessage as any).tool_calls = salvaged;
+        }
+        console.warn(JSON.stringify({
+          event: 'CALL1_DSML_TOOL_SALVAGED',
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          tools: salvaged.map((s) => s.function.name),
+          timestamp: new Date().toISOString(),
+        }));
+      }
     }
 
     // Tracing Call 1 (Tool Routing): latensi bersih model + token/biaya per-call

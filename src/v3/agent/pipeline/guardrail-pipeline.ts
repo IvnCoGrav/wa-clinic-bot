@@ -832,6 +832,26 @@ export class GuardrailPipeline {
         }
         finalReply = deliveryReply;
         console.warn(JSON.stringify({ event: 'DELIVERY_RECOVERY_APPLIED', timestamp: new Date().toISOString() }));
+      } else if (
+        session?.location &&
+        (session.location.kelurahan || session.location.kecamatan || session.location.kota)
+      ) {
+        // State-aware recovery (insiden "Wonokusumo" 2026-10-03): draf kosong
+        // akibat kegagalan Call 1/2, TETAPI lokasi customer sudah presisi di
+        // sesi. Jangan buang ke kaleng buntu — akui jangkauan dari data sesi
+        // (tanpa nominal, karena ongkir hanya sah dari tool) lalu lanjutkan
+        // CTA state-aware. Data lokasi berasal dari sesi (DB), bukan hardcode.
+        const label = session.location.kelurahan || session.location.kecamatan || session.location.kota;
+        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
+        const cta = buildScheduleCta({
+          candidateTreatmentName: session.selectedTreatment,
+          hasCartItems: (session.cartItems || []).length > 0,
+        });
+        finalReply = `Baik Bunda 😊 Rumah Bunda di ${label} sudah masuk jangkauan layanan homecare kami ya. ${cta}`;
+        shouldSendReply = true;
+        emptyKnowledgeResult = false;
+        violationsDetected.push('STATE_AWARE_LOCATION_RECOVERY: lokasi sesi dipakai, bukan fallback buntu');
+        console.warn(JSON.stringify({ event: 'STATE_AWARE_LOCATION_RECOVERY_APPLIED', tenantId, conversationId, label, timestamp: new Date().toISOString() }));
       } else {
         const { getBrandIdentity } = await import('../../../config/brand');
         const brand = getBrandIdentity();

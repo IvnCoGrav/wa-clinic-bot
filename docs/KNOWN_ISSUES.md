@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 207. [LLM/Call 1] Insiden "Wonokusumo" — thinking flag tertinggal + DSML loop (FIXED, 2026-10-03)
+
+- **Gejala:** customer kirim kelurahan presisi (`Wonokusumo`) → bot balas kaleng
+  "Baik Bunda 😊 Kami pastikan informasinya terlebih dahulu yaa..." → admin turun
+  tangan manual. Pola identik #194e (Chyntia) tetapi pemicu beda.
+- **Akar (multi-layer):** `generation-stage.ts:567` mengirim `thinking: { type:
+  'disabled' }` unconditional ke Call 1. Flag dibuat 2026-09-22 untuk router GLM;
+  router dipindah ke `deepseek-v4-flash-0731:netra` (2026-10-02) TANPA mencabut flag.
+  Parameter asing pada DeepSeek via gateway → degenerasi grammar, looping DSML
+  (`isDontKnow...`) hingga `max_tokens` habis → `tool_calls` gagal di-parse →
+  `executedTools` kosong → `buildInvalidReplyFallback` (tanpa recovery karena tidak
+  ada tool result). Bukti eksperimen investigator: dengan flag 1024-2048 token/15 dtk
+  gagal; tanpa flag 64 token/0,8 dtk sukses.
+- **Fixed:** (1) capability gate `supportsThinkingParam` (hanya GLM terima flag);
+  (2) salvage DSML deterministik Call 1 (`dsml-tool-salvage.ts`, JSON terpotong
+  dibuang); (3) recovery state-aware (lokasi sesi → jangkauan + CTA, bukan kaleng);
+  (4) label dashboard dinamis. Test: `call1-provider-payload` (4),
+  `call1-dsml-salvage` (5), 2 kasus recovery di `guardrail-pipeline`.
+- **Sisa OPEN (observability):** keputusan trial netra untuk Call 1+2 (preset
+  `DEEP_REASONING`) menerima latensi lebih tinggi (~2,4s) — dipantau. Salinan lengkap
+  isi prompt/reply tetap butuh JSONL host (`/app/logs` volume) + tabel `messages`.
+
 ## 206. [Geocoding] Halusinasi kecamatan "Demak Surabaya" → tier kandidat Google + guard + verifikasi (2026-10-03, EXECUTED)
 
 - **Gejala:** customer 62816331804 kirim "Daerah Demak surabaya" → bot balas

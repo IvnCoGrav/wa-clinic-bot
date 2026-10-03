@@ -72,4 +72,31 @@ describe('GuardrailPipeline — reprompt terisolasi (LLM mock)', () => {
     expect(executeChat).not.toHaveBeenCalled();
     expect(out.finalReply).toContain('Baik Bunda');
   });
+
+  it('insiden Wonokusumo: draf KOSONG + lokasi presisi di sesi → recovery jangkauan, BUKAN kaleng buntu', async () => {
+    const out = await GuardrailPipeline.verifyAndReprompt(baseInput({
+      draftReply: '',
+      executedTools: [],
+      session: {
+        cartItems: [],
+        genderGreeting: 'Bunda',
+        location: { kelurahan: 'Wonokusumo', kecamatan: 'Semampir', kota: 'Kota Surabaya' },
+      },
+      executeChat: vi.fn(),
+    }));
+    expect(out.finalReply).not.toContain('Kami pastikan informasinya');
+    expect(out.finalReply).toContain('Wonokusumo');
+    expect(out.finalReply).toContain('jangkauan');
+    expect(out.violationsDetected).toContain('STATE_AWARE_LOCATION_RECOVERY: lokasi sesi dipakai, bukan fallback buntu');
+  });
+
+  it('tanpa lokasi sesi → tetap fallback kaleng buntu (tidak mengarang)', async () => {
+    const out = await GuardrailPipeline.verifyAndReprompt(baseInput({
+      draftReply: '',
+      executedTools: [],
+      session: { cartItems: [], genderGreeting: 'Bunda' },
+      executeChat: vi.fn(),
+    }));
+    expect(out.finalReply).toContain('Kami pastikan informasinya');
+  });
 });

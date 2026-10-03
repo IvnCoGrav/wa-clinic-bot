@@ -4,6 +4,47 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-03 - Fix Call 1 netra: provider-aware thinking flag + salvage DSML + recovery state (insiden "Wonokusumo")
+
+- **Akar (multi-layer):** `generation-stage.ts:567` mengirim `thinking: { type: 'disabled' }`
+  UNCONDITIONAL ke Call 1. Flag dipasang 2026-09-22 untuk router GLM; setelah router
+  dipindah ke `deepseek-v4-flash-0731:netra` (2026-10-02) flag tertinggal. Parameter asing
+  pada DeepSeek via gateway memicu degenerasi grammar → model memuntahkan tag DSML mentah
+  dan looping repetisi (`isDontKnow...`) hingga `max_tokens` habis → `tool_calls` gagal
+  di-parse → `executedTools` kosong → guardrail jatuh ke kaleng buntu
+  (`buildInvalidReplyFallback`) → customer "Wonokusumo" hanya dapat "Kami pastikan
+  informasinya..." dan admin turun tangan manual.
+- **Fixed — provider-aware capability gate (`src/config/ai-models.config.ts`):**
+  `supportsThinkingParam(provider, modelName)` — HANYA keluarga GLM yang menerima
+  `thinking`; DeepSeek/OpenAI-compatible/Qwen/MiniMax tidak; tak dikenal → fail-safe
+  jangan kirim. Nilai model tetap dari `tenant_ai_config` (tenant-aware).
+- **Fixed — `generation-stage.ts`:** flag `thinking` kini kondisional lewat resolver
+  (Call 1 netra tidak dikirim). Call 2 tidak disentuh.
+- **Fixed — deterministik DSML salvage (`src/v3/agent/pipeline/dsml-tool-salvage.ts`,
+  baru):** bila Call 1 tak mengembalikan `tool_calls` terstruktur tetapi `content`
+  memuat sintaks DSML, pulihkan invoke+args (JSON balanced-aware atau blok
+  `<parameter>`); JSON terpotong → dibuang, bukan ditebak. Keamanan anti-halusinasi
+  tetap di gerbang verbatim `tool-pipeline`.
+- **Fixed — state-aware recovery (`guardrail-pipeline.ts`):** draf kosong + lokasi
+  presisi sudah ada di sesi → jawab konfirmasi jangkauan dari data sesi + CTA
+  state-aware (`buildScheduleCta`), bukan kaleng buntu; tanpa lokasi → tetap fallback
+  (tidak mengarang).
+- **Fixed — label dashboard (`AiModelSettingsPanel.tsx`):** fallback frontend
+  diselaraskan backend (router→netra, chat→glm); badge statis "Latensi Kilat/Thinking
+  Nonaktif" diganti `describeModelBehavior()` dinamis per model.
+- **Test:** `tests/unit/v3/call1-provider-payload.test.ts` (4) +
+  `call1-dsml-salvage.test.ts` (5, adversarial) + 2 kasus recovery di
+  `guardrail-pipeline.test.ts`. Verifikasi: typecheck bersih; suite 4553 lulus
+  (3 flaky timeout reservation/staff hijau terisolasi); dashboard build hijau.
+
+#### 2026-10-03 - SOP Admin Reservasi v1.1 (revisi audit kesesuaian kode)
+
+- **Added — `docs/SOP_ADMIN_RESERVASI.md` v1.1:** revisi SOP v1.0 berdasarkan audit read-only kode/DB (7 selisih dikoreksi, bukan tambah larangan prompt).
+- **Fixed — status & transisi:** `pending` dikualifikasi (aktif administratif, dikecualikan overcapacity); hold expiry ganda (2 jam `created_at` + tengah malam WIB → `cancelled`); matriks `canTransition`; guard `completed` = tolak bila >24 jam ke depan + celah staf/series dicatat.
+- **Fixed — pembayaran & series:** `purchase_review_status` dikoreksi `pending/approved/ignored_outlier` (bukan `verified`); Lunas = `purchase_occurred_at`; CAPI antrean moderasi; series `cancelled` dilengkapi; GCal masih mock.
+- **Fixed — klinis & Copilot:** imunisasi rujuk `ClinicPolicy post_vaccine_rules` (48-72 jam + 3 hari batas aman operasional); demam 37.8°C; kapasitas = `Staff.active`; Bab 7 jadi spesifikasi seed `KnowledgeChunk` per-tenant (tanpa hardcode angka ke prompt); batasan Hermes/latensi diungkap.
+- **Verifikasi:** read-only, tanpa ubah runtime; konsisten KNOWN_ISSUES #190/#191/#198.
+
 #### 2026-10-03 - Fix Alamat/Anak Hilang di LiveChat Edit (F-A..F-D)
 
 - **Akar:** payload banner LiveChat (`formatReservationItem`) memangkas `preferences`,
