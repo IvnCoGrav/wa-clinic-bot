@@ -5,12 +5,18 @@ import { webhookRoutes } from '../../src/routes/webhook.route';
 import { conversationService } from '../../src/services/conversation.service';
 import { messageService } from '../../src/services/message.service';
 import { wahaClient } from '../../src/integrations/waha/client';
+import { prisma } from '../../src/db/client';
+import { wahaTenantService } from '../../src/services/waha-tenant.service';
 
 describe('Live Chat Typing & Delivery Status Tests', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    // P0-1: webhook kini fail-closed untuk session tak dikenal. Tes ini menguji
+    // ack/typing, jadi tenant WAHA 'default' harus ter-resolve normal.
+    wahaTenantService.resetCache();
+    vi.mocked(prisma.tenant.findFirst).mockResolvedValue({ id: 'default-tenant' } as any);
     app = Fastify();
     await app.register(livechatAdminRoutes);
     await app.register(webhookRoutes);

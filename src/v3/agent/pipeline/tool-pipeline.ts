@@ -62,6 +62,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
 }
 
 /**
+ * C4 (audit #199): saring daftar gejala agar HANYA yang benar-benar muncul di
+ * pesan user turn ini yang dipertahankan (verbatim gate, data-driven). Gejala
+ * karangan LLM DILARANG menjadi fakta sesi. Murni & testable.
+ */
+export function filterSymptomsPresentInText(symptoms: any[], cleanIncomingText: string | undefined): any[] {
+  const normHay = (cleanIncomingText || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normHay) return [];
+  return (symptoms || []).filter((s: any) => {
+    const norm = String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!norm) return false;
+    if (normHay.includes(norm)) return true;
+    return norm.split(' ').some((tok: string) => tok.length >= 4 && normHay.includes(tok));
+  });
+}
+
+/**
  * Stage 2 & 3 — ToolExecutionPipeline: validasi argumen tool, pengayaan
  * kontekstual otomatis, eksekusi via registry, dan reduksi mutasi session
  * (state reducer terpusat — bukan mutasi tersebar).
@@ -575,6 +591,19 @@ export class ToolExecutionPipeline {
   }): Promise<{ session: CustomerGoalSession }> {
     const { fnName, fnArgs, toolResult, tenantId, conversationId, cleanIncomingText } = args;
     let { session } = args;
+
+    // C4 (audit #199): gate verbatim gejala — `fnArgs.symptoms` dari LLM Call 1
+    // HANYA boleh dipersist bila benar-benar muncul di pesan user turn ini.
+    // Mencegah gejala karangan LLM menjadi fakta sesi permanen (kontaminasi
+    // rekomendasi klinis berikutnya). Dipanggil PASCA eksekusi tool (yang tetap
+    // memakai args asli), jadi hanya memengaruhi persistensi. Pola sama dengan
+    // gate specificTreatmentName.
+    if ((fnName === 'get_catalog_and_price' || fnName === 'save_reservation')
+        && Array.isArray(fnArgs.symptoms) && fnArgs.symptoms.length > 0) {
+      try {
+        fnArgs.symptoms = filterSymptomsPresentInText(fnArgs.symptoms, cleanIncomingText);
+      } catch { /* gate best-effort — jangan menggagalkan persist */ }
+    }
 
     if (fnName === 'calculate_delivery' && toolResult.success) {
       session = await GoalTracker.updateGoalSession(conversationId, {

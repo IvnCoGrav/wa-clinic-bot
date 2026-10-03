@@ -28,21 +28,21 @@ describe('FASE 2a — WAHA tenant resolution', () => {
     findFirst.mockReset();
   });
 
-  it('session undefined → DEFAULT_TENANT_ID tanpa query DB', async () => {
+  it('session undefined → null tanpa query DB (fail-closed)', async () => {
     const svc = await loadService();
     const result = await svc.resolveTenantBySession(undefined);
-    expect(result).toBe(DEFAULT_TENANT_ID);
+    expect(result).toBeNull();
     expect(findFirst).not.toHaveBeenCalled();
   });
 
-  it('session string kosong → DEFAULT_TENANT_ID (adversarial)', async () => {
+  it('session string kosong → null (adversarial, fail-closed)', async () => {
     const svc = await loadService();
-    expect(await svc.resolveTenantBySession('')).toBe(DEFAULT_TENANT_ID);
-    expect(await svc.resolveTenantBySession('   ')).toBe(DEFAULT_TENANT_ID);
+    expect(await svc.resolveTenantBySession('')).toBeNull();
+    expect(await svc.resolveTenantBySession('   ')).toBeNull();
     expect(findFirst).not.toHaveBeenCalled();
   });
 
-  it('DB offline (query reject) → DEFAULT_TENANT_ID, tidak throw', async () => {
+  it('DB offline (query reject) → DEFAULT_TENANT_ID (availability), tidak throw', async () => {
     findFirst.mockRejectedValue(new Error('Database offline'));
     const svc = await loadService();
     await expect(svc.resolveTenantBySession('sess-1')).resolves.toBe(DEFAULT_TENANT_ID);
@@ -54,10 +54,10 @@ describe('FASE 2a — WAHA tenant resolution', () => {
     expect(await svc.resolveTenantBySession('sess-2')).toBe('tenant-kala-2');
   });
 
-  it('session tidak ditemukan di DB → DEFAULT_TENANT_ID', async () => {
+  it('session tidak ditemukan di DB → null (fail-closed, BUKAN default)', async () => {
     findFirst.mockResolvedValue(null);
     const svc = await loadService();
-    expect(await svc.resolveTenantBySession('sess-unknown')).toBe(DEFAULT_TENANT_ID);
+    expect(await svc.resolveTenantBySession('sess-unknown')).toBeNull();
   });
 
   it('cache: query kedua untuk session sama tidak memanggil Prisma lagi', async () => {

@@ -3,8 +3,14 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 200. [Ops/State/Tenant] Fixing plan eksekusi Fase A–B (2026-10-03, EXECUTED)
+## 201. [Kontrak Booking/Output] Fase C fixing plan — status + batas konfirmasi (2026-10-03)
 
+- **C.4 FIXED & live-ready — gate verbatim gejala:** `filterSymptomsPresentInText()` di `tool-pipeline.ts` menyaring `fnArgs.symptoms` agar HANYA yang muncul di pesan user turn ini yang dipersist. Cegah gejala karangan LLM menjadi fakta sesi. Test: `tests/unit/v3-llm-symptom-persist.test.ts` (5).
+- **C.3 REKLASIFIKASI — bukan bug murni:** "lokasi presisi → nominal/jarak dibuka tanpa ditanya" adalah **kontrak keputusan user sesi 779408** (didokumentasikan di `calculate-delivery.tool.ts` + test `calculate-delivery-precise-fee.test.ts`). Tidak boleh diubah sebagai "bug" tanpa keputusan produk baru. Yang tetap layak ditutup: status `QUOTED` palsu saat nominal hanya tersembunyi (bukan bug uang). Status: OPEN — butuh keputusan produk.
+- **C.1 (lokasi presisi save_reservation) + C.2 (tanggal/lokasi word-boundary selaras):** menyentuh **kontrak booking + uang** dengan blast radius produksi tinggi. DITAHAN menunggu keputusan eksplisit user (Confirmation Gate) sebelum eksekusi.
+- **Fase D:** BELUM dieksekusi (transaksi seed + tenant-scope CAPI + secret/label).
+
+## 200. [Ops/State/Tenant] Fixing plan eksekusi Fase A–B (2026-10-03, EXECUTED)
 - **Fase A (ops):**
   - Host LAMA (legacy, 43.157.197.148) di-`stop` (waha/app/caddy) untuk cegah rebut sesi WA (`conflict type=replaced`). Host LIVE = `klinik-server-baru` (43.173.11.79, DNS `app.kalababyspa.online`).
   - Log forensik kini persist ke host via volume `./logs:/app/logs` (`docker-compose.yml`). Sebelumnya `logs/` tidak ada di server → JSONL hilang saat recreate.
