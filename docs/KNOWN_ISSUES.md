@@ -95,6 +95,27 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   melanggar mandat Zero New Runtime Dependencies. Bila kelak perlu HEIC galeri penuh, ajukan
   Confirmation Gate (dependency baru) atau konversi server-side (infra + LOC besar + migrasi).
 
+## 215. [Ops/WAHA] Loop "conflict (replaced)" pasca unclean shutdown + stack mati mendadak (2026-10-04, OPEN)
+
+- **Gejala:** `app` + `caddy` + `waha` EXITED serentak hanya ~4 menit setelah deploy
+  (`app` exit 0, `caddy` exit 0, `waha` exit 137) — indikasi `docker compose stop/down`
+  dari luar, bukan crash kode. Setelah dinyalakan ulang, sesi WAHA masuk loop reconnect:
+  `connected to WA → Transitioning to Online → Stream Errored (conflict) type: replaced →
+  reconnect`, ~30x/menit. Anehnya Session API tetap `status: WORKING`, `reachoutTimelock: null`,
+  akun `6285794210526` (Bidan Yusi), dan **tanpa QR**.
+- **Dampak:** `[WAHA MONITOR]` app melihat sesi bergantian tidak WORKING → outbound queue
+  di-pause/resume berulang. Pengiriman follow-up tidak stabil: 3 dari 8 antrean restore
+  (Gita Candi, Putri, Viska) gagal kirim (`WAHA sendText failed`).
+- **Hipotesis akar:** error `conflict/replaced` = nomor WA yang sama sedang aktif di
+  koneksi lain (mis. WAHA lokal/lingkungan tes lain) sehingga saling menendang. Alternatif:
+  `store.fullSync` tetap `true` di config API walau env `WAHA_NOWEB_STORE_FULLSYNC=false`
+  (nama env tidak dikenali versi WAHA ini).
+- **Tindakan sementara:** restart sesi via `POST /api/sessions/default/restart` → berhasil
+  TANPA QR, tetapi **loop tidak berhenti**. Perubahan kode/DB tidak menyentuh WAHA.
+- **Open:** butuh (a) konfirmasi apakah ada instance WAHA lain memakai nomor sama
+  (mematikannya akan menghentikan loop), atau (b) langkah `stop`+`start` sesi penuh /
+  restart container `waha` — dengan warning risiko QR.
+
 ## 214. [FollowUp/NEXT_TREATMENT] Regresi status PENDING & auto-cancel tanpa alasan (2026-10-04, RESOLVED)
 
 - **Gejala:** 41 antrean `NEXT_TREATMENT` (pasien repeat order) ter-cancel otomatis tanpa alasan (`cancel_reason IS NULL`) sejak 24 September hingga 4 Oktober (termasuk kasus Bunda Gobii dan 7 bunda lainnya pada 4 Oktober jam 09:01 WIB). Selain itu, terdapat 333 antrean `NEXT_TREATMENT` di masa depan yang tertahan di status `PENDING` dan terancam hangus otomatis setiap jam 09:01 WIB.
@@ -108,6 +129,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. 8 antrean ter-cancel hari ini (Bunda Gobii dkk) dipulihkan ke `QUEUED` via slot jam kerja.
   4. Worker auto-cancel diberi *grace period* akhir-hari WIB + `cancel_reason: CANCEL_REASON.EXPIRED_PENDING`.
   5. Enum `WINBACK_60D` ditambahkan di DB live (fix `22P02`).
+  6. Healing lanjutan (batch 2): 49 antrean dipulihkan/dijadwalkan ulang ke jam kerja
+     Sen 5 & Sel 6 Okt (46 korban lama 25 Sep–3 Okt yang lolos guard + 3 gagal hari ini);
+     40 korban lain di-skip karena sudah punya baris stage sama yang aktif (anti-dobel).
 - **Tech debt tersisa (OPEN):** (a) `FOLLOWUP_MAX_PER_DAY=40` masih **sebaran jadwal**, BUKAN cap kirim keras — belum ada counter harian di jalur `processDueFollowUps`; (b) masih config global `.env`, belum per-tenant (SaaS). Bila kelak perlu cap keras/per-tenant, butuh tabel kuota + counter (Confirmation Gate).
 
 ## 213. [CTWA Greeting Catcher] Batasan sadar fuzzy attribution Priority 3 (2026-10-04, OPEN — sebagian by design)
