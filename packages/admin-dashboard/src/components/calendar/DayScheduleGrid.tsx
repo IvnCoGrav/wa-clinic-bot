@@ -15,6 +15,7 @@ interface DayScheduleGridProps {
 }
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -393,7 +394,10 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           </span>
                         )}
                         <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1] hidden sm:inline">
-                          {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
+                          {(() => {
+                            const n = resolveStaffName(res);
+                            return n ? n.split(' ')[0] : 'Unassigned';
+                          })()}
                         </span>
                       </div>
                     </div>
@@ -461,7 +465,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                       <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
                         <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 dark:bg-[#111b21]/80 px-2.5 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[#111b21] dark:text-[#e9edef]">
                           <User size={12} className="text-[#008069] dark:text-[#00a884]" />
-                          <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
+                          <span>{resolveStaffName(res) || 'Belum ada terapis'}</span>
                         </div>
                       </div>
                     </div>

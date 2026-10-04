@@ -24,6 +24,7 @@ const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 
 interface PositionedEvent {
   res: Reservation;
@@ -671,9 +672,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                               <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f] dark:text-[#aebac1]">
                                 <User size={9} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
                                 <span className="truncate">
-                                  {res.assigned_staff?.name
-                                    ? res.assigned_staff.name.split(/\s+/)[0]
-                                    : 'Unassigned'}
+                                  {(() => {
+                                    const n = resolveStaffName(res);
+                                    return n ? n.split(/\s+/)[0] : 'Unassigned';
+                                  })()}
                                 </span>
                               </div>
                               <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 shrink-0 ml-1">

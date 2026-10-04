@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useStaffAuth } from '../../contexts/StaffAuthContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -67,7 +67,7 @@ import {
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
-import { compressImageFile } from '../../utils/imageCompressor';
+import { compressImageFile, prepareChatImage } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
@@ -77,12 +77,15 @@ import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 import {
   calculateHaversineKm,
   estimateTravelMinutesKm,
-  getCurrentDeviceLocation,
   isWithinDepartWindow,
   formatWibClock,
   needsNavigationPreflight,
+  startDepartGpsWarmup,
+  stopDepartGpsWarmup,
+  getDepartPositionFast,
 } from '../../utils/geoUtils';
 import { NavigationPreflightModal } from '../../components/staff/NavigationPreflightModal';
+import { OtwConfirmModal } from '../../components/staff/OtwConfirmModal';
 
 interface StaffTaskChild {
   name: string;
@@ -377,7 +380,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [replyText, setReplyText] = useState('');
-  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string; dataUrl: string; mimeType: string; fileName: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -801,6 +804,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Pengganti: kontrol keberangkatan via tombol "Navigasi" (GPS sekali-tembak + status
   // "dalam perjalanan" + ETA). Mesin telemetry (hook + endpoint backend) DIPERTAHANKAN
   // utuh untuk aplikasi native kelak, namun TIDAK ada lagi pemicu otomatis di sini.
+
+  // Pre-warm GPS (plan 2026-10-04, Silent Depart-Capture): panaskan cache lokasi
+  // SAAT ada tugas dalam jendela keberangkatan, sehingga klik "Navigasi" memakai
+  // posisi segar (0 dtk) — bukan tembakan GPS dingin yang sering time-out ketika
+  // prompt izin tertinggal di tab background. Silent total; dilepas saat tak ada
+  // tugas dalam window / unmount (privasi).
+  const hasDepartWindowTask = useMemo(
+    () => [...tasks, ...upcomingTasks].some((t) => isWithinDepartWindow(t.bookingDate)),
+    [tasks, upcomingTasks]
+  );
+  useEffect(() => {
+    if (hasDepartWindowTask) startDepartGpsWarmup();
+    else stopDepartGpsWarmup();
+    return () => stopDepartGpsWarmup();
+  }, [hasDepartWindowTask]);
 
   // Track user scroll position in chat viewport (anti-jerking when reading earlier messages)
   const handleChatScroll = useCallback(() => {
@@ -1310,51 +1328,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   }, []);
 
   // Send reply message
-  const fileToDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
-      reader.readAsDataURL(file);
-    });
-
-  const makeThumbnail = (dataUrl: string): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const maxDim = 480;
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.max(1, Math.round(img.width * scale));
-          const h = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('no ctx');
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => reject(new Error('Gagal memproses gambar.'));
-      img.src = dataUrl;
-    });
-
-  const handlePickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Foto kamera dikompres instan saat dipilih (JPEG ~1280px) → tidak pernah kirim Base64 mentah.
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage('Hanya file gambar yang didukung.');
-      return;
+    try {
+      const prepared = await prepareChatImage(file);
+      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
+        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
+      }
+      setSelectedImage({
+        file,
+        preview: prepared.preview,
+        dataUrl: prepared.dataUrl,
+        mimeType: prepared.mimeType,
+        fileName: prepared.fileName,
+      });
+      setErrorMessage(null);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Gagal memproses foto.');
+    } finally {
+      if (chatFileInputRef.current) chatFileInputRef.current.value = '';
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setErrorMessage('Gambar maksimal 8 MB.');
-      return;
-    }
-    setSelectedImage({ file, preview: URL.createObjectURL(file) });
-    if (chatFileInputRef.current) chatFileInputRef.current.value = '';
   };
 
   const handleSendReply = async (e?: React.FormEvent | React.KeyboardEvent | React.SyntheticEvent) => {
@@ -1403,16 +1398,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     try {
       const body: Record<string, any> = { text: hasText ? textToSend : '' };
       if (image) {
-        const imageB64 = await fileToDataUrl(image.file);
-        const thumbB64 = await makeThumbnail(imageB64);
-        body.imageB64 = imageB64;
-        body.thumbB64 = thumbB64;
-        body.mimeType = image.file.type || 'image/jpeg';
-        body.fileName = image.file.name;
+        body.imageB64 = image.dataUrl;
+        body.thumbB64 = image.dataUrl;
+        body.mimeType = image.mimeType;
+        body.fileName = image.fileName;
       }
       const res = await apiRequest(`/api/staff/conversations/${selectedTask.conversationId}/reply`, {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: 45000,
       });
 
       if (res.success) {
@@ -1443,95 +1437,171 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   };
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
-  const handleSendOtw = async (task: StaffTask, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  // ── Unifikasi OTW (plan 2026-10-04) ─────────────────────────────────────────
+  // SATU jalur kirim OTW untuk semua tombol (kartu & drawer) → mencegah kirim
+  // ganda ke customer. Pesan hanya di-POST dari modal konfirmasi; `sendingOtwId`
+  // mengunci semua tombol selama proses. GMaps dibuka dari gesture tombol modal
+  // (sinkron) agar tidak diblokir pop-up-blocker.
+  const [otwModal, setOtwModal] = useState<{
+    task: StaffTask;
+    navUrl: string | null;
+    draft: string;
+  } | null>(null);
+  const [otwDepart, setOtwDepart] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [otwGpsChecking, setOtwGpsChecking] = useState(false);
 
-    if (!task.conversationId) {
-      toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
+  const openMapsIfAny = (navUrl: string | null): void => {
+    if (!navUrl || navUrl === '#') return;
+    const win = window.open(navUrl, '_blank', 'noopener,noreferrer');
+    if (!win) toast('Izinkan pop-up untuk membuka peta navigasi.', 'error');
+  };
+
+  /**
+   * Titik masuk tunggal semua aksi keberangkatan.
+   * - Sudah OTW → hanya buka ulang peta (tanpa kirim).
+   * - Belum OTW & layak → rekam GPS + buka modal konfirmasi (pesan DB-driven).
+   * - Belum OTW tapi di luar jendela / offline / tanpa chat → mode intip / info.
+   */
+  const handleUnifiedDepart = async (task: StaffTask, navUrl: string | null) => {
+    if (task.otwSentAt) {
+      openMapsIfAny(navUrl);
       return;
     }
 
-    if (!isOnline) {
-      toast('Koneksi internet terputus. Tidak dapat mengirim info OTW saat ini.', 'error');
+    const withinWindow = isWithinDepartWindow(task.bookingDate);
+    // Ada navUrl → jendela H-60..H+120 (perilaku lama); tanpa navUrl → izin
+    // H-2 jam (perilaku lama handleSendOtw). Keduanya kini bermuara ke SATU kirim.
+    const canSend = (navUrl ? withinWindow : isOtwAllowed(task)) && !!task.conversationId && isOnline;
+
+    if (!canSend) {
+      if (navUrl) {
+        openMapsIfAny(navUrl); // mode intip: hanya melihat peta
+      } else if (!isOtwAllowed(task)) {
+        toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
+      } else if (!isOnline) {
+        toast('Koneksi internet terputus. Tidak dapat mengirim info OTW saat ini.', 'error');
+      } else {
+        toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
+      }
       return;
     }
+
+    // Rekam titik awal keberangkatan (cache pre-warm → 0 dtk; fallback balapan ≤2 dtk).
+    setSendingOtwId(task.reservationId);
+    setOtwGpsChecking(true);
+    const depart = await getDepartPositionFast();
+    setOtwDepart(depart);
+    setOtwGpsChecking(false);
 
     const patientName = task.customerName || 'Bunda';
-    const staffSignature = staff?.name || 'Bidan Terapis';
-
+    let draft = `Halo Bunda ${patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍\n\n~ ${staff?.name || 'Bidan Terapis'}`;
     try {
-      let otwMessage = `Halo Bunda ${patientName} 😊\n\nSaya sudah dalam perjalanan menuju rumah Bunda untuk treatmentnya yaa 🚗💨\nMohon ditunggu, Bun. Sampai bertemu sebentar lagi 🤍\n\n~ ${staffSignature}`;
-      try {
-        const tplRes = await apiRequest(`/api/staff/otw-template?patientName=${encodeURIComponent(patientName)}`);
-        if (tplRes.success && tplRes.text) {
-          otwMessage = tplRes.text;
-        }
-      } catch (_) {}
+      const tplRes = await apiRequest(`/api/staff/otw-template?patientName=${encodeURIComponent(patientName)}`);
+      if (tplRes?.success && tplRes.text) draft = tplRes.text;
+    } catch (_) {
+      /* pakai draf fallback */
+    }
 
-      const confirmed = await confirm({
-        title: 'Kirim Info Menuju Lokasi (OTW)',
-        message: `Kirim pesan WhatsApp langsung ke ${patientName}:\n\n"${otwMessage}"`,
-        confirmText: 'Kirim Pesan OTW',
-        cancelText: 'Batal',
-      });
+    setSendingOtwId(null);
+    setOtwModal({ task, navUrl, draft });
+  };
 
-      if (!confirmed) return;
-
-      setSendingOtwId(task.reservationId);
-      const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
-        method: 'POST',
-        body: JSON.stringify({ customText: otwMessage }),
-      });
-
-      if (res.success) {
-        toast(`Pesan OTW berhasil dikirim ke WhatsApp ${patientName}!`, 'success');
-        const nowIso = new Date().toISOString();
-        const updateOtw = (t: StaffTask): StaffTask =>
-          t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso } : t;
-        setTasks((prev) => prev.map(updateOtw));
-        setUpcomingTasks((prev) => prev.map(updateOtw));
-        if (selectedTask?.reservationId === task.reservationId) {
-          setSelectedTask((prev) => (prev ? updateOtw(prev) : null));
-        }
-        if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
-          setMessages((prev) => [...prev, res.data].slice(-10));
-        }
-        // DEPRECATED (plan 2026-09-30): pemancar telemetry perjalanan TIDAK lagi
-        // dinyalakan otomatis dari sini — tracking GPS kontinu tidak andal di PWA.
-      } else {
-        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat mengirim info OTW'}`, 'error');
-      }
-    } catch (err: any) {
-      toast(`Gagal mengirim info OTW: ${err.message || 'Terjadi kesalahan'}`, 'error');
+  const retryOtwGps = async () => {
+    setOtwGpsChecking(true);
+    try {
+      setOtwDepart(await getDepartPositionFast());
     } finally {
-      setSendingOtwId(null);
+      setOtwGpsChecking(false);
     }
   };
 
-  // Kontrol keberangkatan saat Bidan menekan tombol utama "MULAI JALAN"
-  // (plan 2026-10-02 — unifikasi 1-tap). Tracking GPS kontinu DI-DEPRECATE
-  // (tidak andal di PWA). Alur:
-  //  1. Buka Google Maps SINKRON (selalu; anti popup-blocker).
-  //  2. Di luar jendela ±60 mnt dari jam booking → mode intip (tanpa pesan).
-  //  3. Dalam jendela → GPS sekali-tembak → hitung ETA (Haversine) → kirim OTW
-  //     + status "dalam perjalanan" LANGSUNG (tanpa konfirmasi sekunder di jalan).
+  /** Konfirmasi modal OTW: buka peta (sinkron) lalu kirim — satu-satunya POST OTW. */
+  const confirmOtwDepart = () => {
+    const m = otwModal;
+    if (!m) return;
+    const { task, navUrl, draft } = m;
+
+    // Guard ganda (anti double-tap / lintas tombol saat in-flight).
+    if (task.otwSentAt) {
+      setOtwModal(null);
+      openMapsIfAny(navUrl);
+      return;
+    }
+
+    // 1. Buka Google Maps SINKRON dari gesture (anti pop-up block).
+    openMapsIfAny(navUrl);
+
+    // 2. ETA best-effort dari titik awal (bila GPS & tujuan tersedia).
+    const depart = otwDepart;
+    const destLat = task.address?.lat;
+    const destLng = task.address?.lng;
+    let etaMinutes: number | null = null;
+    let arrivalWib: string | null = null;
+    if (depart && destLat != null && destLng != null) {
+      const km = calculateHaversineKm(depart.lat, depart.lng, destLat, destLng);
+      etaMinutes = estimateTravelMinutesKm(km);
+      arrivalWib = formatWibClock(new Date(), etaMinutes);
+    }
+
+    setOtwModal(null);
+    setOtwDepart(null);
+
+    // 3. Kirim OTW (fire-and-forget) — satu-satunya jalur POST OTW.
+    (async () => {
+      try {
+        const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
+          method: 'POST',
+          body: JSON.stringify({
+            customText: draft,
+            markEnRoute: true,
+            ...(etaMinutes != null ? { etaMinutes } : {}),
+            ...(arrivalWib ? { arrivalWib } : {}),
+            ...(depart ? { lat: depart.lat, lng: depart.lng, accuracy: depart.accuracy } : {}),
+          }),
+        });
+        if (res?.success) {
+          const nowIso = new Date().toISOString();
+          const nextStatus = res?.data?.status || 'en_route';
+          const updateOtw = (t: StaffTask): StaffTask =>
+            t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso, status: nextStatus } : t;
+          setTasks((prev) => prev.map(updateOtw));
+          setUpcomingTasks((prev) => prev.map(updateOtw));
+          setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+          if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
+            setMessages((prev) => [...prev, res.data].slice(-10));
+          }
+          toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'} 🛵`, 'success');
+        } else {
+          toast(`Gagal kirim OTW: ${res?.error || 'kesalahan tidak diketahui'}`, 'error');
+        }
+      } catch (err) {
+        toast(`Gagal kirim OTW: ${(err as any)?.message || 'periksa koneksi'}`, 'error');
+      }
+    })();
+  };
+
+  // Kontrol keberangkatan terpadu (plan 2026-10-04).
+  // Tracking GPS kontinu tetap DI-DEPRECATE (tidak andal di PWA).
   // Gerbang pengaman pra-navigasi (insiden Bidan tersasar 2026-09-30): titik
   // NON-presisi (manual_staff/estimated_area/belum diketahui) DILARANG membuka
   // Google Maps langsung — munculkan modal konfirmasi + opsi minta shareloc.
   const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
 
-  /** Buka peta LANGSUNG bila presisi; bila estimasi → tampilkan gerbang dulu. */
+  /**
+   * Titik masuk tunggal tombol navigasi/OTW. Bila titik estimasi → gerbang
+   * preflight dulu; selain itu langsung ke `handleUnifiedDepart` (satu jalur kirim).
+   */
   const requestNavigation = (task: StaffTask, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     const navUrl = task.navigationUrl || task.mapsUrl || '';
-    if (needsNavigationPreflight(task.address?.locationSource)) {
+    if (navUrl && needsNavigationPreflight(task.address?.locationSource)) {
       setPreflightTask(task);
       return;
     }
-    handleStartNavigation(task, navUrl);
+    handleUnifiedDepart(task, navUrl || null);
   };
 
   const buildSharelocDraft = (task: StaffTask): string => {
@@ -1560,78 +1630,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       toast('Gagal menyalin draf shareloc.', 'error');
     }
     setPreflightTask(null);
-  };
-
-  const handleStartNavigation = async (task: StaffTask, navUrl: string, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    // 1. Buka Google Maps DULUAN (sinkron, user-activation aktif).
-    if (navUrl && navUrl !== '#') {
-      const win = window.open(navUrl, '_blank', 'noopener,noreferrer');
-      if (!win) {
-        toast('Izinkan pop-up untuk membuka peta navigasi.', 'error');
-      }
-    }
-
-    const otwAlreadySent = !!task.otwSentAt;
-    // Mode intip: hanya buka peta (di luar jendela / sudah OTW / offline / tanpa chat).
-    const withinWindow = isWithinDepartWindow(task.bookingDate);
-    const canAsk = !otwAlreadySent && withinWindow && !!task.conversationId && isOnline;
-    if (!canAsk) return;
-
-    // 2. GPS sekali-tembak (best-effort; gagal → lanjut tanpa ETA, JANGAN blokir).
-    let etaMinutes: number | null = null;
-    let arrivalWib: string | null = null;
-    let departLat: number | null = null;
-    let departLng: number | null = null;
-    const destLat = task.address?.lat;
-    const destLng = task.address?.lng;
-    try {
-      const pos = await getCurrentDeviceLocation(10000);
-      departLat = pos.lat;
-      departLng = pos.lng;
-      if (destLat != null && destLng != null) {
-        const km = calculateHaversineKm(pos.lat, pos.lng, destLat, destLng);
-        etaMinutes = estimateTravelMinutesKm(km);
-        arrivalWib = formatWibClock(new Date(), etaMinutes);
-      }
-    } catch {
-      // GPS ditolak/tidak tersedia → OTW tetap bisa dikirim tanpa blok ETA.
-    }
-
-    // 3. Kirim OTW + status "dalam perjalanan" (fire-and-forget, dengan toast bila gagal).
-    (async () => {
-      try {
-        const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
-          method: 'POST',
-          body: JSON.stringify({
-            customText: '',
-            markEnRoute: true,
-            ...(etaMinutes != null ? { etaMinutes } : {}),
-            ...(arrivalWib ? { arrivalWib } : {}),
-            ...(departLat != null && departLng != null ? { lat: departLat, lng: departLng } : {}),
-          }),
-        });
-        if (res?.success) {
-          const nowIso = new Date().toISOString();
-          const nextStatus = res?.data?.status || 'en_route';
-          const updateOtw = (t: StaffTask): StaffTask =>
-            t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso, status: nextStatus } : t;
-          setTasks((prev) => prev.map(updateOtw));
-          setUpcomingTasks((prev) => prev.map(updateOtw));
-          setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
-          toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'} 🛵`, 'success');
-        } else {
-          toast(`Gagal kirim OTW: ${res?.error || 'kesalahan tidak diketahui'}`, 'error');
-        }
-      } catch (err) {
-        // Guard 2 jam / tanpa percakapan / offline → beri tahu, bukan diam.
-        toast(`Gagal kirim OTW: ${(err as any)?.message || 'periksa koneksi'}`, 'error');
-      }
-    })();
   };
 
   // Quick Action: Record Arrival and send "Sudah Sampai" notification
@@ -3142,16 +3140,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <button
                                   type="button"
                                   disabled={isSendingOtw}
-                                  onClick={(e) => {
-                                    if (navUrl) {
-                                      requestNavigation(task, e);
-                                    } else if (!isOtwAllowed(task)) {
-                                      e.stopPropagation();
-                                      toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
-                                    } else {
-                                      handleSendOtw(task, e);
-                                    }
-                                  }}
+                                  onClick={(e) => requestNavigation(task, e)}
                                   className={`flex items-center justify-center space-x-1.5 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
                                     navUrl && needsNavigationPreflight(task.address?.locationSource)
                                       ? 'text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300'
@@ -3333,18 +3322,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                          </button>
                         ) : (
                           <button
-                            onClick={() => {
-                              const nav = selectedTask.navigationUrl || selectedTask.mapsUrl;
-                              if (nav) {
-                                requestNavigation(selectedTask);
-                                return;
-                              }
-                              if (!isOtwAllowed(selectedTask)) {
-                                toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`, 'info');
-                                return;
-                              }
-                              handleSendOtw(selectedTask);
-                            }}
+                            onClick={() => requestNavigation(selectedTask)}
                             disabled={sendingOtwId === selectedTask.reservationId}
                             className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
                              isOtwAllowed(selectedTask) || selectedTask.navigationUrl || selectedTask.mapsUrl
@@ -5943,9 +5921,26 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         onProceedNavigation={() => {
           const task = preflightTask;
           setPreflightTask(null);
-          if (task) handleStartNavigation(task, task.navigationUrl || task.mapsUrl || '#');
+          if (task) handleUnifiedDepart(task, task.navigationUrl || task.mapsUrl || null);
         }}
         onRequestShareloc={handleRequestShareloc}
+      />
+
+      {/* Modal konfirmasi OTW terpadu — satu-satunya titik kirim pesan OTW. */}
+      <OtwConfirmModal
+        open={!!otwModal}
+        patientName={otwModal?.task.customerName || 'Bunda'}
+        draft={otwModal?.draft || ''}
+        depart={otwDepart}
+        gpsChecking={otwGpsChecking}
+        sending={!!sendingOtwId}
+        onRetryGps={retryOtwGps}
+        onConfirm={confirmOtwDepart}
+        onClose={() => {
+          if (sendingOtwId) return;
+          setOtwModal(null);
+          setOtwDepart(null);
+        }}
       />
     </div>
   );

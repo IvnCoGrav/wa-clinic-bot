@@ -341,6 +341,32 @@ class ReservationSeriesService {
       updateData.status = data.status;
     }
 
+    // Guard bentrok staf (paritas jalur utama) — hanya saat reassign ke jadwal aktif.
+    if (updateData.assigned_staff_id) {
+      const current = await prisma.reservation.findFirst({
+        where: { id: reservationId, tenant_id: tenantId },
+        select: { booking_date: true, status: true, duration_minutes: true },
+      });
+      const targetDate = updateData.booking_date ?? current?.booking_date ?? null;
+      const targetStatus = updateData.status ?? current?.status;
+      if (current && targetDate && targetStatus !== 'cancelled') {
+        const { findOverlappingStaffReservations } = await import('./reservation-core.service');
+        const conflicts = await findOverlappingStaffReservations({
+          tenantId,
+          staffId: updateData.assigned_staff_id,
+          bookingDate: targetDate,
+          durationMinutes: current.duration_minutes ?? 60,
+          excludeId: reservationId,
+        });
+        if (conflicts.length > 0) {
+          const err: any = new Error('STAFF_COLLISION');
+          err.code = 'STAFF_COLLISION';
+          err.conflict = conflicts[0];
+          throw err;
+        }
+      }
+    }
+
     const updated = await prisma.reservation.update({
       where: { id: reservationId, tenant_id: tenantId },
       data: updateData,

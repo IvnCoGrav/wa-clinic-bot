@@ -46,6 +46,7 @@ import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { getWibDateKey, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -662,10 +663,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   useEffect(() => {
     if (isOpen && mode === 'edit' && initialReservation) {
       const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
-      if (initializedEditIdRef.current === initialReservation.id) {
+      const alreadyHydratedForm = initializedEditIdRef.current === initialReservation.id;
+
+      if (alreadyHydratedForm) {
+        // Anti-race: form utama SUDAH terhidrasi. Saat katalog live tiba di latar
+        // belakang, HANYA remap harga/durasi treatment — DILARANG menimpa pilihan
+        // admin (assignedStaffId, tanggal, customer, catatan) yang mungkin sudah diedit.
         if (hydratedWithLiveCatalogRef.current) return;
         if (!isLiveCatalogReady) return;
+        hydratedWithLiveCatalogRef.current = true;
+        if (initialReservation.treatment_detail) {
+          try {
+            const rawBabies = initialReservation.customer?.children || (initialReservation as any).children || (initialReservation as any).baby_details || [];
+            const parsed = parseTreatmentsFromDetail(initialReservation.treatment_detail, services, initialReservation.purchase_value, rawBabies as any);
+            if (parsed.length > 0) setSelectedTreatments(parsed);
+          } catch {}
+        }
+        return;
       }
+
+      // Hidrasi form utama — hanya SEKALI per reservasi.
       initializedEditIdRef.current = initialReservation.id;
       if (isLiveCatalogReady) hydratedWithLiveCatalogRef.current = true;
 
@@ -1475,13 +1492,45 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
   };
 
+  // Payload PATCH edit — SSoT tunggal agar jalur simpan biasa & force-override konsisten.
+  const buildEditPayload = (force = false) => {
+    const { fullBookingIso, finalTreatmentDetail, computedCategory } = buildCreatePayload(force);
+    return {
+      customerId,
+      treatmentCategory: computedCategory,
+      treatmentDetail: finalTreatmentDetail,
+      bookingDate: fullBookingIso || null,
+      durationMinutes: totalScheduledDurationMinutes,
+      assignedStaffId: assignedStaffId ? assignedStaffId : null,
+      status,
+      notes: notes.trim() ? notes.trim() : null,
+      address: address.trim() || undefined,
+      landmark: landmark.trim() || undefined,
+      babies: babies.filter((b) => b.name.trim().length > 0),
+      purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+      ongkir: Number(ongkir) || 0,
+      ...(force ? { force: true } : {}),
+    };
+  };
+
   // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net).
   // `withInvoice` diteruskan sebagai penanda kontrak agar pemanggil (LiveChatMonitor) tahu
   // apakah invoice sudah ditangani `onSuccessAndInvoice` (jangan buka modal kedua).
   const enrichResWithFormState = (savedRes: any, withInvoice = false) => {
     const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), age: b.ageText.trim() }));
+    // Paritas relasi: sertakan penugasan staff dari form agar pemanggil (list/detail)
+    // tidak sempat menampilkan "Belum ditugaskan" walau backend telat meng-join relasi.
+    const selectedStaffObj = assignedStaffId
+      ? effectiveStaffList.find((s) => s.id === assignedStaffId)
+      : null;
     const enriched = {
       ...savedRes,
+      assigned_staff_id: (savedRes?.assigned_staff_id ?? assignedStaffId) || null,
+      assigned_staff:
+        savedRes?.assigned_staff ||
+        (selectedStaffObj
+          ? { id: selectedStaffObj.id, name: selectedStaffObj.name, phone: selectedStaffObj.phone }
+          : null),
       babies: formBabies,
       customer: savedRes?.customer || selectedCustomerInfo || undefined,
       ongkir: Number(ongkir) || 0,
@@ -1495,6 +1544,23 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const handleForceCreate = async () => {
     setSubmitting(true);
     try {
+      // Mode EDIT: force-override WAJIB PATCH reservasi eksisting — bukan POST create
+      // (POST akan menciptakan reservasi duplikat baru).
+      if (mode === 'edit' && initialReservation?.id) {
+        const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(buildEditPayload(true)),
+        });
+        toast('Perubahan jadwal disimpan dengan override konflik (force).', 'success');
+        setShowConflictModal(false);
+        setConflictInfo(null);
+        discardDraft(true);
+        const savedRes = res?.reservation || res?.data || res || initialReservation;
+        onSuccess(enrichResWithFormState(savedRes));
+        onClose();
+        return;
+      }
+
       const { payload } = buildCreatePayload(true);
       const res = await apiRequest('/api/admin/reservation', {
         method: 'POST',
@@ -1534,11 +1600,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       return;
     }
 
-    let fullBookingIso: string | undefined = undefined;
-    if (bookingDate && bookingTime) {
-      fullBookingIso = buildWibIso(bookingDate, bookingTime);
-    }
-
     // Serialize clean treatment string — hanya nama layanan + label total waktu (tanpa nama bayi/usia)
     const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
     const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
@@ -1576,22 +1637,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         try {
           const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({
-              customerId,
-              treatmentCategory: computedCategory,
-              treatmentDetail: finalTreatmentDetail,
-              bookingDate: fullBookingIso || null,
-              durationMinutes: totalScheduledDurationMinutes,
-              assignedStaffId: assignedStaffId ? assignedStaffId : null,
-              status,
-              notes: notes.trim() ? notes.trim() : null,
-              address: address.trim() || undefined,
-              landmark: landmark.trim() || undefined,
-              babies: babies.filter((b) => b.name.trim().length > 0),
-              purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-              ongkir: Number(ongkir) || 0,
-              force: forceSubmit,
-            }),
+            body: JSON.stringify(buildEditPayload(forceSubmit)),
           });
 
           toast('Perubahan reservasi berhasil disimpan!', 'success');
@@ -3085,7 +3131,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                               <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-300">Sedang Diedit</span>
                             )}
                             <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-full">
-                              {res.assigned_staff?.name || 'Terapis Belum Ditugaskan'}
+                              {resolveStaffName(res, effectiveStaffList) || 'Terapis Belum Ditugaskan'}
                             </span>
                           </div>
                         </div>
@@ -3155,7 +3201,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   onClick={handleForceCreate}
                   className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                 >
-                  {submitting ? 'Menyimpan...' : 'Tetap Simpan Baru (Force)'}
+                  {submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Tetap Simpan Perubahan (Force)' : 'Tetap Simpan Baru (Force)')}
                 </button>
               </div>
             </div>

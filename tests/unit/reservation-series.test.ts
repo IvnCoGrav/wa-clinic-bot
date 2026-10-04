@@ -122,6 +122,20 @@ describe('ReservationSeriesService', () => {
     expect(updated).toBeDefined();
   });
 
+  it('3b. updateSession reassign staf ke slot bentrok → STAFF_COLLISION (paritas jalur utama)', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: 'r1', booking_date: new Date('2026-09-02T02:30:00Z'), status: 'confirmed', duration_minutes: 60,
+    } as any);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
+      { id: 'ex', booking_date: new Date('2026-09-02T02:00:00Z'), duration_minutes: 60, assigned_staff_id: 'staff_1', status: 'confirmed' },
+    ] as any);
+
+    await expect(
+      reservationSeriesService.updateSession('r1', { assignedStaffId: 'staff_1' } as any, 'default-tenant')
+    ).rejects.toMatchObject({ code: 'STAFF_COLLISION' });
+    expect(prisma.reservation.update).not.toHaveBeenCalled();
+  });
+
   it('5. Fase 3.3 — sesi bentrok staf → series ditolak atomik (STAFF_COLLISION)', async () => {
     // existing 09:00 WIB (02:00Z) 60m untuk staff_1; sesi baru 09:30 → overlap.
     vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([

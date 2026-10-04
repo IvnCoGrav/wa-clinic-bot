@@ -237,6 +237,14 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     setAssigningStaff(true);
     try {
       await onAssignStaff?.(displayReservation.id, staffId);
+      // Optimistik lokal: dropdown & label "Ditugaskan ke" langsung reaktif tanpa
+      // menunggu refetch parent (yang bisa lambat / gagal senyap).
+      const assignedObj = staffId ? staffList.find((s) => s.id === staffId) : null;
+      setActiveRes((prev: any) => ({
+        ...prev,
+        assigned_staff_id: staffId,
+        assigned_staff: assignedObj ? { id: assignedObj.id, name: assignedObj.name } : null,
+      }));
       toast(staffId ? 'Staff berhasil ditugaskan ke reservasi.' : 'Penugasan staff telah dilepas.', 'success');
       onUpdate();
     } catch (err: any) {
@@ -382,18 +390,19 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
       <CreateReservationModal
         isOpen={true}
         mode="edit"
-        initialReservation={reservation}
-        initialAddress={getDetailedAddress(reservation)}
+        initialReservation={displayReservation}
+        initialAddress={getDetailedAddress(displayReservation)}
         initialLandmark={
-          ((reservation as any)?.customer?.preferences?.landmark
-            || (reservation as any)?.customer?.preferences?.address_notes
-            || (reservation as any)?.customer?.address_notes
+          ((displayReservation as any)?.customer?.preferences?.landmark
+            || (displayReservation as any)?.customer?.preferences?.address_notes
+            || (displayReservation as any)?.customer?.address_notes
             || null) as string | null
         }
         staffList={staffList}
         onClose={() => setIsEditing(false)}
-        onSuccess={() => {
+        onSuccess={(updatedRes) => {
           setIsEditing(false);
+          if (updatedRes) setActiveRes(updatedRes);
           onUpdate();
           onClose();
         }}

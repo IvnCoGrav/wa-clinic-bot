@@ -3,6 +3,98 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 217. [OTW/Dispatch] Batasan sadar Silent Depart-Capture GPS (2026-10-04, OPEN — by design)
+
+- **Konteks:** unifikasi jalur OTW + rekam titik awal GPS saat klik "Navigasi"/"MULAI JALAN"
+  + fallback titik berangkat bila GPS null (plan 2026-10-04, Fase 1–4).
+- **Batasan yang tersisa (bukan bug):**
+  1. **Izin lokasi browser ditolak permanen / GPS HP mati → titik awal tidak dapat direkam dari
+     Bidan.** Sistem fail-open: pesan OTW tetap terkirim, titik awal jatuh ke fallback
+     (`prev_patient`) atau `unknown` (⚪ tak terekam). Ini batas platform, bukan regresi.
+  2. **PWA dibekukan OS saat Bidan pindah ke aplikasi Google Maps** → tidak ada ping GPS kontinu
+     selama berkendara. Titik awal hanya satu tembakan saat klik (dipanaskan via pre-warm cache).
+     Tracking live tetap butuh aplikasi native (lihat catatan `useTripTelemetry` yang di-deprecate).
+  3. **Fallback `prev_patient` mengasumsikan keberangkatan dari rumah pasien sebelumnya.**
+     Bila Bidan berangkat dari lokasi lain (rumah sendiri), estimasi bisa tidak akurat — ditandai
+     `originSource='prev_patient'` di widget CS agar tidak disalahartikan sebagai GPS presisi.
+  4. **Fallback `clinic` belum diimplementasikan** — menunggu sumber koordinat klinik tenant-aware
+     (saat ini masih hardcode tech-debt). Trip pertama hari itu tanpa GPS tetap `unknown`.
+  5. **Sesi trip in-memory hilang saat restart / multi-instans** — calon Redis `SETEX`
+     (tidak berubah dari sebelumnya).
+- **Verifikasi:** `tests/unit/depart-gps-cache.test.ts`, `tests/unit/staff-trip-tracking.test.ts`
+  (originSource), `tests/integration/otw-depart-endpoint.test.ts`, `tests/integration/staff-trip-dispatch.test.ts`.
+- **Dampak fasilitas:** koordinat klinik hardcode masih tercatat di
+  `docs/SAAS_READINESS_AUDIT.md` (Confirmation Gate terpisah).
+
+## 216. [Reservasi/Penugasan Terapis] Desync assigned_staff lintas lapisan + pola sekelas (2026-10-04, RESOLVED)
+
+- **Gejala:** penugasan terapis via edit reservasi kadang tetap "Belum ditugaskan" di tabel/detail/live-chat
+  sampai reload; force-save saat bentrok berisiko menciptakan reservasi duplikat baru.
+- **Akar terverifikasi (read-only, kode aktual):**
+  1. `src/routes/admin/reservations.subroute.ts:1688,1715,1802,1827` — PATCH full-edit hanya baca
+     `assignedStaffId` camelCase; `assigned_staff_id` snake_case (dipakai endpoint tetangga
+     `:2482` + 2 pemanggil UI) diabaikan diam-diam. Pola sama berlaku untuk SEMUA field PATCH
+     (hanya destructure camelCase `:1711-1730`); series session PATCH `:3596` juga camelCase-only.
+  2. Tanpa validasi keberadaan staff di PATCH full-edit (bandingkan assign-staff `:2500-2507`).
+  3. Fallback in-memory `:1782` + GET single `:1384-1393` tidak menyertakan objek relasi `assigned_staff`.
+  4. Race hidrasi `CreateReservationModal.tsx:662-788` — re-run saat katalog live tiba menimpa
+     `setAssignedStaffId` (`:734`) yang sudah diubah admin.
+  5. `enrichResWithFormState` (`:1481-1493`) tidak membawa `assigned_staff`/`assigned_staff_id`.
+  6. `handleForceCreate` (`:1495`, tombol `:3155`) selalu POST create — di mode edit + `STAFF_COLLISION`
+     menciptakan duplikat, bukan PATCH `force:true` (jalur `handleSubmit` edit `:1575-1594` sudah benar).
+  7. `ReservationDetailModal.tsx:385,395` oper `reservation` basi (bukan `displayReservation` `:151`)
+     + `onSuccess={() =>}` membuang payload update; `handleStaffChange` (`:235-247`) tanpa
+     optimistic `setActiveRes`. Varian sama: `Reservations.tsx:2008` `onSuccess={() => loadReservations()}`
+     (mengandalkan refetch).
+  8. Drift kontrak 3 varian: `assigned_staff.name` vs `assigned_staff_name` vs `assignedStaffName`
+     (`FinancialAnalytics.tsx:819`, `QuickHoldModal.tsx:319`).
+- **Horizontal — resolusi nama single-layer di 7 situs (bocor saat join parsial):**
+  `CustomerDatabase.tsx:1372`, `CreateReservationModal.tsx:3088`, `WeekScheduleGrid.tsx:674`,
+  `DayScheduleGrid.tsx:396,464`, `QuickHoldModal.tsx:319`, `FinancialAnalytics.tsx:819`,
+  `FleetMapModal.tsx:180`. Plan awal hanya mencakup 3 situs.
+- **Open / perlu verifikasi:** apakah `reservation-series.service.updateSession` melakukan
+  cek `STAFF_COLLISION` seperti jalur utama; apakah fallback memory relasi lain (customer/children)
+  juga ramping.
+- **Arah fix (belum dieksekusi, menunggu konfirmasi):** helper dual-casing generik + validasi staff
+  tenant-scoped, relasi memory via lookup staff (tanpa hardcode nama), pecah efek hidrasi,
+  branch force edit-vs-create, `displayReservation` + optimistic update, SATU util
+  `resolveStaffName` untuk semua situs (tanpa copy-paste IIFE), audit series + memory fallback.
+  Regression gate memakai file test riil (`admin-create-reservation`, `staff-auth-and-reservation`),
+  bukan `reservation-route.test.ts` (tidak ada).
+
+- **Resolusi (2026-10-04):**
+  1. Backend `reservations.subroute.ts`: dual-casing generik pada PATCH full-edit +
+     validasi FK staff tenant-scoped (400 bila invalid) + `assigned_staff` di fallback
+     memory list/single + series session PATCH dual-casing & pemetaan `STAFF_COLLISION` → 409.
+  2. `reservation-series.service.ts` `updateSession`: guard bentrok staf (paritas jalur utama).
+  3. `CreateReservationModal.tsx`: efek hidrasi dipecah (form sekali, remap harga katalog
+     tanpa menimpa staff), `buildEditPayload` SSoT, `handleForceCreate` edit→PATCH `force:true`.
+  4. `ReservationDetailModal.tsx`: oper `displayReservation`, `onSuccess` menerapkan payload,
+     optimistic `setActiveRes` pada `handleStaffChange`.
+  5. **Added** `utils/resolveStaffName.ts` — satu resolver berlapis dipakai di 9 situs
+     (Reservations tabel+kalender, LiveChatMonitor, CustomerDatabase reservasi+series,
+     CreateReservationModal, WeekScheduleGrid, DayScheduleGrid, QuickHoldModal, FinancialAnalytics).
+- **Test:** `tests/unit/reservation-staff-assignment-sync.test.ts` (6 kasus adversarial) +
+  `reservation-series.test.ts` (`updateSession` STAFF_COLLISION). Full suite **577 passed, 0 failed**;
+  build root (tsc) & build dashboard hijau.
+- **Sisa / catatan (OPEN, minor):** `WeekScheduleGrid`/`DayScheduleGrid` memanggil `resolveStaffName`
+  tanpa `staffList` (belum ada prop yang dioper) → fallback FK lookup nonaktif di grid itu;
+  `FleetMapModal.tsx:180` sengaja tidak diubah (domain trip-task `staffName` flat, bukan reservasi).
+  Fallback memory relasi `customer`/`children` masih ramping (di luar scope); deploy ke server belum
+  dilakukan (perlu keputusan deploy).
+
+## 215. [Chat Foto Terapis] HEIC galeri bergantung dukungan browser (2026-10-04, OPEN — sebagian by design)
+
+- **Fitur:** kompresi klien `prepareChatImage()` (`packages/admin-dashboard/src/utils/imageCompressor.ts`)
+  dipakai bersama composer StaffToday & LiveChatMonitor.
+- **Limitation:** foto HEIC/HEIF hanya bisa di-decode bila browser mendukung (Safari iOS native).
+  Di Chrome/Android, decode gagal → muncul pesan error yang mengarahkan terapis memakai mode
+  "Paling Kompatibel" atau foto ulang dari kamera. Alur kamera (`capture="environment"`) umumnya
+  sudah JPEG sehingga aman.
+- **By design (anti-dep):** tidak menambah dependency decoder HEIC client-side (`heic2any`) —
+  melanggar mandat Zero New Runtime Dependencies. Bila kelak perlu HEIC galeri penuh, ajukan
+  Confirmation Gate (dependency baru) atau konversi server-side (infra + LOC besar + migrasi).
+
 ## 214. [FollowUp/NEXT_TREATMENT] Regresi status PENDING & auto-cancel tanpa alasan (2026-10-04, RESOLVED)
 
 - **Gejala:** 41 antrean `NEXT_TREATMENT` (pasien repeat order) ter-cancel otomatis tanpa alasan (`cancel_reason IS NULL`) sejak 24 September hingga 4 Oktober (termasuk kasus Bunda Gobii dan 7 bunda lainnya pada 4 Oktober jam 09:01 WIB). Selain itu, terdapat 333 antrean `NEXT_TREATMENT` di masa depan yang tertahan di status `PENDING` dan terancam hangus otomatis setiap jam 09:01 WIB.

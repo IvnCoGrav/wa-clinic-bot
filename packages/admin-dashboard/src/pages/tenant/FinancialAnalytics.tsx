@@ -44,6 +44,7 @@ import {
   Legend,
 } from 'recharts';
 import { stripBufferMetadata, cleanTreatmentName } from '../../utils/treatmentStringParser';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface MonthlyKpiSummary {
@@ -816,7 +817,7 @@ export const FinancialAnalytics: React.FC = () => {
 
                 <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1 border-t border-[#f0f2f5] dark:border-[#2a3942]">
                   <span className="truncate">
-                    Terapis: <strong className="text-[#111b21] dark:text-[#e9edef]">{tx.assignedStaffName || 'Belum ditugaskan'}</strong>
+                    Terapis: <strong className="text-[#111b21] dark:text-[#e9edef]">{resolveStaffName(tx) || 'Belum ditugaskan'}</strong>
                   </span>
                   <span className="truncate">{tx.location || '-'}</span>
                 </div>

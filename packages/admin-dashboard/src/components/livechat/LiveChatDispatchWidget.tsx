@@ -25,6 +25,8 @@ export interface DispatchTripData {
     areaName: string;
     updatedAt: number;
     lastUpdateSec: number;
+    /** Provenance titik awal: 'gps' presisi vs estimasi (prev_patient/clinic/unknown). */
+    originSource?: 'gps' | 'prev_patient' | 'clinic' | 'unknown' | null;
   } | null;
   customerCoords?: { lat: number | null; lng: number | null };
   remainingKm?: number | null;
@@ -272,6 +274,11 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         <div className="space-y-1.5">
           <p className="text-sm font-semibold text-[#111b21]">{trip.areaName}</p>
           <p className="text-[10px] text-[#667781]">Update {formatStale(trip.lastUpdateSec)}</p>
+          {trip.originSource && trip.originSource !== 'gps' && (
+            <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5 inline-block">
+              📍 Titik awal estimasi (dari kunjungan sebelumnya) — bukan GPS presisi
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2 pt-1">
             <div className="rounded-lg bg-[#f0f2f5] px-2 py-1.5 text-center">
               <p className="text-[10px] text-[#667781]">Sisa</p>

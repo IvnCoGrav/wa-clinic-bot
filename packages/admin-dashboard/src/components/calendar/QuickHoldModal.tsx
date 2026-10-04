@@ -4,6 +4,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
 import { buildWibIso } from '../../utils/dateWib';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 
 interface QuickHoldModalProps {
   isOpen: boolean;
@@ -316,7 +317,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
                  {overlappingBookings.map((b: any, i: number) => (
                    <li key={i} className="text-[11px] flex items-center gap-1.5">
                      <span className="font-semibold">{b.customerName || b.customer?.name || 'Pasien'}</span>
-                     <span className="text-[10px] opacity-75">({b.status} • {b.treatmentDetail || b.treatment_detail || '-'} • {b.assignedStaffName || b.assigned_staff?.name || '-'})</span>
+                      <span className="text-[10px] opacity-75">({b.status} • {b.treatmentDetail || b.treatment_detail || '-'} • {resolveStaffName(b) || '-'})</span>
                    </li>
                  ))}
                </ul>

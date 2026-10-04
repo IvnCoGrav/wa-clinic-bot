@@ -93,3 +93,29 @@ describe('staff-trip-tracking Fase 1 (adversarial)', () => {
     expect(evaluateGeofenceAlert(999, 0, -7.28, 112.74, 0, 10, 999).isStalledOutsideTarget).toBe(false);
   });
 });
+
+/**
+ * Provenance titik awal (plan 2026-10-04). Adversarial: default GPS untuk ping
+ * asli, estimasi prev_patient tersimpan apa adanya, dan ping telemetry asli
+ * berikutnya mengembalikan penanda ke 'gps' (bukan nyangkut di estimasi).
+ */
+describe('staff-trip-tracking — originSource (adversarial)', () => {
+  it('default gps; prev_patient tersimpan; ping asli berikutnya kembali gps', () => {
+    const def = staffTripTrackingService.recordTripPing(T, R, S, { lat: -7.28, lng: 112.74 });
+    expect(def.originSource).toBe('gps');
+
+    staffTripTrackingService.clearAll();
+    const est = staffTripTrackingService.recordTripPing(
+      T,
+      R,
+      S,
+      { lat: -7.281, lng: 112.741, accuracy: null },
+      { originSource: 'prev_patient' }
+    );
+    expect(est.originSource).toBe('prev_patient');
+
+    // Telemetry GPS asli menyusul (tanpa state) → kembali 'gps'.
+    const real = staffTripTrackingService.recordTripPing(T, R, S, { lat: -7.29, lng: 112.75 });
+    expect(real.originSource).toBe('gps');
+  });
+});

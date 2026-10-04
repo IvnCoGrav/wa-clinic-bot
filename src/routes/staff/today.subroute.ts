@@ -493,14 +493,61 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       // Fase 1 (plan 2026-10-02): sambungkan titik keberangkatan Bidan ke memori
       // pemantauan CS. Tanpa ini, peta/motor & sisa km di widget CS kosong.
       // Fail-open: kegagalan tracking TIDAK boleh menggagalkan pengiriman WA OTW.
-      if (departLat != null && departLng != null) {
+      //
+      // Fase 4 (plan 2026-10-04): bila GPS Bidan null (izin browser ditolak /
+      // sinyal hilang), pakai titik berangkat PERKIRAAN dari rumah pasien yang
+      // baru diselesaikan Bidan ini (treatment beruntun) agar peta SLA tetap
+      // punya titik awal + ETA. Ditandai `originSource` agar CS tahu ini estimasi,
+      // bukan posisi presisi.
+      let effectiveLat = departLat;
+      let effectiveLng = departLng;
+      let originSource: 'gps' | 'prev_patient' | 'clinic' | 'unknown' =
+        departLat != null && departLng != null ? 'gps' : 'unknown';
+      if (effectiveLat == null && effectiveLng == null && (reservation as any).assigned_staff_id) {
+        try {
+          const prevBooking = (reservation as any).booking_date
+            ? new Date((reservation as any).booking_date)
+            : new Date();
+          const prev = await prisma.reservation.findFirst({
+            where: {
+              tenant_id: tenantId,
+              assigned_staff_id: (reservation as any).assigned_staff_id,
+              id: { not: id },
+              status: 'completed',
+              booking_date: { lt: prevBooking },
+              customer: { lat: { not: null }, lng: { not: null } },
+            },
+            orderBy: { booking_date: 'desc' },
+            select: { customer: { select: { lat: true, lng: true } } },
+          });
+          const plat = (prev as any)?.customer?.lat;
+          const plng = (prev as any)?.customer?.lng;
+          if (Number.isFinite(plat) && Number.isFinite(plng)) {
+            effectiveLat = Number(plat);
+            effectiveLng = Number(plng);
+            originSource = 'prev_patient';
+          }
+        } catch {
+          /* DB offline → biarkan unknown (fail-open, bukan error) */
+        }
+      }
+
+      if (effectiveLat != null && effectiveLng != null) {
         try {
           const departRecord = staffTripTrackingService.recordTripPing(
             tenantId,
             id,
             staffId,
-            { lat: departLat, lng: departLng, accuracy: Number.isFinite(Number(body.accuracy)) ? Number(body.accuracy) : null },
-            { arrivalStreak: 0, delayLevel: 'none' }
+            {
+              lat: effectiveLat,
+              lng: effectiveLng,
+              // Akurasi hanya bermakna untuk GPS asli; titik estimasi → null.
+              accuracy:
+                originSource === 'gps' && Number.isFinite(Number(body.accuracy))
+                  ? Number(body.accuracy)
+                  : null,
+            },
+            { arrivalStreak: 0, delayLevel: 'none', originSource }
           );
           getLiveChatHub()
             .publish({

@@ -86,3 +86,47 @@ export async function compressImageFile(
     reader.readAsDataURL(fileOrBlob);
   });
 }
+
+/**
+ * Batas aman file mentah sebelum kompresi (konstanta algoritmik, bukan data bisnis/tenant).
+ * File di bawah batas ini hampir pasti gagal diproses di browser HP.
+ */
+export const CHAT_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+
+export interface PreparedChatImage {
+  /** Data URL ringan siap ditampilkan sebagai preview maupun dikirim. */
+  preview: string;
+  /** Data URL terkompresi (JPEG ~1280px) untuk dikirim ke backend. */
+  dataUrl: string;
+  mimeType: string;
+  fileName: string;
+}
+
+/**
+ * Menyiapkan foto chat dari kamera HP menjadi JPEG ringan (~120-250KB) dalam satu langkah:
+ * validasi → downscale Canvas. Dipakai bersama oleh composer StaffToday & LiveChatMonitor
+ * agar tidak ada lagi pengiriman Base64 mentah multi-MB (single source of truth).
+ *
+ * Sengaja "attempt-first": HEIC dicoba decode dulu (Safari iOS mendukung native); hanya
+ * bila browser gagal decode (mis. Chrome/Android), baru dilempar pesan yang mengarahkan
+ * terapis memakai mode kompatibel / foto ulang dari kamera — bukan menolak buta.
+ */
+export async function prepareChatImage(file: File): Promise<PreparedChatImage> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Hanya file gambar yang didukung.');
+  }
+  if (file.size > CHAT_IMAGE_MAX_BYTES) {
+    throw new Error('Foto terlalu besar (maks 25 MB). Ambil ulang dari kamera.');
+  }
+  try {
+    const c = await compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
+    return { preview: c.dataUrl, dataUrl: c.dataUrl, mimeType: 'image/jpeg', fileName: file.name };
+  } catch {
+    const isHeic = /heic|heif/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+    throw new Error(
+      isHeic
+        ? 'Foto HEIC (iPhone) belum bisa diproses browser ini. Ubah kamera ke "Paling Kompatibel" atau ambil ulang dari kamera.'
+        : 'Foto gagal diproses. Coba ambil ulang dari kamera.'
+    );
+  }
+}

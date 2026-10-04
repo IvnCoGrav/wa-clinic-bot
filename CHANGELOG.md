@@ -4,6 +4,113 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Changed: Unifikasi Jalur OTW + Capture GPS Maksimal + Fallback Titik Berangkat (Fase 3–4)
+
+- **Akar masalah (terbukti `file:line`):** ada DUA pengirim OTW — `handleStartNavigation`
+  (`StaffToday.tsx:1599`) dan `handleSendOtw` (`:1439`, tanpa guard `otwSentAt`) — dipanggil dari
+  kartu (`:3146`) & drawer (`:3340`). Saat POST masih in-flight / beda tombol, `otwSentAt` belum
+  ter-set lokal → pesan OTW **terkirim dua kali** ke customer.
+- **Changed — `StaffToday.tsx`:** SATU jalur kirim OTW via `handleUnifiedDepart` +
+  `confirmOtwDepart`; `handleSendOtw`/`handleStartNavigation` dihapus. Alur: klik → rekam GPS
+  (cache/balapan) → **modal konfirmasi** (draf DB-driven) → tombol modal membuka Google Maps
+  SINKRON (anti pop-up block) lalu POST OTW. `sendingOtwId` mengunci semua tombol; guard
+  `otwSentAt` dicek ulang tepat sebelum POST. Sudah OTW → hanya buka ulang peta (tanpa kirim).
+- **Added — `components/staff/OtwConfirmModal.tsx`:** modal ringan menampilkan status titik awal
+  (📍 terekam ±Xm / ⚠️ belum) + tombol "Coba rekam ulang" + pratinjau pesan. Presentational murni.
+- **Added — fallback titik berangkat (`src/routes/staff/today.subroute.ts`):** bila GPS null,
+  backend memakai rumah pasien yang baru diselesaikan Bidan ini (`status=completed`,
+  `booking_date` sebelumnya) → trip CS tetap terisi + ETA. `staff-trip-tracking.service.ts`
+  menambah field `originSource` (`gps`/`prev_patient`/`unknown`) pada `TripRecord` (in-memory,
+  tanpa migrasi); diteruskan `reservations.subroute.ts:GET /dispatch/trip` + badge estimasi di
+  `LiveChatDispatchWidget.tsx`.
+- **Tests:** `staff-trip-tracking.test.ts` (+originSource), `depart-gps-cache.test.ts`,
+  `dispatch-map-projection.test.ts`, `otw-depart-endpoint.test.ts`, `staff-trip-dispatch.test.ts`
+  → 53/53 hijau. Build root + dashboard lolos.
+- **Catatan:** batasan sisa (izin browser ditolak permanen, PWA beku di background, fallback klinik
+  belum ada) dicatat di `docs/KNOWN_ISSUES.md` #217.
+
+#### 2026-10-04 - Added: Silent Depart-Capture GPS — Titik Awal & ETA Bidan saat Klik Navigasi (Fase 1–2)
+
+- **Akar masalah (terbukti `file:line`):** `handleStartNavigation` (`StaffToday.tsx:1564-1596`)
+  membuka Google Maps DULUAN (sinkron), baru `getCurrentDeviceLocation(10000)` dengan
+  `maximumAge: 0` (`geoUtils.ts:237`). Prompt izin lokasi tertinggal di tab background (Bidan
+  sudah dilempar ke GMaps) → time-out 10 dtk → `departLat/Lng` null. Backend hanya mencatat
+  trip bila koordinat ada (`today.subroute.ts:496`) → titik awal & ETA Bidan hilang di peta CS
+  (SLA: Bidan OTW tanpa bisa diverifikasi posisinya).
+- **Added — `packages/admin-dashboard/src/utils/geoUtils.ts`:** helper Silent Depart-Capture —
+  cache GPS pasif (`startDepartGpsWarmup`/`stopDepartGpsWarmup`) + `getDepartPositionFast()`:
+  pakai cache segar (≤60 dtk, 0 dtk) atau balapan one-shot ≤2 dtk; akurasi >100 m / izin ditolak
+  / time-out → `null` (fail-open, tidak throw). Konstanta `DEPART_GPS_*`.
+- **Changed — `StaffToday.tsx`:** urutan baru — kunci posisi keberangkatan (cache / balapan 2 dtk)
+  → buka Google Maps (masih dalam jendela user-activation, anti pop-up block) → hitung ETA
+  best-effort → kirim OTW menyertakan `accuracy`. Pre-warm hanya aktif saat ada tugas dalam
+  jendela keberangkatan (`useMemo` + `useEffect`), dilepas saat tak ada/unmount (privasi).
+  Perilaku "mode intip" (di luar jendela/sudah OTW) & seluruh teks toast tidak berubah.
+- **Tests:** `tests/unit/depart-gps-cache.test.ts` (8 kasus adversarial: cache segar tanpa
+  one-shot, fallback basi + timeout 2000, denied/timeout → null, akurasi buruk ditolak, warmup
+  idempoten, tanpa geolocation). `vitest` 23/23 hijau (termasuk regresi `dispatch-map-projection`).
+- **Catatan:** Fase 3 (peringatan jadwal berantai/cascade) belum dikerjakan. Batasan OS
+  membekukan PWA saat pindah ke GMaps (tidak ada ping live selama berkendara) tetap berlaku.
+
+#### 2026-10-04 - Fixed: Foto Chat Terapis — Kompresi Klien Instan, Hapus Batas 8 MB, Timeout 45s
+
+- **Akar masalah (terbukti `file:line`):** composer chat terapis (`StaffToday.tsx`) dan admin
+  (`LiveChatMonitor.tsx`) mengirim **Base64 foto mentah** (`fileToDataUrl` full-res) → payload
+  ~8–11 MB; validasi kaku `file.size > 8 * 1024 * 1024` menolak foto kamera 50–108MP; POST
+  memakai timeout default 15s (`api.ts:289`) → abort di 4G jalanan. Backend `bodyLimit 12 MB`
+  nyaris tersentuh.
+- **Fixed** `packages/admin-dashboard/src/utils/imageCompressor.ts`: helper terpusat baru
+  `prepareChatImage()` — validasi → downscale Canvas JPEG 1280px/q0.75 (≈120–250KB) dalam satu
+  langkah, dipakai bersama kedua composer (single source of truth, anti-case-by-case).
+  "Attempt-first" untuk HEIC (Safari iOS native) dengan pesan arah jelas bila browser gagal decode.
+- **Fixed** `StaffToday.tsx` & `LiveChatMonitor.tsx`: kompres saat pilih foto, buang batas 8 MB
+  (guard aman 25 MB), hapus helper `fileToDataUrl`/`makeThumbnail` mati, lindungi `revokeObjectURL`
+  hanya untuk blob URL, dan set `timeoutMs: 45000` pada balasan bergambar. Kamera-only
+  (`capture="environment"`) dipertahankan.
+- **Catatan:** HEIC dari galeri non-Safari masih bisa gagal decode (batas browser, bukan kode) —
+  lihat `docs/KNOWN_ISSUES.md` #215.
+
+#### 2026-10-04 - Fixed: Sinkronisasi Penugasan Terapis Lintas Lapisan (API → Form → Detail → List)
+
+- **Akar masalah (multi-layer):**
+  - **Kontrak API:** `PATCH /api/admin/reservation/:id` hanya membaca `assignedStaffId`
+    (camelCase); `assigned_staff_id` (snake_case) dari endpoint tetangga `/assign-staff`
+    diabaikan senyap. Fallback in-memory tidak menyertakan objek relasi `assigned_staff`.
+  - **Form lifecycle:** efek hidrasi `CreateReservationModal` ter-run ulang saat katalog
+    layanan live tiba → menimpa `setAssignedStaffId` yang sudah diedit admin (race).
+    Tombol Force pada dialog konflik SELALU `POST` create → reservasi duplikat saat edit.
+  - **Rantai props:** `ReservationDetailModal` mengoper `reservation` basi (bukan
+    `displayReservation`) & `onSuccess={() => {}}` membuang payload update. Dropdown
+    penugasan tak reaktif hingga refetch parent.
+  - **Tampilan:** resolusi nama terapis single-layer (`assigned_staff.name`) di 7+ situs →
+    "Belum ditugaskan" palsu saat join parsial; drift kontrak `assigned_staff_name` /
+    `assignedStaffName`.
+- **Changed — Backend (`src/routes/admin/reservations.subroute.ts`):**
+  - Dual-casing generik pada PATCH full-edit (camel ∪ snake untuk `treatment_*`,
+    `booking_date`, `payment_method`, `customer_*`, dst.); precedence camelCase bila keduanya dikirim.
+  - Validasi FK staff tenant-scoped di PATCH full-edit (paritas `/assign-staff`) → 400
+    bila `assigned_staff_id` tidak valid.
+  - Paritas relasi memory: list & single GET melampirkan `assigned_staff` via peta staff
+    tenant (tanpa hardcode nama).
+  - `PATCH /api/admin/reservation-series/:id/session/:reservationId` dual-casing +
+    pemetaan error `STAFF_COLLISION` → HTTP 409.
+- **Changed — Series service (`src/services/reservation-series.service.ts`):**
+  `updateSession` kini memeriksa bentrok staf (paritas jalur utama) sebelum update.
+- **Changed — Frontend:**
+  - `CreateReservationModal.tsx`: efek hidrasi dipecah — form utama sekali, remap harga
+    katalog tanpa menimpa staff; `buildEditPayload` SSoT; `handleForceCreate` branch
+    edit→PATCH `force:true` vs create→POST; `enrichResWithFormState` menyertakan
+    `assigned_staff_id` + relasi staff dari `effectiveStaffList`.
+  - `ReservationDetailModal.tsx`: oper `displayReservation` (terhidrasi), `onSuccess`
+    menerapkan payload + `setActiveRes`; optimistic update pada `handleStaffChange`.
+  - **Added** `packages/admin-dashboard/src/utils/resolveStaffName.ts` — resolver berlapis
+    (relasi → FK lookup → flat name) dipakai di Reservations (tabel+kalender),
+    LiveChatMonitor, CustomerDatabase (reservasi+series), CreateReservationModal,
+    WeekScheduleGrid, DayScheduleGrid, QuickHoldModal, FinancialAnalytics.
+- **Test:** `tests/unit/reservation-staff-assignment-sync.test.ts` (6 kasus adversarial:
+  snake/camel/precedence, staff invalid → 400, unassign null, dual-casing `booking_date`) +
+  `reservation-series.test.ts` kasus `updateSession` STAFF_COLLISION. Full suite: 577 passed.
+
 #### 2026-10-04 - Fixed: Resolusi NEXT_TREATMENT (PENDING→QUEUED), Grace Auto-Cancel, Kuota 40/hari, & Filter Serius MQL
 
 - **Akar masalah (multi-layer):** `createNextTreatmentFollowUps` (regresi commit `b708c2fc`)

@@ -239,6 +239,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 areaName: trip.areaName,
                 updatedAt: trip.updatedAt,
                 lastUpdateSec: Math.max(0, Math.round((now - trip.updatedAt) / 1000)),
+                /** Provenance titik awal: 'gps' (presisi) vs estimasi (prev_patient/clinic/unknown). */
+                originSource: trip.originSource || 'unknown',
               }
             : null,
           customerCoords: { lat: customerLat ?? null, lng: customerLng ?? null },
@@ -686,8 +688,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             });
         } catch (err2: any) {
           console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
+          // Paritas relasi DB di memory: tempel assigned_staff dari peta staff tenant
+          // (tanpa hardcode nama). DB offline → peta kosong, UI fallback ke staffList via FK.
+          let memStaffMap = new Map<string, any>();
+          try {
+            const staffRows = await prisma.staff.findMany({
+              where: { tenant_id: tenantId },
+              select: { id: true, name: true, phone: true },
+            });
+            memStaffMap = new Map(staffRows.map((s: any) => [s.id, s]));
+          } catch { /* DB offline */ }
           let data = filterMemoryByTenant(memoryReservations.values(), tenantId).map((r) => ({
             ...r,
+            assigned_staff: (r as any).assigned_staff || (r.assigned_staff_id ? (memStaffMap.get(r.assigned_staff_id) || null) : null),
             notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
             baby_details: extractBabyDetails(r.raw_text),
           }));
@@ -1383,10 +1396,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           // memory fallback
           const mem = memoryReservations.get(id);
           if (!mem || mem.tenant_id !== tenantId) return reply.status(404).send({ success: false, error: 'Reservation tidak ditemukan' });
+          // Paritas relasi DB: lengkapi assigned_staff bila belum ada (tanpa hardcode nama)
+          let memStaff: any = mem.assigned_staff || null;
+          if (!memStaff && mem.assigned_staff_id) {
+            try {
+              const s = await prisma.staff.findFirst({
+                where: { id: mem.assigned_staff_id, tenant_id: tenantId },
+                select: { id: true, name: true, phone: true },
+              });
+              memStaff = s || null;
+            } catch {
+              memStaff = null;
+            }
+          }
           return reply.status(200).send({
             success: true,
             data: {
               ...mem,
+              assigned_staff: memStaff,
               notes: (mem as any).notes || extractNotesFromRawText(mem.raw_text),
               baby_details: extractBabyDetails(mem.raw_text),
             },
@@ -1707,7 +1734,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const tenantId = tenantOf(request);
       const { id } = request.params;
-      const body = request.body || {};
+      // Dual-casing: lengkapi camelCase dari snake_case bila camel absen (kontrak toleran).
+      // Tidak menimpa nilai camel yang sudah dikirim; "" tetap diteruskan apa adanya.
+      const rawBody = (request.body || {}) as any;
+      const body: any = { ...rawBody };
+      const dualCaseMap: Record<string, string> = {
+        treatment_category: 'treatmentCategory',
+        treatment_detail: 'treatmentDetail',
+        booking_date: 'bookingDate',
+        assigned_staff_id: 'assignedStaffId',
+        purchase_value: 'purchaseValue',
+        duration_minutes: 'durationMinutes',
+        payment_method: 'paymentMethod',
+        customer_name: 'customerName',
+        customer_phone: 'customerPhone',
+      };
+      for (const [snakeKey, camelKey] of Object.entries(dualCaseMap)) {
+        if (body[camelKey] === undefined && body[snakeKey] !== undefined) body[camelKey] = body[snakeKey];
+      }
       const {
         treatmentCategory,
         treatmentDetail,
@@ -1779,7 +1823,25 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
           if (rawText !== undefined) mock.raw_text = rawText;
           if (paymentMethod !== undefined) mock.payment_method = paymentMethod;
-          if (assignedStaffId !== undefined) mock.assigned_staff_id = assignedStaffId;
+          if (assignedStaffId !== undefined) {
+            const staffId = (assignedStaffId as string) || null;
+            mock.assigned_staff_id = staffId;
+            // Paritas relasi DB di mode memory: lookup staff nyata (tanpa hardcode nama).
+            // Bila lookup gagal (DB offline), relasi null — UI fallback ke staffList via FK.
+            let staffObj: { id: string; name: string; phone?: string } | null = null;
+            if (staffId) {
+              try {
+                const staff = await prisma.staff.findFirst({
+                  where: { id: staffId, tenant_id: tenantId },
+                  select: { id: true, name: true },
+                });
+                staffObj = staff ? { id: staff.id, name: staff.name } : null;
+              } catch {
+                staffObj = null;
+              }
+            }
+            mock.assigned_staff = staffObj;
+          }
           if (bookingDate !== undefined) mock.booking_date = bookingDate ? new Date(bookingDate) : null;
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
@@ -1796,6 +1858,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        // Validasi FK staff tenant-scoped (paritas jalur /assign-staff) bila penugasan diisi.
+        if (assignedStaffId) {
+          const staffExists = await prisma.staff.findFirst({
+            where: { id: assignedStaffId, tenant_id: tenantId },
+            select: { id: true },
+          });
+          if (!staffExists) {
+            return reply.status(400).send({ success: false, error: 'Staff yang dipilih tidak valid.' });
+          }
+        }
         const isBecomingConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
         const isBecomingCancelled = status === 'cancelled' && existing.status !== 'cancelled';
         const isBecomingCompleted = status === 'completed' && existing.status !== 'completed';
@@ -3598,7 +3670,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
-      const { bookingDate, assignedStaffId, status } = request.body || {};
+      // Dual-casing toleran (camel ∪ snake) untuk kontrak session
+      const rawBody = (request.body || {}) as any;
+      const body: any = { ...rawBody };
+      if (body.bookingDate === undefined && body.booking_date !== undefined) body.bookingDate = body.booking_date;
+      if (body.assignedStaffId === undefined && body.assigned_staff_id !== undefined) body.assignedStaffId = body.assigned_staff_id;
+      const { bookingDate, assignedStaffId, status } = body;
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const updated = await reservationSeriesService.updateSession(
@@ -3610,6 +3687,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         await reservationSeriesService.checkAndCompleteSeries(request.params.id, tenantId);
         return reply.status(200).send({ success: true, data: updated });
       } catch (err: any) {
+        if (err?.code === 'STAFF_COLLISION') {
+          return reply.status(409).send({
+            success: false,
+            code: 'STAFF_COLLISION',
+            error: 'Jadwal terapis bentrok dengan reservasi lain.',
+            conflict: err.conflict,
+          });
+        }
         return reply.status(500).send({ success: false, error: err.message });
       }
     }

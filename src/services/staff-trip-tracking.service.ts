@@ -253,6 +253,13 @@ export interface TripRecord extends TripPing {
   arrivalStreak: number;
   /** Level keterlambatan terakhir (untuk anti-spam transisi event delay). */
   delayLevel: DelayLevel;
+  /**
+   * Provenance titik awal perjalanan (plan 2026-10-04). `gps` = koordinat asli
+   * Bidan; `prev_patient` = estimasi dari rumah pasien sebelumnya (beruntun);
+   * `unknown` = tak ada dasar. Dipakai CS agar tidak salah anggap estimasi
+   * sebagai posisi presisi.
+   */
+  originSource: 'gps' | 'prev_patient' | 'clinic' | 'unknown';
 }
 
 export interface TripProgress {
@@ -412,7 +419,11 @@ class StaffTripTrackingService {
     reservationId: string,
     staffId: string,
     ping: TripPing,
-    state?: { arrivalStreak?: number; delayLevel?: DelayLevel }
+    state?: {
+      arrivalStreak?: number;
+      delayLevel?: DelayLevel;
+      originSource?: 'gps' | 'prev_patient' | 'clinic' | 'unknown';
+    }
   ): TripRecord {
     assertTenant(tenantId);
     assertIds(reservationId, staffId);
@@ -450,6 +461,9 @@ class StaffTripTrackingService {
       movedAt,
       arrivalStreak: state?.arrivalStreak ?? (prev ? prev.record.arrivalStreak : 0),
       delayLevel: state?.delayLevel ?? (prev ? prev.record.delayLevel : 'none'),
+      // Default 'gps': pemanggil tak-menentukan (mis. /telemetry) selalu kirim
+      // koordinat asli Bidan. Titik estimasi WAJIB menandai originSource eksplisit.
+      originSource: state?.originSource ?? 'gps',
     };
     const timer = setTimeout(() => {
       this.store.delete(key);

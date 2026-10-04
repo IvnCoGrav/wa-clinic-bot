@@ -6,7 +6,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
+import { prepareChatImage } from '../../utils/imageCompressor';
 import {
   MessageSquare,
   AlertTriangle,
@@ -477,7 +479,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
   const [clinicServices, setClinicServices] = useState<any[]>([]);
-  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string; dataUrl: string; mimeType: string; fileName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
   const composerRef = useRef<LiveChatComposerHandle | null>(null);
@@ -3540,7 +3542,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       sender_name: user?.email || 'Admin',
       created_at: new Date().toISOString(),
       delivery_status: 'sent',
-      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.file.type, caption: text || undefined } : undefined,
+      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.mimeType, caption: text || undefined } : undefined,
       quoted_message: currentReplyingTo ? {
         id: currentReplyingTo.id,
         wa_message_id: currentReplyingTo.wa_message_id,
@@ -3578,7 +3580,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     replyTextRef.current = '';
     setHasReplyText(false);
     if (selectedId) clearConversationDraft(selectedId);
-    if (image?.preview) {
+    if (image?.preview && image.preview.startsWith('blob:')) {
       try { URL.revokeObjectURL(image.preview); } catch {}
     }
     setSelectedImage(null);
@@ -3596,17 +3598,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
       }
       if (image) {
-        const imageB64 = await fileToDataUrl(image.file);
-        const thumbB64 = await makeThumbnail(imageB64);
-        body.imageB64 = imageB64;
-        body.thumbB64 = thumbB64;
-        body.mimeType = image.file.type || 'image/jpeg';
-        body.fileName = image.file.name;
+        body.imageB64 = image.dataUrl;
+        body.thumbB64 = image.dataUrl;
+        body.mimeType = image.mimeType;
+        body.fileName = image.fileName;
       }
 
       const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: 45000,
       });
 
       const actualMsg = res?.data?.message || res?.data;
@@ -3635,28 +3636,31 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   };
 
-  const handlePickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast('Hanya file gambar yang didukung.', 'error');
-      return;
+    try {
+      const prepared = await prepareChatImage(file);
+      // 3.2: revoke URL lama sebelum ganti agar tidak bocor memori
+      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
+        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
+      }
+      setSelectedImage({
+        file,
+        preview: prepared.preview,
+        dataUrl: prepared.dataUrl,
+        mimeType: prepared.mimeType,
+        fileName: prepared.fileName,
+      });
+    } catch (err: any) {
+      toast(err?.message || 'Gagal memproses foto.', 'error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    if (file.size > 8 * 1024 * 1024) {
-      toast('Gambar maksimal 8 MB.', 'error');
-      return;
-    }
-    // 3.2: revoke URL lama sebelum ganti agar tidak bocor memori
-    if (selectedImage?.preview) {
-      try { URL.revokeObjectURL(selectedImage.preview); } catch {}
-    }
-    const preview = URL.createObjectURL(file);
-    setSelectedImage({ file, preview });
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleRemoveSelectedImage = () => {
-    if (selectedImage?.preview) {
+    if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
       try { URL.revokeObjectURL(selectedImage.preview); } catch {}
     }
     setSelectedImage(null);
@@ -3665,43 +3669,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   // 3.2: cleanup saat unmount atau saat preview berganti
   useEffect(() => {
     return () => {
-      if (selectedImage?.preview) {
+      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
         try { URL.revokeObjectURL(selectedImage.preview); } catch {}
       }
     };
   }, [selectedImage?.preview]);
-
-  const fileToDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
-      reader.readAsDataURL(file);
-    });
-
-  const makeThumbnail = (dataUrl: string): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const maxDim = 480;
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.max(1, Math.round(img.width * scale));
-          const h = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('no ctx');
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => reject(new Error('Gagal membuat thumbnail.'));
-      img.src = dataUrl;
-    });
 
   const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' | 'all' => {
     if (chat.escalationReason === 'medical_concern') return 'medical_concern';
@@ -6088,7 +6060,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 </div>
                                 <p className="text-[10px] text-[#008069] font-semibold flex items-center space-x-1 mt-0.5">
                                   <User size={10} />
-                                  <span>Bidan: {r.assigned_staff?.name || r.assigned_staff_name || 'Belum ditugaskan'}</span>
+                                  <span>Bidan: {resolveStaffName(r, reservationStaffList) || 'Belum ditugaskan'}</span>
                                 </p>
                               </div>
                               <div className="flex items-center space-x-1.5 shrink-0 ml-2">

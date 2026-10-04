@@ -241,6 +241,92 @@ export function getCurrentDeviceLocation(timeoutMs = 10000): Promise<{ lat: numb
 }
 
 /**
+ * Pre-warm GPS keberangkatan (plan 2026-10-04, Silent Depart-Capture).
+ *
+ * Masalah: pada klik "Navigasi", `getCurrentDeviceLocation` adalah tembakan
+ * dingin (`maximumAge: 0`) yang sering time-out karena prompt izin browser
+ * tertinggal di tab background setelah Bidan dilempar ke Google Maps → titik
+ * awal Bidan & ETA ke pasien hilang (SLA). Solusi: panaskan cache lokasi secara
+ * pasif SEBELUM tombol diklik, lalu saat klik pakai cache segar (0 dtk) atau
+ * balapan one-shot pendek. Silent total: tanpa popup/toast ke Bidan; gagal →
+ * `null` (fail-open, WA OTW tetap terkirim tanpa koordinat).
+ *
+ * Ambang operasional global (selaras `GPS_ACCURACY_MAX_M` backend &
+ * `MIN_ACCURACY_M` hook telemetry). TODO(tenant-aware): kategori konstanta
+ * operasional, bukan data bisnis per-tenant.
+ */
+export const DEPART_GPS_MAX_AGE_MS = 60_000;
+export const DEPART_GPS_MAX_ACCURACY_M = 100;
+export const DEPART_GPS_FAST_MS = 2000;
+
+let departCache: { lat: number; lng: number; accuracy: number; at: number } | null = null;
+let departWatchId: number | null = null;
+
+/**
+ * Mulai pemanasan cache GPS pasif (idempoten). Aman dipanggil berkali-kali;
+ * hanya satu watch aktif. Browser tanpa `watchPosition` → diam (no-op).
+ */
+export function startDepartGpsWarmup(): void {
+  if (departWatchId != null) return;
+  if (typeof navigator === 'undefined' || !navigator.geolocation?.watchPosition) return;
+  try {
+    departWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(accuracy)) return;
+        // Drift indoor (akurasi buruk) → jangan kotori cache.
+        if (accuracy > DEPART_GPS_MAX_ACCURACY_M) return;
+        departCache = { lat, lng, accuracy, at: Date.now() };
+      },
+      () => {
+        /* silent: izin ditolak / sinyal hilang tidak mengganggu Bidan */
+      },
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 }
+    );
+  } catch {
+    departWatchId = null;
+  }
+}
+
+/** Hentikan pemanasan GPS pasif & lepas watch (privasi + baterai). */
+export function stopDepartGpsWarmup(): void {
+  if (departWatchId != null) {
+    try {
+      navigator.geolocation.clearWatch(departWatchId);
+    } catch {
+      /* noop */
+    }
+  }
+  departWatchId = null;
+}
+
+/**
+ * Ambil posisi keberangkatan untuk dikirim bersama OTW.
+ * - Cache segar (≤ `DEPART_GPS_MAX_AGE_MS`) → langsung (0 dtk, menjaga aktivasi klik).
+ * - Cache basi/kosong → balapan one-shot ≤ `fastMs` (default 2 dtk; masih dalam
+ *   jendela user-activation browser sehingga pop-up Google Maps tidak diblokir).
+ * - Gagal / akurasi > `DEPART_GPS_MAX_ACCURACY_M` → `null` (tidak throw, fail-open).
+ */
+export async function getDepartPositionFast(
+  fastMs: number = DEPART_GPS_FAST_MS
+): Promise<{ lat: number; lng: number; accuracy: number } | null> {
+  if (departCache && Date.now() - departCache.at <= DEPART_GPS_MAX_AGE_MS) {
+    return { lat: departCache.lat, lng: departCache.lng, accuracy: departCache.accuracy };
+  }
+  try {
+    const pos = await getCurrentDeviceLocation(fastMs);
+    if (!Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) return null;
+    if (pos.accuracy > DEPART_GPS_MAX_ACCURACY_M) return null;
+    departCache = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, at: Date.now() };
+    return pos;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Geocoding gratis via OpenStreetMap Nominatim untuk mencari koordinat dari teks alamat / kelurahan.
  */
 export async function geocodeAddressWithNominatim(

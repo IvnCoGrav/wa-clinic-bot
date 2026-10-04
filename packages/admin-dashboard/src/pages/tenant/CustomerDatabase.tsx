@@ -11,6 +11,7 @@ import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
 import {
   Users,
@@ -1369,7 +1370,7 @@ export const CustomerDatabase: React.FC = () => {
                                   {res.purchase_value ? `Rp ${Number(res.purchase_value).toLocaleString('id-ID')}` : <span className="text-[#8696a0] font-normal">-</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-[#54656f] text-[11px] group-hover:text-[#008069]">
-                                  {res.assigned_staff?.name || <span className="text-[#8696a0] italic">-</span>}
+                                  {resolveStaffName(res, reservationStaffList) || <span className="text-[#8696a0] italic">-</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-right">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -1432,7 +1433,7 @@ export const CustomerDatabase: React.FC = () => {
                               </div>
                               <div className="flex items-center justify-between text-[10px] text-[#8696a0]">
                                 <span>{Math.round(progress)}% selesai</span>
-                                {series.assigned_staff && <span>Terapis: {series.assigned_staff.name}</span>}
+                                {resolveStaffName(series, reservationStaffList) && <span>Terapis: {resolveStaffName(series, reservationStaffList)}</span>}
                               </div>
                             </div>
                           );

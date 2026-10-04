@@ -62,6 +62,7 @@ import { CreateReservationModal } from '../../components/calendar/CreateReservat
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { resolveStaffName } from '../../utils/resolveStaffName';
 
 /**
  * Baca deep-link tanggal dari query `?date=YYYY-MM-DD` (mis. dari notifikasi
@@ -1349,11 +1350,15 @@ export const Reservations: React.FC = () => {
                         </div>
                       )}
 
-                      {res.assigned_staff && (
-                        <div className="text-xs text-[#008069] font-semibold flex items-center space-x-1">
-                          <span>Terapis: {res.assigned_staff.name}</span>
-                        </div>
-                      )}
+                      {(() => {
+                        const staffName = resolveStaffName(res, staffList);
+                        if (!staffName) return null;
+                        return (
+                          <div className="text-xs text-[#008069] font-semibold flex items-center space-x-1">
+                            <span>Terapis: {staffName}</span>
+                          </div>
+                        );
+                      })()}
                       
                       {res.status === 'completed' && res.proof_url && (
                         <div className="pt-1 flex justify-end">
@@ -1497,13 +1502,16 @@ export const Reservations: React.FC = () => {
                               )}
                             </td>
                             <td className="py-3.5 px-5">
-                              {res.assigned_staff ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
-                                  {res.assigned_staff.name}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-[#8696a0] italic">Belum ditugaskan</span>
-                              )}
+                              {(() => {
+                                const staffName = resolveStaffName(res, staffList);
+                                return staffName ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                                    {staffName}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-[#8696a0] italic">Belum ditugaskan</span>
+                                );
+                              })()}
                             </td>
                             <td className="py-3.5 px-5">{getStatusBadge(res.status, res.raw_text)}</td>
                             <td className="py-3.5 px-5 whitespace-nowrap">
