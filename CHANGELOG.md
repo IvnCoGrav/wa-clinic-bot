@@ -4,6 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Fixed: Keselamatan Klinis Bumil, Presisi Cart, Trimmer Daftar, Anti-Amnesia Delivery & CTA Reprompt (Fase 1–5)
+
+- **Akar masalah (audit read-only, terbukti `file:line`):** (1) `get-catalog.tool.ts:238` `void
+  gestationalWeeks` + tak ada cabang `momStage==='PREGNANT'` → layanan induksi persalinan
+  (perangsang kontraksi, label "Aterm 37+ Minggu") bisa muncul untuk bumil 20–30 minggu; (2)
+  `cart-manager.ts:496` urut kandidat fuzzy by panjang nama → paket "+Mandi" menyingkirkan paket
+  presisi; (3) `sanitizer.ts:655` bullet dianggap batas kalimat → daftar "nih:\n1. ..." terpotong;
+  (4) template `persona.ts:353` menanyakan ulang "mau perawatan apa" setelah ongkir; (5) reprompt
+  usia hanya menghapus larangan tanpa CTA → dead-end.
+- **Fase 1 — Keselamatan Bumil (`get-catalog.tool.ts`, `tool-pipeline.ts`,
+  `router-tool-routing.layer.ts`):** tambah `momStage`/`gestationalWeeks` ke `CatalogSessionContext`
+  + teruskan dari `session.momProfile`; ambil efektif `input ?? sesi`. Gerbang deterministik PREGNANT:
+  induksi dilarang <37 minggu, perineum <34 minggu, kecuali customer EKSPLISIT minta
+  (`specificTreatmentName` semantic). Bumil umum → Pregnant Massage #1. Enum skema +BREASTFEEDING.
+- **Fase 2 — Presisi Cart (`cart-manager.ts`):** ganti greedy panjang → `rankFuzzyByRelevance`
+  (hit-count → rasio non-generik → penalti token ekstra → panjang tie-break). Reservasi slot add-on,
+  dedup famili kecuali bundle-vs-komponen, simpan PRIMARY terbaik per-scope.
+- **Fase 3 — Trimmer (`sanitizer.ts`):** bullet sesudah ":" bukan batas kalimat + perluas potong
+  hingga akhir senarai (anti-amputasi daftar opsi), prosa biasa tetap 3 kalimat.
+- **Fase 4 — Delivery anti-amnesia (`guardrail-pipeline.ts`):** bila `calculate_delivery` sukses +
+  sesi punya konteks layanan, kalimat "mau perawatan apa" DITUKAR deterministik dengan CTA
+  state-aware (`buildScheduleCta`).
+- **Fase 5 — Kontinuitas reprompt (`guardrail-pipeline.ts`):** `ensureRepromptClosingCta` menempel
+  CTA penutup bila balasan pasca-reprompt (usia/jam/shareloc) buntu tanpa pertanyaan.
+- **Tests:** +5 suite (multi-frasa adversarial): `v3-pregnant-catalog-priority`,
+  `v3-cart-fuzzy-ranking`, `v3-sanitizer-list-preservation`, `delivery-treatment-awareness`,
+  `age-reprompt-cta`. Suite penuh **583 lolos / 0 gagal**; `npm run build` lolos.
+- **Catatan:** ambang klinis (37/34) & ID katalog masih konstanta kode (tech debt SaaS) → dicatat
+  di `docs/KNOWN_ISSUES.md` #218 (Confirmation Gate).
+
 #### 2026-10-04 - Changed: Unifikasi Jalur OTW + Capture GPS Maksimal + Fallback Titik Berangkat (Fase 3–4)
 
 - **Akar masalah (terbukti `file:line`):** ada DUA pengirim OTW — `handleStartNavigation`

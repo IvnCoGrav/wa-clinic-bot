@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 218. [Katalog/Klinis] Ambang klinis & ID layanan masih konstanta kode (tech debt SaaS) (2026-10-04, OPEN — Confirmation Gate)
+
+- **Konteks:** perbaikan Fase 1–5 (2026-10-04) menambah gerbang keselamatan bumil di
+  `src/v3/tools/get-catalog.tool.ts` (blok `momStage === 'PREGNANT'`). Ambang saat ini
+  konstanta kode: `INDUKSI_MIN_WEEKS=37`, `PERINEUM_MIN_WEEKS=34`, plus ID katalog
+  `moms-induksi-massage`, `moms-induksi-fullbody`, `moms-perineum-massage`,
+  `moms-prenatal-massage`, `moms-prenatal-yoga`, dan ID bundle Selapan.
+- **Kenapa ditunda:** memindahkan ambang + penandaan "keluarga klinis" (induksi/perineum/prenatal)
+  ke DB per-tenant butuh kolom/skema baru (mis. `Treatment.minGestationalWeeks`,
+  `Treatment.clinicalFamily`) + UI admin + migrasi `sort_order`/seed — LOC & blast radius besar.
+  Sesuai mandat SaaS-readiness: **Confirmation Gate** — sementara menerima hardcode mengikuti pola
+  existing, wajib dicatat.
+- **Risiko bila dibiarkan:** admin tidak bisa menyesuaikan ambang per-tenant tanpa deploy; rebrand
+  katalog/ID baru bisa membuat gerbang tak mengenali layanan induksi baru (demi keamanan default:
+  layanan tak dikenal dengan kata "induksi" tetap diproses LLM sebagai layar sekunder).
+- **Arah fix (belum dieksekusi, menunggu persetujuan):** tabel/kolom `Treatment` tenant-aware
+  (`min_gestational_weeks`, `clinical_family`) + admin UI tab di modul katalog + gerbang baca DB
+  (fallback konstanta bila kolom kosong). Alternatif minimal: seed konfigurasi ke `ClinicPolicy`.
+- **Verifikasi terkait:** `tests/unit/v3-pregnant-catalog-priority.test.ts`.
+- **Catatan serupa:** ambang FAQ (`src/cli/faq-corpus.ts:163-165` "37-38 minggu") dan template
+  persona (`src/config/persona.ts:353`) juga masih hardcode — ikut roadmap tenant-aware di atas.
+
 ## 217. [OTW/Dispatch] Batasan sadar Silent Depart-Capture GPS (2026-10-04, OPEN — by design)
 
 - **Konteks:** unifikasi jalur OTW + rekam titik awal GPS saat klik "Navigasi"/"MULAI JALAN"

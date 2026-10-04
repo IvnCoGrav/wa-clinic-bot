@@ -88,6 +88,7 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
   - **Review Perubahan / Diff**: WAJIB memuat panduan `code-review`.
   - **Validasi Rencana & Keputusan**: WAJIB melakukan uji kritis (*stress-test*) dengan `grilling` / `grill-me`.
   - **Manajemen Tiket & Spesifikasi**: WAJIB menggunakan `to-tickets`, `to-spec`, dan `triage`.
+- **Mandat Laporan Bahasa Sederhana (MANDATORY)**: Setiap laporan audit/investigasi kepada user WAJIB memakai Bahasa Indonesia sederhana dan struktur tetap: (1) Apa yang terjadi, (2) Apa temuan, (3) Apa solusinya. Dilarang memakai istilah teknis tanpa penjelasan sederhana di sampingnya.
 
 
 ## Monorepo (no npm workspaces)

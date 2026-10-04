@@ -218,6 +218,31 @@ export class CartManager {
     if (services.length === 0) return cart;
     const significantTokens = (name: string): string[] =>
       name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+    // Fase 2 (Cart Precision): peringkat kandidat fuzzy berbasis RELEVANSI,
+    // BUKAN panjang nama. Utamakan: jumlah kata cocok → rasio cocok (non-umum)
+    // → penalti kata ekstra yang TIDAK disebut customer → panjang hanya
+    // tie-breaker terakhir. Mencegah paket "+ Mandi" (nama panjang) menyingkirkan
+    // paket presisi yang diminta customer. Token generik ("pijat/paket/kala/bayi")
+    // tidak boleh menjadi penentu tunggal (konsisten gerbang anti-overfitting).
+    const rankFuzzyByRelevance = (text: string, cands: typeof services): typeof services => {
+      const msgTokens = new Set(significantTokens(text));
+      const scored = cands.map((s) => {
+        const toks = significantTokens(s.name);
+        const nonGeneric = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
+        const hitCount = toks.filter((t) => msgTokens.has(t)).length;
+        const nonGenericHits = nonGeneric.filter((t) => msgTokens.has(t)).length;
+        const extraCount = nonGeneric.filter((t) => !msgTokens.has(t)).length;
+        const ratio = nonGeneric.length > 0 ? nonGenericHits / nonGeneric.length : 0;
+        return { s, hitCount, ratio, extraCount };
+      });
+      scored.sort((a, b) =>
+        (b.hitCount - a.hitCount)
+        || (b.ratio - a.ratio)
+        || (a.extraCount - b.extraCount)
+        || (b.s.name.length - a.s.name.length)
+      );
+      return scored.map((x) => x.s);
+    };
     // Token khas yang hanya dimiliki SATU layanan katalog (misal "oksitosin"):
     // sekali disebut langsung mengidentifikasi layanan tersebut.
     const tokenOwnerCount = new Map<string, number>();
@@ -486,21 +511,40 @@ export class CartManager {
         const form = matchedFormOf(text, s);
         if (form) for (const t of significantTokens(form)) coveredTokens.add(t);
       }
-      let fuzzyHits = (fullHits.length === 0 && !isAssistant)
-        ? services
-            .filter((s) => {
-              if (!fuzzyMatches(text, s.name)) return false;
-              const uncovered = significantTokens(s.name).filter((t) => !coveredTokens.has(t));
-              return uncovered.length >= 2;
-            })
-            .sort((a, b) => b.name.length - a.name.length).slice(0, 2)
-        : [];
+      let fuzzyHits: typeof services = [];
+      if (fullHits.length === 0 && !isAssistant) {
+        const ranked = rankFuzzyByRelevance(
+          text,
+          services.filter((s) => {
+            if (!fuzzyMatches(text, s.name)) return false;
+            const uncovered = significantTokens(s.name).filter((t) => !coveredTokens.has(t));
+            return uncovered.length >= 2;
+          })
+        );
+        // Fase 2: add-on pendamping (mis. Sinar Moksa) DILARANG tergusur oleh
+        // layanan utama yang lebih relevan — reservasi 1 slot add-on + 1 utama
+        // bila keduanya disebut se-turn (SOP: add-on menempel, bukan pengganti).
+        const isAddonSvc = (s: (typeof services)[number]): boolean =>
+          (s as any).isAddon === true
+          || ['ADDON', 'ADD_ON'].includes(((s.category || '') as string).toUpperCase());
+        const addonCand = ranked.find((s) => isAddonSvc(s));
+        const primaryCand = ranked.find((s) => !isAddonSvc(s));
+        fuzzyHits = (addonCand && primaryCand) ? [primaryCand, addonCand] : ranked.slice(0, 4);
+      }
       // Anti-duplikasi famili Baby vs Kids (audit 983902): "pulih ceria" DILARANG
       // memasukkan 2 varian sekaligus untuk anak yang sama — pilih 1 sesuai audiens.
       if (fuzzyHits.length > 1) {
         // Famili didefinisikan oleh irisan token "pulih" + "ceria" (bukan sigKey exact
         // karena "Pijat Bayi Pulih Ceria" vs "Pijat Kids Pulih Ceria" beda token kids/bayi).
         const isSameFamily = (a: string, b: string): boolean => {
+          // Fase 2: BUNDLE vs komponen standalone BUKAN famili yang sama —
+          // bundle menyerap komponen lewat absorbIntoBundle (bundleItemIds),
+          // bukan didedup. Mencegah bundle tergusur oleh komponen BABY-nya.
+          const isBundleName = (n: string): boolean => {
+            const svc = services.find((x) => x.name.toLowerCase() === n.toLowerCase());
+            return !!svc && (((svc.category || '').toUpperCase() === 'BUNDLE') || (svc.bundleItemIds || []).length > 0);
+          };
+          if (isBundleName(a) !== isBundleName(b)) return false;
           const ta = new Set(significantTokens(a).filter((t) => !GENERIC_CLINIC_TOKENS.has(t)));
           const tb = new Set(significantTokens(b).filter((t) => !GENERIC_CLINIC_TOKENS.has(t)));
           // famili pulih-ceria: kedua nama mengandung pulih & ceria
@@ -532,6 +576,20 @@ export class CartManager {
           deduped.push(winner!);
         }
         fuzzyHits = deduped;
+      }
+      // Fase 2: setelah dedup famili, batasi final ke 2 kandidat teratas
+      // (relevansi sudah menang atas panjang nama). Untuk PRIMARY, simpan HANYA
+      // kandidat paling relevan per-scope — mencegah kandidat kurang relevan
+      // menimpa yang lebih relevan via aturan single-PRIMARY-replace.
+      {
+        const seenPrimaryScopes = new Set<string>();
+        fuzzyHits = fuzzyHits.slice(0, 2).filter((s) => {
+          if (primaryTypeOf(s) !== 'PRIMARY') return true;
+          const scope = CartManager.detectRecipientScope(s.name, s as any, audienceOf(s as any));
+          if (seenPrimaryScopes.has(scope)) return false;
+          seenPrimaryScopes.add(scope);
+          return true;
+        });
       }
       const fullSet = new Set(fullHits.map((x) => x.name.toLowerCase()));
       const cleanSet = new Set(cleanHits.map((x) => x.name.toLowerCase()));

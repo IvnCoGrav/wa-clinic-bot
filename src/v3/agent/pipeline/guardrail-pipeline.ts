@@ -203,6 +203,66 @@ export function detectVisitTimeQuestion(replyText: string): boolean {
   return phrases.some((p) => lower.includes(p));
 }
 
+/**
+ * Fase 4 (Delivery anti-amnesia): pola kalimat AMNESIA treatment — bot
+ * menanyakan "mau perawatan apa" padahal customer sudah memilih/membahas
+ * layanan. Pola = frasa template bawaan sistem (technical output normalizer,
+ * analog ASKING_LOCATION_RE), bukan hafalan kalimat user.
+ */
+const ASKING_TREATMENT_RE =
+  /\b(rencana\s+mau\s+(?:ambil|dibantu|memilih)\s+perawatan\s+apa|mau\s+(?:ambil\s+)?(?:treatment|perawatan)\s+apa|(?:treatment|perawatan)\s+apa\s+untuk\s+si\s+kecil|rencana\s+mau\s+treatment\s+apa|mau\s+dibantu\s+perawatan\s+apa|mau\s+ambil\s+perawatan\s+apa)\b/i;
+
+/** True bila balasan menanyakan ulang perawatan/treatment (amnesia treatment). */
+export function hasTreatmentQuestion(replyText: string): boolean {
+  if (!replyText || !replyText.trim()) return false;
+  return ASKING_TREATMENT_RE.test(replyText);
+}
+
+/**
+ * Fase 4: ganti KALIMAT amnesia treatment dengan CTA state-aware (level
+ * kalimat, anti-mutilasi kata) — otoritas deterministik, bukan prompt semata.
+ * Bila tidak ada kalimat amnesia, kembalikan teks apa adanya.
+ */
+export function replaceTreatmentAmnesia(replyText: string, ctaText: string): string {
+  if (!replyText || !replyText.trim() || !ctaText || !ctaText.trim()) return replyText;
+  let replaced = false;
+  const lines = replyText.split('\n');
+  const out = lines.map((line) => {
+    if (!line.trim()) return line;
+    const parts = line.split(/(?<=[.!?])\s+/);
+    const kept = parts.map((s) => {
+      if (ASKING_TREATMENT_RE.test(s)) { replaced = true; return ctaText.trim(); }
+      return s;
+    });
+    return kept.join(' ').trim();
+  });
+  return replaced ? out.join('\n').replace(/[ \t]{2,}/g, ' ').trim() : replyText;
+}
+
+/**
+ * Fase 5 (Reprompt continuity): deteksi CTA/pertanyaan penutup pada balasan.
+ * Bila tidak ada, jaminan deterministik menempel CTA — mencegah dead-end
+ * setelah reprompt (usia/jam/shareloc) yang hanya "menghapus" larangan.
+ */
+export function hasClosingCta(replyText: string): boolean {
+  if (!replyText || !replyText.trim()) return false;
+  if (/[?]/.test(replyText)) return true;
+  return /\b(mau kami bantu|apakah bunda|boleh kami|rencana mau|apakah ingin|ingin kami|mau dibantu|tertarik|ingin dibantu|mau kami siapkan|apakah mau|mau kami cekkan)\b/i.test(replyText);
+}
+
+/**
+ * Fase 5: jaminan blank yang memiliki CTA/pertanyaan penutup. Bila balasan
+ * buntu, tempel ctaText state-aware. Bukan mutilasi kata.
+ */
+export function ensureRepromptClosingCta(text: string, ctaText: string): string {
+  if (!text || !text.trim()) return text;
+  if (!ctaText || !ctaText.trim()) return text;
+  if (hasClosingCta(text)) return text;
+  const base = text.replace(/\s+$/, '');
+  const joiner = /[.!?]$/.test(base) ? ' ' : '. ';
+  return `${base}${joiner}${ctaText.trim()}`.trim();
+}
+
 
 /**
  * Stage 5 — GuardrailPipeline: sanitasi, 3 loop reprompt terisolasi
@@ -353,6 +413,17 @@ export class GuardrailPipeline {
     // kalimat, otoritas pola tunggal dari validator (information hiding).
     const gateAmnesia = (text: string): string =>
       stripAmnesiaQuestions(text, { locationKnown, symptomsKnown });
+    // Fase 5 (Reprompt continuity): CTA penutup state-aware untuk jaminan
+    // kontinuitas pasca-reprompt (usia/jam/shareloc) — anti dead-end.
+    let repromptClosingCta = '';
+    try {
+      const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
+      repromptClosingCta = buildScheduleCta({
+        candidateTreatmentName: session.selectedTreatment,
+        hasCartItems: (session.cartItems || []).length > 0,
+        preferredDate: (session.booking as any)?.preferredDate,
+      });
+    } catch { repromptClosingCta = ''; }
     // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
     // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
     // deterministik trauma-jatuh/vaksin pada pesan masuk. Dihitung dari
@@ -621,8 +692,11 @@ export class GuardrailPipeline {
         const ageRetryText = (ageRetryData?.choices?.[0]?.message?.content || '').trim();
         if (ageRetryText) {
           const ageCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(ageRetryText, incomingText, isFollowUp, sanitizeOpts));
-          if (ageCleaned.trim() && !hasAgeQuestion(ageCleaned)) {
-            finalReply = ageCleaned;
+          const ageWithCta = ageCleaned.trim() && !hasAgeQuestion(ageCleaned)
+            ? ensureRepromptClosingCta(ageCleaned, repromptClosingCta)
+            : ageCleaned;
+          if (ageWithCta.trim() && !hasAgeQuestion(ageWithCta)) {
+            finalReply = ageWithCta;
             ageRepromptOk = true;
             console.log(JSON.stringify({ event: 'AGE_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
             await input.recordCall({
@@ -661,8 +735,11 @@ export class GuardrailPipeline {
         const timeRetryText = (timeRetryData?.choices?.[0]?.message?.content || '').trim();
         if (timeRetryText) {
           const timeCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(timeRetryText, incomingText, isFollowUp, sanitizeOpts));
-          if (timeCleaned.trim() && !detectVisitTimeQuestion(timeCleaned)) {
-            finalReply = timeCleaned;
+          const timeWithCta = timeCleaned.trim() && !detectVisitTimeQuestion(timeCleaned)
+            ? ensureRepromptClosingCta(timeCleaned, repromptClosingCta)
+            : timeCleaned;
+          if (timeWithCta.trim() && !detectVisitTimeQuestion(timeWithCta)) {
+            finalReply = timeWithCta;
             timeRepromptOk = true;
             console.log(JSON.stringify({ event: 'VISIT_TIME_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
             await input.recordCall({
@@ -727,8 +804,11 @@ export class GuardrailPipeline {
         const locRetryText = (locRetryData?.choices?.[0]?.message?.content || '').trim();
         if (locRetryText) {
           const locCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(locRetryText, incomingText, isFollowUp, sanitizeOpts));
-          if (locCleaned.trim() && !hasShareLocationSolicitation(locCleaned)) {
-            finalReply = locCleaned;
+          const locWithCta = locCleaned.trim() && !hasShareLocationSolicitation(locCleaned)
+            ? ensureRepromptClosingCta(locCleaned, repromptClosingCta)
+            : locCleaned;
+          if (locWithCta.trim() && !hasShareLocationSolicitation(locWithCta)) {
+            finalReply = locWithCta;
             locRepromptOk = true;
             console.log(JSON.stringify({ event: 'SHARELOC_SOLICITATION_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
             await input.recordCall({
@@ -899,6 +979,33 @@ export class GuardrailPipeline {
           }
         }
       } catch {}
+    }
+
+    // Fase 4 (Delivery anti-amnesia): bila turn ini menghitung ongkir/delivery
+    // DAN sesi sudah punya konteks layanan (selectedTreatment/keranjang),
+    // balasan DILARANG menanyakan ulang "mau perawatan apa". Gerbang
+    // deterministik menukar kalimat amnesia dengan CTA state-aware.
+    if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
+      const deliveryOk = executedTools.some(
+        (t) => t?.name === 'calculate_delivery' && (t as any)?.result?.success === true
+      );
+      const treatmentName = session.selectedTreatment
+        || (Array.isArray(session.cartItems) && session.cartItems.length > 0 ? session.cartItems[0]?.name : undefined);
+      const hasTreatmentCtx = Boolean(treatmentName) || (session.cartItems || []).length > 0;
+      if (deliveryOk && hasTreatmentCtx && hasTreatmentQuestion(finalReply)) {
+        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
+        const cta = buildScheduleCta({
+          candidateTreatmentName: treatmentName,
+          hasCartItems: (session.cartItems || []).length > 0,
+          preferredDate: (session.booking as any)?.preferredDate,
+        });
+        const replaced = replaceTreatmentAmnesia(finalReply, cta);
+        if (replaced !== finalReply) {
+          finalReply = replaced;
+          violationsDetected.push('TREATMENT_AMNESIA_REPLACED');
+          console.warn(JSON.stringify({ event: 'TREATMENT_AMNESIA_REPLACED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+        }
+      }
     }
 
     // Deterministic Output Normalizer (Rule 1) di gate akhir: trimmer

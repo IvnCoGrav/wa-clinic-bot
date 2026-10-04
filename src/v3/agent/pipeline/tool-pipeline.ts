@@ -497,9 +497,19 @@ export class ToolExecutionPipeline {
             : [];
           const pipeTargetAudience: string | undefined =
             typeof (session as any).targetAudience === 'string' ? (session as any).targetAudience : undefined;
+          // Fase 1 (Clinical Safety): teruskan fase ibu + minggu kehamilan DARI
+          // SESI agar tool katalog punya gerbang klinis deterministik bumil
+          // walau LLM lupa menyalinnya di argumen turn ini.
+          const pipeMomStage: string | undefined =
+            typeof (session as any).momProfile?.stage === 'string' ? (session as any).momProfile.stage : undefined;
+          const pipeGestWeeks: number | undefined =
+            typeof (session as any).momProfile?.gestationalWeeks === 'number'
+              ? (session as any).momProfile.gestationalWeeks : undefined;
           const pipeAudienceCtx = {
             ...(pipeDiscussed.length > 0 ? { discussedTreatments: pipeDiscussed } : {}),
             ...(pipeTargetAudience ? { targetAudience: pipeTargetAudience } : {}),
+            ...(pipeMomStage ? { momStage: pipeMomStage } : {}),
+            ...(typeof pipeGestWeeks === 'number' ? { gestationalWeeks: pipeGestWeeks } : {}),
           };
           toolContext.locationSnapshot = session.location
             ? {

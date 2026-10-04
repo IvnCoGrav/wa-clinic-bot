@@ -651,15 +651,40 @@ export class OutputSanitizer {
       if (prev === '.' || prev === '!' || prev === '?') continue;
       pushEnd(em.index + em[0].length - 1);
     }
-    // Bullet list naratif: setiap baris bullet dianggap batas kalimat
+    // Bullet list naratif: setiap baris bullet dianggap batas kalimat, KECUALI
+    // bila bullet diperkenalkan klausa bertitik dua (":") — daftar opsi adalah
+    // bagian klausa penjelas, bukan kalimat baru.
     const bulletRe = /\n\s*(?:[-•*]|\d+[.)])\s+/g;
     let bm: RegExpExecArray | null;
     while ((bm = bulletRe.exec(text)) !== null) {
+      let p = bm.index - 1;
+      while (p >= 0 && /\s/.test(text[p])) p--;
+      if (p >= 0 && text[p] === ':') continue;
       pushEnd(bm.index);
     }
     const ends = Array.from(endsSet).sort((a, b) => a - b);
     if (ends.length <= maxSentences) return text;
-    return text.slice(0, ends[maxSentences - 1] + 1).trimEnd();
+    let cut = ends[maxSentences - 1];
+    // Fase 3 (List Preservation): bila batas potong jatuh di ekor klausa
+    // pengantar bertitik dua (":") ATAU tepat sebelum senarai bernomor/bullet,
+    // jangan amputasi daftar — sertakan seluruh item hingga item terakhir.
+    const headTrim = text.slice(0, cut + 1).trimEnd();
+    const afterCut = text.slice(cut + 1);
+    const startsList = /^\s*(?:\n\s*)?(?:[-•*]|\d+[.)])\s+/.test(afterCut);
+    if (headTrim.endsWith(':') || startsList) {
+      const lines = afterCut.split('\n');
+      let consumed = 0;
+      let sawItem = false;
+      for (const line of lines) {
+        const isItem = /^\s*(?:[-•*]|\d+[.)])\s+/.test(line);
+        const isBlank = line.trim() === '';
+        if (isItem) { sawItem = true; consumed += line.length + 1; }
+        else if (isBlank && (sawItem || consumed === 0)) { consumed += line.length + 1; }
+        else break;
+      }
+      if (sawItem) cut = cut + consumed;
+    }
+    return text.slice(0, cut + 1).trimEnd();
   }
 
   /**

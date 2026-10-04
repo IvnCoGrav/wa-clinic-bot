@@ -171,6 +171,13 @@ export interface CatalogSessionContext {
    * batuk/pilek bayi.
    */
   targetAudience?: string;
+  /**
+   * Fase 1 (Clinical Safety): fase ibu + usia kehamilan dari STATE SESI
+   * (session.momProfile), bukan tebakan LLM turn ini. Gerbang klinis
+   * deterministik bumil (induksi/perineum butuh ambang minggu).
+   */
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
+  gestationalWeeks?: number;
 }
 
 export const GET_CATALOG_TOOL_SCHEMA = {
@@ -196,8 +203,8 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         },
         momStage: {
           type: 'string',
-          enum: ['PREGNANT', 'POSTPARTUM', 'GENERAL'],
-          description: 'Kondisi Ibu (Hamil, Paska Melahirkan/Nifas, atau Relaksasi Umum).'
+          enum: ['PREGNANT', 'POSTPARTUM', 'BREASTFEEDING', 'GENERAL'],
+          description: 'Kondisi Ibu (Hamil, Paska Melahirkan/Nifas, Menyusui, atau Relaksasi Umum).'
         },
         symptoms: {
           type: 'array',
@@ -235,8 +242,14 @@ export async function executeGetCatalog(
   tenantId: string = DEFAULT_TENANT_ID,
   sessionCtx?: CatalogSessionContext
 ): Promise<GetCatalogOutput> {
-  const { category: requestedCategory, childAgeMonths, gestationalWeeks, momStage, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
-  void gestationalWeeks;
+  const { category: requestedCategory, childAgeMonths, symptoms = [], specificTreatmentName, inquirePrice, targetPrice, asksDuration } = input;
+  // Fase 1 (Clinical Safety): fase + minggu kehamilan EFEKTIF — utamakan argumen
+  // LLM turn ini, fallback ke state sesi (sessionCtx) agar bumil tak kehilangan
+  // konteks minggu yang sudah dicatat di turn sebelumnya.
+  const momStage = input.momStage ?? sessionCtx?.momStage;
+  const gestationalWeeks = typeof input.gestationalWeeks === 'number'
+    ? input.gestationalWeeks
+    : sessionCtx?.gestationalWeeks;
   // Tahap 3 (taksonomi deterministik): kunci kategori BABY/KIDS ke ambang
   // kanonis 24 bulan bila usia diketahui — <24 BABY murni, ≥24 KIDS murni.
   // MOMS/BOTH/tanpa-kategori tidak disentuh (bukan pasien usia anak).
@@ -602,6 +615,47 @@ export async function executeGetCatalog(
         formattedTreatments.length = 0;
         formattedTreatments.push(...pool);
       }
+    }
+
+    // Phase 1 — Clinical Safety (fase PREGNANT): ibu hamil umum DILARANG
+    // ditawari layanan INDUKSI persalinan (merangsang kontraksi) & PERINEUM
+    // sebelum ambang klinisnya. Ambang dari label katalog resmi: Induksi =
+    // "Aterm (37+ Minggu)", Perineum = "Min. 34-36 Minggu". Gerbang pada STATE
+    // (minggu kehamilan dari sesi + pemahaman semantik specificTreatmentName),
+    // BUKAN hafalan kalimat user. Dikecualikan bila customer EKSPLISIT meminta.
+    if (category === 'MOMS' && momStage === 'PREGNANT') {
+      const INDUKSI_MIN_WEEKS = 37;
+      const PERINEUM_MIN_WEEKS = 34;
+      const weeks = typeof gestationalWeeks === 'number' && Number.isFinite(gestationalWeeks)
+        ? gestationalWeeks : null;
+      const INDUCT_IDS = new Set(['moms-induksi-massage', 'moms-induksi-fullbody']);
+      const PERINEUM_IDS = new Set(['moms-perineum-massage']);
+      let explicitId: string | undefined;
+      if (specificTreatmentName && specificTreatmentName.trim()) {
+        try {
+          explicitId = (treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId) as any)?.id;
+        } catch { explicitId = undefined; }
+      }
+      const explicitlyWants = (ids: Set<string>): boolean => explicitId != null && ids.has(explicitId);
+      const inductBlocked = !explicitlyWants(INDUCT_IDS) && (weeks === null || weeks < INDUKSI_MIN_WEEKS);
+      const perineumBlocked = !explicitlyWants(PERINEUM_IDS) && (weeks !== null && weeks < PERINEUM_MIN_WEEKS);
+      const pool = formattedTreatments.filter((t) => {
+        if (inductBlocked && INDUCT_IDS.has(t.id)) return false;
+        if (perineumBlocked && PERINEUM_IDS.has(t.id)) return false;
+        return true;
+      });
+      const priorityOf = (id: string): number =>
+        id === 'moms-prenatal-massage' ? 0
+        : id === 'moms-prenatal-yoga' ? 1
+        : (INDUCT_IDS.has(id) || PERINEUM_IDS.has(id)) ? 3
+        : 2;
+      pool.sort((a, b) => {
+        const rec = (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0);
+        if (rec !== 0) return rec;
+        return priorityOf(a.id) - priorityOf(b.id);
+      });
+      formattedTreatments.length = 0;
+      formattedTreatments.push(...pool);
     }
 
     // momStage GENERAL: bila GENERAL dipanggil tanpa konteks bayi, jangan
