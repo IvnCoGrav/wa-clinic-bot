@@ -3,6 +3,22 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 220. [Deploy/Knowledge] `seed:faq` tidak bisa dijalankan di image app (2026-10-04, OPEN)
+
+- **Gejala:** `docker compose exec app npx tsx src/cli/seed-faq.ts` gagal karena
+  image runner hanya memuat `dist/` (tanpa `src/` & tanpa `tsx` devDep), dan
+  `dist/cli/seed-faq.js` **tidak ikut terkompilasi**. Akibatnya perubahan
+  `faq-corpus.ts` tidak serta-merta masuk DB produksi.
+- **Dampak:** penerapan Fase 2 (pemisahan retrieval induksi) di live terpaksa via
+  `UPDATE` 1 baris `knowledge_chunks` + eviction cache Redis `faq:default-tenant:*`
+  (langkah manual, sudah dijalankan 2026-10-04).
+- **Arah fix (belum dieksekusi):** sertakan entrypoint seeding di image
+  (mis. build `src/cli` ke `dist/cli` ATAU script `docker/seed.sh` + tsx pada
+  stage khusus), atau endpoint admin re-seed knowledge yang juga memanggil
+  `faqCacheService.invalidateAll`.
+- **Verifikasi terkait:** chunk "Panduan Usia Kehamilan ... Induksi Massage"
+  keywords kini tanpa `capek/pegal` (cek SQL langsung).
+
 ## 219. [Guardrail] Batasan Lapis Kontrak Jawaban, Reviewer AI & Eval Skrip (2026-10-04, OPEN — by design)
 
 - **Konteks:** penambahan Fase 0–6 (2026-10-04) — kontrak jawaban, pemisahan
