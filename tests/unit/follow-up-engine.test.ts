@@ -431,7 +431,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(nextCalls.map((c: any) => c[0].data.stage).sort()).toEqual([2, 3]);
   });
 
-  it('15. createNextTreatmentFollowUps WIB & PENDING: jam 09:00 WIB, status PENDING', async () => {
+  it('15. createNextTreatmentFollowUps WIB & QUEUED: jam 09:00 WIB, status QUEUED', async () => {
     const phone = `62893${Date.now()}wib`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Wib', DEFAULT_TENANT_ID);
     const bookingDate = new Date('2026-09-14T10:00:00+07:00');
@@ -442,7 +442,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
     expect(nextCalls.length).toBe(3);
     for (const c of nextCalls) {
-      expect(c[0].data.status).toBe('PENDING');
+      expect(c[0].data.status).toBe('QUEUED');
       const d: Date = c[0].data.scheduled_at;
       // 09:00 WIB = 02:00 UTC
       expect(d.getUTCHours()).toBe(2);
@@ -502,6 +502,86 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     // No method exists to "uns skip" — ensure no auto-restore logic exists (audit: no updateMany with SKIPPED->QUEUED)
     const { followUpService: svc } = await import('../../src/services/follow-up.service');
     expect((svc as any).restoreFollowUpsForCustomer).toBeUndefined();
+  });
+
+  // Fase 3 revisi — grace period & serious-only gate (adversarial, state-based)
+  it('20. processDueFollowUps: NO_PURCHASE stage 3 non-MQL/legacy di-SKIP dgn alasan kanonis', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+    vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([
+      {
+        id: 'fu-noserious',
+        type: 'NO_PURCHASE',
+        stage: 3,
+        customer_id: 'c-spam',
+        scheduled_at: new Date(Date.now() - 60 * 1000),
+        sent_at: null,
+        status: 'QUEUED',
+        customer: { id: 'c-spam', phone: '628123000999', is_mql: false, is_legacy_source: false, labels: [], conversations: [] },
+      },
+    ] as any);
+    const updSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    const execSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValue(true as any);
+
+    await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    const skipCall = updSpy.mock.calls.find((c: any) => c[0]?.data?.cancel_reason === CANCEL_REASON.NON_SERIOUS_STAGE3);
+    expect(skipCall).toBeDefined();
+    expect(skipCall![0].data.status).toBe('SKIPPED');
+  });
+
+  it('21. processDueFollowUps: NO_PURCHASE stage 3 utk MQL tetap dikirim', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+    vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([
+      {
+        id: 'fu-serious',
+        type: 'NO_PURCHASE',
+        stage: 3,
+        customer_id: 'c-mql',
+        scheduled_at: new Date(Date.now() - 60 * 1000),
+        sent_at: null,
+        status: 'QUEUED',
+        customer: { id: 'c-mql', phone: '628123000888', is_mql: true, is_legacy_source: false, labels: [], conversations: [] },
+      },
+    ] as any);
+    vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    const execSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValue(true as any);
+
+    await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+
+    expect(execSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('22. Auto-cancel PENDING pakai grace akhir-hari WIB + alasan EXPIRED_PENDING', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([] as any);
+
+    await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+
+    const expiredCall = updateManySpy.mock.calls.find(
+      (c: any) => c[0]?.data?.cancel_reason === CANCEL_REASON.EXPIRED_PENDING
+    );
+    expect(expiredCall).toBeDefined();
+    const lt = expiredCall![0].where.scheduled_at.lt as Date;
+    // Batas = awal HARI INI WIB (02:00 UTC), bukan `now` (mencegah bunuh di menit ke-1).
+    const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const expected = new Date(
+      Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate()) - 7 * 60 * 60 * 1000
+    );
+    expect(lt.getTime()).toBe(expected.getTime());
+    // Grace = awal hari, pasti lebih tua dari sekarang (tidak menghapus jadwal hari ini).
+    expect(lt.getTime()).toBeLessThan(Date.now());
+  });
+
+  it('23. CANCEL_REASON memiliki stempel EXPIRED_PENDING & NON_SERIOUS_STAGE3', () => {
+    expect(CANCEL_REASON.EXPIRED_PENDING).toBeTruthy();
+    expect(CANCEL_REASON.NON_SERIOUS_STAGE3).toBeTruthy();
   });
 });
 

@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Fixed: Resolusi NEXT_TREATMENT (PENDING→QUEUED), Grace Auto-Cancel, Kuota 40/hari, & Filter Serius MQL
+
+- **Akar masalah (multi-layer):** `createNextTreatmentFollowUps` (regresi commit `b708c2fc`)
+  mengembalikan antrean repeat-order ke `status: 'PENDING'`, lalu worker `processDueFollowUps`
+  membunuh PENDING begitu `scheduled_at < now` (menit ke-1 setelah 09:00 WIB) **tanpa**
+  `cancel_reason`. Di live terbukti 333 NEXT_TREATMENT tertahan PENDING (masa depan) dan
+  8 antrean (Bunda Gobii dkk) ter-cancel 09:01:36 WIB dengan alasan NULL.
+- **Fixed** `src/services/follow-up.service.ts`:
+  - Pembuatan `NEXT_TREATMENT` kembali `status: 'QUEUED'` (langsung masuk antrean kirim,
+    konsisten dgn `NO_PURCHASE`) — gerbang approval admin per-baris dihapus sesuai keputusan pemilik.
+  - Worker auto-cancel PENDING kini memakai **grace period akhir-hari WIB**
+    (`scheduled_at < awal hari ini WIB`), bukan `< now`, dan menyematkan
+    `cancel_reason: CANCEL_REASON.EXPIRED_PENDING` (anti-regresi "mati menit ke-1" & alasan NULL).
+  - **Serious-Only Gate** (state-based): `NO_PURCHASE` stage 3 (pengingat hari ke-14) HANYA
+    dikirim ke kontak `is_mql || is_legacy_source`; sisanya `SKIPPED` dgn alasan kanonis
+    `NON_SERIOUS_STAGE3`. Jalur admin `sendNow` sengaja tidak digerbangi (override manual).
+  - Kuota default harian `FOLLOWUP_MAX_PER_DAY` 25 → **40** (penyebaran jadwal & slot WINBACK).
+- **Added** konstanta `CANCEL_REASON.EXPIRED_PENDING` & `CANCEL_REASON.NON_SERIOUS_STAGE3`.
+- **Database (live):** enum `FollowUpType` ditambah nilai `WINBACK_60D` (fix error `22P02`).
+- **Data healing (live):** promosi 333 NEXT_TREATMENT PENDING→QUEUED (tenant-scoped) dan
+  restore 8 antrean ter-cancel hari ini, lalu dirapikan ke slot jam kerja via
+  `POST /api/admin/follow-ups/reschedule-overdue` (`maxPerDay=40`).
+- **Catatan (tech debt):** `FOLLOWUP_MAX_PER_DAY` = **sebaran jadwal**, BUKAN cap kirim keras.
+  Belum ada penghitung (counter) harian di jalur `processDueFollowUps`; masih setting global
+  `.env` (belum per-tenant). Dicatat di `docs/KNOWN_ISSUES.md` #214.
+- **Test:** `tests/unit/follow-up-engine.test.ts` (27 kasus adversarial: NEXT_TREATMENT QUEUED,
+  grace akhir-hari + alasan kanonis, serious-only gate non-MQL skip vs MQL kirim, stempel baru).
+
 #### 2026-10-04 - Fixed: Radar OTW Live Chat & Tab "Treatment Hari Ini" Hilang saat Reservasi `en_route`
 
 - **Akar masalah (multi-layer):** Tombol OTW Bidan memindahkan status reservasi DB

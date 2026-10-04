@@ -42,6 +42,8 @@ export const CANCEL_REASON = {
   BYPASS_LABEL: 'Nomor berlabel Skip/Admin CS',
   WABA_TEMPLATE_NOT_APPROVED: 'Template WABA belum disetujui',
   WABA_NO_MARKETING_CONSENT: 'Customer belum opt-in marketing',
+  EXPIRED_PENDING: 'Antrean PENDING kadaluarsa (tidak disetujui sebelum akhir hari jadwal)',
+  NON_SERIOUS_STAGE3: 'Pengingat hari ke-14 hanya untuk kontak serius (MQL/legacy)',
 } as const;
 
 // Prioritas Tipe Follow-Up: NEXT_TREATMENT (Prioritas 1) lebih diutamakan daripada NO_PURCHASE (Prioritas 2)
@@ -801,10 +803,11 @@ export class FollowUpService {
 
   /**
    * Dipanggil saat reservasi dikonfirmasi/rescheduled/selesai.
-   * Membuat hingga 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan) di antrian.
+   * Membuat hingga 3 row follow-up QUEUED tipe NEXT_TREATMENT (+1, +2, +3 bulan) di antrian.
    * Guard per-stage (MT-1.3): skip stage yang sudah lampau (scheduledAt <= now),
-   * cek idempotensi per-stage termasuk SENT (jangan recreate stage 1 yang sudah SENT),
-   * status PENDING (butuh approval/bulk-queue, anti-spam).
+   * cek idempotensi per-stage termasuk SENT (jangan recreate stage 1 yang sudah SENT).
+   * Status QUEUED (langsung masuk antrean kirim), konsisten dgn NO_PURCHASE — keputusan
+   * pemilik: repeat-order pasien selesai auto-kirim tanpa perlu approval admin per-baris.
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
@@ -873,7 +876,7 @@ export class FollowUpService {
               type: 'NEXT_TREATMENT',
               stage,
               scheduled_at: scheduledAt,
-              status: 'PENDING',
+              status: 'QUEUED',
             },
           });
           created++;
@@ -1216,7 +1219,7 @@ export class FollowUpService {
 
   /**
    * Majukan seluruh follow-up PENDING yang tanggalnya sebelum tanggal target (overdue)
-   * dan jadwalkan merata dengan kuota maksimal per hari (default: 10 pesan/hari) pada jam kerja (09:00 - 16:00 WIB).
+   * dan jadwalkan merata dengan kuota maksimal per hari (default FOLLOWUP_MAX_PER_DAY, 40) pada jam kerja (09:00 - 16:30 WIB).
    */
   public async rescheduleOverdueFollowUps(
     tenantId: string = DEFAULT_TENANT_ID,
@@ -1229,7 +1232,7 @@ export class FollowUpService {
     daysCount: number;
     distribution: Record<string, number>;
   }> {
-    const defaultMax = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 25);
+    const defaultMax = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
     const maxPerDay = Math.max(1, options.maxPerDay || defaultMax);
 
     const now = new Date();
@@ -1342,13 +1345,20 @@ export class FollowUpService {
       // Kebijakan Pengguna: Follow-up yang masih PENDING dan belum disetujui / dijadwalkan oleh admin,
       // jika waktu jadwalnya sudah terlewat (scheduled_at < NOW()), otomatis dibatalkan (CANCELLED).
       try {
+        // Grace period: JANGAN bunuh antrean PENDING di menit ke-1 setelah jam 09:00 WIB.
+        // Hanya batalkan bila sudah melewati AKHIR HARI jadwalnya (scheduled_at < awal hari ini WIB),
+        // dengan alasan kanonis tertera (bukan NULL seperti regresi sebelumnya).
+        const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+        const startOfTodayWibUtc = new Date(
+          Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate()) - 7 * 60 * 60 * 1000
+        );
         const expiredPending = await prisma.followUp.updateMany({
           where: {
             tenant_id: tenantId,
             status: 'PENDING',
-            scheduled_at: { lt: now },
+            scheduled_at: { lt: startOfTodayWibUtc },
           },
-          data: { status: 'CANCELLED' },
+          data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.EXPIRED_PENDING },
         });
         if (expiredPending?.count && expiredPending.count > 0) {
           console.log(`[FollowUp Worker] Auto-cancelled ${expiredPending.count} expired PENDING follow-ups (schedule passed without admin approval).`);
@@ -1459,6 +1469,24 @@ export class FollowUpService {
         // Kebijakan Klinik: Follow-up Reminder H-1 dan Review H+1 di-postpone (ditunda pengirimannya sementara)
         if (fu.type === 'REMINDER_H1' || fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.type}) for ${fu.customer?.phone} is POSTPONED by clinic policy. Skipping automatic send.`);
+          continue;
+        }
+
+        // Serious-Only Gate (state-based, bukan pencocokan teks): pengingat hari ke-14
+        // (NO_PURCHASE stage 3) HANYA dikirim ke kontak berkualifikasi (MQL/legacy).
+        // Kontak yang tidak pernah serius (tak cukup bubble / bukan legacy) dihentikan
+        // di sini agar tidak boros & tidak memicu penandaan spam. Admin tetap bisa
+        // kirim manual via sendNow (jalur override sengaja tidak digerbangi).
+        if (
+          fu.type === 'NO_PURCHASE' &&
+          fu.stage >= 3 &&
+          !(fu.customer?.is_mql || fu.customer?.is_legacy_source)
+        ) {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} (NO_PURCHASE stage 3) for ${fu.customer?.phone} is SKIPPED (bukan MQL/legacy).`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.NON_SERIOUS_STAGE3 },
+          });
           continue;
         }
 
@@ -1893,11 +1921,11 @@ export class FollowUpService {
 
   /**
    * Hitung slot jadwal WINBACK_60D pada jam kerja 09:30–16:00 WIB, disisipkan ke
-   * kuota harian GLOBAL (FOLLOWUP_MAX_PER_DAY, default 25) — tanpa kuota khusus
+   * kuota harian GLOBAL (FOLLOWUP_MAX_PER_DAY, default 40) — tanpa kuota khusus
    * terpisah. Beban hari dihitung dari baris PENDING/QUEUED yang sudah ada.
    */
   private async buildWinbackScheduleSlots(tenantId: string, count: number, now: Date): Promise<Date[]> {
-    const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 25);
+    const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
     const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const startY = nowWib.getUTCFullYear();
     const startM = nowWib.getUTCMonth();

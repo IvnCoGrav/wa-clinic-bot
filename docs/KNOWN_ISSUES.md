@@ -3,6 +3,21 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 214. [FollowUp/NEXT_TREATMENT] Regresi status PENDING & auto-cancel tanpa alasan (2026-10-04, RESOLVED)
+
+- **Gejala:** 41 antrean `NEXT_TREATMENT` (pasien repeat order) ter-cancel otomatis tanpa alasan (`cancel_reason IS NULL`) sejak 24 September hingga 4 Oktober (termasuk kasus Bunda Gobii dan 7 bunda lainnya pada 4 Oktober jam 09:01 WIB). Selain itu, terdapat 333 antrean `NEXT_TREATMENT` di masa depan yang tertahan di status `PENDING` dan terancam hangus otomatis setiap jam 09:01 WIB.
+- **Akar Masalah Sistemik:**
+  1. **Regresi Status di Pembuatan Row:** Pada commit `b708c2fc` (23 Sept 2026 15:53 WIB), refactoring fungsi `createNextTreatmentFollowUps` di baris 876 secara tidak sengaja mengembalikan status pembuatan antrean ke `status: 'PENDING'`, padahal pada commit `4e09bb14` (26 Agust 2026) sudah diputuskan bahwa repeat order pasien selesai wajib langsung `status: 'QUEUED'` (sama seperti `NO_PURCHASE`).
+  2. **Worker Auto-Cancel Terlalu Agresif (0 Toleransi):** Di `follow-up.service.ts` baris 1345, fungsi `processDueFollowUps` langsung membatalkan antrean `PENDING` begitu `scheduled_at < now` (langsung mati di menit ke-1 setelah jam 09:00 WIB, sebelum admin sempat meninjau/klik jadwal).
+  3. **Omission `cancel_reason`:** Pada mutasi baris 1351, payload `updateMany` tidak menyertakan kolom `cancel_reason`, sehingga data historis pembatalan bernilai `NULL`.
+- **Resolusi (2026-10-04):**
+  1. Baris 876 `follow-up.service.ts` dikembalikan permanen ke `status: 'QUEUED'`.
+  2. 333 antrean `NEXT_TREATMENT` PENDING di live DB dipromosikan ke `QUEUED` (tenant-scoped).
+  3. 8 antrean ter-cancel hari ini (Bunda Gobii dkk) dipulihkan ke `QUEUED` via slot jam kerja.
+  4. Worker auto-cancel diberi *grace period* akhir-hari WIB + `cancel_reason: CANCEL_REASON.EXPIRED_PENDING`.
+  5. Enum `WINBACK_60D` ditambahkan di DB live (fix `22P02`).
+- **Tech debt tersisa (OPEN):** (a) `FOLLOWUP_MAX_PER_DAY=40` masih **sebaran jadwal**, BUKAN cap kirim keras — belum ada counter harian di jalur `processDueFollowUps`; (b) masih config global `.env`, belum per-tenant (SaaS). Bila kelak perlu cap keras/per-tenant, butuh tabel kuota + counter (Confirmation Gate).
+
 ## 213. [CTWA Greeting Catcher] Batasan sadar fuzzy attribution Priority 3 (2026-10-04, OPEN — sebagian by design)
 
 - **Fitur:** Multi-Template CTWA Greeting Catchers (lihat CHANGELOG 2026-10-04).
