@@ -95,26 +95,30 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   melanggar mandat Zero New Runtime Dependencies. Bila kelak perlu HEIC galeri penuh, ajukan
   Confirmation Gate (dependency baru) atau konversi server-side (infra + LOC besar + migrasi).
 
-## 215. [Ops/WAHA] Loop "conflict (replaced)" pasca unclean shutdown + stack mati mendadak (2026-10-04, OPEN)
+## 215. [Ops/WAHA] Loop "conflict (replaced)" — dua host memakai sesi WA yang sama (2026-10-04, RESOLVED)
 
 - **Gejala:** `app` + `caddy` + `waha` EXITED serentak hanya ~4 menit setelah deploy
   (`app` exit 0, `caddy` exit 0, `waha` exit 137) — indikasi `docker compose stop/down`
   dari luar, bukan crash kode. Setelah dinyalakan ulang, sesi WAHA masuk loop reconnect:
   `connected to WA → Transitioning to Online → Stream Errored (conflict) type: replaced →
-  reconnect`, ~30x/menit. Anehnya Session API tetap `status: WORKING`, `reachoutTimelock: null`,
-  akun `6285794210526` (Bidan Yusi), dan **tanpa QR**.
+  reconnect`, ~27x/menit. Session API tetap `status: WORKING`, `reachoutTimelock: null`,
+  akun `6285794210526` (Bidan Yusi), **tanpa QR**.
 - **Dampak:** `[WAHA MONITOR]` app melihat sesi bergantian tidak WORKING → outbound queue
-  di-pause/resume berulang. Pengiriman follow-up tidak stabil: 3 dari 8 antrean restore
-  (Gita Candi, Putri, Viska) gagal kirim (`WAHA sendText failed`).
-- **Hipotesis akar:** error `conflict/replaced` = nomor WA yang sama sedang aktif di
-  koneksi lain (mis. WAHA lokal/lingkungan tes lain) sehingga saling menendang. Alternatif:
-  `store.fullSync` tetap `true` di config API walau env `WAHA_NOWEB_STORE_FULLSYNC=false`
-  (nama env tidak dikenali versi WAHA ini).
-- **Tindakan sementara:** restart sesi via `POST /api/sessions/default/restart` → berhasil
-  TANPA QR, tetapi **loop tidak berhenti**. Perubahan kode/DB tidak menyentuh WAHA.
-- **Open:** butuh (a) konfirmasi apakah ada instance WAHA lain memakai nomor sama
-  (mematikannya akan menghentikan loop), atau (b) langkah `stop`+`start` sesi penuh /
-  restart container `waha` — dengan warning risiko QR.
+  di-pause/resume berulang; sebagian pengiriman follow-up gagal (`WAHA sendText failed`).
+- **AKAR MASALAH SEBENARNYA (dikonfirmasi):** **DUA host menjalankan WAHA dengan sesi WA
+  yang sama**: host LAMA/legacy `43.157.197.148` dan host PRODUKSI `43.173.11.79`
+  (alias SSH `klinik-server-baru`, DNS `app.kalababyspa.online`). Keduanya saling
+  meng-`replace` → konflik loop di KEDUA host. Restart sesi saja tidak menolong.
+- **RESOLUSI (2026-10-04):** `docker compose stop waha app caddy` di host LAMA
+  (postgres/redis dibiarkan hidup, data aman) → konflik di produksi **27/menit → 0**,
+  sesi stabil. Selaras dgn keputusan #200 Fase A (host lama memang harus di-`stop`).
+- **PERINGATAN TOOLING (OPEN):** skill `server-access` masih menunjuk `43.157.197.148:1403`
+  sebagai "produksi", padahal itu host legacy. Ini menyebabkan pekerjaan sesi ini
+  (deploy + healing) awalnya salah host. Wajib diperbarui: produksi = `43.173.11.79`
+  (`klinik-server-baru`), legacy = `43.157.197.148`.
+- **Healing produksi (server baru, 2026-10-04):** 349 `NEXT_TREATMENT` PENDING→QUEUED
+  + 54 CANCELLED (tanpa alasan, lolos guard) dipulihkan ke jam kerja; `PENDING` tersisa 0.
+  Kode produksi (`2ae829e0`) sudah memuat fix `d815a130`.
 
 ## 214. [FollowUp/NEXT_TREATMENT] Regresi status PENDING & auto-cancel tanpa alasan (2026-10-04, RESOLVED)
 
