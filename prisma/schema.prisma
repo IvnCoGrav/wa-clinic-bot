@@ -571,6 +571,30 @@ model AdClick {
   @@map("ad_clicks")
 }
 
+/// CTWA Greeting Catcher: pemetaan kalimat pembuka iklan Click-to-WhatsApp
+/// (multi-template + toleransi typo/slang) ke nama kampanye, untuk menjaga
+/// atribusi saat metadata referral Meta hilang di jalan. Tenant-aware.
+/// - greetings       : daftar template teks tombol iklan (min. 1).
+/// - anchor_keywords : kata kunci penanda wajib; KOSONG = guard anchor dilewati.
+/// - similarity_threshold : ambang kemiripan 0.0–1.0 (validasi admin 0.50–0.95).
+model CtwaCampaignCatcher {
+  id                   String   @id @default(uuid())
+  tenant_id            String   @default("default-tenant")
+  campaign_name        String
+  source               String   @default("instagram")
+  medium               String   @default("ctwa")
+  greetings            String[]
+  anchor_keywords      String[] @default([])
+  similarity_threshold Float    @default(0.70)
+  is_active            Boolean  @default(true)
+  notes                String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  @@index([tenant_id, is_active])
+  @@map("ctwa_campaign_catchers")
+}
+
 model LandingPageView {
   id          String   @id @default(cuid())
   tenant_id   String   @default("default-tenant")

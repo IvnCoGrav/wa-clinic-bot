@@ -50,6 +50,7 @@ import {
   parseTreatmentItems as parseNumberedTreatments,
 } from '../../utils/durationCalculator';
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
+import { isEnRouteStatus } from '../../utils/reservationStatus';
 import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
 
 interface TaskChild {
@@ -388,7 +389,7 @@ export const TodayTreatments: React.FC = () => {
       return isTaskCompletedOrPast(t);
     }
     if (statusFilter === 'OTW') {
-      return t.status.toLowerCase() === 'otw';
+      return isEnRouteStatus(t.status);
     }
 
     return true;
@@ -407,7 +408,7 @@ export const TodayTreatments: React.FC = () => {
     lng: t.address?.lng ?? null,
   }));  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t)).length;
   const completedCount = tasks.filter((t) => isTaskCompletedOrPast(t)).length;
-  const otwCount = tasks.filter((t) => t.status.toLowerCase() === 'otw').length;
+  const otwCount = tasks.filter((t) => isEnRouteStatus(t.status)).length;
   const lunasCount = tasks.filter((t) => t.pricing.paymentStatus === 'LUNAS').length;
   const totalRevenue = tasks.reduce((sum, t) => sum + (t.pricing.totalFee || 0), 0);
 
@@ -1030,7 +1031,7 @@ export const TodayTreatments: React.FC = () => {
           {filteredTasks.map((task, index) => {
             const isPast = isTaskPastTime(task);
             const isCompleted = task.status.toLowerCase() === 'completed' || isPast;
-            const isOtw = !isCompleted && task.status.toLowerCase() === 'otw';
+            const isOtw = !isCompleted && isEnRouteStatus(task.status);
             const isLunas = task.pricing.paymentStatus === 'LUNAS';
             const catCfg = getCategoryIcon(task.treatmentCategory);
             const otwReady = isOtwAllowed(task);

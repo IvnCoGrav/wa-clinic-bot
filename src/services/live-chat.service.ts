@@ -5,6 +5,7 @@ import { customerService } from './customer.service';
 import { messageService } from './message.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
+import { CONFIRMED_FAMILY_STATUSES } from '../domain/reservation-status';
 
 // WABA free-form text hanya diperbolehkan dalam 24 jam sejak pesan inbound terakhir customer
 const WABA_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1157,7 +1158,7 @@ export class LiveChatService {
       return true;
     };
     const hasActiveHold = reservations.some((r: any) => isHoldValid(r));
-    const hasUpcomingBooking = reservations.some((r: any) => r.status === 'confirmed');
+    const hasUpcomingBooking = reservations.some((r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status));
     const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
 
     const formatReservationItem = (res: any) => {
@@ -1212,7 +1213,7 @@ export class LiveChatService {
     };
 
     const activeHold = reservations.find((r: any) => isHoldValid(r)) || null;
-    const activeConfirmed = reservations.find((r: any) => r.status === 'confirmed') || null;
+    const activeConfirmed = reservations.find((r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status)) || null;
     const activePending = reservations.find((r: any) => r.status === 'pending') || null;
 
     const activeHoldReservation = formatReservationItem(activeHold);

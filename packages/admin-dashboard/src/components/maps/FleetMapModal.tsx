@@ -31,7 +31,7 @@ type FleetBucket = 'completed' | 'en_route' | 'waiting';
 function bucketOf(status: string): FleetBucket {
   const s = String(status || '').toLowerCase();
   if (s === 'completed') return 'completed';
-  if (s === 'en_route' || s === 'on_the_way') return 'en_route';
+  if (s === 'en_route' || s === 'on_the_way' || s === 'otw') return 'en_route';
   return 'waiting';
 }
 

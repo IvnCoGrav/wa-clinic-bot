@@ -3,6 +3,37 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 213. [CTWA Greeting Catcher] Batasan sadar fuzzy attribution Priority 3 (2026-10-04, OPEN — sebagian by design)
+
+- **Fitur:** Multi-Template CTWA Greeting Catchers (lihat CHANGELOG 2026-10-04).
+  Atribusi fuzzy P3 hanya berjalan bila P1 (native `ctwa_clid`) & P2 (`Promo[xx]`)
+  tidak match, dan customer baru / belum ber-atribusi / idle >24 jam.
+- **Tanpa kamus slang hardcode (by design):** sesuai mandat non-hardcode/anti-hafalan,
+  tidak ada tabel alias `sby→surabaya`. Toleransi typo/slang mengandalkan kemiripan
+  karakter + **kredit anchor** (`ANCHOR_MATCH_CREDIT=0.30`). Konsekuensi: singkatan
+  ekstrem yang tidak memuat anchor (`sby`, `tny` tanpa "baby spa") TIDAK akan match.
+  Jalan tengah bila kelak diperlukan: tabel alias slang **per-tenant di DB**
+  (butuh migrasi + Confirmation Gate), bukan konstanta kode.
+- **Konstanta tuning (bukan data bisnis):** `ANCHOR_MATCH_CREDIT=0.30`,
+  `HIGH_CONFIDENCE_ANCHOR_BYPASS=0.85`, bobot `0.6/0.4`. Preseden ambang algoritmik
+  seperti fuzzy lokasi (0.75/0.82 di PRD). Tuning lanjutan sebaiknya lewat kolom DB
+  bila perlu per-tenant.
+- **Dry-run simulator tidak menulis Customer/AdClick** (murni evaluasi) → tidak ada
+  baris test yang perlu ditandai `is_sandbox_test` (N/A mandate `qa-test-labeling`).
+- **Panel analitik:** kanal `CTWA_FUZZY` ditambahkan ke `channelComparison`. Bila
+  `MetaPerformancePanel` kelak menampilkan label kanal hardcode 2-item, perbarui agar
+  membaca array dinamis (tanpa page baru).
+- **`Tenant.greetings_text` tetap CTA landing default** (single greeting). Tabel
+  `ctwa_campaign_catchers` adalah kumpulan template iklan multi-kampanye — TIDAK ada
+  migrasi otomatis antar keduanya; admin mengisi manual bila perlu. Relasi ini
+  didokumentasikan agar tidak dianggap duplikasi.
+- **Migrasi belum di-deploy ke live server.** Untuk produksi: `npx prisma migrate deploy`
+  (setelah `prisma generate` penuh, TANPA `--no-engine`). Drift check live baru bermakna
+  setelah deploy. **Deploy menyentuh WAHA → perlu 2-step verification**.
+- **Full suite flake:** `npm test` paralel menunjukkan 11 timeout (label-lifecycle,
+  live-chat media, staff-auth GPS, media cleanup, dll.) yang SELURUHNYA lolos saat
+  dijalankan terisolasi — kontensi resource test runner, bukan regresi fitur ini.
+
 ## 211. [FollowUp/WINBACK_60D] Batasan dormansi & guard reservasi yang diterima (2026-10-03, OPEN — by design)
 
 - **Fitur:** re-engagement `WINBACK_60D` (lihat CHANGELOG 2026-10-03). Keputusan desain

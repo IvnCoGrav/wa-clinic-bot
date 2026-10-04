@@ -329,6 +329,10 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         tenantId
       );
 
+      // Conversation dibuat lebih awal agar state idle (last_customer_message_at)
+      // dapat dipakai guard fuzzy CTWA catcher pada atribusi di bawah.
+      let conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
       // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
       const attributionResult = await matchAdClickAndFireContact({
         bodyText: msg.text || '',
@@ -336,6 +340,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         customer,
         tenantId,
         referral: msg.referral,
+        lastCustomerMessageAt: conversation.last_customer_message_at ?? conversation.last_message_at ?? null,
       });
 
       if (attributionResult.strippedText && msg.text) {
@@ -344,10 +349,9 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       }
 
       if (customer.status === 'blocked') {
-        const blockedConversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
         await messageService.logMessage({
           tenantId,
-          conversationId: blockedConversation.id,
+          conversationId: conversation.id,
           direction: 'INBOUND',
           content: wabaCanonicalContent,
           waMessageId: msg.messageId,
@@ -355,8 +359,6 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         });
         continue;
       }
-
-      let conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
       // P0-5: abuse-detection simetris WABA (sebelumnya hanya WAHA)
       try {

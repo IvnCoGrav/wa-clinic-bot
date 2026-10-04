@@ -120,7 +120,7 @@ export interface MetaPerformanceReport {
     ctrNote?: string;
   };
   channelComparison: Array<{
-    channel: 'CTWA_NATIVE' | 'PROMO_CTA';
+    channel: 'CTWA_NATIVE' | 'CTWA_FUZZY' | 'PROMO_CTA';
     leads: number;
     mql: number;
     firstTimeBuyers: number;
@@ -469,7 +469,8 @@ export async function getMetaPerformanceReport(
   const dbNote = errors.length ? `Sebagian query gagal: ${errors.slice(0, 3).join(' | ')}` : undefined;
 
   // ── Kanal & kohort iklan ──────────────────────────────────────────────────
-  const channelOf = (a: any): 'CTWA_NATIVE' | 'PROMO_CTA' => (a?.ctwa_clid ? 'CTWA_NATIVE' : 'PROMO_CTA');
+  const channelOf = (a: any): 'CTWA_NATIVE' | 'CTWA_FUZZY' | 'PROMO_CTA' =>
+    a?.ctwa_clid ? 'CTWA_NATIVE' : a?.utmMedium === 'ctwa_fuzzy' ? 'CTWA_FUZZY' : 'PROMO_CTA';
   const cohortCustomerIds = new Set<string>();
   const firstTouchByCustomer = new Map<string, number>();
   for (const a of matchedAds) {
@@ -675,7 +676,7 @@ export async function getMetaPerformanceReport(
     return { key: b.key, label: b.label, count, pct: leadTimeTotal > 0 && b.key !== NO_DATE_KEY.key ? round2((count / leadTimeTotal) * 100) : 0 };
   });
 
-  const channelComparison: MetaPerformanceReport['channelComparison'] = (['CTWA_NATIVE', 'PROMO_CTA'] as const).map((channel) => {
+  const channelComparison: MetaPerformanceReport['channelComparison'] = (['CTWA_NATIVE', 'CTWA_FUZZY', 'PROMO_CTA'] as const).map((channel) => {
     const ce = channelAgg.get(channel) || { leads: new Set<string>(), mql: 0, buyers: 0, initialRevenue: 0, journey: [] as number[] };
     return {
       channel,

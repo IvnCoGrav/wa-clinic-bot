@@ -65,31 +65,31 @@
       "time": "09:00",
       "combined": "besok 09:00",
       "flow1Iso": "2026-10-01T02:00:00.000Z",
-      "flow2Iso": "2026-10-04T02:00:00.000Z",
-      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T02:00:00.000Z vs flow2=2026-10-04T02:00:00.000Z"
+      "flow2Iso": "2026-10-05T02:00:00.000Z",
+      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T02:00:00.000Z vs flow2=2026-10-05T02:00:00.000Z"
     },
     {
       "date": "besok",
       "time": "10:30",
       "combined": "besok 10:30",
       "flow1Iso": "2026-10-01T03:30:00.000Z",
-      "flow2Iso": "2026-10-04T03:30:00.000Z",
-      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T03:30:00.000Z vs flow2=2026-10-04T03:30:00.000Z"
+      "flow2Iso": "2026-10-05T03:30:00.000Z",
+      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T03:30:00.000Z vs flow2=2026-10-05T03:30:00.000Z"
     },
     {
       "date": "besok",
       "time": "11:00",
       "combined": "besok 11:00",
       "flow1Iso": "2026-10-01T04:00:00.000Z",
-      "flow2Iso": "2026-10-04T04:00:00.000Z",
-      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T04:00:00.000Z vs flow2=2026-10-04T04:00:00.000Z"
+      "flow2Iso": "2026-10-05T04:00:00.000Z",
+      "reason": "DISCREPANCY_OTHER: flow1=2026-10-01T04:00:00.000Z vs flow2=2026-10-05T04:00:00.000Z"
     },
     {
       "date": "besok",
       "time": "jam 11 siang",
       "combined": "besok jam 11 siang",
       "flow1Iso": "2026-10-01T04:00:00.000Z",
-      "flow2Iso": "2026-10-04T16:00:00.000Z",
+      "flow2Iso": "2026-10-05T16:00:00.000Z",
       "reason": "BUG_G7_PM_MODIFIER_11_SIANG: tryParseIndonesianDate mengubah 11 siang menjadi 23:00 WIB (16:00 UTC), sedangkan applyBookingTimeToDate menghasilkan 11:00 WIB (04:00 UTC)."
     }
   ],

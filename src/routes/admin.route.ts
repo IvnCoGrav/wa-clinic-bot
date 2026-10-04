@@ -27,6 +27,7 @@ import { wabaAdminRoutes } from './admin/waba.subroute';
 import { migrationAdminRoutes } from './admin/migration.subroute';
 import { evaluationsAdminRoutes } from './admin/evaluations.subroute';
 import { metaAttributionAdminRoutes } from './admin/meta-attribution.subroute';
+import { ctwaCatchersAdminRoutes } from './admin/ctwa-catchers.subroute';
 import { exportAdminRoutes } from './admin/export.subroute';
 import { staffManagementAdminRoutes } from './admin/staff-management.subroute';
 import { labelsAdminRoutes } from './admin/labels.subroute';
@@ -294,6 +295,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(migrationAdminRoutes);
   fastify.register(evaluationsAdminRoutes);
   fastify.register(metaAttributionAdminRoutes);
+  fastify.register(ctwaCatchersAdminRoutes);
   fastify.register(exportAdminRoutes);
   fastify.register(staffManagementAdminRoutes);
   fastify.register(labelsAdminRoutes);

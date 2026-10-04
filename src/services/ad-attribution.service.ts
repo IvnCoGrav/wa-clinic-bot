@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { memoryAdClicks } from '../routes/tracking.route';
 import { capiService } from './capi.service';
+import { ctwaTextCatcherService } from './ctwa-text-catcher.service';
 import type { AdReferral } from '../integrations/whatsapp/gateway.types';
 
 export interface CustomerIdentity {
@@ -17,6 +18,8 @@ export interface MatchAdClickParams {
   customer: CustomerIdentity;
   tenantId: string;
   referral?: AdReferral;
+  /** Timestamp pesan customer terakhir (state DB) — untuk guard idle > 24 jam pada fuzzy catcher. */
+  lastCustomerMessageAt?: Date | string | null;
 }
 
 export interface MatchAdClickResult {
@@ -57,6 +60,8 @@ export async function matchAdClickAndFireContact(
   let matched = false;
   let isNewlyLinked = false;
   let matchedAdClick: any = null;
+  let fuzzyScore: number | undefined;
+  let fuzzyCampaign: string | undefined;
 
   // 1. Priority 1: Native Click-to-WhatsApp (ctwa_clid) from Meta Referral payload (WABA)
   if (ctwaClid) {
@@ -213,7 +218,77 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // 3. Fire Meta CAPI 'Contact' event DENGAN GUARD MULTI-LAPIS (Idempotensi + 10s Debounce + 24h Cooldown)
+  // 3. Priority 3: CTWA Greeting Catcher (fuzzy multi-template + toleransi typo/slang).
+  // Guard berbasis STATE (bukan pencocokan teks): hanya dievaluasi bila customer BARU,
+  // percakapan IDLE > 24 jam, atau belum punya atribusi aktif. Mencegah pesan di tengah
+  // konsultasi medis salah teratribusi. Teks TIDAK dimutilasi.
+  if (!matched && bodyText && bodyText.trim().length > 0) {
+    const IDLE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+    const lastTs = params.lastCustomerMessageAt ? new Date(params.lastCustomerMessageAt).getTime() : NaN;
+    const isIdle = Number.isFinite(lastTs) ? Date.now() - lastTs > IDLE_THRESHOLD_MS : false;
+
+    let hasExistingAttribution = false;
+    if (!isNewCustomerRecord) {
+      try {
+        const existing = await prisma.adClick.findUnique({ where: { customerId: customer.id } });
+        hasExistingAttribution = Boolean(existing && (existing.ctwa_clid || existing.utmCampaign));
+      } catch {
+        // Best-effort: DB offline / unit test mock → anggap belum ber-atribusi.
+      }
+    }
+
+    const isEligibleForFuzzyMatch = isNewCustomerRecord || !hasExistingAttribution || isIdle;
+
+    if (isEligibleForFuzzyMatch) {
+      try {
+        const catchResult = await ctwaTextCatcherService.matchInboundText(bodyText, tenantId);
+        if (catchResult?.matched) {
+          const uniqueTrackingCode = `ctwa_fuzzy_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+          try {
+            const fuzzyClick = await prisma.adClick.create({
+              data: {
+                trackingCode: uniqueTrackingCode,
+                utmCampaign: catchResult.campaignName || 'ctwa_fuzzy',
+                utmSource: catchResult.source || 'meta',
+                utmMedium: 'ctwa_fuzzy',
+                matchedAt: new Date(),
+                customerId: customer.id,
+                tenant_id: tenantId,
+                phone: customer.phone,
+              },
+            });
+            matched = true;
+            isNewlyLinked = true;
+            matchedAdClick = fuzzyClick;
+            fuzzyScore = catchResult.effectiveScore;
+            fuzzyCampaign = catchResult.campaignName || undefined;
+            console.log(
+              `[ATTRIBUTION SUCCESS - CTWA FUZZY] Linked campaign ${fuzzyCampaign} (score ${catchResult.effectiveScore.toFixed(2)}) to customer ${customer.phone}`
+            );
+          } catch (createErr: any) {
+            // DB offline pada test/fallback: pertahankan hasil match in-memory agar CAPI tetap bisa dinilai.
+            matched = true;
+            isNewlyLinked = true;
+            matchedAdClick = matchedAdClick || {
+              trackingCode: uniqueTrackingCode,
+              utmCampaign: catchResult.campaignName,
+              utmSource: catchResult.source,
+              utmMedium: 'ctwa_fuzzy',
+              matchedAt: new Date(),
+              customerId: customer.id,
+            };
+            fuzzyScore = catchResult.effectiveScore;
+            fuzzyCampaign = catchResult.campaignName || undefined;
+            console.warn('[ATTRIBUTION WARNING - CTWA FUZZY] Failed to create AdClick:', createErr.message);
+          }
+        }
+      } catch (fuzzyErr: any) {
+        console.warn('[ATTRIBUTION WARNING - CTWA FUZZY] Catcher evaluation failed:', fuzzyErr.message);
+      }
+    }
+  }
+
+  // 4. Fire Meta CAPI 'Contact' event DENGAN GUARD MULTI-LAPIS (Idempotensi + 10s Debounce + 24h Cooldown)
   const phoneKey = (customer?.phone || '').replace(/\D/g, '');
   const isNewTouchpoint = isNewlyLinked || isNewCustomerRecord;
 
@@ -245,6 +320,8 @@ export async function matchAdClickAndFireContact(
           customData: {
             trackingCode: trackingCode || undefined,
             ctwaClid: ctwaClid || undefined,
+            fuzzyScore: fuzzyScore !== undefined ? Number(fuzzyScore.toFixed(4)) : undefined,
+            fuzzyCampaign: fuzzyCampaign || undefined,
             source: matched ? 'WHATSAPP_INBOUND_CTA' : 'WHATSAPP_INBOUND_ORGANIC',
           },
         }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));

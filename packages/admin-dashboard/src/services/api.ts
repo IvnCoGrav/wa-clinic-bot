@@ -97,6 +97,54 @@ export function fetchMetaPerformance<T = any>(params: { startDate?: string; endD
   return apiRequest(`/api/admin/meta-performance${qs ? `?${qs}` : ''}`);
 }
 
+export interface CtwaCatcher {
+  id: string;
+  tenant_id: string;
+  campaign_name: string;
+  source: string;
+  medium: string;
+  greetings: string[];
+  anchor_keywords: string[];
+  similarity_threshold: number;
+  is_active: boolean;
+  notes: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CtwaCatcherInput {
+  campaign_name: string;
+  source?: string;
+  medium?: string;
+  greetings: string[];
+  anchor_keywords?: string[];
+  similarity_threshold?: number;
+  is_active?: boolean;
+  notes?: string | null;
+}
+
+/** Daftar kampanye CTWA Greeting Catcher (GET /api/admin/ctwa-catchers). */
+export function fetchCtwaCatchers<T = any>(): Promise<T> {
+  return apiRequest('/api/admin/ctwa-catchers', { forceFresh: true });
+}
+
+export function createCtwaCatcher<T = any>(data: CtwaCatcherInput): Promise<T> {
+  return apiRequest('/api/admin/ctwa-catchers', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateCtwaCatcher<T = any>(id: string, data: Partial<CtwaCatcherInput>): Promise<T> {
+  return apiRequest(`/api/admin/ctwa-catchers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function deleteCtwaCatcher<T = any>(id: string): Promise<T> {
+  return apiRequest(`/api/admin/ctwa-catchers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+/** Dry-run simulator: uji teks terhadap seluruh catcher aktif (POST /api/admin/ctwa-catchers/test). */
+export function testCtwaCatcherSimulator<T = any>(text: string): Promise<T> {
+  return apiRequest('/api/admin/ctwa-catchers/test', { method: 'POST', body: JSON.stringify({ text }) });
+}
+
 /** Live test koneksi Meta CAPI (POST /api/admin/debug/meta-capi-test). */
 export function testCapiEvent<T = any>(body: {
   eventName?: string;

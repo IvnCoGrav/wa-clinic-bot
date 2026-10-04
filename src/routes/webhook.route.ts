@@ -1219,6 +1219,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         customer,
         tenantId: resolvedTenantId,
         referral: wahaReferral,
+        lastCustomerMessageAt: conversation.last_customer_message_at ?? conversation.last_message_at ?? null,
       });
 
       // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail.

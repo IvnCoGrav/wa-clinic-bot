@@ -5,6 +5,7 @@ import { Pagination } from '../../components/common/Pagination';
 
 // Panel performa dimuat lazy agar chunk halaman observability tetap ringan.
 const MetaPerformancePanel = React.lazy(() => import('../../components/meta-performance/MetaPerformancePanel'));
+const CtwaCatchersTab = React.lazy(() => import('../../components/meta-performance/CtwaCatchersTab'));
 import {
   MousePointerClick,
   RefreshCw,
@@ -216,7 +217,7 @@ const pageViewSourceLabel = (source: string) => PAGEVIEW_SOURCE_LABELS[source] ?
 export const MetaClickCatcher: React.FC = () => {
   const { toast } = useUiFeedback();
 
-  const [activeTab, setActiveTab] = useState<'performance' | 'observability'>('performance');
+  const [activeTab, setActiveTab] = useState<'performance' | 'observability' | 'catchers'>('performance');
 
   // Summary
   const [summary, setSummary] = useState<MetaSummary | null>(null);
@@ -485,6 +486,17 @@ export const MetaClickCatcher: React.FC = () => {
           }`}
         >
           🛠️ Log Klik &amp; Observability CAPI
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('catchers')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            activeTab === 'catchers'
+              ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
+              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+          }`}
+        >
+          🎯 Greeting Catchers CTWA
         </button>
       </div>
 
@@ -1132,6 +1144,18 @@ export const MetaClickCatcher: React.FC = () => {
           }
         >
           <MetaPerformancePanel startDate={startDate} endDate={endDate} />
+        </Suspense>
+      )}
+
+      {activeTab === 'catchers' && (
+        <Suspense
+          fallback={
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
+              <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat Greeting Catchers...
+            </div>
+          }
+        >
+          <CtwaCatchersTab />
         </Suspense>
       )}
 

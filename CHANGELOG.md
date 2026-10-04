@@ -4,6 +4,81 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Fixed: Radar OTW Live Chat & Tab "Treatment Hari Ini" Hilang saat Reservasi `en_route`
+
+- **Akar masalah (multi-layer):** Tombol OTW Bidan memindahkan status reservasi DB
+  `confirmed` → `en_route` (`src/routes/staff/today.subroute.ts`), namun:
+  - `src/services/live-chat.service.ts` (`serialize`) masih membandingkan literal
+    `status === 'confirmed'` untuk `hasUpcomingBooking` & `activeConfirmedReservation`.
+    Reservasi `en_route` langsung tersingkir → payload LS `activeConfirmedReservation`
+    `null` → `dispatchReservationId` di `LiveChatMonitor` ikut `null` → widget Radar
+    OTW & peta perjalanan CS hilang total (bukan mode Standby).
+  - `packages/admin-dashboard/src/pages/tenant/TodayTreatments.tsx` mengecek literal
+    `status === 'otw'` (tab, count, badge kartu) padahal backend hanya memancarkan
+    `en_route` → tab OTW selalu `(0)`, badge & tombol aksi tidak sinkron.
+- **Perbaikan fondasional (kontrak domain, bukan tambalan literal):**
+  - **Changed** `src/services/live-chat.service.ts` — `hasUpcomingBooking` &
+    `activeConfirmed` kini memakai `CONFIRMED_FAMILY_STATUSES` (`['confirmed','en_route']`)
+    dari SSoT `src/domain/reservation-status.ts`. `formatReservationItem` tetap
+    mempertahankan `status` asli + `otw_sent_at` + `arrived_at`.
+  - **Added** `packages/admin-dashboard/src/utils/reservationStatus.ts` — helper
+    terpusat (`isEnRouteStatus`, `isConfirmedFamilyStatus`, `normalizeReservationStatus`)
+    guna mencegah drift literal `otw` vs `en_route` di UI.
+  - **Changed** `TodayTreatments.tsx` — filter tab OTW, `otwCount`, dan deteksi kartu
+    `isOtw` memakai `isEnRouteStatus()` (null-safe, case-insensitive, termasuk alias
+    `on_the_way`/`otw`).
+  - **Changed** `packages/admin-dashboard/src/components/maps/FleetMapModal.tsx` —
+    `bucketOf` memetakan alias `otw` ke bucket `en_route` (defensif).
+- **Catatan:** Edit klaim rencana awal pada `LiveChatMonitor.tsx` (`:3227`) sudah benar
+  di kode (sudah mendukung `en_route`) sehingga tidak diubah — root cause riil murni di
+  backend `serialize`. `dispatchReservationId` sudah berbasis `otw_sent_at` sehingga
+  pulih otomatis begitu payload chat kembali terisi; kasus OTW tanpa GPS (lat/lng null)
+  ditangani widget sebagai "OTW tanpa telemetri", bukan hilang.
+- **Test:** `tests/unit/live-chat-enroute-status.test.ts` (17 kasus adversarial:
+  en_route aktif, OTW tanpa GPS, completed/cancelled/rejected negatif, pending vs
+  hold aktif/kedaluwarsa, data reservasi kosong/null, case-sensitivity, helper UI).
+
+#### 2026-10-04 - CTWA Greeting Catchers: Atribusi Multi-Template + Typing Similarity (Fuzzy Priority 3)
+
+- **Akar masalah:** iklan Click-to-WhatsApp (CTWA) yang masuk ke WAHA dapat kehilangan
+  metadata referral (`ctwa_clid`) di jalan; teks tombol iklan yang diubah (typo/slang
+  WhatsApp) juga tidak terasosiasi ke kampanye → traffic tercatat organik
+  (rujuk `KNOWN_ISSUES` #159 & #170).
+- **Added — Data layer:** model `CtwaCampaignCatcher` (`prisma/schema.prisma`) +
+  migrasi aman non-blocking `prisma/migrations/20261004000000_add_ctwa_campaign_catchers/`
+  (tabel `ctwa_campaign_catchers`, tenant-scoped, `IF NOT EXISTS`). Data kampanye,
+  multi-template sapaan, kata kunci jangkar, dan ambang sensitivitas 100% dari DB per-tenant
+  (tanpa hardcode).
+- **Added — Logic layer:** `src/services/ctwa-text-catcher.service.ts` — engine
+  pencocokan berbasis DB: normalisasi generik, kemiripan gabungan (0.6×bigram-Dice +
+  0.4×token-Jaccard), guard kata kunci jangkar (berbasis frasa/token, bukan substring),
+  kredit anchor, cache per-tenant 5 menit + invalidasi, fallback in-memory saat DB offline.
+  **Tanpa kamus slang hardcode** (anti-hafalan); toleransi typo/slang dari algoritma.
+- **Added — Util:** `src/utils/similarity.ts` diperluas `normalizeForMatch`, `tokenJaccard`,
+  `combinedSimilarity` (reuse, bukan modul duplikat).
+- **Changed — Ingestion (`src/services/ad-attribution.service.ts`):** **Priority 3**
+  CTWA Greeting Catcher setelah P1 native `ctwa_clid` & P2 `Promo[xx]`. Guard berbasis
+  **STATE** (customer baru / belum ber-atribusi / idle >24 jam via `lastCustomerMessageAt`),
+  bukan pencocokan teks. Menulis `AdClick` `utmMedium='ctwa_fuzzy'`, `utmCampaign=<kampanye>`.
+  Teks asli TIDAK dimutilasi. CAPI Contact memakai guard debounce 10s/cooldown 24h existing
+  + `customData.fuzzyScore/fuzzyCampaign`.
+- **Changed — Caller wiring:** `src/routes/webhook.route.ts` & `src/routes/waba-webhook.route.ts`
+  meneruskan `lastCustomerMessageAt` dari state conversation (WABA: conversation dibuat
+  lebih awal agar state idle valid).
+- **Changed — Analytics (`meta-performance-analytics.service.ts`):** kanal ketiga
+  **`CTWA_FUZZY`** (sebelumnya fuzzy jatuh keliru ke `PROMO_CTA`).
+- **Added — Admin API (`src/routes/admin/ctwa-catchers.subroute.ts`):** CRUD tenant-scoped
+  + dry-run `POST /test` (read-only). Didaftarkan di `admin.route.ts`; CUD meng-invalidate cache.
+- **Added — Dashboard:** fungsi API di `packages/admin-dashboard/src/services/api.ts` +
+  tab ke-3 **`CtwaCatchersTab.tsx`** (nama, platform, chips template/anchor, slider 50–95%,
+  simulator interaktif) di `MetaClickCatcher.tsx`. Tanpa page/rute baru (anti-bloat).
+  Konfirmasi hapus via `useUiFeedback` (bukan `window.confirm`).
+- **Test:** `similarity-ctwa-ext` (13), `ctwa-text-catcher` (17), `ad-attribution-ctwa-catch` (7),
+  `admin-ctwa-catchers` (10). Regresi terdampak (105 test: ad-attribution*, webhook*, meta-*)
+  hijau. `npm run build` (tsc) bersih, `prisma validate` valid, dashboard build hijau.
+  Full suite: 4737 hijau; 11 kegagalan adalah flake kontensi paralel (timeout) yang
+  seluruhnya lolos saat dijalankan terisolasi (5 file, 139 test) — bukan regresi.
+
 #### 2026-10-03 - Pricelist Landing Page Dinamis (Data-Driven, Tenant-Aware & Server-Side Hydration)
 
 - **Akar masalah:** `src/landing/public/pricelist.html` menyimpan nomor WhatsApp
