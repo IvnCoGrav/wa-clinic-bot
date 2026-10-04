@@ -2247,6 +2247,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         // Invalidate cache
         const { clearClinicPolicyCache } = await import('../../v3/tools/clinic-faq.tool');
         clearClinicPolicyCache(DEFAULT_TENANT_ID, topic);
+        // Fase 2 (Revisi Turn-0): invalidasi cache template sapaan bila topic greeting.
+        if (topic === 'greeting') {
+          try {
+            const { invalidateGreetingTemplateCache } = await import('../../services/greeting-template.service');
+            invalidateGreetingTemplateCache(DEFAULT_TENANT_ID);
+          } catch {}
+        }
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,

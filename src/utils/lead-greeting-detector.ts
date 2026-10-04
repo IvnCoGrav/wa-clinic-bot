@@ -17,12 +17,12 @@ export interface LeadGreetingResult {
 
 const HONORIFICS =
   '(?:kak+|ka(?:k)?|sis(?:t)?|min|mimin|admin|bun(?:da|d)?|bu(?:nda)?|ibu|bidan|bu\\s+bidan|mbak+|mba|dok(?:ter)?|gan|om|tante|say(?:ang)?)';
-const PARTICLES = '(?:dong|ya(?:a)?|deh|sih|nih|yuk|tolong|mohon|kah|gak|nggak|ta)';
+const PARTICLES = '(?:dong|ya(?:a)?|deh|sih|nih|yuk|tolong|mohon|kah|gak|nggak|ta|saya|aku|sy)';
 const GREETINGS =
-  '(?:halo|hola|hai|hi|hei|hey|p+|tes|test|ping|assalamu\\x27?alaikum|assalamualaikum|ass|askum|samlikum|(?:selamat|selmat|slmt|met)\\s+(?:pagi|siang|sore|malam|subuh)|pagi|siang|sore|malam|subuh|permisi|punten|spada)';
+  '(?:ha+l+o+|hola|hai|hi|hei|hey|p+|tes|test|ping|assalamu\\x27?alaikum|assalamualaikum|ass|askum|samlikum|(?:selamat|selmat|slmt|met)\\s+(?:pagi|siang|sore|malam|subuh)|pagi|siang|sore|malam|subuh|permisi|punten|spada)';
 const INQUIRY_ACTIONS =
-  '(?:mau\\s+tanya(?:-?tanya)?|tanya|boleh\\s+tanya|bisa\\s+konsultasi|mau\\s+konsultasi|minta\\s+info|info(?:\\s+lengkap)?|mau\\s+info|mau\\s+tau|mau\\s+tahu|tertarik|saya\\s+tertarik|bisa|apakah\\s+bisa|bisa\\s+homecare|melayani\\s+homecare|ada\\s+homecare|bisa\\s+dipanggil|bisa\\s+panggil|homecare|home\\s*treatment|home\\s*service|mau\\s+(?:treatment|treatmen|pijat|massage|spa|reservasi|booking|pesan|order)|bisa\\s+(?:treatment|treatmen|pijat|massage|spa)|treatment|pijat|layanan|perawatan|paket|ada\\s+(?:layanan|treatment|perawatan|paket|apa\\s*(?:aja|saja))|apa\\s*(?:aja|saja))';
-const TAIL_ELEMENT = `(?:\\s+(?:${HONORIFICS}|${PARTICLES}))*`;
+  '(?:mau\\s+tanya(?:-?tanya)?|tanya|boleh\\s+tanya|bisa\\s+konsultasi|mau\\s+konsultasi|minta\\s+info|info(?:\\s+lengkap)?|mau\\s+info|mau\\s+tau|mau\\s+tahu|tertarik|saya\\s+tertarik|bisa|apakah\\s+bisa|bisa\\s+homecare|melayani\\s+homecare|ada\\s+homecare|bisa\\s+dipanggil|bisa\\s+panggil|homecare|home\\s*treatment|home\\s*service|mau\\s+(?:treatment|treatmen|pijat|massage|spa|reservasi|booking|pesan|order)|bisa\\s+(?:treatment|treatmen|pijat|massage|spa)|treatment|pijat|layanan|perawatan|paket|ada\\s+(?:layanan|treatment|perawatan|paket|apa\\s*(?:aja|saja))|apa\\s*(?:aja|saja)|(?:bagaimana|gimana|gmn|gmna)\\s+cara(?:nya)?|cara\\s+(?:pesan|order|booking|reservasi|daftar)|booking|reservasi|pesan|order)';
+const TAIL_ELEMENT = `(?:[\\s.,]+(?:${HONORIFICS}|${PARTICLES}))*`;
 
 // Guard pertanyaan spesifik: harga, gejala/keluhan medis, jadwal, usia.
 const SPECIFIC_QUESTION_RE =
@@ -101,6 +101,31 @@ function hasPreciseLocationEntity(text: string): boolean {
   return false;
 }
 
+/**
+ * Fase 1 (Revisi Turn-0): guard eksplisit untuk balasan statis. Re-use guard
+ * yang SUDAH ada (lokasi presisi + pertanyaan spesifik), tanpa daftar kata baru.
+ */
+export function hasSpecificTurn0Question(text: string): boolean {
+  return SPECIFIC_QUESTION_RE.test(stripAdTags(text || ''));
+}
+
+export function hasTurn0LocationEntity(text: string): boolean {
+  return hasPreciseLocationEntity(stripAdTags(text || ''));
+}
+
+/**
+ * True bila pesan AMAN dibalas template statis Turn-0: bukan lokasi presisi,
+ * bukan pertanyaan spesifik (harga/gejala/jadwal/usia). Filter bahaya jalan
+ * DULU sebelum pencocokan CTWA/sapaan.
+ */
+export function isSafeForStaticTurn0Reply(text: string): boolean {
+  const clean = stripAdTags(text || '');
+  if (!clean.trim()) return false;
+  if (hasPreciseLocationEntity(clean)) return false;
+  if (SPECIFIC_QUESTION_RE.test(clean)) return false;
+  return true;
+}
+
 export function isPureLeadGreeting(text: string): LeadGreetingResult {
   const notIslamic = { isLeadGreeting: false, isIslamic: false };
   if (!text || typeof text !== 'string') return notIslamic;
@@ -119,11 +144,11 @@ export function isPureLeadGreeting(text: string): LeadGreetingResult {
 
   const isPureLeadOpener =
     new RegExp(
-      `^(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}(?:\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT})*[!.\\s?~-]*$`,
+      `^(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}(?:[\\s.,]+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT})*[!.\\s?~-]*$`,
       'i'
     ).test(cleanText) ||
     new RegExp(
-      `^${HONORIFICS}${TAIL_ELEMENT}\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}[!.\\s?~-]*$`,
+      `^${HONORIFICS}${TAIL_ELEMENT}[\\s.,]+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}[!.\\s?~-]*$`,
       'i'
     ).test(cleanText);
 

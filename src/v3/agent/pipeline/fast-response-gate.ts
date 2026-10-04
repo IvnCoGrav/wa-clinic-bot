@@ -9,7 +9,7 @@
  */
 import { CustomerGoalSession, GoalTracker } from '../../state/goal-tracker';
 import { ConversationState } from '@prisma/client';
-import { isPureLeadGreeting } from '../../../utils/lead-greeting-detector';
+import { isPureLeadGreeting, isSafeForStaticTurn0Reply, hasIslamicSalutation } from '../../../utils/lead-greeting-detector';
 import { TEMPLATES } from '../../../config/persona';
 import { extractFastIntents } from '../persona';
 import type { AgentRunnerOutput } from '../agent-runner';
@@ -225,9 +225,39 @@ export class FastResponseGate {
     // GATE DETERMINISTIK: sapaan pembuka murni (Turn-0) langsung dibalas template
     // resmi tanpa LLM (0 token). Hanya bila asisten belum pernah membalas.
     if (!isFollowUp) {
-      const leadCheck = isPureLeadGreeting(cleanIncomingText);
-      if (leadCheck.isLeadGreeting) {
-        const staticReply = TEMPLATES.greeting({ isIslamic: leadCheck.isIslamic });
+      // Fase 1/3 (Revisi Turn-0): filter bahaya DULU — pesan ber-lokasi presisi,
+      // keluhan medis, harga spesifik, atau jadwal spesifik DILARANG dibalas
+      // statis (tetap ke LLM/tool). Baru CTWA ketat / sapaan generik.
+      let staticSource: 'ctwa' | 'lead' | null = null;
+      let leadIslamic = false;
+      if (isSafeForStaticTurn0Reply(cleanIncomingText)) {
+        try {
+          const { ctwaTextCatcherService, HIGH_CONFIDENCE_ANCHOR_BYPASS } = await import('../../../services/ctwa-text-catcher.service');
+          const ctwa = await ctwaTextCatcherService.matchInboundText(cleanIncomingText, tenantId);
+          // Balasan statis butuh keyakinan LEBIH TINGGI dari atribusi analitik.
+          if (ctwa && ctwa.matched && ctwa.effectiveScore >= HIGH_CONFIDENCE_ANCHOR_BYPASS
+            && ctwa.anchorCheckPassed && !ctwa.anchorBypassed) {
+            staticSource = 'ctwa';
+          }
+        } catch { /* fail-open ke LLM */ }
+        if (!staticSource) {
+          const leadCheck = isPureLeadGreeting(cleanIncomingText);
+          if (leadCheck.isLeadGreeting) {
+            staticSource = 'lead';
+            leadIslamic = leadCheck.isIslamic;
+          }
+        }
+      }
+      if (staticSource) {
+        const isIslamic = leadIslamic || hasIslamicSalutation(cleanIncomingText);
+        let staticReply: string;
+        try {
+          const { resolveGreetingText } = await import('../../../services/greeting-template.service');
+          staticReply = await resolveGreetingText(tenantId, { isIslamic, customerName: session.customerName });
+        } catch {
+          staticReply = TEMPLATES.greeting({ isIslamic });
+        }
+        console.log(JSON.stringify({ event: 'GREETING_STATIC_REPLY_APPLIED', source: staticSource, tenantId, conversationId, timestamp: new Date().toISOString() }));
         if (conversationId && !skipDbLogging) {
           try {
             const { messageService } = await import('../../../services/message.service');

@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Added: Balasan Statis Turn-0 Data-Driven (Revisi Plan — Fase 0–3)
+
+- **Revisi fondasional** dari plan "Static Template Turn-0": pemakaian ulang
+  guard/state yang ada, tanpa daftar frasa bisnis baru, tanpa `session.stage`.
+- **Fase 1 (`lead-greeting-detector.ts`):** perluasan tata bahasa fungsional
+  (bingkai tanya prosedural "bagaimana/gimana cara", kata aksi booking/order,
+  partikel kata ganti "saya/aku", pemisah koma/titik, varian "hallo") + guard
+  eksplisit `isSafeForStaticTurn0Reply` (re-use filter lokasi presisi &
+  pertanyaan spesifik yang sudah ada). Filter bahaya jalan DULU.
+- **Fase 2 (`greeting-template.service.ts`, BARU):** template sapaan dari
+  `ClinicPolicy` topic `'greeting'` (tenant-aware), cache 5 menit + invalidasi
+  via endpoint settings existing; fallback `TEMPLATES.greeting`. Interpolasi
+  aman `{{greeting}}`/`{{nama}}` (default "Bunda"; DILARANG pushName mentah).
+- **Fase 3 (`fast-response-gate.ts`):** filter bahaya → CTWA keyakinan tinggi
+  (`effectiveScore ≥ 0.85` + anchor cocok, bukan bypass) ATAU sapaan generik →
+  balasan statis; `nextState` tetap `deriveConversationState`.
+- **Fase 4 DITAHAN** (butuh migrasi `reply_template` per kampanye) — Confirmation
+  Gate terpisah. **Fase 5 DITUNDA** (swap kalimat merusak konten substantif).
+- **Tests:** +4 suite (`turn0-safe-gate`, `greeting-template-service`,
+  `v3-ctwa-greeting-fastgate`, `v3-sanitizer-cta-preservation`). Suite penuh
+  **595 lolos / 0 gagal**; `npm run build` lolos.
+- **Batasan jujur:** dicatat di `docs/KNOWN_ISSUES.md` #222 (cakupan % belum
+  diukur, free-form phrasing sebagian masih ke LLM, Fase 4/5 tertunda).
+
 #### 2026-10-04 - Fixed: Fondasi Keselamatan Bumil Lintas Kategori, Juri Paket Tunggal, Trimmer List-Safe, CTA Funnel & Anti Harga Ganda
 
 - **Akar (read-only):** gerbang PREGNANT hanya `category==='MOMS'` (`get-catalog.tool.ts`)

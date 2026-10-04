@@ -3,6 +3,31 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 222. [Turn-0] Batasan balasan statis: Fase 5 trimmer ditunda + free-form phrasing (2026-10-04, OPEN)
+
+- **Konteks:** revisi plan "Static Template Turn-0" (Fase 0–3 diimplementasikan;
+  Fase 4 migrasi DITAHAN; Fase 5 DITUNDA).
+- **Fase 5 (trimmer jaga kalimat tanya) DITUNDA:** strategi "ganti kalimat
+  terakhir dengan kalimat tanya penutup" TERBUKTI memotong konten substantif
+  (regresi `v3-persona-rules` Test 2/4/15 + `agent-runner` Skenario 2). Trimmer
+  kini tetap ≤3 kalimat apa adanya. Rencana lanjutan: pemilihan kalimat mana
+  yang dibuang harus berbasis "kalimat paling tidak informatif", bukan posisi.
+- **Residual free-form phrasing:** detektor Turn-0 (`isPureLeadGreeting`) memakai
+  tata bahasa ber-anchor (GREETINGS/INQUIRY_ACTIONS + honorifik/partikel).
+  Pesan dengan kata benda subjek di ekor (mis. "... gimana cara pesan pijat
+  bayi") BELUM dicocokkan → tetap ke LLM/tool (AMAN, sekadar bukan 0-token).
+  Bukan regex hafalan baru; perluasan tata bahasa fungsional saja.
+- **Cakupan % belum diukur:** klaim "90%" plan lama tidak dipakai. Angka riil
+  perlu pengukuran log produksi (Fase 0.2) yang belum dijalankan di sini.
+- **Fase 4 (balasan per kampanye CTWA) DITAHAN:** butuh migrasi `reply_template`
+  di `ctwa_campaign_catchers` + admin API + UI + rebuild (Confirmation Gate).
+  Sampai itu, balasan statis memakai template sapaan umum `ClinicPolicy` topic
+  `'greeting'`.
+- **Verifikasi terkait:** `tests/unit/turn0-safe-gate.test.ts`,
+  `tests/unit/greeting-template-service.test.ts`,
+  `tests/unit/v3-ctwa-greeting-fastgate.test.ts`,
+  `tests/unit/v3-sanitizer-cta-preservation.test.ts`.
+
 ## 221. [Cart] Jalur exact-match & detectAgreedTreatment sengaja tetap "nama terpanjang" (2026-10-04, OPEN — by design)
 
 - **Konteks:** Fase 2 (2026-10-04) menyatukan juri relevansi (`rankServiceByRelevance`)
