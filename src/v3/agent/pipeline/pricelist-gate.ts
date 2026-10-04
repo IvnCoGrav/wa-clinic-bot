@@ -22,6 +22,12 @@ export interface PricelistGateInput {
   executedTools: Array<{ name: string; result?: any }>;
   /** Status kuota 1x: true bila customer sudah pernah menerima gambar pricelist. */
   pricelistSent: boolean;
+  /**
+   * Fase 4 (anti harga ganda): true bila balasan turn ini SUDAH memuat total
+   * resmi (rincian keranjang). Kirim gambar pricelist otomatis DILARANG saat itu
+   * — mencegah customer menerima harga dua kali (teks + gambar).
+   */
+  replyHasTotals?: boolean;
 }
 
 export type PricelistGateReason = 'EXPLICIT_REQUEST' | 'POST_DELIVERY' | 'NONE';
@@ -44,7 +50,7 @@ export function evaluatePricelistTrigger(input: PricelistGateInput): PricelistGa
   const delivery = (input.executedTools || []).find((t) => t?.name === 'calculate_delivery');
   const deliveryOk =
     delivery?.result?.success === true && delivery.result.isOutOfCoverage !== true;
-  if (deliveryOk && !input.pricelistSent) {
+  if (deliveryOk && !input.pricelistSent && input.replyHasTotals !== true) {
     return { send: true, forceResend: false, reason: 'POST_DELIVERY' };
   }
 

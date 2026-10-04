@@ -291,7 +291,9 @@ export class OutputSanitizer {
    * (./!? atau emoji penutup) pertama setelahnya. Null bila tak ada.
    */
   private static findLastCompleteListItemEnd(rawSlice: string): number {
-    const startRe = /\n\s*\d+\.\s/g;
+    // Fase 3 (unifikasi): dukung daftar bernomor (1. / 1)) DAN bullet (-/•/*),
+    // bukan hanya nomor titik, agar daftar opsi ber-bullet tidak diamputasi.
+    const startRe = /\n\s*(?:\d+[.)]|[-•*])\s/g;
     let m: RegExpExecArray | null;
     let lastStart = -1;
     while ((m = startRe.exec(rawSlice)) !== null) {
@@ -355,7 +357,7 @@ export class OutputSanitizer {
     // 1b. Bila break terakhir menggantung di kepala daftar bernomor (sesi 381894),
     // jangan mundur ke pra-header (membuang seluruh katalog) — potong di akhir
     // item bernomor lengkap terakhir sebagai gantinya.
-    if (hangingSeen && /\n\s*\d+\.\s/.test(rawSlice)) {
+    if (hangingSeen && /\n\s*(?:\d+[.)]|[-•*])\s/.test(rawSlice)) {
       const itemEnd = OutputSanitizer.findLastCompleteListItemEnd(rawSlice);
       if (itemEnd > 100) {
         return rawSlice.slice(0, itemEnd + 1).trimEnd();

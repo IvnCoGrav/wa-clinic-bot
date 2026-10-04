@@ -3,6 +3,23 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 221. [Cart] Jalur exact-match & detectAgreedTreatment sengaja tetap "nama terpanjang" (2026-10-04, OPEN — by design)
+
+- **Konteks:** Fase 2 (2026-10-04) menyatukan juri relevansi (`rankServiceByRelevance`)
+  untuk jalur FUZZY dan `resolveAffirmativeSwap`. Dua jalur lain SENGAJA tidak diubah:
+  1. **Exact/clean hit** (`cart-manager.ts` fullHits/cleanHits): aturan "bila nama
+     pendek adalah substring nama panjang yang sama-sama cocok → pendek gugur"
+     mencegah harga salah ("Induksi Massage" Rp 50k vs "Induksi Massage Fullbody"
+     Rp 105k). Mengubahnya ke skor relevansi berisiko menurunkan presisi ini.
+  2. **`detectAgreedTreatment`** (`booking-commit-gate.ts`): memilih nama katalog
+     terpanjang yang muncul (substring) di pesan USER — "paling spesifik menang".
+- **Risiko tersisa:** bila ada varian nama di mana yang terpanjang BUKAN yang
+  paling dimaksud, jalur ini bisa salah. Belum ditemukan kasus nyata; bila
+  ditemukan, arah fix = juri relevansi yang sama (butuh audit dampak ke
+  collision bundle/usia).
+- **Verifikasi terkait:** `tests/unit/v3-cart-fuzzy-ranking.test.ts`,
+  `tests/unit/v3/cart-dedup-total.test.ts`, `tests/unit/v3/ambiguous-choice-clarification.test.ts`.
+
 ## 220. [Deploy/Knowledge] Jalur seed FAQ di produksi (2026-10-04, RESOLVED — misdiagnosis dikoreksi)
 
 - **Koreksi diagnosis awal (PENTING):** laporan pertama menyebut

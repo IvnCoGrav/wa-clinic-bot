@@ -485,16 +485,34 @@ export class GuardrailPipeline {
     // kalimat, otoritas pola tunggal dari validator (information hiding).
     const gateAmnesia = (text: string): string =>
       stripAmnesiaQuestions(text, { locationKnown, symptomsKnown });
+    // Fase 5 (CTA sesuai funnel + audiens): hitung sekali, pakai di semua CTA
+    // (reprompt, amnesia delivery, kontrak akhir) agar konsisten.
+    let funnelCommitted = false;
+    try {
+      const { isFunnelCommitted } = await import('./phase-resolver');
+      funnelCommitted = isFunnelCommitted(session);
+    } catch { funnelCommitted = false; }
+    const ctaAudience: 'MOMS' | 'CHILD' = (
+      (session as any).targetAudience === 'MOMS'
+      || Boolean((session as any).momProfile?.stage)
+      || typeof (session as any).momProfile?.gestationalWeeks === 'number'
+    ) ? 'MOMS' : 'CHILD';
+    let buildScheduleCtaFn: ((o: any) => string) | undefined;
+    try {
+      buildScheduleCtaFn = (await import('../../tools/calculate-delivery.tool')).buildScheduleCta;
+    } catch { buildScheduleCtaFn = undefined; }
+    const buildCtaForSession = (): string => buildScheduleCtaFn ? buildScheduleCtaFn({
+      candidateTreatmentName: session.selectedTreatment,
+      hasCartItems: (session.cartItems || []).length > 0,
+      preferredDate: (session.booking as any)?.preferredDate,
+      committed: funnelCommitted,
+      audience: ctaAudience,
+    }) : '';
     // Fase 5 (Reprompt continuity): CTA penutup state-aware untuk jaminan
     // kontinuitas pasca-reprompt (usia/jam/shareloc) — anti dead-end.
     let repromptClosingCta = '';
     try {
-      const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
-      repromptClosingCta = buildScheduleCta({
-        candidateTreatmentName: session.selectedTreatment,
-        hasCartItems: (session.cartItems || []).length > 0,
-        preferredDate: (session.booking as any)?.preferredDate,
-      });
+      repromptClosingCta = buildCtaForSession();
     } catch { repromptClosingCta = ''; }
     // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
     // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
@@ -994,12 +1012,8 @@ export class GuardrailPipeline {
         // (tanpa nominal, karena ongkir hanya sah dari tool) lalu lanjutkan
         // CTA state-aware. Data lokasi berasal dari sesi (DB), bukan hardcode.
         const label = session.location.kelurahan || session.location.kecamatan || session.location.kota;
-        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
-        const cta = buildScheduleCta({
-          candidateTreatmentName: session.selectedTreatment,
-          hasCartItems: (session.cartItems || []).length > 0,
-        });
-        finalReply = `Baik Bunda 😊 Rumah Bunda di ${label} sudah masuk jangkauan layanan homecare kami ya. ${cta}`;
+        const cta = buildCtaForSession();
+        finalReply = `Baik Bunda 😊 Rumah Bunda di ${label} sudah masuk jangkauan layanan homecare kami ya. ${cta}`.trim();
         shouldSendReply = true;
         emptyKnowledgeResult = false;
         violationsDetected.push('STATE_AWARE_LOCATION_RECOVERY: lokasi sesi dipakai, bukan fallback buntu');
@@ -1097,12 +1111,7 @@ export class GuardrailPipeline {
         || (Array.isArray(session.cartItems) && session.cartItems.length > 0 ? session.cartItems[0]?.name : undefined);
       const hasTreatmentCtx = Boolean(treatmentName) || (session.cartItems || []).length > 0;
       if (deliveryOk && hasTreatmentCtx && hasTreatmentQuestion(finalReply)) {
-        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
-        const cta = buildScheduleCta({
-          candidateTreatmentName: treatmentName,
-          hasCartItems: (session.cartItems || []).length > 0,
-          preferredDate: (session.booking as any)?.preferredDate,
-        });
+        const cta = buildCtaForSession();
         const replaced = replaceTreatmentAmnesia(finalReply, cta);
         if (replaced !== finalReply) {
           finalReply = replaced;
@@ -1166,12 +1175,7 @@ export class GuardrailPipeline {
         }
       }
       if (contract.missingSchedule) {
-        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
-        const cta = buildScheduleCta({
-          candidateTreatmentName: session.selectedTreatment,
-          hasCartItems: (session.cartItems || []).length > 0,
-          preferredDate: (session.booking as any)?.preferredDate,
-        });
+        const cta = buildCtaForSession();
         const withCta = ensureRepromptClosingCta(finalReply, cta);
         if (withCta !== finalReply) {
           finalReply = withCta;

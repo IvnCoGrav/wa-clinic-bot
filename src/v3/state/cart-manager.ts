@@ -41,6 +41,36 @@ function isBareGreetingOrAck(text: string): boolean {
   return tokens.every((t) => BARE_GREETING_OR_ACK_TOKENS.has(t));
 }
 
+const significantTokensOf = (name: string): string[] =>
+  name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+
+/**
+ * Fase 2 (juri tunggal): peringkat kandidat layanan berdasarkan RELEVANSI
+ * terhadap teks acuan, BUKAN panjang nama. Dipakai jalur fuzzy DAN swap agar
+ * tidak ada dua aturan berbeda yang saling bertentangan. Urutan kunci:
+ * jumlah token cocok → rasio non-generik → penalti token ekstra (tidak
+ * disebut) → panjang nama hanya tie-breaker terakhir.
+ */
+export function rankServiceByRelevance<T extends { name: string }>(text: string, cands: T[]): T[] {
+  const msgTokens = new Set(significantTokensOf(text));
+  const scored = cands.map((s) => {
+    const toks = significantTokensOf(s.name);
+    const nonGeneric = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
+    const hitCount = toks.filter((t) => msgTokens.has(t)).length;
+    const nonGenericHits = nonGeneric.filter((t) => msgTokens.has(t)).length;
+    const extraCount = nonGeneric.filter((t) => !msgTokens.has(t)).length;
+    const ratio = nonGeneric.length > 0 ? nonGenericHits / nonGeneric.length : 0;
+    return { s, hitCount, ratio, extraCount };
+  });
+  scored.sort((a, b) =>
+    (b.hitCount - a.hitCount)
+    || (b.ratio - a.ratio)
+    || (a.extraCount - b.extraCount)
+    || (b.s.name.length - a.s.name.length)
+  );
+  return scored.map((x) => x.s);
+}
+
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
 // Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
 export type {
@@ -224,25 +254,8 @@ export class CartManager {
     // tie-breaker terakhir. Mencegah paket "+ Mandi" (nama panjang) menyingkirkan
     // paket presisi yang diminta customer. Token generik ("pijat/paket/kala/bayi")
     // tidak boleh menjadi penentu tunggal (konsisten gerbang anti-overfitting).
-    const rankFuzzyByRelevance = (text: string, cands: typeof services): typeof services => {
-      const msgTokens = new Set(significantTokens(text));
-      const scored = cands.map((s) => {
-        const toks = significantTokens(s.name);
-        const nonGeneric = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
-        const hitCount = toks.filter((t) => msgTokens.has(t)).length;
-        const nonGenericHits = nonGeneric.filter((t) => msgTokens.has(t)).length;
-        const extraCount = nonGeneric.filter((t) => !msgTokens.has(t)).length;
-        const ratio = nonGeneric.length > 0 ? nonGenericHits / nonGeneric.length : 0;
-        return { s, hitCount, ratio, extraCount };
-      });
-      scored.sort((a, b) =>
-        (b.hitCount - a.hitCount)
-        || (b.ratio - a.ratio)
-        || (a.extraCount - b.extraCount)
-        || (b.s.name.length - a.s.name.length)
-      );
-      return scored.map((x) => x.s);
-    };
+    const rankFuzzyByRelevance = (text: string, cands: typeof services): typeof services =>
+      rankServiceByRelevance(text, cands);
     // Token khas yang hanya dimiliki SATU layanan katalog (misal "oksitosin"):
     // sekali disebut langsung mengidentifikasi layanan tersebut.
     const tokenOwnerCount = new Map<string, number>();
@@ -795,10 +808,11 @@ export class CartManager {
         // sudah disebut asisten (covered) DILARANG jadi kandidat swap.
         const uncovered = matched.filter((t) => !cartCoveredTokens.has(t));
         return uncovered.length >= 2;
-      })
-      .sort((a, b) => b.name.length - a.name.length);
+      });
     if (candidates.length === 0) return null;
-    const offered = candidates[0];
+    // Fase 2 (juri tunggal): pilih kandidat paling RELEVAN terhadap tawaran
+    // asisten (bukan terpanjang) — konsisten dengan jalur fuzzy cart.
+    const offered = rankServiceByRelevance(offerText, candidates)[0];
     // Plan regresi Fase 2: audiens bundle dari komposisi komponen katalog.
     const swapById = new Map((catalog || []).map((s) => [(s?.id || '').toLowerCase(), s]));
     const scope = CartManager.detectRecipientScope(

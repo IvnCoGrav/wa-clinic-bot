@@ -623,7 +623,11 @@ export async function executeGetCatalog(
     // "Aterm (37+ Minggu)", Perineum = "Min. 34-36 Minggu". Gerbang pada STATE
     // (minggu kehamilan dari sesi + pemahaman semantik specificTreatmentName),
     // BUKAN hafalan kalimat user. Dikecualikan bila customer EKSPLISIT meminta.
-    if (category === 'MOMS' && momStage === 'PREGNANT') {
+    // Fase 1 lanjutan: gerbang berlaku LINTAS KATEGORI (MOMS/BOTH/kosong) —
+    // momStage 'PREGNANT' hanya terisi untuk subjek ibu, jadi tak boleh
+    // dikunci ke category==='MOMS' (kalau tidak, bumil di kategori BOTH/kosong
+    // tetap bocor ke induksi pre-term).
+    if (momStage === 'PREGNANT') {
       const INDUKSI_MIN_WEEKS = 37;
       const PERINEUM_MIN_WEEKS = 34;
       const weeks = typeof gestationalWeeks === 'number' && Number.isFinite(gestationalWeeks)

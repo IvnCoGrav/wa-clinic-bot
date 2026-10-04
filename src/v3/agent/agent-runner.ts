@@ -468,6 +468,8 @@ export class V3AgentRunner {
           intents: intentsForGate,
           executedTools: turn.executedTools as any,
           pricelistSent: dbPricelistSent,
+          // Fase 4: jangan kirim gambar bila teks sudah memuat total resmi.
+          replyHasTotals: /total\s+keseluruhan|subtotal/i.test(finalReply || ''),
         });
       } catch {}
 

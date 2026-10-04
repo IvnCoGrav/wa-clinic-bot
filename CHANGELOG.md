@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Fixed: Fondasi Keselamatan Bumil Lintas Kategori, Juri Paket Tunggal, Trimmer List-Safe, CTA Funnel & Anti Harga Ganda
+
+- **Akar (read-only):** gerbang PREGNANT hanya `category==='MOMS'` (`get-catalog.tool.ts`)
+  → bumil di kategori BOTH/kosong tetap bocor ke induksi pre-term; rekomendasi
+  klinis dihitung sebelum gerbang; plumbing sesi bisa kehilangan `momStage` saat
+  konteks turn sepi (`tool-pipeline.ts`); swap/agreed masih memilih nama terpanjang;
+  pemotong karakter belum melindungi daftar bullet; CTA default buta audiens &
+  bisa terpotong sebelum kirim; pricelist bisa dobel dengan teks harga.
+- **Fase 1 (Keselamatan):** gerbang PREGNANT berlaku **lintas kategori**
+  (`momStage==='PREGNANT'`), `momStage`/`gestationalWeeks` dari sesi selalu
+  diteruskan. Tes: `tests/unit/v3-pregnant-both-category.test.ts`.
+- **Fase 2 (Juri tunggal):** ekstrak `rankServiceByRelevance` (cart-manager) —
+  dipakai jalur fuzzy DAN `resolveAffirmativeSwap` (bukan panjang nama). Jalur
+  exact substring-overlap dipertahankan sengaja (anti "Induksi Massage" vs
+  "Induksi Massage Fullbody") — dicatat di #221.
+- **Fase 3 (Trimmer):** `findLastCompleteListItemEnd` + trigger `truncateToMaxChars`
+  kini mencakup bullet (-/•/*), bukan hanya nomor titik.
+- **Fase 4 (Anti harga ganda):** `pricelist-gate` skip POST_DELIVERY bila balasan
+  sudah memuat total (`replyHasTotals`); permintaan eksplisit tetap dilayani.
+- **Fase 5 (CTA funnel + audiens):** `buildScheduleCta` menerima `committed` &
+  `audience` — belum committed → tanya minat (bukan todong jadwal); layanan ibu
+  tidak ditutup "si kecil". Satu `buildCtaForSession()` dipakai di semua CTA guardrail.
+- **Tests:** +3 suite. Suite penuh **588 lolos** (3 file gagal = timeout flaky
+  pra-eksisting: reservation-silent-failure-audit / reservation-security-and-integrity /
+  staff-auth-and-reservation). `npm run build` lolos.
+- **Catatan:** jalur exact-match substring/longest & `detectAgreedTreatment`
+  longest-name dipertahankan sengaja → `docs/KNOWN_ISSUES.md` #221.
+
 #### 2026-10-04 - Added: Seed FAQ Aman (--dry-run/--only), Guardrail Radar + Koreksi #220
 
 - **Koreksi misdiagnosis (#220):** `dist/cli/seed-faq.js` SEBENARNYA ADA di dalam

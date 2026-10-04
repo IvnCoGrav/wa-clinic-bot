@@ -66,6 +66,14 @@ export interface ScheduleCtaOptions {
   preferredDate?: string;
   candidateTreatmentName?: string;
   hasCartItems?: boolean;
+  /**
+   * Fase 5 (CTA sesuai funnel): false = funnel BELUM committed (eksplorasi/
+   * menimbang) → DILARANG todong jadwal; tanya minat. undefined/true =
+   * perilaku lama (boleh tanya hari).
+   */
+  committed?: boolean;
+  /** Fase 5: subjek sapa — 'MOMS' menyapa Bunda (tanpa "si kecil"). */
+  audience?: 'MOMS' | 'CHILD';
 }
 
 /**
@@ -83,15 +91,22 @@ export function buildScheduleCta(opts?: ScheduleCtaOptions | string): string {
   const preferredDate = (o.preferredDate || '').trim();
   const treatment = (o.candidateTreatmentName || '').trim();
 
+  const subject = o.audience === 'MOMS' ? 'Bunda' : 'si kecil';
   if (preferredDate) {
     return `Untuk ketersediaan jadwal ${preferredDate}nya, akan kami bantu cekkan ketersediaan jadwal terlebih dahulu ya Bunda 🙏😊`;
   }
   if (treatment || o.hasCartItems) {
+    // Fase 5: funnel belum committed → jangan todong jadwal, tanya minat dulu.
+    if (o.committed === false) {
+      const treatClause = treatment ? ` *${treatment}*` : '';
+      return `Apakah Bunda tertarik untuk kami bantu siapkan layanan${treatClause} ini? 😊`;
+    }
     const treatClause = treatment ? ` *${treatment}*` : 'nya';
     return `Untuk layanan${treatClause}, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
   }
   // Single-Vocative Principle: tanpa akhiran "atau Bunda" agar tidak duplikasi vokatif.
-  return 'Rencana mau dibantu perawatan apa untuk si kecil? 🤗';
+  // Fase 5: subjek sapa audience-aware (layanan ibu DILARANG ditutup "si kecil").
+  return `Rencana mau dibantu perawatan apa untuk ${subject}? 🤗`;
 }
 
 /**

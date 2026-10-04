@@ -522,6 +522,7 @@ export class ToolExecutionPipeline {
                 ...pipeAudienceCtx,
               }
             : (pipeKnownSymptoms.length > 0 || pipeDiscussed.length > 0 || pipeTargetAudience
+              || pipeMomStage || typeof pipeGestWeeks === 'number'
               ? { knownSymptoms: pipeKnownSymptoms, incomingText: cleanIncomingText, ...pipeAudienceCtx }
               : { incomingText: cleanIncomingText } as any);
           toolResult = await withTimeout(
