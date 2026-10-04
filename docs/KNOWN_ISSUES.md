@@ -3,21 +3,27 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 220. [Deploy/Knowledge] `seed:faq` tidak bisa dijalankan di image app (2026-10-04, OPEN)
+## 220. [Deploy/Knowledge] Jalur seed FAQ di produksi (2026-10-04, RESOLVED — misdiagnosis dikoreksi)
 
-- **Gejala:** `docker compose exec app npx tsx src/cli/seed-faq.ts` gagal karena
-  image runner hanya memuat `dist/` (tanpa `src/` & tanpa `tsx` devDep), dan
-  `dist/cli/seed-faq.js` **tidak ikut terkompilasi**. Akibatnya perubahan
-  `faq-corpus.ts` tidak serta-merta masuk DB produksi.
-- **Dampak:** penerapan Fase 2 (pemisahan retrieval induksi) di live terpaksa via
-  `UPDATE` 1 baris `knowledge_chunks` + eviction cache Redis `faq:default-tenant:*`
-  (langkah manual, sudah dijalankan 2026-10-04).
-- **Arah fix (belum dieksekusi):** sertakan entrypoint seeding di image
-  (mis. build `src/cli` ke `dist/cli` ATAU script `docker/seed.sh` + tsx pada
-  stage khusus), atau endpoint admin re-seed knowledge yang juga memanggil
-  `faqCacheService.invalidateAll`.
+- **Koreksi diagnosis awal (PENTING):** laporan pertama menyebut
+  `dist/cli/seed-faq.js` "tidak ikut terkompilasi". Itu **SALAH** — perintah
+  `ls dist/cli/...` dijalankan di **HOST** `/opt/wa-clinic-bot` (tanpa `dist/`
+  karena dockerignored), bukan di dalam container. Verifikasi ulang:
+  `docker compose exec -T app ls dist/cli/seed-faq.js` → **ADA**
+  (`-rw-r--r-- node node 3395 ... seed-faq.js`). Jadi seed memang ada di image.
+- **Perbaikan:** `src/cli/seed-faq.ts` diberi opsi aman `--dry-run` (tanpa tulis)
+  dan `--only=<substr>` (update terarah 1 chunk). Script npm baru:
+  `seed:faq:prod` (`node dist/cli/seed-faq.js`), `seed:faq:dry`.
+- **Cara pakai di produksi (aman):**
+  `docker compose exec -T app node dist/cli/seed-faq.js --dry-run`
+  `docker compose exec -T app node dist/cli/seed-faq.js --only="Induksi Massage"`
+- **Caveat yang masih berlaku:** upsert berbasis (tenant, title) akan MENIMPA
+  konten/keywords baris yang judulnya sama dengan daftar seed — kurasi admin pada
+  judul yang sama berisiko tertimpa. Untuk perubahan kecil, `--only=` atau
+  `UPDATE` terarah + eviction `faq:default-tenant:*` tetap paling aman.
 - **Verifikasi terkait:** chunk "Panduan Usia Kehamilan ... Induksi Massage"
-  keywords kini tanpa `capek/pegal` (cek SQL langsung).
+  keywords kini tanpa `capek/pegal` (cek SQL langsung); tes radar
+  `tests/unit/guardrail-radar.test.ts`.
 
 ## 219. [Guardrail] Batasan Lapis Kontrak Jawaban, Reviewer AI & Eval Skrip (2026-10-04, OPEN — by design)
 

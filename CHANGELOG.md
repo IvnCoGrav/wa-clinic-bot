@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Added: Seed FAQ Aman (--dry-run/--only), Guardrail Radar + Koreksi #220
+
+- **Koreksi misdiagnosis (#220):** `dist/cli/seed-faq.js` SEBENARNYA ADA di dalam
+  container (ls pertama keliru jalan di HOST tanpa `dist/`). Seed memang bisa
+  dijalankan via `node dist/cli/seed-faq.js`.
+- **`src/cli/seed-faq.ts`:** opsi `--dry-run` (tanpa tulis DB) + `--only=<substr>`
+  (update terarah 1 chunk tanpa menyentuh kurasi lain). Script npm baru:
+  `seed:faq:prod`, `seed:faq:dry`. Caveat title-overwrite didokumentasikan.
+- **`src/cli/guardrail-radar.ts` (baru):** merangkum event perbaikan-paksa
+  guardrail (`*AMNESIA*`, `*REPROMPT*`, `*RECOVERY*`, `REPLY_CONTRACT_*`,
+  `HOLISTIC_REVIEW_*`, `*SOLICITATION*`, `*_UNRESOLVED`) dari log JSON agar
+  anomali terlihat lebih dulu. Script `radar:guardrail` / `radar:guardrail:dev`.
+- **Tests:** +`guardrail-radar.test.ts`. Suite penuh **589 lolos / 0 gagal**;
+  `npm run build` lolos.
+- **Deploy:** app-only rebuild (WAHA tidak disentuh). Verifikasi seed `--dry-run`.
+
 #### 2026-10-04 - Added: Lapis Kontrak Jawaban, Pemisahan Retrieval Induksi, Tes Parafrase, Reviewer AI Risiko & Eval Skrip (Fase 0–6)
 
 - **Latar:** pasca audit, ditambahkan lapisan penjaga agar jawaban "nyambung"
