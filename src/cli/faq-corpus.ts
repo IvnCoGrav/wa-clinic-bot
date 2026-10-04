@@ -158,11 +158,13 @@ export const faqs = [
   },
   {
     // SEED DB-DRIVEN (tenant-aware, bisa diedit via dashboard /api/admin/knowledge):
-    // Aturan klinis usia aterm untuk induksi alami + relaksasi bumil capek.
-    // BUKAN hardcode runtime — dibaca dinamis via knowledgeBaseService.searchRelevantChunks.
+    // Aturan klinis usia aterm untuk induksi alami. Pemisahan retrieval: penanda
+    // aterm TIDAK dicampur keluhan relaksasi umum (lelah/ngilu/kaki bengkak) agar
+    // bumil non-aterm tidak tertarik ke narasi induksi. BUKAN hardcode runtime —
+    // dibaca dinamis via knowledgeBaseService.searchRelevantChunks.
     "question": "Panduan Usia Kehamilan untuk Pijat Induksi Alami (Induksi Massage)",
-    "answer": "Pijat induksi alami aman dan sangat dianjurkan dilakukan pada usia kehamilan cukup bulan (aterm), yaitu mulai 37-38 minggu ke atas hingga menjelang HPL. Perawatan ini membantu merangsang hormon oksitosin alami, menstimulasi titik akupresur persalinan, dan melenturkan otot panggul. Untuk ibu hamil yang juga merasakan capek, pegal seluruh tubuh, atau ketegangan otot di trimester akhir, paket Induksi Massage Fullbody (relaksasi seluruh tubuh dipadukan dengan titik induksi) merupakan pilihan yang paling tepat.",
-    "keywords": "38 weeks, 37 weeks, induksi, induksi alami, pijat induksi, capek, hamil trimester 3, aterm, cukup bulan, hpl"
+    "answer": "Pijat induksi alami (Induksi Massage) hanya dianjurkan pada usia kehamilan cukup bulan (aterm), yaitu mulai 37-38 minggu ke atas hingga menjelang HPL. Perawatan ini membantu merangsang hormon oksitosin alami, menstimulasi titik akupresur persalinan, dan melenturkan otot panggul. Untuk ibu hamil yang belum cukup bulan dan hanya merasakan lelah, ngilu pinggang, atau kaki bengkak, perawatan yang tepat adalah Pijat Hamil (Prenatal Massage)/relaksasi bumil — BUKAN induksi.",
+    "keywords": "38 weeks, 37 weeks, induksi, induksi alami, pijat induksi, aterm, cukup bulan, hpl, kontraksi, pembukaan"
   },
 
 // === BEGIN MERGED LIVE CURATIONS (scripts/sync-live-knowledge.ts) ===

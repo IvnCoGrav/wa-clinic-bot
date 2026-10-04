@@ -7,6 +7,7 @@ import { maskPhoneNumber } from '../../../utils/pii-masker';
 import { GenerationStage } from './generation-stage';
 import { SAME_DAY_DISCLAIMER } from './generation-stage';
 import type { V3RetrievedChunk } from '../agent-runner';
+import { DAY_EVIDENCE_WORDS } from '../../../utils/date-confirmation';
 
 export interface NumericRepromptDeps {
   tenantId: string;
@@ -261,6 +262,77 @@ export function ensureRepromptClosingCta(text: string, ctaText: string): string 
   const base = text.replace(/\s+$/, '');
   const joiner = /[.!?]$/.test(base) ? ' ' : '. ';
   return `${base}${joiner}${ctaText.trim()}`.trim();
+}
+
+/** Fase 1 (Lapis 1): balasan memuat nominal rupiah teknis ("Rp <angka>"). */
+export function replyMentionsRupiah(replyText: string): boolean {
+  return /Rp\.?\s*\d/i.test(replyText || '');
+}
+
+/** Fase 1: balasan memuat penanda hari (seam DAY_EVIDENCE_WORDS, tanpa daftar baru). */
+export function replyMentionsDay(replyText: string): boolean {
+  const lower = (replyText || '').toLowerCase();
+  if (!lower.trim()) return false;
+  return DAY_EVIDENCE_WORDS.some((w) => lower.includes(w));
+}
+
+export interface ReplyContractCtx {
+  /** AI menilai customer menanyakan harga turn ini (inquirePrice/targetPrice). */
+  priceAsked?: boolean;
+  /** Tool katalog turn ini benar-benar membawa data harga (bukan angka kosong). */
+  priceDataAvailable?: boolean;
+  /** Sesi sudah punya konteks layanan (paket/keranjang) → CTA jadwal diharapkan. */
+  scheduleExpected?: boolean;
+}
+export interface ReplyContractResult {
+  missingPrice: boolean;
+  missingSchedule: boolean;
+}
+
+/**
+ * Fase 1: kontrak jawaban deterministik (DATA vs JAWABAN). TIDAK menebak maksud
+ * customer dari teks; bersandar pada flag AI (priceAsked) + status sesi
+ * (scheduleExpected) + ketersediaan data tool (priceDataAvailable).
+ */
+export function checkReplyContract(replyText: string, ctx: ReplyContractCtx): ReplyContractResult {
+  const missingPrice = ctx.priceAsked === true && ctx.priceDataAvailable === true
+    && !replyMentionsRupiah(replyText);
+  const missingSchedule = ctx.scheduleExpected === true
+    && !replyMentionsDay(replyText)
+    && !hasClosingCta(replyText);
+  return { missingPrice, missingSchedule };
+}
+
+/**
+ * Fase 4 (Lapis 2): giliran BERISIKO TINGGI — bumil yang memakai katalog,
+ * reservasi sukses, atau eskalasi. Data-driven dari tool + state sesi (bukan
+ * detektor/daftar kata baru).
+ */
+export function isHighRiskTurn(
+  session: CustomerGoalSession | undefined,
+  executedTools: Array<{ name: string; result?: any }>
+): boolean {
+  const tools = executedTools || [];
+  const pregnantWithCatalog = (session as any)?.momProfile?.stage === 'PREGNANT'
+    && tools.some((t) => t?.name === 'get_catalog_and_price');
+  const reservationDone = tools.some((t) => t?.name === 'save_reservation' && (t as any)?.result?.success === true);
+  const escalated = tools.some((t) => t?.name === 'escalate_to_human');
+  return pregnantWithCatalog || reservationDone || escalated;
+}
+
+/**
+ * Fase 4: reviewer AI HANYA untuk giliran berisiko yang MASIH menyisakan
+ * pelanggaran tak-terselesaikan (fail-safe anti-mutilasi yang mengirim asli).
+ * Tanpa pelanggaran tersisa → tidak dipanggil (hindari merusak jawaban benar).
+ */
+export function shouldRunHolisticReview(ctx: {
+  violationsDetected: string[];
+  highRisk: boolean;
+  hasExecuteChat: boolean;
+}): boolean {
+  if (!ctx.hasExecuteChat) return false;
+  if (!ctx.highRisk) return false;
+  return (ctx.violationsDetected || []).some((v) => String(v).endsWith('_unresolved'));
 }
 
 
@@ -981,6 +1053,38 @@ export class GuardrailPipeline {
       } catch {}
     }
 
+    // Fase 4 (Lapis 2 — reviewer AI): giliran BERISIKO TINGGI yang masih memuat
+    // pelanggaran tak-terselesaikan → satu tulis-ulang terisolasi memakai teks
+    // pelanggaran sebagai nota. Kosong/gagal → pakai asli (pass-through).
+    if (
+      shouldSendReply && !isEscalated && finalReply && finalReply.trim()
+      && shouldRunHolisticReview({
+        violationsDetected,
+        highRisk: isHighRiskTurn(session, executedTools),
+        hasExecuteChat: !!input.executeChat,
+      })
+    ) {
+      try {
+        const holisticNote = `TINJAU ULANG AKHIR — tulis ulang SELURUH balasan agar sesuai kebutuhan customer, tetap hangat 2-3 kalimat, dan pastikan setiap koreksi berikut terpenuhi:\n- ${violationsDetected.join('\n- ')}\nDILARANG mengubah fakta/angka/nama layanan selain yang diperintahkan koreksi.`;
+        const holisticData = await input.executeChat({
+          payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, holisticNote), temperature: 0.3 },
+          tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
+        });
+        repromptCount++;
+        const holisticText = (holisticData?.choices?.[0]?.message?.content || '').trim();
+        if (holisticText) {
+          const holisticCleaned = OutputSanitizer.cleanOutboundReply(holisticText, incomingText, isFollowUp, sanitizeOpts);
+          if (holisticCleaned.trim() && OutputSanitizer.isValidReply(holisticCleaned)) {
+            finalReply = holisticCleaned;
+            violationsDetected.push('HOLISTIC_REVIEW_APPLIED');
+            console.warn(JSON.stringify({ event: 'HOLISTIC_REVIEW_APPLIED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+          }
+        }
+      } catch (holisticErr: any) {
+        console.warn(JSON.stringify({ event: 'HOLISTIC_REVIEW_ERROR', tenantId, conversationId, error: holisticErr?.message, timestamp: new Date().toISOString() }));
+      }
+    }
+
     // Fase 4 (Delivery anti-amnesia): bila turn ini menghitung ongkir/delivery
     // DAN sesi sudah punya konteks layanan (selectedTreatment/keranjang),
     // balasan DILARANG menanyakan ulang "mau perawatan apa". Gerbang
@@ -1017,6 +1121,63 @@ export class GuardrailPipeline {
     if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
       if (!OutputSanitizer.hasStructuredContent(finalReply)) {
         finalReply = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(finalReply, 3);
+      }
+    }
+
+    // Fase 1 (Lapis 1 kontrak jawaban): sebelum kirim, pastikan balasan memuat
+    // DATA yang diharapkan. Sinyal dari flag AI (priceAsked) + status sesi
+    // (scheduleExpected) + ketersediaan data tool — BUKAN pindai teks customer.
+    // Fail-soft: perbaiki lunak lalu lanjut; DILARANG memblokir pengiriman.
+    if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
+      const catalogTool = executedTools.find((t) => t?.name === 'get_catalog_and_price');
+      const priceAsked = Boolean(
+        catalogTool
+        && ((catalogTool as any).args?.inquirePrice === true
+          || typeof (catalogTool as any).args?.targetPrice === 'number')
+      );
+      const priceDataAvailable = Boolean(
+        (catalogTool as any)?.result?.treatments?.some
+        && (catalogTool as any).result.treatments.some(
+          (tr: any) => typeof tr?.promoPrice === 'number' || typeof tr?.originalPrice === 'number'
+        )
+      );
+      const scheduleExpected = Boolean(
+        session.selectedTreatment || (session.cartItems || []).length > 0
+      );
+      const contract = checkReplyContract(finalReply, { priceAsked, priceDataAvailable, scheduleExpected });
+      if (contract.missingPrice && input.executeChat) {
+        try {
+          const retry = await GuardrailPipeline.attemptFactualReprompt(
+            finalReply,
+            ['Draf balasan WAJIB memuat nominal harga resmi (bertanda "Rp <angka>") karena customer menanyakan harga dan data harga sudah tersedia dari tool.'],
+            input.executeChat,
+            { tenantId, phone, conversationId, baseUrl, apiKey, selectedModel }
+          );
+          if (retry) {
+            const cleaned = OutputSanitizer.cleanOutboundReply(retry, incomingText, isFollowUp, sanitizeOpts);
+            if (cleaned.trim() && replyMentionsRupiah(cleaned)) {
+              finalReply = cleaned;
+              violationsDetected.push('REPLY_CONTRACT_PRICE_FIXED');
+              console.warn(JSON.stringify({ event: 'REPLY_CONTRACT_PRICE_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+            }
+          }
+        } catch (contractErr: any) {
+          console.warn(JSON.stringify({ event: 'REPLY_CONTRACT_PRICE_ERROR', tenantId, conversationId, error: contractErr?.message, timestamp: new Date().toISOString() }));
+        }
+      }
+      if (contract.missingSchedule) {
+        const { buildScheduleCta } = await import('../../tools/calculate-delivery.tool');
+        const cta = buildScheduleCta({
+          candidateTreatmentName: session.selectedTreatment,
+          hasCartItems: (session.cartItems || []).length > 0,
+          preferredDate: (session.booking as any)?.preferredDate,
+        });
+        const withCta = ensureRepromptClosingCta(finalReply, cta);
+        if (withCta !== finalReply) {
+          finalReply = withCta;
+          violationsDetected.push('REPLY_CONTRACT_SCHEDULE_CTA');
+          console.warn(JSON.stringify({ event: 'REPLY_CONTRACT_SCHEDULE_CTA', tenantId, conversationId, timestamp: new Date().toISOString() }));
+        }
       }
     }
 

@@ -4,6 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-04 - Added: Lapis Kontrak Jawaban, Pemisahan Retrieval Induksi, Tes Parafrase, Reviewer AI Risiko & Eval Skrip (Fase 0–6)
+
+- **Latar:** pasca audit, ditambahkan lapisan penjaga agar jawaban "nyambung"
+  dengan kebutuhan customer TANPA daftar kata baru (anti-kaku) dan tanpa
+  memblokir pengiriman.
+- **Fase 1 — Lapis 1 kontrak jawaban (`guardrail-pipeline.ts`):** helper murni
+  `replyMentionsRupiah`/`replyMentionsDay` (pakai seam `DAY_EVIDENCE_WORDS`
+  existing) + `checkReplyContract(reply, ctx)` dengan `ctx` = bendera AI/status
+  sesi (`priceAsked`, `priceDataAvailable`, `scheduleExpected`) — BUKAN pindai
+  teks customer. Gagal → reprompt faktual existing (`REPLY_CONTRACT_PRICE_FIXED`)
+  / tempel CTA state-aware (`REPLY_CONTRACT_SCHEDULE_CTA`); fail-soft.
+- **Fase 2 — Pemisahan retrieval (`keyword-enrichment.service.ts`,
+  `faq-corpus.ts`):** penanda aterm (induksi) tak lagi dicampur keluhan umum
+  (lelah/ngilu/kaki bengkak); kata relaksasi dipindah ke rule ibu. Jawaban FAQ
+  induksi tak lagi memetakan capek→Induksi Fullbody.
+- **Fase 3 — Tes parafrase daftar lama (`tests/unit/legacy-wordlist-paraphrase.test.ts`):**
+  mengunci perilaku `detectVisitTimeQuestion`, `hasBookingCommitSignal`,
+  `isConsultativeUserText`, `isAvailabilityInquiryText`, `extractFastIntents`
+  pada ragam nyata. Murni tes (kode lama tak diubah).
+- **Fase 4 — Reviewer AI risiko (`guardrail-pipeline.ts`):** `isHighRiskTurn`
+  (bumil+katalog / reservasi / eskalasi) + `shouldRunHolisticReview`
+  (HANYA bila ada pelanggaran *unresolved*). Satu tulis-ulang terisolasi
+  memakai teks pelanggaran; kosong → pakai asli.
+- **Fase 5 — Eval skrip percakapan (`tests/eval/conversation-scripts.eval.test.ts`):**
+  12 skenario deterministik (harga, ongkir, bumil, bundle, ambigu, addon,
+  trimmer, CTA, kontrak) offline.
+- **Tests:** +6 suite baru; suite penuh **588 lolos / 0 gagal**; `npm run build` lolos.
+- **Catatan/batasan:** dicatat di `docs/KNOWN_ISSUES.md` #219 (reviewer AI
+  terbatas, eval = lapis deterministik, kontrak harga bisa menambah 1 panggilan LLM).
+
 #### 2026-10-04 - Fixed: Keselamatan Klinis Bumil, Presisi Cart, Trimmer Daftar, Anti-Amnesia Delivery & CTA Reprompt (Fase 1–5)
 
 - **Akar masalah (audit read-only, terbukti `file:line`):** (1) `get-catalog.tool.ts:238` `void

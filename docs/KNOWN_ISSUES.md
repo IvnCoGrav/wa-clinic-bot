@@ -3,6 +3,39 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 219. [Guardrail] Batasan Lapis Kontrak Jawaban, Reviewer AI & Eval Skrip (2026-10-04, OPEN — by design)
+
+- **Konteks:** penambahan Fase 0–6 (2026-10-04) — kontrak jawaban, pemisahan
+  retrieval induksi, tes parafrase, reviewer AI risiko, eval skrip.
+- **Batasan yang disengaja (bukan bug):**
+  1. **Lapis 1 `checkReplyContract` fail-soft, tidak memblokir kirim.** Cek
+     rupiah = pola teknis `Rp <angka>`; balasan model yang menulis "60rb" tanpa
+     "Rp" ditandai missing → dicoba reprompt faktual existing. Bila model tetap
+     tak menulis "Rp", balasan tetap dikirim (anti-mangkrak). Perlu
+     langganan/pantau agar tidak jadi tambahan panggilan LLM yang boros.
+  2. **Deteksi hari memakai `DAY_EVIDENCE_WORDS`** (termasuk kata bulan &
+     'minggu') → bisa false-negative (anggap sudah menyebut hari). Sengaja
+     konservatif: lebih baik tidak menempel CTA daripada menempel ganda.
+  3. **Reviewer AI (Fase 4) hanya jalan** saat giliran berisiko tinggi
+     (bumil+katalog / reservasi / eskalasi) DAN ada flag `*_unresolved`.
+     Bukan reviewer umum tiap pesan (menghindari biaya + merusak jawaban benar).
+  4. **Eval `tests/eval/conversation-scripts.eval.test.ts` = lapis DETERMINISTIK**
+     (cart/CTA/trimmer/kontrak), BUKAN eval LLM penuh. Belum ada harness yang
+     menjalankan pipeline Call 1+2 nyata dengan mock model untuk skrip utuh —
+     kandidat pekerjaan lanjut.
+  5. **Daftar kata lama** (`hasAgeQuestion` internal, `detectVisitTimeQuestion`,
+     `DAY_EVIDENCE_WORDS`, `extractFastIntents`) tetap berbasis token/frasa
+     (warisan). Fase 3 hanya MENGUNCI perilaku yang diharapkan via tes; celah
+     parafrasa di luar kasus uji belum tentu tertangkap. Ideal jangka panjang:
+     taksonomi semantik terpusat (lihat juga #156/#218).
+  6. **`hasAgeQuestion` belum diekspor** sehingga belum diuji satuan langsung;
+     diuji tidak langsung lewat kontrak reprompt.
+- **Verifikasi terkait:** `tests/unit/reply-contract.test.ts`,
+  `tests/unit/induksi-retrieval-separation.test.ts`,
+  `tests/unit/legacy-wordlist-paraphrase.test.ts`,
+  `tests/unit/holistic-review-gate.test.ts`,
+  `tests/eval/conversation-scripts.eval.test.ts`.
+
 ## 218. [Katalog/Klinis] Ambang klinis & ID layanan masih konstanta kode (tech debt SaaS) (2026-10-04, OPEN — Confirmation Gate)
 
 - **Konteks:** perbaikan Fase 1–5 (2026-10-04) menambah gerbang keselamatan bumil di
