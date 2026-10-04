@@ -608,8 +608,10 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   verifikasi apakah sengaja; (2) transkrip Turn-5/6 pelanggan 6287883887456 TIDAK
   ditemukan di `customers`/`messages` (nomor/tenant tidak cocok) — perlu nomor
   kanonik; (3) `/opt/wa-clinic-bot/logs` tidak dipersist ke volume.
-- **Catatan server:** plan menyebut IP `43.173.11.79`; runbook resmi
-  (`server-access`) = `43.157.197.148:1403`. Gunakan yang resmi.
+- **Catatan server (KOREKSI 2026-10-04):** host PRODUKSI = `43.173.11.79`
+  (`klinik-server-baru`, DNS `app.kalababyspa.online`). Host `43.157.197.148`
+  (`klinik-server`) = LEGACY dan WAJIB tetap stop (lihat #215). Runbook
+  `server-access` sudah dikoréksi menunjuk IP produksi.
 
 ## 193. [Pembayaran] Divergensi definisi "Lunas" lintas layanan (OPEN, 2026-10-02)
 
