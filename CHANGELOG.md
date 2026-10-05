@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Reservasi Aktif: Jendela Hari-H & Filter Bidan Bertugas
+
+- **Akar masalah (3 lapis):** tab Reservasi Aktif menampilkan booking `confirmed`/
+  `pending` dari zaman kapan pun (booking lampau berminggu-minggu tetap muncul);
+  dropdown "Semua Label" berisi escalation reason (bukan label) sehingga di tab
+  reservasi nyaris selalu kosong; `formatReservationItem` membuang `assigned_staff_id`/
+  `assigned_staff` walau query sudah meng-`include` relasinya (kontrak berbohong).
+- **Domain (`reservation-status.ts`):** `ACTIVE_TREATMENT_WINDOW_MS`,
+  `activeTreatmentCutoff()`, `isTreatmentWithinActiveWindow()` (null/tanggal korup
+  fail-open, lampau >2 jam gugur), `activeReservationWhere()` (builder query Prisma
+  paritas), `en_route` disamakan dengan `confirmed`, `isHoldActive` dipertahankan.
+- **Backend (`conversation.service.ts`):** query `filter=reservation` pakai builder
+  `activeReservationWhere()` + dukungan param `staffId` (`all|unassigned|{id}`,
+  fail-closed); fallback in-memory memakai `isActiveReservation` + predikat staff.
+- **Backend (`live-chat.service.ts`):** `hasUpcomingBooking`/`hasPendingBooking`/
+  `hasActiveHold`/`activeConfirmedReservation`/`activePendingReservation` kini
+  ter-gate jendela 2 jam; mapper meneruskan `assigned_staff_id` & `assigned_staff`.
+- **Backend (`admin/livechat.subroute.ts`):** terima query `staffId` (khusus
+  `filter=reservation`).
+- **Frontend (`LiveChatMonitor.tsx`):** dropdown kontekstual — tab reservasi
+  menampilkan filter bidan ("Semua Bidan"/"Belum Ada Bidan"/per-bidan THERAPIST
+  aktif), tab lain tetap "Semua Label"; guard tanggal + staff di `filteredChats`;
+  badge `👩‍⚕️ Bidan X` / `⚠️ Belum Ada Bidan`; param `staffId` diteruskan ke server.
+- **Test (adversarial):** `conversation-filter.test.ts` (bentuk query + jendela +
+  `staffId` pass-through), `livechat-payload-completeness.test.ts` (kontrak staff,
+  confirmed lampau gugur, hari-H berjalan aktif, en_route lampau gugur, pending null
+  aktif), `reservation-status-en-route.test.ts` (en_route lampau tak aktif).
+- **Verifikasi:** `tsc` bersih; suite 4614 lulus; dashboard build hijau.
+
 #### 2026-10-03 - Fix Alamat/Anak Hilang di LiveChat Edit (F-A..F-D)
 
 - **Akar:** payload banner LiveChat (`formatReservationItem`) memangkas `preferences`,

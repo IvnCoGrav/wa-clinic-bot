@@ -32,6 +32,13 @@ export const CONFIRMED_FAMILY_STATUSES: string[] = ['confirmed', 'en_route'];
 export const ACTIVE_HOLD_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 /**
+ * Jendela toleransi keterlambatan treatment (jam janji temu) untuk semua status
+ * aktif. Sama dengan jendela hold: reservasi yang jam treatment-nya sudah lewat
+ * >2 jam TIDAK lagi dianggap aktif (tidak muncul di tab Reservasi Aktif).
+ */
+export const ACTIVE_TREATMENT_WINDOW_MS = ACTIVE_HOLD_WINDOW_MS;
+
+/**
  * Batas bawah booking_date agar sebuah `hold` masih dianggap aktif.
  * Dipakai untuk membangun kondisi Prisma (`booking_date: { gte: cutoff }`).
  */
@@ -39,18 +46,60 @@ export function activeHoldCutoff(nowMs: number = Date.now()): Date {
   return new Date(nowMs - ACTIVE_HOLD_WINDOW_MS);
 }
 
+/** Batas bawah booking_date agar treatment masih dalam jendela aktif (alias hold). */
+export function activeTreatmentCutoff(nowMs: number = Date.now()): Date {
+  return new Date(nowMs - ACTIVE_TREATMENT_WINDOW_MS);
+}
+
+/**
+ * Apakah booking_date sebuah treatment masih dalam jendela aktif
+ * (`booking_date >= now - 2 jam`). Reservasi TANPA booking_date (mis. pending
+ * baru yang belum memilih jadwal) tetap dianggap aktif agar pasien tidak
+ * hilang dari pandangan admin. Tanggal korup juga fail-open (lebih aman
+ * menampilkan pasien daripada menyembunyikannya).
+ */
+export function isTreatmentWithinActiveWindow(
+  bookingDate: Date | string | null | undefined,
+  nowMs: number = Date.now()
+): boolean {
+  if (bookingDate === null || bookingDate === undefined) return true;
+  const t = new Date(bookingDate).getTime();
+  if (Number.isNaN(t)) return true;
+  return t >= nowMs - ACTIVE_TREATMENT_WINDOW_MS;
+}
+
+/**
+ * Membangun klausa Prisma `reservations.some` untuk reservasi aktif:
+ *   confirmed | en_route | pending → booking_date null ATAU dalam jendela 2 jam;
+ *   hold                          → booking_date dalam jendela 2 jam.
+ * Paritas dengan `isActiveReservation` + `isTreatmentWithinActiveWindow`.
+ */
+export function activeReservationWhere(nowMs: number = Date.now()): { OR: any[] } {
+  const cutoff = activeTreatmentCutoff(nowMs);
+  const scheduledStatuses = ['confirmed', 'en_route', 'pending'];
+  return {
+    OR: [
+      { status: { in: scheduledStatuses }, booking_date: null },
+      { status: { in: scheduledStatuses }, booking_date: { gte: cutoff } },
+      { status: 'hold', booking_date: { gte: cutoff } },
+    ],
+  };
+}
+
 /**
  * Apakah sebuah reservasi (row apa pun) termasuk reservasi aktif.
- * Paritas persis dengan LiveChatMonitor.hasActiveHold/hasPendingBooking/
- * hasUpcomingBooking: confirmed (kapan pun) | pending (kapan pun) |
- * hold (hanya bila booking_date dalam jendela 2 jam).
+ * Paritas dengan LiveChatMonitor.hasActiveHold/hasPendingBooking/
+ * hasUpcomingBooking: confirmed/en_route/pending hanya bila booking_date masih
+ * dalam jendela 2 jam (atau null); hold hanya bila dalam jendela 2 jam.
  */
 export function isActiveReservation(
   reservation: { status?: string | null; booking_date?: Date | string | null } | null | undefined,
   nowMs: number = Date.now()
 ): boolean {
   if (!reservation || !reservation.status) return false;
-  if (reservation.status === 'confirmed' || reservation.status === 'en_route' || reservation.status === 'pending') return true;
+  if (reservation.status === 'confirmed' || reservation.status === 'en_route' || reservation.status === 'pending') {
+    return isTreatmentWithinActiveWindow(reservation.booking_date, nowMs);
+  }
   if (reservation.status === 'hold') return isHoldActive(reservation.booking_date, nowMs);
   return false;
 }

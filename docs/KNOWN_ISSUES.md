@@ -3,6 +3,66 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 208. [Integritas Penamaan] Kebocoran noise wilayah ke `Customer.name` — gerbang deterministik (2026-10-05, CODE EXECUTED; DATA-FIX PENDING)
+
+- **Gejala:** sapaan follow-up/WhatsApp bocor toponimi ("Halo Bunda Dewy Kec",
+  nama DB "Bunda Ella Kecamatan Waru Kecamatan Waru").
+- **Audit empiris (temuan, bukan klaim plan):**
+  1. Produsen PRIMER yang terlewat: `src/state-machine/machine.ts:402` sengaja
+     membentuk `Bunda ${nama} ${kecamatan}` → lalu disinkronkan Google & balik
+     mengotori DB. Ini akar loop, BUKAN semata Google People API.
+  2. `src/utils/name-sanitizer.ts:172` (lama) regex hanya `kecamatan|kelurahan|
+     desa|kabupaten|kota` — biang `Kec. Sawahan` lolos → terpotong jadi "Dewy Kec".
+  3. `src/scripts/sanitize-customer-names-and-kelurahan.ts:97-110` (lama) guard
+     pasif melewati customer yang kolom kecamatan/kelurahan sudah terisi → nama
+     kotor tak pernah dibersihkan.
+  4. Impor Google tanpa delimiter " - " tidak dipecah (`splitImportedContactName`).
+- **Fix fondasional (gerbang kode deterministik, bukan tambal prompt):**
+  - `stripLocationNoise()` + `sanitizeCustomerNameForStorage()` di
+    `src/utils/name-sanitizer.ts` (satu seam wilayah; prefix "Bunda" & nama utuh
+    dipertahankan untuk DB). Ekspansi singkatan via `expandToponymAbbreviations`
+    (`toponym-normalizer.ts`, closed-class linguistik — bukan hafalan geografis).
+  - Gerbang tulis di `customer.service.ts` (`getOrCreateCustomer`,
+    `updateCustomerName`, `updateCustomer`) — hasil kosong = JANGAN timpa nama lama.
+  - `machine.ts:398` TIDAK lagi menempelkan kecamatan ke nama (kecamatan hidup di
+    kolomnya; formatter Google membacanya dari DB).
+  - `splitImportedContactName` + `classifyImportedAreaTag` menangani "tanpa
+    delimiter" + normalisasi awalan "Kecamatan ".
+- **Test:** `name-sanitizer.test.ts` (+11 adversarial), `google-contacts.test.ts`
+  (+4). Regression gate: **4614 passed / 0 failed**, `tsc` bersih.
+- **OPEN (DATA-FIX, butuh 2-step verification):** 89 baris customer yang SUDAH
+  terlanjur tercemar di DB produksi belum dibersihkan (Fase 5 sengaja TIDAK
+  dieksekusi dari sesi kode). Jalankan dengan urutan:
+  1. Backup: `pg_dump` DB tenant.
+  2. Dry-run: `npx tsx src/scripts/sanitize-customer-names-and-kelurahan.ts --dry-run --limit=700`
+     — review 100% sampel; nama yang seluruhnya noise TIDAK ditulis ulang.
+  3. Apply di server (setelah approval manusia + WARNING WAHA): lihat README.
+  4. Verifikasi: `SELECT id,phone,name,kecamatan FROM customers WHERE name ILIKE '%kec%' OR name ILIKE '%kelurahan%' OR name ILIKE '%kecamatan%';` → 0 baris.
+  - Catatan: klaim "89 customer" pada plan belum diverifikasi dengan dump; angka
+    final diambil dari output dry-run.
+
+## 207. [LiveChat/Reservasi Aktif] Jendela hari-H & filter bidan — kontrak & sisa debt (2026-10-05, EXECUTED)
+
+- **Gejala:** tab Reservasi Aktif menampilkan booking lampau (confirmed/pending
+  dari zaman kapan pun); dropdown "Semua Label" di tab reservasi hampir selalu
+  kosong; badge bidan tak bisa dipasang karena `assigned_staff` tak pernah sampai
+  ke frontend.
+- **Fix:** lihat CHANGELOG 2026-10-05. Semua gerbang berbasis state/domain
+  deterministik (`isTreatmentWithinActiveWindow`, `activeReservationWhere`).
+- **OPEN (tech debt):**
+  - **`en_route` sengaja tidak diquery di `activeReservationWhere()`**: status ini
+    sangat jarang (transient, hanya saat bidan OTW) dan tidak menyentuh jalur UI
+    yang dilaporkan. Bila nanti perlu muncul di tab reservasi, tambahkan
+    `en_route` ke `scheduledStatuses` — sudah aman karena domain `isActiveReservation`
+    & boolean serializer sudah memasukkannya.
+  - **Validasi tenant untuk `staffId`** masih fail-closed by-ID (ID tak dikenal →
+    tak ada hasil), bukan cross-check eksplisit bahwa staf milik tenant pemanggil.
+    Aman untuk kebocoran (query juga difilter `tenant_id` customer), tapi belum
+    ada 403 eksplisit. Kandidat penyempurnaan berikutnya.
+  - **Filter bidan hanya di tab reservasi** — di tab "all"/"unread" dropdown tetap
+    "Semua Label". Bila admin ingin filter bidan lintas tab, perlu desain ulang
+    toolbar (hindari page/tombol baru per Mandat Anti-Bloat).
+
 ## 206. [Geocoding] Halusinasi kecamatan "Demak Surabaya" → tier kandidat Google + guard + verifikasi (2026-10-03, EXECUTED)
 
 - **Gejala:** customer 62816331804 kirim "Daerah Demak surabaya" → bot balas

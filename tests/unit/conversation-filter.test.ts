@@ -8,8 +8,10 @@ import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import {
   ACTIVE_HOLD_WINDOW_MS,
+  activeReservationWhere,
   isActiveReservation,
   isHoldActive,
+  isTreatmentWithinActiveWindow,
 } from '../../src/domain/reservation-status';
 
 /**
@@ -39,18 +41,23 @@ describe('conversationService.listConversations — server-side filter', () => {
     expect(unreadClause.OR).toContainEqual({ messages: { some: { direction: 'INBOUND', read_at: null } } });
   });
 
-  it('filter=reservation pakai status aktif + hold-window 2 jam (paritas frontend)', async () => {
+  it('filter=reservation: confirmed/en_route/pending butuh jendela 2 jam + null; hold butuh jendela', async () => {
     const before = Date.now();
     await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'reservation');
     const where = lastWhere();
     const some = where.customer.reservations.some;
-    expect(some.OR).toContainEqual({ status: 'confirmed' });
-    expect(some.OR).toContainEqual({ status: 'pending' });
-    const hold = some.OR.find((o: any) => o.status === 'hold');
-    expect(hold).toBeTruthy();
-    const cutoff = hold.booking_date.gte.getTime();
+    // Status terjadwal: null ATAU >= now-2jam, memakai status `in`.
+    const scheduledNull = some.OR.find((o: any) => o.booking_date === null && o.status?.in);
+    const scheduledGte = some.OR.find((o: any) => o.booking_date?.gte && o.status?.in);
+    expect(scheduledNull.status.in).toEqual(expect.arrayContaining(['confirmed', 'en_route', 'pending']));
+    expect(scheduledGte.status.in).toEqual(expect.arrayContaining(['confirmed', 'en_route', 'pending']));
+    const cutoff = scheduledGte.booking_date.gte.getTime();
     // cutoff harus ~= now - 2 jam (toleransi 3 detik)
     expect(Math.abs(cutoff - (before - ACTIVE_HOLD_WINDOW_MS))).toBeLessThan(3000);
+    // hold: hanya jendela waktu (tanpa cabang null).
+    const hold = some.OR.find((o: any) => o.status === 'hold');
+    expect(hold).toBeTruthy();
+    expect(hold.booking_date?.gte).toBeTruthy();
   });
 
   it('filter=all TIDAK menambah AND dan tetap memasang isolasi mode', async () => {
@@ -82,11 +89,14 @@ describe('conversationService.listConversations — server-side filter', () => {
 });
 
 describe('liveChatService.getConversationList — pass-through filter', () => {
-  it('meneruskan filter ke conversationService.listConversations', async () => {
+  it('meneruskan filter + staffId ke conversationService.listConversations', async () => {
     const spy = vi.spyOn(conversationService, 'listConversations').mockResolvedValue([] as any);
-    await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
-    expect(spy).toHaveBeenCalledWith(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
-    spy.mockRestore();
+    try {
+      await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'reservation', 'unassigned');
+      expect(spy).toHaveBeenCalledWith(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'reservation', 'unassigned');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -118,9 +128,10 @@ describe('conversationService.listConversations — fallback memory (DB offline)
 });
 
 describe('domain/reservation-status — isActiveReservation & hold expiry', () => {
-  it('confirmed & pending aktif kapan pun', () => {
-    expect(isActiveReservation({ status: 'confirmed', booking_date: null })).toBe(true);
-    expect(isActiveReservation({ status: 'pending', booking_date: null })).toBe(true);
+  it('confirmed & pending aktif bila booking_date null', () => {
+    const now = Date.now();
+    expect(isActiveReservation({ status: 'confirmed', booking_date: null }, now)).toBe(true);
+    expect(isActiveReservation({ status: 'pending', booking_date: null }, now)).toBe(true);
   });
 
   it('hold aktif hanya bila booking_date dalam jendela 2 jam', () => {
@@ -138,5 +149,47 @@ describe('domain/reservation-status — isActiveReservation & hold expiry', () =
     expect(isActiveReservation({ status: 'cancelled' })).toBe(false);
     expect(isActiveReservation({ status: 'hold', booking_date: null })).toBe(false);
     expect(isActiveReservation(null)).toBe(false);
+  });
+});
+
+describe('domain/reservation-status — jendela treatment (hari-H ke depan, gugur setelah 2 jam)', () => {
+  const now = new Date('2026-10-05T09:00:00.000Z').getTime();
+  const at = (h: number, m = 0) => new Date(Date.UTC(2026, 9, 5, h, m)).getTime();
+
+  it('isTreatmentWithinActiveWindow: null & tanggal korup fail-open, lampau gugur', () => {
+    expect(isTreatmentWithinActiveWindow(null, now)).toBe(true);
+    expect(isTreatmentWithinActiveWindow(undefined, now)).toBe(true);
+    expect(isTreatmentWithinActiveWindow('bukan-tanggal', now)).toBe(true);
+    // Kemarin jam 10:00 → jauh lewat jendela → gugur.
+    expect(isTreatmentWithinActiveWindow(new Date('2026-10-04T10:00:00.000Z'), now)).toBe(false);
+    // Hari ini 07:00, sekarang 09:00 → tepat di batas (>= now-2jam) → masih aktif.
+    expect(isTreatmentWithinActiveWindow(new Date(at(7)), now)).toBe(true);
+    // Hari ini 06:59 → lewat 2 jam 1 menit → gugur.
+    expect(isTreatmentWithinActiveWindow(new Date(at(6, 59)), now)).toBe(false);
+    // Nanti sore → aktif.
+    expect(isTreatmentWithinActiveWindow(new Date(at(14)), now)).toBe(true);
+    // Besok / masa depan → aktif.
+    expect(isTreatmentWithinActiveWindow(new Date('2026-10-10T08:00:00.000Z'), now)).toBe(true);
+  });
+
+  it('isActiveReservation: confirmed lampau gugur, confirmed berjalan/depan aktif', () => {
+    expect(isActiveReservation({ status: 'confirmed', booking_date: new Date('2026-10-04T10:00:00.000Z') }, now)).toBe(false);
+    expect(isActiveReservation({ status: 'confirmed', booking_date: new Date(at(8, 30)) }, now)).toBe(true);
+    expect(isActiveReservation({ status: 'confirmed', booking_date: new Date(at(14)) }, now)).toBe(true);
+    expect(isActiveReservation({ status: 'pending', booking_date: new Date('2026-10-04T10:00:00.000Z') }, now)).toBe(false);
+  });
+
+  it('activeReservationWhere: bentuk query Prisma paritas (null | gte untuk status terjadwal, gte untuk hold)', () => {
+    const where = activeReservationWhere(now);
+    expect(where.OR).toHaveLength(3);
+    const scheduledNull = where.OR.find((o) => o.booking_date === null);
+    expect(scheduledNull.status.in).toEqual(expect.arrayContaining(['confirmed', 'en_route', 'pending']));
+    const scheduledGte = where.OR.find((o) => o.booking_date?.gte && o.status?.in);
+    expect(scheduledGte.booking_date.gte.getTime()).toBe(now - ACTIVE_HOLD_WINDOW_MS);
+    const hold = where.OR.find((o) => o.status === 'hold');
+    expect(hold.booking_date.gte.getTime()).toBe(now - ACTIVE_HOLD_WINDOW_MS);
+    // Paritas: setiap kasus yang lolos isActiveReservation harus lolos where juga.
+    expect(isActiveReservation({ status: 'confirmed', booking_date: null }, now)).toBe(true);
+    expect(isActiveReservation({ status: 'hold', booking_date: new Date(now) }, now)).toBe(true);
   });
 });
