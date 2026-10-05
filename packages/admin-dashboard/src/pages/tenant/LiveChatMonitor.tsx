@@ -351,7 +351,18 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
         </span>
         <div className="flex-1 min-w-0 text-[11px] leading-tight">
           <p className="font-bold">Audio gagal dimuat</p>
-          <p className="text-amber-600/80">Format tidak didukung atau file tidak tersedia.</p>
+          <p className="text-amber-600/80">
+            Format tidak didukung atau file tidak tersedia.{' '}
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="underline text-[#008069] hover:text-[#00a884]"
+            >
+              Buka / unduh
+            </a>
+          </p>
         </div>
       </div>
     );

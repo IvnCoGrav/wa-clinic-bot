@@ -199,4 +199,75 @@ describe('enforceAiScopeGate', () => {
     expect(result.action).toBe('pass');
     expect(escalateSpy).not.toHaveBeenCalled();
   });
+
+  // ── T-A/T-B/T-C: jam acuan idle = chat MASUK customer (bukan aktivitas apa pun) ──
+  // Kasus pemicu 6285109356888: follow-up bot (outbound) menyegarkan last_message_at
+  // sehingga percakapan yang sudah tidur 6 hari di mata customer dibaca "aktif" → bot
+  // menjawab. Kolom benar = last_customer_message_at; last_message_at = fallback lawas.
+
+  it('T-A: legacy + RESERVATION_SENT + follow-up bot fresh tapi customer idle 6 hari -> silence (bukan defer)', async () => {
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+    const result = await enforceAiScopeGate({
+      customer: legacyCustomer(),
+      conversation: makeConversation(ConversationState.RESERVATION_SENT, {
+        last_message_at: new Date(Date.now() - 5 * 60 * 1000), // pesan follow-up bot 5 mnt lalu
+        last_customer_message_at: sixDaysAgo, // chat masuk customer terakhir 6 hari lalu
+      }),
+      tenantId: TENANT,
+      content: 'massage terakhir 5 hr yg lalu tgl 30 Sept',
+      waMessageId: 'ta',
+      payloadRaw: {},
+    });
+    expect(result.action).toBe('silence');
+    expect(escalateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('T-B: legacy + RESERVATION_SENT + customer baru chat 5 mnt (mid-flow asli) -> pass', async () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const result = await enforceAiScopeGate({
+      customer: legacyCustomer(),
+      conversation: makeConversation(ConversationState.RESERVATION_SENT, {
+        last_message_at: fiveMinAgo,
+        last_customer_message_at: fiveMinAgo,
+      }),
+      tenantId: TENANT,
+      content: 'iya bun',
+      waMessageId: 'tb',
+      payloadRaw: {},
+    });
+    expect(result.action).toBe('pass');
+    expect(escalateSpy).not.toHaveBeenCalled();
+  });
+
+  it('T-C1: fallback migrasi — last_customer_message_at null + last_message_at fresh -> pass (perilaku lama)', async () => {
+    const result = await enforceAiScopeGate({
+      customer: legacyCustomer(),
+      conversation: makeConversation(ConversationState.RESERVATION_SENT, {
+        last_message_at: new Date(),
+        last_customer_message_at: null,
+      }),
+      tenantId: TENANT,
+      content: 'halo',
+      waMessageId: 'tc1',
+      payloadRaw: {},
+    });
+    expect(result.action).toBe('pass');
+    expect(escalateSpy).not.toHaveBeenCalled();
+  });
+
+  it('T-C2: fallback migrasi — last_customer_message_at null + last_message_at 48 jam -> silence', async () => {
+    const result = await enforceAiScopeGate({
+      customer: legacyCustomer(),
+      conversation: makeConversation(ConversationState.RESERVATION_SENT, {
+        last_message_at: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        last_customer_message_at: null,
+      }),
+      tenantId: TENANT,
+      content: 'halo',
+      waMessageId: 'tc2',
+      payloadRaw: {},
+    });
+    expect(result.action).toBe('silence');
+    expect(escalateSpy).toHaveBeenCalledTimes(1);
+  });
 });

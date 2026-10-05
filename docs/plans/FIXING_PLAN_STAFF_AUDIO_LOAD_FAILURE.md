@@ -1,7 +1,7 @@
 # Fixing Plan — Audio WhatsApp Gagal Dimuat di Portal Staf (Kasus Bunda Kamila)
 
 - **Tanggal:** 2026-10-05
-- **Status:** DRAFT — Menunggu Persetujuan Eksekusi (Human-in-the-Loop)
+- **Status:** EXECUTED (2026-10-05) — Fase 1-2 + 4 + 5 diterapkan; Fase 3 (env WAHA) menunggu restart WAHA. Lihat CHANGELOG & KNOWN_ISSUES #230.
 - **Kasus pemicu:** Nomor WhatsApp 6282244121370 (Bunda Kamila) — Portal Staf (`/admin/staff/today`) diakses via iPhone Safari
 - **Prinsip:** Solusi fondasional (arsip permanen di backend, ekspansi MIME audio, perpanjangan TTL WAHA, resilience audio player Safari/iOS), tanpa tambalan prompt, tanpa regex hafalan, tanpa dependency runtime baru.
 

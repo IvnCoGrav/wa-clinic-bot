@@ -4,6 +4,46 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Fixed: Audio WhatsApp gagal dimuat di Portal Staf (voice note 404 / tak didukung)
+
+- **Akar (multi-layer):** (1) deteksi media berat di webhook memakai `payload.message?.audioMessage`
+  / `payload.type` yang TIDAK ada di payload WAHA NOWEB/Baileys (struktur asli di
+  `_data.message` + `hasMedia`/`media`) → `heavyMediaType` selalu null → audio TIDAK pernah
+  diarsipkan; (2) file WAHA kedaluwarsa 180s → proxy `/api/files` 404; (3) `MIME_MAP` media
+  route tak punya audio; (4) Safari iOS tak decode Ogg Opus `.oga`.
+- **Fixed backend (`src/routes/webhook.route.ts`):** deteksi media berat dari tipe KANONIS
+  (`canonical.type` = `audio`/`voice_note`/`video`/`document`), + unduh via URL langsung
+  (fallback `downloadMedia`). Blok arsip/lampir/SSE yang sudah ada kini benar-benar terpanggil
+  untuk audio.
+- **Fixed backend (`src/routes/media.route.ts`):** `MIME_MAP` + audio (`oga/ogg/opus/mp3/m4a/wav`),
+  video, pdf; header `Accept-Ranges: bytes` untuk streaming/seek.
+- **Infra (`docker-compose.yml`):** `WHATSAPP_FILES_LIFETIME=86400` (defense-in-depth; berlaku
+  setelah WAHA restart — tidak di-restart di deploy ini).
+- **Fixed frontend (`StaffToday.tsx` & `LiveChatMonitor.tsx`):** saat audio gagal diputar,
+  sediakan tautan fallback "Buka / unduh" agar terapis tetap bisa mengakses rekaman.
+- **Fixed (`src/utils/pii-masker.ts`):** pertahankan metadata `isPtt`/`isSticker` pada media.
+- **Test:** `tests/integration/waha-webhook.test.ts` (+1 audio `_data` → `saveInboundMedia`),
+  `tests/unit/media-mime-audio.test.ts` (Content-Type audio/ogg + Accept-Ranges + 401).
+
+#### 2026-10-05 - Fixed: AI Scope Gate — jam acuan idle terkontaminasi pesan bot (Opsi A)
+
+- **Akar (multi-layer):** gerbang `enforceAiScopeGate` sudah benar mendeteksi pasien
+  repeat/legacy, tetapi pengecualian mid-flow (`src/services/ai-scope-gate.service.ts`)
+  mengukur "idle" dari `conversation.last_message_at` = aktivitas apa pun, TERMASUK
+  pesan outbound bot sendiri. Follow-up `NEXT_TREATMENT` menyegarkan `last_message_at`
+  sehingga percakapan yang sudah tidur berhari-hari terbaca "aktif" → bot tetap
+  menjawab pasien yang seharusnya langsung ke CS (kasus 6285109356888 / Bunda Rina).
+- **Fixed:** `isAtResetBoundary` kini mengukur jeda dari `last_customer_message_at`
+  (chat MASUK customer), fallback ke `last_message_at` bila kolom belum terisi
+  (data lawas / WABA lama) — perilaku lama utuh. Tanpa regex/prompt/dependency/migrasi.
+- **Paritas WABA:** `src/routes/waba-webhook.route.ts` kini memanggil
+  `conversationService.updateLastCustomerMessageAt` seperti jalur WAHA, agar kolom
+  terisi juga di WABA (tanpa ini, fallback terus → bug setara tak sembuh).
+- **Test:** `tests/unit/ai-scope-gate.test.ts` +4 (T-A replay Rina merah→hijau,
+  T-B mid-flow asli tetap pass, T-C1/C2 fallback).
+- **Blast radius:** hanya `isAtResetBoundary` (dipakai gerbang ini saja). Rollback =
+  `git revert` satu commit.
+
 #### 2026-10-05 - Fixed: Pengingat NEXT_TREATMENT prematur (Recent/Upcoming-Visit Guard)
 
 - **Masalah (kasus 6285109356888):** customer yang SUDAH punya riwayat beli tetap

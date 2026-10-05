@@ -3,6 +3,34 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 230. [Audio/Media] Sisa batasan pasca-fix audio portal staf (2026-10-05, OPEN — by design)
+
+- **Konteks:** fix audio voice note portal staf (lihat CHANGELOG 2026-10-05). Audio baru
+  kini diarsipkan ke `/media/inbound/...` saat webhook masuk.
+- **230a — `WHATSAPP_FILES_LIFETIME` belum aktif:** env ditambahkan ke `docker-compose.yml`
+  (24 jam) tetapi baru berlaku SETELAH container WAHA di-restart. Deploy fix ini TIDAK
+  me-restart WAHA (menghindari putus sesi WhatsApp). Audio lama (pra-deploy) yang belum
+  terarsip tetap bisa 404 bila file WAHA sudah kedaluwarsa.
+- **230b — Safari/iOS tidak decode Ogg Opus `.oga`:** fallback yang disediakan = tautan
+  "Buka / unduh" (bukan playback in-app). Playback penuh butuh konversi server-side
+  (mis. ffmpeg → mp3/m4a) yang menambah dependency/infra → menunggu Confirmation Gate.
+- **230c — arsip bergantung pada unduhan dari WAHA saat webhook:** bila WAHA sudah
+  menghapus file (180s) sebelum webhook diproses (mis. downtime), arsip gagal. Mitigasi
+  lanjutan: perpanjang lifetime (230a) + retry.
+
+## 229. [AI Scope Gate] Jam acuan idle = chat masuk customer, bukan aktivitas bot (2026-10-05, RESOLVED)
+
+- **Gejala:** pasien repeat/legacy (kasus 6285109356888 / Bunda Rina) dibalas bot
+  padahal seharusnya langsung ke CS. Gerbang AI-scope mendeteksi ineligible dengan
+  benar, tetapi pengecualian mid-flow membatalkan pembisuan.
+- **Akar (two clocks, kelas #67):** `isAtResetBoundary` mengukur idle dari
+  `conversation.last_message_at` (aktivitas apa pun, termasuk pesan outbound
+  bot/follow-up) → follow-up menyegarkan jam → percakapan tidur terbaca aktif.
+- **Resolusi:** acuan idle = `last_customer_message_at` (fallback `last_message_at`);
+  paritas WABA menambahkan `updateLastCustomerMessageAt`. Tanpa regex/prompt/migrasi.
+- **Sisa (di luar cakupan):** isu "two clocks" umum (#67) untuk cooldown worker
+  follow-up belum disentuh; baris Rina terjadwal non-baku (#128) tetap terpisah.
+
 ## 228. [Google Sheets Rekapan] Pondasi Fase 0–4 dieksekusi — sisa debt (2026-10-05, FASE 0–4 EXECUTED)
 
 - **Konteks:** otomatisasi rekapan reservasi ke Google Sheets (16 kolom A–P, tab

@@ -959,34 +959,55 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Keputusan: image tetap sinkron (dipakai Live Chat), media berat TIDAK dirender
       // di Live Chat tapi tetap diarsipkan ke storage supaya tidak hilang. Webhook tidak
       // boleh diblok menunggu unduhan besar (latency ke WAHA) — jalankan tanpa await.
-      const heavyMediaType =
-        (payload.message?.videoMessage && 'video') ||
-        (payload.message?.audioMessage && 'audio') ||
-        (payload.message?.documentMessage && 'document') ||
-        (payload.type === 'video' && 'video') ||
-        (payload.type === 'audio' && 'audio') ||
-        (payload.type === 'document' && 'document') ||
-        null;
+      // Deteksi media berat dari tipe KANONIS (SSOT), BUKAN `payload.message` mentah
+      // yang tidak selalu ada di payload WAHA NOWEB/Baileys (struktur sebenarnya di
+      // `_data.message`) maupun `payload.type`. Tanpa ini audio/voice note TIDAK
+      // pernah diarsipkan → file WAHA (lifetime 180s) hilang → player 404.
+      const isAudioOrVoice = canonical.type === 'audio' || canonical.type === 'voice_note';
+      const isVideoMsg = canonical.type === 'video';
+      const isDocumentMsg = canonical.type === 'document';
+      const heavyMediaType: 'audio' | 'video' | 'document' | null =
+        isAudioOrVoice ? 'audio' : isVideoMsg ? 'video' : isDocumentMsg ? 'document' : null;
       if (heavyMediaType && !isInboundImage) {
         const heavyMime =
+          canonical.media?.mimeType ||
           payload.message?.videoMessage?.mimetype ||
           payload.message?.audioMessage?.mimetype ||
           payload.message?.documentMessage?.mimetype ||
           `application/${heavyMediaType}`;
         const heavyFileName =
+          canonical.media?.fileName ||
           payload.message?.documentMessage?.fileName ||
           payload.message?.documentMessage?.title ||
           pAny._data?.message?.documentMessage?.fileName ||
           pAny.fileName ||
           undefined;
         const heavyCaption =
+          canonical.media?.caption ||
           payload.message?.videoMessage?.caption ||
           pAny.caption ||
           undefined;
         void (async () => {
           try {
             const { mediaService } = await import('../services/media.service');
-            const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+            // Unduh: coba URL langsung dulu (bila ada), fallback ke downloadMedia multi-endpoint.
+            const heavyMediaUrl =
+              canonical.media?.url ||
+              pAny.media?.url ||
+              pAny._data?.mediaUrl ||
+              pAny._data?.deprecatedMms3Url ||
+              null;
+            let buffer: Buffer | null = null;
+            if (heavyMediaUrl) {
+              try {
+                buffer = await wahaClient.fetchUrl(String(heavyMediaUrl));
+              } catch {
+                buffer = null;
+              }
+            }
+            if (!buffer || buffer.length === 0) {
+              buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+            }
             if (buffer && buffer.length > 0) {
               const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType: heavyMime });
               // Lampirkan URL lokal ke record pesan + siarkan SSE agar bubble yang sudah

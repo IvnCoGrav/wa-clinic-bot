@@ -154,6 +154,9 @@ export function sanitizePayloadRawForStaff(payloadRaw: any, opts?: { maskPhone?:
     if (m.fileName !== undefined) filtered.fileName = typeof m.fileName === 'string' ? mask(m.fileName) : m.fileName;
     if (m.caption !== undefined) filtered.caption = typeof m.caption === 'string' ? mask(m.caption) : m.caption;
     if (m.fileSize !== undefined) filtered.fileSize = m.fileSize;
+    // Metadata audio/voice note (non-sensitif) agar pemutar terapis tahu ini PTT.
+    if (m.isPtt !== undefined) filtered.isPtt = !!m.isPtt;
+    if (m.isSticker !== undefined) filtered.isSticker = !!m.isSticker;
     if (Object.keys(filtered).length) allowed.media = filtered;
   }
 

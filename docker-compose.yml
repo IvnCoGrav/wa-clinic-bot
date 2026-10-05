@@ -138,6 +138,10 @@ services:
       # FASE 3R: fullsync chat history dimatikan untuk hemat RAM (efektif setelah waha restart — WAHA untouched di fase ini)
       - WAHA_NOWEB_STORE_FULLSYNC=false
       - WAHA_NOWEB_STORE_FULL_SYNC=false
+      # Lapisan pengaman kedua: perpanjang masa simpan file sementara WAHA dari
+      # default 180s menjadi 24 jam, agar proxy /api/files masih bisa mengambil
+      # audio/video bila arsip backend belum sempat (defense-in-depth).
+      - WHATSAPP_FILES_LIFETIME=86400
       - WAHA_WEBHOOKS=[{"url":"http://host.docker.internal:3000/webhook","events":["message","message.any","session.status"]}]
     extra_hosts:
       - "host.docker.internal:host-gateway"

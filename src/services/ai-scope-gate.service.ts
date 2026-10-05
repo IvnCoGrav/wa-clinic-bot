@@ -44,7 +44,11 @@ function isAtResetBoundary(conversation: any): boolean {
     return true;
   }
   const idleTimeout = parseInt(process.env.IDLE_TIMEOUT_MS || String(IDLE_TIMEOUT_MS_DEFAULT), 10);
-  const last = conversation.last_message_at ? new Date(conversation.last_message_at).getTime() : 0;
+  // Jam acuan = chat MASUK terakhir customer (bukan aktivitas apa pun): pesan keluar
+  // bot (mis. follow-up) tidak boleh "menghidupkan" percakapan tidur. Fallback ke
+  // last_message_at bila kolom belum terisi (WABA lama / data lawas) = perilaku lama.
+  const lastCustomer = (conversation as any).last_customer_message_at ?? conversation.last_message_at;
+  const last = lastCustomer ? new Date(lastCustomer).getTime() : 0;
   if (last > 0 && Date.now() - last > idleTimeout) {
     return true;
   }

@@ -1,7 +1,7 @@
 # Fixing Plan — AI Scope Gate: Mid-Flow Exception Terkontaminasi Pesan Bot (Opsi A)
 
 - **Tanggal:** 2026-10-05
-- **Status:** DRAFT — menunggu persetujuan eksekusi (Human-in-the-Loop)
+- **Status:** EXECUTED (2026-10-05) — Opsi A diterapkan; lihat CHANGELOG & KNOWN_ISSUES #229.
 - **Kasus pemicu:** 6285109356888 (Bunda Rina)
 - **Prinsip:** solusi fondasional (gerbang kode deterministik berbasis state), tanpa tambalan prompt, tanpa regex, tanpa hafalan kalimat, tanpa dependency/migrasi baru.
 

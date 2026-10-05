@@ -9,6 +9,15 @@ const MIME_MAP: Record<string, string> = {
   png: 'image/png',
   webp: 'image/webp',
   gif: 'image/gif',
+  // Audio (voice note WhatsApp = Ogg Opus .oga) + format audio/dokumen lain.
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  opus: 'audio/opus',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  wav: 'audio/wav',
+  mp4: 'video/mp4',
+  pdf: 'application/pdf',
 };
 
 // Folder outbound → publik (dibutuhkan Meta/WABA & WAHA utk mengambil file).
@@ -132,6 +141,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       console.log(`[MEDIA FALLBACK] HD→thumb served: /media/${scope}/${tenant}/${file}`);
     }
     reply.type(MIME_MAP[ext] || 'application/octet-stream');
+    // Streaming audio/video: dukung seek + inisialisasi pemutar (Safari/iOS minta Range).
+    reply.header('Accept-Ranges', 'bytes');
     const stream = fs.createReadStream(finalAbs);
     return reply.send(stream);
   });

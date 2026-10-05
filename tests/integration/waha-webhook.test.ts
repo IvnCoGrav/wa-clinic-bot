@@ -562,4 +562,52 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
     wahaClient.mockLabels.delete(chatId);
     attrSpy.mockRestore();
   });
+
+  it('POST /webhook: voice note/audio WAHA (struktur di _data, tanpa payload.message) tetap diarsipkan via saveInboundMedia', async () => {
+    const { mediaService } = await import('../../src/services/media.service');
+    const saveSpy = vi.spyOn(mediaService, 'saveInboundMedia');
+    const attachSpy = vi
+      .spyOn(messageService, 'attachMediaToMessage')
+      .mockResolvedValue(undefined as any);
+
+    const phone = `628766${Date.now().toString().slice(-6)}`;
+    const waMessageId = `waha_audio_msg_${Date.now()}`;
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: waMessageId,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        hasMedia: true,
+        media: {
+          url: `http://localhost:3000/api/files/default/${waMessageId}.oga`,
+          mimetype: 'audio/ogg; codecs=opus',
+        },
+        // Bentuk WAHA NOWEB/Baileys: struktur pesan di `_data.message`, BUKAN `payload.message`.
+        _data: {
+          notifyName: 'Customer Audio',
+          type: 'ptt',
+          message: { audioMessage: { mimetype: 'audio/ogg; codecs=opus', ptt: true, seconds: 5 } },
+        },
+      },
+    };
+
+    const res = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res.statusCode).toBe(200);
+
+    // Blok media berat (audio) = fire-and-forget → beri kesempatan selesai.
+    await new Promise((r) => setTimeout(r, 500));
+
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const saveArg = saveSpy.mock.calls[0][0];
+    expect(saveArg.tenantId).toBe(DEFAULT_TENANT_ID);
+    expect(String(saveArg.mimeType)).toContain('audio');
+    expect(Buffer.isBuffer(saveArg.buffer)).toBe(true);
+    expect(attachSpy).toHaveBeenCalled();
+
+    saveSpy.mockRestore();
+    attachSpy.mockRestore();
+  });
 });

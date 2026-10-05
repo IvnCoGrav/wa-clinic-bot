@@ -312,7 +312,18 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
       </button>
       <div className="flex-1 min-w-0">
         {hasError ? (
-          <div className="text-[11px] font-semibold text-amber-700">Audio gagal dimuat. Coba minta ulang.</div>
+          <div className="text-[11px] font-semibold text-amber-700">
+            Audio tak bisa diputar di browser ini.{' '}
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="underline text-[#008069] hover:text-[#00a884]"
+            >
+              Buka / unduh
+            </a>
+          </div>
         ) : (
           <>
             <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />

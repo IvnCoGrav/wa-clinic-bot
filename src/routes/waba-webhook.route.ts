@@ -332,6 +332,9 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       // Conversation dibuat lebih awal agar state idle (last_customer_message_at)
       // dapat dipakai guard fuzzy CTWA catcher pada atribusi di bawah.
       let conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+      // Paritas WAHA (webhook.route.ts): catat chat MASUK customer agar gerbang AI-scope
+      // mengukur idle dari chat customer (bukan aktivitas bot/outbound).
+      conversationService.updateLastCustomerMessageAt(conversation.id, tenantId).catch(() => {});
 
       // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
       const attributionResult = await matchAdClickAndFireContact({
