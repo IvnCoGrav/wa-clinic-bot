@@ -8,7 +8,7 @@ function conv(overrides: any = {}) {
     id: 'conv-1',
     customer_id: 'cust-1',
     current_state: 'INITIAL',
-    updated_at: new Date('2026-10-03T08:00:00+07:00'),
+    updated_at: new Date(),
     messages: [],
     customer: {
       id: 'cust-1',
@@ -25,7 +25,8 @@ function conv(overrides: any = {}) {
         {
           id: 'res-1',
           status: 'confirmed',
-          booking_date: new Date('2026-10-03T09:00:00+07:00'),
+          // Jadwal treatment hari ini (relatif) agar lolos jendela aktif 2 jam.
+          booking_date: new Date(Date.now() + 2 * 60 * 60 * 1000),
           treatment_category: 'BABY',
           treatment_detail: 'Kala Baby – Pijat Ceria',
           duration_minutes: 60,
@@ -58,6 +59,58 @@ describe('LiveChat banner payload completeness (F-A)', () => {
     expect(r.customer.preferences.landmark).toBe('depan makam islam');
     expect(r.customer.children).toHaveLength(1);
     expect(r.customer.distance_km).toBe(3.4);
+  });
+
+  it('kontrak staff: assigned_staff_id & assigned_staff diteruskan ke payload', () => {
+    const out: any = serialize(conv());
+    const r = out.activeConfirmedReservation;
+    expect(r.assigned_staff_id).toBe('st-1');
+    expect(r.assigned_staff).toEqual({ id: 'st-1', name: 'Bidan Rina' });
+  });
+
+  it('adversarial jendela: confirmed lampau (>2 jam) TIDAK memicu badge/border', () => {
+    const c = conv();
+    c.customer.reservations = [
+      {
+        id: 'old-1',
+        status: 'confirmed',
+        booking_date: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        treatment_detail: 'Kala Baby',
+      },
+    ];
+    const out: any = serialize(c);
+    expect(out.hasUpcomingBooking).toBe(false);
+    expect(out.activeConfirmedReservation).toBeNull();
+  });
+
+  it('adversarial jendela: confirmed hari-H berjalan (1 jam lalu) TETAP aktif', () => {
+    const c = conv();
+    c.customer.reservations = [
+      {
+        id: 'running-1',
+        status: 'confirmed',
+        booking_date: new Date(Date.now() - 60 * 60 * 1000),
+        treatment_detail: 'Kala Baby',
+      },
+    ];
+    const out: any = serialize(c);
+    expect(out.hasUpcomingBooking).toBe(true);
+    expect(out.activeConfirmedReservation?.id).toBe('running-1');
+  });
+
+  it('adversarial jendela: en_route lampau gugur; pending null tetap aktif', () => {
+    const past = conv();
+    past.customer.reservations = [
+      { id: 'er-old', status: 'en_route', booking_date: new Date(Date.now() - 4 * 60 * 60 * 1000) },
+    ];
+    const outPast: any = serialize(past);
+    expect(outPast.hasUpcomingBooking).toBe(false);
+
+    const nullPending = conv();
+    nullPending.customer.reservations = [{ id: 'p-null', status: 'pending', booking_date: null }];
+    const outNull: any = serialize(nullPending);
+    expect(outNull.hasPendingBooking).toBe(true);
+    expect(outNull.activePendingReservation?.id).toBe('p-null');
   });
 
   it('adversarial: customer ramping (tanpa preferences) tetap punya raw_text untuk seam baca', () => {

@@ -493,6 +493,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  // Filter bidan bertugas (khusus tab Reservasi Aktif): 'all' | 'unassigned' | staffId.
+  const [reservationStaffFilter, setReservationStaffFilter] = useState<string>('all');
+  const reservationStaffFilterRef = useRef<string>('all');
+  useEffect(() => { reservationStaffFilterRef.current = reservationStaffFilter; }, [reservationStaffFilter]);
   // Indikator unread global dari DB (bukan hanya 50 chat pertama) — akurat walau
   // chat unread berada di luar halaman yang termuat.
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
@@ -1195,6 +1199,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFilter]);
 
+  // Ganti filter bidan (tab reservasi) → reset daftar ke halaman pertama.
+  const reservationStaffFilterFirstRenderRef = useRef(true);
+  useEffect(() => {
+    if (reservationStaffFilterFirstRenderRef.current) {
+      reservationStaffFilterFirstRenderRef.current = false;
+      return;
+    }
+    if (sourceFilterRef.current === 'reservation') loadChats(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservationStaffFilter]);
+
   const triggerDebouncedSearch = (q: string) => {
     if (searchDebounceTimerRef.current) {
       clearTimeout(searchDebounceTimerRef.current);
@@ -1238,7 +1253,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       // dari total sesungguhnya di DB, bukan hasil filter 50 item di memori browser.
       const activeSource = sourceFilterRef.current;
       const filterParam = activeSource === 'unread' || activeSource === 'reservation' ? `&filter=${activeSource}` : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}${filterParam}`, {
+      // Filter bidan server-side hanya saat tab reservasi aktif — agar paginasi akurat.
+      const staffParam =
+        activeSource === 'reservation' && reservationStaffFilterRef.current !== 'all'
+          ? `&staffId=${encodeURIComponent(reservationStaffFilterRef.current)}`
+          : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}${filterParam}${staffParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
       });
@@ -3694,10 +3714,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const isUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
       if (!isUnread) return false;
     }
-    // 1. Filter reservasi aktif (pending/hold/terjadwal)
+    // 1. Filter reservasi aktif (pending/hold/terjadwal) — paritas jendela 2 jam.
+    //    Backend sudah memfilter, tapi guard klien ini menahan chat ghost/SSE yang
+    //    terlanjur dimuat (mis. booking yang jam treatment-nya baru lewat jendela).
     if (sourceFilter === 'reservation') {
-      const hasRes = !!(chat as any).hasActiveHold || !!(chat as any).hasUpcomingBooking || !!(chat as any).hasPendingBooking;
-      if (!hasRes) return false;
+      const activeRes =
+        (chat as any).activeConfirmedReservation || (chat as any).activeHoldReservation || (chat as any).activePendingReservation;
+      if (!activeRes) return false;
+      const bd = activeRes.booking_date ? new Date(activeRes.booking_date).getTime() : null;
+      const stale = bd !== null && !Number.isNaN(bd) && bd < Date.now() - 2 * 60 * 60 * 1000;
+      if (stale) return false;
+      // Filter bidan (klien) — paritas dengan query server.
+      if (reservationStaffFilter !== 'all') {
+        const sid = activeRes.assigned_staff_id || (activeRes as any).assigned_staff?.id || null;
+        if (reservationStaffFilter === 'unassigned') {
+          if (sid) return false;
+        } else if (sid !== reservationStaffFilter) {
+          return false;
+        }
+      }
     }
     // 2. Filter label
     if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
@@ -3733,7 +3768,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
 
     return true;
-  }), [chats, labelFilter, searchQuery, sourceFilter, isSearching]);
+  }), [chats, labelFilter, searchQuery, sourceFilter, isSearching, reservationStaffFilter]);
 
   // Hierarki pencarian 2-Tier: kontak (nama/telepon) lebih diprioritaskan daripada
   // kecocokan isi pesan, lalu diurutkan berdasarkan aktivitas terakhir. Hanya menata
@@ -4041,7 +4076,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                   {/* Label Filter Dropdown & Mark All Read (Disampingnya) */}
                   <div className="flex items-center space-x-1 flex-1 min-w-0">
-                    {(isDesktop || mobileView === 'list') && (
+                    {(isDesktop || mobileView === 'list') && sourceFilter === 'reservation' && (
+                      <select
+                        value={reservationStaffFilter}
+                        onChange={(e) => setReservationStaffFilter(e.target.value)}
+                        className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
+                        title="Filter bidan yang bertugas"
+                      >
+                        <option value="all">Semua Bidan</option>
+                        <option value="unassigned">⚠️ Belum Ada Bidan</option>
+                        {reservationStaffList
+                          .filter((s: any) => s.role === 'THERAPIST' && s.active !== false)
+                          .map((s: any) => (
+                            <option key={s.id} value={s.id}>
+                              Bidan {s.name}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {(isDesktop || mobileView === 'list') && sourceFilter !== 'reservation' && (
                       <select
                         value={labelFilter}
                         onChange={(e) => {
@@ -4382,6 +4435,29 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   🕓 Pending
                                 </span>
                               )}
+                              {sourceFilter === 'reservation' &&
+                                (() => {
+                                  const ar =
+                                    (chat as any).activeConfirmedReservation ||
+                                    (chat as any).activeHoldReservation ||
+                                    (chat as any).activePendingReservation;
+                                  const staff = ar?.assigned_staff;
+                                  if (staff?.name) {
+                                    return (
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-violet-300 ring-1 ring-violet-300 dark:ring-violet-500/40 shadow-2xs">
+                                        👩‍⚕️ Bidan {staff.name}
+                                      </span>
+                                    );
+                                  }
+                                  if (ar && !ar.assigned_staff_id) {
+                                    return (
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-500/40 shadow-2xs">
+                                        ⚠️ Belum Ada Bidan
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                             </div>
                           </div>
                         </div>

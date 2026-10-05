@@ -4,7 +4,7 @@ import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON } from './ai-eligibility.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
-import { activeHoldCutoff, isActiveReservation } from '../domain/reservation-status';
+import { activeReservationWhere, isActiveReservation } from '../domain/reservation-status';
 
 const memoryConversations = new Map<string, any>();
 
@@ -154,7 +154,8 @@ export class ConversationService {
     mode: 'all' | 'real' | 'sandbox' = 'all',
     search?: string,
     label?: string,
-    filter: 'all' | 'unread' | 'reservation' = 'all'
+    filter: 'all' | 'unread' | 'reservation' = 'all',
+    staffId?: string
   ): Promise<any[]> {
     try {
       const where: any = {
@@ -172,17 +173,19 @@ export class ConversationService {
       }
 
       // 2. Filter reservasi aktif — paritas semantik dengan LiveChatMonitor:
-      //    confirmed | pending (kapan pun) | hold (hanya booking_date dalam 2 jam).
+      //    confirmed | en_route | pending (hanya bila booking_date null ATAU
+      //    dalam jendela 2 jam) | hold (hanya booking_date dalam jendela 2 jam).
+      //    Satu sumber kebenaran bentuk query ada di domain activeReservationWhere().
       if (filter === 'reservation') {
-        customerWhere.reservations = {
-          some: {
-            OR: [
-              { status: 'confirmed' },
-              { status: 'pending' },
-              { status: 'hold', booking_date: { gte: activeHoldCutoff() } },
-            ],
-          },
-        };
+        const reservationWhere: any = activeReservationWhere();
+        // Filter bidan bertugas (hanya relevan di tab reservasi). Nilai yang
+        // dikenal: 'all' | 'unassigned' | {staffId}. ID tak dikenal → fail-closed
+        // (tidak ada hasil) agar tidak bocor lintas tenant, kecuali 'unassigned'
+        // yang memang khusus assigned_staff_id null.
+        if (staffId && staffId !== 'all') {
+          reservationWhere.assigned_staff_id = staffId === 'unassigned' ? null : staffId;
+        }
+        customerWhere.reservations = { some: reservationWhere };
       }
       if (Object.keys(customerWhere).length > 0) where.customer = customerWhere;
 
@@ -283,7 +286,13 @@ export class ConversationService {
           try {
             const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
             const res: any[] = cust?.reservations || [];
-            if (res.some((r: any) => isActiveReservation(r))) next.push(c);
+            const matchesStaff: (r: any) => boolean =
+              !staffId || staffId === 'all'
+                ? () => true
+                : staffId === 'unassigned'
+                  ? (r: any) => !r.assigned_staff_id
+                  : (r: any) => r.assigned_staff_id === staffId;
+            if (res.some((r: any) => isActiveReservation(r) && matchesStaff(r))) next.push(c);
           } catch {
             // Data customer tak tersedia → fail-closed (jangan tampilkan reservasi palsu).
           }

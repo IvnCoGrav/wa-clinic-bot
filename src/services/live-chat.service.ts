@@ -5,7 +5,7 @@ import { customerService } from './customer.service';
 import { messageService } from './message.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
-import { CONFIRMED_FAMILY_STATUSES } from '../domain/reservation-status';
+import { CONFIRMED_FAMILY_STATUSES, isHoldActive, isTreatmentWithinActiveWindow } from '../domain/reservation-status';
 
 // WABA free-form text hanya diperbolehkan dalam 24 jam sejak pesan inbound terakhir customer
 const WABA_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -167,9 +167,10 @@ export class LiveChatService {
     mode: 'all' | 'real' | 'sandbox' = 'all',
     search?: string,
     label?: string,
-    filter: 'all' | 'unread' | 'reservation' = 'all'
+    filter: 'all' | 'unread' | 'reservation' = 'all',
+    staffId?: string
   ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter);
+    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter, staffId);
     if (conversations.length === 0) {
       return { items: [], hasMore: false };
     }
@@ -1149,17 +1150,16 @@ export class LiveChatService {
     }
 
     const reservations: any[] = c.customer?.reservations || [];
-    const isHoldValid = (r: any) => {
-      if (!r || r.status !== 'hold') return false;
-      if (!r.booking_date) return false;
-      const bd = new Date(r.booking_date).getTime();
-      // Hold kedaluwarsa jika booking_date sudah lewat >2 jam
-      if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
-      return true;
-    };
-    const hasActiveHold = reservations.some((r: any) => isHoldValid(r));
-    const hasUpcomingBooking = reservations.some((r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status));
-    const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
+    // Paritas persis dengan domain: hanya reservasi dalam jendela aktif (hari-H
+    // ke depan; gugur bila jam treatment lewat >2 jam) yang memicu badge/border.
+    // `CONFIRMED_FAMILY_STATUSES` (= confirmed + en_route) didelegasi ke domain.
+    const hasActiveHold = reservations.some((r: any) => r.status === 'hold' && isHoldActive(r.booking_date));
+    const hasUpcomingBooking = reservations.some(
+      (r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status) && isTreatmentWithinActiveWindow(r.booking_date)
+    );
+    const hasPendingBooking = reservations.some(
+      (r: any) => r.status === 'pending' && isTreatmentWithinActiveWindow(r.booking_date)
+    );
 
     const formatReservationItem = (res: any) => {
       if (!res) return null;
@@ -1182,6 +1182,12 @@ export class LiveChatService {
         needs_staff_verification: (res as any).needs_staff_verification ?? false,
         raw_text: (res as any).raw_text || null,
         notes: (res as any).notes || null,
+        // Kontrak staff: teruskan relasi yang sudah di-include di query (anti
+        // "kontrak berbohong" — frontend butuh ini untuk filter bidan bertugas).
+        assigned_staff_id: res.assigned_staff_id ?? null,
+        assigned_staff: res.assigned_staff
+          ? { id: res.assigned_staff.id, name: res.assigned_staff.name }
+          : null,
         customer_id: res.customer_id || c.customer_id,
         otw_sent_at: res.otw_sent_at
           ? (typeof res.otw_sent_at === 'string' ? res.otw_sent_at : (res.otw_sent_at as Date).toISOString())
@@ -1212,9 +1218,13 @@ export class LiveChatService {
       };
     };
 
-    const activeHold = reservations.find((r: any) => isHoldValid(r)) || null;
-    const activeConfirmed = reservations.find((r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status)) || null;
-    const activePending = reservations.find((r: any) => r.status === 'pending') || null;
+    const activeHold = reservations.find((r: any) => r.status === 'hold' && isHoldActive(r.booking_date)) || null;
+    const activeConfirmed =
+      reservations.find(
+        (r: any) => CONFIRMED_FAMILY_STATUSES.includes(r.status) && isTreatmentWithinActiveWindow(r.booking_date)
+      ) || null;
+    const activePending =
+      reservations.find((r: any) => r.status === 'pending' && isTreatmentWithinActiveWindow(r.booking_date)) || null;
 
     const activeHoldReservation = formatReservationItem(activeHold);
     const activeConfirmedReservation = formatReservationItem(activeConfirmed);

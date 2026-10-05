@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 223. [LiveChat/Reservasi Aktif] Jendela hari-H & filter bidan — kontrak & sisa debt (2026-10-05, EXECUTED)
+
+- **Gejala:** tab Reservasi Aktif menampilkan booking lampau (confirmed/pending
+  dari zaman kapan pun); dropdown "Semua Label" di tab reservasi hampir selalu
+  kosong; badge bidan tak bisa dipasang karena `assigned_staff` tak pernah sampai
+  ke frontend.
+- **Fix:** lihat CHANGELOG 2026-10-05. Semua gerbang berbasis state/domain
+  deterministik (`isTreatmentWithinActiveWindow`, `activeReservationWhere`).
+- **OPEN (tech debt):**
+  - **`en_route` sengaja tidak diquery di `activeReservationWhere()`**: status ini
+    sangat jarang (transient, hanya saat bidan OTW) dan tidak menyentuh jalur UI
+    yang dilaporkan. Bila nanti perlu muncul di tab reservasi, tambahkan
+    `en_route` ke `scheduledStatuses` — sudah aman karena domain `isActiveReservation`
+    & boolean serializer sudah memasukkannya.
+  - **Validasi tenant untuk `staffId`** masih fail-closed by-ID (ID tak dikenal →
+    tak ada hasil), bukan cross-check eksplisit bahwa staf milik tenant pemanggil.
+    Aman untuk kebocoran (query juga difilter `tenant_id` customer), tapi belum
+    ada 403 eksplisit. Kandidat penyempurnaan berikutnya.
+  - **Filter bidan hanya di tab reservasi** — di tab "all"/"unread" dropdown tetap
+    "Semua Label". Bila admin ingin filter bidan lintas tab, perlu desain ulang
+    toolbar (hindari page/tombol baru per Mandat Anti-Bloat).
+
 ## 222. [Turn-0] Batasan balasan statis: Fase 5 trimmer ditunda + free-form phrasing (2026-10-04, OPEN)
 
 - **Konteks:** revisi plan "Static Template Turn-0" (Fase 0–3 diimplementasikan;

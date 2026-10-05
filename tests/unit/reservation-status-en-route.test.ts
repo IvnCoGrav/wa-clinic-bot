@@ -21,9 +21,12 @@ describe('domain/reservation-status — en_route', () => {
     expect(isActiveReservationStatus('en_route')).toBe(true);
   });
 
-  it('en_route aktif kapan pun (tanpa syarat booking_date)', () => {
-    expect(isActiveReservation({ status: 'en_route', booking_date: null })).toBe(true);
-    expect(isActiveReservation({ status: 'en_route', booking_date: new Date('2020-01-01') })).toBe(true);
+  it('en_route aktif bila booking_date null atau dalam jendela 2 jam (bukan lampau)', () => {
+    const now = Date.now();
+    expect(isActiveReservation({ status: 'en_route', booking_date: null }, now)).toBe(true);
+    expect(isActiveReservation({ status: 'en_route', booking_date: new Date(now - 30 * 60 * 1000) }, now)).toBe(true);
+    // Booking 2020 sudah jauh lewat jendela 2 jam → tidak lagi aktif.
+    expect(isActiveReservation({ status: 'en_route', booking_date: new Date('2020-01-01') }, now)).toBe(false);
   });
 
   it('en_route setara confirmed untuk riwayat kunjungan', () => {

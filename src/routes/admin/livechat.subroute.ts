@@ -83,7 +83,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations',
     async (
       request: FastifyRequest<{
-        Querystring: { limit?: string; offset?: string; mode?: string; search?: string; label?: string; filter?: string };
+        Querystring: { limit?: string; offset?: string; mode?: string; search?: string; label?: string; filter?: string; staffId?: string };
       }>,
       reply
     ) => {
@@ -100,6 +100,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const filterRaw = request.query.filter?.trim();
         const filter: 'all' | 'unread' | 'reservation' =
           filterRaw === 'unread' || filterRaw === 'reservation' ? filterRaw : 'all';
+        // Filter bidan bertugas — hanya relevan untuk filter=reservation.
+        const staffId = filter === 'reservation' ? request.query.staffId?.trim() : undefined;
         const effectiveMode: 'all' | 'real' | 'sandbox' =
           process.env.NODE_ENV === 'production' && mode === 'all' ? 'real' : mode;
 
@@ -115,7 +117,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any, filter);
+        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any, filter, staffId);
         const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, filter, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
