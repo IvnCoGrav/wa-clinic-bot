@@ -809,7 +809,7 @@ export class FollowUpService {
    * Status QUEUED (langsung masuk antrean kirim), konsisten dgn NO_PURCHASE — keputusan
    * pemilik: repeat-order pasien selesai auto-kirim tanpa perlu approval admin per-baris.
    */
-  public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+  public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID, reservationId?: string): Promise<void> {
     try {
     // 1. Skip kontak sandbox/dummy/bypass (best-effort, offline-safe).
     //    Keberadaan customer TIDAK menjadi gerbang: integritas FK ditegakkan DB dan
@@ -842,6 +842,7 @@ export class FollowUpService {
       let created = 0;
       let skippedPast = 0;
       let skippedExists = 0;
+      let reAnchored = 0;
 
       for (const stage of [1, 2, 3] as const) {
         const scheduledAt = this.computeNextTreatmentAtWib0900(bDate, stage);
@@ -851,7 +852,7 @@ export class FollowUpService {
         }
 
         // Per-stage idempotensi: cek PENDING/QUEUED/SENT agar tidak recreate stage yang sudah ada/terkirim
-        let exists = null;
+        let exists: any = null;
         try {
           exists = await prisma.followUp?.findFirst?.({
             where: {
@@ -864,6 +865,51 @@ export class FollowUpService {
           });
         } catch (_) {}
         if (exists) {
+          // Re-anchor (fondasional): baris aktif PENDING/QUEUED yang masih terjadwal di
+          // tanggal lama akibat anchor kunjungan sebelumnya WAJIB digeser ke tanggal
+          // kunjungan terbaru. Ini state-driven (status + scheduled_at), bukan tambal
+          // prompt. SENT bersifat terminal historis — tidak pernah digeser/dikirim ulang.
+          const existsStatus = String(exists.status || '').toUpperCase();
+          if (existsStatus === 'SENT') {
+            skippedExists++;
+            continue;
+          }
+          if ((existsStatus === 'PENDING' || existsStatus === 'QUEUED')) {
+            const oldAt = exists.scheduled_at ? new Date(exists.scheduled_at) : null;
+            const needsReAnchor =
+              !oldAt ||
+              isNaN(oldAt.getTime()) ||
+              oldAt.getTime() !== scheduledAt.getTime() ||
+              (!!reservationId && exists.reservation_id !== reservationId);
+            if (needsReAnchor) {
+              const baseData: any = { scheduled_at: scheduledAt };
+              if (reservationId) baseData.reservation_id = reservationId;
+              try {
+                await prisma.followUp?.update?.({
+                  where: { id: exists.id },
+                  data: baseData,
+                });
+                reAnchored++;
+              } catch (updErr: any) {
+                // Bila bentrok @@unique([tenant_id, reservation_id, type, stage]) saat
+                // menautkan reservation_id, tetap selamatkan tanggal (update scheduled_at saja).
+                if (reservationId) {
+                  try {
+                    await prisma.followUp?.update?.({
+                      where: { id: exists.id },
+                      data: { scheduled_at: scheduledAt },
+                    });
+                    reAnchored++;
+                  } catch (_) {}
+                } else {
+                  console.warn('[FollowUp Service] Re-anchor NEXT_TREATMENT failed:', updErr?.message || updErr);
+                }
+              }
+            } else {
+              skippedExists++;
+            }
+            continue;
+          }
           skippedExists++;
           continue;
         }
@@ -873,6 +919,7 @@ export class FollowUpService {
             data: {
               tenant_id: tenantId,
               customer_id: customerId,
+              ...(reservationId ? { reservation_id: reservationId } : {}),
               type: 'NEXT_TREATMENT',
               stage,
               scheduled_at: scheduledAt,
@@ -884,7 +931,9 @@ export class FollowUpService {
       }
 
       if (created > 0) {
-        console.log(`[FollowUp Service] Queued ${created} NEXT_TREATMENT follow-up(s) for customer: ${customerId} (skipped ${skippedPast} past, ${skippedExists} existing).`);
+        console.log(`[FollowUp Service] Queued ${created} NEXT_TREATMENT follow-up(s) for customer: ${customerId} (skipped ${skippedPast} past, ${skippedExists} existing, re-anchored ${reAnchored}).`);
+      } else if (reAnchored > 0) {
+        console.log(`[FollowUp Service] Re-anchored ${reAnchored} NEXT_TREATMENT follow-up(s) to new booking date for customer: ${customerId}.`);
       } else if (skippedExists > 0) {
         console.log(`[FollowUp Service] NEXT_TREATMENT follow-ups already exist for customer: ${customerId}. Skipping (idempotent per-stage).`);
       }
@@ -939,21 +988,33 @@ export class FollowUpService {
 
       const customerIds = Array.from(maxByCustomer.keys());
 
-      // 2. Exclude yang punya reservasi aktif masa depan (pending/confirmed/hold, booking_date >= now)
-      let activeFuture: Array<{ customer_id: string }> = [];
+      // 2. Exclude customer yang punya reservasi belum-selesai (pending/confirmed/en_route/hold)
+      //    yang lebih baru dari completed terakhir — termasuk yang booking_date-nya di MASA LALU.
+      //    Alasan: kunjungan baru yang belum ditandai 'completed' berarti anchor follow-up
+      //    belum sah; menjadwalkan dari completed kuno akan menghasilkan jadwal prematur.
+      //    `cancelled` tidak dihitung (bukan kunjungan nyata).
+      let uncompleted: Array<{ customer_id: string; booking_date: Date | null }> = [];
       try {
-        activeFuture = (await prisma.reservation.findMany({
+        uncompleted = (await prisma.reservation.findMany({
           where: {
             tenant_id: tenantId,
             customer_id: { in: customerIds },
             status: { in: ['pending', 'confirmed', 'en_route', 'hold'] },
-            booking_date: { gte: now },
           },
-          select: { customer_id: true },
+          select: { customer_id: true, booking_date: true },
         })) as any;
       } catch {}
-      const hasActiveFuture = new Set((activeFuture || []).map((r) => r.customer_id));
-      const candidates = customerIds.filter((id) => !hasActiveFuture.has(id));
+      const hasNewerUncompleted = new Set<string>();
+      for (const r of uncompleted || []) {
+        if (!r.customer_id || !r.booking_date) continue;
+        const d = new Date(r.booking_date);
+        if (isNaN(d.getTime())) continue;
+        const maxCompleted = maxByCustomer.get(r.customer_id);
+        if (!maxCompleted || d.getTime() > maxCompleted.getTime()) {
+          hasNewerUncompleted.add(r.customer_id);
+        }
+      }
+      const candidates = customerIds.filter((id) => !hasNewerUncompleted.has(id));
       if (candidates.length === 0) return empty;
 
       // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED (SENT tidak dihitung â€” per-stage guard akan skip stage SENT)

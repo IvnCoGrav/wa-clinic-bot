@@ -583,6 +583,149 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(CANCEL_REASON.EXPIRED_PENDING).toBeTruthy();
     expect(CANCEL_REASON.NON_SERIOUS_STAGE3).toBeTruthy();
   });
+
+  // ── Re-anchor NEXT_TREATMENT (fondasional: state-driven, bukan tambal prompt) ──
+  // Booking jauh di masa depan agar deterministik lintas-waktu (tidak bergantung jam mesin).
+  const FUTURE_BOOKING = new Date('2030-01-15T10:00:00+07:00'); // stage1 → 2030-02-15 02:00 UTC
+  const STAGE1_TARGET = new Date('2030-02-15T02:00:00.000Z');
+
+  it('24. re-anchor: baris QUEUED prematur digeser ke tanggal kunjungan baru + reservation_id ditautkan', async () => {
+    const phone = `62893${Date.now()}reanchor`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Reanchor', DEFAULT_TENANT_ID);
+
+    // stage1 → baris lama prematur (2030-01-25, hanya 10 hari dari booking); stage2/3 → null
+    const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
+    findFirstSpy
+      .mockResolvedValueOnce({
+        id: 'fu-stage1-old',
+        status: 'QUEUED',
+        scheduled_at: new Date('2030-01-25T02:00:00.000Z'),
+        reservation_id: null,
+      } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, FUTURE_BOOKING, DEFAULT_TENANT_ID, 'res-new-1');
+
+    // Dua stage baru dibuat (2,3); stage 1 diperbarui (bukan dibuat ulang)
+    const nextCreates = createSpy.mock.calls.filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
+    expect(nextCreates.map((c: any) => c[0].data.stage).sort()).toEqual([2, 3]);
+
+    const stage1Update = updateSpy.mock.calls.find((c: any) => c[0]?.where?.id === 'fu-stage1-old');
+    expect(stage1Update).toBeDefined();
+    expect(new Date(stage1Update![0].data.scheduled_at).toISOString()).toBe(STAGE1_TARGET.toISOString());
+    expect(stage1Update![0].data.reservation_id).toBe('res-new-1');
+  });
+
+  it('25. re-anchor: baris PENDING prematur juga digeser', async () => {
+    const phone = `62893${Date.now()}reanchor2`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Reanchor2', DEFAULT_TENANT_ID);
+
+    vi.spyOn(prisma.followUp, 'findFirst')
+      .mockResolvedValueOnce({
+        id: 'fu-pending-old',
+        status: 'PENDING',
+        scheduled_at: new Date('2030-01-20T02:00:00.000Z'),
+        reservation_id: null,
+      } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, FUTURE_BOOKING, DEFAULT_TENANT_ID);
+
+    const upd = updateSpy.mock.calls.find((c: any) => c[0]?.where?.id === 'fu-pending-old');
+    expect(upd).toBeDefined();
+    expect(new Date(upd![0].data.scheduled_at).toISOString()).toBe(STAGE1_TARGET.toISOString());
+  });
+
+  it('26. re-anchor: status SENT TIDAK pernah digeser (terminal historis)', async () => {
+    const phone = `62893${Date.now()}sentkeep`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda SentKeep', DEFAULT_TENANT_ID);
+
+    vi.spyOn(prisma.followUp, 'findFirst')
+      .mockResolvedValueOnce({ id: 'fu-sent-old', status: 'SENT', scheduled_at: new Date('2030-01-10T02:00:00.000Z') } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, FUTURE_BOOKING, DEFAULT_TENANT_ID, 'res-new-2');
+
+    const sentUpdate = updateSpy.mock.calls.find((c: any) => c[0]?.where?.id === 'fu-sent-old');
+    expect(sentUpdate).toBeUndefined();
+  });
+
+  it('27. re-anchor: tanggal sudah sesuai → TIDAK ada update (idempoten)', async () => {
+    const phone = `62893${Date.now()}noop`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Noop', DEFAULT_TENANT_ID);
+
+    vi.spyOn(prisma.followUp, 'findFirst')
+      .mockResolvedValueOnce({ id: 'fu-stage1-same', status: 'QUEUED', scheduled_at: STAGE1_TARGET, reservation_id: 'res-same' } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, FUTURE_BOOKING, DEFAULT_TENANT_ID, 'res-same');
+
+    const sameUpdate = updateSpy.mock.calls.find((c: any) => c[0]?.where?.id === 'fu-stage1-same');
+    expect(sameUpdate).toBeUndefined();
+  });
+
+  it('28. reconciler: customer dengan reservasi belum-selesai yang LEBIH BARU tidak dijadwalkan dari completed kuno', async () => {
+    const oldCompleted = new Date('2026-06-01T10:00:00+07:00');
+    const newerUncompletedPast = new Date('2026-09-20T10:00:00+07:00'); // confirmed, booking_date lampau
+
+    vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args: any) => {
+      const status = args?.where?.status;
+      if (status === 'completed') {
+        return [{ customer_id: 'cust-kuno', booking_date: oldCompleted }] as any;
+      }
+      // query uncompleted (status: { in: [...] })
+      return [{ customer_id: 'cust-kuno', booking_date: newerUncompletedPast }] as any;
+    });
+    const nextSpy = vi.spyOn(followUpService, 'createNextTreatmentFollowUps').mockResolvedValue(undefined as any);
+
+    const res = await followUpService.reconcileOrphanedCompletedFollowUps(DEFAULT_TENANT_ID);
+
+    expect(res.reconciledCount).toBe(0);
+    expect(nextSpy).not.toHaveBeenCalled();
+  });
+
+  it('29. re-anchor: bentrok unique saat taut reservation_id → tanggal tetap diselamatkan', async () => {
+    const phone = `62893${Date.now()}collide`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Collide', DEFAULT_TENANT_ID);
+
+    vi.spyOn(prisma.followUp, 'findFirst')
+      .mockResolvedValueOnce({
+        id: 'fu-collide',
+        status: 'QUEUED',
+        scheduled_at: new Date('2030-01-01T02:00:00.000Z'),
+        reservation_id: null,
+      } as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(null as any);
+
+    // Panggilan update pertama (taut reservation_id) gagal P2002; kedua (scheduled_at saja) sukses.
+    const updateSpy = vi
+      .spyOn(prisma.followUp, 'update')
+      .mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }) as any)
+      .mockResolvedValueOnce({} as any);
+    vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, FUTURE_BOOKING, DEFAULT_TENANT_ID, 'res-collide');
+
+    const collideUpdates = updateSpy.mock.calls.filter((c: any) => c[0]?.where?.id === 'fu-collide');
+    // Dua percobaan: pertama dengan reservation_id, kedua fallback scheduled_at saja.
+    expect(collideUpdates.length).toBe(2);
+    expect(collideUpdates[1][0].data.reservation_id).toBeUndefined();
+    expect(new Date(collideUpdates[1][0].data.scheduled_at).toISOString()).toBe(STAGE1_TARGET.toISOString());
+  });
 });
 
 

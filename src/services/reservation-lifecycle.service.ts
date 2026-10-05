@@ -255,7 +255,7 @@ export class ReservationLifecycleService {
     // 2. NEXT_TREATMENT (per-stage guard + WIB + SENT-aware ada di follow-up.service)
     try {
       const { followUpService } = await import('./follow-up.service');
-      await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId);
+      await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId, reservationId);
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted createNextTreatmentFollowUps failed:', err?.message || err);
     }
