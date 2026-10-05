@@ -56,6 +56,11 @@ export class QueueService {
   private memoryProcessing: Set<string> = new Set();
   // BullMQ in-flight per-phone guard (FIFO per customer, cegah salip saat typing delay)
   private bullProcessing: Set<string> = new Set();
+  // Phase 4 (audit 6285743192813): penanda turn TERBARU per phone. Saat pesan
+  // baru masuk ketika turn lama masih diproses (typing delay), turn lama
+  // menjadi SUPERSEDED → `shouldAbort` membatalkan draf usang sebelum bubble
+  // terkirim, antrean memproses pesan terbaru dengan konteks lengkap.
+  private latestTurnByPhone: Map<string, string> = new Map();
 
 
   constructor() {
@@ -289,8 +294,30 @@ export class QueueService {
   /**
    * Menambahkan pesan masuk ke dalam antrian pemrosesan
    */
+  /**
+   * Phase 4: tandai turn TERBARU untuk sebuah phone. Dipanggil setiap enqueue,
+   * sehingga turn yang sedang diproses bisa dideteksi "usang" bila pesan lebih
+   * baru sudah masuk antrean.
+   */
+  public markLatestTurn(phone: string, turnId?: string): void {
+    if (!phone || !turnId) return;
+    this.latestTurnByPhone.set(phone, turnId);
+  }
+
+  /**
+   * Phase 4: true bila turn saat ini sudah disalip pesan yang lebih baru
+   * (dipakai `shouldAbort` di state machine untuk membatalkan draf usang).
+   */
+  public isTurnSuperseded(phone: string, turnId?: string): boolean {
+    if (!phone || !turnId) return false;
+    const latest = this.latestTurnByPhone.get(phone);
+    return Boolean(latest && latest !== turnId);
+  }
+
   public async enqueueMessage(payload: QueuePayload): Promise<void> {
     const phone = payload.phone || payload.customerId;
+    // Phase 4: catat turn terbaru SEBELUM proses, agar turn in-flight tahu ia usang.
+    this.markLatestTurn(phone, payload.turnId);
 
     if (this.redisEnabled) {
       try {

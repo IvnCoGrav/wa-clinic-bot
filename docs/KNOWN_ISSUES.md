@@ -3,6 +3,121 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 234. [FollowUp/Audit 32 Temuan] Sisa & Keputusan Pasca-Remediasi Tahap 1-5 (2026-10-06, OPEN - sebagian by design)
+
+Remediasi fondasional engine follow-up (Tahap 1-5) sudah dieksekusi. Item yang
+SENGAJA ditunda / butuh keputusan manusia sebelum diaktifkan penuh:
+
+- **H2 AI Scope Gate (BUTUH KEPUTUSAN BISNIS):** saat repeat customer membalas
+  follow-up outbound, `enforceAiScopeGate` di `src/services/ai-scope-gate.service.ts`
+  masih bisa membungkam bot tanpa sapaan. Usulan (belum dieksekusi): bila inbound
+  terjadi <= 24 jam setelah outbound follow-up, beri 1 balasan pembuka ramah /
+  arahkan ke CS. Mengubah perilaku consent/anti-spam -> wajib setuju pemilik dulu.
+- **Migrasi `20261006000000_fix_followup_unique_and_indexes` BELUM di-deploy:**
+  berisi dedup data live + trigger `follow_ups_active_slot_key_trg`. Wajib dijalankan
+  `npx prisma migrate deploy` di server (setelah verifikasi drift kosong) agar V1 aktif.
+  Jalur offline/testing (mock Prisma) TIDAK menegakkan trigger ini.
+- **M7 (REMINDER_H1/REVIEW_H1) default OFF:** baris tidak lagi dibuat (anti zombie),
+  tetapi item PENDING lama di DB perlu dibersihkan/di-expire. Aktifkan kembali via
+  `FOLLOWUP_CREATE_REMINDER_REVIEW='true'`. Butuh konfirmasi kebijakan jika admin
+  mengandalkan tombol kirim manual untuk reminder/review.
+- **Env baru (global .env, BELUM tenant-aware):** `FOLLOWUP_MAX_PER_DAY`,
+  `FOLLOWUP_CLAIM_LEASE_MS`, `WABA_SEND_THROTTLE_BASE_MS`,
+  `LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS`, `NO_PURCHASE_LOST_GRACE_DAYS`,
+  `FOLLOWUP_CREATE_REMINDER_REVIEW`. Untuk SaaS sejati, pindahkan ke kolom per-tenant
+  (Confirmation Gate: butuh skema + UI).
+- **H9 koreksi:** `src/services/broadcast-queue.service.ts` (BullMQ) TERBUKTI MASIH
+  DIPAKAI `settings.subroute.ts` (+ test). BUKAN dead-code; TIDAK dihapus. Hanya
+  `sendMorningReminders` & `sendYesterdayReviewsAndScheduleNextFollowups` yang dihapus.
+- **Pre-existing failures (BUKAN regresi remediasi ini):** `tests/unit/live-chat-enroute-status.test.ts`
+  gagal 5 test pada baseline (sebelum perubahan) — dicatat agar tidak tertukar.
+
+## 233. [Kecerdasan/Latensi] Prompt Raksasa & Latensi Produksi (2026-10-05, OPEN — program stabilisasi Fase 0/1)
+
+Baseline program "chatbot lebih cerdas" (read-only, 1.693 log lokal + `llm_audit_logs` produksi):
+
+- **Prompt membengkak (terukur):** `V3_GENERATION` systemPrompt rata-rata **45.000 char**
+  (p95 51.083, maks 52.517); riwayat hanya 2.211 char (4 pesan) → **98% prompt = instruksi**.
+  `PersonaPromptBuilder.buildSystemPrompt` = **48.614 char** (follow-up). `NLU_EXTRACTOR` konstan
+  15.473 char. Rasio token prompt:jawaban = **60:1**.
+- **Latensi produksi (14–30 hari):** `CHAT_REPLY` avg 36,2 dtk / p95 **361 dtk** / 8 completion=0;
+  `SLOT_EXTRACTOR` avg 24,2 dtk / p95 361 dtk / 15 completion=0; `INTENT_CLASSIFICATION`
+  p90 26 detik (130 panggilan). Tren memburuk sejak 2026-09-22. Error: 22× HTTP 400, 2× 401, 1× 403.
+- **Sensus guardrail (log lokal):** TOOL_MASKING 117, PRONOUN 7, FACTUAL 6, AGE 2, NUMERIC 2,
+  NOMINAL_AGE 1; **0 tembakan**: SHARELOC, VISIT_TIME, REPLY_CONTRACT, NEWBORN_AGE, AMNESIA,
+  GREETING_STATIC → kandidat pangkas Fase 3.
+- **Harness ujian emas (baru):** `tests/eval/golden-conversations.eval.test.ts` — 7/7 skenario
+  deterministik + pagar anggaran prompt (jalur slim dikunci <34.000 char EARLY). Gerbang regresi Fase 2/3.
+- **Fase 2 (DONE, 2026-10-05):** Call 2 dirakit `slim:true` + `derivePhaseFocus`; mandat medis
+  (`MEDICAL_SOP_MANDATE_BLOCK`) selalu dipertahankan. Prompt 48.614 → **32.342 char** (EARLY, −33%),
+  41.746 (CONSULT, −14%), 43.370 (CONSULT+SCHED, −11%). **Sisa OPEN:** blok `NEGATIVE CONSTRAINTS`
+  (~9k char) belum di-prune state-gated → target ≥30% di fase CONSULT/SCHED belum tercapai; perlu
+  Fase 2b (pruning negatif per-state) dengan uji keselamatan. Konflik prompt-cache (prefix berubah
+  per-fase EARLY/CONSULT/SCHED) belum diukur dampak cache-hit-nya.
+- **Catatan:** log `logs/llm-*.jsonl` lokal mayoritas SANDBA, dan `logs/` produksi tidak dipersist
+  (#194d) → baseline produksi hanya via `llm_audit_logs` DB. Temuan "penulis paralel" terkonfirmasi
+  kembali: `CHANGELOG.md` tertimpa proses lain saat Fase 2 (entri ditulis ulang).
+- **Fase 2b (DITUNDA — butuh data produksi):** blok `NEGATIVE CONSTRAINTS` (~9k) berisi aturan
+  keselamatan klinis + anti-injeksi; memangkas per-state tanpa jendela observasi produksi
+  melanggar mandat "verifikasi sebelum eksekusi". Jangan potong buta.
+- **Fase 3 (DITUNDA — bukti belum cukup):** 6 guardrail 0-tembakan di `app-*.log` lokal, TAPI
+  log lokal mayoritas sandbox & `logs/` server tidak persisten → bukti belum sahih untuk menghapus.
+  Syarat lanjut: kumpulkan jendela log produksi ≥30 hari (`llm_audit_logs` + persist `logs/` server).
+- **Fase 4 (DITUNDA — keputusan biaya user):** pilot `CHAT_REPLY_DEEP`/reasoning untuk giliran sulit
+  butuh persetujuan biaya + gerbang provider (pelajaran insiden `thinking` salah provider).
+- **Fase 5 (DONE sebagian):** pagar anggaran prompt + ujian emas jadi gerbang deploy; moratorium
+  aturan baru (wajib mempensiunkan aturan lama) dicatat sebagai kebijakan kerja.
+
+## 232. [Audit 6285743192813] Sisa Batasan Pasca-Fix 5 Akar (2026-10-05, OPEN — by design)
+
+Konteks: audit percakapan 6285743192813 (mutilasi usia, hijack keranjang tanpa
+komitmen, tabrakan balasan, CTA jadwal prematur, CTWA fast-gate). Fix fondasional
+dicatat di CHANGELOG 2026-10-05. Sisa batasan:
+
+- **232a — Deteksi konsultatif tanpa '?' (OPEN, by design):** `hasInterrogativeIntent`
+  menangkap akar interogatif gramatikal + ragam ejaan (gimana/gmn/gmna/bgmn/kapan/apa/dll).
+  Pesan DEKLARATIF tanpa penanda tanya dan tanpa verba komitmen (mis. "pulih ceria buat
+  bayi baru lahir") MASIH dianggap sebutan layanan sah (bukan komitmen) agar alur
+  komitmen lama ("saya mau yang X", verdict COMMITTED) tidak regresi. Bila muncul hijack
+  pada kalimat deklaratif murni, tangani di State Machine (verdict `lastCommitment`),
+  BUKAN menambah daftar frasa.
+- **232b — Supersede in-flight lintas-instance (OPEN, terbatas):** `latestTurnByPhone`
+  hanya di memori proses (`queue.service.ts`). Multi-instance/restart bisa kehilangan
+  penanda → supersede tidak aktif (fail-open, hanya kembali ke perilaku lama). Registry
+  lintas-instance butuh Redis/DB (infra) → ditunda, tanpa dependency baru.
+- **232c — Supersede vs bubble terkirim (OPEN, by design):** jika pesan baru tiba SETELAH
+  bubble pertama pesan lama terkirim, pembatalan sisa bubble bisa meninggalkan balasan
+  parsial. Ini trade-off yang diterima (lebih baik daripada dua balasan penuh bertabrakan);
+  jalur pesan-baru-saat-typing (kasus audit) sudah tertangani.
+- **232d — Uji `live-chat-enroute-status.test.ts` GAGAL (5 test) — PRE-EXISTING, di luar
+  batch ini:** terverifikasi gagal juga tanpa perubahan batch ini (di-stash). Berasal dari
+  changeset working-tree lain (serialisasi reservasi `en_route`). Perlu ditindaklanjuti
+  pemilik changeset terkait, JANGAN di-fix buta di sini.
+
+## 231. [Serobot Admin] Audit Horizontal/Vertikal/Kolateral + Sisa Batasan (2026-10-05, RESOLVED sebagian)
+
+- **Konteks:** audit menyeluruh risiko "bot menyerobot admin" (horizontal, vertikal,
+  kolateral). Inti anti-serobot (`is_human_handling` + guard antrean + state machine +
+  `shouldAbort`) sudah fondasional. Lubang ditemukan & diperbaiki (lihat CHANGELOG
+  2026-10-05 "Serobot Admin vs Bot"): V-A (balasan terminal tak terkirim), V-B
+  (`previous_state` teracuni), F3 (proaktif nyela), F4.1/4.3 (pintu release tunggal),
+  F4.2 (presedensi `FORCE_ON`), F4.4 (gerbang diam WABA), F5 (ledger `wa_message_id`).
+- **231a — Saklar `manual_reply_escalates=false` (OPEN, tech debt):** bila tenant mematikan
+  opsi ini, balasan admin tidak menyalakan `is_human_handling` → bot & admin bisa menjawab
+  bersamaan. Belum ada "jendela diam" wajib + banner dashboard. Menunggu keputusan produk
+  (Opsi A per-tenant vs banner). Saat ini default `true` aman.
+- **231b — Konstanta jendela diam global (OPEN, SaaS debt):** `bolehKirimProaktif` memakai
+  ambang global (`FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS`), belum per-tenant di DB. Tenant-aware
+  butuh migrasi → Confirmation Gate.
+- **231c — `HUMAN_HANDLING_TIMEOUT_HOURS` disatukan ke 6 (RESOLVED):** default kode 18 vs
+  dokumen/docker 6 → disatukan 6. Angka per-tenant di DB belum ada (ditunda, gate).
+- **231d — Ledger `wa_message_id` in-memory (OPEN, terbatas):** penentu utama bot-vs-admin
+  (`knownBotMessageIds`) hanya di memori proses → hilang saat restart / tidak lintas-instance.
+  Jalur durable via DB (`isDuplicateMessage`) tetap ada, tetapi registry lintas-instance
+  butuh infra (Redis/DB) → ditunda, tanpa dependency baru.
+- **231e — Peringatan pra-auto-release in-memory (OPEN, ringan):** guard idempoten
+  `autoReleaseWarned` per proses; restart bisa mengulang 1 peringatan (tidak berbahaya).
+
 ## 230. [Audio/Media] Sisa batasan pasca-fix audio portal staf (2026-10-05, OPEN — by design)
 
 - **Konteks:** fix audio voice note portal staf (lihat CHANGELOG 2026-10-05). Audio baru

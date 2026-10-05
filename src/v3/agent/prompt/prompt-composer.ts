@@ -44,6 +44,7 @@ import {
 } from './phases/pricing-catalog.phase';
 import {
   SCHEDULING_HIERARCHY_BLOCK,
+  MEDICAL_SOP_MANDATE_BLOCK,
   buildScheduleNegConstraintsHead,
   SCHEDULE_NEG_CONSTRAINTS_RULE20,
   SCHEDULE_NEG_CONSTRAINTS_RULE21,
@@ -197,7 +198,13 @@ function buildHierarchySlim(focus: PhaseFocus[], session?: CustomerGoalSession):
   const parts: string[] = [];
   if (wantLocation) parts.push(buildLocationHierarchyBlock(session));
   if (wantPricing) parts.push(buildPricingCatalogBlock());
-  if (wantScheduling) parts.push(SCHEDULING_HIERARCHY_BLOCK);
+  if (wantScheduling) {
+    parts.push(SCHEDULING_HIERARCHY_BLOCK);
+  } else {
+    // Mandat keselamatan medis/sop SELALU dipertahankan walau blok scheduling
+    // dibuang (information hiding aman: instruksi medis bukan kontradiktif).
+    parts.push(MEDICAL_SOP_MANDATE_BLOCK);
+  }
   return parts.join('\n');
 }
 

@@ -45,13 +45,26 @@ describe('Fase 3 — legacy wordlist paraphrase resilience', () => {
   });
 
   describe('isConsultativeUserText', () => {
-    it('konsultasi murni (true)', () => {
+    it('konsultasi murni bertanda ? (true)', () => {
       for (const t of ['ini bisa untuk asi?', 'oksitosin itu apa ya?', 'boleh dipijat gak?']) {
         expect(isConsultativeUserText(t), t).toBe(true);
       }
     });
+    it('konsultasi TANPA ? — ragam slang/typo interogatif (true)', () => {
+      for (const t of [
+        'maaf untuk pulih ceria itu gmna ya',
+        'pulih ceria itu gimana ya bund',
+        'bedanya yang satu sama yang lain apa',
+        'maksudnya apa ya',
+        'jelaskan dong bunda',
+        'ini untuk apa',
+        'kapan enaknya',
+      ]) {
+        expect(isConsultativeUserText(t), t).toBe(true);
+      }
+    });
     it('bukan konsultasi bila komitmen/hari (false)', () => {
-      for (const t of ['mau ambil yang ceria', 'besok bisa?']) {
+      for (const t of ['mau ambil yang ceria', 'besok bisa?', 'saya booking sekarang', 'yang tadi aja']) {
         expect(isConsultativeUserText(t), t).toBe(false);
       }
     });

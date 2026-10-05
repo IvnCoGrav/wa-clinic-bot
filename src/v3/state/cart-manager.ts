@@ -71,6 +71,41 @@ export function rankServiceByRelevance<T extends { name: string }>(text: string,
   return scored.map((x) => x.s);
 }
 
+/**
+ * Phase 3 (audit 6285743192813) — hitung layanan PRIMARY BERBEDA yang disebut
+ * dalam sebuah teks, memakai matcher katalog data-driven (nama utuh/nama bersih
+ * atau ≥2 token non-generik cocok). Dipakai gerbang CTA reprompt: bila draf
+ * menyodorkan ≥2 pilihan paket, penutup DILARANG menodong jadwal. Pure, tanpa I/O.
+ */
+export function countDistinctPrimaryOffers(
+  text: string,
+  services: Array<{ name: string; category?: string; isAddon?: boolean }>
+): number {
+  const hay = (text || '').toLowerCase();
+  if (!hay.trim()) return 0;
+  const primaries = (services || []).filter((s) =>
+    s && typeof s.name === 'string' && s.name.trim().length >= 4
+    && s.isAddon !== true
+    && !['ADDON', 'ADD_ON'].includes((s.category || '').toUpperCase())
+  );
+  const hits = new Set<string>();
+  for (const s of primaries) {
+    const full = s.name.toLowerCase();
+    const clean = (full.endsWith(')') && full.lastIndexOf('(') > 0)
+      ? full.slice(0, full.lastIndexOf('(')).trim()
+      : full;
+    let matched = hay.includes(full) || (clean.length >= 4 && hay.includes(clean));
+    if (!matched) {
+      const toks = significantTokensOf(s.name);
+      const nonGeneric = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
+      const hit = nonGeneric.filter((t) => hay.includes(t));
+      matched = hit.length >= 2 && hit.length / Math.max(1, nonGeneric.length) >= 0.5;
+    }
+    if (matched) hits.add(full);
+  }
+  return hits.size;
+}
+
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
 // Re-export di bawah menjaga seluruh import path lama tetap berfungsi.
 export type {

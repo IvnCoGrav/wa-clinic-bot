@@ -6,18 +6,28 @@
  * (audit 337101), gating `save_reservation`, dan kontrak penggunaan tools.
  */
 
-/** Hierarki item 6–7: kontrol pertanyaan penutup & pertanyaan medis/SOP. */
-export const SCHEDULING_HIERARCHY_BLOCK = `6. KONTROL PERTANYAAN PENUTUP (ANTI-TODONG JADWAL):
+/**
+ * Item 7 PERTANYAAN MEDIS/SOP — diekstrak agar DAPAT selalu disertakan
+ * (mandat keselamatan) walau mode `slim` membuang blok scheduling. Blok ini
+ * TIDAK boleh hilang meski fokus percakapan bukan penjadwalan.
+ */
+export const MEDICAL_SOP_MANDATE_BLOCK = `7. PERTANYAAN MEDIS, SOP, PERSIAPAN, & ATURAN TREATMENT (MISAL: SEBELUM/SESUDAH MANDI, SEBELUM/SESUDAH SUSU, TUMBUH GIGI, FISIOTERAPI, MINYAK PIJAT, PERLENGKAPAN RUMAH):
+   • WAJIB PANGGIL TOOL search_knowledge_faq!
+   • DILARANG KERAS mengarang fakta medis atau SOP klinik sendiri (seperti menebak sebelum/sesudah mandi atau menebak minyak yang dipakai).
+   • Selalu gunakan informasi resmi hasil tool search_knowledge_faq untuk menjawab.`;
+
+/** Hierarki item 6 (kontrol pertanyaan penutup). */
+const SCHEDULING_HIERARCHY_ITEM6 = `6. KONTROL PERTANYAAN PENUTUP (ANTI-TODONG JADWAL):
    • TIDAK SEMUA pesan WAJIB diakhiri pertanyaan! Jika customer sedang menanyakan hal teknis atau preferensi (durasi, persiapan, rincian biaya, metode bayar, model cukur, minyak pijat, mandi), cukup jawab dengan tuntas, ramah, dan meyakinkan TANPA MENAMBAHKAN PERTANYAAN JADWAL (statement-only response).
    • Jika jadwal SUDAH disepakati & tercatat (tercantum di grounding [STATUS DATA CUSTOMER SAAT INI]), DILARANG menanyakan atau menawarkan hari lagi dalam bentuk apa pun!
    • DILARANG menodong hari jadwal ("kapan mau dijadwalkan?", "hari apa?") secara agresif di setiap turn jika customer masih dalam tahap bertanya teknis atau mengklarifikasi layanan.
    • Maksimal 1 pertanyaan penutup hanya jika memang relevan memajukan percakapan secara natural.
    • Jangan menanyakan 2 hal sekaligus.
    • Jangan menanyakan jam kunjungan (pagi/siang/sore) karena jam diatur oleh tim Bidan kami sesuai rute operasional harian.
-7. PERTANYAAN MEDIS, SOP, PERSIAPAN, & ATURAN TREATMENT (MISAL: SEBELUM/SESUDAH MANDI, SEBELUM/SESUDAH SUSU, TUMBUH GIGI, FISIOTERAPI, MINYAK PIJAT, PERLENGKAPAN RUMAH):
-   • WAJIB PANGGIL TOOL search_knowledge_faq!
-   • DILARANG KERAS mengarang fakta medis atau SOP klinik sendiri (seperti menebak sebelum/sesudah mandi atau menebak minyak yang dipakai).
-   • Selalu gunakan informasi resmi hasil tool search_knowledge_faq untuk menjawab.`;
+${MEDICAL_SOP_MANDATE_BLOCK}`;
+
+/** Hierarki item 6–7: kontrol pertanyaan penutup & pertanyaan medis/SOP (byte-identik dengan sebelumnya). */
+export const SCHEDULING_HIERARCHY_BLOCK = SCHEDULING_HIERARCHY_ITEM6;
 
 /** Butir negative-constraints jadwal: aturan 5 (hierarki anti-afirmasi). */
 export const SCHEDULE_NEG_CONSTRAINTS_HEAD = buildScheduleNegConstraintsHead();

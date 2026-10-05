@@ -3,6 +3,7 @@ import { ConversationState } from '@prisma/client';
 import { CircuitBreaker } from '../../../utils/circuit-breaker';
 import { ALL_V3_TOOLS } from '../../tools/tool-registry';
 import { PersonaPromptBuilder, extractFastIntents, PERSONA_STABLE_PREFIX_MARKER } from '../persona';
+import { derivePhaseFocus } from '../prompt/prompt-composer';
 import { buildCacheableSystemPrompt, buildCachedMessages } from '../../../integrations/llm/prompt-cache';
 import { CustomerGoalSession } from '../../state/goal-tracker';
 import { AiModelConfigService, supportsThinkingParam } from '../../../config/ai-models.config';
@@ -875,9 +876,14 @@ export class GenerationStage {
     // 6. Panggilan Kedua: Menyusun teks balasan ramah Bidan Yusi menggunakan fakta tool
     // Perbarui system prompt di messages[0] dengan session terbaru yang telah di-grounding hasil tools
     // (async agar blok contoh dinamis bank tetap dipakai, bukan revert ke statis).
+    // Fase 2 (program stabilisasi): rakit prompt Call 2 secara RAMPIng & state-gated.
+    // `slim:true` membuang blok hierarki yang tidak relevan dengan fokus sesi
+    // (lokasi/konsultasi/jadwal), MANDAT MEDIS selalu dipertahankan di dalam
+    // buildHierarchySlim. Menurunkan 45k→~31-43k char → latensi & penalaran membaik.
     const refreshedPrompt = await PersonaPromptBuilder.buildSystemPromptAsync(session, isFollowUp, {
       tenantId,
       incomingText: cleanIncomingText,
+      phaseInjection: { focus: derivePhaseFocus(session), slim: true },
     });
     turn.fewShotExemplars = refreshedPrompt.exemplars;
 

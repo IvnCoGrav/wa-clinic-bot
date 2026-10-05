@@ -198,16 +198,52 @@ export function hasBookingCommitSignal(text: string | undefined): boolean {
  * cart sync, detectAgreedTreatment) agar konsultasi eksplorasi DILARANG
  * mengunci layanan ke cart/selectedTreatment.
  */
+/**
+ * Akar interogatif gramatikal (closed-class function words bahasa Indonesia)
+ * dengan toleransi ejaan WhatsApp: gimana/gmn/gmna/bgmn, apa/apakah, kapan,
+ * berapa, kenapa/napa, mana/dimana/kemana, maksudnya, jelaskan, cara.
+ * BUKAN hafalan kalimat bisnis — ini kata fungsi tanya, setingkat
+ * INTERROGATIVE_PARTICLES/STRONG_INTERROGATIVES yang sudah ada. Dasar temuan
+ * audit 6285743192813: customer menulis pertanyaan TANPA tanda '?' ("...itu
+ * gmna ya") sehingga predikat '?'-only salah mengklasifikasikannya sebagai
+ * komitmen dan mengunci keranjang sepihak.
+ */
+const INTERROGATIVE_ROOTS = new Set([
+  'gimana', 'gmn', 'gmna', 'bgmn', 'bagaimana', 'bagaiman',
+  'kenapa', 'napa', 'kapan', 'berapa', 'brp',
+  'apa', 'apakah', 'apapun', 'apaan',
+  'dimana', 'kemana', 'mengapa', 'mana',
+  'maksudnya', 'jelaskan', 'cara', 'caranya',
+]);
+/** Akar panjang yang boleh cocok-prefiks (toleran typo imbuhan/akhiran). */
+const INTERROGATIVE_ROOT_STEMS = [
+  'gimana', 'bagaimana', 'mengapa', 'maksudnya', 'jelaskan',
+];
+
+/** True bila teks membawa niat interogatif/eksplorasi (tanpa wajib '?'). */
+export function hasInterrogativeIntent(text: string | undefined): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower.trim()) return false;
+  if (lower.includes('?')) return true;
+  const tokens = tokenizeAlnum(lower);
+  if (tokens.length === 0) return false;
+  return tokens.some((t) =>
+    INTERROGATIVE_ROOTS.has(t) || INTERROGATIVE_ROOT_STEMS.some((r) => t.startsWith(r))
+  );
+}
+
 export function isConsultativeUserText(
   text: string | undefined,
   session?: { bookingCommitConfirmed?: boolean }
 ): boolean {
   const lower = (text || '').toLowerCase();
-  if (!lower.includes('?')) return false;
+  if (!lower.trim()) return false;
+  // Verba komitmen eksplisit / jejak hari / commit sticky sesi selalu menang.
   if (hasBookingCommitSignal(lower)) return false;
   if (DAY_EVIDENCE_WORDS.some((w) => lower.includes(w))) return false;
   if (session?.bookingCommitConfirmed === true) return false;
-  return true;
+  // Niat interogatif/eksplorasi (dengan ATAU tanpa '?') = KONSULTASI murni.
+  return hasInterrogativeIntent(lower);
 }
 
 /**

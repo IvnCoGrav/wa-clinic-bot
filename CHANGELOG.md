@@ -4,6 +4,79 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Added/Changed: Program Stabilisasi Kecerdasan (Fase 0–2)
+
+- **Fase 0 — baseline (read-only):** `V3_GENERATION` system prompt rata-rata 45.000 char
+  (98% instruksi), rasio token prompt:jawaban 60:1; produksi `llm_audit_logs` `CHAT_REPLY`
+  p95 361 dtk + 8 completion=0, `SLOT_EXTRACTOR` 15 completion=0; 6 guardrail 0-tembakan.
+  Detail: `docs/KNOWN_ISSUES.md` #233.
+- **Fase 1 — ujian emas:** `tests/eval/golden-conversations.eval.test.ts` (7 skenario
+  deterministik + pagar anggaran prompt). Skor 7/7.
+- **Fase 2 — perampingan prompt state-gated:** Call 2 dirakit `slim:true` +
+  `derivePhaseFocus` (`generation-stage.ts`, `prompt-composer.ts`); mandat medis
+  (`MEDICAL_SOP_MANDATE_BLOCK`) diekstrak agar selalu ikut (`scheduling.phase.ts`).
+  Prompt turun 48.614 → 32.342 char (EARLY, −33%) / 41.746 (CONSULT, −14%).
+  Verifikasi: build lolos, 76 test hijau, skor emas 7/7.
+- **Catatan:** CHANGELOG ini sempat ditimpa penulis paralel (isue "penulis paralel" #…);
+  entri Fase 0–2 ditulis ulang. Perubahan `Follow-Up` di atas BUKAN bagian dari Fase 0–2.
+
+#### 2026-10-06 - Fixed: Remediasi Fondasional Engine Follow-Up (Audit 32 Temuan, Tahap 1-5)
+
+- **Tahap 1 - Skema DB & Integritas (`prisma/schema.prisma`, migrasi
+  `20261006000000_fix_followup_unique_and_indexes`):**
+  - **V1** Anti-duplikat follow-up aktif. Karena repo melarang partial index (drift
+    permanen, lihat migrasi 20260920000001), dipakai kolom sentinel nullable
+    `active_slot_key` + trigger Postgres `follow_ups_active_slot_key_trg` (Prisma-native,
+    drift aman): baris PENDING/QUEUED unik per `(tenant, customer, type, stage)`; baris
+    historis `active_slot_key = NULL`. Unique lama `(tenant_id, reservation_id, type, stage)`
+    di-drop. Migrasi menyertakan dedup data live (`cancel_reason='DEDUP_CLEANUP'`).
+  - **V2** `reservation_id` DIPERTAHANKAN saat cancel (6 titik di `follow-up.service.ts`)
+    untuk audit trail; tidak lagi dinetralkan ke NULL.
+  - **V3** Indeks komposit `follow_ups(tenant_id,status,scheduled_at)` &
+    `customers(tenant_id,deleted_at,status)`.
+  - **H6** `buildNonBypassCustomerWhere` (`utils/customer-bypass.ts`) kini mengecualikan
+    `deleted_at != null` dan `is_internal_staff`.
+- **Tahap 2 - Jam Kerja & Kuota (`follow-up.service.ts`, `cron.service.ts`):**
+  - **V8** Gerbang jam kerja deterministik 09:00-17:00 WIB di `processDueFollowUps`
+    (`isWithinFollowUpWorkingHours`); pengiriman TIDAK lagi dipicu dari `runMorningJobs`
+    (subuh 06:00) - pindah ke worker jam kerja.
+  - **M1** Rem kuota harian runtime (`countDailySent` terhadap `FOLLOWUP_MAX_PER_DAY`,
+    batch dibatasi sisa kuota).
+  - **M5/M6** `createNoPurchaseFollowUps` memakai jadwal 09:40 WIB (`computeScheduleAtWib0940`)
+    + jitter 0-30 menit (anti burst).
+  - **V9** Idempotensi morning jobs berbasis DB (`AdminNotificationLog.idempotency_key`)
+    tahan restart container; klaim dilepas bila gagal agar bisa retry.
+- **Tahap 3 - Konkurensi (`follow-up.service.ts`, skema `processing_claimed_at`):**
+  - **V5/H3** Klaim atomik (lease) `processing_claimed_at` - worker vs `sendNow` tidak
+    dobel-kirim; lease kedaluwarsa otomatis (env `FOLLOWUP_CLAIM_LEASE_MS`).
+  - **V6** Cek-ulang status dari DB tepat sebelum kirim fisik; abort bila status berubah.
+  - **V7** `logMessage` Live Chat dipindah ke SETELAH kirim sukses (write-after-send);
+    WAHA gagal tidak lagi meninggalkan bubble bot fiktif.
+  - **H10** `sendNow` memuat relasi lengkap (reservation, labels, conversations) -
+    `{time}` benar & gerbang CS-handoff/bypass bekerja.
+- **Tahap 4 - Kalender & Lifecycle (`follow-up.service.ts`):**
+  - **M2** `computeNextTreatmentAtWib0900` menjepit akhir bulan (31 Okt +1 bln = 30 Nov).
+  - **M4** `suppressPrematureNextTreatment` menjaga ritme bulanan (`+stage` bulan, bukan +14 hari).
+  - **M3/H8** `checkAndSetLostCustomers`: kohort NO_PURCHASE Stage 3 tanpa respons jadi `lost`
+    (env `NO_PURCHASE_LOST_GRACE_DAYS`); NEXT_TREATMENT memakai jendela 60 hari
+    (env `LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS`), bukan 3 hari.
+  - **H7** Inbound chat / reservasi membatalkan antrean `WINBACK_60D` aktif
+    (`CANCEL_REASON.INBOUND_CHAT`).
+  - **M11** `resolveMilestoneType` menerima kategori `BOTH` & memindai seluruh `children`.
+  - **M7** `createReservationFollowUps` tidak lagi membuat baris zombie REMINDER_H1/REVIEW_H1
+    (default OFF; aktifkan via `FOLLOWUP_CREATE_REMINDER_REVIEW='true'`).
+- **Tahap 5 - Transport & UI (`follow-up.service.ts`, `follow-up.subroute.ts`, `FollowUpQueue.tsx`, `cron.service.ts`):**
+  - **H4/V10/V11** WABA mengirim parameter lengkap `{name,time,babyName}`, jeda acak
+    1.5-3 dtk (`WABA_SEND_THROTTLE_BASE_MS`), dan mencatat TEKS terbaca ke Live Chat.
+  - **M9** Normalizer sapaan deterministik terpusat (dobel "dek dek"/"Bunda Bunda").
+  - **M8/H5** Default kuota UI/API 10->40 (`FOLLOWUP_MAX_PER_DAY`); endpoint
+    `POST /api/admin/follow-ups/:id/retry` + tombol "Coba Lagi" untuk item FAILED.
+  - **H9** Hapus dead-code `sendMorningReminders` & `sendYesterdayReviewsAndScheduleNextFollowups`
+    (219 baris) + import terkait. Catatan: `broadcast-queue.service.ts` (BullMQ) BUKAN
+    dead-code - dipakai `settings.subroute.ts`; tidak dihapus.
+- **Test baru:** `followup-working-hours` (batas 09:00/17:00 WIB), `followup-atomic-claim`
+  (anti dobel-kirim paralel), `followup-date-and-milestone` (overflow 31 Okt + milestone BOTH).
+
 #### 2026-10-05 - Fixed: Audio WhatsApp gagal dimuat di Portal Staf (voice note 404 / tak didukung)
 
 - **Akar (multi-layer):** (1) deteksi media berat di webhook memakai `payload.message?.audioMessage`

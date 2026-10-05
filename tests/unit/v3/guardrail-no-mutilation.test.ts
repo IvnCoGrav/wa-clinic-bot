@@ -41,7 +41,41 @@ describe('GuardrailPipeline Anti-Mutilation (T0.2)', () => {
     expect(out.shouldSendReply).toBe(true);
   });
 
-  it('SESI 783810: menodong usia NOMINAL tanpa otorisasi klinis → strip deterministik angka (bukan mutilasi kata)', async () => {
+  it('AUDIT 6285743192813: rentang usia katalog "7 - 24 bulan" DILARANG dimutilasi menjadi "usia 7 -"', async () => {
+    const draftReply = 'Pijat ini dikhususkan untuk si kecil usia 7 - 24 bulan yang sedang dalam masa pemulihan.';
+    const mockExecuteChat = vi.fn().mockRejectedValue(new Error('Reprompt failed'));
+
+    const out = await GuardrailPipeline.verifyAndReprompt({
+      draftReply,
+      incomingText: 'Anak saya batuk pilek terus',
+      isFollowUp: true,
+      executedTools: [],
+      retrievedChunks: [],
+      session: baseSession,
+      tenantId: 'default-tenant',
+      phone: '628123456789',
+      conversationId: 'conv-test-1',
+      selectedModel: 'gpt-4o-mini',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'test-key',
+      shouldSendReply: true,
+      isEscalated: false,
+      emptyKnowledgeResult: false,
+      executeChat: mockExecuteChat,
+      recordCall: vi.fn(),
+      addUsage: vi.fn(),
+      auditUsage: vi.fn(),
+    });
+
+    // Rentang usia utuh, bukan teks cacat "usia 7 -".
+    expect(out.finalReply).toBe(draftReply);
+    expect(out.finalReply).toContain('7 - 24 bulan');
+    expect(out.finalReply).not.toMatch(/usia\s+7\s*-?\s*$/);
+    expect(out.violationsDetected).not.toContain('nominal_age_solicitation_stripped');
+    expect(out.shouldSendReply).toBe(true);
+  });
+
+  it('AUDIT 6285743192813: afirmasi nominal usia TIDAK lagi di-strip (batasan klinis sah)', async () => {
     const draftReply = 'Bunda, untuk rekomendasi yang tepat kami perlu tahu usia si kecil 3 bulan anaknya.';
     const mockExecuteChat = vi.fn().mockRejectedValue(new Error('Reprompt failed'));
 
@@ -67,10 +101,9 @@ describe('GuardrailPipeline Anti-Mutilation (T0.2)', () => {
       auditUsage: vi.fn(),
     });
 
-    // Hanya klausa nominal usia yang di-kolom-kan; kalimat tidak dimutilasi.
-    expect(out.finalReply).not.toMatch(/3\s*bulan/);
-    expect(out.finalReply).toContain('usia si kecil');
-    expect(out.violationsDetected).toContain('nominal_age_solicitation_stripped');
+    // Tanpa mutilasi: kalimat utuh, tidak ada flag strip lama.
+    expect(out.finalReply).toBe(draftReply);
+    expect(out.violationsDetected).not.toContain('nominal_age_solicitation_stripped');
     expect(out.shouldSendReply).toBe(true);
   });
 

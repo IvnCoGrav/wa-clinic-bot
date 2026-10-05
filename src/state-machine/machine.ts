@@ -219,6 +219,16 @@ export class ConversationStateMachine {
         const safetyReply = isHigh
           ? 'Mohon maaf Bunda 🙏 Keluhan seperti ini membutuhkan perhatian medis segera dan tidak bisa ditangani dengan pijat. Jika si kecil demam tinggi, kejang, sesak napas, atau lemas tak merespons, segera bawa ke dokter/faskes/IGD terdekat ya Bunda. Chat ini sudah kami teruskan ke tim Bidan kami agar segera dibantu.'
           : 'Terima kasih infonya Bunda 🙏 Untuk keluhan seperti ini, tim Bidan kami akan membantu mengecek lebih lanjut ya Bunda. Bila kondisi si kecil memburuk (demam tinggi, sesak, atau lemas), segera periksa ke dokter/faskes. Chat ini sudah kami teruskan ke tim Bidan kami.';
+        // V-A: balasan keselamatan WAJIB benar-benar terkirim (bukan hanya
+        // di-return lalu dibuang pemanggil). Anti-silent-drop.
+        await this.deliverTerminalReply({
+          tenantId,
+          customer,
+          conversation,
+          incomingMessage,
+          replyText: safetyReply,
+          aiReasoning: `Medical ${medicalResult.severity} safety reply delivered before human handoff.`,
+        });
         return {
           nextState: ConversationState.HUMAN_HANDLING,
           shouldSendReply: true,
@@ -455,6 +465,16 @@ export class ConversationStateMachine {
           replyText = `Baik Bunda, data reservasi sudah kami catat ya. Tim Bidan kami akan segera menghubungi Bunda untuk konfirmasi jadwalnya 😊${shareNote}`;
         }
 
+        await this.deliverTerminalReply({
+          tenantId,
+          customer,
+          conversation,
+          incomingMessage,
+          replyText,
+          aiReasoning: savedOk
+            ? 'Customer submitted valid reservation form -> Saved reservation to DB & escalated to human handling.'
+            : 'Customer submitted reservation form but DB save FAILED -> escalated to human handling with alert.',
+        });
         return {
           nextState: ConversationState.HUMAN_HANDLING,
           replyText,
@@ -488,8 +508,7 @@ export class ConversationStateMachine {
               const { GoalTracker } = await import('../v3/state/goal-tracker');
               await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: 0 }, tenantId);
             } catch {}
-            activeConversation.is_human_handling = true;
-            activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+            // V-B: eskalasi dulu, baru mutasi in-memory (anti racun previous_state).
             await conversationService.escalateToHumanHandling(
               activeConversation,
               customer.phone,
@@ -509,6 +528,15 @@ export class ConversationStateMachine {
             await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: retryCount + 1 }, tenantId);
           } catch {}
           const incompleteReply = `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`;
+          // V-A: permintaan melengkapi form WAJIB terkirim (bukan sekadar di-return).
+          await this.deliverTerminalReply({
+            tenantId,
+            customer,
+            conversation: activeConversation,
+            incomingMessage,
+            replyText: incompleteReply,
+            aiReasoning: 'Customer submitted incomplete reservation form -> Prompted to fill missing fields.',
+          });
           return {
             nextState: ConversationState.RESERVATION_SENT,
             replyText: incompleteReply,
@@ -559,8 +587,9 @@ export class ConversationStateMachine {
     const domainVerdict = evaluateDomainGate(preExtractedIntents);
     if (domainVerdict.action === 'silent_escalate') {
       console.log(`[SILENT GATE] ${domainVerdict.reason} untuk ${customer.phone} — eskalasi sunyi tanpa V3.`);
-      activeConversation.is_human_handling = true;
-      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      // V-B: eskalasi DULU (service menyimpan previous_state = state riil),
+      // baru mutasi in-memory. DILARANG set current_state=HUMAN_HANDLING sebelum
+      // eskalasi — meracuni previous_state → release macet di HUMAN_HANDLING.
       await conversationService.escalateToHumanHandling(
         activeConversation,
         customer.phone,
@@ -655,7 +684,10 @@ export class ConversationStateMachine {
         note: (v3Result as any).escalationNote || 'Eskalasi otomatis oleh V3 Agent',
         reason: escReason,
       };
-      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      // V-B: DILARANG memutasi current_state / is_human_handling di sini.
+      // Eskalasi riil di STEP 6b (setelah closing terkirim) — service menyimpan
+      // previous_state = state riil. Pra-mutasi meracuni previous_state ATAU
+      // membatalkan pengiriman closing via shouldAbort (anti-silent-drop).
 
       // Stage 5 Fase 4 (RC-04): tandai turn durable sebagai HANDOFF (best-effort).
       try {
@@ -726,10 +758,22 @@ export class ConversationStateMachine {
         shouldAbort: async () => {
           try {
             const freshConv = await conversationService.getOrCreateConversation(customer.id, tenantId);
-            return !!freshConv?.is_human_handling;
+            if (freshConv?.is_human_handling) return true;
           } catch {
-            return false;
+            // fail-open: jangan blokir karena error baca state
           }
+          // Phase 4 (audit 6285743192813): batalkan draf USANG bila pesan yang
+          // lebih baru sudah masuk antrean untuk phone ini (in-flight coalescing).
+          try {
+            const turnId = contextStorage.getStore()?.turnId;
+            if (turnId) {
+              const { queueService } = await import('../services/queue.service');
+              if (queueService.isTurnSuperseded(customer.phone, turnId)) return true;
+            }
+          } catch {
+            // fail-open
+          }
+          return false;
         },
       });
 
@@ -812,7 +856,12 @@ export class ConversationStateMachine {
               while (attempts < maxAttempts) {
                 attempts++;
                 const sendResult = await gateway.sendImageMessage(customer.phone, target, caption);
-                if (sendResult.success) { sendOk = true; sentMessageId = sendResult.messageId; break; }
+                if (sendResult.success) {
+                  sendOk = true;
+                  sentMessageId = sendResult.messageId;
+                  if (sentMessageId) messageService.registerKnownBotMessageId(sentMessageId, tenantId);
+                  break;
+                }
                 if (attempts < maxAttempts) await new Promise((r) => setTimeout(r, 2000));
               }
             }
@@ -897,6 +946,56 @@ export class ConversationStateMachine {
     }
 
     return result;
+  }
+
+  /**
+   * Kontrak kirim TUNGGAL untuk balasan terminal deterministik (medis, ack
+   * formulir) yang diputuskan SEBELUM blok pengiriman utama. Sebelumnya
+   * jalur-jalur ini `return shouldSendReply:true` tanpa benar-benar mengirim
+   * (dibuang pemanggil) → customer menerima diam total. Helper ini memakai
+   * jalur kirim yang sama dengan blok utama (typingService + logMessage) agar
+   * satu kontrak: setiap balasan terminal pasti terkirim tepat sekali.
+   * Tanpa shouldAbort: pesan terminal (keselamatan/ack) WAJIB sampai.
+   */
+  private async deliverTerminalReply(params: {
+    tenantId: string;
+    customer: any;
+    conversation: any;
+    incomingMessage: any;
+    replyText: string;
+    aiReasoning?: string;
+  }): Promise<void> {
+    const { tenantId, customer, conversation, incomingMessage, replyText, aiReasoning } = params;
+    if (!replyText) return;
+    const chatId = `${customer.phone}@c.us`;
+    try {
+      const resultHuman = await this.typingSvc.simulateHumanReply({
+        chatId,
+        incomingMessageId: incomingMessage.id,
+        incomingText: incomingMessage.text?.body || '',
+        replyText,
+        tenantId,
+        turnId: contextStorage.getStore()?.turnId,
+        provider: contextStorage.getStore()?.provider,
+      });
+      try {
+        await messageService.logMessage({
+          tenantId,
+          conversationId: conversation.id,
+          direction: Direction.OUTBOUND,
+          content: replyText,
+          waMessageId: (resultHuman as any).messageId,
+          payloadRaw: aiReasoning ? { aiReasoning } : undefined,
+          deliveryStatus: resultHuman.success ? 'sent' : 'failed',
+          metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
+          metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
+        });
+      } catch (logErr: any) {
+        console.error(`[TERMINAL REPLY LOG ERROR] ${logErr?.message || logErr}`);
+      }
+    } catch (sendErr: any) {
+      console.error(`[TERMINAL REPLY SEND ERROR] ${sendErr?.message || sendErr}`);
+    }
   }
 }
 

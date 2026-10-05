@@ -8,6 +8,7 @@ import { GenerationStage } from './generation-stage';
 import { SAME_DAY_DISCLAIMER } from './generation-stage';
 import type { V3RetrievedChunk } from '../agent-runner';
 import { DAY_EVIDENCE_WORDS } from '../../../utils/date-confirmation';
+import { countDistinctPrimaryOffers } from '../../state/cart-manager';
 
 export interface NumericRepromptDeps {
   tenantId: string;
@@ -523,12 +524,30 @@ export class GuardrailPipeline {
       committed: funnelCommitted,
       audience: ctaAudience,
     }) : '';
-    // Fase 5 (Reprompt continuity): CTA penutup state-aware untuk jaminan
-    // kontinuitas pasca-reprompt (usia/jam/shareloc) — anti dead-end.
-    let repromptClosingCta = '';
+    // Fase 5 (Reprompt continuity) + Phase 3 (audit 6285743192813): CTA penutup
+    // state-aware untuk jaminan kontinuitas pasca-reprompt (usia/jam/shareloc)
+    // — anti dead-end. Bila draf masih
+    // menyodorkan ≥2 pilihan paket PRIMARY dan belum ada paket terpilih/keranjang,
+    // DILARANG menodong jadwal ("hari apa") — ajak memilih paket dulu. Deteksi
+    // via matcher katalog data-driven (countDistinctPrimaryOffers), BUKAN regex
+    // penomoran "1. 2." yang rapuh.
+    let ctaCatalogServices: Array<{ name: string; category?: string; isAddon?: boolean }> | undefined;
     try {
-      repromptClosingCta = buildCtaForSession();
-    } catch { repromptClosingCta = ''; }
+      const { treatmentCatalogService } = await import('../../../services/treatment-catalog.service');
+      ctaCatalogServices = (treatmentCatalogService.getAllServices(true, tenantId) || [])
+        .map((s: any) => ({ name: s?.name, category: s?.category, isAddon: s?.isAddon }));
+    } catch { ctaCatalogServices = undefined; }
+    const buildRepromptClosingCta = (text: string): string => {
+      try {
+        const noSelection = ((session as any).cartItems || []).length === 0
+          && !(session as any).selectedTreatment;
+        if (noSelection && ctaCatalogServices) {
+          const offers = countDistinctPrimaryOffers(text, ctaCatalogServices);
+          if (offers >= 2) return 'Kira-kira si kecil lebih cocok dengan pilihan yang mana Bunda? 😊';
+        }
+      } catch { /* fail-open ke CTA jadwal */ }
+      return buildCtaForSession();
+    };
     // Fase 6 K2 (Issue #74) — tag struktural penolakan/eskalasi (primer;
     // regex fallback di validator): eskalasi tool tereksekusi ATAU sinyal
     // deterministik trauma-jatuh/vaksin pada pesan masuk. Dihitung dari
@@ -735,58 +754,13 @@ export class GuardrailPipeline {
       if (typeof c0 === 'number' && Number.isFinite(c0)) return c0;
       return undefined;
     })();
-    // Lapis kode DETERMINISTIK (sesi 783810 — anti-tambal-sulam: kontrol gaya
-    // berkuota HANYA diizinkan lewat gerbang kode, bukan kepatuhan prompt).
-    // Tanpa otorisasi klinis, menodong usia NOMINAL ("usia si kecil 3 bulan")
-    // dikeluarkan dengan menggugurkan bilangan+satuan, KONTEKS kalimat lestari.
-    // Dasar pola: kata 'usia' lalu bilangan lalu satuan; kalimat bertanda
-    // '?'/berdaftar mode/satuan tanggung → gagal aman (tanpa strip).
-    const NOMINAL_AGE_RE =
-      /\b(?:usia|umur)\s+[^\n.?!]*?\b(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/gi;
-    const NOMINAL_AGE_MODES = ['bulan', 'hari', 'minggu', 'tahun'] as const;
-    const stripNominalAges = (text: string): string => {
-      if (!text) return text;
-      if (isAgeClarificationAuthorized) return text;
-      // PLAN 12 Fase 4 — state-gated: bila usia sudah tercatat di sesi, JANGAN mutilasi afirmasi katalog
-      const hasChildAgeKnown = Boolean(
-        (session as any)?.childProfile?.ageMonths != null ||
-        (Array.isArray((session as any)?.children) && (session as any).children.length > 0 && (session as any).children.some((c: any) => c?.ageMonths != null))
-      );
-      if (hasChildAgeKnown) return text;
-      const anyMode = NOMINAL_AGE_MODES.some(
-        (m) => new RegExp(`(?:^|[^a-z0-9])${m}(?:[^a-z0-9]|$)`).test(text.toLowerCase())
-      );
-      if (!anyMode) return text;
-      let updated = text;
-      let hits = 0;
-      updated = updated.replace(NOMINAL_AGE_RE, (m) => { hits++; return m; });
-      if (hits === 0) return text;
-      updated = text.replace(NOMINAL_AGE_RE, (span) => {
-        const num = /(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/i.exec(span);
-        if (!num) return span;
-        const at = span.search(num[0]);
-        return span.slice(0, at).trimEnd();
-      });
-      const normal = updated.replace(/\s{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
-      if (!normal) return text;
-      // Sisa satuan/tahun → perbaikan mencurigakan (bukan sekedar strip) →
-      // anti-mutilasi: pulihkan teks asli daripada memotong tengah kalimat.
-      if (/\btahun\b|\bbulan\b/.test(normal)) return text;
-      return normal;
-    };
-    if (!isEscalated && shouldSendReply && finalReply.trim()) {
-      const strippedReply = stripNominalAges(finalReply);
-      if (strippedReply !== finalReply) {
-        finalReply = strippedReply;
-        violationsDetected.push('nominal_age_solicitation_stripped');
-        console.warn(JSON.stringify({ event: 'NOMINAL_AGE_SOLICITATION_STRIPPED', tenantId, conversationId, timestamp: new Date().toISOString() }));
-        await input.recordCall({
-          reply: finalReply, status: 'SUCCESS', durationMs: 0,
-          promptPayload: { model: selectedModel, correction: 'nominal_age_strip' },
-          callReasoning: 'Strip deterministik nominal usia (otorisasi klinis tak ada)', callSequence: 3,
-        });
-      }
-    }
+    // Phase 1 (audit 6285743192813 — mid-sentence mutilation ban): pemotong
+    // regex `stripNominalAges`/`NOMINAL_AGE_RE` DIHAPUS. Fungsi itu memutilasi
+    // rentang usia katalog yang sah ("7 - 24 bulan" → "usia 7 -") dan melanggar
+    // Mandat Minimalisasi Regex & Mid-Sentence Mutilation Ban. Batasan usia
+    // resmi katalog adalah data klinis sah yang boleh dijelaskan ke customer.
+    // Proteksi todong usia tetap dijaga `hasAgeQuestion` + reprompt di bawah
+    // (hanya memicu pada kalimat TANYA usia ke customer, bukan afirmasi katalog).
     if (!isAgeClarificationAuthorized && hasAgeQuestion(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
       violationsDetected.push('age_solicitation_detected');
       const ageRepromptStartedAt = Date.now();
@@ -810,7 +784,7 @@ export class GuardrailPipeline {
         if (ageRetryText) {
           const ageCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(ageRetryText, incomingText, isFollowUp, sanitizeOpts));
           const ageWithCta = ageCleaned.trim() && !hasAgeQuestion(ageCleaned)
-            ? ensureRepromptClosingCta(ageCleaned, repromptClosingCta)
+            ? ensureRepromptClosingCta(ageCleaned, buildRepromptClosingCta(ageCleaned))
             : ageCleaned;
           if (ageWithCta.trim() && !hasAgeQuestion(ageWithCta)) {
             finalReply = ageWithCta;
@@ -906,7 +880,7 @@ export class GuardrailPipeline {
         if (timeRetryText) {
           const timeCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(timeRetryText, incomingText, isFollowUp, sanitizeOpts));
           const timeWithCta = timeCleaned.trim() && !detectVisitTimeQuestion(timeCleaned)
-            ? ensureRepromptClosingCta(timeCleaned, repromptClosingCta)
+            ? ensureRepromptClosingCta(timeCleaned, buildRepromptClosingCta(timeCleaned))
             : timeCleaned;
           if (timeWithCta.trim() && !detectVisitTimeQuestion(timeWithCta)) {
             finalReply = timeWithCta;
@@ -975,7 +949,7 @@ export class GuardrailPipeline {
         if (locRetryText) {
           const locCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(locRetryText, incomingText, isFollowUp, sanitizeOpts));
           const locWithCta = locCleaned.trim() && !hasShareLocationSolicitation(locCleaned)
-            ? ensureRepromptClosingCta(locCleaned, repromptClosingCta)
+            ? ensureRepromptClosingCta(locCleaned, buildRepromptClosingCta(locCleaned))
             : locCleaned;
           if (locWithCta.trim() && !hasShareLocationSolicitation(locWithCta)) {
             finalReply = locWithCta;
