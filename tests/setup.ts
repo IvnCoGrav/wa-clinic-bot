@@ -332,6 +332,25 @@ vi.mock('../src/db/client', () => {
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         count: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
+      // Google Sheets rekapan (Fase 0): default offline → service fail-closed
+      // (tidak pernah menulis tanpa config); test jalur-DB pasang double sendiri.
+      tenantSheetsConfig: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      sheetsSyncOutbox: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
       $transaction: vi.fn().mockRejectedValue(new Error('Database offline')),
       $queryRaw: vi.fn().mockRejectedValue(new Error('Database offline')),
     },

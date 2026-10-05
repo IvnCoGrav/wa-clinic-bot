@@ -5,6 +5,8 @@
  * catatan admin (+ Alamat, status WA), simbol/emoji, serta menangani multiple babies (kembar / 2 anak).
  */
 
+import { expandToponymAbbreviations } from './toponym-normalizer';
+
 // Diekspor untuk dipakai ulang skrip healing data (sanitize-customer-names) —
 // DILARANG menduplikasi daftar ini di modul lain (single source of truth).
 export const COMMON_DISTRICTS = [
@@ -130,6 +132,110 @@ function stripTrailingDistrictFragment(name: string): string {
 }
 
 
+/** Escape literal untuk RegExp lokal (bebas dependency, dataset aman). */
+function escapeLexiconToken(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Gerbang DETERMINISTIK wilayah — SATU sumber kebenaran untuk membuang noise
+ * toponimi dari sebuah nama (dipakai jalur sapaan DAN jalur penyimpanan DB).
+ *
+ * Urutan (fondasional, data-driven dari leksikon dataset + normalizer linguistik):
+ *  1. Ekspansi singkatan baku ("Kec." → "Kecamatan", "Kel." → "Kelurahan")
+ *     via `expandToponymAbbreviations` — closed-class linguistik, BUKAN daftar
+ *     hafalan geografis bisnis.
+ *  2. Buang label administratif + entitas setelahnya ("Kecamatan Sawahan").
+ *  3. Buang frasa penunjuk lokasi di ujung ("dari/di/area/daerah/lokasi X").
+ *  4. Runtuhkan frasa toponimi ganda beruntun ("Sedati Sedati").
+ *  5. Kelupas toponimi akhir berulang via leksikon efektif dataset.
+ *  6. Kelupas fragmen toponimi terpotong ("Ifa Tambak Os" → "Ifa").
+ *
+ * Tanpa regex hafalan per-kasus; wilayah bersumber dari leksikon gazetteer.
+ */
+export function stripLocationNoise(rawName?: string | null): string {
+  let name = (rawName || '').trim();
+  if (!name) return '';
+
+  // 1. Ekspansi singkatan baku toponimi (case-preserving).
+  name = expandToponymAbbreviations(name);
+
+  // 2. Buang label administratif generik + entitas setelahnya.
+  name = name.replace(/\b(?:kecamatan|kelurahan|desa|kabupaten|kota)\s+[a-zA-Z0-9_.-]+/gi, '').trim();
+  // Sisa label administratif yang menggantung tanpa entitas.
+  name = name.replace(/\b(?:kecamatan|kelurahan|kabupaten|kota)\b\s*$/gi, '').trim();
+
+  // 3. Buang frasa penunjuk lokasi seperti "dari Semampir", "area Rungkut".
+  name = name.replace(/\s+(?:dari|di|area|daerah|lokasi)\s+[a-zA-Z0-9_\s-]+$/i, '').trim();
+
+  // 4. Runtuhkan frasa toponimi ganda beruntun.
+  name = stripConsecutiveDuplicatePhrase(name);
+
+  // 5. Kelupas toponimi akhir (bisa berulang) via leksikon efektif dataset.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const d of getEffectiveDistrictLexicon()) {
+      if (!d) continue;
+      const re = new RegExp(`\\s+${escapeLexiconToken(d)}$`, 'i');
+      if (re.test(name)) {
+        name = name.replace(re, '').trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  // 6. Kelupas fragmen toponimi terpotong di akhir.
+  name = stripTrailingDistrictFragment(name);
+
+  return name.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Kelupas HANYA tag wilayah di ujung nama dan kembalikan sebagai `areaTag`
+ * (fondasional untuk impor komposit tanpa delimiter " - ", mis. Google People
+ * API yang menyatukan given+family). Dipakai `splitImportedContactName`.
+ *
+ * Berbeda dari `stripLocationNoise`: fungsi ini mengembalikan entitas wilayah
+ * yang terkelupas (bukan membuangnya) agar dapat diklasifikasi ke kolom
+ * kecamatan/kelurahan oleh gazetteer — anti data-loss informasi alamat.
+ */
+export function stripTrailingLocationTag(rawName?: string | null): {
+  cleanName: string;
+  areaTag: string | null;
+} {
+  let name = expandToponymAbbreviations((rawName || '').trim());
+  if (!name) return { cleanName: '', areaTag: null };
+
+  const tags: string[] = [];
+  let changed = true;
+  while (changed && name) {
+    changed = false;
+    // Label administratif menggantung di ujung ("... Kecamatan").
+    const labelMatch = name.match(/\s+(?:kecamatan|kelurahan|desa|kabupaten|kota)$/i);
+    if (labelMatch && labelMatch.index !== undefined) {
+      name = name.slice(0, labelMatch.index).trim();
+      changed = true;
+      continue;
+    }
+    for (const d of getEffectiveDistrictLexicon()) {
+      if (!d) continue;
+      const re = new RegExp(`\\s+${escapeLexiconToken(d)}$`, 'i');
+      const m = name.match(re);
+      if (m && m.index !== undefined) {
+        tags.push(m[0].trim());
+        name = name.slice(0, m.index).trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  const cleanName = name.replace(/\s+/g, ' ').trim();
+  return { cleanName, areaTag: tags.length > 0 ? tags[tags.length - 1] : null };
+}
+
 /**
  * Membersihkan nama customer agar hanya berupa nama panggilan/nama asli orang.
  * Menghilangkan:
@@ -168,45 +274,55 @@ export function sanitizeCustomerNameForGreeting(rawName?: string | null): string
   // 5. Buang awalan sapaan (Bunda, Ibu, Mama, Moms, Suami Bunda, Ny, Mrs, ~)
   name = name.replace(/^(?:suami\s+bunda|bunda|ibu|mama|moms|momm|mbak|mas|mrs|ny|ny\.|kakak|kak|~)\s+/i, '').trim();
 
-  // 6. Buang kata "Kecamatan ..." atau "Kelurahan ..." di tengah/belakang
-  name = name.replace(/\b(?:kecamatan|kelurahan|desa|kabupaten|kota)\s+[a-zA-Z0-9_-]+/gi, '').trim();
+  // 6. Gerbang deterministik wilayah (satu sumber: stripLocationNoise) —
+  //    termasuk ekspansi singkatan "Kec."/"Kel." yang dulu bocor.
+  name = stripLocationNoise(name);
 
-  // 6b. Buang frasa penunjuk lokasi seperti "dari Semampir", "area Rungkut", "di Sedati"
-  name = name.replace(/\s+(?:dari|di|area|daerah|lokasi)\s+[a-zA-Z0-9_\s-]+$/i, '').trim();
-
-  // 7. Buang nama-nama kecamatan/kelurahan umum Surabaya/Sidoarjo di akhir string (bisa berulang misal "Semampir Sidoarjo")
-  name = stripConsecutiveDuplicatePhrase(name);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const d of getEffectiveDistrictLexicon()) {
-      const re = new RegExp(`\\s+${d}$`, 'i');
-      if (re.test(name)) {
-        name = name.replace(re, '').trim();
-        changed = true;
-        break;
-      }
-    }
-  }
-  // 7b. Buang fragmen toponimi terpotong di akhir ("Ifa Tambak Os" -> "Ifa").
-  name = stripTrailingDistrictFragment(name);
-
-  // 8. Bersihkan simbol aneh yang tersisa di awal/akhir
+  // 7. Bersihkan simbol aneh yang tersisa di awal/akhir
   name = name.replace(/^[\s~_.*\-#@!&|+=<>]+|[\s~_.*\-#@!&|+=<>]+$/g, '').trim();
 
-  // 9. Cek apakah nama tersisa adalah placeholder atau generic (misal "Pelanggan 6319", "Sandbox Customer", "Bunda")
+  // 8. Cek apakah nama tersisa adalah placeholder atau generic (misal "Pelanggan 6319", "Sandbox Customer", "Bunda")
   const lower = name.toLowerCase();
   if (!name || GENERIC_NAME_PLACEHOLDERS.has(lower) || /^pelanggan\s*\d+/i.test(lower) || /^customer\s*\d+/i.test(lower)) {
     return '';
   }
 
-  // 10. Jika nama terlalu panjang (misal > 2 kata), ambil 1-2 kata pertama saja untuk sapaan ramah
+  // 9. Jika nama terlalu panjang (misal > 2 kata), ambil 1-2 kata pertama saja untuk sapaan ramah
   const words = name.split(/\s+/).filter(Boolean);
   if (words.length > 2) {
     name = words.slice(0, 2).join(' ');
   }
 
   return name.trim();
+}
+
+/**
+ * Gerbang SEAM TULIS (fondasional): bersihkan nama SEBELUM dipersist ke
+ * `Customer.name`. BEDA dari jalur sapaan:
+ *  - Prefix "Bunda"/"Ibu" DIPERTAHANKAN (DB memang menyimpan "Bunda <nama>").
+ *  - Nama TIDAK dipotong 2 kata (nama panjang asli tetap utuh untuk kontak).
+ * Hanya noise toponimi/wilayah + penanda alamat/status yang dibuang, memakai
+ * gerbang deterministik `stripLocationNoise` (data-driven, bukan regex hafalan).
+ *
+ * Mengembalikan '' bila hasil kosong/placeholder — pemanggil WAJIB memilih
+ * untuk TIDAK menulis nilai (pertahankan nama lama) demi anti data-loss.
+ */
+export function sanitizeCustomerNameForStorage(rawName?: string | null): string {
+  if (!rawName) return '';
+  let name = rawName.trim();
+
+  // Buang catatan alamat/status ("Bunda Balqis, Sidotopo Wetan", "- Leave ur Chat").
+  name = name.split(/[,|]/)[0].trim();
+  name = name.split(/\s+[-+/:]\s+|\s*\+\s*alamat/i)[0].trim();
+
+  // Gerbang wilayah deterministik (ekspansi "Kec." + leksikon dataset).
+  name = stripLocationNoise(name);
+
+  // Rapikan simbol sisa.
+  name = name.replace(/^[\s~_.*\-#@!&|+=<>]+|[\s~_.*\-#@!&|+=<>]+$/g, '').trim();
+
+  if (!name || GENERIC_NAME_PLACEHOLDERS.has(name.toLowerCase())) return '';
+  return name.replace(/\s+/g, ' ').trim();
 }
 
 /**

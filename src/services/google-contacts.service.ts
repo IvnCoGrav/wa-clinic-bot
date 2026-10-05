@@ -22,7 +22,12 @@ export function classifyImportedAreaTag(areaTag: string | null): {
   kelurahan?: string;
   kecamatan?: string;
 } {
-  const tag = (areaTag || '').trim();
+  // Normalisasi awalan administratif generik ("Kecamatan Waru" → "Waru",
+  // "Kel. Lontar" → "Lontar") sebelum klasifikasi gazetteer.
+  const tag = (areaTag || '')
+    .trim()
+    .replace(/^(?:kecamatan|kelurahan|kecamatan|desa|kabupaten|kota|kec|kel|kab)\.?\s+/i, '')
+    .trim();
   if (!tag) return {};
   try {
     const hit = getGazetteerCoordinates(tag);

@@ -726,6 +726,91 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(collideUpdates[1][0].data.reservation_id).toBeUndefined();
     expect(new Date(collideUpdates[1][0].data.scheduled_at).toISOString()).toBe(STAGE1_TARGET.toISOString());
   });
+
+  // ── Recent/Upcoming-Visit Guard (fondasional: state-based, kasus Bunda Rina 2026-10-05) ──
+  // Pengingat NEXT_TREATMENT ("ayo booking treatment berikutnya") DILARANG terkirim bila
+  // customer baru saja ditangani (booking_date dalam N hari terakhir) ATAU sudah punya
+  // booking non-cancelled yang akan datang — redundan & mengganggu. Murni state
+  // (booking_date + status), tanpa pencocokan teks. Menunda, bukan membatalkan.
+  const makeNextTreatmentFu = (overrides: any = {}): any => ({
+    id: 'fu-next-guard',
+    tenant_id: DEFAULT_TENANT_ID,
+    customer_id: 'cust-next-guard',
+    type: 'NEXT_TREATMENT',
+    stage: 1,
+    scheduled_at: new Date(Date.now() - 1000), // jatuh tempo
+    status: 'QUEUED',
+    customer: {
+      id: 'cust-next-guard',
+      name: 'Bunda Rina',
+      phone: '6285109356888',
+      children: [],
+      conversations: [],
+    },
+    ...overrides,
+  });
+
+  it('30. executeFollowUp: NEXT_TREATMENT ditunda bila customer BARU berkunjung (<14 hari)', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+
+    const recentVisit = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000); // 5 hari lalu (kasus Rina)
+    vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce({ booking_date: recentVisit } as any);
+
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    const { typingService } = await import('../../src/services/typing.service');
+    const sendSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true } as any);
+
+    const ok = await followUpService.executeFollowUp(makeNextTreatmentFu(), DEFAULT_TENANT_ID);
+
+    expect(ok).toBe(false);
+    expect(sendSpy).not.toHaveBeenCalled();
+    const postponed = updateSpy.mock.calls.find((c: any) => c[0]?.data?.scheduled_at);
+    expect(postponed).toBeDefined();
+    expect((postponed![0].data.scheduled_at as Date).getTime()).toBeGreaterThan(Date.now());
+    // Tidak boleh menandai SENT/FAILED — hanya menggeser jadwal.
+    const terminal = updateSpy.mock.calls.find((c: any) => c[0]?.data?.status);
+    expect(terminal).toBeUndefined();
+  });
+
+  it('31. executeFollowUp: NEXT_TREATMENT ditunda bila customer punya booking non-cancelled AKAN DATANG', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+
+    const futureBooking = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce({ booking_date: futureBooking } as any);
+
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+    const { typingService } = await import('../../src/services/typing.service');
+    const sendSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true } as any);
+
+    const ok = await followUpService.executeFollowUp(makeNextTreatmentFu(), DEFAULT_TENANT_ID);
+
+    expect(ok).toBe(false);
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(updateSpy.mock.calls.some((c: any) => c[0]?.data?.scheduled_at)).toBe(true);
+  });
+
+  it('32. executeFollowUp: NEXT_TREATMENT TETAP terkirim bila kunjungan terakhir sudah lama (>14 hari)', async () => {
+    const { whatsappProviderService } = await import('../../src/services/whatsapp-provider.service');
+    vi.spyOn(whatsappProviderService, 'isOutboundCutOff').mockResolvedValue(false as any);
+
+    // Tidak ada booking non-cancelled dalam window → guard lolos.
+    vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null as any);
+    vi.spyOn(prisma.followUp, 'update').mockResolvedValue({} as any);
+
+    const { typingService } = await import('../../src/services/typing.service');
+    const sendSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({
+      success: true,
+      bubblesSent: 1,
+      chatId: '6285109356888',
+    } as any);
+
+    const ok = await followUpService.executeFollowUp(makeNextTreatmentFu(), DEFAULT_TENANT_ID);
+
+    expect(ok).toBe(true);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 

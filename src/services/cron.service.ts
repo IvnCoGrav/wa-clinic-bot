@@ -63,6 +63,34 @@ export class CronService {
   }
 
   /**
+   * Worker sinkronisasi Google Sheets (Fase 3): proses antrean outbox per tenant.
+   * Dipanggil dari boot app.ts via trackInterval (gated ENABLE_SHEETS_SYNC_CRON).
+   * Best-effort: DB/Google offline → tunda, chat tetap jalan.
+   */
+  public async runSheetsSyncWorker(): Promise<void> {
+    try {
+      const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenantIds = await getAllTenantIds();
+      let done = 0;
+      for (const tenantId of tenantIds) {
+        try {
+          const res = await sheetsSyncService.processOutbox(tenantId);
+          done += res.succeeded;
+          if (res.failed > 0) {
+            console.warn(`[Cron] Sheets sync tenant ${tenantId}: ${res.failed} gagal, ${res.deferred} ditunda.`);
+          }
+        } catch (e: any) {
+          console.warn(`[Cron] Sheets sync tenant ${tenantId} skipped:`, e?.message);
+        }
+      }
+      if (done > 0) console.log(`[Cron Service] Sheets sync worker: ${done} baris tersinkron.`);
+    } catch (err) {
+      console.error('[Cron Service] Error running Sheets sync worker:', (err as Error).message);
+    }
+  }
+
+  /**
    * Label reconciliation (Task 7) — re-sync label WA vs status DB.
    * Best-effort; dipanggil dari boot app.ts via setInterval (gated oleh
    * ENABLE_LABEL_RECONCILIATION_CRON).

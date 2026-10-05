@@ -295,6 +295,10 @@ model Reservation {
   // customer pindah alamat). Nullable agar baris lama tetap valid; baca
   // memakai fallback ke Customer.ongkir bila null.
   delivery_fee             Int?
+  // Diskonto/potongan khusus (Repeat Order / kesepakatan harga lama). Sumber
+  // kebenaran harga tetap di sistem; Google Sheets hanya cermin. Nullable agar
+  // baris lama tetap valid (dibaca sebagai 0).
+  discount_amount          Int?
   purchase_review_status   String            @default("pending")
   payment_method           String?
   proof_url                String?
@@ -320,6 +324,15 @@ model Reservation {
   assigned_staff_id        String?
   assigned_staff           Staff?            @relation(fields: [assigned_staff_id], references: [id], onDelete: SetNull)
   follow_ups               FollowUp[]
+  // Sinkronisasi rekapan Google Sheets (cermin satu-arah; sumber kebenaran tetap DB).
+  // row_index = nomor baris 1-based di tab (header baris 1) → update baris yang sama
+  // saat admin menugaskan bidan/mencatat bayar (anti baris ganda). Harga hanya ditulis
+  // sekali saat create (write-once) agar koreksi manual admin tidak tertimpa.
+  sheets_spreadsheet_id    String?
+  sheets_tab_name          String?
+  sheets_row_index         Int?
+  sheets_synced_at         DateTime?
+  sheets_sync_status       String            @default("pending")
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
@@ -1099,4 +1112,47 @@ model OutboundAttempt {
   @@unique([turn_id, bubble_index])
   @@index([tenant_id, status])
   @@map("outbound_attempts")
+}
+
+/// Konfigurasi rekapan Google Sheets per-tenant (SaaS-ready, no-hardcode).
+/// Nama file, nama 12 tab bulan, dan ID file/tahun berasal dari DB agar admin
+/// dapat mengubahnya tanpa deploy ulang. ID file TIDAK boleh hardcoded di kode.
+model TenantSheetsConfig {
+  id                    String   @id @default(uuid())
+  tenant_id             String   @unique @default("default-tenant")
+  is_enabled            Boolean  @default(false)
+  file_base_name        String   @default("Rekapan Pasien")
+  master_spreadsheet_id String?
+  drive_folder_id       String?
+  /// Peta tahun → ID file spreadsheet, mis. {"2026":"1AbC...","2027":"1XyZ..."}.
+  yearly_file_ids       Json?
+  /// Nama 12 tab bulan persis sesuai rekapan operasional (index 0 = Januari).
+  month_tab_names       String[] @default(["Jan", "Feb", "Mar", "April", "Mei", "Juni", "Juli", "Aug", "Sept", "okt", "Nov", "Des"])
+  /// Nama tab sumber duplikasi saat bulan baru (header/warna/rumus/dropdown utuh).
+  template_sheet_name   String   @default("_TEMPLATE")
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@index([tenant_id])
+  @@map("tenant_sheets_configs")
+}
+
+/// Kotak antrean (outbox) sinkronisasi Sheets: webhook chat hanya menulis 1 baris
+/// di sini (non-blocking), worker cron yang memanggil API Google. Unique per
+/// reservasi → retry webhook / restart server tidak menghasilkan baris ganda.
+model SheetsSyncOutbox {
+  id             String    @id @default(uuid())
+  tenant_id      String    @default("default-tenant")
+  reservation_id String
+  operation      String    @default("UPSERT")
+  status         String    @default("pending") // pending | processing | done | failed
+  attempts       Int       @default(0)
+  next_retry_at  DateTime?
+  last_error     String?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@unique([tenant_id, reservation_id])
+  @@index([tenant_id, status, next_retry_at])
+  @@map("sheets_sync_outbox")
 }

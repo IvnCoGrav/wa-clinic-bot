@@ -9,6 +9,11 @@ const GOOGLE_CONTACTS_SCOPES = [
   'https://www.googleapis.com/auth/contacts',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/drive.file',
+  // Rekapan reservasi ke Google Sheets: tulis tab bulanan di file yang sudah ada.
+  // Perlu re-consent sekali (token lama hanya punya kontak + drive.file).
+  // Scope `drive` (duplikat file tahunan saat ganti tahun) sengaja DITUNDA demi
+  // least-privilege — ditambahkan menjelang Desember saat file tahun baru dibutuhkan.
+  'https://www.googleapis.com/auth/spreadsheets',
 ];
 
 // SEC-AUDIT-10: umur maksimum state OAuth (batas jendela replay Login CSRF).

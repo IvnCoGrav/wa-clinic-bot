@@ -20,6 +20,14 @@ const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
+// Recent/Upcoming-Visit Guard (fondasional, kasus Bunda Rina 2026-10-05):
+// Pengingat NEXT_TREATMENT ("ayo booking treatment berikutnya") DILARANG terkirim bila
+// customer baru saja ditangani (booking_date dalam N hari terakhir) ATAU sudah punya booking
+// non-cancelled yang akan datang — pesan menjadi redundan & terasa menodong. Ambang default 14
+// hari: deret bulanan (+30 hari) tak pernah tersentuh; hanya baris basi dekat-visit yang ditunda.
+// Murni berbasis state (booking_date + status), bukan pencocokan kalimat. Menunda, bukan membatalkan.
+const FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS = parsePositiveInt(process.env.FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS, 14);
+
 // WINBACK_60D (re-engagement pelanggan dormant). Ambang dormansi & cooldown
 // memakai basis last_message_at (termasuk outbound) supaya WINBACK tidak
 // menyerobot rangkaian NEXT_TREATMENT yang masih berjalan (hingga +3 bulan).
@@ -1640,6 +1648,64 @@ export class FollowUpService {
   }
 
   /**
+   * Recent/Upcoming-Visit Guard untuk NEXT_TREATMENT (fondasional: state-based).
+   *
+   * Mengembalikan `true` (dan menggeser `scheduled_at`) bila pengingat repeat-order
+   * sebaiknya DITUNDA karena customer baru saja ditangani atau sudah punya booking
+   * non-cancelled yang akan datang:
+   *  - Ada reservasi non-cancelled dengan `booking_date >= now − N hari`. Karena
+   *    booking masa depan selalu memenuhi syarat ini, satu kondisi mencakup DUA kasus
+   *    (kunjungan baru-baru ini DAN jadwal yang sudah di depan).
+   *  - Bila ada → geser jadwal ke `booking_date + N hari` (snap 09:40 WIB, minimal
+   *    now + 24 jam). MENUNDA, bukan membatalkan — deret tetap hidup untuk siklus berikutnya.
+   *  - DB error → fail-open (return false) agar gangguan infrastruktur tidak memblokir
+   *    pengiriman sah; selaras dengan degradasi offline service lain.
+   */
+  private async suppressPrematureNextTreatment(fu: any, tenantId: string): Promise<boolean> {
+    try {
+      const now = new Date();
+      const windowStart = new Date(now.getTime() - FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS * 24 * 60 * 60 * 1000);
+
+      const anchor = await prisma.reservation.findFirst({
+        where: {
+          customer_id: fu.customer_id,
+          tenant_id: tenantId,
+          status: { notIn: ['cancelled'] },
+          booking_date: { gte: windowStart },
+        },
+        orderBy: { booking_date: 'desc' },
+        select: { booking_date: true },
+      });
+
+      const anchorRaw = (anchor as any)?.booking_date;
+      if (!anchorRaw) return false;
+      const anchorDate = new Date(anchorRaw);
+      if (isNaN(anchorDate.getTime())) return false;
+
+      // Jadwal baru = anchor + N hari, snap 09:40 WIB (02:40 UTC); minimal now + 24 jam.
+      const target = new Date(anchorDate.getTime() + FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS * 24 * 60 * 60 * 1000);
+      const targetWib = new Date(target.getTime() + 7 * 60 * 60 * 1000);
+      const adjusted = new Date(
+        Date.UTC(targetWib.getUTCFullYear(), targetWib.getUTCMonth(), targetWib.getUTCDate(), 2, 40, 0, 0)
+      );
+      const finalDate = adjusted.getTime() > now.getTime() ? adjusted : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      await prisma.followUp.update({
+        where: { id: fu.id },
+        data: { scheduled_at: finalDate },
+      });
+
+      console.log(
+        `[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) NEXT_TREATMENT postponed to ${finalDate.toISOString()} (recent/upcoming visit guard: anchor ${anchorDate.toISOString()}, window ${FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS}d).`
+      );
+      return true;
+    } catch (err: any) {
+      console.warn('[FollowUp Worker] suppressPrematureNextTreatment skipped:', err?.message || err);
+      return false;
+    }
+  }
+
+  /**
    * Eksekusi satu unit pengiriman follow-up (dengan rolling template & status update)
    */
   public async executeFollowUp(fu: any, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
@@ -1666,6 +1732,14 @@ export class FollowUpService {
       if (milestoneType) {
         templateType = milestoneType;
         fu._milestone = true;
+      } else if (fu.type === 'NEXT_TREATMENT') {
+        // Recent/Upcoming-Visit Guard: pengingat repeat-order DILARANG terkirim bila
+        // customer baru saja ditangani (kunjungan non-cancelled dalam N hari terakhir)
+        // atau sudah punya booking non-cancelled yang akan datang. Menunda jadwal
+        // (fondasional, state-based) — tidak pernah membatalkan deret.
+        const postponed = await this.suppressPrematureNextTreatment(fu, tenantId);
+        if (postponed) return false;
+        templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
       } else if (fu.type === 'NO_PURCHASE') {
         // Auto-cancel jika customer ternyata sudah memiliki reservasi (pending/confirmed/completed)
         try {
@@ -1687,8 +1761,6 @@ export class FollowUpService {
         } catch (_) {}
 
         templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
-      } else if (fu.type === 'NEXT_TREATMENT') {
-        templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
       } else if (fu.type === 'REMINDER_H1') {
         templateType = 'REMINDER_H1';
       } else if (fu.type === 'REVIEW_H1_BABY') {

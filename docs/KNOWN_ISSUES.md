@@ -3,6 +3,46 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 228. [Google Sheets Rekapan] Pondasi Fase 0–4 dieksekusi — sisa debt (2026-10-05, FASE 0–4 EXECUTED)
+
+- **Konteks:** otomatisasi rekapan reservasi ke Google Sheets (16 kolom A–P, tab
+  bulanan, file tahunan). Diputuskan fondasional: config tenant-aware di DB, antrean
+  outbox (bukan panggil API dari webhook chat), harga write-once agar koreksi manual
+  admin tidak tertimpa. Fase 0 = DB + scope + migrasi; Fase 1 = resolver murni + formatter.
+- **Sudah dieksekusi:** `TenantSheetsConfig` + `SheetsSyncOutbox` (`schema.prisma`),
+  kolom `Reservation` (`discount_amount`, `sheets_spreadsheet_id`, `sheets_tab_name`,
+  `sheets_row_index`, `sheets_synced_at`, `sheets_sync_status`), scope
+  `spreadsheets` di `google-oauth.client.ts`, migrasi idempoten
+  `20261005000000_add_sheets_sync_fondasional`, seed `default-tenant` dengan ID file
+  milik user. **Fase 1:** `src/services/sheets/month-resolver.ts` +
+  `src/services/sheets/row-formatter.ts` (murni, 16 kolom), test
+  `tests/unit/sheets-rekapan-formatter.test.ts` 17/17 hijau. **Fase 2–3:**
+  `sheets-client.ts` (SheetsGateway OAuth) + `sheets-sync.service.ts` (enqueue/
+  processOutbox/syncReservation, harga write-once), hook di lifecycle & admin,
+  worker cron `runSheetsSyncWorker` (gated `ENABLE_SHEETS_SYNC_CRON`, default aktif),
+  test `tests/unit/sheets-sync.service.test.ts` 12/12 hijau. **Fase 4:** endpoint admin
+  `GET/PUT sheets-config` + `POST sheets-test` & UI sub-tab "Rekapan Pasien" di panel
+  Google (toggle, link/ID spreadsheet, uji koneksi). Gerbang: `prisma validate`
+  hijau, `prisma generate` hijau, `npm run typecheck` hijau, `typing.test.ts` 12/12,
+  dashboard `npm run build` hijau.
+- **Sisa debt OPEN (verifikasi live belum dikerjakan):**
+  - **Scope `drive` (duplikat file tahunan) DITUNDA** demi least-privilege. Wajib
+    ditambah sebelum Desember 2026 agar booking tahun 2027 tidak kehilangan tab.
+  - **`Tip` (kolom N) belum punya sumber data di DB.** Saat ini diisi `0` eksplisit
+    di row formatter. Bila klinik butuh tip riil, perlu kolom DB baru.
+  - **Token OAuth butuh re-consent manual sekali** (`is_enabled=false` sampai user
+    menyambungkan ulang Google agar token membawa scope `spreadsheets`).
+  - **Drift-verifikasi migrasi ke DB live BELUM dijalankan** (DB lokal offline saat
+    eksekusi). Jalankan `npx prisma migrate deploy` lalu
+    `npx prisma migrate diff --from-url "$DATABASE_URL"
+    --to-schema-datamodel prisma/schema.prisma --script` (harus `-- This is an empty
+    migration.`) di lingkungan ber-DB.
+  - **Uji tulis ke spreadsheet ASLI belum dilakukan** (butuh akun Google tersambung
+    + `is_enabled=true`). Jalankan tombol "Uji Koneksi & Siapkan Tab" di dashboard.
+  - **`sheets_row_index` rapuh bila admin menghapus baris manual** di spreadsheet
+    (nomor bergeser). Aturan: jangan hapus baris, hanya tambah; rekonsiliasi
+    otomatis ditahan (butuh tabel state tambahan).
+
 ## 227. [Tool Masker / Intent / Katalog] Perbaikan PL, Pin Lokasi & Usia Newborn — sisa debt (2026-10-05, EXECUTED)
 
 - **Konteks:** insiden Rizky 6285236127747 (PL tidak terkirim, pin lokasi gagal →
@@ -5430,4 +5470,34 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
   menampilkan area/chrome berbeda per cabang. BUKAN regresi fungsional.
 - **Rencana:** Pindahkan chrome + area ke `Tenant.settings`/`landing_content` saat
   onboarding tenant kedua (butuh desain skema + UI admin).
+
+## 128. [Follow-Up NEXT_TREATMENT Prematur] Pengingat repeat-order terkirim 5 hari pasca-visit (kasus 6285109356888, 2026-10-05)
+
+- **Status:** FIXED (guard deterministik) + sisa observasi (open).
+- **Konteks/gejala:** Customer Bunda Rina (6285109356888) sudah punya riwayat beli
+  (visit 28 Agu `completed`, visit 30 Sep `confirmed`). Tetap lolos ke antrean follow-up
+  dan menerima `NEXT_TREATMENT` stage 1 pada 5 Okt (5 hari pasca-visit 30 Sep). Customer
+  membalas bingung ("massage terakhir 5 hr yg lalu").
+- **Akar masalah (terverifikasi dari DB + log live):** penjaga state "customer sudah punya
+  reservasi" HANYA ada untuk `NO_PURCHASE` di `executeFollowUp`; **tidak ada untuk
+  `NEXT_TREATMENT`**. Baris stage 1 berjangkar visit lama tetap terkirim meski customer
+  baru ditangani. Kombinasi reconciler pagi (30 Sep) yang membuat ulang stage 2/3 dari
+  jangkar lama memperparah.
+- **Solusi fondasional (gerbang kode, bukan prompt):** `suppressPrematureNextTreatment()`
+  di `src/services/follow-up.service.ts` — bila ada reservasi **non-cancelled** dengan
+  `booking_date >= now − N hari` (satu kondisi mencakup kunjungan baru DAN booking
+  mendatang), jadwal `NEXT_TREATMENT` DIGESER ke `booking_date + N hari` (snap 09:40 WIB).
+  **Menunda, bukan membatalkan.** Ambang `FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS` (default
+  14). Murni state (booking_date + status), tanpa pencocokan kalimat. Regresi dikunci
+  di `tests/unit/follow-up-engine.test.ts` (T30–T32).
+- **Sisa observasi (open, butuh investigasi lanjut bila terulang):**
+  1. Baris Rina terlihat terjadwal 5 Okt 12:30 WIB (bukan 09:00 WIB baku) — jejak asal
+     tak dapat direproduksi deterministik karena log 28 Sep–2 Okt sudah terotasi.
+  2. `REMINDER_H1` & `REVIEW_H1_BABY` milik visit 30 Sep `cancelled` TANPA `cancel_reason`
+     (bukan lewat `onReservationCancelled`) — perlu penelusuran jalur pembatalan lain.
+- **Catatan regresi tak terkait (temuan sampling suite penuh):** `tests/unit/live-chat-
+  enroute-status.test.ts` (5 test) GAGAL karena fixture tanggal hardcode `2026-10-03` yang
+  sudah lampau (time-rot), BUKAN akibat perubahan guard follow-up. Perlu fixture
+  relatif-waktu agar tidak lapuk.
+
 

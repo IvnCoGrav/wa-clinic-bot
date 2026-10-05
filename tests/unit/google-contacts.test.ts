@@ -271,6 +271,33 @@ describe('Google Contacts Integration Suite', () => {
       expect(classifyImportedAreaTag(null)).toEqual({});
       expect(classifyImportedAreaTag('Kawasan Tak Dikenal XYZ').kelurahan).toBe('Kawasan Tak Dikenal XYZ');
     });
+
+    // Adversarial: Google People API menyatukan given+family tanpa " - ".
+    it('TC-09: impor TANPA delimiter " - " memisahkan nama murni + wilayah', () => {
+      const a = splitImportedContactName('Bunda ella Kecamatan Waru');
+      expect(a.cleanName).toBe('Bunda ella');
+      expect(a.areaTag?.toLowerCase()).toBe('waru');
+      expect(classifyImportedAreaTag(a.areaTag).kecamatan).toBe('Waru');
+
+      const b = splitImportedContactName('Bunda Ayu menganti Kecamatan Menganti');
+      expect(b.cleanName).toBe('Bunda Ayu');
+      expect(b.areaTag?.toLowerCase()).toBe('menganti');
+      expect(classifyImportedAreaTag(b.areaTag).kecamatan).toBe('Menganti');
+    });
+
+    it('TC-09b: impor tanpa delimiter dengan kelurahan resmi → kelurahan gazetteer', () => {
+      const split = splitImportedContactName('Pelanggan 8247 Manukan Kulon');
+      expect(split.cleanName).toBe('Pelanggan 8247');
+      const area = classifyImportedAreaTag(split.areaTag);
+      expect(area.kelurahan).toBe('Manukan Kulon');
+      expect(area.kecamatan).toBe('Tandes');
+    });
+
+    it('TC-10: classifyImportedAreaTag menormalkan awalan administratif', () => {
+      expect(classifyImportedAreaTag('Kecamatan Waru').kecamatan).toBe('Waru');
+      expect(classifyImportedAreaTag('Kec. Waru').kecamatan).toBe('Waru');
+      expect(classifyImportedAreaTag('Kel. Lontar').kelurahan).toBeTruthy();
+    });
   });
 
   describe('OAuth Client Manager (SEC-AUDIT-10: HMAC state, fail-closed)', () => {

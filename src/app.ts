@@ -285,6 +285,18 @@ if (require.main === module) {
       }).catch(e => console.error('[LABEL RECONCILIATION START ERROR]', e));
     }
 
+    // Start Google Sheets sync worker (Fase 3): proses outbox antrean rekapan.
+    // Default AKTIF; jalankan sekali saat boot untuk self-healing backlog.
+    if (process.env.ENABLE_SHEETS_SYNC_CRON !== 'false') {
+      const sheetsIntervalMinutes = parseInt(process.env.SHEETS_SYNC_INTERVAL_MINUTES || '1', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        cron.runSheetsSyncWorker().catch(e => console.warn('[SHEETS SYNC BOOT WARNING]', (e as Error).message));
+        trackInterval(() => cron.runSheetsSyncWorker(), sheetsIntervalMinutes * 60 * 1000);
+        console.log(`📊 Google Sheets sync worker started (every ${sheetsIntervalMinutes}m)`);
+      }).catch(e => console.error('[SHEETS SYNC START ERROR]', e));
+    }
+
     // Start media cleanup cron (hapus file media Live Chat yang melebihi retensi)
     // Default aktif kecuali eksplisit diset 'false'; jalankan sekali saat startup untuk self-healing.
     if (process.env.ENABLE_MEDIA_CLEANUP_CRON !== 'false') {

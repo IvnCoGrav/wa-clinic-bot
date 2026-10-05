@@ -276,4 +276,112 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * GET /api/admin/integrations/google/sheets-config
+   * Konfigurasi rekapan Google Sheets per-tenant (tanpa kredensial sensitif).
+   */
+  fastify.get(
+    '/api/admin/integrations/google/sheets-config',
+    async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
+      const tenantId = request.query.tenantId || DEFAULT_TENANT_ID;
+      try {
+        const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
+        const status = await googleContactsService.getIntegrationStatus(tenantId);
+        const config = await sheetsSyncService.getPublicConfig(tenantId);
+        return reply.status(200).send({
+          success: true,
+          data: {
+            config: config || null,
+            googleConnected: status.isConnected,
+            connectedEmail: status.connectedEmail,
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err?.message });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/admin/integrations/google/sheets-config
+   * Perbarui konfigurasi rekapan Sheets (toggle, nama file, ID master, template).
+   */
+  fastify.put(
+    '/api/admin/integrations/google/sheets-config',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          tenantId?: string;
+          isEnabled?: boolean;
+          fileBaseName?: string;
+          masterSpreadsheetId?: string | null;
+          templateSheetName?: string;
+          monthTabNames?: string[];
+          yearlyFileIds?: Record<string, string>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const body = request.body || {};
+      try {
+        const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
+        await sheetsSyncService.updateConfig(tenantId, {
+          is_enabled: body.isEnabled,
+          file_base_name: body.fileBaseName,
+          master_spreadsheet_id: body.masterSpreadsheetId,
+          template_sheet_name: body.templateSheetName,
+          month_tab_names: body.monthTabNames,
+          yearly_file_ids: body.yearlyFileIds,
+        });
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_SHEETS_CONFIG',
+          payload: { tenantId, isEnabled: body.isEnabled },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, message: 'Konfigurasi rekapan Sheets tersimpan.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err?.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/integrations/google/sheets-test
+   * Uji koneksi tulis: pastikan tab bulan berjalan siap (duplikat template bila
+   * perlu) tanpa menulis baris data. Mengembalikan pesan jujur bila izin kurang.
+   */
+  fastify.post(
+    '/api/admin/integrations/google/sheets-test',
+    async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
+      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      try {
+        const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
+        const result = await sheetsSyncService.testConnection(tenantId);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'TEST_SHEETS_CONNECTION',
+          payload: { tenantId, ...result },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({
+          success: true,
+          data: result,
+          message: `Koneksi Sheets OK. Tab "${result.tabName}" (${result.year}) ${result.created ? 'dibuat' : 'sudah ada'}.`,
+        });
+      } catch (err: any) {
+        const msg = err?.message || '';
+        let hint = 'Gagal mengakses Google Sheets.';
+        if (msg === 'SHEETS_NOT_CONNECTED') hint = 'Google belum terhubung / izin tidak cukup. Sambungkan ulang akun Google (scope spreadsheets).';
+        else if (msg === 'TEMPLATE_SHEET_NOT_FOUND') hint = 'Tab template (mis. _TEMPLATE) tidak ditemukan di spreadsheet.';
+        else if (msg === 'SHEETS_YEAR_NOT_CONFIGURED') hint = 'Tahun berjalan belum dipetakan ke ID file (yearly_file_ids).';
+        else if (msg === 'SHEETS_CONFIG_DISABLED') hint = 'Konfigurasi rekapan belum ada untuk tenant ini.';
+        return reply.status(400).send({ success: false, error: hint, detail: msg });
+      }
+    }
+  );
 }

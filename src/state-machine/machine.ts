@@ -395,11 +395,14 @@ export class ConversationStateMachine {
           console.error(`[MACHINE FORM] Gagal simpan reservasi customer ${customer.phone} (${parsed.name}):`, dbErr.message);
         }
 
-        // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"
+        // Simpan nama kontak customer: "Bunda {nama}".
+        // Integritas penamaan (fondasional): kecamatan HIDUP di kolom `kecamatan`
+        // (dipakai formatter Google Contacts dari DB) — DILARANG ditempel ke
+        // Customer.name. Sebelumnya `Bunda ${name} ${kecamatan}` memproduksi
+        // duplikasi wilayah ("Bunda Ella Kecamatan Waru Kecamatan Waru").
         const customerName = parsed.name?.trim();
         if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
-          const kecamatan = parsed.kec || customer.kecamatan || '';
-          const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+          const contactName = `Bunda ${customerName}`.trim();
           try {
             const { customerService } = await import('../services/customer.service');
             await customerService.updateCustomerName(customer.id, contactName, tenantId);

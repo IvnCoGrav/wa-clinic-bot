@@ -4,6 +4,114 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Fixed: Pengingat NEXT_TREATMENT prematur (Recent/Upcoming-Visit Guard)
+
+- **Masalah (kasus 6285109356888):** customer yang SUDAH punya riwayat beli tetap
+  menerima follow-up `NEXT_TREATMENT` ("ayo booking treatment berikutnya") hanya 5 hari
+  pasca-kunjungan, karena pengingat repeat-order tidak punya penjaga "customer baru saja
+  ditangani" (penjaga itu hanya ada untuk `NO_PURCHASE`).
+- **Perbaikan (`src/services/follow-up.service.ts`, gerbang kode deterministik — bukan
+  tambahan larangan prompt):** metode `suppressPrematureNextTreatment()`. Bila ada
+  reservasi **non-cancelled** dengan `booking_date >= now − N hari` (satu kondisi
+  mencakup kunjungan baru DAN booking yang akan datang), `scheduled_at` `NEXT_TREATMENT`
+  DIGESER ke `booking_date + N hari` 09:40 WIB. **Menunda, bukan membatalkan** — deret
+  tetap hidup. Ambang env baru `FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS` (default 14 hari).
+- **Untuk admin:** jika customer "baru saja treatment" tak seharusnya ditodong booking
+  lagi, atur ambang lewat env di atas; nilai besar = lebih longgar, kecil = lebih ketat.
+- **Regresi dikunci:** `tests/unit/follow-up-engine.test.ts` T30 (visit <14 hari → ditunda),
+  T31 (booking akan datang → ditunda), T32 (visit lama → tetap terkirim). 36/36 hijau.
+- **Verifikasi:** `npx vitest run tests/unit/follow-up-engine.test.ts` + suite follow-up
+  terkait (65/65) hijau; `tsc` bersih.
+
+#### 2026-10-05 - Added: Rekapan Google Sheets — Fase 4 (Endpoint Admin & UI Tab)
+
+- **Endpoint admin (`src/routes/admin/google-integration.subroute.ts`, reusability-first,
+  tanpa rute baru):** `GET/PUT /api/admin/integrations/google/sheets-config`
+  (baca/ubah toggle, nama file, master spreadsheet, template, peta tahun) dan
+  `POST /api/admin/integrations/google/sheets-test` (uji koneksi: siapkan tab bulan
+  berjalan TANPA menulis baris, pesan error jujur per-kasus). Semua ter-audit.
+- **Service (`sheets-sync.service.ts`):** metode publik `getPublicConfig`,
+  `updateConfig` (whitelist field), `testConnection`.
+- **UI (`GoogleIntegrationPanel.tsx`, sub-tab — bukan page baru):** tab
+  "Rekapan Pasien (Google Sheets)" dengan toggle aktif, input link/ID spreadsheet
+  (auto-ekstrak ID dari URL), nama file & template, tombol "Uji Koneksi & Siapkan Tab",
+  dan panduan singkat. Registrasi tahun berjalan ke `yearly_file_ids` otomatis dari UI.
+- **Test:** `sheets-sync.service.test.ts` +2 (`testConnection` tidak menulis baris;
+  tahun belum dipetakan → throw) → 12/12.
+- **Verifikasi:** `npm run typecheck` bersih; `packages/admin-dashboard` `npm run build`
+  hijau.
+
+#### 2026-10-05 - Added: Rekapan Google Sheets — Fase 2–3 (Service, Outbox Worker, Hook & Update Admin)
+
+- **Adaptor Google (`src/services/sheets/sheets-client.ts`):** `SheetsGateway` di atas
+  Google Sheets API v4 memakai token OAuth per-tenant (`googleOAuthClientManager`,
+  scope `spreadsheets`), tanpa Service Account & tanpa dependency baru.
+  `ensureMonthlyTab` (duplikat dari `_TEMPLATE`, `clear A2:P1000`, race-safe: error
+  "sudah ada" → re-fetch = sukses), `appendRow` (`USER_ENTERED`), dan `updateCells`
+  (kelompok kolom berurutan). Helper murni `parseRowIndexFromRange` & `columnLetter`.
+- **Service sinkronisasi (`src/services/sheets/sheets-sync.service.ts`):** `enqueue()`
+  (hanya tulis outbox non-blocking), `processOutbox()` (retry/backoff 1-5-15-60 mnt,
+  max 10 → `failed`; error "belum siap" seperti belum-connect/tanggal-kosong/tahun-belum-
+  dipetakan → ditunda tanpa menghabiskan attempts), `syncReservation()` (append pertama,
+  update baris berikutnya). **Harga write-once:** saat update, kolom H/I/J/K
+  (ongkir/total/diskon/harga akhir) DILEWATI agar koreksi manual admin tidak tertimpa.
+  Dua seam uji: `SheetsGateway` + `SheetsSyncStore` (default Prisma, test in-memory).
+- **Hook (Fase 3):** `reservation-lifecycle.service.ts` menambah `sheetsSyncService.enqueue`
+  best-effort setelah Google Contacts; admin `reservations.subroute.ts` menambah enqueue
+  pada assign-staff & update reservasi (bayar/status). Worker cron
+  `cronService.runSheetsSyncWorker()` di-wire di `app.ts` (gated
+  `ENABLE_SHEETS_SYNC_CRON`, default aktif, interval `SHEETS_SYNC_INTERVAL_MINUTES`=1m).
+- **Test:** `tests/unit/sheets-sync.service.test.ts` (10) — append pertama buat tab,
+  idempotensi update-bukan-append, write-once harga (H/I/J/K tidak disentuh),
+  tahun belum dipetakan → tunda, tanggal kosong → throw, config nonaktif → tak menumpuk,
+  retry backoff sampai `failed`. Total suite terkait 39/39 hijau; `tests/setup.ts` ditambah
+  mock `tenantSheetsConfig`/`sheetsSyncOutbox`.
+- **Verifikasi:** `npm run typecheck` bersih.
+
+#### 2026-10-05 - Added: Rekapan Google Sheets — Fase 1 (Resolver Murni & Format 16 Kolom)
+
+- **Modul baru murni (tanpa I/O, mudah diuji offline):**
+  - `src/services/sheets/month-resolver.ts` — `resolveSheetTarget(bookingDate, monthTabNames?)`
+    memetakan tanggal → tab bulan + tahun + hari + ISO WIB, memakai ulang
+    `src/utils/wib-time.ts` (single source of truth WIB, tidak ada konversi kedua).
+    Nama 12 tab bulan disuntikkan dari DB (`TenantSheetsConfig.month_tab_names`) — bukan
+    hardcode; `DEFAULT_MONTH_TAB_NAMES` hanya fallback. `resolveYearlyFileName()` untuk
+    nama file tahunan.
+  - `src/services/sheets/row-formatter.ts` — `formatReservationToRow()` menghasilkan
+    TEPAT 16 sel (A–P): Tanggal, Hari, Customer, Lokasi, Bayi, Tipe, Layanan, Ongkir,
+    Total, Diskon, Harga akhir, Metode Bayar, Bidan, Tip, Follow up, Catatan. Ongkir
+    fallback `delivery_fee ?? Customer.ongkir` (pola KB-6); Harga akhir = Total+Ongkir−Diskon;
+    tag internal (`[HOLD]`, `[SAME_DAY_REQUEST]`, dst.) dibersihkan; sel kosong = `-` agar
+    kolom tak bergeser.
+- **Test adversarial:** `tests/unit/sheets-rekapan-formatter.test.ts` (17) — batas bulan
+  WIB (31 Okt 23:59 tetap `okt`; 1 Nov 00:01 WIB saat UTC masih 31 Okt → `Nov`), ganti
+  tahun 2027, nama tab kustom dari DB, tanggal null/rusak → throw (bukan tab salah),
+  Repeat + diskon, ongkir fallback, data kosong 16 sel utuh.
+- **Verifikasi:** `npx vitest run tests/unit/sheets-rekapan-formatter.test.ts` 17/17 hijau;
+  `npm run typecheck` bersih.
+
+#### 2026-10-05 - Added: Rekapan Google Sheets — Fase 0 (Pondasi DB, Scope & Migrasi)
+
+- **Revisi fondasional** dari plan "Integrasi Google Sheets & Drive Otomatis": panggil
+  API Google dari webhook chat diganti **antrean outbox** (webhook non-blocking), config
+  nama file/12 tab bulan dari **DB per-tenant** (bukan hardcode TS), harga **write-once**
+  agar koreksi manual admin di spreadsheet tidak tertimpa, dan update admin (bidan/bayar)
+  memakai **baris yang sama** (anti duplikat).
+- **Skema (`prisma/schema.prisma`):** model `TenantSheetsConfig` (file_base_name,
+  master_spreadsheet_id, drive_folder_id, yearly_file_ids, month_tab_names[],
+  template_sheet_name) + `SheetsSyncOutbox` (unique per `tenant_id+reservation_id`);
+  kolom `Reservation.discount_amount`, `sheets_spreadsheet_id`, `sheets_tab_name`,
+  `sheets_row_index`, `sheets_synced_at`, `sheets_sync_status`.
+- **OAuth (`src/integrations/google-contacts/google-oauth.client.ts`):** tambah scope
+  `spreadsheets`; scope `drive` ditunda demi least-privilege (ditambah menjelang ganti tahun).
+- **Migrasi:** `prisma/migrations/20261005000000_add_sheets_sync_fondasional/migration.sql`
+  (idempoten `IF NOT EXISTS`, seed config `default-tenant` dengan ID file user).
+- **Verifikasi:** `prisma validate` hijau, `prisma generate` hijau, `npm run typecheck`
+  hijau, `typing.test.ts` 12/12. Drift check DB live menunggu DB tersedia (catat di
+  `docs/KNOWN_ISSUES.md` #228).
+- **Belum dikerjakan (Fase 1–4):** resolver murni + row formatter, service Sheets,
+  hook outbox + worker cron, UI Tab Sheets, dan test adversarial.
+
 #### 2026-10-05 - Reservasi Aktif: Jendela Hari-H & Filter Bidan Bertugas
 
 - **Akar masalah (3 lapis):** tab Reservasi Aktif menampilkan booking `confirmed`/

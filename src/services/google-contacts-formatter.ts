@@ -1,3 +1,5 @@
+import { stripTrailingLocationTag } from '../utils/name-sanitizer';
+
 export interface CustomerContactContext {
   id?: string;
   name?: string | null;
@@ -136,7 +138,14 @@ export function splitImportedContactName(compositeName: string): {
   const raw = (compositeName || '').trim();
   if (!raw) return { cleanName: '', areaTag: null };
   const idx = raw.indexOf(' - ');
-  if (idx < 0) return { cleanName: raw, areaTag: null };
+  if (idx < 0) {
+    // Google People API menyatukan given+family TANPA delimiter " - "
+    // ("Bunda ella Kecamatan Waru"). Kelupas tag wilayah di ujung agar nama
+    // murni + wilayah terisolasi (anti data-loss: tag dikembalikan utk klasifikasi).
+    const { cleanName, areaTag } = stripTrailingLocationTag(raw);
+    if (areaTag && cleanName) return { cleanName, areaTag };
+    return { cleanName: raw, areaTag: null };
+  }
   const cleanName = raw.slice(0, idx).trim();
   const areaTag = raw.slice(idx + 3).trim();
   return { cleanName: cleanName || raw, areaTag: areaTag || null };

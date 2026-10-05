@@ -44,10 +44,22 @@ interface BackupItem {
   webViewLink?: string;
 }
 
+interface SheetsConfig {
+  tenant_id: string;
+  is_enabled: boolean;
+  file_base_name: string;
+  master_spreadsheet_id: string | null;
+  yearly_file_ids: Record<string, string> | null;
+  month_tab_names: string[];
+  template_sheet_name: string;
+}
+
+const SPREADSHEET_ID_RE = /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/;
+
 export const GoogleIntegrationPanel: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'contacts' | 'backup'>('contacts');
+  const [activeTab, setActiveTab] = useState<'contacts' | 'sheets' | 'backup'>('contacts');
 
   // Google Status State
   const [status, setStatus] = useState<GoogleStatus | null>(null);
@@ -61,6 +73,15 @@ export const GoogleIntegrationPanel: React.FC = () => {
 
   // Backups State
   const [backups, setBackups] = useState<BackupItem[]>([]);
+
+  // Sheets Rekapan State
+  const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig | null>(null);
+  const [sheetsEnabled, setSheetsEnabled] = useState(false);
+  const [sheetsMasterId, setSheetsMasterId] = useState('');
+  const [sheetsFileBaseName, setSheetsFileBaseName] = useState('Rekapan Pasien');
+  const [sheetsTemplateName, setSheetsTemplateName] = useState('_TEMPLATE');
+  const [savingSheets, setSavingSheets] = useState(false);
+  const [testingSheets, setTestingSheets] = useState(false);
 
   // Action Loading States
   const [savingSettings, setSavingSettings] = useState(false);
@@ -103,9 +124,85 @@ export const GoogleIntegrationPanel: React.FC = () => {
     }
   };
 
+  const fetchSheetsConfig = async () => {
+    try {
+      const res = await apiRequest<{ success: boolean; data: { config: SheetsConfig | null } }>(
+        '/api/admin/integrations/google/sheets-config'
+      );
+      const cfg = res.success ? res.data?.config : null;
+      setSheetsConfig(cfg);
+      if (cfg) {
+        setSheetsEnabled(cfg.is_enabled);
+        setSheetsMasterId(cfg.master_spreadsheet_id || '');
+        setSheetsFileBaseName(cfg.file_base_name || 'Rekapan Pasien');
+        setSheetsTemplateName(cfg.template_sheet_name || '_TEMPLATE');
+      }
+    } catch (err: any) {
+      console.warn('Gagal memuat konfigurasi Sheets:', err?.message);
+    }
+  };
+
+  const normalizeSpreadsheetId = (input: string): string => {
+    const trimmed = (input || '').trim();
+    const m = trimmed.match(SPREADSHEET_ID_RE);
+    return m ? m[1] : trimmed;
+  };
+
+  const handleSaveSheetsConfig = async () => {
+    const cleanId = normalizeSpreadsheetId(sheetsMasterId);
+    setSavingSheets(true);
+    try {
+      const res = await apiRequest<{ success: boolean; message: string }>(
+        '/api/admin/integrations/google/sheets-config',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            isEnabled: sheetsEnabled,
+            fileBaseName: sheetsFileBaseName,
+            masterSpreadsheetId: cleanId || null,
+            templateSheetName: sheetsTemplateName,
+            // Peta tahun: master ID dipakai untuk tahun berjalan agar tidak menulis ke file tahun lain.
+            yearlyFileIds: cleanId ? { [String(new Date().getFullYear())]: cleanId } : {},
+          }),
+        }
+      );
+      if (res.success) {
+        toast('Konfigurasi rekapan Sheets tersimpan.', 'success');
+        setSheetsMasterId(cleanId);
+        fetchSheetsConfig();
+      } else {
+        toast(res.message || 'Gagal menyimpan konfigurasi Sheets.', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal menyimpan konfigurasi Sheets.', 'error');
+    } finally {
+      setSavingSheets(false);
+    }
+  };
+
+  const handleTestSheets = async () => {
+    setTestingSheets(true);
+    try {
+      const res = await apiRequest<{ success: boolean; message: string; error?: string }>(
+        '/api/admin/integrations/google/sheets-test',
+        { method: 'POST', body: JSON.stringify({}) }
+      );
+      if (res.success) {
+        toast(res.message || 'Koneksi Sheets OK.', 'success');
+        fetchSheetsConfig();
+      } else {
+        toast(res.error || res.message || 'Uji koneksi Sheets gagal.', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Uji koneksi Sheets gagal.', 'error');
+    } finally {
+      setTestingSheets(false);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
-    await Promise.all([fetchStatus(), fetchBackups()]);
+    await Promise.all([fetchStatus(), fetchBackups(), fetchSheetsConfig()]);
     setLoading(false);
   };
 
@@ -564,6 +661,27 @@ export const GoogleIntegrationPanel: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('sheets')}
+            className={`pb-3 flex items-center gap-2 transition-colors relative whitespace-nowrap ${
+              activeTab === 'sheets'
+                ? 'text-[#008069] font-bold border-b-2 border-[#008069]'
+                : 'text-[#54656f] hover:text-[#111b21]'
+            }`}
+          >
+            <FileCheck className="w-4 h-4" />
+            <span>2. Rekapan Pasien (Google Sheets)</span>
+            {sheetsConfig?.is_enabled ? (
+              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] rounded-full font-semibold border border-emerald-200">
+                Aktif
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 bg-[#f0f2f5] text-[#54656f] text-[11px] rounded-full font-medium">
+                Nonaktif
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('backup')}
             className={`pb-3 flex items-center gap-2 transition-colors relative whitespace-nowrap ${
               activeTab === 'backup'
@@ -572,7 +690,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
             }`}
           >
             <Database className="w-4 h-4" />
-            <span>2. Backup Database &amp; Restore</span>
+            <span>3. Backup Database &amp; Restore</span>
             {status?.isConnected ? (
               <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] rounded-full font-semibold border border-emerald-200">
                 Drive Aktif
@@ -754,7 +872,124 @@ export const GoogleIntegrationPanel: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: BACKUP DATABASE & RESTORE */}
+        {/* TAB 2: REKAPAN PASIEN (GOOGLE SHEETS) */}
+        {activeTab === 'sheets' && (
+          <div className="space-y-6">
+            {!status?.isConnected ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-amber-800 space-y-1">
+                  <p className="font-bold">Akun Google belum terhubung</p>
+                  <p>
+                    Rekapan otomatis membutuhkan izin <strong>Google Sheets</strong>. Hubungkan akun
+                    Google (tab Contacts) — jika sebelumnya sudah terhubung, sambungkan ulang sekali
+                    untuk menambah izin Sheets.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Toggle Aktif */}
+            <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-xs font-bold text-[#111b21]">Rekapan Otomatis ke Google Sheets</h4>
+                  <p className="text-[11px] text-[#667781] mt-0.5">
+                    Setiap reservasi baru dicatat otomatis (16 kolom, tab bulanan). Admin bebas mengoreksi
+                    angka harga manual di spreadsheet; sistem tidak akan menimpanya.
+                  </p>
+                </div>
+                <ToggleSwitch
+                  checked={sheetsEnabled}
+                  onChange={(next) => setSheetsEnabled(next)}
+                  onLabel="ON (AKTIF)"
+                  offLabel="OFF (NONAKTIF)"
+                  size="md"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-[#111b21] mb-1.5">
+                  Link / ID Spreadsheet Rekapan:
+                </label>
+                <input
+                  type="text"
+                  value={sheetsMasterId}
+                  onChange={(e) => setSheetsMasterId(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit  atau  xxxxx"
+                  className="w-full text-xs font-mono px-3.5 py-2 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                />
+                <p className="text-[11px] text-[#667781] mt-1.5 leading-relaxed">
+                  Tempel link lengkap dari browser atau cukup ID-nya. Pastikan spreadsheet milik akun
+                  Google yang terhubung di atas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#111b21] mb-1.5">Nama Dasar File:</label>
+                  <input
+                    type="text"
+                    value={sheetsFileBaseName}
+                    onChange={(e) => setSheetsFileBaseName(e.target.value)}
+                    placeholder="Rekapan Pasien"
+                    className="w-full text-xs px-3.5 py-2 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#111b21] mb-1.5">Nama Tab Template:</label>
+                  <input
+                    type="text"
+                    value={sheetsTemplateName}
+                    onChange={(e) => setSheetsTemplateName(e.target.value)}
+                    placeholder="_TEMPLATE"
+                    className="w-full text-xs font-mono px-3.5 py-2 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                  />
+                </div>
+              </div>
+
+              {sheetsConfig?.month_tab_names && (
+                <div className="text-[11px] text-[#667781]">
+                  <span className="font-bold">Tab bulanan terdeteksi: </span>
+                  <span className="font-mono">{sheetsConfig.month_tab_names.join(' · ')}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  onClick={handleTestSheets}
+                  disabled={testingSheets}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {testingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5 text-[#008069]" />}
+                  <span>Uji Koneksi &amp; Siapkan Tab</span>
+                </button>
+                <button
+                  onClick={handleSaveSheetsConfig}
+                  disabled={savingSheets}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {savingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Simpan Konfigurasi Rekapan</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Panduan singkat */}
+            <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 text-[11px] text-[#667781] leading-relaxed space-y-1.5">
+              <p className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-[#008069]" />
+                Cara kerja singkat
+              </p>
+              <p>1. Booking baru → antrean sistem → otomatis masuk tab bulan berjalan (mis. <code>okt</code>).</p>
+              <p>2. Ganti bulan → tab bulan baru dibuat dari template (header, warna, dropdown Bidan tetap).</p>
+              <p>3. Ganti tahun → file tahun baru belum otomatis (butuh izin Drive, ditambahkan menjelang Desember).</p>
+              <p>4. Harga yang Anda koreksi manual di spreadsheet tidak akan ditimpa sistem.</p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: BACKUP DATABASE & RESTORE */}
         {activeTab === 'backup' && (
           <div className="space-y-6">
             {/* Action Bar Pembuatan & Upload Backup */}

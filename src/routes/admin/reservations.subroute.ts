@@ -2143,6 +2143,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Cermin Sheets: update baris yang sama (bayar/bidan/status/treatment).
+        // Fire-and-forget; kolom harga H/I/J/K write-once tidak tersentuh.
+        import('../../services/sheets/sheets-sync.service')
+          .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, existing.tenant_id || tenantId))
+          .catch((err) => console.warn('[Admin API] sheets enqueue on edit failed:', err?.message));
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -2615,6 +2621,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             console.error('[Admin API] Failed to schedule staff notification on assign:', err.message);
           });
         }
+
+        // Cermin Sheets: update kolom Bidan di baris yang sama (bukan baris baru).
+        // Fire-and-forget; harga write-once tidak tersentuh (lihat sheets-sync).
+        import('../../services/sheets/sheets-sync.service')
+          .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, tenantId))
+          .catch((err) => console.warn('[Admin API] sheets enqueue on assign failed:', err?.message));
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

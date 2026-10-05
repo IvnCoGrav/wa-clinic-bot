@@ -6,6 +6,7 @@ import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
+import { sanitizeCustomerNameForStorage } from '../utils/name-sanitizer';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -176,6 +177,9 @@ export class CustomerService {
     // TIDAK ADA lagi pembuatan objek mock diam-diam saat DB mati di produksi.
     const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
     const isSandbox = isDummyOrTestContact(phone, name);
+    // Gerbang SEAM TULIS (fondasional): nama mentah dari buku telepon WAHA /
+    // pushname / booking SELALU dibersihkan dari noise toponimi sebelum persist.
+    const safeName = sanitizeCustomerNameForStorage(name);
 
     let customer = await repo.findByPhone(phone, tenantId);
     let isNewlyCreated = false;
@@ -197,7 +201,7 @@ export class CustomerService {
         customer = await repo.create({
           tenant_id: tenantId,
           phone,
-          name: name || null,
+          name: safeName || null,
           is_sandbox_test: isSandbox,
         });
         isNewlyCreated = true;
@@ -763,10 +767,18 @@ export class CustomerService {
    * Update nama kontak customer (misal: "Bunda Sari" / "Bunda Sari Waru")
    */
   public async updateCustomerName(customerId: string, name: string, tenantId: string): Promise<any> {
+    // Gerbang SEAM TULIS (fondasional): noise toponimi ("Kecamatan X", "Kec. Y")
+    // DILARANG masuk kolom `name`. Bila hasil bersih kosong/placeholder, JANGAN
+    // menimpa nama lama (anti data-loss) — cukup lewati penulisan nama.
+    const safeName = sanitizeCustomerNameForStorage(name);
+    if (!safeName) {
+      const current = await this.getCustomerById(customerId, tenantId);
+      return current;
+    }
     try {
       const updated = await prisma.customer.update({
         where: { id: customerId },
-        data: { name },
+        data: { name: safeName },
       });
 
       // Google Contacts auto-sync (best-effort, non-blocking)
@@ -781,7 +793,7 @@ export class CustomerService {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
-          cust.name = name;
+          cust.name = safeName;
           return cust;
         }
       }
@@ -820,7 +832,11 @@ export class CustomerService {
     tenantId: string
   ): Promise<any> {
     const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
+    if (data.name !== undefined) {
+      // Gerbang SEAM TULIS: admin edit pun DILARANG menyelipkan noise toponimi.
+      const safeName = sanitizeCustomerNameForStorage(data.name);
+      if (safeName) updateData.name = safeName;
+    }
     // Fase 165b: simpan nilai kelurahan yang tercemar untuk DIALIHKAN ke
     // preferences.address (agar info jalan/perumahan tidak hilang), bukan ditulis
     // ke kolom kelurahan.

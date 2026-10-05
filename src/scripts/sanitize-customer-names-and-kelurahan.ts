@@ -2,11 +2,15 @@
  * sanitize-customer-names-and-kelurahan.ts — Pembersihan data master (idempoten).
  * Fase 5 plan integritas penamaan Google Contacts & Database.
  *
- * 3 aturan (semua HANYA melengkapi kolom kosong — tidak menimpa data existing):
+ * Aturan (idempoten; kolom kecamatan/kelurahan HANYA diisi bila kosong agar
+ * tidak menimpa data existing, tetapi KOLOM NAME selalu dibersihkan dari noise):
+ *  0. Normalisasi awalan administratif kecamatan ("Kecamatan Waru" → "Waru").
  *  1. kelurahan tercemar (URL maps / alamat jalan / >40 char) → pindah ke
  *     preferences.address bila kosong, lalu kelurahan = null.
- *  2. Nama bersuffix wilayah ("Bunda Retno Gedangan") → nama bersih +
- *     kecamatan bila kosong (else kelurahan bila kosong, else skip).
+ *  2. Nama ber-noise wilayah ("Bunda Retno Gedangan", "Bunda Dewy Kec. Sawahan")
+ *     → nama bersih via gerbang runtime `sanitizeCustomerNameForStorage`
+ *     (anti data-loss: bila seluruh isi hanyalah noise, nama tidak ditulis ulang),
+ *     wilayah dipindah ke kecamatan/kelurahan bila kolomnya kosong.
  *  3. Nama komposit impor ("Pelanggan 8247 - Manukan Kulon") → belah +
  *     klasifikasi gazetteer, isi kolom kosong saja.
  *
@@ -17,12 +21,14 @@
  */
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { COMMON_DISTRICTS } from '../utils/name-sanitizer';
+import { sanitizeCustomerNameForStorage } from '../utils/name-sanitizer';
 import {
   isCorruptedKelurahan,
   stripTrailingDistrict,
   toTitleCase,
 } from '../utils/customer-name-healing';
+import { COMMON_DISTRICTS } from '../utils/name-sanitizer';
+import { getGazetteerAreas } from '../utils/gazetteer';
 import { splitImportedContactName } from '../services/google-contacts-formatter';
 import { classifyImportedAreaTag } from '../services/google-contacts.service';
 
@@ -34,6 +40,14 @@ const LIMIT = limitArg ? Math.max(1, parseInt(limitArg.split('=')[1], 10) || 500
 
 async function main() {
   console.log(`[SANITIZE] Mode: ${APPLY ? 'APPLY (tulis DB)' : 'DRY-RUN (tanpa tulis)'} | tenant=${TENANT} | limit=${LIMIT}`);
+  // Init gazetteer (data-driven): meng-inject leksikon toponimi lengkap dari
+  // dataset ke name-sanitizer. Tanpa ini, hanya daftar statis COMMON_DISTRICTS
+  // yang aktif → toponimi dataset murni (mis. "Lontar") lolos dari pembersihan.
+  try {
+    getGazetteerAreas();
+  } catch (e: any) {
+    console.warn('[SANITIZE] Gagal init gazetteer (lanjut dengan daftar statis):', e?.message);
+  }
 
   const rows = await prisma.customer.findMany({
     where: { tenant_id: TENANT },
@@ -50,6 +64,20 @@ async function main() {
   for (const r of rows) {
     const patch: any = {};
     const reasons: string[] = [];
+
+    // Aturan 0: normalisasi awalan administratif pada kolom kecamatan
+    // ("Kecamatan Waru" → "Waru", "Kec. Sedati" → "Sedati"). Kolom kecamatan
+    // hidup terpisah dari nama — nilai mentah di sini ikut mencemari formatter.
+    if (r.kecamatan) {
+      const normalizedKec = r.kecamatan
+        .trim()
+        .replace(/^(?:kecamatan|kec)\.?\s+/i, '')
+        .trim();
+      if (normalizedKec && normalizedKec !== r.kecamatan) {
+        patch.kecamatan = toTitleCase(normalizedKec);
+        reasons.push(`kecamatan dinormalisasi → "${patch.kecamatan}"`);
+      }
+    }
 
     // Aturan 1: kelurahan tercemar → preferences.address + null
     if (isCorruptedKelurahan(r.kelurahan)) {
@@ -90,23 +118,31 @@ async function main() {
         continue;
       }
     } else if (name) {
-      // Aturan 2: suffix wilayah di akhir nama
+      // Aturan 2: bersihkan noise wilayah dari nama (fondasional, memakai gerbang
+      // yang sama dengan jalur tulis runtime). Nama SELALU diperbaiki bila ada
+      // noise — tidak lagi dibiarkan kotor hanya karena kolom kecamatan/kelurahan
+      // sudah terisi (bug guard pasif lama). Wilayah hanya DIPINDAH ke kolom bila
+      // kolomnya masih kosong (anti data-loss).
       const { cleanName, district } = stripTrailingDistrict(name, COMMON_DISTRICTS);
-      if (district && cleanName && cleanName !== name) {
-        const proper = toTitleCase(district);
-        if (!r.kecamatan) {
-          patch.name = cleanName;
-          patch.kecamatan = proper;
-          reasons.push(`suffix → "${cleanName}" + kec ${proper}`);
-          fixSuffix++;
-        } else if (!r.kelurahan && !patch.kelurahan) {
-          patch.name = cleanName;
-          patch.kelurahan = proper;
-          reasons.push(`suffix → "${cleanName}" + kel ${proper}`);
-          fixSuffix++;
-        } else {
-          skipped++;
-          continue;
+      const storageName = sanitizeCustomerNameForStorage(name);
+      // Utamakan hasil gerbang runtime (paling menyeluruh); fallback ke hasil
+      // strip suffix. Bila keduanya kosong → semua isi hanyalah noise, JANGAN
+      // menulis placeholder (anti data-loss).
+      const candidate = storageName || (cleanName !== name ? cleanName : '');
+      const targetName = candidate && !/^bunda$/i.test(candidate) ? candidate : '';
+      if (targetName && targetName !== name) {
+        patch.name = targetName;
+        reasons.push(`nama dibersihkan → "${targetName}"`);
+        fixSuffix++;
+        const proper = district ? toTitleCase(district) : null;
+        if (proper) {
+          if (!r.kecamatan && !patch.kecamatan) {
+            patch.kecamatan = proper;
+            reasons.push(`+ kec ${proper}`);
+          } else if (!r.kelurahan && !patch.kelurahan) {
+            patch.kelurahan = proper;
+            reasons.push(`+ kel ${proper}`);
+          }
         }
       } else if (Object.keys(patch).length === 0) {
         skipped++;

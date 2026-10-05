@@ -217,6 +217,15 @@ export class ReservationLifecycleService {
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] googleContactsService.syncCustomer failed:', err?.message);
     }
+
+    // 5. Rekapan Google Sheets — HANYA enqueue ke outbox (non-blocking). Worker cron
+    // yang memanggil API Google, sehingga webhook chat tidak pernah menunggu Google.
+    try {
+      const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
+      await sheetsSyncService.enqueue(reservationId, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] sheetsSync enqueue failed:', err?.message);
+    }
   }
 
   /**
