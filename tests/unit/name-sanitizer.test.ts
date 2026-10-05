@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   sanitizeCustomerNameForGreeting,
+  sanitizeCustomerNameForStorage,
   formatGreetingBunda,
   cleanSingleBabyName,
   formatBabyNamesForGreeting,
@@ -84,6 +85,54 @@ describe('Name & BabyName Sanitizer Unit Tests', () => {
 
     it('does not mangle a real name that legitimately repeats a single word', () => {
       expect(sanitizeCustomerNameForGreeting('Bunda Dede Dede')).toBe('Dede Dede');
+    });
+  });
+
+  // Adversarial (mandat anti-overfitting): bukan meniru 1 kalimat verbatim,
+  // tetapi variasi parafrase singkatan/besar-kecil/dialek wilayah yang tak terbatas.
+  describe('1b. sanitizeCustomerNameForGreeting — kebocoran singkatan & toponimi', () => {
+    it('membuang singkatan "Kec."/"Kel." berpasangan dengan toponimi', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Dewy Kec. Sawahan kota Surabaya')).toBe('Dewy');
+      expect(sanitizeCustomerNameForGreeting('Bunda Dewy KEC SAWAHAN')).toBe('Dewy');
+      expect(sanitizeCustomerNameForGreeting('Bunda Dewy kecamatan sawahan')).toBe('Dewy');
+      expect(sanitizeCustomerNameForGreeting('Bunda Dewy Kel. Sawahan')).toBe('Dewy');
+    });
+
+    it('membuang toponimi ganda beruntun tanpa mutilasi tengah kalimat', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda ella Kecamatan Waru Kecamatan Waru')).toBe('ella');
+      expect(sanitizeCustomerNameForGreeting('Bunda Ayu menganti Kecamatan Menganti Kecamatan Menganti')).toBe('Ayu');
+      expect(sanitizeCustomerNameForGreeting('Bunda chaterina Kecamatan Sedati')).toBe('chaterina');
+      expect(sanitizeCustomerNameForGreeting('Bunda Olivia G Sedati')).toBe('Olivia G');
+    });
+
+    it('membuang toponimi di tengah nama', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Jasmine Lontar Sambikerep')).toBe('Jasmine');
+    });
+
+    it('tidak merusak nama yang mengandung konjungsi toponimi', () => {
+      expect(sanitizeCustomerNameForGreeting('Pak alip buduran & sidoarjo')).toBe('Pak alip');
+    });
+  });
+
+  // Gerbang SEAM TULIS: DB menyimpan prefix "Bunda" & nama utuh, tetapi TANPA noise wilayah.
+  describe('1c. sanitizeCustomerNameForStorage (gerbang persistensi)', () => {
+    it('mempertahankan prefix Bunda dan membuang noise wilayah', () => {
+      expect(sanitizeCustomerNameForStorage('Bunda Dewy Kec. Sawahan kota Surabaya')).toBe('Bunda Dewy');
+      expect(sanitizeCustomerNameForStorage('Bunda ella Kecamatan Waru Kecamatan Waru')).toBe('Bunda ella');
+      expect(sanitizeCustomerNameForStorage('Bunda Jasmine Lontar Sambikerep')).toBe('Bunda Jasmine');
+      expect(sanitizeCustomerNameForStorage('Bunda Retno Gedangan')).toBe('Bunda Retno');
+      expect(sanitizeCustomerNameForStorage('Bunda Rina, Sidotopo Wetan')).toBe('Bunda Rina');
+    });
+
+    it('tidak menyentuh nama bersih (anti-mutilasi)', () => {
+      expect(sanitizeCustomerNameForStorage('Bunda Sari')).toBe('Bunda Sari');
+      expect(sanitizeCustomerNameForStorage('Bunda Fitria Febriani')).toBe('Bunda Fitria Febriani');
+    });
+
+    it('mengembalikan string kosong untuk placeholder (pemanggil wajib skip tulis)', () => {
+      expect(sanitizeCustomerNameForStorage('Bunda')).toBe('');
+      expect(sanitizeCustomerNameForStorage('')).toBe('');
+      expect(sanitizeCustomerNameForStorage(null)).toBe('');
     });
   });
 

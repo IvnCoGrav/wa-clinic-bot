@@ -24,6 +24,27 @@ const ABBREVIATION_RULES: Array<{ re: RegExp; replacement: string }> = [
 ];
 
 /**
+ * Ekspansi singkatan baku toponimi Indonesia dengan word boundary, TANPA
+ * merendahkan huruf (case-preserving). Dipakai hot-path sanitasi NAMA customer
+ * agar "Kec. Sawahan" → "Kecamatan Sawahan" sehingga gerbang wilayah
+ * deterministik (bukan regex hafalan per-kasus) dapat mengelupasnya.
+ * "Bunda Dewy Kec. Sawahan" -> "Bunda Dewy Kecamatan Sawahan".
+ */
+export function expandToponymAbbreviations(text: string): string {
+  if (!text) return '';
+  let out = text;
+  for (const rule of ABBREVIATION_RULES) {
+    const re = new RegExp(rule.re.source, 'gi');
+    out = out.replace(re, (m) => {
+      const first = m[0];
+      const upper = first === first.toUpperCase() && first !== first.toLowerCase();
+      return upper ? rule.replacement[0].toUpperCase() + rule.replacement.slice(1) : rule.replacement;
+    });
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Ekspansi singkatan baku toponimi Indonesia dengan word boundary.
  * "Kupang gn barat gg 3" -> "kupang gunung barat gang 3".
  */
