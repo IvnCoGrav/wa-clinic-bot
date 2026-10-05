@@ -42,6 +42,28 @@ describe('PRICELIST GATE — gerbang keputusan deterministik (murni)', () => {
     }
   });
 
+  it('EXPLICIT: singkatan populer "PL" (token utuh) → ask_pricelist_image', () => {
+    const phrases = [
+      'Boleh minta PL nya',
+      'PL nya kak',
+      'minta PL dong',
+      'spill PL',
+      'PL',
+    ];
+    for (const p of phrases) {
+      const intents = extractFastIntents(p);
+      expect(intents, `frasa: "${p}"`).toContain('ask_pricelist_image');
+      const v = evaluatePricelistTrigger({ intents, executedTools: [], pricelistSent: true });
+      expect(v, `frasa: "${p}"`).toEqual({ send: true, forceResend: true, reason: 'EXPLICIT_REQUEST' });
+    }
+  });
+
+  it('NEGATIF: token "pl" di tengah kata lain BUKAN permintaan pricelist', () => {
+    expect(extractFastIntents('tolong jelasin sample nya')).not.toContain('ask_pricelist_image');
+    expect(extractFastIntents('boleh minta pil nya ga')).not.toContain('ask_pricelist_image');
+    expect(extractFastIntents('terapkan template nya')).not.toContain('ask_pricelist_image');
+  });
+
   it('POST_DELIVERY: ongkir sukses dalam jangkauan, pricelistSent=false → kirim non-force', () => {
     const v = evaluatePricelistTrigger({
       intents: [],

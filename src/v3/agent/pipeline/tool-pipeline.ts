@@ -434,6 +434,16 @@ export class ToolExecutionPipeline {
             ?? (session as any).children?.[0]?.ageMonths ?? null;
           if (typeof sessionChildAge === 'number') fnArgs.childAgeMonths = sessionChildAge;
         }
+        // Fallback turn-ini (insiden Rizky 19 bln): bila sesi belum sempat
+        // mencatat usia (mis. sinkron tertunda), ekstrak dari pesan masuk agar
+        // filter tier usia Newborn tetap aktif. Murni via extractor terpusat.
+        if (fnArgs.childAgeMonths == null && cleanIncomingText) {
+          try {
+            const { PatientProfileExtractor } = await import('../../state/patient-extractor');
+            const ages = PatientProfileExtractor.extractAgesMonths(cleanIncomingText.toLowerCase());
+            if (ages.length > 0 && Number.isFinite(ages[0])) fnArgs.childAgeMonths = ages[0];
+          } catch {}
+        }
       }
 
       console.log(`[V3 AGENT TOOL EXECUTE] Tool: "${fnName}", Args:`, JSON.stringify(maskToolArgsForLogging(fnName, fnArgs)));

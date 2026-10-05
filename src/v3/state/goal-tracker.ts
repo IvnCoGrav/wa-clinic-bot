@@ -208,8 +208,14 @@ export class GoalTracker {
           kecamatan: conv.customer.kecamatan || undefined,
           kota: conv.customer.kota || undefined,
           distanceKm: conv.customer.distance_km != null ? Number(conv.customer.distance_km) : undefined,
+          // Catatan: `Customer.ongkir` menyimpan HARGA PROMO (temuan audit:
+          // label 'ongkirPromoFee' di preferences tak pernah ditulis siapa pun,
+          // sehingga ongkir hilang lintas-turn → total katalog & rekap keranjang
+          // tanpa ongkir). Ongkir promo WAJIB terbaca dari kolom yang benar-benar
+          // ditulis; ongkirNormal tetap fallback sama (utang label dicatat).
           ongkirNormal: conv.customer.ongkir != null ? Number(conv.customer.ongkir) : undefined,
-          ongkirPromo: prefs.ongkirPromoFee || undefined,
+          ongkirPromo: prefs.ongkirPromoFee
+            ?? (conv.customer.ongkir != null ? Number(conv.customer.ongkir) : undefined),
           isOutOfCoverage: Boolean(conv.customer.is_out_of_coverage)
         } : undefined),
         childProfile: prefs.childProfile || (prefs.childAgeMonths ? {

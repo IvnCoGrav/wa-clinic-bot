@@ -349,4 +349,31 @@ describe('Tool Masker Engine (Fase 2)', () => {
       expect(result.maskedToolNames).not.toContain('calculate_delivery');
     });
   });
+
+  describe('6. Pin lokasi WhatsApp native (insiden Rizky — format [LOCATION: Lat ...])', () => {
+    const session: CustomerGoalSession = {
+      genderGreeting: 'Bunda',
+      cartItems: [{ name: 'Pijat Bayi Ceria', price: 60000, type: 'PRIMARY' }],
+    };
+
+    it('format kanonis [LOCATION: Lat ..., Lng ...] dikenali sebagai entitas lokasi baru', () => {
+      expect(hasNewLocationEntity('[LOCATION: Lat -7.33108377456665, Lng 112.68679809570312]')).toBe(true);
+      expect(hasNewLocationEntity('[LIVE_LOCATION: Lat -7.31, Lng 112.75]')).toBe(true);
+      // Plus keterangan teks customer di pesan yang sama
+      expect(hasNewLocationEntity('[LOCATION: Lat -7.33108, Lng 112.68679] Di balas klumprik kak')).toBe(true);
+    });
+
+    it('koordinat telanjang dua-desimal dikenali, tetapi pasangan bilangan bulat biasa TIDAK (anti salah-tembak)', () => {
+      expect(hasNewLocationEntity('-7.331083, 112.686798')).toBe(true);
+      // "jam 10, 11 siang" / tahun "2019, 2020" BUKAN koordinat GPS
+      expect(hasNewLocationEntity('bisa jam 10, 11 siang kak')).toBe(false);
+      expect(hasNewLocationEntity('data tahun 2019, 2020')).toBe(false);
+    });
+
+    it('pin WhatsApp membuka calculate_delivery secara fisik (tidak di-mask)', () => {
+      const result = evaluateToolMasking(ALL_V3_TOOLS, session, '[LOCATION: Lat -7.33108377456665, Lng 112.68679809570312]', []);
+      expect(result.maskedToolNames).not.toContain('calculate_delivery');
+      expect(result.availableTools.some((t) => t.function?.name === 'calculate_delivery')).toBe(true);
+    });
+  });
 });

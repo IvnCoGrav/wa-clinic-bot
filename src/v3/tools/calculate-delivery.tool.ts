@@ -7,6 +7,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { getCoverageCities, getInsideRegions, getOutsideCities } from '../../config/coverage';
 import { TEMPLATES } from '../../config/persona';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../../utils/google-maps-url-resolver';
+import { extractPinCoordinates } from '../../utils/pin-coordinates';
 import { isLocationConfirmationAffirmative } from '../state/location-helpers';
 
 export interface CartSnapshotItem {
@@ -530,6 +531,69 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
   // Sinyal awal kota luar (data-driven includes, bukan regex hafalan).
   // Keputusan final tetap berbasis jarak koordinat riil + hierarki kota geocoding.
   const isExplicitOutsideCity = textMentionsOutsideCity(locationText);
+
+  // Phase 0b — Pin lokasi WhatsApp native (insiden Rizky 6285236127747).
+  // Teks "[Shared Location: lat, lng]" / "[LOCATION: Lat ..., Lng ...]" jatuh
+  // ke geocoding NAMA daerah (guzzle) dan gagal → bot malah minta kelurahan
+  // padahal koordinat sudah di tangan. Cabang ini menghitung jarak/ongkir
+  // langsung dari koordinat, cermin cabang URL Maps di atas.
+  try {
+    const pinCoords = extractPinCoordinates(locationText);
+    if (pinCoords) {
+      const { lat, lng } = pinCoords;
+      const [reversed, deliveryResult] = await Promise.all([
+        geocodingService.reverseGeocode(lat, lng).catch(() => null),
+        deliveryService.calculateDelivery({ lat, lng }, { lat: clinicConfig.lat, lng: clinicConfig.lng }, tenantId),
+      ]);
+      const distanceKm = deliveryResult.distanceKm;
+      const ongkirNormal = deliveryResult.normalPrice;
+      const ongkirPromo = deliveryResult.ongkir;
+      const maxCoverageKm = deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm;
+      const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm;
+      const kelurahan = reversed?.kelurahan || 'Titik Lokasi Terpilih';
+      const hasCartItems = (cartSnapshot || []).length > 0;
+      const pinShowFeeNominal = askedFee || !isOutOfCoverage;
+      const scheduleCta = !isOutOfCoverage
+        ? buildScheduleCta({ preferredDate, candidateTreatmentName, hasCartItems })
+        : undefined;
+      const pinTemplate = isOutOfCoverage
+        ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
+        : pinShowFeeNominal
+          ? TEMPLATES.ongkirInfo({
+              distanceKm,
+              normalPrice: ongkirNormal,
+              promoPrice: ongkirPromo,
+              freeTierKm: deliveryResult.freeTierKm,
+              candidateTreatmentName,
+              ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
+            })
+          : TEMPLATES.inCoverageNoFee({ kelurahan, scheduleCta: scheduleCta! });
+      const pinRecap = isOutOfCoverage || !shouldShowCartRecap ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
+      const pinTemplateWithRecap = pinRecap ? `${pinTemplate}\n\n${pinRecap.block}` : pinTemplate;
+      const pinMessageBase = isOutOfCoverage
+        ? `Titik share location berhasil diidentifikasi: jarak rute kurang lebih ${distanceKm} km, melebihi batas jangkauan layanan klinik (maks ${maxCoverageKm} km).`
+        : `Area ${kelurahan} masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
+      const pinMessage = pinRecap ? `${pinMessageBase}\n\n${pinRecap.block}` : pinMessageBase;
+      console.log(JSON.stringify({ event: 'V3_TOOL_DELIVERY_PIN_RESOLVED', tenantId, lat, lng, distanceKm, timestamp: new Date().toISOString() }));
+      const pinOutput: CalculateDeliveryOutput = {
+        success: true,
+        isPrecise: true,
+        kelurahan,
+        kecamatan: reversed?.kecamatan,
+        kota: reversed?.kota || 'Sidoarjo/Surabaya',
+        formattedAddress: reversed?.formattedAddress,
+        distanceKm,
+        ongkirNormal,
+        ongkirPromo,
+        isOutOfCoverage,
+        suggestedTemplateReply: pinTemplateWithRecap,
+        message: pinMessage,
+      };
+      return applyFeeInformationHiding(pinOutput, pinShowFeeNominal);
+    }
+  } catch (pinErr: any) {
+    console.warn(JSON.stringify({ event: 'V3_TOOL_DELIVERY_PIN_FALLBACK', tenantId, error: pinErr?.message, timestamp: new Date().toISOString() }));
+  }
 
   if (!locationText || locationText.trim().length < 2) {
     return {

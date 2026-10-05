@@ -26,6 +26,7 @@ import { findPopularLandmark, resolveArteryCorridor } from '../../config/landmar
 import { getOutsideCities, getCoverageCities } from '../../config/coverage';
 import { isTypoAtMostOne } from '../../utils/typo-match';
 import { isPureLeadGreeting } from '../../utils/lead-greeting-detector';
+import { extractPinCoordinates } from '../../utils/pin-coordinates';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -177,7 +178,11 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
   const lower = input.toLowerCase();
   if (!lower.trim()) return false;
   const textWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
-  // 0. Landmark populer / koridor arteri (sumber terpisah dari gazetteer).
+  // 0. Pin/koordinat GPS presisi (format kanonis WhatsApp "[LOCATION: Lat ...]",
+  //    "[LIVE_LOCATION: Lat ...]", atau koordinat berdesimal). Membuka
+  //    calculate_delivery — sebelumnya lolos celah (insiden Rizky 6285236...).
+  if (isPreciseNewPinpoint(input)) return true;
+  // 0b. Landmark populer / koridor arteri (sumber terpisah dari gazetteer).
   try {
     if (findPopularLandmark(input) || resolveArteryCorridor(input)) return true;
   } catch {}
@@ -207,13 +212,9 @@ export function hasNewLocationEntity(text: string | undefined): boolean {
  * lat/lng (format teknis mesin, non-semantik).
  */
 function isPreciseNewPinpoint(text: string): boolean {
-  const coordMatch = text.match(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/);
-  if (coordMatch) {
-    const lat = parseFloat(coordMatch[1]);
-    const lng = parseFloat(coordMatch[2]);
-    if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return true;
-  }
-  for (const token of text.split(/\s+/)) {
+  const t = text || '';
+  if (extractPinCoordinates(t)) return true;
+  for (const token of t.split(/\s+/)) {
     if (!/^https?:\/\//i.test(token)) continue;
     try {
       const url = new URL(token);

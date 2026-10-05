@@ -571,10 +571,23 @@ export async function executeGetCatalog(
       if (effectiveSymptoms.length > 0) return 0;
       return isSickTherapyService(id) ? 1 : 0;
     };
+    // Insiden Rizky (6285236127747): layanan khusus Newborn (0-6 bln) menempati
+    // indeks 0 katalog. Saat usia anak BELUM diketahui, urutan seri kembali ke
+    // urutan DB → LLM mengira semua bayi = newborn. Turunkan prioritas tier
+    // newborn HANYA saat usia belum diketahui, data-driven dari ageTier
+    // (BUKAN hafalan nama). Saat usia diketahui, filter usia sudah menangani.
+    const isNewbornTier = (id: string): boolean => {
+      const s = serviceById.get(id);
+      const max = s?.ageTier?.maxAgeMonths;
+      return typeof max === 'number' && max <= 6;
+    };
+    const newbornLastWhenUnknown = (id: string): number =>
+      (ageUnknown && !isTargetingMoms && isNewbornTier(id)) ? 1 : 0;
     formattedTreatments.sort((a, b) =>
       ((b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0))
       || (therapyScoreOf(b.id) - therapyScoreOf(a.id))
       || (healthyPriorityOf(a.id) - healthyPriorityOf(b.id))
+      || (newbornLastWhenUnknown(a.id) - newbornLastWhenUnknown(b.id))
       || (babyFirstOf(b.id) - babyFirstOf(a.id))
       || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
     );

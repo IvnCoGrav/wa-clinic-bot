@@ -105,6 +105,21 @@ export interface GuardrailOutput {
 const REPROMPT_EDITOR_SYSTEM =
   'Kamu adalah editor bahasa dan konsistensi teks untuk layanan homecare "Kala Moms and Baby Spa". Tugasmu HANYA merevisi draf teks balasan WhatsApp asisten yang diberikan agar 100% mematuhi instruksi koreksi, dengan tetap mempertahankan nada hangat Bidan Yusi. WAJIB selalu menggunakan kata ganti "kami" atau "Bidan kami" (DILARANG KERAS menggunakan kata "saya" atau "aku"). DILARANG menyalin pesan dari percakapan lama (tidak ada konteks lain yang diberikan), DILARANG menambah penjelasan di luar draf, DILARANG mengubah fakta/angka/nama layanan selain yang diperintahkan koreksi, dan keluarkan HANYA teks balasan yang sudah direvisi secara utuh dan alami.';
 
+/**
+ * Deteksi todong usia (murni, pola teknis sapaan bot): kenali leksikon "usia"
+ * DAN "umur" (insiden Rizky: bot bertanya "umur si kecil berapa?" lolos dari
+ * semua gerbang karena pola lama hanya cocok "usia"). Bukan hafalan kalimat
+ * customer, melainkan pola kata tanya bot + satuan usia.
+ */
+export function hasAgeQuestion(text: string): boolean {
+  const t = (text || '').toLowerCase();
+  if (!t.trim()) return false;
+  // "umur/usianya ... berapa" atau "berapa (bulan|tahun|usia|umur) ..."
+  return /(?:usia|umur)\s*(?:nya|ku)?\s+[^\n.!?]{0,25}?\bberap\w*/.test(t)
+    || /berapa\s+(?:bulan|tahun|usia|umur)\b/.test(t)
+    || /(?:usia|umur)\s+berap\w*/.test(t);
+}
+
 export function buildIsolatedRepromptMessages(
   currentDraft: string | undefined,
   correctionNote: string
@@ -711,8 +726,15 @@ export class GuardrailPipeline {
     const isAgeClarificationAuthorized = executedTools.some(
       (t) => t?.name === 'get_catalog_and_price' && (t as any)?.result?.needsAgeClarification === true
     );
-    const hasAgeQuestion = (text: string): boolean =>
-      /usia\s+(si\s+kecil|anak|baby|balita|bunda)|berapa\s+(bulan|tahun|usia)/i.test(text);
+    // Usia anak diketahui dari state sesi (dipakai gerbang Newborn 7d-2 dan
+    // nota koreksi usia di bawah) — dihitung sekali sebagai single source.
+    const knownChildAge = (() => {
+      const a = (session as any)?.childProfile?.ageMonths;
+      if (typeof a === 'number' && Number.isFinite(a)) return a;
+      const c0 = (session as any)?.children?.[0]?.ageMonths;
+      if (typeof c0 === 'number' && Number.isFinite(c0)) return c0;
+      return undefined;
+    })();
     // Lapis kode DETERMINISTIK (sesi 783810 — anti-tambal-sulam: kontrol gaya
     // berkuota HANYA diizinkan lewat gerbang kode, bukan kepatuhan prompt).
     // Tanpa otorisasi klinis, menodong usia NOMINAL ("usia si kecil 3 bulan")
@@ -720,7 +742,7 @@ export class GuardrailPipeline {
     // Dasar pola: kata 'usia' lalu bilangan lalu satuan; kalimat bertanda
     // '?'/berdaftar mode/satuan tanggung → gagal aman (tanpa strip).
     const NOMINAL_AGE_RE =
-      /\busia\s+[^\n.?!]*?\b(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/gi;
+      /\b(?:usia|umur)\s+[^\n.?!]*?\b(\d+(?:[.,]\d+)?)\s*(tahun|tahunan|thn|th|bln|bulan|hari)\b/gi;
     const NOMINAL_AGE_MODES = ['bulan', 'hari', 'minggu', 'tahun'] as const;
     const stripNominalAges = (text: string): string => {
       if (!text) return text;
@@ -771,6 +793,11 @@ export class GuardrailPipeline {
       let ageRepromptOk = false;
       try {
         let ageCorrectionNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA, tetapi HAPUS pertanyaan tentang usia si kecil/anak/baby. DILARANG menodong usia customer. DILARANG memotong atau mutilasi kalimat di tengah.`;
+        // Lapis sekunder (gerbang kode utama ada di 7d-2): bila usia anak sudah
+        // diketahui dan > 6 bulan, tegaskan agar nama layanan selaras usia.
+        if (typeof knownChildAge === 'number' && knownChildAge > 6) {
+          ageCorrectionNote += ` Usia si kecil adalah ${knownChildAge} bulan (BUKAN newborn) — DILARANG menyebut paket "Newborn", gunakan nama layanan sesuai usia anak.`;
+        }
         if (symptomsKnown) {
           ageCorrectionNote += ` PERHATIAN: Customer SUDAH menyampaikan keluhan si kecil di chat. DILARANG menanyakan kembali keluhan/kondisi si kecil ("boleh dibagikan keluhan", "apakah ada keluhan")! Cukup tutup dengan empati Bidan yang hangat atau tanyakan apakah Bunda berminat mencoba perawatan tersebut.`;
         }
@@ -804,6 +831,59 @@ export class GuardrailPipeline {
         // catat untuk kurasi prompt. DILARANG memotong kalimat.
         violationsDetected.push('age_solicitation_unresolved');
         console.warn(JSON.stringify({ event: 'AGE_SOLICITATION_UNRESOLVED_KEEP_ORIGINAL', tenantId, conversationId, timestamp: new Date().toISOString() }));
+      }
+    }
+
+    // 7d-2. Gerbang kode anti-salah-usia layanan Newborn (insiden Rizky
+    // 6285236127747): anak > 6 bln DILARANG ditawari layanan "Newborn".
+    // Kendali deterministik (bukan kalimat "DILARANG..." di prompt): reprompt
+    // 1x, lalu salvage TINGKAT KALIMAT bila masih melanggar.
+    if (shouldSendReply && !isEscalated && finalReply.trim()) {
+      const { hasNewbornAgeMismatch } = await import('../../guardrails/factual-claim-validator');
+      if (hasNewbornAgeMismatch(finalReply, knownChildAge)) {
+        violationsDetected.push('newborn_age_mismatch_detected');
+        const newbornStartedAt = Date.now();
+        let newbornRepromptOk = false;
+        try {
+          const ageNote = `KOREKSI USIA — tulis ulang SELURUH balasan dengan MAKNA yang SAMA. Usia si kecil adalah ${knownChildAge} bulan (BUKAN newborn/baru lahir), sehingga DILARANG menyebut layanan/paket "Newborn". Gunakan nama layanan yang sesuai usia anak dari hasil tool resmi (DILARANG mengarang nama layanan). DILARANG memotong atau mutilasi kalimat di tengah.`;
+          const newbornRetry = await input.executeChat({
+            payload: { model: selectedModel, messages: buildIsolatedRepromptMessages(finalReply, ageNote), temperature: 0.3 },
+            tenantId, phone, conversationId, baseUrl, apiKey, selectedModel,
+          });
+          repromptCount++;
+          const newbornText = (newbornRetry?.choices?.[0]?.message?.content || '').trim();
+          if (newbornText) {
+            const newbornCleaned = gateAmnesia(OutputSanitizer.cleanOutboundReply(newbornText, incomingText, isFollowUp, sanitizeOpts));
+            if (newbornCleaned.trim() && !hasNewbornAgeMismatch(newbornCleaned, knownChildAge)) {
+              finalReply = newbornCleaned;
+              newbornRepromptOk = true;
+              console.log(JSON.stringify({ event: 'NEWBORN_AGE_REPROMPT_FIXED', tenantId, conversationId, timestamp: new Date().toISOString() }));
+              await input.recordCall({
+                reply: finalReply, status: 'SUCCESS', durationMs: Date.now() - newbornStartedAt,
+                promptPayload: { model: selectedModel, correction: 'newborn_age_mismatch' },
+                callReasoning: `Koreksi layanan Newborn tidak sesuai usia ${knownChildAge} bulan`, callSequence: 3,
+              });
+            }
+          }
+        } catch (repromptErr: any) {
+          console.warn(JSON.stringify({ event: 'NEWBORN_AGE_REPROMPT_ERROR', tenantId, conversationId, error: repromptErr?.message, timestamp: new Date().toISOString() }));
+        }
+        if (!newbornRepromptOk) {
+          // Deterministic output normalizer (level KALIMAT, anti-mutilasi kata):
+          // buang kalimat yang menyebut "Newborn"; pertahankan kalimat valid.
+          try {
+            const { splitSentences } = await import('../../guardrails/sentence-salvage');
+            const kept = splitSentences(finalReply).filter((s) => !/\bnewborn\b/i.test(s));
+            if (kept.length > 0 && kept.length < splitSentences(finalReply).length) {
+              finalReply = kept.join(' ').trim();
+              violationsDetected.push('newborn_age_sentence_salvaged');
+            } else {
+              violationsDetected.push('newborn_age_mismatch_unresolved');
+            }
+          } catch {
+            violationsDetected.push('newborn_age_mismatch_unresolved');
+          }
+        }
       }
     }
 

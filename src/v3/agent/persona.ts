@@ -140,13 +140,20 @@ export function extractFastIntents(text: string): string[] {
   // data-driven (hasAnyWord), BUKAN regex hafalan: 'pricelist'/'price list'
   // sudah masuk hasExplicitCostWord untuk ask_price, sedangkan intent ini
   // khusus memicu pengiriman GAMBAR (bypass kuota 1x via force-resend).
+  const pricelistTextWords = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
   const hasPricelistToken =
     lower.includes('pricelist') ||
     lower.includes('price list') ||
     lower.includes('price-list') ||
     (lower.includes('daftar') && hasAnyWord(['harga', 'tarif', 'layanan', 'paket'])) ||
     (lower.includes('katalog') && hasAnyWord(['harga', 'tarif', 'layanan', 'paket'])) ||
-    (lower.includes('menu') && hasAnyWord(['harga', 'layanan', 'treatment', 'paket']));
+    (lower.includes('menu') && hasAnyWord(['harga', 'layanan', 'treatment', 'paket'])) ||
+    // Singkatan populer "PL" (pricelist): token KATA UTUH saja — "pl" bukan
+    // kata bahasa Indonesia, sehingga aman tanpa perlu konteks pendamping
+    // (mencegah salah-tembak "sample"/"pil"/"template" yang tokennya beda).
+    // TODO(tenant-aware): sinonim bisnis idealnya dari DB (TenantPromptConfig),
+    // hardcode sementara — lihat docs/KNOWN_ISSUES.md.
+    pricelistTextWords.has('pl');
   if (hasPricelistToken) {
     intents.push('ask_pricelist_image');
   }

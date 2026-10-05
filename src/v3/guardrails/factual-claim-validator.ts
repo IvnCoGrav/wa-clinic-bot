@@ -130,6 +130,24 @@ function mentionsPhrase(haystack: string, phrase: string): boolean {
   return false;
 }
 
+/**
+ * Gerbang deterministik anti-salah-usia layanan Newborn (insiden Rizky
+ * 6285236127747): anak berusia > 6 bulan DILARANG ditawari layanan khusus
+ * "Newborn" (tier 0-6 bln). Kontrol perilaku LLM WAJIB lewat kode, bukan
+ * kalimat "DILARANG..." di prompt yang rapuh. Usia belum diketahui → false
+ * (jangan blok, tunggu klarifikasi usia netral).
+ */
+export function hasNewbornAgeMismatch(
+  replyText: string,
+  childAgeMonths: number | null | undefined
+): boolean {
+  if (typeof childAgeMonths !== 'number' || !Number.isFinite(childAgeMonths)) return false;
+  if (childAgeMonths <= 6) return false;
+  const lower = (replyText || '').toLowerCase();
+  if (!lower.trim()) return false;
+  return /\bnewborn\b/i.test(lower);
+}
+
 export interface FactualValidationOptions {
   /** True bila sesi sudah memuat kelurahan/kecamatan customer. */
   locationKnown?: boolean;

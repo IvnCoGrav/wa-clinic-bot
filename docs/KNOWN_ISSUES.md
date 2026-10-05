@@ -3,6 +3,58 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 227. [Tool Masker / Intent / Katalog] Perbaikan PL, Pin Lokasi & Usia Newborn — sisa debt (2026-10-05, EXECUTED)
+
+- **Konteks:** insiden Rizky 6285236127747 (PL tidak terkirim, pin lokasi gagal →
+  `calculate_delivery` dicabut + DSML bocor, anak 19 bln ditawari Newborn, tanya usia
+  saat sudah disebut). Executed: Fase 1 pin native (`tool-masker.ts`), Fase 2 token "PL"
+  (`persona.ts`), Fase 3 deprioritas Newborn saat usia unknown + fallback usia turn-ini
+  (`get-catalog.tool.ts`, `tool-pipeline.ts`), Fase 4 gerbang kode `hasNewbornAgeMismatch`
+  (`factual-claim-validator.ts` + `guardrail-pipeline.ts`). Suite baru hijau.
+- **Sisa debt OPEN:**
+  - **Sinonim "PL" masih hardcode di TS** (`persona.ts`). Idealnya sinonim bisnis
+    (pricelist) berasal dari DB (`TenantPromptConfig`/`KnowledgeChunk`) agar tenant-aware
+    tanpa deploy. Hardcode sementara ini butuh Confirmation Gate bila diubah.
+  - **Regex sinonim "PL" belum multi-bahasa** — hanya token latin `pl`. Bila customer
+    menulis "prix", "gambar harga", dll. tetap tidak terpicu; andalkan DB-driven berikutnya.
+  - **DSML salvage saat tool di-mask belum diaudit tuntas.** Pin lokasi kini membuka
+    `calculate_delivery`, tetapi skenario Call 1 memanggil tool ter-mask lain (mis.
+    `save_reservation`) yang memicu DSML mentah → `V3_AGENT_SANITIZER_REJECTED` perlu
+    observasi lanjutan. Recovery katalog/delivery sudah ada (`guardrail-pipeline.ts:947-1020`).
+  - **Deprioritas Newborn data-driven hanya pada level tier ≤6 bln.** Bila ada layanan
+    khusus "bayi baru lahir" lain dengan batas tier berbeda, urutan seri bisa kembali
+    menguntungkan tier termuda; evaluasi bila katalog bertambah.
+  - **Distribusi usia ke tool bergantung pada `prepareSession`/fallback pesan masuk.**
+    Bila `syncChildrenProfiles` gagal senyap (DB offline), fallback ekstraktor pesan
+    masuk menutup celah, tetapi tidak ada test integrasi end-to-end lintas-stage untuk
+    ini. Tambah bila mulai rawan.
+
+## 227b. [Lokasi / Ongkir] Audit Vertikal Pin & Ongkir — sisa debt (2026-10-05, EXECUTED)
+
+- **Konteks:** audit vertikal menemukan (a) tool `calculate_delivery` tidak mencerna
+  teks pin `[Shared Location: lat, lng]` → bot malah tanya kelurahan + pricelist
+  POST_DELIVERY tak pernah terkirim; (b) gerbang usia buta kata "umur"; (c) ongkir
+  hilang lintas-turn. Executed: helper murni `src/utils/pin-coordinates.ts` +
+  Phase 0b pin di `calculate-delivery.tool.ts`; `hasAgeQuestion` kenal "umur"
+  (diekspor) + `NOMINAL_AGE_RE` `(usia|umur)`; `goal-tracker.ts` baca
+  `Customer.ongkir` untuk `ongkirPromo`. Suite pin/umur/regresi hijau.
+- **Sisa debt OPEN:**
+  - **4 produsen teks pin belum disatukan:** `[LOCATION:...]`/`[LIVE_LOCATION:...]`
+    (`canonical-message-normalizer.ts`), `[Shared Location:...]` (`machine.ts:613`),
+    `[LOCATION SHARE:...]` (`machine.ts:105`). Helper `extractPinCoordinates`
+    menangani keempatnya, tetapi produksi teks seharusnya satu pintu agar format
+    baru tidak lolos. Refactor fondasional ditunda (blast radius webhook).
+  - **Label `ongkirNormal` masih salah makna:** `goal-tracker.ts` mengisi
+    `ongkirNormal` dari `Customer.ongkir` yang isinya HARGA PROMO. Diperbaiki hanya
+    untuk `ongkirPromo` (baca kolom benar); `ongkirNormal` belum dipisah karena butuh
+    kolom/tier lookup tambahan. Dampak: nominal "normal" pada prompt bisa sama dgn promo.
+  - **`hasAgeQuestion` berpotensi false-positive** pada frasa edukasi yang memuat
+    "usia ... berapa" (mis. penjelasan), walau dampaknya hanya reprompt 1x. Pantau log
+    `AGE_SOLICITATION_REPROMPT`.
+  - **`ongkirNormal`/`ongkirPromo` dari `prefs.ongkirPromoFee` legacy** tetap
+    dipertahankan sebagai prioritas pertama (backward-compat); bila ada tenant lama
+    yang menulis field itu dengan makna berbeda, perlu migrasi data.
+
 ## 226. [Staff Lapangan / Sinyal 1-Bar] Resilience PWA — sisa debt yang BELUM dieksekusi (2026-10-05, FASE 0-2 EXECUTED, FASE 3 DITAHAN)
 
 - **Konteks:** plan "Penguatan Komunikasi Lapangan Bidan". Fase 0 (resume/presence/izin/SSE id),
