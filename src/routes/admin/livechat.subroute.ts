@@ -9,6 +9,14 @@ import { customerService } from '../../services/customer.service';
 import { messageService } from '../../services/message.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
+import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+
+/**
+ * Fase 0.4: penomoran event SSE monotonik proses-wide (bukan acak). Klien admin
+ * memakai id ini untuk mendeteksi gap saat tab tidur lalu bangun; bila gap
+ * terdeteksi klien merekonsiliasi via loadChats/loadThread (lihat LiveChatMonitor).
+ */
+const liveChatSseSeq = createMonotonicSseSequencer();
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -671,7 +679,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const sendEvent = (event: any) => {
       if (closed) return;
       try {
-        const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const eventId = liveChatSseSeq.next();
         const data = JSON.stringify(event.payload || {});
         reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {

@@ -3618,8 +3618,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
       }
       if (image) {
+        // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
+        // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
         body.imageB64 = image.dataUrl;
-        body.thumbB64 = image.dataUrl;
         body.mimeType = image.mimeType;
         body.fileName = image.fileName;
       }

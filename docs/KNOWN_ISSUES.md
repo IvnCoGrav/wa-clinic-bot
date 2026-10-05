@@ -3,6 +3,41 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 226. [Staff Lapangan / Sinyal 1-Bar] Resilience PWA — sisa debt yang BELUM dieksekusi (2026-10-05, FASE 0-2 EXECUTED, FASE 3 DITAHAN)
+
+- **Konteks:** plan "Penguatan Komunikasi Lapangan Bidan". Fase 0 (resume/presence/izin/SSE id),
+  Fase 1 (polling cadangan + outbox gagal idempoten), Fase 2 (satu pintu kompres + pangkas
+  dobel thumb + bodyLimit) DIEKSEKUSI. Gerbang: `tests/unit/staff-field-resilience.test.ts`
+  9/9 hijau; `tsc` backend bersih; `tsc` + `npm run build` dashboard hijau.
+- **Sisa debt OPEN:**
+  - **Idempotensi `clientTempId` masih in-memory** (`ClientIdempotencyStore` di
+    `live-chat.service.ts`). Aman untuk single-instance `docker compose` app saat ini,
+    tetapi TIDAK berlaku bila app di-scale multi-replica (retry bisa mendarat di proses
+    lain → kirim dobel). Solusi fondasional bila perlu: tabel `reply_idempotency`
+    (tenant_id, client_temp_id, message_id, created_at) dengan unique index.
+  - **SSE gap = rekonsiliasi via fetch, BUKAN replay**. Server belum menyimpan buffer
+    event ber-id untuk `Last-Event-ID`; id monotonik (`utils/sse-sequence.ts`) hanya
+    dipakai klien untuk mendeteksi gap lalu `fetchMessages`. Bila ingin replay sungguhan,
+    butuh ring buffer per-tenant + endpoint resume.
+  - **Ukuran foto nyata belum diukur di perangkat.** Profil `field` 960px/q0.65 ada di
+    test sebagai batas konstanta, TAPI pengukuran KB & keterbacaan nomor rumah pada foto
+    gang siang/malam di HP asli BELUM dilakukan. Jalankan uji lapangan sebelum klaim
+    waktu kirim.
+  - **Koreksi janji plan:** "60 KB terkirim <2 detik di 100 kbps" salah hitung
+    (60 KB = 480 kbit → ±5 dtk). Jangan tempel klaim itu di materi internal.
+  - **`update-location` (foto rumah) belum diturunkan bodyLimit-nya.** Foto rumah sudah
+    di-rekompres ke profil `house`, tetapi endpoint masih `bodyLimit 12MB`; turunkan ke
+    ±4MB setelah uji lapangan bila ingin menutup celah Base64 mentah sepenuhnya.
+  - **Presence masih coarse**: hanya `read_at` via `markConversationMessagesAsRead`.
+    Belum ada timestamp "staff terakhir melihat" khusus; gerbang presence untuk notifikasi
+    (Fase 3) membutuhkan kolom/derivasi eksplisit.
+- **FASE 3 (forward chat ke WhatsApp pribadi bidan) DITAHAN** — belum dieksekusi. Alasan
+  blast radius: privasi data medis ke HP pribadi, biaya outbound ganda, risiko template/24h
+  window WABA, dan kebutuhan rate-limit persisten. Wajib lewat Confirmation Gate + solusi
+  fondasional (template dari DB, rate-limit DB, opt-in per bidan, presence-aware) sebelum
+  dikerjakan. Kanal yang SUDAH ada (Web Push `sendPushToStaff` + Telegram pairing) tetap
+  jadi jalur utama.
+
 ## 223. [LiveChat/Reservasi Aktif] Jendela hari-H & filter bidan — kontrak & sisa debt (2026-10-05, EXECUTED)
 
 - **Gejala:** tab Reservasi Aktif menampilkan booking lampau (confirmed/pending

@@ -4,6 +4,7 @@ import { conversationService, buildConversationUpdatedPayload } from './conversa
 import { customerService } from './customer.service';
 import { messageService } from './message.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
+import { ClientIdempotencyStore } from '../utils/client-idempotency';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
 import { CONFIRMED_FAMILY_STATUSES, isHoldActive, isTreatmentWithinActiveWindow } from '../domain/reservation-status';
 
@@ -155,6 +156,12 @@ export function parseInternalNoteCommand(
 export class LiveChatService {
   // Local cache for idempotency check (to prevent double tap)
   private static recentReplies = new Map<string, number>();
+  // Fase 1.2: idempotensi berbasis `clientTempId` dari HP terapis (retry setelah
+  // timeout sinyal 1-bar). Jendela lebih panjang dari double-tap (5 menit).
+  // CATATAN: penyimpanan di memori proses; deploy saat ini single-instance app
+  // (docker compose) sehingga retry dari HP yang sama selalu mendarat di proses
+  // yang sama. Multi-instance butuh backing DB (lihat KNOWN_ISSUES).
+  private static recentClientTemps = new ClientIdempotencyStore(5 * 60 * 1000, 500);
 
   /**
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (dengan sender_type/sender_name).
@@ -416,13 +423,30 @@ export class LiveChatService {
      * seluruh teks diperlakukan sebagai isi catatan (tanpa perlu prefix /notes).
      */
     isInternalNote?: boolean;
+    /**
+     * Idempotency key dari HP terapis (Fase 1.2). Dikirim ulang apa adanya saat
+     * tombol "Coba Kirim Lagi" ditekan setelah timeout sinyal. Bila kunci sama
+     * masih dalam TTL 5 menit → balikan hasil pengiriman pertama (tanpa kirim dobel).
+     */
+    clientTempId?: string;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId } = params;
+    const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId, clientTempId } = params;
+
+    // Fase 1.2: idempotensi retry berbasis clientTempId (retry timeout sinyal 1-bar).
+    const prevClientTemp = LiveChatService.recentClientTemps.get(clientTempId);
+    if (prevClientTemp) {
+      return {
+        success: true,
+        conversationId,
+        messageId: prevClientTemp.messageId,
+        id: prevClientTemp.id,
+      };
+    }
 
     const hasText = !!text && !!text.trim();
     
     // Idempotency Check: cegah pengiriman ganda dalam 2 detik
-    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64 || !!mediaUrl}:${replyToMessageId || ''}`;
+    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64 || !!mediaUrl}:${replyToMessageId || ''}:${clientTempId || ''}`;
     const now = Date.now();
     const lastSent = LiveChatService.recentReplies.get(hash);
     if (lastSent && now - lastSent < 2000) {
@@ -786,6 +810,13 @@ export class LiveChatService {
     } catch (capiErr) {
       console.warn('[CAPI] InitiateCheckout (admin form) skipped:', (capiErr as Error).message);
     }
+
+    // Fase 1.2: catat clientTempId SUKSES → retry berikutnya (timeout sinyal) mengembalikan
+    // hasil yang sama tanpa mengirim ulang bubble ke pasien.
+    LiveChatService.recentClientTemps.set(clientTempId, {
+      messageId: sendResult.messageId,
+      id: logged?.id,
+    });
 
     return {
       success: true,

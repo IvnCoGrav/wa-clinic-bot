@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { StaffReservationService } from '../../services/staff-reservation.service';
 import { liveChatService } from '../../services/live-chat.service';
+import { messageService } from '../../services/message.service';
 import { auditService } from '../../services/audit.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import {
@@ -16,6 +17,14 @@ import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pi
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
 import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
+import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+
+/**
+ * Penomoran event SSE monotonik proses-wide (Fase 0.4). Menjamin id selalu naik
+ * antar koneksi, sehingga klien bisa mendeteksi gap. Bila ada gap (tab tidur lalu
+ * bangun), klien WAJIB merekonsiliasi lewat fetchMessages — bukan mengandalkan replay.
+ */
+const staffSseSeq = createMonotonicSseSequencer();
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
@@ -181,13 +190,51 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/staff/conversations/:id/read
+   * Menandai percakapan yang sedang dibuka terapis sebagai telah dibaca (presence jujur).
+   * Paritas dengan admin `PATCH /api/admin/conversations/:id/read`. Dipakai frontend
+   * untuk memadamkan badge unread + menjadi sumber kebenaran "sudah dibuka" bagi
+   * gerbang notifikasi berbasis presence (Fase 3). Otorisasi tetap per-hari via
+   * `assertConversationOwnedByStaffToday` (anti-IDOR lintas-terapis).
+   */
+  fastify.patch(
+    '/api/staff/conversations/:id/read',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const staffId = (request as any).staffId;
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const { id } = request.params;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor = isStaffSupervisorRole(role);
+
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(
+        id,
+        staffId,
+        tenantId,
+        isSupervisor
+      );
+      if (!owned) {
+        return reply.status(403).send({ success: false, error: 'Anda tidak memiliki akses ke percakapan ini.' });
+      }
+
+      try {
+        await messageService.markConversationMessagesAsRead(id, tenantId);
+        return reply.status(200).send({ success: true, message: 'Percakapan ditandai telah dibaca.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai telah dibaca' });
+      }
+    }
+  );
+
+  /**
    * POST /api/staff/conversations/:id/reply
    * Staff mengirim balasan pesan ke customer yang ditugaskan.
    * Pesan dikirim atas nama Bot Official klinik (sesuai gateway tenant).
    */
   fastify.post(
     '/api/staff/conversations/:id/reply',
-    { bodyLimit: 12 * 1024 * 1024 },
+    // Fase 2.3: foto chat sudah dikompres di HP (profil field ~60-100KB); 2MB cukup
+    // dan menutup celah Base64 mentah multi-MB membebani memori/sinyal 1-bar.
+    { bodyLimit: 2 * 1024 * 1024 },
     async (
       request: FastifyRequest<{
         Params: { id: string };
@@ -198,6 +245,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           mimeType?: string;
           fileName?: string;
           replyToMessageId?: string;
+          clientTempId?: string;
         };
       }>,
       reply: FastifyReply
@@ -206,7 +254,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName, replyToMessageId } = request.body || {};
+      const { text, imageB64, thumbB64, mimeType, fileName, replyToMessageId, clientTempId } = request.body || {};
 
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
@@ -234,6 +282,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         tenantId,
         adminName: staffName,
         replyToMessageId,
+        clientTempId,
         // Balasan terapis selalu mengaktifkan mode human-handling agar bot
         // tidak menyela percakapan di tengah penanganan oleh staf.
         forceEscalate: true,
@@ -1212,8 +1261,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         if (event.type === 'message.created' || event.type === 'message.updated') {
           payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type, { maskPhone: !isSupervisor });
         }
-        // P3-3: id monoton untuk Last-Event-ID replay (gap-tolerant)
-        const eventId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        // Fase 0.4: id monotonik proses-wide (bukan acak). Klien menyimpan Last-Event-ID;
+        // bila ada gap (tab tidur lalu bangun) ia tahu ada yang terlewat dan WAJIB
+        // merekonsiliasi lewat fetchMessages (server belum menyimpan buffer replay).
+        const eventId = staffSseSeq.next();
         const data = JSON.stringify(payloadToSend);
         reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {

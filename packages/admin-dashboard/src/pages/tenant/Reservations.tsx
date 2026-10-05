@@ -54,7 +54,7 @@ import {
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
-import { compressImageFile } from '../../utils/imageCompressor';
+import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
@@ -784,8 +784,9 @@ export const Reservations: React.FC = () => {
     if (!file) return;
 
     try {
-      // Kompresi cepat di sisi client (maks 1280px, ~150-250KB)
-      const compressed = await compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.8 });
+      // Kompresi cepat di sisi client — profil 'chat' seragam (1280px/q0.75)
+      const cp = resolveCompressProfile('chat');
+      const compressed = await compressImageFile(file, { maxWidth: cp.maxWidth, maxHeight: cp.maxHeight, quality: cp.quality });
       setEditRawHousePhotoB64(compressed.dataUrl);
       
       // Beri watermark GPS / Kelurahan jika tersedia

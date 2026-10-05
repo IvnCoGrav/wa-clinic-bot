@@ -44,7 +44,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
-import { compressImageFile } from '../../utils/imageCompressor';
+import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import {
   parseTreatmentItems as parseNumberedTreatments,
@@ -540,16 +540,26 @@ export const TodayTreatments: React.FC = () => {
     takerName: currentTakerName,
       staffName: currentTakerName,
     });
-    setLocHousePhotoB64(watermarked);
-    return watermarked;
+    // Fase 2.2: stampGpsWatermark q0.85 bisa membengkakkan file → re-kompres ke profil 'house'.
+    let finalB64 = watermarked;
+    try {
+      const hp = resolveCompressProfile('house');
+      const rec = await compressDataUrl(watermarked, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
+      if (rec) finalB64 = rec;
+    } catch {
+      /* pakai hasil watermark apa adanya */
+    }
+    setLocHousePhotoB64(finalB64);
+    return finalB64;
   };
 
   // Kompresi instan di sisi client (<100KB) tanpa lag
   const handleProcessHousePhoto = async (file: File) => {
     setLocProcessingPhoto(true);
     try {
-      // 1. Fast Canvas downscaling & JPEG compression (<30ms, 1000px, ~70-100KB)
-      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.75 });
+      // 1. Fast Canvas downscaling — profil 'house' seragam (1000px/q0.70)
+      const hp = resolveCompressProfile('house');
+      const compressed = await compressImageFile(file, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
       setLocRawHousePhotoB64(compressed.dataUrl);
       setLocHousePhotoB64(compressed.dataUrl);
       toast('Foto rumah berhasil dimuat! 📸', 'success');

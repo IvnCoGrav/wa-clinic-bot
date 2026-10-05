@@ -3,6 +3,7 @@ import { buildApp } from '../../src/app';
 import { StaffAuthService } from '../../src/services/staff-auth.service';
 import { StaffReservationService } from '../../src/services/staff-reservation.service';
 import { liveChatService } from '../../src/services/live-chat.service';
+import { messageService } from '../../src/services/message.service';
 import { auditService } from '../../src/services/audit.service';
 import { SessionStoreUnavailable } from '../../src/services/admin-session.service';
 import { prisma } from '../../src/db/client';
@@ -417,6 +418,58 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
           action: 'STAFF_REPLY',
           targetId: 'conv-owned',
         })
+      );
+    });
+
+    it('PATCH /api/staff/conversations/:id/read marks read when owned', async () => {
+      const ownedSpy = vi.spyOn(StaffReservationService, 'assertConversationOwnedByStaffToday').mockResolvedValue(true);
+      const readSpy = vi.spyOn(messageService, 'markConversationMessagesAsRead').mockResolvedValue();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/staff/conversations/conv-owned/read',
+        headers: { cookie: 'staff_session=valid_token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(ownedSpy).toHaveBeenCalledWith('conv-owned', 'staff-1', 'default-tenant', false);
+      expect(readSpy).toHaveBeenCalledWith('conv-owned', 'default-tenant');
+    });
+
+    it('PATCH /api/staff/conversations/:id/read returns 403 (anti-IDOR) when not owned', async () => {
+      vi.spyOn(StaffReservationService, 'assertConversationOwnedByStaffToday').mockResolvedValue(false);
+      const readSpy = vi.spyOn(messageService, 'markConversationMessagesAsRead').mockResolvedValue();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/staff/conversations/conv-unowned/read',
+        headers: { cookie: 'staff_session=valid_token' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(readSpy).not.toHaveBeenCalled();
+    });
+
+    it('POST /api/staff/conversations/:id/reply forwards clientTempId for idempotent retry', async () => {
+      vi.spyOn(StaffReservationService, 'assertConversationOwnedByStaffToday').mockResolvedValue(true);
+      const sendSpy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValue({
+        success: true,
+        messageId: 'msg-out-9',
+      } as any);
+      vi.spyOn(auditService, 'logAdminAction').mockResolvedValue();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/conversations/conv-owned/reply',
+        headers: { cookie: 'staff_session=valid_token' },
+        payload: { text: 'Coba lagi ya', clientTempId: 'temp-1700000000000-abc123' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ clientTempId: 'temp-1700000000000-abc123' })
       );
     });
 

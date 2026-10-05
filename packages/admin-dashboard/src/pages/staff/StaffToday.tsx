@@ -67,7 +67,7 @@ import {
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
-import { compressImageFile, prepareChatImage } from '../../utils/imageCompressor';
+import { compressImageFile, compressDataUrl, prepareChatImage, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatWibTime, getTodayWibDateKey, getWibDateKey } from '../../utils/dateWib';
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
@@ -457,6 +457,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
+  // Fase 1.2: outbox pesan gagal (sinyal 1-bar). Bertahan di layar + localStorage
+  // agar terapis bisa "Coba Kirim Lagi" tanpa mengetik ulang / mengambil foto ulang.
+  const [failedMessages, setFailedMessages] = useState<
+    Array<{
+      clientTempId: string;
+      conversationId: string;
+      text: string;
+      image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
+      createdAt: string;
+      error: string;
+    }>
+  >([]);
+  const [retryingTempId, setRetryingTempId] = useState<string | null>(null);
+
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const allTasksRef = useRef<StaffTask[]>([]);
   const knownTaskIdsRef = useRef<Set<string> | null>(null);
@@ -464,6 +478,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  // Fase 0.1/0.4: status SSE terbaru dibaca dari ref (interval/effect mount-once)
+  // + Last-Event-ID untuk mendeteksi gap saat tab tidur lalu bangun.
+  const sseConnectedRef = useRef(false);
+  const sseReconnectRef = useRef<(() => void) | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
+  const refreshActiveChatRef = useRef<((opts?: { keepScroll?: boolean }) => void) | null>(null);
+  const chatPollInFlightRef = useRef(false);
+  const lastInboundAtRef = useRef<number>(0);
+  const markConversationReadRef = useRef<((conversationId: string) => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -614,6 +637,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       toast('Sesi staf belum siap. Coba muat ulang halaman.', 'error');
       return;
     }
+    // Fase 0.3: izin harus diminta dari gesture pengguna (bukan auto-load). Bila
+    // sudah 'denied', browser memblokir prompt → arahkan buka pengaturan situs.
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'denied') {
+        toast(
+          'Izin notifikasi diblokir. Buka pengaturan situs di browser → ubah "Notifikasi" menjadi Izinkan, lalu muat ulang.',
+          'error'
+        );
+        setPushStatus('denied');
+        return;
+      }
+      if (Notification.permission === 'default') {
+        try {
+          const p = await Notification.requestPermission();
+          setPushStatus(p);
+          if (p !== 'granted') {
+            toast('Izin notifikasi belum diberikan. Aktifkan untuk menerima getar pesan pasien.', 'error');
+            return;
+          }
+        } catch {
+          /* lanjut coba subscribe */
+        }
+      }
+    }
     setPushSyncing(true);
     try {
       playIncomingMessageSound(true);
@@ -636,11 +683,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Request browser notification permission, unlock audio chime, and load gateway capability
+  // Fase 0.3: JANGAN minta izin notifikasi otomatis di load (browser modern menolak
+  // prompt tanpa gesture). Cukup baca status + unlock audio + load gateway capability.
+  // Permintaan izin dilakukan lewat tombol "Aktifkan Notifikasi" (gesture pengguna).
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then((p) => setPushStatus(p)).catch(() => {});
-    }
     const cleanupAudio = initAudioUnlock();
     apiRequest('/api/staff/gateway-capability')
       .then((res) => {
@@ -782,21 +828,67 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   }, [isSupervisor]);
 
-  // Auto-poll tasks every 20s — tetap jalan di background (best-effort) agar toast/OS notif tugas baru tetap terkirim
+  // Auto-poll tasks every 20s (Fase 0.1: skip saat tab tersembunyi → hemat baterai/kuota
+  // di lapangan; debt lama "polling 20s di background" ditutup).
   useEffect(() => {
     fetchTasks();
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       fetchTasks(true);
     }, 20000);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') fetchTasks(true);
-    };
-    document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchTasks]);
+
+  // Fase 0.1: Zero-Loss Resume — saat tab kembali terlihat / window fokus:
+  //  - muat ulang daftar tugas,
+  //  - muat ulang isi chat yang sedang dibuka (silent, tanpa sentak scroll),
+  //  - reconnect SSE segera bila terputus (tanpa tunggu backoff 4 dtk),
+  //  - tandai dibaca (presence).
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchTasksRef.current?.(true);
+      if (selectedTaskRef.current?.conversationId) {
+        refreshActiveChatRef.current?.({ keepScroll: true });
+      }
+      if (!sseConnectedRef.current) {
+        sseReconnectRef.current?.();
+      }
+    };
+    const onFocus = () => resume();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resume();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+    };
+  }, []);
+
+  // Fase 1.1: jaring pengaman polling aktif HANYA saat chat terbuka & SSE tidak sehat.
+  // Interval 5 dtk, 30 pesan terakhir, rekonsiliasi idempoten. Saat SSE hidup → 0 request.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const convId = selectedTaskRef.current?.conversationId;
+      if (!convId) return;
+      const sseSehat = sseConnectedRef.current && isOnline && Date.now() - lastInboundAtRef.current < 20000;
+      if (sseSehat) return;
+      if (chatPollInFlightRef.current) return;
+      chatPollInFlightRef.current = true;
+      refreshActiveChatRef.current?.({ keepScroll: true });
+      setTimeout(() => {
+        chatPollInFlightRef.current = false;
+      }, 1500);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isOnline]);
 
   // DEPRECATED (plan 2026-09-30, NAVIGASI_DEPART_CONTROL_REVISI_PLAN): tracking GPS
   // kontinu (auto-start H-30, pemancar `useTripTelemetry`) DIHENTIKAN — tidak andal di
@@ -843,32 +935,63 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   }, []);
 
   // Fetch messages for selected task conversation (Maksimal 30 bubble chat)
-  const fetchMessages = useCallback(async (conversationId: string) => {
-    setLoadingMessages(true);
-    setErrorMessage(null);
-    try {
-      const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
-      if (res.success && Array.isArray(res.data)) {
-        // Masking HP hanya untuk terapis; supervisor (CS/SPV) melihat apa adanya.
-        const shouldMask = !isSupervisorRef.current;
-        const sanitized = res.data.slice(-30).map((m: any) => ({
-          ...m,
-          content: shouldMask && typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
-          sender_name: shouldMask && typeof m.sender_name === 'string' ? maskPhoneInTextClient(m.sender_name) : m.sender_name,
-          senderName: shouldMask && typeof m.senderName === 'string' ? maskPhoneInTextClient(m.senderName) : m.senderName,
-        }));
-        setMessages(sanitized);
-        isNearBottomRef.current = true;
-        scrollToBottom(true);
+  // `silent` (Fase 1.1): polling cadangan / auto-catchup resume tab — tanpa spinner,
+  // tanpa paksa scroll, dan hanya re-render bila isi benar-benar berubah (anti-kedip).
+  const fetchMessages = useCallback(
+    async (conversationId: string, opts?: { silent?: boolean }) => {
+      const silent = !!opts?.silent;
+      if (!silent) setLoadingMessages(true);
+      if (!silent) setErrorMessage(null);
+      try {
+        const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
+        if (res.success && Array.isArray(res.data)) {
+          // Masking HP hanya untuk terapis; supervisor (CS/SPV) melihat apa adanya.
+          const shouldMask = !isSupervisorRef.current;
+          const sanitized = res.data.slice(-30).map((m: any) => ({
+            ...m,
+            content: shouldMask && typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
+            sender_name: shouldMask && typeof m.sender_name === 'string' ? maskPhoneInTextClient(m.sender_name) : m.sender_name,
+            senderName: shouldMask && typeof m.senderName === 'string' ? maskPhoneInTextClient(m.senderName) : m.senderName,
+          }));
+          setMessages((prev) => {
+            // Rekonsiliasi idempoten: jangan ganti array bila tanda-tandanya identik
+            // (mencegah re-render/kedip + reload gambar tiap poll).
+            const sig = (arr: any[]) =>
+              arr
+                .map(
+                  (m) =>
+                    `${m.id}|${m.delivery_status || ''}|${m.read_at || ''}|${m.is_revoked ? 1 : 0}|${m.is_edited ? 1 : 0}|${
+                      typeof m.content === 'string' ? m.content.length : 0
+                    }`
+                )
+                .join('\n');
+            return sig(prev) === sig(sanitized) ? prev : sanitized;
+          });
+          if (!silent) {
+            isNearBottomRef.current = true;
+            scrollToBottom(true);
+          }
+        }
+      } catch (err: any) {
+        if (!silent) setErrorMessage(err.message || 'Gagal memuat riwayat pesan.');
+      } finally {
+        if (!silent) {
+          setLoadingMessages(false);
+          isNearBottomRef.current = true;
+          scrollToBottom(true);
+        }
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Gagal memuat riwayat pesan.');
-    } finally {
-      setLoadingMessages(false);
-      isNearBottomRef.current = true;
-      scrollToBottom(true);
-    }
-  }, [scrollToBottom]);
+    },
+    [scrollToBottom]
+  );
+
+  // Fase 0.2: tandai percakapan dibaca saat dibuka (badge padam + sumber presence untuk
+  // gerbang notifikasi berbasis "dibuka 1 menit terakhir"). Fire-and-forget.
+  const markConversationRead = useCallback((conversationId: string) => {
+    if (!conversationId) return;
+    apiRequest(`/api/staff/conversations/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
+  }, []);
+  markConversationReadRef.current = markConversationRead;
 
   // Load conversation when task is selected
   useEffect(() => {
@@ -877,10 +1000,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
     if (selectedTask?.conversationId) {
       fetchMessages(selectedTask.conversationId);
+      markConversationRead(selectedTask.conversationId);
     } else {
       setMessages([]);
     }
-  }, [selectedTask?.conversationId, fetchMessages]);
+  }, [selectedTask?.conversationId, fetchMessages, markConversationRead]);
+
+  // Fase 0.1: ekspos refresh chat aktif ke effect mount-once (visibility/polling).
+  refreshActiveChatRef.current = (opts?: { keepScroll?: boolean }) => {
+    const convId = selectedTaskRef.current?.conversationId;
+    if (!convId) return;
+    if (!opts?.keepScroll) isNearBottomRef.current = true;
+    fetchMessages(convId, { silent: true });
+    if (document.visibilityState === 'visible') markConversationRead(convId);
+  };
 
   // Auto scroll chat when messages update or loading completes
   useEffect(() => {
@@ -1049,15 +1182,45 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     let es: EventSource | null = null;
     let reconnectTimeout: any = null;
 
+    const handleGap = (event: MessageEvent) => {
+      // Fase 0.4: id monotonik proses-wide. Bila lompat → ada event terlewat
+      // (tab tidur lalu bangun). Rekonsiliasi deterministik via fetchMessages.
+      try {
+        const idNum = Number((event as any).lastEventId);
+        const prev = lastEventIdRef.current ? Number(lastEventIdRef.current) : null;
+        if (Number.isFinite(idNum)) {
+          if (prev != null && Number.isFinite(prev) && idNum > prev + 1) {
+            refreshActiveChatRef.current?.({ keepScroll: true });
+          }
+          lastEventIdRef.current = String(idNum);
+        }
+      } catch {
+        /* abaikan */
+      }
+    };
+
     const connectSSE = () => {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+      try {
+        if (es) es.close();
+      } catch {
+        /* abaikan */
+      }
       es = new EventSource('/api/staff/live-chat/events');
 
       es.onopen = () => {
+        sseConnectedRef.current = true;
         setSseConnected(true);
+        // Setelah reconnect, tarik pesan yang mungkin terlewat selagi offline.
+        refreshActiveChatRef.current?.({ keepScroll: true });
       };
 
       es.addEventListener('message.created', (event) => {
         try {
+          handleGap(event as MessageEvent);
           const payload = JSON.parse((event as MessageEvent).data);
           const convId = payload.conversationId || payload.conversation_id;
           const shouldMask = !isSupervisorRef.current;
@@ -1100,11 +1263,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             payload.isHumanHandling ?? payload.is_human_handling ?? false
           );
 
+          // Fase 1.1: catat waktu pesan masuk agar polling cadangan tahu SSE masih segar.
+          if (msg.direction === 'INBOUND' && !payload.isHistorical) {
+            lastInboundAtRef.current = Date.now();
+          }
+
           try {
             if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox && isHumanHandling) {
               playIncomingMessageSound();
             }
           } catch (_) {}
+
+          // Fase 0.2: bila percakapan ini sedang dibuka & terlihat, pesan masuk otomatis
+          // ditandai dibaca (padamkan badge + presence untuk gerbang notifikasi).
+          if (selectedTaskRef.current?.conversationId === convId && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+            markConversationReadRef.current?.(convId);
+          }
 
           try {
             const isChatVisible = selectedTaskRef.current?.conversationId === convId && typeof document !== 'undefined' && document.visibilityState === 'visible';
@@ -1310,6 +1484,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       });
 
       es.onerror = () => {
+        sseConnectedRef.current = false;
         setSseConnected(false);
         if (es) {
           es.close();
@@ -1319,10 +1494,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       };
     };
 
+    // Fase 0.1: izinkan resume handler memicu reconnect segera (tanpa tunggu 4 dtk).
+    sseReconnectRef.current = connectSSE;
     connectSSE();
 
     return () => {
-      if (es) es.close();
+      sseReconnectRef.current = null;
+      try {
+        if (es) es.close();
+      } catch {
+        /* abaikan */
+      }
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, []);
@@ -1333,7 +1515,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const prepared = await prepareChatImage(file);
+      // Fase 2.2: profil 'field' (960px/q0.65) — foto lapangan sinyal 1-bar.
+      const prepared = await prepareChatImage(file, 'field');
       if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
         try { URL.revokeObjectURL(selectedImage.preview); } catch {}
       }
@@ -1374,7 +1557,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     setSending(true);
     setErrorMessage(null);
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const conversationId = selectedTask.conversationId;
     const optimisticMsg: ChatMessage = {
       id: tempId,
       direction: 'OUTBOUND',
@@ -1396,14 +1580,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     scrollToBottom(true);
 
     try {
-      const body: Record<string, any> = { text: hasText ? textToSend : '' };
+      const body: Record<string, any> = { text: hasText ? textToSend : '', clientTempId: tempId };
       if (image) {
+        // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
+        // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
         body.imageB64 = image.dataUrl;
-        body.thumbB64 = image.dataUrl;
         body.mimeType = image.mimeType;
         body.fileName = image.fileName;
       }
-      const res = await apiRequest(`/api/staff/conversations/${selectedTask.conversationId}/reply`, {
+      const res = await apiRequest(`/api/staff/conversations/${conversationId}/reply`, {
         method: 'POST',
         body: JSON.stringify(body),
         timeoutMs: 45000,
@@ -1416,25 +1601,129 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             prev.map((m) => (m.id === tempId ? { ...m, id: assignedId } : m))
           );
         }
+        // Berhasil → hapus dari antrean gagal (bila ini hasil retry).
+        setFailedMessages((prev) => prev.filter((f) => f.clientTempId !== tempId));
       } else {
         const errorMsg = res.error || 'Gagal mengirim pesan balasan.';
-        setErrorMessage(errorMsg);
-        toast(errorMsg, 'error');
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        setReplyText(textToSend);
-        setSelectedImage(image);
+        queueFailedMessage(tempId, conversationId, textToSend, image, errorMsg);
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp.';
-      setErrorMessage(errorMsg);
-      toast(errorMsg, 'error');
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setReplyText(textToSend);
-      setSelectedImage(image);
+      queueFailedMessage(tempId, conversationId, textToSend, image, errorMsg);
     } finally {
       setSending(false);
     }
   };
+
+  // Fase 1.2: simpan pesan gagal (bubble `failed` tetap tampil + tombol Coba Kirim Lagi).
+  const queueFailedMessage = (
+    clientTempId: string,
+    conversationId: string,
+    text: string,
+    image: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null,
+    error: string
+  ) => {
+    setErrorMessage(error);
+    toast(error, 'error');
+    setMessages((prev) =>
+      prev.map((m) => (m.id === clientTempId ? { ...m, delivery_status: 'failed' as const } : m))
+    );
+    setFailedMessages((prev) => {
+      const next = [
+        ...prev.filter((f) => f.clientTempId !== clientTempId),
+        {
+          clientTempId,
+          conversationId,
+          text,
+          image: image
+            ? { preview: image.preview, dataUrl: image.dataUrl, mimeType: image.mimeType, fileName: image.fileName }
+            : null,
+          createdAt: new Date().toISOString(),
+          error,
+        },
+      ];
+      persistFailedMessages(next);
+      return next;
+    });
+  };
+
+  // Fase 1.2: retry idempoten. Kirim ulang dengan `clientTempId` yang SAMA supaya
+  // backend tidak menggandakan bubble di WhatsApp walau percobaan pertama sebenarnya sukses.
+  const handleRetryFailedMessage = async (item: {
+    clientTempId: string;
+    conversationId: string;
+    text: string;
+    image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
+  }) => {
+    if (retryingTempId) return;
+    setRetryingTempId(item.clientTempId);
+    try {
+      const body: Record<string, any> = { text: item.text, clientTempId: item.clientTempId };
+      if (item.image) {
+        body.imageB64 = item.image.dataUrl;
+        body.mimeType = item.image.mimeType;
+        body.fileName = item.image.fileName;
+      }
+      const res = await apiRequest(`/api/staff/conversations/${item.conversationId}/reply`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        timeoutMs: 45000,
+      });
+      if (res.success) {
+        const assignedId = res.data?.messageId || res.data?.id;
+        if (assignedId) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === item.clientTempId ? { ...m, id: assignedId, delivery_status: 'sent' } : m))
+          );
+        }
+        setFailedMessages((prev) => {
+          const next = prev.filter((f) => f.clientTempId !== item.clientTempId);
+          persistFailedMessages(next);
+          return next;
+        });
+        toast('✅ Pesan berhasil terkirim ulang.', 'success');
+      } else {
+        const errorMsg = res.error || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
+        setFailedMessages((prev) => {
+          const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
+          persistFailedMessages(next);
+          return next;
+        });
+        toast(errorMsg, 'error');
+      }
+    } catch (err: any) {
+      const errorMsg = err.message || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
+      setFailedMessages((prev) => {
+        const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
+        persistFailedMessages(next);
+        return next;
+      });
+      toast(errorMsg, 'error');
+    } finally {
+      setRetryingTempId(null);
+    }
+  };
+
+  // Fase 1.2: outbox tahan-reload (localStorage). Dipulihkan saat mount.
+  const FAILED_OUTBOX_KEY = 'staff_failed_outbox_v1';
+  const persistFailedMessages = (list: Array<unknown>) => {
+    try {
+      localStorage.setItem(FAILED_OUTBOX_KEY, JSON.stringify(list.slice(-20)));
+    } catch {
+      /* storage penuh / private mode → abaikan (best-effort) */
+    }
+  };
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FAILED_OUTBOX_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setFailedMessages(parsed);
+      }
+    } catch {
+      /* abaikan */
+    }
+  }, []);
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
   // ── Unifikasi OTW (plan 2026-10-04) ─────────────────────────────────────────
@@ -2151,8 +2440,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       takerName,
       staffName: takerName,
     });
-    setLocHousePhotoB64(watermarked);
-    return watermarked;
+    // Fase 2.2: stampGpsWatermark meng-encode ulang q0.85 → bisa membengkakkan file.
+    // Re-kompres sekali ke profil 'house' agar ukuran akhir tetap terbatas (sinyal 1-bar).
+    let finalB64 = watermarked;
+    try {
+      const hp = resolveCompressProfile('house');
+      const rec = await compressDataUrl(watermarked, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
+      if (rec) finalB64 = rec;
+    } catch {
+      /* bila gagal, pakai hasil watermark apa adanya */
+    }
+    setLocHousePhotoB64(finalB64);
+    return finalB64;
   };
 
   // Get GPS directly from mobile device
@@ -2164,8 +2463,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const handleProcessStaffHousePhoto = async (file: File) => {
     setLocProcessingPhoto(true);
     try {
-      // 1. Fast Canvas downscaling (<30ms, 1000px, ~70-100KB)
-      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.75 });
+      // 1. Fast Canvas downscaling — profil 'house' seragam (1000px/q0.70).
+      const hp = resolveCompressProfile('house');
+      const compressed = await compressImageFile(file, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
       setLocRawHousePhotoB64(compressed.dataUrl);
       setLocHousePhotoB64(compressed.dataUrl);
       toast('Foto rumah berhasil dimuat! 📸', 'success');
@@ -2547,11 +2847,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         </div>
       </header>
 
-      {/* Offline connectivity banner (lapangan / sinyal seluler hilang) */}
-      {!isOnline && (
+      {/* Offline / sinyal lemah connectivity banner (lapangan).
+          Fase 1.3: tampilkan juga saat koneksi ada tapi SSE putus (1-bar). */}
+      {(!isOnline || !sseConnected) && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-amber-900 text-xs flex items-center gap-2 z-20 shrink-0">
           <WifiOff size={15} className="flex-shrink-0 text-amber-600" />
-          <span className="font-semibold">Koneksi internet terputus. Menunggu sinyal seluler...</span>
+          <span className="font-semibold">
+            {!isOnline
+              ? 'Koneksi internet terputus. Menunggu sinyal seluler...'
+              : 'Sinyal lemah — menyambungkan kembali obrolan...'}
+          </span>
         </div>
       )}
 
@@ -3601,6 +3906,35 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     {/* Invisible Anchor for 100% Reliable Auto-Scroll */}
                     <div ref={messagesEndRef} className="h-0 w-0 pointer-events-none" />
                   </div>
+
+                  {/* Fase 1.2: antrean pesan gagal — tombol "Coba Kirim Lagi" tanpa ketik ulang */}
+                  {failedMessages.filter((f) => f.conversationId === selectedTask.conversationId).length > 0 && (
+                    <div className="bg-rose-50 border-t border-rose-200 px-3 py-2 space-y-1.5 shrink-0">
+                      {failedMessages
+                        .filter((f) => f.conversationId === selectedTask.conversationId)
+                        .map((f) => (
+                          <div key={f.clientTempId} className="flex items-center gap-2 text-[11px] text-rose-800">
+                            <AlertCircle size={13} className="flex-shrink-0 text-rose-500" />
+                            <span className="flex-1 min-w-0 truncate">
+                              {f.image && !f.text ? '📷 Foto' : f.text || '(pesan)'} — gagal terkirim
+                            </span>
+                            <button
+                              type="button"
+                              disabled={retryingTempId === f.clientTempId}
+                              onClick={() => handleRetryFailedMessage(f)}
+                              className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold disabled:opacity-50 active:scale-95 flex items-center gap-1 shrink-0"
+                            >
+                              {retryingTempId === f.clientTempId ? (
+                                <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                              ) : (
+                                <RefreshCw size={11} />
+                              )}
+                              Coba Kirim Lagi
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
 
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, MapPin, Navigation, Search, Camera, Image as ImageIcon, Loader } from 'lucide-react';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
-import { compressImageFile } from '../../utils/imageCompressor';
+import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -121,7 +121,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const handlePhoto = async (file: File) => {
     setProcessingPhoto(true);
     try {
-      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.75 });
+      const hp = resolveCompressProfile('house');
+      const compressed = await compressImageFile(file, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
       setRawB64(compressed.dataUrl);
       let finalUrl = compressed.dataUrl;
       if (value.lat && value.lng) {
