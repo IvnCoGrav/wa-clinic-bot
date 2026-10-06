@@ -4,6 +4,44 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-06 - Fixed: Kolom F Rekapan Sheets "Repeat" palsu — otoritas ordinal riwayat transaksi
+
+- **Akar (multi-layer):**
+  1. `reservations.is_repeat_order` historis terkontaminasi bug modul follow-up lama
+     (mutasi saat follow-up `NO_PURCHASE` dibatalkan; sudah diperbaiki 2026-10-03).
+  2. `sheets-sync.service.ts` + `row-formatter.ts` membaca flag mentah itu secara naif,
+     berbeda dengan Admin Dashboard/CAPI yang menghitung ordinal riwayat
+     (`confirmed/en_route/completed`) secara dinamis.
+- **Fixed (fondasional):**
+  - `src/services/sheets/row-formatter.ts`: `resolveCustomerType()` menerima `priorCount`;
+    bila tersedia, `priorCount > 0` MUTLAK menentukan `Repeat` dan flag DB diabaikan
+    (hanya fallback bila ordinal tak dihitung).
+  - `src/services/sheets/sheets-sync.service.ts`: `PrismaSheetsSyncStore.getReservation`
+    menghitung `prior_reservations_count` (jumlah reservasi kanonis `confirmed/en_route/
+    completed` milik customer yang `created_at` LEBIH AWAL — ordinal sama dengan
+    `reservations.subroute.ts` & `computeIsRepeatOrder`), lalu menurunkan ulang
+    `is_repeat_order`. Fail-safe DB offline → 0 (New).
+- **Data healing live (default-tenant):** normalisasi flag Oktober ke ordinal kanonis;
+  backup in-DB `reservations_repeat_backup_20261006` (11 baris; 10 salah-true + 1 salah-false).
+  Verifikasi ulang: 0 anomali tersisa untuk Oktober.
+- **Deploy live:** image `app` di-rebuild di 43.173.11.79 (WAHA untouched, zero WAHA disruption).
+- **Test:** `sheets-rekapan-formatter` + `sheets-sync.service` (39 hijau, termasuk 4 kasus
+  adversarial kontaminasi/stale + kontrak query ordinal); regresi CAPI/follow-up 16 hijau; `npm run build` lolos.
+- **OPEN:** 147 anomali historis (Apr–Sep 2026) di luar scope Oktober — lihat `docs/KNOWN_ISSUES.md` #235.
+
+#### 2026-10-06 - Changed: Standardisasi Kolom Rekapan Sheets & Klasifikasi CAC (New Ads / New / Repeat)
+
+- **`row-formatter.ts` & `sheets-sync.service.ts`:**
+  - Kolom D (Lokasi): HANYA kelurahan (tanpa imbuhan kota/kabupaten).
+  - Kolom E (Bayi/Layanan): HANYA nama bayi (tanpa usia/bulan/tahun).
+  - Kolom F (Tipe Customer): Klasifikasi terpadu untuk analisis CAC (`Repeat` bila repeat order, `New Ads` bila pelanggan baru dari ads/adClick/CTWA, `New` bila pelanggan baru organik/langsung).
+  - Kolom M (Bidan): Nama staf saja tanpa prefix "Bidan".
+  - Kolom N (Tip): Dikosongkan (`''` / null).
+  - Kolom P (Catatan): Dikosongkan (`''`).
+  - `sheets-sync.service.ts`: Query `getReservation` kini mengikutsertakan `adClick` customer untuk deteksi traffic iklan.
+- **Google Sheets Tab `okt`:** Rekonsiliasi & pembaruan seluruh Baris 2 s/d 32 (tanggal 1 s/d 12 Oktober) diselaraskan ke format standar baru.
+- **Verifikasi:** 30/30 unit test hijau (`sheets-rekapan-formatter.test.ts` & `sheets-sync.service.test.ts`), `npm run build` lolos.
+
 #### 2026-10-05 - Fixed: Residual Audit #1 (jalur prompt DB) & #2 (ukur cache)
 
 - **#1 (`prompt-composer.ts`):** jalur `composeSystemPromptAsync` DB kini menghormati

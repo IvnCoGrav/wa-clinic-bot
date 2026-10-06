@@ -6,6 +6,7 @@ import {
 } from '../../src/services/sheets/month-resolver';
 import {
   formatReservationToRow,
+  resolveCustomerType,
   EMPTY_CELL,
   SHEET_COLUMN_COUNT,
 } from '../../src/services/sheets/row-formatter';
@@ -106,19 +107,30 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(row[0]).toBe('2026-10-01');       // A Tanggal
     expect(row[1]).toBe('Kamis');            // B Hari
     expect(row[2]).toBe('Bunda Tere');       // C Customer
-    expect(row[3]).toBe('tenggilis surabaya'); // D Lokasi (kelurahan + kota, dedupe)
-    expect(row[4]).toBe('An. Keysha 10 bulan'); // E Bayi
-    expect(row[5]).toBe('Baru');             // F Tipe
+    expect(row[3]).toBe('tenggilis');        // D Lokasi (kelurahan saja)
+    expect(row[4]).toBe('An. Keysha');       // E Bayi (nama saja)
+    expect(row[5]).toBe('New');              // F Tipe Customer (New organik)
     expect(row[6]).toBe('Kala Baby – Pijat Pulih Ceria'); // G Layanan
     expect(row[7]).toBe(15000);              // H Ongkir
-    expect(row[8]).toBe(135000);             // I Total
+    expect(row[8]).toBe(150000);             // I Total (135000 layanan + 15000 ongkir)
     expect(row[9]).toBe(0);                  // J Diskon
-    expect(row[10]).toBe(150000);            // K Harga akhir (135000+15000-0)
+    expect(row[10]).toBe(150000);            // K Harga akhir (150000 - 0)
     expect(row[11]).toBe('Transfer');        // L Metode Bayar
-    expect(row[12]).toBe('Bidan Siti');      // M Bidan
-    expect(row[13]).toBe(0);                 // N Tip
+    expect(row[12]).toBe('Siti');            // M Bidan (tanpa kata "Bidan")
+    expect(row[13]).toBe('');                // N Tip (kosong / null)
     expect(row[14]).toBe('Belum');           // O Follow up
-    expect(row[15]).toBe('Batuk pilek 3 hari'); // P Catatan (blok Catatan:)
+    expect(row[15]).toBe('');                // P Catatan (kosong)
+  });
+
+  it('New customer dari traffic ads → kolom F "New Ads"', () => {
+    const row = formatReservationToRow({
+      ...base,
+      customer: {
+        ...base.customer,
+        hasAds: true,
+      },
+    });
+    expect(row[5]).toBe('New Ads');
   });
 
   it('Repeat customer → kolom F "Repeat", diskon dihitung ke Harga akhir', () => {
@@ -131,8 +143,9 @@ describe('row-formatter — 16 kolom A–P', () => {
       },
     });
     expect(row[5]).toBe('Repeat');
+    expect(row[8]).toBe(150000);             // I Total (135000 + 15000)
     expect(row[9]).toBe(30000);
-    expect(row[10]).toBe(135000 + 15000 - 30000);
+    expect(row[10]).toBe(150000 - 30000);    // K Harga akhir (150000 - 30000 = 120000)
   });
 
   it('ongkir fallback ke Customer.ongkir bila delivery_fee null', () => {
@@ -166,7 +179,8 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(row[6]).toBe(EMPTY_CELL);   // Layanan
     expect(row[11]).toBe(EMPTY_CELL);  // Metode bayar
     expect(row[12]).toBe(EMPTY_CELL);  // Bidan
-    expect(row[15]).toBe(EMPTY_CELL);  // Catatan
+    expect(row[13]).toBe('');          // Tip (kosong)
+    expect(row[15]).toBe('');          // Catatan (kosong)
     expect(row[7]).toBe(0);
     expect(row[8]).toBe(0);
     expect(row[10]).toBe(0);
@@ -199,5 +213,73 @@ describe('row-formatter — 16 kolom A–P', () => {
         reservation: { ...base.reservation, booking_date: null },
       })
     ).toThrow('INVALID_BOOKING_DATE');
+  });
+});
+
+/**
+ * ADVERSARIAL: kontaminasi historis `is_repeat_order` DB (bug follow-up lama).
+ * Otoritas TUNGGAL new-vs-repeat = ordinal riwayat nyata `prior_reservations_count`.
+ * Order #1 (priorCount=0) TIDAK PERNAH 'Repeat' walau flag DB bohong; order #2+
+ * SELALU 'Repeat' walau flag DB stale `false` — termasuk bila punya adClick.
+ */
+describe('row-formatter — otoritas ordinal atas flag DB terkontaminasi', () => {
+  const base = {
+    reservation: {
+      booking_date: new Date('2026-10-01T03:00:00Z'),
+      treatment_detail: 'Pijat Bayi',
+      purchase_value: 135000,
+      delivery_fee: 0,
+      discount_amount: 0,
+      payment_method: null,
+      is_repeat_order: false,
+      status: 'confirmed',
+      raw_text: null,
+    },
+    customer: { name: 'Bunda X' },
+  };
+
+  it('KASUS 1: order #1 flag DB terkontaminasi true + adClick → "New Ads"', () => {
+    const row = formatReservationToRow({
+      ...base,
+      reservation: { ...base.reservation, is_repeat_order: true, prior_reservations_count: 0 },
+      customer: { ...base.customer, adClick: { id: 'ad-1', fbclid: 'x' } },
+    });
+    expect(row[5]).toBe('New Ads');
+  });
+
+  it('KASUS 2: order #1 flag DB terkontaminasi true tanpa adClick → "New"', () => {
+    const row = formatReservationToRow({
+      ...base,
+      reservation: { ...base.reservation, is_repeat_order: true, prior_reservations_count: 0 },
+      customer: { ...base.customer, adClick: null },
+    });
+    expect(row[5]).toBe('New');
+  });
+
+  it('KASUS 3: order #2+ flag DB stale false → "Repeat"', () => {
+    const row = formatReservationToRow({
+      ...base,
+      reservation: { ...base.reservation, is_repeat_order: false, prior_reservations_count: 2 },
+      customer: { ...base.customer, adClick: null },
+    });
+    expect(row[5]).toBe('Repeat');
+  });
+
+  it('KASUS 4: order #2+ dengan adClick → tetap "Repeat" (ordinal menang atas ads)', () => {
+    const row = formatReservationToRow({
+      ...base,
+      reservation: { ...base.reservation, is_repeat_order: false, prior_reservations_count: 1 },
+      customer: { ...base.customer, adClick: { id: 'ad-2', fbclid: 'y' } },
+    });
+    expect(row[5]).toBe('Repeat');
+  });
+
+  it('KONTRAK resolveCustomerType: priorCount angka MENANG atas flag; flag hanya fallback', () => {
+    // Ordinal tersedia → flag diabaikan.
+    expect(resolveCustomerType(true, { adClick: { id: 'a' } }, 0)).toBe('New Ads');
+    expect(resolveCustomerType(false, null, 3)).toBe('Repeat');
+    // Ordinal tidak tersedia (undefined/null) → fallback ke flag DB (kompatibilitas store non-Prisma).
+    expect(resolveCustomerType(true, null, null)).toBe('Repeat');
+    expect(resolveCustomerType(false, { adClick: { id: 'a' } }, undefined)).toBe('New Ads');
   });
 });

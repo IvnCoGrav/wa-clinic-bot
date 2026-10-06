@@ -3,6 +3,20 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 235. [Sheets/Data] Kontaminasi historis `is_repeat_order` di luar scope Oktober (2026-10-06, OPEN)
+
+- **Temuan:** saat backfill Oktober, audit ordinal kanonis (jumlah reservasi
+  `confirmed/en_route/completed` lebih awal per customer) menemukan **158** anomali
+  `is_repeat_order` sepanjang waktu, bukan hanya 11 di Oktober. Rincian per bulan:
+  (null)=1, 2026-04=3, 2026-05=16, 2026-06=14, 2026-07=10, 2026-08=32, 2026-09=71, 2026-10=11.
+- **Sudah ditangani:** hanya Oktober (11 baris) di-backfill (scope plan). Gerbang kode baru
+  (`row-formatter`/`sheets-sync`) membuat sinkronisasi MASA DEPAN selalu benar.
+- **Sisa (OPEN):** 147 baris Apr–Sep masih salah untuk tujuan analitik yang membaca
+  `reservation.is_repeat_order` (`financial-analytics.service.ts`, `daily-report.service.ts`).
+  Perlu keputusan: backfill global (blast radius analitik historis) atau biarkan.
+- **Catatan drift git:** repo lokal ketinggalan 7 commit dari `origin/master`; editan
+  sheets di server belum di-commit (deploy via file + rebuild). Perlu rekonsiliasi git.
+
 ## 234. [FollowUp/Audit 32 Temuan] Sisa & Keputusan Pasca-Remediasi Tahap 1-5 (2026-10-06, OPEN - sebagian by design)
 
 Remediasi fondasional engine follow-up (Tahap 1-5) sudah dieksekusi. Item yang

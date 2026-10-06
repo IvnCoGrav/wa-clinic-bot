@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   SheetsSyncService,
+  PrismaSheetsSyncStore,
   SheetsSyncStore,
   SheetsConfigRow,
   ReservationForSheets,
   OutboxRow,
   SHEETS_YEAR_NOT_CONFIGURED,
 } from '../../src/services/sheets/sheets-sync.service';
+import { prisma } from '../../src/db/client';
 import {
   SheetsGateway,
   EnsureMonthlyTabParams,
@@ -234,6 +236,72 @@ describe('SheetsSyncService — append/update idempoten', () => {
   it('testConnection: tahun berjalan belum dipetakan → throw SHEETS_YEAR_NOT_CONFIGURED', async () => {
     store.config = makeConfig({ yearly_file_ids: {} });
     await expect(svc.testConnection(TENANT)).rejects.toThrow(SHEETS_YEAR_NOT_CONFIGURED);
+  });
+});
+
+describe('PrismaSheetsSyncStore.getReservation — ordinal riwayat kanonis (kontrak query)', () => {
+  const CREATED = new Date('2026-10-02T03:00:00.000Z');
+
+  beforeEach(() => {
+    (prisma as any).reservation.findFirst = vi.fn().mockResolvedValue({
+      id: 'res-1',
+      tenant_id: TENANT,
+      customer_id: 'cust-1',
+      created_at: CREATED,
+      is_repeat_order: true, // flag DB terkontaminasi (bug follow-up lama)
+      customer: null,
+      children: [],
+      assigned_staff: null,
+    });
+  });
+
+  it('order #1 (0 riwayat lebih awal, flag DB bohong true) → prior=0, flag dipaksa false', async () => {
+    (prisma as any).reservation.count = vi.fn().mockResolvedValue(0);
+    const store = new PrismaSheetsSyncStore();
+
+    const r = await store.getReservation('res-1', TENANT);
+
+    expect(r?.prior_reservations_count).toBe(0);
+    expect(r?.is_repeat_order).toBe(false);
+    // Kontrak query kanonis: status confirmed/en_route/completed + created_at LT.
+    expect((prisma as any).reservation.count).toHaveBeenCalledWith({
+      where: {
+        customer_id: 'cust-1',
+        tenant_id: TENANT,
+        status: { in: ['confirmed', 'en_route', 'completed'] },
+        created_at: { lt: CREATED },
+      },
+    });
+  });
+
+  it('order #2+ (2 riwayat lebih awal, flag DB stale false) → prior=2, flag dipaksa true', async () => {
+    (prisma as any).reservation.count = vi.fn().mockResolvedValue(2);
+    const store = new PrismaSheetsSyncStore();
+
+    const r = await store.getReservation('res-1', TENANT);
+
+    expect(r?.prior_reservations_count).toBe(2);
+    expect(r?.is_repeat_order).toBe(true);
+  });
+
+  it('ADVERSARIAL: DB offline saat count → fail-safe prior=0 (New), tidak melempar', async () => {
+    (prisma as any).reservation.count = vi.fn().mockRejectedValue(new Error('Database offline'));
+    const store = new PrismaSheetsSyncStore();
+
+    const r = await store.getReservation('res-1', TENANT);
+
+    expect(r).not.toBeNull();
+    expect(r?.prior_reservations_count).toBe(0);
+    expect(r?.is_repeat_order).toBe(false);
+  });
+
+  it('reservasi tidak ditemukan → null', async () => {
+    (prisma as any).reservation.findFirst = vi.fn().mockResolvedValue(null);
+    const store = new PrismaSheetsSyncStore();
+
+    const r = await store.getReservation('missing', TENANT);
+
+    expect(r).toBeNull();
   });
 });
 

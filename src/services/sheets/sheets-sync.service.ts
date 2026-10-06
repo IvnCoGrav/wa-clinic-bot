@@ -49,6 +49,12 @@ export interface ReservationForSheets {
   discount_amount: number | null;
   payment_method: string | null;
   is_repeat_order: boolean;
+  /** Ordinal riwayat: jumlah reservasi qualifying yang dibuat LEBIH AWAL dari
+   *  reservasi ini (kanonis sama dengan Admin Dashboard/CAPI). Dihitung di
+   *  `PrismaSheetsSyncStore.getReservation`; `formatReservationToRow` memakainya
+   *  sebagai otoritas tunggal new-vs-repeat. */
+  prior_reservations_count?: number | null;
+  created_at?: Date | string | null;
   status: string;
   raw_text: string | null;
   sheets_spreadsheet_id: string | null;
@@ -60,6 +66,8 @@ export interface ReservationForSheets {
     kecamatan: string | null;
     kota: string | null;
     ongkir: number | null;
+    adClick?: any;
+    hasAds?: boolean | null;
   } | null;
   children: Array<{ name: string | null; raw_age_text: string | null; age_months_at_registration: number | null }>;
   assigned_staff: { name: string | null } | null;
@@ -257,8 +265,6 @@ export class SheetsSyncService {
     const map = config.yearly_file_ids || {};
     const id = map[String(year)];
     if (id) return id;
-    // Tanpa peta tahun: hanya boleh pakai master bila kosong (fallback aman).
-    // Untuk tahun yang belum dipetakan, JANGAN tulis ke file tahun lain.
     throw new Error(SHEETS_YEAR_NOT_CONFIGURED);
   }
 
@@ -354,7 +360,16 @@ export class PrismaSheetsSyncStore implements SheetsSyncStore {
       where: { id: reservationId, tenant_id: tenantId },
       include: {
         customer: {
-          select: { name: true, kelurahan: true, kecamatan: true, kota: true, ongkir: true },
+          select: {
+            name: true,
+            kelurahan: true,
+            kecamatan: true,
+            kota: true,
+            ongkir: true,
+            adClick: {
+              select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, ctwa_clid: true },
+            },
+          },
         },
         children: {
           select: { name: true, raw_age_text: true, age_months_at_registration: true },
@@ -363,7 +378,36 @@ export class PrismaSheetsSyncStore implements SheetsSyncStore {
       },
     });
     if (!r) return null;
-    return r as ReservationForSheets;
+
+    // Ordinal riwayat KANONIS: hitung reservasi qualifying milik customer yang
+    // dibuat LEBIH AWAL (created_at asc) — sama dengan ordinal yang dipakai
+    // Admin Dashboard (`reservations.subroute.ts`) dan status riwayat kanonis
+    // `computeIsRepeatOrder` (`reservation-core.service.ts`: confirmed/en_route/
+    // completed). Flag mentah `is_repeat_order` DB TIDAK dipakai sebagai otoritas
+    // karena bisa terkontaminasi bug follow-up lama (order #1 palsu Repeat).
+    // Fail-safe DB offline → priorCount = 0 (New), selaras reservasi-core.
+    let priorCount = 0;
+    try {
+      priorCount = await prisma.reservation.count({
+        where: {
+          customer_id: r.customer_id,
+          tenant_id: tenantId,
+          status: { in: ['confirmed', 'en_route', 'completed'] },
+          created_at: { lt: r.created_at },
+        },
+      });
+    } catch (err: any) {
+      console.warn('[SHEETS] hitung prior_reservations_count gagal (anggap 0):', err?.message);
+      priorCount = 0;
+    }
+
+    return {
+      ...r,
+      prior_reservations_count: priorCount,
+      // Turunkan ulang flag dari ordinal agar konsisten bila ada kode lain
+      // membaca `is_repeat_order` dari objek ini.
+      is_repeat_order: priorCount > 0,
+    } as ReservationForSheets;
   }
 
   async saveRowRef(
