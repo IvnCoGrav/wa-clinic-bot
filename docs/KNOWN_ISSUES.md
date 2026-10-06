@@ -13,10 +13,20 @@ SENGAJA ditunda / butuh keputusan manusia sebelum diaktifkan penuh:
   masih bisa membungkam bot tanpa sapaan. Usulan (belum dieksekusi): bila inbound
   terjadi <= 24 jam setelah outbound follow-up, beri 1 balasan pembuka ramah /
   arahkan ke CS. Mengubah perilaku consent/anti-spam -> wajib setuju pemilik dulu.
-- **Migrasi `20261006000000_fix_followup_unique_and_indexes` BELUM di-deploy:**
-  berisi dedup data live + trigger `follow_ups_active_slot_key_trg`. Wajib dijalankan
-  `npx prisma migrate deploy` di server (setelah verifikasi drift kosong) agar V1 aktif.
-  Jalur offline/testing (mock Prisma) TIDAK menegakkan trigger ini.
+- **Migrasi `20261006000000_fix_followup_unique_and_indexes` SUDAH di-deploy ke live
+  (2026-10-05, server 43.173.11.79):** kolom `active_slot_key` + `processing_claimed_at`,
+  trigger `follow_ups_active_slot_key_trg`, unique `follow_ups_tenant_id_active_slot_key_type_stage_key`,
+  indeks komposit baru terpasang. Verifikasi: 1 grup duplikat aktif dibersihkan (QUEUED
+  606 → 605), duplikat aktif kini 0, `active_slot_key` terisi untuk 622 baris aktif.
+  Backup pra-migrasi disimpan sebagai tabel in-DB `follow_ups_backup_pre_v1` (2020 baris,
+  konsisten dengan pola backup in-DB lain).
+  - **Catatan drift:** `prisma migrate diff` TIDAK kosong, TAPI seluruh selisih berasal dari
+    item PRA-EKSISTING (tabel backup lama `few_shot_exemplars_backup_20260907`,
+    `knowledge_chunks_backup_20260910`, `push_subscriptions_backup_*`, dan
+    `ctwa_campaign_catchers.greetings DROP DEFAULT`) + tabel backup baru kita. TIDAK ada
+    selisih pada objek migrasi follow-up (kolom/index cocok; trigger memang tak terlihat Prisma).
+  - **Kode app belum di-deploy:** V1 aktif di level DB, tetapi gerbang runtime (jam kerja,
+    kuota, klaim atomik, dll.) baru berlaku setelah commit + deploy build app berikutnya.
 - **M7 (REMINDER_H1/REVIEW_H1) default OFF:** baris tidak lagi dibuat (anti zombie),
   tetapi item PENDING lama di DB perlu dibersihkan/di-expire. Aktifkan kembali via
   `FOLLOWUP_CREATE_REMINDER_REVIEW='true'`. Butuh konfirmasi kebijakan jika admin
@@ -31,6 +41,24 @@ SENGAJA ditunda / butuh keputusan manusia sebelum diaktifkan penuh:
   `sendMorningReminders` & `sendYesterdayReviewsAndScheduleNextFollowups` yang dihapus.
 - **Pre-existing failures (BUKAN regresi remediasi ini):** `tests/unit/live-chat-enroute-status.test.ts`
   gagal 5 test pada baseline (sebelum perubahan) — dicatat agar tidak tertukar.
+
+## 234. [Medis/RF-06] Red-flag Komposit Batuk-Ruam-Demam — Investigasi & Fix (2026-10-05)
+
+- **Konteks:** harness T1 (`run-test-plan.ts --suite=episodes --simulator --llm`) melaporkan
+  RF-06 ("batuk 2 minggu" + "ruam merah kayak campak + demam") TIDAK dieskalasi (state INITIAL).
+- **Temuan (dibuktikan):** BUKAN bug produksi. Detektor `detectPersistentCoughRashEmergency`
+  (`src/config/medical-keywords.ts`) BEKERJA benar bila riwayat lintas-turn tersedia
+  (uji langsung: WITH history → HIGH; WITHOUT history → NONE). Kegagalan hanya muncul saat
+  `getRecentMessages` kosong (DB offline di harness) — artefak pengujian.
+- **FIX-2 (DONE):** regex kata-utuh `batuk` meleset pada imbuhan ("batuknya") → diganti
+  prefiks `(^|[^a-z])batuk` + dukung `berbatuk`.
+- **FIX-3 (DONE):** guard proksimitas usia terlalu galak — "anak batuk 2 minggu" salah
+  dianggap usia anak. Kini disaring sebagai usia HANYA bila tak ada verba gejala di sekitar angka.
+- **FIX-1 (OPEN, robustness):** jaring keselamatan komposit BERGANTUNG riwayat dari DB.
+  Bila DB lambat/down → `getRecentMessages` kosong → deteksi lintas-turn hilang **tanpa peringatan**.
+  Belum diperbaiki (butuh fallback riwayat in-memory / Redis). Di produksi DB hidup → risiko rendah.
+- **Test:** `tests/unit/medical-rf06-composite.test.ts` (10 kasus: WITH/WITHOUT history, order-independent,
+  FIX-2/3, guard usia, ruam jinak). Suite medis/keselamatan 80/80 hijau, golden corpus 61/61.
 
 ## 233. [Kecerdasan/Latensi] Prompt Raksasa & Latensi Produksi (2026-10-05, OPEN — program stabilisasi Fase 0/1)
 

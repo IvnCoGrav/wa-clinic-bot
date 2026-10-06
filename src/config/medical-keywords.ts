@@ -345,7 +345,12 @@ export function detectPersistentCoughRashEmergency(texts: string | string[]): {
   let combined = list.join(' \n ').toLowerCase();
   for (const benign of BENIGN_RASH_PHRASES) combined = combined.split(benign).join(' ');
 
-  const hasCough = /(^|[^a-z])batuk([^a-z]|$)/.test(combined) || combined.includes('bapil');
+  // Prefiks kata (bukan kata-utuh): menangkap imbuhan/varian "batuknya",
+  // "batuk-batuk", "batuknya" — sebelumnya regex kata-utuh meleset sehingga
+  // "batuknya udah 2 minggu" lolos tanpa eskalasi (celah audit RF-06).
+  const hasCough = /(^|[^a-z])batuk/.test(combined)
+    || combined.includes('bapil')
+    || combined.includes('berbatuk');
   if (!hasCough) return none;
 
   const RASH_TOKENS = ['ruam', 'bintik', 'campak', 'bentol', 'bercak', 'merah-merah'];
@@ -358,6 +363,10 @@ export function detectPersistentCoughRashEmergency(texts: string | string[]): {
   // (anak/bayi/umur/usia/newborn/...) adalah USIA PASIEN, bukan durasi batuk —
   // DILARANG dihitung kronis (mencegah false-positive "bayi 3 bulan batuk pilek").
   const AGE_MARKERS = ['usia', 'umur', 'anak', 'anaknya', 'bayi', 'baby', 'newborn', 'neonatus', 'adik', 'kakak', 'kecil'];
+  // Verba gejala: bila token PERSIS sebelum angka adalah verba gejala
+  // ("anak BATUK 2 minggu"), angka itu DURASI, bukan usia — jangan disaring
+  // sebagai usia (celah audit RF-06: "anak batuk 2 minggu" terlewat).
+  const SYMPTOM_VERBS = ['batuk', 'pilek', 'bapil', 'demam', 'panas', 'rewel', 'diare', 'muntah', 'sakit', 'grok', 'flu', 'sesak'];
   let maxDays = 0;
   const re = /(\d{1,3})\s*(minggu|pekan|week|hari|day|bulan|month)/g;
   let m: RegExpExecArray | null;
@@ -366,7 +375,11 @@ export function detectPersistentCoughRashEmergency(texts: string | string[]): {
     if (!Number.isFinite(n)) continue;
     const before = combined.slice(Math.max(0, m.index - 24), m.index);
     const beforeToks = before.split(/[^a-z0-9]+/).filter((t) => t.length > 0).slice(-3);
-    if (beforeToks.some((t) => AGE_MARKERS.includes(t))) continue;
+    const ageMarkerNearby = beforeToks.some((t) => AGE_MARKERS.includes(t));
+    // Bila ada VERBA GEJALA di sekitar angka ("anak batuk ... 2 minggu"),
+    // angka itu durasi gejala, BUKAN usia → jangan disaring sebagai usia.
+    const symptomPresent = beforeToks.some((t) => SYMPTOM_VERBS.includes(t));
+    if (ageMarkerNearby && !symptomPresent) continue;
     const unit = m[2];
     const days = unit === 'minggu' || unit === 'pekan' || unit === 'week'
       ? n * 7

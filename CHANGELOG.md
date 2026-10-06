@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Fixed: Red-flag Medis Komposit RF-06 (batuk-ruam-demam)
+
+- **Investigasi (koreksi temuan harness T1):** "RF-06 tidak dieskalasi" BUKAN bug produksi —
+  detektor `detectPersistentCoughRashEmergency` bekerja benar dengan riwayat lintas-turn;
+  gagal hanya saat riwayat kosong (DB offline di harness). Detail: `docs/KNOWN_ISSUES.md` #234.
+- **FIX-2 (`src/config/medical-keywords.ts`):** pencocokan `batuk` kini prefiks — menangkap
+  imbuhan "batuknya"/"berbatuk" (sebelumnya meleset kata-utuh).
+- **FIX-3 (`src/config/medical-keywords.ts`):** guard proksimitas usia tidak lagi menyaring
+  durasi saat ada verba gejala ("anak batuk 2 minggu" = durasi, bukan usia anak).
+- **Test:** `tests/unit/medical-rf06-composite.test.ts` (10 kasus). Suite medis 80/80,
+  golden corpus 61/61, build lolos.
+- **Sisa OPEN:** FIX-1 (silent degradation bila riwayat DB kosong) dicatat di #234.
+
 #### 2026-10-05 - Added/Changed: Program Stabilisasi Kecerdasan (Fase 0–2)
 
 - **Fase 0 — baseline (read-only):** `V3_GENERATION` system prompt rata-rata 45.000 char
