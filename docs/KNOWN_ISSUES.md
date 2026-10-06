@@ -41,11 +41,14 @@ Laporan: titik peta pelanggan 6281390541340 nyangkut di **Suko** padahal di
   cek `matchedLevel`), `src/services/google-contacts.service.ts:33`, dan skrip
   `scripts/backfill-customer-centroids.ts:80`. Pola sehat sudah ada di
   `src/routes/admin/customers.subroute.ts:214-217` (kecamatan-saja ditolak).
-- **Data pelanggan 6281390541340 sendiri BELUM dikoreksi di DB** — DB lokal
-  (`localhost:5432`) tidak aktif saat audit. Perbaikan data terhalang; perlu
-  jalankan skrip idempoten/`refreshCustomerLocationAndOngkir` pada DB yang hidup.
-  Bila `location_source='gps_pin'`, titik jangan ditimpa (hanya teks) — verifikasi
-  dulu via Admin + `preferences.location_history`.
+- **Data pelanggan 6281390541340 SUDAH dikoreksi di LIVE (2026-10-06).** Bukti
+  pra-fix: `kelurahan=berbek,kecamatan=waru` TAPI `lat/lng=-7.44615,112.678558`
+  (Suko), `location_source=manual_staff`, `share_location_sent=false` → 19.79 km,
+  Rp20.000. Fix via skrip baru `src/scripts/geocode-text-wilayah-drift.ts`
+  (dry-run default, hormati `gps_pin`) → geocode teks "berbek, waru" →
+  `-7.3427222,112.7613933`, **2.03 km, Rp0** (prima ORS). Pasca-fix terverifikasi
+  di DB live. DB lokal (`localhost:5432`) tidak aktif saat audit awal, sehingga
+  koreksi dijalankan di server.
 - **Regresi:** tes baru 88 hijau; `npm run build` hijau. Full suite: 8-10 gagal
   **pre-existing** (terbukti identik di HEAD via `git stash`): `live-chat-enroute-status`,
   `media-mime-audio` (flaky), `v3-conversation-matrix`, `waha-webhook` — di luar
