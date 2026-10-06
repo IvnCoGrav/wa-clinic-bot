@@ -2257,16 +2257,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         // Sync babies if provided
         if (existing.customer_id && Array.isArray(babies) && babies.length > 0) {
+          const { parseAgeTextToBirthDate, monthsBetween } = await import('../../utils/age-calculator');
           for (const b of babies) {
             if (!b.name) continue;
+            // Koreksi admin umur WAJIB menghitung ulang birth_date (bukan hanya
+            // raw_age_text) — jika tidak, anak lama yang sudah punya birth_date
+            // tetap menampilkan umur lama (tampilan memprioritaskan birth_date).
+            const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
             const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === b.name.toLowerCase());
             if (existingChild) {
-              await prisma.child.update({
-                where: { id: existingChild.id },
-                data: {
-                  raw_age_text: b.ageText || existingChild.raw_age_text,
-                },
-              });
+              const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
+              if (newBirthDate) {
+                updateData.birth_date = newBirthDate;
+                updateData.age_months_at_registration = monthsBetween(newBirthDate, new Date());
+              }
+              await prisma.child.update({ where: { id: existingChild.id }, data: updateData });
             } else {
               await prisma.child.create({
                 data: {
@@ -2274,6 +2279,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                   customer_id: existing.customer_id,
                   name: b.name,
                   raw_age_text: b.ageText || '',
+                  birth_date: newBirthDate,
+                  age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,
                 },
               });
             }

@@ -235,8 +235,20 @@ export class PatientProfileExtractor {
       stage,
       complaints: mergedComplaints,
     };
-    if (gestationalWeeks !== undefined) next.gestationalWeeks = gestationalWeeks;
-    else if (prev.gestationalWeeks !== undefined) next.gestationalWeeks = prev.gestationalWeeks;
+    if (gestationalWeeks !== undefined) {
+      next.gestationalWeeks = gestationalWeeks;
+      // Jangkar dinamis: segarkan HANYA saat angka minggu eksplisit berubah dari
+      // teks baru; nilai lama yang diwariskan mempertahankan jangkar aslinya
+      // agar usia kehamilan tetap bertambah antar-turn (bukan reset).
+      if (prev.gestationalWeeks !== gestationalWeeks || !prev.gestationalCapturedAt) {
+        next.gestationalCapturedAt = new Date().toISOString();
+      } else {
+        next.gestationalCapturedAt = prev.gestationalCapturedAt;
+      }
+    } else if (prev.gestationalWeeks !== undefined) {
+      next.gestationalWeeks = prev.gestationalWeeks;
+      next.gestationalCapturedAt = prev.gestationalCapturedAt;
+    }
     if (prev.postpartumPeriod) next.postpartumPeriod = prev.postpartumPeriod;
     // Deteksi durasi paska salin sederhana: cari pola "N minggu/bulan" di dekat kata nifas/paska
     if (stage === 'POSTPARTUM' && !next.postpartumPeriod) {
