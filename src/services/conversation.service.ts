@@ -4,6 +4,7 @@ import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON } from './ai-eligibility.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { hasBypassLabel } from '../utils/customer-bypass';
 import { activeReservationWhere, isActiveReservation } from '../domain/reservation-status';
 
 const memoryConversations = new Map<string, any>();
@@ -31,6 +32,9 @@ export function buildConversationUpdatedPayload(conversation: any) {
 }
 
 export class ConversationService {
+  /** F4.4b: guard idempoten peringatan pra-auto-release (in-memory, per proses). */
+  private autoReleaseWarned = new Set<string>();
+
   /**
    * Cari conversation aktif milik customer, atau buat baru dengan state INITIAL jika belum ada.
    */
@@ -387,7 +391,28 @@ export class ConversationService {
       conversation.escalation_reason === 'admin_manual_reply' ||
       (typeof conversation.escalation_reason === 'string' && conversation.escalation_reason.startsWith('manual_'));
     if (isManualTakeover) {
-      if (hoursEarly < 12) {
+      // F4.4b: lease manual = 12 jam, TAPI `human_handling_since` sudah di-slide
+      // tiap balasan admin (resetHumanHandlingTimer) → efektif berbasis AKTIVITAS
+      // admin, bukan sekadar waktu sejak eskalasi. Peringatan pra-lepas dikirim
+      // ~2 jam sebelum release agar admin bisa intervensi.
+      const MANUAL_LEASE_HOURS = 12;
+      if (
+        hoursEarly >= MANUAL_LEASE_HOURS - 2 &&
+        hoursEarly < MANUAL_LEASE_HOURS &&
+        !this.autoReleaseWarned.has(conversation.id)
+      ) {
+        this.autoReleaseWarned.add(conversation.id);
+        console.log(`[AUTO-RELEASE WARN] Conversation ${conversation.id} (manual) ~${(MANUAL_LEASE_HOURS - hoursEarly).toFixed(1)}h lagi akan dilepas ke bot.`);
+        void import('./web-push.service').then(({ webPushService }) =>
+          webPushService.sendPushToRole(tenantId, 'ADMIN', {
+            title: '⏳ Percakapan segera dilepas ke bot',
+            body: `Tidak ada aktivitas admin ${hoursEarly.toFixed(1)} jam. Bot aktif kembali dalam ~${(MANUAL_LEASE_HOURS - hoursEarly).toFixed(1)} jam — tekan "Ambil Alih" bila masih perlu.`,
+            url: `/admin/live-chat?conversationId=${conversation.id}`,
+            tag: `autorelease-warn-${conversation.id}`,
+          })
+        ).catch(() => {});
+      }
+      if (hoursEarly < MANUAL_LEASE_HOURS) {
         console.log(`[AUTO-RELEASE SEWA] Conversation ${conversation.id} manual ${hoursEarly.toFixed(1)}h <12h — belum release.`);
         return { released: false, updatedConversation: conversation };
       }
@@ -540,6 +565,12 @@ export class ConversationService {
     console.log(`[HUMAN HANDOFF] Conversation ${conversation.id} escalated to human handling. Reason: ${reason}`);
 
     const currentStateBeforeEscalation = conversation.current_state;
+    // V-B guard (fondasional): bila percakapan SUDAH HUMAN_HANDLING, JANGAN timpa
+    // previous_state — state riil pra-eskalasi bisa hilang dan Release akan
+    // memulihkan ke HUMAN_HANDLING (chat macet selamanya). Update di-skip dengan
+    // mengirim undefined (patch diabaikan oleh updateConversationState).
+    const isAlreadyHumanHandling = currentStateBeforeEscalation === ConversationState.HUMAN_HANDLING;
+    const previousStateForUpdate = isAlreadyHumanHandling ? undefined : currentStateBeforeEscalation;
 
     // Deteksi apakah percakapan berasal dari customer Sandbox/QA Test
     let isSandbox = Boolean(conversation.customer?.is_sandbox_test);
@@ -607,7 +638,7 @@ export class ConversationService {
       conversation.id,
       {
         currentState: ConversationState.HUMAN_HANDLING,
-        previousState: currentStateBeforeEscalation,
+        previousState: previousStateForUpdate,
         isHumanHandling: true,
         humanHandlingSince: new Date(),
         escalationReason: escalationReason || undefined,
@@ -710,8 +741,65 @@ export class ConversationService {
     return releasedCount;
   }
 
+  /**
+   * F4.1 — Pintu TUNGGAL melepas percakapan dari HUMAN_HANDLING kembali ke bot.
+   * Menyatukan semua penulis (dashboard release, kurasi FAQ, /reset, FORCE_ON)
+   * agar pemulihan previous_state + clearance hold konsisten (anti-spaghetti).
+   */
+  public async releaseToBot(conversationId: string, tenantId: string): Promise<any> {
+    const existing = await this.getConversationById(conversationId, tenantId).catch(() => null);
+    const restoredState = existing?.previous_state || ConversationState.INITIAL;
+    await this.updateConversationState(
+      conversationId,
+      {
+        currentState: restoredState,
+        isHumanHandling: false,
+        humanHandlingSince: null,
+        escalationReason: null,
+      },
+      tenantId
+    );
+    // DB-internal hold clearance (single source of truth; zero WAHA label mutation).
+    try {
+      if (existing?.customer_id) {
+        const cust = await prisma.customer.findUnique({
+          where: { id: existing.customer_id },
+          select: { phone: true },
+        });
+        if (cust?.phone) {
+          const { customerService } = await import('./customer.service');
+          await customerService.setLabelFlags(cust.phone, { isHoldLabeled: false });
+        }
+      }
+    } catch {}
+    return restoredState;
+  }
+
   public getMemoryConversations(): any[] {
     return Array.from(memoryConversations.values());
+  }
+
+  /**
+   * Gerbang TUNGGAL semua pengirim PROAKTIF (cron/follow-up/broadcast).
+   * State-based (tanpa cocok teks): DILARANG mengirim pesan basa-basi/pengingat
+   * ke percakapan yang sedang DIpegang manusia (is_human_handling) dengan
+   * aktivitas < ambang jam, atau ke kontak bypass/admin. Ambang memakai env
+   * yang sudah ada (Reusability-first; tanpa dependency baru).
+   */
+  public bolehKirimProaktif(conversation: any, customer?: any): boolean {
+    if (customer && (customer.is_admin_labeled === true || hasBypassLabel(customer))) {
+      return false;
+    }
+    if (customer && customer.is_sandbox_test === true) return false;
+    if (!conversation) return true;
+    if (conversation.is_human_handling) {
+      const raw = parseInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS || '72', 10);
+      const hours = Number.isFinite(raw) && raw > 0 ? raw : 72;
+      const last = conversation.last_message_at || conversation.last_customer_message_at;
+      const lastMs = last ? new Date(last).getTime() : 0;
+      if (!lastMs || Date.now() - lastMs < hours * 3600000) return false;
+    }
+    return true;
   }
 }
 

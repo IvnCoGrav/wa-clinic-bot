@@ -209,6 +209,23 @@ export class BroadcastQueueService {
         return;
       }
 
+      // F3: gerbang proaktif TUNGGAL — hormati pegangan manusia & kontak bypass.
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const gateTenantId = followUp.tenant_id || DEFAULT_TENANT_ID;
+        const conv = await conversationService.getOrCreateConversation(customer.id, gateTenantId);
+        if (!conversationService.bolehKirimProaktif(conv, customer)) {
+          console.log(`[Broadcast Queue] Follow-up ${followUpId} skipped — chat manusia / kontak bypass.`);
+          await prisma.followUp.update({
+            where: { id: followUpId },
+            data: { status: 'SKIPPED', cancel_reason: 'bypass_label' },
+          }).catch(() => {});
+          return;
+        }
+      } catch (gateErr: any) {
+        console.warn('[Broadcast Queue] Proactive gate warning:', gateErr?.message || gateErr);
+      }
+
       // 3. Cari template pesan acak dari array
       let replyText = '';
       const name = customer.name || 'Bunda';

@@ -506,6 +506,12 @@ export class TypingService {
         }
         if (sentMessageId) {
           lastMessageId = sentMessageId;
+          // F5: catat wa_message_id pesan bot sebagai penentu utama (anti salah
+          // kategorikan gema bot sebagai balasan admin).
+          try {
+            const { messageService } = await import('./message.service');
+            messageService.registerKnownBotMessageId(sentMessageId, effectiveTenantId);
+          } catch {}
         }
         // Stage 5: tandai SENT + provider message id.
         if (outboundAttemptId) {

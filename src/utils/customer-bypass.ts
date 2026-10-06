@@ -89,6 +89,8 @@ export const BYPASS_LABEL_PRISMA_IN: readonly string[] = [
 export function buildNonBypassCustomerWhere(): Record<string, unknown> {
   return {
     status: { not: 'blocked' },
+    deleted_at: null,
+    is_internal_staff: false,
     is_sandbox_test: false,
     is_admin_labeled: false,
     labels: {

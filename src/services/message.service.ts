@@ -34,6 +34,17 @@ interface InFlightBotOutbound {
 }
 const inFlightBotOutbounds: InFlightBotOutbound[] = [];
 
+// F5: ledger wa_message_id pesan yang PASTI dikirim bot. Penentu utama bot-vs-admin
+// (lebih andal daripada cocok-awalan konten yang bisa salah kategorikan balasan
+// admin sebagai gema bot). In-memory per proses; bila multi-instance, DB/durable
+// ledger tetap jalur utama via `isDuplicateMessage`.
+interface KnownBotMessageId {
+  waMessageId: string;
+  tenantId: string;
+  expiresAt: number;
+}
+const knownBotMessageIds: KnownBotMessageId[] = [];
+
 // Sender default untuk payload Live Chat: outbound tanpa penanda = bot, inbound = customer
 function resolveSenderType(data: { direction: Direction; senderType?: string }): string {
   if (data.senderType) return data.senderType;
@@ -182,6 +193,31 @@ export class MessageService {
 
     return false;
   }
+  /**
+   * F5: daftarkan wa_message_id yang PASTI dikirim bot (dari hasil send).
+   * Dipakai sebagai penentu utama bot-vs-admin (anti salah-kategorikan gema).
+   */
+  public registerKnownBotMessageId(waMessageId: string, tenantId: string, ttlMs = 6 * 60 * 60 * 1000): void {
+    if (!waMessageId) return;
+    const now = Date.now();
+    for (let i = knownBotMessageIds.length - 1; i >= 0; i--) {
+      if (knownBotMessageIds[i].expiresAt <= now) knownBotMessageIds.splice(i, 1);
+    }
+    knownBotMessageIds.push({ waMessageId, tenantId, expiresAt: now + ttlMs });
+  }
+
+  /** F5: cek apakah wa_message_id ini diketahui pesan bot (penentu utama). */
+  public isKnownBotMessageId(waMessageId: string, tenantId?: string): boolean {
+    if (!waMessageId) return false;
+    const now = Date.now();
+    for (let i = knownBotMessageIds.length - 1; i >= 0; i--) {
+      if (knownBotMessageIds[i].expiresAt <= now) knownBotMessageIds.splice(i, 1);
+    }
+    return knownBotMessageIds.some(
+      (e) => e.waMessageId === waMessageId && (!tenantId || e.tenantId === tenantId)
+    );
+  }
+
   /**
    * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
    * Mengembalikan true jika pesan SUDAH PERNAH diproses sebelumnya (duplicate/retry).

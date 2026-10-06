@@ -432,6 +432,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 ? outCanonical.content
                 : adminReplyText;
 
+              // F5: penentu UTAMA — wa_message_id yang terdaftar sebagai pesan bot.
+              const isKnownBotId = messageService.isKnownBotMessageId(payload.id, resolvedTenantId);
               const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, resolvedTenantId);
               const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
                 conversation.id,
@@ -459,8 +461,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 resolvedTenantId
               );
 
-              if (isDuplicateOutbound || isRecentDuplicate || isInFlightBot) {
-                if (isInFlightBot && payload.id) {
+              if (isKnownBotId || isDuplicateOutbound || isRecentDuplicate || isInFlightBot) {
+                if ((isInFlightBot || isKnownBotId) && payload.id) {
                   messageService.isDuplicateMessage(payload.id, resolvedTenantId).catch(() => {});
                 }
                 console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / in-flight / duplicate). Skipping manual reply escalation.`);
@@ -497,8 +499,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               // 2. Jika bukan auto-reply bot, proses human handling takeover / timer + auto mark-as-read
               if (!isBotAutoReply) {
                 if (conversation.is_human_handling) {
-                  conversationService.resetHumanHandlingTimer(conversation.id, resolvedTenantId)
-                    .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
+                  // F5.2: await tulis timer sebelum lanjut (hindari race baca-ulang).
+                  try {
+                    await conversationService.resetHumanHandlingTimer(conversation.id, resolvedTenantId);
+                  } catch (err: any) {
+                    console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err);
+                  }
                 } else {
                   // Jika admin membalas langsung dari HP saat bot aktif, eskalasi ke human handling (takeover)
                   try {

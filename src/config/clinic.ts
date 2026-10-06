@@ -19,6 +19,7 @@ export const clinicConfig: ClinicConfig = {
   // Dipakai sebagai cap atas fallback; sumber utama coverage = tier ongkir dari DB.
   maxDeliveryDistanceKm: parseFloat(process.env.MAX_DELIVERY_DISTANCE_KM || '30'),
 
-  // Timeout auto-release status human handling (dalam jam) — default 18 jam (aman dari siklus malam/libur)
-  humanHandlingTimeoutHours: parseFloat(process.env.HUMAN_HANDLING_TIMEOUT_HOURS || '18'),
+  // Timeout auto-release status human handling (dalam jam) — SATU sumber angka:
+  // selaras dengan .env.example, README, dan docker-compose (default 6 jam).
+  humanHandlingTimeoutHours: parseFloat(process.env.HUMAN_HANDLING_TIMEOUT_HOURS || '6'),
 };

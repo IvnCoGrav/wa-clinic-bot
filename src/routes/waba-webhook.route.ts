@@ -391,6 +391,30 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
+      // F4.4: gerbang diam eksplisit (paritas WAHA) — percakapan yang sedang
+      // dipegang manusia TIDAK diantrekan ke bot. Sebelumnya WABA baru dibuang
+      // di worker (boros + tak tercatat). Cukup log + enrichment, status sama
+      // dengan jalur WAHA (`HUMAN_HANDLING_ACTIVE_SILENT`).
+      if (conversation.is_human_handling) {
+        try {
+          const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+          humanBackgroundEnrichmentService.enrichAsync(
+            { customer, conversation, incomingMessage: { type: msg.type, text: msg.text ? { body: msg.text } : undefined, location: msg.location }, history: [] } as any,
+            tenantId
+          );
+        } catch {}
+        await messageService.logMessage({
+          tenantId,
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: wabaCanonicalContent,
+          waMessageId: msg.messageId,
+          payloadRaw: mergeWabaMedia(msg.rawPayload),
+        });
+        processed++;
+        continue;
+      }
+
       // --- PURCHASE EVENT DETECTION FOR WABA (sebelum state machine / human handling) ---
       if (msg.type === 'text' && msg.text) {
         try {

@@ -3,7 +3,9 @@ import { hasBypassLabel } from '../utils/customer-bypass';
 
 /**
  * Precedence (urut, berhenti di match pertama):
- * 1. customer.ai_override === 'FORCE_ON'  -> true   (override menang, ANY scope)
+ * 0. is_admin_labeled / bypass label (Skip / Admin CS) -> false
+ *    (kontak internal SELALU menang, termasuk atas FORCE_ON)
+ * 1. customer.ai_override === 'FORCE_ON'  -> true   (override menang, HANYA atas scope)
  * 2. customer.ai_override === 'FORCE_OFF' -> false  (override menang, ANY scope)
  * 3. customer.has_active_appointment === true -> false (ACTIVE_APPOINTMENT_MANUAL;
  *    guard operasional wajib — pasien dengan jadwal aktif H-0/H+1 SELALU ke CS
@@ -78,13 +80,15 @@ export function resolveAiEligibilityWithReason(
   customer: AiEligibilityCustomer,
   tenant: AiEligibilityTenant,
 ): AiEligibilityResolution {
-  if (customer.ai_override === 'FORCE_ON') return { eligible: true };
-  if (customer.ai_override === 'FORCE_OFF') return { eligible: false, reason: 'FORCE_OFF' };
-
-  // Guard bypass kontak non-customer (Skip atau Admin CS)
+  // Guard bypass kontak non-customer (Skip / Admin CS) DIPERIKSA DULUAN — label
+  // admin SELALU menang, termasuk atas FORCE_ON. Kontak internal bukan customer;
+  // FORCE_ON hanya boleh mengalahkan batas SCOPE (umur/legacy/repeat), bukan label.
   if ((customer as any).is_admin_labeled === true || hasBypassLabel(customer)) {
     return { eligible: false, reason: 'FORCE_OFF' };
   }
+
+  if (customer.ai_override === 'FORCE_ON') return { eligible: true };
+  if (customer.ai_override === 'FORCE_OFF') return { eligible: false, reason: 'FORCE_OFF' };
 
   // Guard operasional wajib: jadwal aktif H-0/H+1 → CS manusia, tanpa toggle.
   if (customer.has_active_appointment === true) {

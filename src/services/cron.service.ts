@@ -1,12 +1,6 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { TEMPLATES } from '../config/persona';
-import { typingService } from './typing.service';
 import { followUpService } from './follow-up.service';
-import {
-  sanitizeCustomerNameForGreeting,
-  formatBabyNamesForGreeting,
-} from '../utils/name-sanitizer';
 
 export class CronService {
   /**
@@ -17,24 +11,41 @@ export class CronService {
       console.log('[Cron Service] Starting Morning Jobs...');
       const { getAllTenantIds } = await import('./media.service');
       const tenantIds = await getAllTenantIds();
+      const wibNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+      const dateStr = wibNow.toISOString().slice(0, 10);
       for (const tenantId of tenantIds) {
+        // V9: idempotensi tahan-restart di level DB (bukan variabel RAM). Klaim via
+        // AdminNotificationLog.idempotency_key; bila sudah ada, lewati tenant ini.
+        const claimed = await this.tryClaimMorningJobs(tenantId, dateStr);
+        if (!claimed) {
+          console.log(`[Cron] Morning jobs untuk tenant ${tenantId} sudah dijalankan hari ini. Dilewati (idempoten).`);
+          continue;
+        }
         try {
           const wb = await followUpService.enqueueDormantWinbackFollowUps(tenantId);
           if (wb > 0) console.log(`[Cron] Queued ${wb} WINBACK_60D follow-ups (tenant ${tenantId}).`);
         } catch (e: any) {
           console.warn('[Cron] enqueueDormantWinbackFollowUps failed:', e?.message);
         }
-        await followUpService.processDueFollowUps(tenantId);
+        // V8: pengiriman follow-up DIPINDAH ke runFollowUpWorker (jendela jam kerja
+        // 09:00–17:00 WIB). runMorningJobs TIDAK lagi memanggil processDueFollowUps
+        // agar tidak menembak pesan subuh 06:00 WIB.
         try {
           const rec = await followUpService.reconcileOrphanedCompletedFollowUps(tenantId);
           if (rec.reconciledCount > 0) console.log(`[Cron] Reconciled ${rec.reconciledCount} orphaned NEXT_TREATMENT (tenant ${tenantId}).`);
         } catch (e: any) {
           console.warn('[Cron] reconcileOrphanedCompletedFollowUps failed:', e?.message);
         }
-        await followUpService.checkAndSetLostCustomers(tenantId);
-        await this.checkPendingPurchaseModerationAlerts(tenantId);
-        const { staffNotificationService } = await import('./staff-notification.service');
-        await staffNotificationService.sendAllStaffMorningBriefings(tenantId);
+        try {
+          await followUpService.checkAndSetLostCustomers(tenantId);
+          await this.checkPendingPurchaseModerationAlerts(tenantId);
+          const { staffNotificationService } = await import('./staff-notification.service');
+          await staffNotificationService.sendAllStaffMorningBriefings(tenantId);
+        } catch (e: any) {
+          // Kegagalan tak terduga → lepas klaim agar jadwal berikutnya bisa retry.
+          console.warn(`[Cron] Morning jobs tenant ${tenantId} gagal, klaim dilepas untuk retry:`, e?.message);
+          await this.releaseMorningJobsClaim(tenantId, dateStr);
+        }
       }
       await this.cleanupOldAdClicks();
       await this.purgeOldLegacyStaging();
@@ -44,6 +55,55 @@ export class CronService {
       console.error('[Cron Service] Error running morning jobs:', err);
     }
   }
+
+  /** V9: kunci idempotensi morning jobs per tenant + tanggal WIB. */
+  private morningJobsClaimKey(tenantId: string, dateStr: string): string {
+    return `${tenantId}:MORNING_JOBS:${dateStr}`;
+  }
+
+  /**
+   * V9: klaim eksekusi morning jobs hari ini. Mengembalikan true bila klaim baru
+   * berhasil (belum pernah jalan); false bila sudah ada (P2002 = idempoten).
+   */
+  private async tryClaimMorningJobs(tenantId: string, dateStr: string): Promise<boolean> {
+    try {
+      await prisma.adminNotificationLog.create({
+        data: {
+          tenant_id: tenantId,
+          channel: 'SYSTEM',
+          recipient: 'system',
+          notification_type: 'MORNING_JOBS',
+          report_date: dateStr,
+          idempotency_key: this.morningJobsClaimKey(tenantId, dateStr),
+          title: 'Morning Jobs',
+          message_content: 'Penanda idempotensi eksekusi morning jobs harian (tahan restart).',
+          status: 'SENT',
+        },
+      });
+      return true;
+    } catch {
+      // P2002 unique violation → sudah dijalankan hari ini. DB offline → jangan
+      // memblokir operasi (fail-open) agar bot tetap berjalan.
+      try {
+        const existing = await prisma.adminNotificationLog.findFirst({
+          where: { idempotency_key: this.morningJobsClaimKey(tenantId, dateStr) },
+        });
+        return !existing;
+      } catch {
+        return true;
+      }
+    }
+  }
+
+  /** V9: lepas klaim agar jadwal berikutnya bisa mencoba ulang setelah kegagalan. */
+  private async releaseMorningJobsClaim(tenantId: string, dateStr: string): Promise<void> {
+    try {
+      await prisma.adminNotificationLog.deleteMany({
+        where: { idempotency_key: this.morningJobsClaimKey(tenantId, dateStr) },
+      });
+    } catch {}
+  }
+
 
   /**
    * Worker periodik (misal 15 menit sekali) untuk memproses antrian Follow-Up PENDING
@@ -183,212 +243,6 @@ export class CronService {
     }
   }
 
-  /**
-   * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
-   */
-  private async sendMorningReminders(): Promise<void> {
-    const { whatsappProviderService } = await import('./whatsapp-provider.service');
-    const isCutOff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
-    if (isCutOff) {
-      console.log(`[Cron Service] Outbound Cut-Off is ACTIVE. Skipping morning reminders.`);
-      return;
-    }
-
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-
-    const todayReservations = await prisma.reservation.findMany({
-      where: {
-        status: 'confirmed',
-        booking_date: {
-          gte: startOfToday,
-          lte: endOfToday,
-        },
-        tenant_id: DEFAULT_TENANT_ID,
-      },
-      include: { customer: true },
-    });
-
-    console.log(`[Cron Service] Found ${todayReservations.length} confirmed reservations for today.`);
-
-    // Urutkan berdasarkan booking_date ASCENDING
-    todayReservations.sort((a, b) => {
-      if (!a.booking_date || !b.booking_date) return 0;
-      return a.booking_date.getTime() - b.booking_date.getTime();
-    });
-
-    let accumulatedDelayMs = 0;
-
-    for (const res of todayReservations) {
-      if (!res.customer || !res.booking_date) continue;
-
-      const now = new Date();
-      const timeToTreatment = res.booking_date.getTime() - now.getTime();
-
-      // Estimasi waktu kirim dengan safety buffer (max jitter 45s + 5s typing simulation)
-      const maxJitter = 45000;
-      const typingTime = 5000;
-      const estimatedDuration = maxJitter + typingTime;
-
-      // Pengaman Prioritas: jika delay antrian terakumulasi melebihi waktu dimulainya treatment, bypass throttle!
-      const shouldBypassThrottle = (accumulatedDelayMs + estimatedDuration) >= timeToTreatment;
-
-      if (!shouldBypassThrottle) {
-        // Throttling normal: jeda acak 20-45 detik
-        const isTest = process.env.NODE_ENV === 'test';
-        const jitter = isTest ? 1 : Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
-
-        console.log(`[Cron Service] Throttling morning reminder: waiting for ${jitter / 1000}s`);
-        await new Promise((resolve) => setTimeout(resolve, jitter));
-        accumulatedDelayMs += jitter;
-      } else {
-        console.log(`[Cron Service] Bypassing throttle for urgent reminder: booking at ${res.booking_date.toISOString()}`);
-      }
-
-      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
-      const timeStr = this.formatTime(res.booking_date);
-
-      const messageText = TEMPLATES.morningReminder({
-        name: customerName,
-        time: timeStr,
-      });
-
-      console.log(`[Cron Service] Sending morning reminder to ${res.customer.phone} (${customerName || 'Bunda'})`);
-      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
-
-      // Pre-log pesan reminder ke tabel messages untuk Live Chat
-      try {
-        const { conversationService } = await import('./conversation.service');
-        const { messageService } = await import('./message.service');
-        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
-        if (conv) {
-          await messageService.logMessage({
-            tenantId: targetTenantId,
-            conversationId: conv.id,
-            direction: 'OUTBOUND',
-            content: messageText,
-            senderType: 'BOT',
-            senderName: 'Bot (Morning Reminder)',
-          });
-        }
-      } catch (logErr: any) {
-        console.warn('[Cron Service] Failed to log morning reminder to messages:', logErr.message);
-      }
-
-      await typingService.simulateHumanReply({
-        chatId: res.customer.phone,
-        replyText: messageText,
-        tenantId: targetTenantId,
-      });
-    }
-  }
-
-  /**
-   * @deprecated MT-1.5 — REVIEW_H1 dipostpone permanen (follow-up.service processDueFollowUps skip REMINDER/REVIEW),
-   * dan NEXT_TREATMENT kini dijadwalkan via reservationLifecycleService.onReservationCompleted (dekopling dari REVIEW).
-   * Method ini dead-code (tidak dipanggil runMorningJobs); dipertahankan stub agar tidak break import, lihat KNOWN_ISSUES.
-   * Jika H+1 diaktifkan kembali, wire ulang secara eksplisit dan hapus deprecasi ini.
-   */
-  private async sendYesterdayReviewsAndScheduleNextFollowups(): Promise<void> {
-    const { whatsappProviderService } = await import('./whatsapp-provider.service');
-    const isCutOff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
-    if (isCutOff) {
-      console.log(`[Cron Service] Outbound Cut-Off is ACTIVE. Skipping yesterday reviews.`);
-      return;
-    }
-
-    const startOfYesterday = new Date();
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    startOfYesterday.setHours(0, 0, 0, 0);
-    const endOfYesterday = new Date();
-    endOfYesterday.setDate(endOfYesterday.getDate() - 1);
-    endOfYesterday.setHours(23, 59, 59, 999);
-
-    const yesterdayReservations = await prisma.reservation.findMany({
-      where: {
-        // `completed` ikut dihitung: admin yang menandai Treatment Selesai di
-        // hari-H tidak boleh membuat review H+1 hilang (kanonis patient-lifecycle).
-        status: { in: ['confirmed', 'en_route', 'completed'] },
-        booking_date: {
-          gte: startOfYesterday,
-          lte: endOfYesterday,
-        },
-        tenant_id: DEFAULT_TENANT_ID,
-      },
-      include: {
-        customer: {
-          include: { children: true },
-        },
-      },
-    });
-
-    console.log(`[Cron Service] Found ${yesterdayReservations.length} confirmed/completed reservations booked yesterday.`);
-
-    for (const res of yesterdayReservations) {
-      if (!res.customer || !res.booking_date) continue;
-
-      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
-      let messageText = '';
-
-      // 1. Tentukan template review berdasarkan kategori
-      if (res.treatment_category === 'BABY' || res.treatment_category === 'BOTH') {
-        const babyName = formatBabyNamesForGreeting(res.customer.children, res.raw_text, { prefixDek: true });
-        messageText = TEMPLATES.followUpReviewBaby({
-          name: customerName,
-          babyName,
-        });
-      } else {
-        // MOMS
-        messageText = TEMPLATES.followUpReviewMoms({
-          name: customerName,
-        });
-      }
-
-      // 2. Kirim pesan review H+1
-      console.log(`[Cron Service] Sending H+1 review to ${res.customer.phone} (${customerName || 'Bunda'}, Baby: ${res.treatment_category === 'MOMS' ? '-' : 'bayi'})`);
-      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
-
-      // Pre-log pesan review H+1 ke tabel messages untuk Live Chat
-      try {
-        const { conversationService } = await import('./conversation.service');
-        const { messageService } = await import('./message.service');
-        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
-        if (conv) {
-          await messageService.logMessage({
-            tenantId: targetTenantId,
-            conversationId: conv.id,
-            direction: 'OUTBOUND',
-            content: messageText,
-            senderType: 'BOT',
-            senderName: 'Bot (Review H+1)',
-          });
-        }
-      } catch (logErr: any) {
-        console.warn('[Cron Service] Failed to log H+1 review to messages:', logErr.message);
-      }
-
-      await typingService.simulateHumanReply({
-        chatId: res.customer.phone,
-        replyText: messageText,
-        tenantId: targetTenantId,
-      });
-
-      // 3. [MT-1.5] NEXT_TREATMENT dinetralkan — sudah dijadwalkan via onReservationCompleted (seam terpusat).
-      //     Jika H+1 diaktifkan kembali, panggil reservationLifecycleService.onReservationCompleted di sini.
-      void followUpService;
-    }
-  }
-
-  /**
-   * Helper format Date ke string HH:MM
-   */
-  private formatTime(date: Date): string {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  }
 
   /**
    * Memeriksa status session WAHA secara berkala. Jika session terputus/down,

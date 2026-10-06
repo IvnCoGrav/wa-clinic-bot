@@ -148,17 +148,18 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           status: 'APPROVED',
         });
 
-        await prisma.conversation.update({
-          where: { id },
-          data: {
-            is_human_handling: false,
-            human_handling_since: null,
-            escalation_reason: null,
-          },
-        });
+        // F4.1/F4.3: lepas via pintu TUNGGAL (pulihkan previous_state + clear hold),
+        // JANGAN reset manual yang menghancurkan previous_state.
+        const tenantIdResolve = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const { conversationService } = await import('../../services/conversation.service');
+        await conversationService.releaseToBot(id, tenantIdResolve);
+        // Beri makna pada antrean sebelumnya agar loop ditutup.
+        await prisma.conversation
+          .update({ where: { id }, data: { review_flagged: false } as any })
+          .catch(() => {});
 
         const { resolveGatewayForTenant } = await import('../../integrations/whatsapp/factory');
-        const gateway = await resolveGatewayForTenant(DEFAULT_TENANT_ID);
+        const gateway = await resolveGatewayForTenant(tenantIdResolve);
         await gateway.sendTextMessage(conversation.customer.phone, answer);
 
         const { messageService } = await import('../../services/message.service');
@@ -166,7 +167,9 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           conversationId: id,
           direction: 'OUTBOUND',
           content: answer,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantIdResolve,
+          senderType: 'ADMIN',
+          senderName: 'Admin (Kurasi FAQ)',
         });
 
         return reply.status(200).send({ success: true, message: 'Pertanyaan berhasil dijawab dan disimpan ke FAQ.' });
