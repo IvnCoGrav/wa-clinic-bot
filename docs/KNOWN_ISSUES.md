@@ -54,9 +54,12 @@ SENGAJA ditunda / butuh keputusan manusia sebelum diaktifkan penuh:
   prefiks `(^|[^a-z])batuk` + dukung `berbatuk`.
 - **FIX-3 (DONE):** guard proksimitas usia terlalu galak — "anak batuk 2 minggu" salah
   dianggap usia anak. Kini disaring sebagai usia HANYA bila tak ada verba gejala di sekitar angka.
-- **FIX-1 (OPEN, robustness):** jaring keselamatan komposit BERGANTUNG riwayat dari DB.
-  Bila DB lambat/down → `getRecentMessages` kosong → deteksi lintas-turn hilang **tanpa peringatan**.
-  Belum diperbaiki (butuh fallback riwayat in-memory / Redis). Di produksi DB hidup → risiko rendah.
+- **FIX-1 (SELESAI-sebagian, terverifikasi):** kekhawatiran "degradasi senyap saat riwayat kosong"
+  TERNyata sudah termitigasi — `messageService.getRecentMessages` punya **fallback `memoryMessages`**
+  (`src/services/message.service.ts:725-731`) sehingga riwayat tetap ada walau DB down.
+  Sisa celah hanya bila DB DAN memori proses SAMA-SAMA kosong (mis. restart + DB down). Harness
+  T1 offline gagal karena turns-nya tidak tercatat ke `memoryMessages` (artefak harness, bukan bot).
+  Perbaikan lanjutan bersifat OPSIONAL (observability warning / fallback Redis) — bukan prioritas.
 - **Test:** `tests/unit/medical-rf06-composite.test.ts` (10 kasus: WITH/WITHOUT history, order-independent,
   FIX-2/3, guard usia, ruam jinak). Suite medis/keselamatan 80/80 hijau, golden corpus 61/61.
 
