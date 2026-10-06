@@ -870,9 +870,12 @@ export class GenerationStage {
       messages: any[];
       preGroundingBlock: string;
       tenantId: string;
+      /** Fase 2b: selaraskan prompt Call 2 dengan skema tool yang nyata di-mask. */
+      isSaveReservationMasked?: boolean;
+      isCalculateDeliveryMasked?: boolean;
     }
   ): Promise<GenerationOutput> {
-    const { session, isFollowUp, cleanIncomingText, conversationHistory, messages, preGroundingBlock, tenantId } = opts;
+    const { session, isFollowUp, cleanIncomingText, conversationHistory, messages, preGroundingBlock, tenantId, isSaveReservationMasked, isCalculateDeliveryMasked } = opts;
     // 6. Panggilan Kedua: Menyusun teks balasan ramah Bidan Yusi menggunakan fakta tool
     // Perbarui system prompt di messages[0] dengan session terbaru yang telah di-grounding hasil tools
     // (async agar blok contoh dinamis bank tetap dipakai, bukan revert ke statis).
@@ -884,6 +887,10 @@ export class GenerationStage {
       tenantId,
       incomingText: cleanIncomingText,
       phaseInjection: { focus: derivePhaseFocus(session), slim: true },
+      // Information hiding: guidance tool yang di-mask TIDAK dijelaskan penuh
+      // (selaras dengan skema tools JSON yang benar-benar dikirim).
+      isSaveReservationMasked,
+      isCalculateDeliveryMasked,
     });
     turn.fewShotExemplars = refreshedPrompt.exemplars;
 

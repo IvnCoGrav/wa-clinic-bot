@@ -340,6 +340,7 @@ export class V3AgentRunner {
           const gen = await GenerationStage.generateReply(turn, tel, {
             session, isFollowUp, cleanIncomingText, conversationHistory,
             messages, preGroundingBlock, tenantId,
+            isSaveReservationMasked, isCalculateDeliveryMasked,
           });
           lastContextSummary = gen.contextSummary;
           lastPhaseDirective = gen.phaseDirective;
@@ -391,6 +392,7 @@ export class V3AgentRunner {
           const gen = await GenerationStage.generateReply(turn, tel, {
             session, isFollowUp, cleanIncomingText, conversationHistory,
             messages, preGroundingBlock, tenantId,
+            isSaveReservationMasked, isCalculateDeliveryMasked,
           });
           lastContextSummary = gen.contextSummary;
           lastPhaseDirective = gen.phaseDirective;

@@ -88,7 +88,13 @@ Baseline program "chatbot lebih cerdas" (read-only, 1.693 log lokal + `llm_audit
 - **Catatan:** log `logs/llm-*.jsonl` lokal mayoritas SANDBA, dan `logs/` produksi tidak dipersist
   (#194d) → baseline produksi hanya via `llm_audit_logs` DB. Temuan "penulis paralel" terkonfirmasi
   kembali: `CHANGELOG.md` tertimpa proses lain saat Fase 2 (entri ditulis ulang).
-- **Fase 2b (DITUNDA — butuh data produksi):** blok `NEGATIVE CONSTRAINTS` (~9k) berisi aturan
+- **Fase 2b — guidance tool mask-aware (DONE):** flag mask Call 1 diteruskan ke prompt Call 2
+  (`agent-runner`→`generation-stage`); prompt ter-mask 46.665 vs 48.617 char (hemat ~1.952).
+- **Fase 2b — prune NEGATIVE CONSTRAINTS (DITOLAK setelah ukur):** total blok hanya 10.690 char,
+  terpecah kecil & mayoritas aturan keselamatan → risiko tinggi, hasil kecil. Tidak dikerjakan.
+- **Catatan pre-existing:** `tests/integration/v3-conversation-matrix.test.ts` CM-22 gagal
+  (terverifikasi gagal juga tanpa perubahan batch ini) — perlu ditindaklanjuti pemilik changeset terkait.
+- **Fase 2b lanjutan (DITUNDA — butuh data produksi):** blok `NEGATIVE CONSTRAINTS` (~9k) berisi aturan
   keselamatan klinis + anti-injeksi; memangkas per-state tanpa jendela observasi produksi
   melanggar mandat "verifikasi sebelum eksekusi". Jangan potong buta.
 - **Fase 3 (DITUNDA — bukti belum cukup):** 6 guardrail 0-tembakan di `app-*.log` lokal, TAPI

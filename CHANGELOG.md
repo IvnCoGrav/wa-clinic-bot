@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Changed: Fase 2b — Guidance Tool Mask-Aware di Call 2
+
+- **`agent-runner.ts` → `generation-stage.ts` → `persona/prompt-composer`:** flag
+  `isSaveReservationMasked`/`isCalculateDeliveryMasked` (sudah dihitung di Call 1) kini
+  diteruskan ke prompt Call 2. Guidance tool yang di-mask TIDAK lagi dijelaskan penuh —
+  selaras dengan skema `tools` JSON yang benar-benar dikirim (information hiding).
+- **Hasil terukur:** prompt ter-mask **46.665 char** vs 48.617 (hemat ~1.952 char);
+  dikombinasi `slim` state-gated Fase 2.
+- **Catatan Fase 2b lanjutan DITOLAK:** blok `NEGATIVE CONSTRAINTS` hanya 10.690 char
+  terpecah kecil & mayoritas aturan keselamatan → memangkasnya berisiko tinggi/hasil kecil
+  (lihat `KNOWN_ISSUES` #233). Keputusan berbasis ukur, bukan asumsi.
+- **Verifikasi:** build lolos; eval 7/7; tool-masker & prompt suite hijau.
+  `v3-conversation-matrix` CM-22 gagal **pre-existing** (bukan dari change ini; terverifikasi
+  gagal juga tanpa perubahan ini).
+
 #### 2026-10-05 - Fixed: Red-flag Medis Komposit RF-06 (batuk-ruam-demam)
 
 - **Investigasi (koreksi temuan harness T1):** "RF-06 tidak dieskalasi" BUKAN bug produksi —

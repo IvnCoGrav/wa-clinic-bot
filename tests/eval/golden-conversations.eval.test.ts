@@ -136,4 +136,16 @@ describe('Fase 1 — Pagar anggaran prompt (gerbang Fase 2)', () => {
     expect(followUp.length).toBeLessThan(60000);
     expect(initial.length).toBeLessThan(60000);
   });
+
+  it('Fase 2b: guidance tool ter-mask → prompt lebih pendek (information hiding)', () => {
+    const unmasked = PersonaPromptBuilder.buildSystemPrompt(baseSession, true);
+    const masked = PersonaPromptBuilder.buildSystemPrompt(baseSession, true, {
+      isSaveReservationMasked: true,
+      isCalculateDeliveryMasked: true,
+    });
+    // eslint-disable-next-line no-console
+    console.log(`\n[PROMPT MASK] unmasked=${unmasked.length} masked=${masked.length} (hemat ${unmasked.length - masked.length})`);
+    expect(masked.length).toBeLessThan(unmasked.length);
+    expect(masked).toContain('DISEMBUNYIKAN');
+  });
 });
