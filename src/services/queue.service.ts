@@ -61,6 +61,8 @@ export class QueueService {
   // menjadi SUPERSEDED → `shouldAbort` membatalkan draf usang sebelum bubble
   // terkirim, antrean memproses pesan terbaru dengan konteks lengkap.
   private latestTurnByPhone: Map<string, string> = new Map();
+  /** Batas entri LRU penanda turn terbaru (anti memory-leak proses panjang). */
+  private static readonly MAX_LATEST_TURN_ENTRIES = 5000;
 
 
   constructor() {
@@ -293,15 +295,21 @@ export class QueueService {
 
   /**
    * Menambahkan pesan masuk ke dalam antrian pemrosesan
-   */
-  /**
    * Phase 4: tandai turn TERBARU untuk sebuah phone. Dipanggil setiap enqueue,
    * sehingga turn yang sedang diproses bisa dideteksi "usang" bila pesan lebih
-   * baru sudah masuk antrean.
+   * baru sudah masuk antrean. Map DIBATASI (LRU sederhana) agar memori tidak
+   * tumbuh tanpa batas pada proses berumur panjang.
    */
   public markLatestTurn(phone: string, turnId?: string): void {
     if (!phone || !turnId) return;
+    // LRU sederhana: sentuh-ulang memindah ke akhir; buang yang tertua bila penuh.
+    if (this.latestTurnByPhone.has(phone)) this.latestTurnByPhone.delete(phone);
     this.latestTurnByPhone.set(phone, turnId);
+    while (this.latestTurnByPhone.size > QueueService.MAX_LATEST_TURN_ENTRIES) {
+      const oldest = this.latestTurnByPhone.keys().next().value;
+      if (oldest === undefined) break;
+      this.latestTurnByPhone.delete(oldest);
+    }
   }
 
   /**

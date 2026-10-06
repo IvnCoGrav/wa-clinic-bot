@@ -30,6 +30,21 @@ describe('countDistinctPrimaryOffers (pure, data-driven)', () => {
   it('tanpa nama katalog → 0 (tanpa phantom)', () => {
     expect(countDistinctPrimaryOffers('Baik Bunda, kami bantu jadwalkan ya.', catalog)).toBe(0);
   });
+
+  it('dedup KELUARGA: varian se-famili dihitung 1 opsi (anti over-count)', () => {
+    const famCatalog = [
+      { name: 'Kala Baby - Pijat Pulih Ceria', category: 'BABY', isAddon: false },
+      { name: 'Kala Kids - Pijat Pulih Ceria', category: 'KIDS', isAddon: false },
+    ];
+    // Keduanya berbagi token non-generik "pulih"+"ceria" → 1 keluarga.
+    const text = 'Ada Kala Baby - Pijat Pulih Ceria atau Kala Kids - Pijat Pulih Ceria.';
+    expect(countDistinctPrimaryOffers(text, famCatalog)).toBe(1);
+  });
+
+  it('dua KELUARGA berbeda tetap dihitung 2', () => {
+    const text = 'Ada 2 pilihan: Kala Baby - Pijat Ceria Newborn atau Kala Baby - Pijat Pulih Ceria.';
+    expect(countDistinctPrimaryOffers(text, catalog)).toBe(2);
+  });
 });
 
 describe('GuardrailPipeline reprompt CTA multi-opsi (audit 6285743192813)', () => {

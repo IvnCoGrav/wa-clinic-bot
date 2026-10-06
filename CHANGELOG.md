@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Fixed: Hasil Audit Best-Practice Sesi Stabilisasi
+
+- **SEDANG-1 (`queue.service.ts`):** `latestTurnByPhone` kini LRU berbatas
+  (`MAX_LATEST_TURN_ENTRIES=5000`) — cegah pertumbuhan memori proses panjang.
+- **SEDANG-2 (`cart-manager.ts`):** `countDistinctPrimaryOffers` dedup per-KELUARGA
+  (irisan ≥2 token non-generik) — bundle/varian se-famili dihitung 1 opsi (anti over-count CTA).
+- **MINOR-1 (`date-confirmation.ts`):** docstring usang '?'-only dibersihkan; deskripsi
+  `isConsultativeUserText` diselaraskan dengan perilaku interogatif tanpa '?'.
+- **SEDANG-3/4 (DIDOKUMENTASIKAN, belum diperbaiki):** jalur prompt async-DB mengabaikan
+  `phaseInjection`; dampak prompt-cache dari `slim` belum diukur — dicatat `KNOWN_ISSUES` #233.
+- **Verifikasi:** build lolos; eval + cart + queue + guardrail 59/59 hijau; test dedup keluarga ditambah.
+
 #### 2026-10-05 - Changed: Fase 2b — Guidance Tool Mask-Aware di Call 2
 
 - **`agent-runner.ts` → `generation-stage.ts` → `persona/prompt-composer`:** flag

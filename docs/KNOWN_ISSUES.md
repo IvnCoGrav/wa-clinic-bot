@@ -92,6 +92,12 @@ Baseline program "chatbot lebih cerdas" (read-only, 1.693 log lokal + `llm_audit
   (`agent-runner`→`generation-stage`); prompt ter-mask 46.665 vs 48.617 char (hemat ~1.952).
 - **Fase 2b — prune NEGATIVE CONSTRAINTS (DITOLAK setelah ukur):** total blok hanya 10.690 char,
   terpecah kecil & mayoritas aturan keselamatan → risiko tinggi, hasil kecil. Tidak dikerjakan.
+- **SEDANG-3 (OPEN, laten):** `composeSystemPromptAsync` jalur DB mengabaikan `phaseInjection`
+  → bila suatu tenant punya `tenant_prompt_config` aktif, `slim` TIDAK berlaku diam-diam.
+  Default-tenant belum punya (tabel tak ada) → tidak terdampak sekarang. Perbaikan: teruskan
+  `phaseInjection` ke jalur DB + ukur ulang via async.
+- **SEDANG-4 (OPEN, observasi):** dampak `slim` (prefix berubah per-fase) terhadap prompt-cache
+  hit-rate belum diukur.
 - **Catatan pre-existing:** `tests/integration/v3-conversation-matrix.test.ts` CM-22 gagal
   (terverifikasi gagal juga tanpa perubahan batch ini) — perlu ditindaklanjuti pemilik changeset terkait.
 - **Fase 2b lanjutan (DITUNDA — butuh data produksi):** blok `NEGATIVE CONSTRAINTS` (~9k) berisi aturan

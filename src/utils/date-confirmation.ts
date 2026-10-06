@@ -190,15 +190,6 @@ export function hasBookingCommitSignal(text: string | undefined): boolean {
 }
 
 /**
- * Pertanyaan KONSULTATIF murni (Sesi 783810, satu sumber kebenaran bersama):
- * true bila pesan USER bertanda '?' TANPA verba komitmen, TANPA jejak
- * hari/waktu, dan TANPA komitmen booking sticky sesi. Level tanda baca +
- * state (bukan daftar frasa hafalan) — cermin fail-closed pertanyaan slot
- * di day-gate. Dipakai SELURUH seam kontrak transaksi (userConfirmedNames,
- * cart sync, detectAgreedTreatment) agar konsultasi eksplorasi DILARANG
- * mengunci layanan ke cart/selectedTreatment.
- */
-/**
  * Akar interogatif gramatikal (closed-class function words bahasa Indonesia)
  * dengan toleransi ejaan WhatsApp: gimana/gmn/gmna/bgmn, apa/apakah, kapan,
  * berapa, kenapa/napa, mana/dimana/kemana, maksudnya, jelaskan, cara.
@@ -232,6 +223,16 @@ export function hasInterrogativeIntent(text: string | undefined): boolean {
   );
 }
 
+/**
+ * Pertanyaan KONSULTATIF murni (Sesi 783810 + audit 6285743192813, satu sumber
+ * kebenaran bersama): true bila pesan USER membawa niat interogatif/eksplorasi
+ * (DENGAN atau TANPA '?'), TANPA verba komitmen, TANPA jejak hari/waktu, dan
+ * TANPA komitmen booking sticky sesi. Level tata bahasa + state (bukan daftar
+ * frasa hafalan bisnis) — cermin fail-closed pertanyaan slot di day-gate.
+ * Dipakai SELURUH seam kontrak transaksi (userConfirmedNames, cart sync,
+ * detectAgreedTreatment, tool-masker) agar konsultasi eksplorasi DILARANG
+ * mengunci layanan ke cart/selectedTreatment.
+ */
 export function isConsultativeUserText(
   text: string | undefined,
   session?: { bookingCommitConfirmed?: boolean }

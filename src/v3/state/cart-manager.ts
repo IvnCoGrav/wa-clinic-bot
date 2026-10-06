@@ -88,22 +88,35 @@ export function countDistinctPrimaryOffers(
     && s.isAddon !== true
     && !['ADDON', 'ADD_ON'].includes((s.category || '').toUpperCase())
   );
-  const hits = new Set<string>();
+  const matched: Array<{ name: string; nonGeneric: Set<string> }> = [];
   for (const s of primaries) {
     const full = s.name.toLowerCase();
     const clean = (full.endsWith(')') && full.lastIndexOf('(') > 0)
       ? full.slice(0, full.lastIndexOf('(')).trim()
       : full;
-    let matched = hay.includes(full) || (clean.length >= 4 && hay.includes(clean));
-    if (!matched) {
-      const toks = significantTokensOf(s.name);
-      const nonGeneric = toks.filter((t) => !GENERIC_CLINIC_TOKENS.has(t));
-      const hit = nonGeneric.filter((t) => hay.includes(t));
-      matched = hit.length >= 2 && hit.length / Math.max(1, nonGeneric.length) >= 0.5;
+    let isMatch = hay.includes(full) || (clean.length >= 4 && hay.includes(clean));
+    const nonGeneric = new Set(
+      significantTokensOf(s.name).filter((t) => !GENERIC_CLINIC_TOKENS.has(t))
+    );
+    if (!isMatch) {
+      const hit = [...nonGeneric].filter((t) => hay.includes(t));
+      isMatch = hit.length >= 2 && hit.length / Math.max(1, nonGeneric.size) >= 0.5;
     }
-    if (matched) hits.add(full);
+    if (isMatch) matched.push({ name: full, nonGeneric });
   }
-  return hits.size;
+  // Dedup per-KELUARGA (anti over-count): bundle + komponen standalone, atau
+  // varian se-famili (mis. "Pijat Bayi Pulih Ceria" vs "Kala Kids - Pijat Pulih
+  // Ceria") dengan irisan ≥2 token non-generik dihitung SATU opsi.
+  const groups: Array<Array<{ name: string; nonGeneric: Set<string> }>> = [];
+  for (const m of matched) {
+    const sameFamily = (a: { nonGeneric: Set<string> }, b: { nonGeneric: Set<string> }): boolean => {
+      const inter = [...a.nonGeneric].filter((t) => b.nonGeneric.has(t));
+      return inter.length >= 2;
+    };
+    const g = groups.find((grp) => grp.some((x) => sameFamily(x, m)));
+    if (g) g.push(m); else groups.push([m]);
+  }
+  return groups.length;
 }
 
 // PLAN 8 FASE 6: definisi tipe kanonis pindah ke src/v3/domain/types.ts.
