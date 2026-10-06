@@ -182,6 +182,26 @@ export function extractAddressQueryFromUrlString(urlString: string): string | nu
     const q = parsed.searchParams.get('q');
     const cleaned = cleanAddressQuery(q);
     if (cleaned) return cleaned;
+
+    // Sekunder: teks tempat dari segmen pathname `/maps/place/<tempat>` atau
+    // `/maps/search/<teks>` (link tempat tanpa `?q=`). Diurai via API URL
+    // standar (`pathname.split('/')`), BUKAN regex pola alamat hafalan —
+    // teks non-koordinat berlaku sebagai query geocoding transparan.
+    const segs = parsed.pathname.split('/').filter(Boolean);
+    const idx = segs.findIndex((s) => {
+      const low = s.toLowerCase();
+      return low === 'place' || low === 'search';
+    });
+    if (idx >= 0 && segs[idx + 1]) {
+      let decoded = '';
+      try {
+        decoded = decodeURIComponent(segs[idx + 1].replace(/\+/g, ' ')).trim();
+      } catch (_) {
+        decoded = '';
+      }
+      const cleanedSeg = cleanAddressQuery(decoded);
+      if (cleanedSeg) return cleanedSeg;
+    }
   }
   // Fallback: pola `q=` mentah di body HTML tak-terparse.
   const qMatch = urlString.match(/[?&]q=([^&#]*)/i);

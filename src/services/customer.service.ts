@@ -949,11 +949,7 @@ export class CustomerService {
 
       const finalCustomer = await this.getCustomerById(customerId, tenantId);
 
-      // Auto-recalculate distance_km & ongkir if lat/lng or address components changed
-      const shouldRecalculate =
-        data.lat != null && data.lng != null ||
-        data.kelurahan !== undefined || data.kecamatan !== undefined || data.kota !== undefined;
-
+      // Auto-recalculate distance_km & ongkir if lat/lng or address components changed.
       // Gerbang presisi: admin yang mengubah komponen TEKS (kelurahan/kecamatan/kota)
       // pada customer ber-pin GPS presisi TIDAK BOLEH memicu geocode-ulang yang menimpa
       // lat/lng + menurunkan sumber ke manual_staff. Teks tetap ter-update; koordinat
@@ -962,16 +958,29 @@ export class CustomerService {
       const preciseLocked =
         !!finalCustomer && CustomerService.isPreciseGps(finalCustomer) && !explicitCoords && !data.forceUpdateGps;
 
-      if (shouldRecalculate && finalCustomer && !preciseLocked) {
+      // Drift administratif (fondasional, berbasis data wilayah — bukan ambang km
+      // hardcode): titik estimasi WAJIB di-geocode ulang bila kecamatan teks berubah.
+      // Pindah kelurahan dalam kecamatan yang sama tidak memicu geocode sia-sia.
+      const norm = (v?: string | null) => (v || '').trim().toLowerCase();
+      const newKecamatan = data.kecamatan !== undefined ? data.kecamatan : finalCustomer?.kecamatan;
+      const kecamatanDrift =
+        !!finalCustomer && norm(newKecamatan) !== norm(finalCustomer.kecamatan);
+      const hasCoords = finalCustomer?.lat != null && finalCustomer?.lng != null;
+      const needsGeocode = !explicitCoords && (!hasCoords || kecamatanDrift);
+      const shouldRunRecalc =
+        !!finalCustomer && !preciseLocked && (explicitCoords || needsGeocode);
+
+      if (shouldRunRecalc) {
         try {
           let recalcLat: number | null = finalCustomer.lat;
           let recalcLng: number | null = finalCustomer.lng;
+          let geocoded = false;
 
-          if (data.lat != null && data.lng != null) {
-            recalcLat = data.lat;
-            recalcLng = data.lng;
-          } else if (!recalcLat || !recalcLng) {
-            // No coords - geocode from address components
+          if (explicitCoords) {
+            recalcLat = data.lat as number;
+            recalcLng = data.lng as number;
+          } else {
+            // Geocode dari komponen alamat (nilai baru bila admin mengubahnya).
             const kel = data.kelurahan !== undefined ? data.kelurahan : finalCustomer.kelurahan;
             const kec = data.kecamatan !== undefined ? data.kecamatan : finalCustomer.kecamatan;
             const kot = data.kota !== undefined ? data.kota : finalCustomer.kota;
@@ -982,11 +991,15 @@ export class CustomerService {
               if (geo.isPrecise && geo.lat != null && geo.lng != null) {
                 recalcLat = geo.lat;
                 recalcLng = geo.lng;
+                geocoded = true;
               }
             }
           }
 
-          if (recalcLat != null && recalcLng != null) {
+          // Tulis hanya bila ada koordinat baru yang sah (eksplisit atau hasil
+          // geocode presisi). Bila geocode gagal, JANGAN menulis ulang titik lama
+          // (mencegah titik basi ter-persist kembali + source salah).
+          if ((explicitCoords || geocoded) && recalcLat != null && recalcLng != null) {
             const { deliveryService } = await import('./delivery.service');
             const delivery = await deliveryService.calculateDelivery(
               { lat: recalcLat, lng: recalcLng },

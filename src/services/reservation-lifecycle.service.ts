@@ -114,26 +114,54 @@ export class ReservationLifecycleService {
 
               // Fallback fondasional: Jika geocoding Maps tidak presisi, gunakan kamus Gazetteer internal
               if (!resolvedLat || !resolvedLng) {
-                const { getGazetteerCoordinates } = await import('../utils/gazetteer');
-                const gzSearchQueries = [fullAddressStr, customerName, kecamatan, kota].filter(Boolean);
+                const { getGazetteerCoordinates, getGazetteerCanonicalCities } = await import('../utils/gazetteer');
+                // Gerbang placeholder generik (tanpa daftar kata hafalan): buang nilai
+                // kosong / terlalu pendek / hanya simbol. Nama orang (customerName)
+                // DILARANG menjadi query wilayah — bukan entitas administratif.
+                const isBlankWilayah = (v: unknown): boolean => {
+                  const s = String(v ?? '').trim();
+                  if (s.length < 2) return true;
+                  if (/^[^a-z0-9]+$/i.test(s)) return true;
+                  return false;
+                };
+                // Inti nama kota dari dataset (buang awalan administratif) untuk
+                // gerbang homonim — "Kabupaten Sidoarjo" → "sidoarjo".
+                const cityCores = new Set(
+                  getGazetteerCanonicalCities().map((c) =>
+                    String(c).toLowerCase().replace(/^(kabupaten|kota|kab\.?|kotamadya)\s+/i, '').trim()
+                  )
+                );
+                const gzSearchQueries = [fullAddressStr, kecamatan, kota].filter(
+                  (q): q is string => !!q && !isBlankWilayah(q)
+                );
                 for (const q of gzSearchQueries) {
                   const gz = getGazetteerCoordinates(String(q));
-                  if (gz && gz.lat && gz.lng) {
-                    resolvedLat = gz.lat;
-                    resolvedLng = gz.lng;
-                    // Anti-fabrikasi wilayah: sentroid kecamatan dapat mengembalikan
-                    // nama desa-pertama (mis. "buduran" → "Sidokerto") yang TIDAK
-                    // disebut customer. Nama desa hanya dipersist bila benar-benar
-                    // muncul di alamat/query; selain itu cukup koordinat estimasi +
-                    // kecamatan/kota (jangan mengarang kelurahan).
-                    const kelFromGaz = (gz.kelurahan || '').trim();
-                    const kelMentioned =
-                      !!kelFromGaz && String(q).toLowerCase().includes(kelFromGaz.toLowerCase());
-                    resolvedKel = resolvedKel || (kelMentioned ? kelFromGaz : undefined);
-                    resolvedKec = resolvedKec || gz.kecamatan;
-                    resolvedKota = resolvedKota || gz.kota;
-                    break;
+                  if (!gz || !gz.lat || !gz.lng) continue;
+                  // Homonym Safety Gate (fondasional, berbasis dataset): hasil hanya
+                  // selevel kecamatan yang namanya sekadar HOMONIM nama kota (mis.
+                  // "Sidoarjo", "Surabaya") → customer hanya menyebut kota luas,
+                  // BUKAN kecamatan tersebut. DILARANG mengunci koordinat ke sentroid
+                  // desa-pertamanya (kasus Suko). Lanjut ke query berikutnya.
+                  if (
+                    gz.matchedLevel === 'kecamatan' &&
+                    cityCores.has((gz.kecamatan || '').trim().toLowerCase())
+                  ) {
+                    continue;
                   }
+                  resolvedLat = gz.lat;
+                  resolvedLng = gz.lng;
+                  // Anti-fabrikasi wilayah: sentroid kecamatan dapat mengembalikan
+                  // nama desa-pertama (mis. "buduran" → "Sidokerto") yang TIDAK
+                  // disebut customer. Nama desa hanya dipersist bila benar-benar
+                  // muncul di alamat/query; selain itu cukup koordinat estimasi +
+                  // kecamatan/kota (jangan mengarang kelurahan).
+                  const kelFromGaz = (gz.kelurahan || '').trim();
+                  const kelMentioned =
+                    !!kelFromGaz && String(q).toLowerCase().includes(kelFromGaz.toLowerCase());
+                  resolvedKel = resolvedKel || (kelMentioned ? kelFromGaz : undefined);
+                  resolvedKec = resolvedKec || gz.kecamatan;
+                  resolvedKota = resolvedKota || gz.kota;
+                  break;
                 }
               }
 

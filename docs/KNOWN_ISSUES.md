@@ -3,6 +3,54 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 238. [ERD/Age] Fase 4 Plan ERD dieksekusi (umur) + gate Fase 0-3 (2026-10-06)
+
+Plan `docs/plans/ERD_FOUNDATIONAL_HARDENING_FIXING_PLAN.md` (REVISI-1). DIEKSEKUSI: **Fase 4 (mekanisme umur)** saja.
+
+- **Fase 4.1 (DONE):** koreksi umur lewat Edit Reservasi/Series kini menghitung ulang `birth_date` + `age_months_at_registration` (`reservations.subroute.ts:2264`, `reservation-series.service.ts:191`), paritas dengan Edit Customer. Sebelumnya anak lama tetap menampilkan umur basi.
+- **Fase 4.2 (DONE):** usia kehamilan di jalur chat kini DINAMIS — `MomProfileState.gestationalCapturedAt` (jangkar ISO) + `computeGestationalAge` di `goal-tracker.ts` & `conversation-summarizer.ts`. Angka minggu bertambah sejak pertama dicatat (selaras badge admin). Backward-compat: data lama tanpa jangkar tetap tampil angka mentah. Test: `tests/unit/gestational-age-dynamic.test.ts` (6/6) + suite umur 79/79.
+- **Fase 4.3 (OPEN, display-only):** label "1 bulan 30 hari" (1 bulan=30,44 hari) masih ada; belum dirapikan.
+- **GATE Fase 0-3 — BELUM dieksekusi, butuh keputusan + env ber-DB:**
+  - **Fase 0 (WAJIB diputuskan duluan):** live `43.173.11.79` punya `active_slot_key` (KNOWN_ISSUES #234) yang TIDAK ada di `schema.prisma` (drift). Plan Fase 1 mengusulkan partial index KEDUA → tabrakan. Pilih **Opsi A** (teruskan `active_slot_key`, samakan schema) atau **Opsi B** (cabut lalu partial index). Belum diputuskan.
+  - **Fase 1-3:** butuh DB (lokal offline: `P1001 localhost:5432`), migrasi `CONCURRENTLY`, dan — untuk Fase 2/3 — pivot `ReservationPatient`/`ReservationItem` + backfill + alihkan 9+ reader. DILARANG dijalankan tanpa Fase 0 selesai.
+  - **Pre-existing failures saat full suite (bukan regresi Fase 4, terbukti via stash):** `live-chat-enroute-status.test.ts` (5), `live-chat.service.test.ts` (2), `media-mime-audio.test.ts` (2), `v3-conversation-matrix.test.ts` CM-22 (1).
+
+## 237. [Lokasi/URL] Audit Kasus Suko (Bunda Chris 6281390541340) — 3 akar, 2 ter-fix (2026-10-06, OPEN)
+
+Laporan: titik peta pelanggan 6281390541340 nyangkut di **Suko** padahal di
+**Jl. Kyai Hadi, Waru**. Investigasi read-only + eksekusi fondasional:
+
+- **Akar 1 (FIXED):** `extractAddressQueryFromUrlString` (`src/utils/google-maps-url-resolver.ts:177`)
+  hanya membaca `?q=`, mengabaikan teks pada path `/maps/place/<tempat>` &
+  `/maps/search/<teks>`. Kini diurai via `URL.pathname.split('/')` + `decodeURIComponent`
+  (bukan regex hafalan). Tes: `tests/unit/google-maps-url-place-resolver.test.ts`.
+- **Akar 2 (FIXED):** `reservation-lifecycle.service.ts:115-138` mengunci koordinat ke
+  sentroid kecamatan untuk form dengan kecamatan placeholder (`"-"`) + kota luas
+  (`Sidoarjo`) → desa-pertama = Suko. Ditambah **Homonym Safety Gate**: bila hasil
+  gazetteer `matchedLevel==='kecamatan'` dan nama kecamatan hanyalah homonim nama
+  kota (dataset `getGazetteerCanonicalCities()`), koordinat DILARANG dikunci; juga
+  `customerName` dikeluarkan dari query wilayah. Tes:
+  `tests/unit/reservation-lifecycle-homonym-gate.test.ts`.
+- **Akar 3 (FIXED):** `updateCustomer` (`customer.service.ts:809+`) menulis ulang koordinat
+  LAMA saat admin mengubah teks wilayah (tak pernah geocode bila lat sudah ada) →
+  teks "Berbek, Waru" tapi titik tetap Suko. Kini geocode ulang saat kecamatan teks
+  berubah (atau belum ada koordinat), tetap menghormati gembok `isPreciseGps`. Tes:
+  `tests/unit/customer-profile-edit-drift.test.ts`.
+- **Sisa pintu penebak sentroid (BELUM ditutup, kandidat follow-up):**
+  `src/v3/tools/calculate-delivery.tool.ts:688` (fallback sentroid kecamatan tanpa
+  cek `matchedLevel`), `src/services/google-contacts.service.ts:33`, dan skrip
+  `scripts/backfill-customer-centroids.ts:80`. Pola sehat sudah ada di
+  `src/routes/admin/customers.subroute.ts:214-217` (kecamatan-saja ditolak).
+- **Data pelanggan 6281390541340 sendiri BELUM dikoreksi di DB** — DB lokal
+  (`localhost:5432`) tidak aktif saat audit. Perbaikan data terhalang; perlu
+  jalankan skrip idempoten/`refreshCustomerLocationAndOngkir` pada DB yang hidup.
+  Bila `location_source='gps_pin'`, titik jangan ditimpa (hanya teks) — verifikasi
+  dulu via Admin + `preferences.location_history`.
+- **Regresi:** tes baru 88 hijau; `npm run build` hijau. Full suite: 8-10 gagal
+  **pre-existing** (terbukti identik di HEAD via `git stash`): `live-chat-enroute-status`,
+  `media-mime-audio` (flaky), `v3-conversation-matrix`, `waha-webhook` — di luar
+  cakupan perubahan ini.
+
 ## 236. [Reservasi/Bulk] Batasan fitur "Tandai Selesai Massal" (2026-10-06, OPEN - by design)
 
 Fitur checkbox + `POST /api/admin/reservations/bulk-complete` ditambahkan. Batasan
