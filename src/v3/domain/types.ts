@@ -46,6 +46,13 @@ export interface MomProfileState {
   stage?: MomStage;
   /** Usia kehamilan dalam minggu (misal: 38 untuk "uk 38 weeks"). */
   gestationalWeeks?: number;
+  /**
+   * Waktu (ISO) saat `gestationalWeeks` PERTAMA dicatat. Jangkar untuk
+   * menghitung usia kehamilan DINAMIS di sesi chat (computeGestationalAge):
+   * `minggu_sekarang = gestationalWeeks + minggu_berlalu`. Tanpa ini, angka
+   * minggu beku dan tidak bertambah seiring waktu obrolan.
+   */
+  gestationalCapturedAt?: string;
   /** Durasi paska salin (misal: "2 minggu") — teks bebas dari customer. */
   postpartumPeriod?: string;
   /** Keluhan ibu (misal: pegal, kaki bengkak, capek, asi). */

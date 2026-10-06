@@ -3,6 +3,7 @@ import { treatmentCatalogService } from '../../services/treatment-catalog.servic
 import { getCoverageCities } from '../../config/coverage';
 import type { ExtractedEntities } from '../../types/nlu';
 import { isAskedLocationRecently } from './location-helpers';
+import { computeGestationalAge } from '../../utils/age-calculator';
 
 export interface V3SummaryOptions {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -61,7 +62,12 @@ export class V3ConversationSummarizer {
     const isMomSubject = session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH' || Boolean(session.momProfile?.gestationalWeeks != null || session.momProfile?.stage);
     const ageMonths = session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null;
     if (session.momProfile?.gestationalWeeks != null) {
-      sudahDibahas.push(`Usia kehamilan Bunda: ${session.momProfile.gestationalWeeks} minggu`);
+      let weeks = session.momProfile.gestationalWeeks;
+      const anchor = session.momProfile.gestationalCapturedAt ? new Date(session.momProfile.gestationalCapturedAt) : null;
+      if (anchor && !isNaN(anchor.getTime())) {
+        weeks = computeGestationalAge({ registeredAt: anchor, gestationalWeeksAtReg: session.momProfile.gestationalWeeks }).currentWeeks;
+      }
+      sudahDibahas.push(`Usia kehamilan Bunda: ${weeks} minggu`);
       janganDiulang.push('Menanyakan usia kehamilan Bunda');
     } else if (session.momProfile?.stage === 'POSTPARTUM') {
       sudahDibahas.push(`Kondisi Bunda: paska salin/nifas${session.momProfile.postpartumPeriod ? ` (${session.momProfile.postpartumPeriod})` : ''}`);

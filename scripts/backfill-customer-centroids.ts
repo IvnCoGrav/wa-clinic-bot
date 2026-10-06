@@ -15,7 +15,7 @@
 
 import { prisma } from '../src/db/client';
 import { DEFAULT_TENANT_ID } from '../src/config/tenant';
-import { getGazetteerCoordinates } from '../src/utils/gazetteer';
+import { getGazetteerCoordinates, isCityHomonymKecamatan } from '../src/utils/gazetteer';
 import { isValidAreaName, normalizeWilayahText } from '../src/utils/wilayah-normalizer';
 import { customerService } from '../src/services/customer.service';
 import { deliveryService } from '../src/services/delivery.service';
@@ -79,6 +79,14 @@ async function main() {
 
       const gaz = getGazetteerCoordinates(kelurahan || kecamatan || '');
       if (!gaz || !Number.isFinite(gaz.lat) || !Number.isFinite(gaz.lng)) {
+        skippedNoGazetteer++;
+        continue;
+      }
+      // Homonym Safety Gate: hanya kecamatan saja yang tersedia DAN itu sekadar
+      // homonim nama kota (kedua kolom kelurahan/kecamatan kosong-spesifik) →
+      // JANGAN backfill ke sentroid desa-pertama (kasus Suko). Hanya kelurahan
+      // spesifik yang boleh di-backfill (lihat juga pemanggil peta admin).
+      if (!kelurahan && isCityHomonymKecamatan(gaz)) {
         skippedNoGazetteer++;
         continue;
       }

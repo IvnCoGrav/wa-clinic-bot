@@ -181,17 +181,23 @@ class ReservationSeriesService {
 
     // Sync babies if provided (same upsert logic as single reservation edit)
     if (params.babies && params.babies.length > 0) {
+      const { parseAgeTextToBirthDate, monthsBetween } = await import('../utils/age-calculator');
       for (const b of params.babies) {
         if (!b.name) continue;
         try {
+          // Koreksi admin umur WAJIB menghitung ulang birth_date (paritas jalur
+          // edit customer) — bukan hanya raw_age_text.
+          const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
           const existingChild = await prisma.child.findFirst({
             where: { customer_id: customerId, name: { equals: b.name, mode: 'insensitive' } },
           });
           if (existingChild) {
-            await prisma.child.update({
-              where: { id: existingChild.id },
-              data: { raw_age_text: b.ageText || existingChild.raw_age_text },
-            });
+            const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
+            if (newBirthDate) {
+              updateData.birth_date = newBirthDate;
+              updateData.age_months_at_registration = monthsBetween(newBirthDate, new Date());
+            }
+            await prisma.child.update({ where: { id: existingChild.id }, data: updateData });
           } else {
             await prisma.child.create({
               data: {
@@ -199,6 +205,8 @@ class ReservationSeriesService {
                 customer_id: customerId,
                 name: b.name,
                 raw_age_text: b.ageText || '',
+                birth_date: newBirthDate,
+                age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,
               },
             });
           }

@@ -198,6 +198,36 @@ export function getGazetteerCanonicalCities(): string[] {
 }
 
 /**
+ * Homonym Safety Gate (fondasional, berbasis DATASET — bukan hafalan kalimat):
+ * True bila sebuah hasil gazetteer HANYA selevel 'kecamatan' DAN nama
+ * kecamatannya sekadar HOMONIM nama kota resmi (mis. kecamatan "Sidoarjo" ⊂
+ * kota "Kabupaten Sidoarjo"; kecamatan "Surabaya" ⊂ "Kota Surabaya").
+ *
+ * Artinya customer hanya menyebut KOTA LUAS, BUKAN kecamatan tersebut. Sentroid
+ * desa-pertama (mis. Suko untuk kecamatan Sidoarjo) DILARANG dikunci sebagai
+ * lokasi. Satu sumber untuk SEMUA seam tulis (reservation-lifecycle, tool
+ * calculate_delivery, google-contacts) agar tidak ada aturan bercabang.
+ */
+export function isCityHomonymKecamatan(hit: {
+  kecamatan?: string | null;
+  matchedLevel?: 'kelurahan' | 'kecamatan';
+} | null): boolean {
+  if (!hit || hit.matchedLevel !== 'kecamatan') return false;
+  const kecCore = (hit.kecamatan || '').trim().toLowerCase();
+  if (!kecCore) return false;
+  for (const city of getGazetteerCanonicalCities()) {
+    const cityCore = String(city)
+      .toLowerCase()
+      .replace(/^(kabupaten|kota|kab\.?|kotamadya)\s+/i, '')
+      .trim();
+    if (cityCore && (cityCore === kecCore || cityCore.includes(kecCore) || kecCore.includes(cityCore))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Prefix auto-index: untuk kelurahan 2 kata (misal "Manukan Kulon"),
  * index kata pertamanya ("manukan") → daftar kelurahan lengkap yang berbagi prefix sama.
  */

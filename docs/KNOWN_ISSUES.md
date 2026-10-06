@@ -3,7 +3,7 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 235. [Sheets/Data] Kontaminasi historis `is_repeat_order` di luar scope Oktober (2026-10-06, OPEN)
+## 239. [Sheets/Data] Kontaminasi historis `is_repeat_order` di luar scope Oktober (2026-10-06, OPEN)
 
 - **Temuan:** saat backfill Oktober, audit ordinal kanonis (jumlah reservasi
   `confirmed/en_route/completed` lebih awal per customer) menemukan **158** anomali
@@ -14,8 +14,138 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Sisa (OPEN):** 147 baris Apr–Sep masih salah untuk tujuan analitik yang membaca
   `reservation.is_repeat_order` (`financial-analytics.service.ts`, `daily-report.service.ts`).
   Perlu keputusan: backfill global (blast radius analitik historis) atau biarkan.
-- **Catatan drift git:** repo lokal ketinggalan 7 commit dari `origin/master`; editan
-  sheets di server belum di-commit (deploy via file + rebuild). Perlu rekonsiliasi git.
+- **Catatan drift git:** SINKRON 2026-10-06 — commit sheets (ordinal riwayat) dipindahkan
+  ke atas `origin/master`; lokal = origin = live.
+
+## 238. [ERD/Age] Fase 4 Plan ERD dieksekusi (umur) + gate Fase 0-3 (2026-10-06)
+
+Plan `docs/plans/ERD_FOUNDATIONAL_HARDENING_FIXING_PLAN.md` (REVISI-1). DIEKSEKUSI: **Fase 4 (mekanisme umur)** saja.
+
+- **Fase 4.1 (DONE):** koreksi umur lewat Edit Reservasi/Series kini menghitung ulang `birth_date` + `age_months_at_registration` (`reservations.subroute.ts:2264`, `reservation-series.service.ts:191`), paritas dengan Edit Customer. Sebelumnya anak lama tetap menampilkan umur basi.
+- **Fase 4.2 (DONE):** usia kehamilan di jalur chat kini DINAMIS — `MomProfileState.gestationalCapturedAt` (jangkar ISO) + `computeGestationalAge` di `goal-tracker.ts` & `conversation-summarizer.ts`. Angka minggu bertambah sejak pertama dicatat (selaras badge admin). Backward-compat: data lama tanpa jangkar tetap tampil angka mentah. Test: `tests/unit/gestational-age-dynamic.test.ts` (6/6) + suite umur 79/79.
+- **Fase 4.3 (OPEN, display-only):** label "1 bulan 30 hari" (1 bulan=30,44 hari) masih ada; belum dirapikan.
+- **GATE Fase 0-3 — BELUM dieksekusi, butuh keputusan + env ber-DB:**
+  - **Fase 0 (WAJIB diputuskan duluan):** live `43.173.11.79` punya `active_slot_key` (KNOWN_ISSUES #234) yang TIDAK ada di `schema.prisma` (drift). Plan Fase 1 mengusulkan partial index KEDUA → tabrakan. Pilih **Opsi A** (teruskan `active_slot_key`, samakan schema) atau **Opsi B** (cabut lalu partial index). Belum diputuskan.
+  - **Fase 1-3:** butuh DB (lokal offline: `P1001 localhost:5432`), migrasi `CONCURRENTLY`, dan — untuk Fase 2/3 — pivot `ReservationPatient`/`ReservationItem` + backfill + alihkan 9+ reader. DILARANG dijalankan tanpa Fase 0 selesai.
+  - **Pre-existing failures saat full suite (bukan regresi Fase 4, terbukti via stash):** `live-chat-enroute-status.test.ts` (5), `live-chat.service.test.ts` (2), `media-mime-audio.test.ts` (2), `v3-conversation-matrix.test.ts` CM-22 (1).
+
+## 237. [Lokasi/URL] Audit Kasus Suko (Bunda Chris 6281390541340) — 3 akar, 2 ter-fix (2026-10-06, OPEN)
+
+Laporan: titik peta pelanggan 6281390541340 nyangkut di **Suko** padahal di
+**Jl. Kyai Hadi, Waru**. Investigasi read-only + eksekusi fondasional:
+
+- **Akar 1 (FIXED):** `extractAddressQueryFromUrlString` (`src/utils/google-maps-url-resolver.ts:177`)
+  hanya membaca `?q=`, mengabaikan teks pada path `/maps/place/<tempat>` &
+  `/maps/search/<teks>`. Kini diurai via `URL.pathname.split('/')` + `decodeURIComponent`
+  (bukan regex hafalan). Tes: `tests/unit/google-maps-url-place-resolver.test.ts`.
+- **Akar 2 (FIXED):** `reservation-lifecycle.service.ts:115-138` mengunci koordinat ke
+  sentroid kecamatan untuk form dengan kecamatan placeholder (`"-"`) + kota luas
+  (`Sidoarjo`) → desa-pertama = Suko. Ditambah **Homonym Safety Gate**: bila hasil
+  gazetteer `matchedLevel==='kecamatan'` dan nama kecamatan hanyalah homonim nama
+  kota (dataset `getGazetteerCanonicalCities()`), koordinat DILARANG dikunci; juga
+  `customerName` dikeluarkan dari query wilayah. Tes:
+  `tests/unit/reservation-lifecycle-homonym-gate.test.ts`.
+- **Akar 3 (FIXED):** `updateCustomer` (`customer.service.ts:809+`) menulis ulang koordinat
+  LAMA saat admin mengubah teks wilayah (tak pernah geocode bila lat sudah ada) →
+  teks "Berbek, Waru" tapi titik tetap Suko. Kini geocode ulang saat kecamatan teks
+  berubah (atau belum ada koordinat), tetap menghormati gembok `isPreciseGps`. Tes:
+  `tests/unit/customer-profile-edit-drift.test.ts`.
+- **Sisa pintu penebak sentroid (SUDAH ditutup, 2026-10-06):** satu gerbang bersama
+  `isCityHomonymKecamatan()` di `src/utils/gazetteer.ts` (dataset-driven: `matchedLevel`
+  kecamatan + homonim nama kota) kini dipakai di SEMUA seam tulis —
+  `reservation-lifecycle.service.ts`, `src/v3/tools/calculate-delivery.tool.ts:688`
+  (sentroid fallback), `google-contacts.service.ts` (`classifyImportedAreaTag`), dan
+  `scripts/backfill-customer-centroids.ts`. Tidak ada lagi aturan bercabang per-pintu.
+  Tes: `tests/unit/gazetteer-city-homonym-gate-shared.test.ts` (adversarial + non-regresi
+  Jambangan/Manukan Kulon).
+- **Data pelanggan 6281390541340 SUDAH dikoreksi di LIVE (2026-10-06).** Bukti
+  pra-fix: `kelurahan=berbek,kecamatan=waru` TAPI `lat/lng=-7.44615,112.678558`
+  (Suko), `location_source=manual_staff`, `share_location_sent=false` → 19.79 km,
+  Rp20.000. Fix via skrip baru `src/scripts/geocode-text-wilayah-drift.ts`
+  (dry-run default, hormati `gps_pin`) → geocode teks "berbek, waru" →
+  `-7.3427222,112.7613933`, **2.03 km, Rp0** (prima ORS). Pasca-fix terverifikasi
+  di DB live. DB lokal (`localhost:5432`) tidak aktif saat audit awal, sehingga
+  koreksi dijalankan di server.
+- **Regresi:** tes baru 88 hijau; `npm run build` hijau. Full suite: 8-10 gagal
+  **pre-existing** (terbukti identik di HEAD via `git stash`): `live-chat-enroute-status`,
+  `media-mime-audio` (flaky), `v3-conversation-matrix`, `waha-webhook` — di luar
+  cakupan perubahan ini.
+
+## 236. [Reservasi/Bulk] Batasan fitur "Tandai Selesai Massal" (2026-10-06, OPEN - by design)
+
+Fitur checkbox + `POST /api/admin/reservations/bulk-complete` ditambahkan. Batasan
+yang SENGAJA dipilih (bukan bug) untuk versi ini:
+
+- **Maksimal 50 id per request.** Tiap item memicu efek samping lifecycle (jadwal
+  follow-up/review, next-treatment, reset sesi V3, enqueue Google Sheets). Server
+  menolak `>50` dengan `400 TOO_MANY_IDS`; UI juga menolak sebelum kirim.
+- **Hanya `confirmed`/`en_route` yang boleh diselesaikan massal** (paritas
+  `canTransition`). `hold`/`pending`/`completed`/`cancelled` dilewati sebagai
+  `NOT_ELIGIBLE` dan dilaporkan di respons `skipped[]`. ENDPOINT SATUAN
+  (`PATCH /api/admin/reservation/:id/complete`) tidak berubah: masih tanpa cek
+  transisi (kompatibilitas mundur).
+- **Tanpa `forceComplete` di UI.** Reservasi berjadwal > 24 jam ke depan otomatis
+  dilewati (`PREMATURE`) agar tidak salah-selesai. Untuk darurat, masih bisa via
+  endpoint satuan dengan `forceComplete:true`.
+- **DB offline → `503 DB_OFFLINE`** (batal total, anti setengah jalan). Operasi
+  satuan tetap punya fallback memori seperti sebelumnya.
+- **Cakupan "pilih semua" = halaman/filter aktif** (bukan lintas halaman). Pilihan
+  di-reset saat ganti halaman/filter/sortir/view.
+- **Refaktor seam:** logika tandai-selesai diekstrak ke `completeReservationById`
+  + `runCompletionSideEffects` (di `reservations.subroute.ts`) sebagai satu sumber
+  efek samping; endpoint satuan & bulk memakai seam yang sama.
+- **Catatan:** field `note` fallback memori lama di endpoint satuan tetap tidak
+  mengirim `note` pada respons sukses DB (perilaku sebelum refaktor dipertahankan).
+
+## 235. [Arsitektur/Root-Cause] Kerapuhan struktural chatbot V3 hasil audit read-only (2026-10-06, OPEN)
+
+Hasil audit `docs/audit/FRAGILITY_AUDIT.md` (Fase 0-7, read-only). Ini rangkuman
+akar struktural — bukan daftar bug per kasus. Semua bukti `file:line`/angka ada di laporan.
+
+- **R1 - Terlalu banyak "pengadil" balasan per giliran tanpa pemilik tunggal.** Satu
+  balasan bisa diubah/ditolak oleh: scope gate (`src/routes/webhook.route.ts:1174`),
+  state machine, tool-masker, Call 1 router, tool, Call 2 generator, 22 reprompt +
+  23 panggilan `executeChat` di `src/v3/agent/pipeline/guardrail-pipeline.ts`, funnel
+  reprompt (`:1082`), holistic reviewer (`:1136`), sanitizer. Bukti produksi: 98x
+  `TOOL_MASKING_ENFORCED_APPLIED`, 33x FALLBACK, 20x REPROMPT dalam 3 hari.
+- **R2 - State terduplikasi & multi-penulis (drift).** `Conversation.current_state`
+  ditulis oleh banyak pemanggil (repo, `conversation.service`, webhook `:1457`, admin
+  livechat, `command.service`), sementara detail sesi hidup di `session_data`
+  (`src/v3/state/goal-tracker.ts:258`). Dua definisi "idle": `ai-scope-gate.service.ts:50`
+  (`last_customer_message_at`) vs `machine.ts:252` (`last_message_at`).
+  **Drift terbukti:** `reservation-lifecycle.service.ts:281-295` mengosongkan sesi V3
+  saat reservasi selesai TAPI tidak memperbarui `current_state` -> bisa tertinggal
+  di `RESERVATION_SENT`.
+- **R3 - Aturan bisnis/klinis hidup sebagai daftar kata/regex (melanggar mandat
+  non-hardcode).** 185 `.includes` + 102 `.test` di `src/v3`. Peta klinis hardcode:
+  `treatment-catalog.service.ts:2219-2227` (batuk/pilek->"pulih", gtm/makan->"lahap",
+  laktasi->MOMS). `patient-extractor.ts` sendiri 64 `.includes`.
+- **R4 - Komitmen customer hanya tercatat bila LLM memanggil tool.** `isFunnelCommitted`
+  (`phase-resolver.ts:127`) bergantung `selectedTreatment`/`cartItems`/`booking` yang
+  hanya terisi via tool (`tool-pipeline.ts:875`). LLM menilai "committed" tanpa memanggil
+  tool -> state kosong -> guardrail berikutnya salah paham (kasus conv funnel 62e60d13).
+- **R5 - Strategi perbaikan menumpuk lapisan, bukan fondasi.** 144 commit `fix`/30 hari;
+  `CHANGELOG.md` 8.255 baris; 98 teks "DILARANG" di prompt `src/v3/agent/prompt`.
+
+Bukti operasional 7 hari (read-only, server 43.173.11.79): 73 percakapan baru vs 34
+`CONVERSATION_MANUAL_TAKEOVER` + 42 `REVOKE_MESSAGE` (>=47% diselamatkan admin, proxy);
+latensi LLM p95 26 detik; rata-rata 1,56 panggilan LLM/giliran (puncak 3).
+
+Pola transkrip nyata (Fase 4b): bot menarik balasannya 5 detik setelah customer memberi
+lokasi (`conv 2b943cc6`, 08:45:12->08:45:17); tanda tanya "jam berapa aja ya?" diperlakukan
+sebagai komitmen lalu ditarik (`conv 57fb7f07`); balasan bot ganda untuk satu konteks
+(`conv 8dfb9f76`, 12:24:11 & 12:24:17); takeover "out_of_domain" untuk pertanyaan lokasi
+(`conv 246d63ab`). Satu pun tidak akan tertangkap test saat ini (LLM di-stub, replay pakai
+engine lama `src/slot-engine`, bukan `src/v3`).
+
+**Tindak lanjut (2026-10-06):** Opsi C dieksekusi (C1-C4) — lihat
+`docs/audit/RENCANA_PERBAIKAN_C.md`. Ringkas: satu definisi jam aktivitas customer,
+penulisan `current_state=COMPLETED` saat reservasi selesai, penguncian kontrak komitmen,
+dan replay transkrip produksi di jalur V3. Gate: build hijau, 5005 test hijau; 7 gagal
+pre-existing (terbukti identik via `git stash`).
+
+**Masih OPEN (butuh keputusan pemilik):** opsi arsitektur A/B di laporan, dan
+pemindahan peta klinis hardcode (`treatment-catalog.service.ts:2219-2227`) ke DB.
 
 ## 234. [FollowUp/Audit 32 Temuan] Sisa & Keputusan Pasca-Remediasi Tahap 1-5 (2026-10-06, OPEN - sebagian by design)
 

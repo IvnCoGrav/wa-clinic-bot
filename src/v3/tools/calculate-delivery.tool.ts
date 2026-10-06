@@ -1,6 +1,6 @@
 import { geocodingService, hasStreetAddressDetail } from '../../integrations/google-maps/geocoding';
 import type { ResolvedLocation } from '../../integrations/google-maps/geocoding';
-import { getGazetteerCoordinates } from '../../utils/gazetteer';
+import { getGazetteerCoordinates, isCityHomonymKecamatan } from '../../utils/gazetteer';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -686,7 +686,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       const kecName = findKecamatanInQuery(compositeQuery);
       if (kecName && hasSpecificAddressDetail(compositeQuery, streetDetail)) {
         const centro = getGazetteerCoordinates(kecName);
-        if (centro && Number.isFinite(centro.lat) && Number.isFinite(centro.lng)) {
+        // Homonym Safety Gate: kecamatan yang sekadar homonim nama kota (mis.
+        // "Sidoarjo" ⊂ "Kabupaten Sidoarjo") DILARANG jadi sentroid (desa-pertama
+        // = Suko). Kecamatan asli ("Jambangan") tetap sah.
+        if (centro && Number.isFinite(centro.lat) && Number.isFinite(centro.lng) && !isCityHomonymKecamatan(centro)) {
           resolved = {
             isPrecise: false,
             kecamatan: centro.kecamatan,

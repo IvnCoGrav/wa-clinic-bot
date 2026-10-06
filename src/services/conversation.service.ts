@@ -9,6 +9,21 @@ import { activeReservationWhere, isActiveReservation } from '../domain/reservati
 
 const memoryConversations = new Map<string, any>();
 
+/**
+ * Fase C1 (Rencana Perbaikan Opsi C) — SATU definisi "jam aktivitas customer".
+ * Sumber kanonis = pesan MASUK terakhir (`last_customer_message_at`), dengan
+ * fallback ke `last_message_at` HANYA bila kolom baru belum terisi (data lawas).
+ * Tujuan: pesan keluar bot (follow-up/pengingat) TIDAK boleh menghidupkan
+ * percakapan tidur, dan idle reset tidak boleh memakai kronologi yang tercampur.
+ */
+export function getLastCustomerActivityMs(conversation: any): number {
+  if (!conversation) return 0;
+  const raw = conversation.last_customer_message_at ?? conversation.last_message_at;
+  if (!raw) return 0;
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 export function buildConversationUpdatedPayload(conversation: any) {
   return {
     conversationId: conversation.id,
@@ -795,8 +810,7 @@ export class ConversationService {
     if (conversation.is_human_handling) {
       const raw = parseInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS || '72', 10);
       const hours = Number.isFinite(raw) && raw > 0 ? raw : 72;
-      const last = conversation.last_message_at || conversation.last_customer_message_at;
-      const lastMs = last ? new Date(last).getTime() : 0;
+      const lastMs = getLastCustomerActivityMs(conversation);
       if (!lastMs || Date.now() - lastMs < hours * 3600000) return false;
     }
     return true;

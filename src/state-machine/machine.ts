@@ -1,7 +1,7 @@
 import { ConversationState, Direction } from '@prisma/client';
 import { prisma } from '../db/client';
 import { StateHandlerContext, StateHandlerResult } from './types';
-import { conversationService } from '../services/conversation.service';
+import { conversationService, getLastCustomerActivityMs } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { customerService } from '../services/customer.service';
 import { TypingService, typingService } from '../services/typing.service';
@@ -249,7 +249,9 @@ export class ConversationStateMachine {
     const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS || '1218240000', 10);
     const CONFIRMATION_TIMEOUT_MS = parseInt(process.env.LOCATION_CONFIRMATION_TIMEOUT_MS || '300000', 10);
 
-    const lastMsgTime = activeConversation.last_message_at ? new Date(activeConversation.last_message_at).getTime() : 0;
+    // Fase C1: jam aktivitas customer kanonis (pesan masuk terakhir), bukan
+    // kronologi campuran yang ikut tersentuh pesan keluar bot (follow-up).
+    const lastMsgTime = getLastCustomerActivityMs(activeConversation);
     const isIdleTooLong = lastMsgTime > 0 && (Date.now() - lastMsgTime > IDLE_TIMEOUT_MS);
     const isConfirmationTimeout = activeConversation.current_state === ConversationState.LOCATION_CONFIRMED &&
       lastMsgTime > 0 && (Date.now() - lastMsgTime > CONFIRMATION_TIMEOUT_MS);
