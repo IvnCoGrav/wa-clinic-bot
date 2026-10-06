@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
-import { TreatmentCategory } from '@prisma/client';
+import { TreatmentCategory, ConversationState } from '@prisma/client';
 
 /**
  * Kanonis nama label lifecycle di DB internal (tabel `Label`, tenant-scoped).
@@ -293,6 +293,36 @@ export class ReservationLifecycleService {
           } as any,
           tenantId
         );
+
+        // 3b. Tutup status percakapan (Fase C2 Rencana Perbaikan Opsi C).
+        // Sebelumnya tidak ada kode yang menulis COMPLETED ke DB sehingga
+        // current_state bisa tertinggal di RESERVATION_SENT berminggu-minggu
+        // walau reservasi sudah selesai (drift terbukti di audit). Tutup di
+        // pintu yang sama dengan reset sesi agar satu peristiwa = satu status.
+        try {
+          const { conversationService } = await import('./conversation.service');
+          // Baca state lama best-effort (DB offline => null, bukan gagal-total).
+          let prevState: any = null;
+          try {
+            const convRow = await prisma.conversation.findUnique({
+              where: { id: activeConv.id },
+              select: { current_state: true },
+            });
+            prevState = (convRow as any)?.current_state ?? null;
+          } catch {
+            prevState = null;
+          }
+          await conversationService.updateConversationState(
+            activeConv.id,
+            {
+              currentState: ConversationState.COMPLETED,
+              previousState: prevState,
+            },
+            tenantId
+          );
+        } catch (stateErr: any) {
+          console.warn('[RESERVATION LIFECYCLE] onReservationCompleted set COMPLETED failed:', stateErr?.message || stateErr);
+        }
       }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted reset V3 session failed:', err?.message || err);

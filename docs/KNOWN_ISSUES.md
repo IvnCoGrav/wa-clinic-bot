@@ -3,6 +3,82 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 236. [Reservasi/Bulk] Batasan fitur "Tandai Selesai Massal" (2026-10-06, OPEN - by design)
+
+Fitur checkbox + `POST /api/admin/reservations/bulk-complete` ditambahkan. Batasan
+yang SENGAJA dipilih (bukan bug) untuk versi ini:
+
+- **Maksimal 50 id per request.** Tiap item memicu efek samping lifecycle (jadwal
+  follow-up/review, next-treatment, reset sesi V3, enqueue Google Sheets). Server
+  menolak `>50` dengan `400 TOO_MANY_IDS`; UI juga menolak sebelum kirim.
+- **Hanya `confirmed`/`en_route` yang boleh diselesaikan massal** (paritas
+  `canTransition`). `hold`/`pending`/`completed`/`cancelled` dilewati sebagai
+  `NOT_ELIGIBLE` dan dilaporkan di respons `skipped[]`. ENDPOINT SATUAN
+  (`PATCH /api/admin/reservation/:id/complete`) tidak berubah: masih tanpa cek
+  transisi (kompatibilitas mundur).
+- **Tanpa `forceComplete` di UI.** Reservasi berjadwal > 24 jam ke depan otomatis
+  dilewati (`PREMATURE`) agar tidak salah-selesai. Untuk darurat, masih bisa via
+  endpoint satuan dengan `forceComplete:true`.
+- **DB offline → `503 DB_OFFLINE`** (batal total, anti setengah jalan). Operasi
+  satuan tetap punya fallback memori seperti sebelumnya.
+- **Cakupan "pilih semua" = halaman/filter aktif** (bukan lintas halaman). Pilihan
+  di-reset saat ganti halaman/filter/sortir/view.
+- **Refaktor seam:** logika tandai-selesai diekstrak ke `completeReservationById`
+  + `runCompletionSideEffects` (di `reservations.subroute.ts`) sebagai satu sumber
+  efek samping; endpoint satuan & bulk memakai seam yang sama.
+- **Catatan:** field `note` fallback memori lama di endpoint satuan tetap tidak
+  mengirim `note` pada respons sukses DB (perilaku sebelum refaktor dipertahankan).
+
+## 235. [Arsitektur/Root-Cause] Kerapuhan struktural chatbot V3 hasil audit read-only (2026-10-06, OPEN)
+
+Hasil audit `docs/audit/FRAGILITY_AUDIT.md` (Fase 0-7, read-only). Ini rangkuman
+akar struktural — bukan daftar bug per kasus. Semua bukti `file:line`/angka ada di laporan.
+
+- **R1 - Terlalu banyak "pengadil" balasan per giliran tanpa pemilik tunggal.** Satu
+  balasan bisa diubah/ditolak oleh: scope gate (`src/routes/webhook.route.ts:1174`),
+  state machine, tool-masker, Call 1 router, tool, Call 2 generator, 22 reprompt +
+  23 panggilan `executeChat` di `src/v3/agent/pipeline/guardrail-pipeline.ts`, funnel
+  reprompt (`:1082`), holistic reviewer (`:1136`), sanitizer. Bukti produksi: 98x
+  `TOOL_MASKING_ENFORCED_APPLIED`, 33x FALLBACK, 20x REPROMPT dalam 3 hari.
+- **R2 - State terduplikasi & multi-penulis (drift).** `Conversation.current_state`
+  ditulis oleh banyak pemanggil (repo, `conversation.service`, webhook `:1457`, admin
+  livechat, `command.service`), sementara detail sesi hidup di `session_data`
+  (`src/v3/state/goal-tracker.ts:258`). Dua definisi "idle": `ai-scope-gate.service.ts:50`
+  (`last_customer_message_at`) vs `machine.ts:252` (`last_message_at`).
+  **Drift terbukti:** `reservation-lifecycle.service.ts:281-295` mengosongkan sesi V3
+  saat reservasi selesai TAPI tidak memperbarui `current_state` -> bisa tertinggal
+  di `RESERVATION_SENT`.
+- **R3 - Aturan bisnis/klinis hidup sebagai daftar kata/regex (melanggar mandat
+  non-hardcode).** 185 `.includes` + 102 `.test` di `src/v3`. Peta klinis hardcode:
+  `treatment-catalog.service.ts:2219-2227` (batuk/pilek->"pulih", gtm/makan->"lahap",
+  laktasi->MOMS). `patient-extractor.ts` sendiri 64 `.includes`.
+- **R4 - Komitmen customer hanya tercatat bila LLM memanggil tool.** `isFunnelCommitted`
+  (`phase-resolver.ts:127`) bergantung `selectedTreatment`/`cartItems`/`booking` yang
+  hanya terisi via tool (`tool-pipeline.ts:875`). LLM menilai "committed" tanpa memanggil
+  tool -> state kosong -> guardrail berikutnya salah paham (kasus conv funnel 62e60d13).
+- **R5 - Strategi perbaikan menumpuk lapisan, bukan fondasi.** 144 commit `fix`/30 hari;
+  `CHANGELOG.md` 8.255 baris; 98 teks "DILARANG" di prompt `src/v3/agent/prompt`.
+
+Bukti operasional 7 hari (read-only, server 43.173.11.79): 73 percakapan baru vs 34
+`CONVERSATION_MANUAL_TAKEOVER` + 42 `REVOKE_MESSAGE` (>=47% diselamatkan admin, proxy);
+latensi LLM p95 26 detik; rata-rata 1,56 panggilan LLM/giliran (puncak 3).
+
+Pola transkrip nyata (Fase 4b): bot menarik balasannya 5 detik setelah customer memberi
+lokasi (`conv 2b943cc6`, 08:45:12->08:45:17); tanda tanya "jam berapa aja ya?" diperlakukan
+sebagai komitmen lalu ditarik (`conv 57fb7f07`); balasan bot ganda untuk satu konteks
+(`conv 8dfb9f76`, 12:24:11 & 12:24:17); takeover "out_of_domain" untuk pertanyaan lokasi
+(`conv 246d63ab`). Satu pun tidak akan tertangkap test saat ini (LLM di-stub, replay pakai
+engine lama `src/slot-engine`, bukan `src/v3`).
+
+**Tindak lanjut (2026-10-06):** Opsi C dieksekusi (C1-C4) — lihat
+`docs/audit/RENCANA_PERBAIKAN_C.md`. Ringkas: satu definisi jam aktivitas customer,
+penulisan `current_state=COMPLETED` saat reservasi selesai, penguncian kontrak komitmen,
+dan replay transkrip produksi di jalur V3. Gate: build hijau, 5005 test hijau; 7 gagal
+pre-existing (terbukti identik via `git stash`).
+
+**Masih OPEN (butuh keputusan pemilik):** opsi arsitektur A/B di laporan, dan
+pemindahan peta klinis hardcode (`treatment-catalog.service.ts:2219-2227`) ke DB.
+
 ## 234. [FollowUp/Audit 32 Temuan] Sisa & Keputusan Pasca-Remediasi Tahap 1-5 (2026-10-06, OPEN - sebagian by design)
 
 Remediasi fondasional engine follow-up (Tahap 1-5) sudah dieksekusi. Item yang
