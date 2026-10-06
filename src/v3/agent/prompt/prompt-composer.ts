@@ -338,6 +338,17 @@ export async function composeSystemPromptAsync(
       const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
       const brand = getBrandIdentity();
       const greetingInstruction = buildGreetingInstruction(isFollowUp, brand.businessName);
+      // Audit best-practice (SEDANG-3): jalur DB WAJIB menghormati phaseInjection
+      // (fokus fase) + flag masking tool — jangan diam-diam mengabaikannya.
+      const injection = opts?.phaseInjection;
+      const focus = injection?.focus && injection.focus.length > 0 ? [...new Set(injection.focus)] : null;
+      const focusSuffix = focus ? `\n\n${buildPhaseFocusBlock(focus)}` : '';
+      const calcLine = opts?.isCalculateDeliveryMasked
+        ? '1. calculate_delivery: SAAT INI DISEMBUNYIKAN dari daftar tool (tidak ada entitas lokasi baru) — JANGAN memanggilnya.'
+        : '1. calculate_delivery: WAJIB panggil saat lokasi disebut';
+      const saveLine = opts?.isSaveReservationMasked
+        ? '4. save_reservation: SAAT INI DISEMBUNYIKAN dari daftar tool (prasyarat belum lengkap) — JANGAN memanggilnya.'
+        : '4. save_reservation: saat booking';
       base = `Kamu adalah Bidan Yusi, bidan konsultan resmi dari "${brand.businessName}" — layanan homecare treatment profesional untuk ibu dan bayi langsung ke rumah di area Surabaya dan Sidoarjo.
 
 ${dbPrompt.personalityTone}
@@ -352,14 +363,14 @@ ${dbPrompt.medicalOverclaimRules}
 ${dbPrompt.negativeConstraints}
 
 [PANDUAN PENGGUNAAN TOOLS]
-1. calculate_delivery: WAJIB panggil saat lokasi disebut
+${calcLine}
 2. get_catalog_and_price: saat tanya harga/keluhan
 3. get_clinic_policy_faq: saat tanya kebijakan klinik
-4. save_reservation: saat booking
+${saveLine}
 5. escalate_to_human: darurat
 
 ${STABLE_PREFIX_MARKER}
-${goalSummary}
+${goalSummary}${focusSuffix}
 
 ${getRealTimeTemporalGrounding().block}
 

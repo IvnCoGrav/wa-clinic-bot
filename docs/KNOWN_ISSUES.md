@@ -92,12 +92,13 @@ Baseline program "chatbot lebih cerdas" (read-only, 1.693 log lokal + `llm_audit
   (`agent-runner`→`generation-stage`); prompt ter-mask 46.665 vs 48.617 char (hemat ~1.952).
 - **Fase 2b — prune NEGATIVE CONSTRAINTS (DITOLAK setelah ukur):** total blok hanya 10.690 char,
   terpecah kecil & mayoritas aturan keselamatan → risiko tinggi, hasil kecil. Tidak dikerjakan.
-- **SEDANG-3 (OPEN, laten):** `composeSystemPromptAsync` jalur DB mengabaikan `phaseInjection`
-  → bila suatu tenant punya `tenant_prompt_config` aktif, `slim` TIDAK berlaku diam-diam.
-  Default-tenant belum punya (tabel tak ada) → tidak terdampak sekarang. Perbaikan: teruskan
-  `phaseInjection` ke jalur DB + ukur ulang via async.
-- **SEDANG-4 (OPEN, observasi):** dampak `slim` (prefix berubah per-fase) terhadap prompt-cache
-  hit-rate belum diukur.
+- **SEDANG-3 (RESOLVED 2026-10-05):** `composeSystemPromptAsync` jalur DB kini menghormati
+  `phaseInjection` (blok `[PHASE_FOCUS]`) + flag masking tool (guidance calculate_delivery/
+  save_reservation menyesuaikan). Test: `tests/unit/v3/db-prompt-phase-mask.test.ts`.
+- **SEDANG-4 (RESOLVED-sebagian, terukur 2026-10-05):** prefix stabil dalam fase SAMA
+  byte-identik (EARLY 30.740 char / CONSULT 46.197 char) → cache-hit antar-turn dalam satu fase.
+  Cache miss hanya saat PINDAH fase (jarang), bukan tiap turn. Belum diukur hit-rate provider nyata
+  (perlu trafik produksi).
 - **Catatan pre-existing:** `tests/integration/v3-conversation-matrix.test.ts` CM-22 gagal
   (terverifikasi gagal juga tanpa perubahan batch ini) — perlu ditindaklanjuti pemilik changeset terkait.
 - **Fase 2b lanjutan (DITUNDA — butuh data produksi):** blok `NEGATIVE CONSTRAINTS` (~9k) berisi aturan

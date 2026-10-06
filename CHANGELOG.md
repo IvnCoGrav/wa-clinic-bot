@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-05 - Fixed: Residual Audit #1 (jalur prompt DB) & #2 (ukur cache)
+
+- **#1 (`prompt-composer.ts`):** jalur `composeSystemPromptAsync` DB kini menghormati
+  `phaseInjection` (blok `[PHASE_FOCUS]`) + flag masking tool — tidak lagi mengabaikan
+  diam-diam untuk tenant yang punya `tenant_prompt_config`.
+- **#2 (terukur):** prefix stabil dalam fase SAMA byte-identik (EARLY 30.740 / CONSULT 46.197 char)
+  → cache-hit antar-turn; miss hanya saat pindah fase. Test: `tests/unit/v3/db-prompt-phase-mask.test.ts`.
+- **Verifikasi:** build lolos; 97/97 test hijau.
+
 #### 2026-10-05 - Fixed: Hasil Audit Best-Practice Sesi Stabilisasi
 
 - **SEDANG-1 (`queue.service.ts`):** `latestTurnByPhone` kini LRU berbatas
