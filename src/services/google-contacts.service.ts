@@ -10,7 +10,7 @@ import {
   splitImportedContactName,
   CustomerContactContext,
 } from './google-contacts-formatter';
-import { getGazetteerCoordinates, getGazetteerKecamatanNames } from '../utils/gazetteer';
+import { getGazetteerCoordinates, getGazetteerKecamatanNames, isCityHomonymKecamatan } from '../utils/gazetteer';
 import { encryptSecretIfPossible } from '../utils/encryption';
 
 /**
@@ -31,6 +31,12 @@ export function classifyImportedAreaTag(areaTag: string | null): {
   if (!tag) return {};
   try {
     const hit = getGazetteerCoordinates(tag);
+    // Homonym Safety Gate: hasil selevel kecamatan yang sekadar homonim nama kota
+    // (mis. tag "Sidoarjo" → kecamatan Sidoarjo/desa-pertama Suko) DILARANG
+    // menandai kelurahan (desa karangan). Cukup kecamatan dari tag itu sendiri.
+    if (hit && isCityHomonymKecamatan(hit)) {
+      return { kecamatan: hit.kecamatan };
+    }
     if (hit) {
       const out: { kelurahan?: string; kecamatan?: string } = {};
       if (hit.kelurahan) out.kelurahan = hit.kelurahan;

@@ -114,7 +114,7 @@ export class ReservationLifecycleService {
 
               // Fallback fondasional: Jika geocoding Maps tidak presisi, gunakan kamus Gazetteer internal
               if (!resolvedLat || !resolvedLng) {
-                const { getGazetteerCoordinates, getGazetteerCanonicalCities } = await import('../utils/gazetteer');
+                const { getGazetteerCoordinates, isCityHomonymKecamatan } = await import('../utils/gazetteer');
                 // Gerbang placeholder generik (tanpa daftar kata hafalan): buang nilai
                 // kosong / terlalu pendek / hanya simbol. Nama orang (customerName)
                 // DILARANG menjadi query wilayah — bukan entitas administratif.
@@ -124,13 +124,6 @@ export class ReservationLifecycleService {
                   if (/^[^a-z0-9]+$/i.test(s)) return true;
                   return false;
                 };
-                // Inti nama kota dari dataset (buang awalan administratif) untuk
-                // gerbang homonim — "Kabupaten Sidoarjo" → "sidoarjo".
-                const cityCores = new Set(
-                  getGazetteerCanonicalCities().map((c) =>
-                    String(c).toLowerCase().replace(/^(kabupaten|kota|kab\.?|kotamadya)\s+/i, '').trim()
-                  )
-                );
                 const gzSearchQueries = [fullAddressStr, kecamatan, kota].filter(
                   (q): q is string => !!q && !isBlankWilayah(q)
                 );
@@ -142,12 +135,7 @@ export class ReservationLifecycleService {
                   // "Sidoarjo", "Surabaya") → customer hanya menyebut kota luas,
                   // BUKAN kecamatan tersebut. DILARANG mengunci koordinat ke sentroid
                   // desa-pertamanya (kasus Suko). Lanjut ke query berikutnya.
-                  if (
-                    gz.matchedLevel === 'kecamatan' &&
-                    cityCores.has((gz.kecamatan || '').trim().toLowerCase())
-                  ) {
-                    continue;
-                  }
+                  if (isCityHomonymKecamatan(gz)) continue;
                   resolvedLat = gz.lat;
                   resolvedLng = gz.lng;
                   // Anti-fabrikasi wilayah: sentroid kecamatan dapat mengembalikan

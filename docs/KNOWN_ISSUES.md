@@ -36,11 +36,14 @@ Laporan: titik peta pelanggan 6281390541340 nyangkut di **Suko** padahal di
   teks "Berbek, Waru" tapi titik tetap Suko. Kini geocode ulang saat kecamatan teks
   berubah (atau belum ada koordinat), tetap menghormati gembok `isPreciseGps`. Tes:
   `tests/unit/customer-profile-edit-drift.test.ts`.
-- **Sisa pintu penebak sentroid (BELUM ditutup, kandidat follow-up):**
-  `src/v3/tools/calculate-delivery.tool.ts:688` (fallback sentroid kecamatan tanpa
-  cek `matchedLevel`), `src/services/google-contacts.service.ts:33`, dan skrip
-  `scripts/backfill-customer-centroids.ts:80`. Pola sehat sudah ada di
-  `src/routes/admin/customers.subroute.ts:214-217` (kecamatan-saja ditolak).
+- **Sisa pintu penebak sentroid (SUDAH ditutup, 2026-10-06):** satu gerbang bersama
+  `isCityHomonymKecamatan()` di `src/utils/gazetteer.ts` (dataset-driven: `matchedLevel`
+  kecamatan + homonim nama kota) kini dipakai di SEMUA seam tulis —
+  `reservation-lifecycle.service.ts`, `src/v3/tools/calculate-delivery.tool.ts:688`
+  (sentroid fallback), `google-contacts.service.ts` (`classifyImportedAreaTag`), dan
+  `scripts/backfill-customer-centroids.ts`. Tidak ada lagi aturan bercabang per-pintu.
+  Tes: `tests/unit/gazetteer-city-homonym-gate-shared.test.ts` (adversarial + non-regresi
+  Jambangan/Manukan Kulon).
 - **Data pelanggan 6281390541340 SUDAH dikoreksi di LIVE (2026-10-06).** Bukti
   pra-fix: `kelurahan=berbek,kecamatan=waru` TAPI `lat/lng=-7.44615,112.678558`
   (Suko), `location_source=manual_staff`, `share_location_sent=false` → 19.79 km,
