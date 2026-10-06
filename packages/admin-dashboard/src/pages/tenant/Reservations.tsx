@@ -169,6 +169,10 @@ export const Reservations: React.FC = () => {
   const [totalReservations, setTotalReservations] = useState(0);
   const PAGE_SIZE = 20;
 
+  // Bulk complete (checklist massal). Cakupan pilihan = baris pada halaman/filter aktif.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCompleting, setBulkCompleting] = useState(false);
+
   useEffect(() => {
     if (selectedRes?.booking_date) {
       const d = new Date(selectedRes.booking_date);
@@ -346,6 +350,12 @@ export const Reservations: React.FC = () => {
     return () => clearTimeout(handler);
   }, [filterState.searchQuery]);
 
+  // Reset pilihan massal saat berpindah halaman/filter/view — agar cakupan tetap
+  // = baris yang tampil (halaman aktif), tidak ada id "hantu" dari halaman lain.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, viewMode, filterState.status, filterState.staffId, filterState.category, sortField, sortOrder]);
+
   const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
     if (!dateStr) return '';
     try {
@@ -487,7 +497,71 @@ export const Reservations: React.FC = () => {
     }
   };
 
-  // Generic Status Change
+  // ── Bulk complete (checklist massal) ─────────────────────────────────────
+  const BULK_COMPLETE_MAX = 50;
+
+  const toggleSelect = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const pageIds = filteredReservations.map((r) => r.id);
+      const allSelected = pageIds.length > 0 && pageIds.every((id) => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of pageIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of pageIds) next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkComplete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (ids.length > BULK_COMPLETE_MAX) {
+      toast(`Maksimal ${BULK_COMPLETE_MAX} reservasi per sekali proses. Persempit pilihan Anda.`, 'error');
+      return;
+    }
+    const ok = await confirm({
+      title: `Tandai ${ids.length} Reservasi Selesai?`,
+      message: `${ids.length} reservasi yang dipilih akan ditandai Selesai Treatment. Reservasi yang belum dijadwalkan, yang tanggalnya masih di masa depan, atau yang sudah selesai akan otomatis dilewati.`,
+      confirmText: `Ya, Selesaikan ${ids.length}`,
+    });
+    if (!ok) return;
+
+    try {
+      setBulkCompleting(true);
+      const res = await apiRequest('/api/admin/reservations/bulk-complete', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      });
+      const completed: string[] = Array.isArray(res?.completed) ? res.completed : [];
+      const skipped: Array<{ id: string; reason: string }> = Array.isArray(res?.skipped) ? res.skipped : [];
+      if (skipped.length === 0) {
+        toast(`${completed.length} reservasi berhasil ditandai Selesai Treatment.`, 'success');
+      } else {
+        toast(`${completed.length} selesai, ${skipped.length} dilewati (mungkin sudah selesai / belum dijadwalkan / masa depan).`, 'info');
+      }
+      clearSelection();
+      await loadReservations(page);
+    } catch (err: any) {
+      toast(`Gagal menyelesaikan massal: ${err.message}`, 'error');
+    } finally {
+      setBulkCompleting(false);
+    }
+  };
   const handleStatusChange = async (id: string, newStatus: string) => {
     try {
       setLoading(true);
@@ -1278,6 +1352,32 @@ export const Reservations: React.FC = () => {
 
           {viewMode === 'table' && (
             <div className="space-y-4">
+              {/* Bulk Complete Action Bar — muncul saat ada pilihan */}
+              {selectedIds.size > 0 && (
+                <div className="sticky top-2 z-30 flex items-center justify-between gap-3 px-4 py-2.5 bg-[#008069] text-white rounded-2xl shadow-lg">
+                  <span className="text-xs font-bold">
+                    {selectedIds.size} reservasi dipilih
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={clearSelection}
+                      disabled={bulkCompleting}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/15 hover:bg-white/25 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={handleBulkComplete}
+                      disabled={bulkCompleting}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-[#008069] hover:bg-[#e8f5f2] transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {bulkCompleting ? <Loader size={13} className="animate-spin" /> : <CheckCheck size={14} />}
+                      <span>{bulkCompleting ? 'Memproses...' : 'Tandai Selesai'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Mobile Card List */}
               <div className="block md:hidden space-y-3">
                 {/* Mobile Count Bar */}
@@ -1287,6 +1387,24 @@ export const Reservations: React.FC = () => {
                       ? `Menampilkan ${reservations.length} dari ${totalReservations} Reservasi`
                       : '0 Data Reservasi'}
                   </span>
+                  {filteredReservations.length > 0 && (
+                    <label className="flex items-center gap-1.5 text-[#54656f] font-bold text-xs cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={filteredReservations.every((r) => selectedIds.has(r.id))}
+                        ref={(el) => {
+                          if (el) {
+                            const some = filteredReservations.some((r) => selectedIds.has(r.id));
+                            const all = filteredReservations.every((r) => selectedIds.has(r.id));
+                            el.indeterminate = some && !all;
+                          }
+                        }}
+                        onChange={toggleSelectAllOnPage}
+                        className="h-4 w-4 accent-[#008069] cursor-pointer"
+                      />
+                      <span>Pilih semua</span>
+                    </label>
+                  )}
                 </div>
 
                 {filteredReservations.length === 0 ? (
@@ -1301,21 +1419,31 @@ export const Reservations: React.FC = () => {
                       className="bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs space-y-3 cursor-pointer hover:border-[#008069] hover:shadow-md transition"
                     >
                       <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-[#111b21] text-sm group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</h4>
-                          <p className="text-xs text-[#667781] font-mono mt-0.5">{res.customer?.phone}</p>
-                          {res.customer && (
-                            <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
-                                {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
-                              </span>
-                              {res.customer.ltv !== undefined && (
-                                <span className="text-[#8696a0] font-mono">
-                                  LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(res.id)}
+                            onClick={(e) => toggleSelect(res.id, e)}
+                            onChange={() => {}}
+                            className="mt-1 h-4 w-4 accent-[#008069] cursor-pointer shrink-0"
+                            aria-label={`Pilih reservasi ${res.customer?.name || 'Bunda'}`}
+                          />
+                          <div>
+                            <h4 className="font-bold text-[#111b21] text-sm group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</h4>
+                            <p className="text-xs text-[#667781] font-mono mt-0.5">{res.customer?.phone}</p>
+                            {res.customer && (
+                              <div className="flex items-center gap-1.5 mt-1 text-[10px]">
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                                  {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
                                 </span>
-                              )}
-                            </div>
-                          )}
+                                {res.customer.ltv !== undefined && (
+                                  <span className="text-[#8696a0] font-mono">
+                                    LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div>{getStatusBadge(res.status, res.raw_text)}</div>
                       </div>
@@ -1387,6 +1515,23 @@ export const Reservations: React.FC = () => {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-xs uppercase tracking-wider font-bold select-none">
+                        <th className="py-3.5 pl-5 pr-0 w-8">
+                          <input
+                            type="checkbox"
+                            checked={filteredReservations.length > 0 && filteredReservations.every((r) => selectedIds.has(r.id))}
+                            ref={(el) => {
+                              if (el) {
+                                const some = filteredReservations.some((r) => selectedIds.has(r.id));
+                                const all = filteredReservations.every((r) => selectedIds.has(r.id));
+                                el.indeterminate = some && !all;
+                              }
+                            }}
+                            onChange={toggleSelectAllOnPage}
+                            className="h-4 w-4 accent-[#008069] cursor-pointer align-middle"
+                            title="Pilih semua reservasi di halaman ini"
+                            aria-label="Pilih semua reservasi di halaman ini"
+                          />
+                        </th>
                         <th 
                           onClick={() => handleSort('customer')} 
                           className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
@@ -1452,7 +1597,7 @@ export const Reservations: React.FC = () => {
                     <tbody className="divide-y divide-[#e9edef] text-xs text-[#111b21]">
                       {filteredReservations.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-[#667781] text-xs">
+                          <td colSpan={9} className="py-8 text-center text-[#667781] text-xs">
                             Tidak ada data reservasi yang sesuai.
                           </td>
                         </tr>
@@ -1463,6 +1608,16 @@ export const Reservations: React.FC = () => {
                             onClick={() => setSelectedRes(res)}
                             className="hover:bg-[#f0f2f5] transition-all cursor-pointer group"
                           >
+                            <td className="py-3.5 pl-5 pr-0 w-8">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(res.id)}
+                                onClick={(e) => toggleSelect(res.id, e)}
+                                onChange={() => {}}
+                                className="h-4 w-4 accent-[#008069] cursor-pointer align-middle"
+                                aria-label={`Pilih reservasi ${res.customer?.name || 'Bunda'}`}
+                              />
+                            </td>
                             <td className="py-3.5 px-5 font-medium">
                               <p className="font-bold text-[#111b21] group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</p>
                               <p className="text-xs text-[#667781] font-mono">{res.customer?.phone}</p>

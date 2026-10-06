@@ -66,6 +66,94 @@ function tenantOf(request: FastifyRequest): string {
   return (request as any).tenantId || DEFAULT_TENANT_ID;
 }
 
+/**
+ * Hasil operasi tandai-selesai. `reason` hanya terisi saat gagal, dan dipetakan
+ * ke kode HTTP oleh tiap pemanggil (satuan → 400/404; bulk → masuk `skipped`).
+ */
+type CompleteOutcome =
+  | { ok: true; reservation: any; existing: any }
+  | { ok: false; reason: 'NOT_FOUND' | 'NOT_ELIGIBLE' | 'PREMATURE' };
+
+/**
+ * Seam tunggal tandai-selesai reservasi (dipakai endpoint satuan DAN bulk).
+ * Murni tahap mutasi status (findFirst + guard + update); efek samping
+ * follow-up/Sheets/reset-sesi dilakukan terpisah lewat `runCompletionSideEffects`
+ * agar pemanggil bisa memutuskan pencatatan audit sendiri.
+ *
+ * - `strict` true (bulk): hanya `confirmed`/`en_route` yang boleh lanjut
+ *   (paritas `canTransition`). `strict` false (satuan): perilaku lama dipertahankan.
+ * - Guard prematur (`isPrematureCompletion`) berlaku di kedua jalur.
+ * - DB offline → melempar (pemanggil satuan menangkap untuk fallback memori;
+ *   endpoint bulk memetakan ke 503 eksplisit).
+ */
+async function completeReservationById(opts: {
+  id: string;
+  tenantId: string;
+  strict: boolean;
+  forceComplete?: boolean;
+}): Promise<CompleteOutcome> {
+  const existing = await prisma.reservation.findFirst({
+    where: { id: opts.id, tenant_id: opts.tenantId },
+  });
+  if (!existing) return { ok: false, reason: 'NOT_FOUND' };
+
+  if (opts.strict) {
+    const { canTransition } = await import('../../domain/reservation-status');
+    if (!canTransition(existing.status, 'completed')) return { ok: false, reason: 'NOT_ELIGIBLE' };
+  }
+
+  if (isPrematureCompletion(existing.booking_date) && !opts.forceComplete) {
+    return { ok: false, reason: 'PREMATURE' };
+  }
+
+  const reservation = await prisma.reservation.update({
+    where: { id: opts.id },
+    data: { status: 'completed' },
+    include: {
+      customer: { include: { children: true } },
+      assigned_staff: { select: { id: true, name: true, phone: true } },
+      children: true,
+    },
+  });
+  return { ok: true, reservation, existing };
+}
+
+/**
+ * Efek samping terpusat setelah status `completed` tersimpan (MT-1.4):
+ * jadwal follow-up/review + next-treatment + reset sesi V3 episodik. Best-effort:
+ * kegagalan tidak pernah melempar ke pemanggil. `existing` = baris SEBELUM update.
+ */
+async function runCompletionSideEffects(existing: any, tenantId: string): Promise<void> {
+  try {
+    const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+    if (existing.booking_date) {
+      await reservationLifecycleService.onReservationCompleted({
+        customerId: existing.customer_id,
+        reservationId: existing.id,
+        bookingDate: existing.booking_date,
+        treatmentCategory: existing.treatment_category,
+        tenantId: existing.tenant_id || tenantId,
+      });
+    } else {
+      // Tanpa booking_date: tetap reset sesi V3
+      const activeConv = await prisma.conversation.findFirst({
+        where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || tenantId },
+        orderBy: { updated_at: 'desc' },
+        select: { id: true },
+      });
+      if (activeConv?.id) {
+        const { GoalTracker } = await import('../../v3/state/goal-tracker');
+        await GoalTracker.updateGoalSession(activeConv.id, { cartItems: [], selectedTreatment: undefined, booking: undefined, discussedTreatments: [], priceDiscussed: undefined, bookingCommitConfirmed: undefined, lastCommitment: undefined, ongkirStatus: undefined, totalPrice: undefined } as any, existing.tenant_id || tenantId);
+      }
+    }
+  } catch (fuErr: any) {
+    console.warn('[Admin API] onReservationCompleted failed:', fuErr?.message);
+  }
+}
+
+/** Batas aman jumlah id per satu request bulk-complete (tiap item memicu efek samping). */
+const BULK_COMPLETE_MAX_IDS = 50;
+
 export async function reservationAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete reservasi (termasuk series)
   fastify.addHook('onResponse', async (request) => {
@@ -1613,61 +1701,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
-        const existing = await prisma.reservation.findFirst({
-          where: { id, tenant_id: tenantId },
+        const outcome = await completeReservationById({
+          id,
+          tenantId,
+          strict: false, // perilaku lama satuan: tanpa cek transisi
+          forceComplete: (request.body as any)?.forceComplete,
         });
-        if (!existing) {
+
+        if (!outcome.ok) {
+          if (outcome.reason === 'PREMATURE') {
+            // Guard anti-completed prematur: jangan tandai selesai jadwal > 24 jam
+            // ke depan (salah klik admin). forceComplete:true utk approval darurat.
+            return reply.status(400).send({
+              success: false,
+              code: 'PREMATURE_COMPLETION_BLOCKED',
+              error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+            });
+          }
+          // NOT_FOUND → lempar agar jatuh ke fallback memori / 404 (perilaku lama).
           throw new Error('Reservation not found');
         }
 
-        // Guard anti-completed prematur: jangan tandai selesai jadwal > 24 jam
-        // ke depan (salah klik admin). forceComplete:true utk approval darurat.
-        if (isPrematureCompletion(existing.booking_date) && !(request.body as any)?.forceComplete) {
-          return reply.status(400).send({
-            success: false,
-            code: 'PREMATURE_COMPLETION_BLOCKED',
-            error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
-          });
-        }
-
-        const reservation = await prisma.reservation.update({
-          where: { id },
-          data: {
-            status: 'completed',
-          },
-          include: {
-            customer: { include: { children: true } },
-            assigned_staff: { select: { id: true, name: true, phone: true } },
-            children: true,
-          },
-        });
-
         // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT + reset V3 episodik
-        try {
-          const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
-          if (existing.booking_date) {
-            await reservationLifecycleService.onReservationCompleted({
-              customerId: existing.customer_id,
-              reservationId: id,
-              bookingDate: existing.booking_date,
-              treatmentCategory: existing.treatment_category,
-              tenantId: existing.tenant_id || tenantId,
-            });
-          } else {
-            // Tanpa booking_date: tetap reset sesi V3
-            const activeConv = await prisma.conversation.findFirst({
-              where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || tenantId },
-              orderBy: { updated_at: 'desc' },
-              select: { id: true },
-            });
-            if (activeConv?.id) {
-              const { GoalTracker } = await import('../../v3/state/goal-tracker');
-              await GoalTracker.updateGoalSession(activeConv.id, { cartItems: [], selectedTreatment: undefined, booking: undefined, discussedTreatments: [], priceDiscussed: undefined, bookingCommitConfirmed: undefined, lastCommitment: undefined, ongkirStatus: undefined, totalPrice: undefined } as any, existing.tenant_id || tenantId);
-            }
-          }
-        } catch (fuErr: any) {
-          console.warn('[Admin API] onReservationCompleted (complete) failed:', fuErr?.message);
-        }
+        await runCompletionSideEffects(outcome.existing, tenantId);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -1678,7 +1734,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
-        return reply.status(200).send({ success: true, data: reservation });
+        return reply.status(200).send({ success: true, data: outcome.reservation });
       } catch (error) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === tenantId) {
@@ -1696,6 +1752,107 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         }
         return reply.status(404).send({ success: false, error: 'Reservation not found' });
       }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservations/bulk-complete
+   * Menandai selesai (status: 'completed') sekumpulan reservasi sekaligus.
+   *
+   * Kontrak:
+   *  - body `{ ids: string[] }` — array 1..50 id (duplikat di-dedupe, whitespace di-trim);
+   *  - tenant-scoped: id milik tenant lain → dilewati sebagai NOT_FOUND;
+   *  - HANYA status confirmed/en_route yang boleh diselesaikan (keyat ketat, paritas
+   *    `canTransition`); sisanya dilewati sebagai NOT_ELIGIBLE;
+   *  - reservasi masa depan (> 24 jam, `isPrematureCompletion`) dilewati sebagai PREMATURE;
+   *  - setiap sukses menjalankan efek samping lifecycle (follow-up/Sheets/reset sesi);
+   *  - DB offline saat preflight → 503 eksplisit (batal total, bukan setengah jalan);
+   *  - SATU audit `BULK_COMPLETE_RESERVATIONS` merangkum hasil.
+   *
+   * Respons: `{ success, completed: string[], skipped: [{ id, reason }], note? }`.
+   */
+  fastify.post(
+    '/api/admin/reservations/bulk-complete',
+    async (
+      request: FastifyRequest<{ Body: { ids?: unknown; forceComplete?: boolean } }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      const rawIds = (request.body as any)?.ids;
+
+      if (!Array.isArray(rawIds)) {
+        return reply.status(400).send({ success: false, code: 'INVALID_BODY', error: 'Field "ids" wajib berupa array of string.' });
+      }
+
+      // Trim + buang non-string/kosong, lalu dedupe (pertahankan urutan).
+      const cleaned = rawIds
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
+      if (cleaned.length !== rawIds.length) {
+        return reply.status(400).send({ success: false, code: 'INVALID_BODY', error: 'Setiap id wajib berupa string non-kosong.' });
+      }
+
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const id of cleaned) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+      }
+
+      if (ids.length === 0) {
+        return reply.status(400).send({ success: false, code: 'EMPTY_IDS', error: 'Minimal satu id diperlukan.' });
+      }
+      if (ids.length > BULK_COMPLETE_MAX_IDS) {
+        return reply.status(400).send({
+          success: false,
+          code: 'TOO_MANY_IDS',
+          error: `Maksimal ${BULK_COMPLETE_MAX_IDS} reservasi per sekali proses.`,
+        });
+      }
+
+      // Preflight DB: pastikan koneksi hidup SEBELUM mutasi apa pun (anti setengah jalan).
+      try {
+        await prisma.reservation.findMany({ where: { tenant_id: tenantId, id: { in: ids } }, select: { id: true } });
+      } catch {
+        return reply.status(503).send({
+          success: false,
+          code: 'DB_OFFLINE',
+          error: 'Basis data sedang tidak tersedia. Operasi massal dibatalkan agar tidak berjalan setengah jalan. Coba lagi beberapa saat.',
+        });
+      }
+
+      const completed: string[] = [];
+      const skipped: Array<{ id: string; reason: string }> = [];
+
+      for (const id of ids) {
+        let outcome: CompleteOutcome;
+        try {
+          outcome = await completeReservationById({ id, tenantId, strict: true, forceComplete: false });
+        } catch (err: any) {
+          // DB error mid-batch: laporkan sebagai SKIP agar sisa batch tetap diproses
+          // (tidak menggantung di 503 setelah sebagian sukses).
+          skipped.push({ id, reason: 'DB_ERROR' });
+          continue;
+        }
+        if (!outcome.ok) {
+          skipped.push({ id, reason: outcome.reason });
+          continue;
+        }
+        await runCompletionSideEffects(outcome.existing, tenantId);
+        completed.push(id);
+      }
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'BULK_COMPLETE_RESERVATIONS',
+        payload: { completed, skipped, requested: ids.length },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success: true, completed, skipped });
     }
   );
 
