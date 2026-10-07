@@ -4,6 +4,33 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-07 - Fixed: Pemisahan "Selesai" vs "Lunas" — status bayar tri-state & moderasi CAPI outlier tidak mengubah keuangan
+
+- **Akar (multi-layer):**
+  1. `completeReservationById` (`reservations.subroute.ts:109`) tidak mengisi `purchase_occurred_at`,
+     sementara `PATCH /status` (:2460) justru punya fallback — 2 pintu "selesai" tidak konsisten.
+  2. `isLunas = Boolean(purchase_occurred_at)` membuat reservasi `completed` tanpa catatan bayar
+     tampil "Tagih di Tempat" (mengesankan kunjungan belum terjadi).
+  3. Teks konfirmasi `MetaCapiQueue` ("Data internal tetap tercatat") menyesatkan; `reject-purchase`
+     tidak pernah menyentuh status bayar (dan memang tidak boleh).
+- **Fixed (fondasional, Opsi B — pisahkan, jangan satukan):**
+  - `src/domain/reservation-payment.ts`: seam kanonis tri-state `getPaymentDisplayStatus()` +
+    `getPaymentDisplayLabel()` (`LUNAS` / `SELESAI_BELUM_VERIFIKASI` / `TAGIH_DI_TEMPAT`).
+  - `src/services/financial-analytics.service.ts`: ledger admin memakai seam; completed-belum-bayar →
+    "Selesai — verifikasi bayar" (bukan "Tagih di Tempat"); lunas tanpa metode tidak lagi dipaksa "TRANSFER".
+  - `src/services/staff-notification.service.ts`: label notifikasi jujur (tidak klaim "Transfer").
+  - `src/routes/admin/reservations.subroute.ts`: fallback `purchase_occurred_at` di `PATCH /status`
+    DIHAPUS (konsisten dengan seam tunggal); `reject-purchase` diberi guard komentar (keuangan internal
+    tak diubah — CAPI murni atribusi Meta Ads).
+  - `packages/admin-dashboard/.../FinancialAnalytics.tsx`: chip filter + label 3-status;
+    `MetaCapiQueue.tsx`: teks konfirmasi jujur ("Status pembayaran internal TIDAK berubah").
+- **Prinsip:** lunas HANYA via jalur bayar resmi (`recordPayment` staff / `approve-purchase` / deteksi
+  pesan Payment). "Selesai" tidak menyiratkan "lunas" → piutang tidak hilang, tidak ada label metode palsu.
+- **Test:** `tests/unit/reservation-payment-display.test.ts` (9, termasuk adversarial ISO/Date/null) +
+  suite CAPI/reservasi/staff hijau; `npm run build` root & `packages/admin-dashboard` lolos.
+- **Data live:** TIDAK ada UPDATE massal. Reservasi `completed` lama tampil jujur "Selesai — verifikasi bayar"
+  sampai bayar dicatat resmi. Lihat `docs/KNOWN_ISSUES.md` #240.
+
 #### 2026-10-06 - Fixed: Kolom F Rekapan Sheets "Repeat" palsu — otoritas ordinal riwayat transaksi
 
 - **Akar (multi-layer):**

@@ -5,6 +5,7 @@ import { webPushService } from './web-push.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getStaffNotificationConfig } from '../config/staff-notification-config';
+import { getPaymentDisplayStatus } from '../domain/reservation-payment';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -188,8 +189,15 @@ export class StaffNotificationService {
       const purchaseValue = reservation.purchase_value || 0;
       const ongkir = cust?.ongkir || 0;
       const totalFee = purchaseValue || (ongkir > 0 ? ongkir : 0);
-      const isLunas = Boolean((reservation as any).purchase_occurred_at);
-      const paymentStatusLabel = isLunas ? 'LUNAS (Transfer)' : 'TAGIH DI TEMPAT (Cash/QRIS)';
+      // Seam kanonis: jangan klaim "Transfer" tanpa bukti metode. completed
+      // tanpa bayar → "SELESAI — BELUM VERIFIKASI BAYAR", bukan TAGIH.
+      const paymentDisplayStatus = getPaymentDisplayStatus(reservation as any);
+      const paymentStatusLabel =
+        paymentDisplayStatus === 'LUNAS'
+          ? 'LUNAS'
+          : paymentDisplayStatus === 'SELESAI_BELUM_VERIFIKASI'
+          ? 'SELESAI — BELUM VERIFIKASI BAYAR'
+          : 'TAGIH DI TEMPAT (Cash/QRIS)';
 
       // 7. Catatan / Preferensi Pasien
       const notes = (cust?.preferences as any)?.allergies || (cust?.preferences as any)?.notes || null;

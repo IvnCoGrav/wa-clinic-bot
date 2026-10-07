@@ -3,6 +3,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
+import { getPaymentDisplayStatus, type PaymentDisplayStatus } from '../domain/reservation-payment';
 
 /**
  * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236). Nilai yang diawali
@@ -88,7 +89,7 @@ export interface TransactionLedgerItem {
   deliveryFee: number;
   totalFee: number;
   paymentMethod: string;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  paymentStatus: PaymentDisplayStatus;
   status: string;
   isRepeatOrder: boolean;
 }
@@ -226,6 +227,9 @@ export class FinancialAnalyticsService {
       const isCompleted = (r.status || '').toLowerCase() === 'completed';
       const isCancelled = (r.status || '').toLowerCase() === 'cancelled';
       const isLunas = Boolean(r.purchase_occurred_at);
+      // Seam kanonis: completed-tanpa-bayar ditampilkan sebagai
+      // SELESAI_BELUM_VERIFIKASI, bukan "Tagih di Tempat" (menyesatkan).
+      const paymentDisplayStatus = getPaymentDisplayStatus(r as any);
 
       if (isCancelled) {
         cancelledBookings++;
@@ -273,7 +277,14 @@ export class FinancialAnalyticsService {
         categoryMap.set(catKey, catEntry);
 
         // Payment method breakdown
-        const payKey = (r.payment_method || (isLunas ? 'TRANSFER' : 'TAGIH_DI_TEMPAT')).toUpperCase();
+        const payKey = (
+          r.payment_method ||
+          (paymentDisplayStatus === 'LUNAS'
+            ? 'LUNAS_TANPA_METODE'
+            : paymentDisplayStatus === 'SELESAI_BELUM_VERIFIKASI'
+            ? 'SELESAI_BELUM_VERIFIKASI'
+            : 'TAGIH_DI_TEMPAT')
+        ).toUpperCase();
         const payEntry = paymentMap.get(payKey) || { revenue: 0, count: 0 };
         payEntry.revenue += totalFee;
         payEntry.count += 1;
@@ -316,8 +327,8 @@ export class FinancialAnalyticsService {
         treatmentFee,
         deliveryFee,
         totalFee,
-        paymentMethod: r.payment_method || (isLunas ? 'TRANSFER' : 'TAGIH_DI_TEMPAT'),
-        paymentStatus: isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT',
+        paymentMethod: r.payment_method || (isLunas ? '' : paymentDisplayStatus),
+        paymentStatus: paymentDisplayStatus,
         status: r.status || 'pending',
         isRepeatOrder: Boolean(r.is_repeat_order),
       });
@@ -377,6 +388,8 @@ export class FinancialAnalyticsService {
       QRIS: 'QRIS Realtime',
       CASH: 'Cash / Tunai di Tempat',
       TAGIH_DI_TEMPAT: 'Tagih di Tempat (Pending)',
+      LUNAS_TANPA_METODE: 'Lunas (metode belum dicatat)',
+      SELESAI_BELUM_VERIFIKASI: 'Selesai — belum verifikasi bayar',
     };
 
     const paymentBreakdown: PaymentMethodItem[] = Array.from(paymentMap.entries()).map(([method, val]) => ({

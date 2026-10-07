@@ -2456,9 +2456,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Revisi-1 (Opsi B): "selesai" TIDAK menyiratkan "lunas". Fallback
+        // pengisian purchase_occurred_at di sini DIHAPUS agar konsisten dengan
+        // `completeReservationById` (seam tunggal). Lunas HANYA via recordPayment
+        // (staff), approve-purchase, atau deteksi pesan Payment.
+        const updateStatusData: any = { status };
+
         const reservation = await prisma.reservation.update({
           where: { id },
-          data: { status },
+          data: updateStatusData,
           include: {
             customer: { include: { children: true } },
             assigned_staff: { select: { id: true, name: true, phone: true } },
@@ -3239,6 +3245,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           });
         }
 
+        // Moderasi CAPI murni urusan atribusi Meta Ads: HANYA mengubah
+        // purchase_review_status. DILARANG menyentuh purchase_occurred_at /
+        // purchase_value / payment_method — status keuangan internal TIDAK
+        // berubah. Melunasi reservasi tetap lewat jalur bayar resmi.
         const reservation = await prisma.reservation.update({
           where: { id },
           data: { purchase_review_status: 'ignored_outlier' },
@@ -3290,6 +3300,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           customer: { is_sandbox_test: false },
           OR: [
             { purchase_occurred_at: { not: null } },
+            { status: 'completed' },
           ],
         },
         orderBy: { created_at: 'desc' },

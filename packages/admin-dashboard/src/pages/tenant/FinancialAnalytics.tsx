@@ -117,7 +117,7 @@ interface TransactionLedgerItem {
   deliveryFee: number;
   totalFee: number;
   paymentMethod: string;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  paymentStatus: 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT';
   status: string;
   isRepeatOrder: boolean;
 }
@@ -155,6 +155,22 @@ function formatCompactRupiah(amount: number): string {
   return `Rp ${amount}`;
 }
 
+function getLedgerPaymentLabel(status: TransactionLedgerItem['paymentStatus']): string {
+  if (status === 'LUNAS') return 'Lunas';
+  if (status === 'SELESAI_BELUM_VERIFIKASI') return 'Selesai — verifikasi bayar';
+  return 'Tagih di Tempat';
+}
+
+function getLedgerPaymentClass(status: TransactionLedgerItem['paymentStatus']): string {
+  if (status === 'LUNAS') {
+    return 'bg-[#d9fdd3] dark:bg-[#005c4b]/50 text-[#008069] dark:text-[#4ae3b5] border border-[#00a884]/30';
+  }
+  if (status === 'SELESAI_BELUM_VERIFIKASI') {
+    return 'bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-500/40';
+  }
+  return 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300';
+}
+
 export const FinancialAnalytics: React.FC = () => {
   const { toast } = useUiFeedback();
   const { resolved } = useTheme();
@@ -170,7 +186,7 @@ export const FinancialAnalytics: React.FC = () => {
 
   // Table filter states
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'LUNAS' | 'TAGIH_DI_TEMPAT'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT'>('ALL');
   const [selectedTx, setSelectedTx] = useState<TransactionLedgerItem | null>(null);
 
   // Fetch monthly analytics data
@@ -746,6 +762,16 @@ export const FinancialAnalytics: React.FC = () => {
             >
               ⏳ Tagih di Tempat
             </button>
+            <button
+              onClick={() => setStatusFilter('SELESAI_BELUM_VERIFIKASI')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                statusFilter === 'SELESAI_BELUM_VERIFIKASI'
+                  ? 'bg-[#008069] text-white shadow-xs'
+                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+              }`}
+            >
+              Selesai — Belum Verifikasi
+            </button>
           </div>
         </div>
 
@@ -797,13 +823,11 @@ export const FinancialAnalytics: React.FC = () => {
                       {formatRupiah(tx.totalFee)}
                     </span>
                     <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 ${
-                        tx.paymentStatus === 'LUNAS'
-                          ? 'bg-[#d9fdd3] dark:bg-[#005c4b]/50 text-[#008069] dark:text-[#4ae3b5] border border-[#00a884]/30'
-                          : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300'
-                      }`}
+                      className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 ${getLedgerPaymentClass(
+                        tx.paymentStatus
+                      )}`}
                     >
-                      {tx.paymentStatus === 'LUNAS' ? 'Lunas' : 'Tagih di Tempat'}
+                      {getLedgerPaymentLabel(tx.paymentStatus)}
                     </span>
                   </div>
                 </div>
@@ -910,15 +934,15 @@ export const FinancialAnalytics: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      {tx.paymentStatus === 'LUNAS' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
-                          ✓ Lunas ({tx.paymentMethod})
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                          ⏳ Tagih di Tempat
-                        </span>
-                      )}
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${getLedgerPaymentClass(
+                          tx.paymentStatus
+                        )}`}
+                      >
+                        {tx.paymentStatus === 'LUNAS'
+                          ? `✓ Lunas${tx.paymentMethod ? ` (${tx.paymentMethod})` : ''}`
+                          : `⏳ ${getLedgerPaymentLabel(tx.paymentStatus)}`}
+                      </span>
                     </td>
                   </tr>
                 ))
@@ -954,15 +978,15 @@ export const FinancialAnalytics: React.FC = () => {
                   <p className="font-mono font-bold text-[#111b21]">{selectedTx.id}</p>
                 </div>
                 <div>
-                  {selectedTx.paymentStatus === 'LUNAS' ? (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
-                      ✓ LUNAS
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                      ⏳ TAGIH DI TEMPAT
-                    </span>
-                  )}
+                  <span
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold ${getLedgerPaymentClass(
+                      selectedTx.paymentStatus
+                    )}`}
+                  >
+                    {selectedTx.paymentStatus === 'LUNAS'
+                      ? '✓ LUNAS'
+                      : `⏳ ${getLedgerPaymentLabel(selectedTx.paymentStatus).toUpperCase()}`}
+                  </span>
                 </div>
               </div>
 

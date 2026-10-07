@@ -606,7 +606,7 @@ export const MetaCapiQueue: React.FC = () => {
     const ok = await confirm({
       title: 'Tandai sebagai Outlier / Abaikan?',
       message:
-        `Event ${eventName} ini akan diabaikan dan TIDAK dikirim ke Meta CAPI. Data internal tetap tercatat. Lanjutkan?`,
+        `Event ${eventName} akan diabaikan & TIDAK dikirim ke Meta CAPI. Status pembayaran internal TIDAK berubah. Lanjutkan?`,
       confirmText: 'Ya, Abaikan',
       danger: true,
     });
@@ -615,7 +615,7 @@ export const MetaCapiQueue: React.FC = () => {
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${item.id}/reject-purchase`, { method: 'POST' });
-      toast(`Event ${eventName} ditandai Outlier & tidak dikirim ke Meta.`, 'success');
+      toast(`Event ${eventName} ditandai Outlier & tidak dikirim ke Meta. Status bayar internal tidak diubah.`, 'success');
       setItems((prev) =>
         prev.map((p) => (p.id === item.id ? { ...p, purchase_review_status: 'ignored_outlier' } : p))
       );

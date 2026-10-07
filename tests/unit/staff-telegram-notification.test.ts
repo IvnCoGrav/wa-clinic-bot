@@ -92,7 +92,7 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
     expect(text).toContain('Pagar hitam samping pos satpam');
     expect(text).toContain('travelmode=two-wheeler');
     expect(text).toContain('Rp 185.000');
-    expect(text).toContain('LUNAS (Transfer)');
+    expect(text).toContain('LUNAS');
     expect(text).toContain('Alergi minyak telon beraroma tajam');
     expect(text).toContain('/staff/today');
 

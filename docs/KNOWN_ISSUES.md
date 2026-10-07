@@ -3,6 +3,24 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 240. [Keuangan/CAPI] Reservasi `completed` tanpa catatan bayar (historis) — tampil "Selesai — verifikasi bayar" (2026-10-07, OPEN)
+
+- **Konteks:** bug lama — `completeReservationById` & `PATCH /status` tidak mengisi
+  `purchase_occurred_at`, sehingga reservasi yang layanannya selesai tampil
+  "Tagih di Tempat" seolah belum dikunjungi. Sudah diperbaiki di level tampilan
+  (seam tri-state `src/domain/reservation-payment.ts`, Opsi B): completed-tanpa-bayar
+  kini "Selesai — verifikasi bayar", bukan "Tagih di Tempat".
+- **Sisa (OPEN):** reservasi `completed` historis dengan `purchase_occurred_at IS NULL`
+  tetap "belum lunas" secara sah sampai pembayaran dicatat lewat jalur resmi
+  (`recordPayment` staff) atau approve CAPI. **DILARANG** `UPDATE purchase_occurred_at =
+  booking_date` massal tanpa bukti bayar (memalsukan piutang & label metode bayar).
+- **Verifikasi live (read-only, belum dijalankan):**
+  `SELECT COUNT(*) FROM reservations WHERE status='completed' AND purchase_occurred_at IS NULL;`
+  Reservasi acuan Bunda Jasmine `62521512-9227-4a18-a45a-89e9379a6d5d` — wajib cek
+  `booking_date` asli sebelum mengklaim jam pelunasan.
+- **Keputusan tertunda:** strategi pelunasan data lama (verifikasi per-baris vs biarkan
+  tampil jujur) — butuh keputusan bisnis.
+
 ## 239. [Sheets/Data] Kontaminasi historis `is_repeat_order` di luar scope Oktober (2026-10-06, OPEN)
 
 - **Temuan:** saat backfill Oktober, audit ordinal kanonis (jumlah reservasi
