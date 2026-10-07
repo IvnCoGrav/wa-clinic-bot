@@ -42,10 +42,10 @@ function conv(reservations: any[], overrides: any = {}) {
 const EN_ROUTE_RES = {
   id: '12e2f62b-280a-4789-9f92-8059e1eb1780',
   status: 'en_route',
-  booking_date: new Date('2026-10-03T09:00:00+07:00'),
+  booking_date: new Date(Date.now() + 3600000),
   treatment_category: 'BABY',
   treatment_detail: 'Kala Baby – Pijat Ceria',
-  otw_sent_at: new Date('2026-10-03T08:40:00+07:00'),
+  otw_sent_at: new Date(Date.now() - 1200000),
   arrived_at: null,
 };
 

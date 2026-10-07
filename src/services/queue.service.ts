@@ -340,8 +340,16 @@ export class QueueService {
           return;
         }
       } catch (err) {
-        console.error(`[QUEUE ERROR] Failed to enqueue to BullMQ shard. Runtime fallback to In-Memory queue triggered. Error: ${(err as Error).message}`);
-        this.redisEnabled = false;
+        // FONDASIONAL (audit arsitektur Fase 1.1): kegagalan enqueue SATU pesan
+        // (mis. hiccup Redis sesaat) TIDAK boleh mematikan Redis secara permanen.
+        // Dulu `this.redisEnabled = false` di sini menyebabkan SELURUH pesan
+        // berikutnya jatuh ke in-memory queue tanpa pemulihan (sticky downgrade),
+        // sehingga antrean tidak lagi persisten dan hilang saat container restart.
+        // Flag koneksi HANYA diubah oleh event on('error')/on('ready') di
+        // initQueueSystem(); di sini cukup fallback in-memory untuk pesan ini saja.
+        console.warn(`[QUEUE WARN] Enqueue BullMQ gagal 1x (fallback in-memory untuk pesan ini saja, Redis flag tetap aktif). Error: ${(err as Error).message}`);
+        this.enqueueInMemory(phone, payload);
+        return;
       }
     }
 

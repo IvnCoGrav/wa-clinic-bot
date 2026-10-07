@@ -91,6 +91,53 @@ describe('detectPersistentCoughRashEmergency — komposit lintas-turn (RF-06)', 
     expect(r.isEmergency).toBe(false);
   });
 
+  it('adversarial: "anak batuk pilek, usia 3 bulan" (gejala sebelum usia) = usia, BUKAN kronis', () => {
+    const r = detectPersistentCoughRashEmergency(['Anak saya batuk pilek, usia 3 bulan']);
+    expect(r.isEmergency).toBe(false);
+  });
+
+  it('adversarial: "anak batuk pilek, umur 2 bulan" = usia, BUKAN kronis', () => {
+    const r = detectPersistentCoughRashEmergency(['anak batuk pilek, umur 2 bulan']);
+    expect(r.isEmergency).toBe(false);
+  });
+
+  it('adversarial: duplikasi riwayat turn ("Anak saya (3 bulan) batuk pilek" ganda) = anti-bleed baris', () => {
+    const r = detectPersistentCoughRashEmergency([
+      'Anak saya (3 bulan) batuk pilek',
+      'Anak saya (3 bulan) batuk pilek',
+    ]);
+    expect(r.isEmergency).toBe(false);
+  });
+
+  it('adversarial: turn 1 gejala, turn 2 usia anak ("Anak saya (3 bulan)") = BUKAN kronis', () => {
+    const r = detectPersistentCoughRashEmergency([
+      'Anak saya batuk pilek',
+      'Anak saya (3 bulan)',
+    ]);
+    expect(r.isEmergency).toBe(false);
+  });
+
+  it('adversarial: turn 1 batuk pilek, turn 2 "sudah 2 minggu" = kronis HIGH', () => {
+    const r = detectPersistentCoughRashEmergency([
+      'Anak saya batuk pilek',
+      'Sudah 2 minggu',
+    ]);
+    expect(r.isEmergency).toBe(true);
+    expect(r.severity).toBe('HIGH');
+  });
+
+  it('adversarial: "anak batuk 3 bulan gak sembuh" = kronis HIGH (90 hari)', () => {
+    const r = detectPersistentCoughRashEmergency(['Anak batuk 3 bulan gak sembuh-sembuh']);
+    expect(r.isEmergency).toBe(true);
+    expect(r.severity).toBe('HIGH');
+  });
+
+  it('adversarial: "bayi 3 bulan batuk sudah 2 minggu" = usia 3 bulan diabaikan, batuk 2 minggu kronis HIGH', () => {
+    const r = detectPersistentCoughRashEmergency(['bayi 3 bulan batuk sudah 2 minggu']);
+    expect(r.isEmergency).toBe(true);
+    expect(r.severity).toBe('HIGH');
+  });
+
   it('input kosong/undefined aman', () => {
     expect(detectPersistentCoughRashEmergency([]).isEmergency).toBe(false);
     expect(detectPersistentCoughRashEmergency(['']).isEmergency).toBe(false);

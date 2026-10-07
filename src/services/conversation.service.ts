@@ -175,7 +175,7 @@ export class ConversationService {
     label?: string,
     filter: 'all' | 'unread' | 'reservation' = 'all',
     staffId?: string
-  ): Promise<any[]> {
+  ): Promise<{ items: any[]; hasMore: boolean }> {
     try {
       const where: any = {
         tenant_id: tenantId,
@@ -256,15 +256,46 @@ export class ConversationService {
       }
       const convs = await prisma.conversation.findMany({
         where,
+        include: (search && search.trim()) ? {
+          messages: {
+            where: { content: { contains: search.trim(), mode: 'insensitive' } },
+            select: { content: true },
+            take: 20,
+          },
+          customer: {
+            select: { name: true, phone: true, children: { select: { name: true } } },
+          },
+        } : undefined,
         orderBy: [
           { is_pinned: 'desc' },
           { last_message_at: 'desc' },
         ],
         skip: offset,
-        take,
+        take: take + 1,
       });
-      convs.forEach((c) => memoryConversations.set(c.id, c));
-      return convs;
+
+      let filteredConvs = convs;
+      if (search && search.trim()) {
+        const query = search.trim();
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wordRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
+        filteredConvs = convs.filter((c: any) => {
+          if (!c.messages && !c.customer) return true;
+          const nameMatch = (c.customer?.name || '').toLowerCase().includes(query.toLowerCase());
+          const phoneMatch = (c.customer?.phone || '').includes(query);
+          const childMatch = Array.isArray(c.customer?.children) && c.customer.children.some((ch: any) => (ch.name || '').toLowerCase().includes(query.toLowerCase()));
+          if (nameMatch || phoneMatch || childMatch) return true;
+          if (Array.isArray(c.messages) && c.messages.length > 0) {
+            return c.messages.some((m: any) => wordRegex.test(m.content || ''));
+          }
+          return false;
+        });
+      }
+
+      const hasMore = filteredConvs.length > take;
+      const items = filteredConvs.slice(0, take);
+      items.forEach((c) => memoryConversations.set(c.id, c));
+      return { items, hasMore };
     } catch (error) {
       const { customerService } = await import('./customer.service');
       const all = Array.from(memoryConversations.values())
@@ -326,12 +357,15 @@ export class ConversationService {
       }
       if (search && search.trim()) {
         const q = search.trim().toLowerCase();
+        const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wordRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
         const digitsOnly = q.replace(/\D/g, '');
         let normalized = digitsOnly;
         if (normalized.startsWith('0')) normalized = '62' + normalized.slice(1);
         else if (normalized.startsWith('8')) normalized = '62' + normalized;
         const next: any[] = [];
         for (const c of working) {
+          let matched = false;
           try {
             const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
             const nameMatch = (cust?.name || '').toLowerCase().includes(q);
@@ -341,18 +375,36 @@ export class ConversationService {
               ? (phoneDigits.includes(digitsOnly) || (normalized.length >= 4 && phoneDigits.includes(normalized)) || phoneRaw.includes(q))
               : phoneRaw.includes(q);
             const childMatch = Array.isArray(cust?.children) && cust.children.some((ch: any) => (ch.name || '').toLowerCase().includes(q));
-            if (nameMatch || phoneMatch || childMatch) next.push(c);
+            if (nameMatch || phoneMatch || childMatch) {
+              matched = true;
+            }
           } catch {
             // fallback: cek phone/name di conversation snapshot jika ada
             const phoneMatch = digitsOnly.length >= 3
               ? ((c.customerPhone || '') && (c.customerPhone || '').replace(/\D/g, '').includes(digitsOnly))
               : false;
-            if (phoneMatch) next.push(c);
+            if (phoneMatch) matched = true;
           }
+
+          if (!matched) {
+            try {
+              const { messageService } = await import('./message.service');
+              const msgs = (messageService.getMemoryMessages ? messageService.getMemoryMessages() : []).filter(
+                (m: any) => m.conversation_id === c.id && m.tenant_id === tenantId
+              );
+              if (msgs.some((m: any) => wordRegex.test(m.content || ''))) {
+                matched = true;
+              }
+            } catch {}
+          }
+
+          if (matched) next.push(c);
         }
         working = next;
       }
-      return working.slice(offset, offset + take);
+      const hasMore = working.length > offset + take;
+      const items = working.slice(offset, offset + take);
+      return { items, hasMore };
     }
   }
 

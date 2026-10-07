@@ -270,9 +270,9 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
   describe('5. Admin Route Security & IDOR Isolation (release-hold)', () => {
     it('should reject release-hold if reservation belongs to different tenant (IDOR protection)', async () => {
       const Fastify = (await import('fastify')).default;
-      const { reservationAdminRoutes } = await import('../../src/routes/admin/reservations.subroute');
+      const { reservationDispatchRoutes } = await import('../../src/routes/admin/reservation-dispatch.route');
       const app = Fastify();
-      await app.register(reservationAdminRoutes);
+      await app.register(reservationDispatchRoutes);
 
       // Mock prisma.reservation.findFirst returns null saat mencari dengan tenant_id penyerang
       const findFirstSpy = vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
@@ -307,9 +307,9 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
 
     it('should reject release-hold if reservation status is not hold (e.g. confirmed)', async () => {
       const Fastify = (await import('fastify')).default;
-      const { reservationAdminRoutes } = await import('../../src/routes/admin/reservations.subroute');
+      const { reservationDispatchRoutes } = await import('../../src/routes/admin/reservation-dispatch.route');
       const app = Fastify();
-      await app.register(reservationAdminRoutes);
+      await app.register(reservationDispatchRoutes);
 
       // Mock prisma.reservation.findFirst returns reservasi confirmed (bukan hold)
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
@@ -336,10 +336,10 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
 
     it('memory fallback: entri hold tanpa tenant_id DILARANG lolos isolasi (fail-closed)', async () => {
       const Fastify = (await import('fastify')).default;
-      const { reservationAdminRoutes } = await import('../../src/routes/admin/reservations.subroute');
+      const { reservationDispatchRoutes } = await import('../../src/routes/admin/reservation-dispatch.route');
       const { memoryReservations } = await import('../../src/routes/admin/stores');
       const app = Fastify();
-      await app.register(reservationAdminRoutes);
+      await app.register(reservationDispatchRoutes);
 
       // Entri legacy tanpa tenant_id — harus ditolak (bukan diloloskan).
       memoryReservations.set('res-legacy-no-tenant', { id: 'res-legacy-no-tenant', status: 'hold' } as any);

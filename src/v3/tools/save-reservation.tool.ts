@@ -72,6 +72,14 @@ export interface SaveReservationInput {
    * tool-registry; kosong = gate dilewati (kompatibilitas test langsung).
    */
   dayMentionEvidence?: string[];
+  /**
+   * Alamat tersimpan (buku alamat) yang dijadikan titik kunjungan — disuntik
+   * pipeline deterministik dari sesi (activeSavedAddress), BUKAN argumen LLM.
+   * Ditulis sebagai tag `[SAVED_ADDR id=... label=...]` di ekor raw_text.
+   */
+  savedAddress?: { id?: string; label?: string };
+  /** Snapshot nominal ongkir (dari sesi) untuk kolom Reservation.delivery_fee. */
+  deliveryFee?: number;
 }
 
 /**
@@ -519,7 +527,14 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     if (notes) momLines.push(`Catatan: ${notes}`);
     const momRawSuffix = momLines.length > 0 ? `\n${momLines.join('\n')}` : '';
     const addressSuffix = effectiveAddress ? `\nAlamat: ${effectiveAddress}` : '';
-    const effectiveRawText = `[V3_NATIVE_AGENT_TOOL] ${treatmentDetail} | ${bookingDate}${bookingTime ? ' ' + bookingTime : ''} | ${effectiveName || '-'}${momRawSuffix}${addressSuffix}`;
+    // Buku alamat (Fase 3): tag identitas alamat tersimpan di ekor raw_text.
+    // Admin mengandalkan id ini untuk menemukan entri saved_addresses saat
+    // re-map alamat — tanpa kolom baru (Opsi A).
+    const savedAddrSuffix =
+      input.savedAddress?.id
+        ? `\n[SAVED_ADDR id=${input.savedAddress.id}${input.savedAddress.label ? ` label=${input.savedAddress.label}` : ''}]`
+        : '';
+    const effectiveRawText = `[V3_NATIVE_AGENT_TOOL] ${treatmentDetail} | ${bookingDate}${bookingTime ? ' ' + bookingTime : ''} | ${effectiveName || '-'}${momRawSuffix}${addressSuffix}${savedAddrSuffix}`;
 
     // purchase_value = murni subtotal promo layanan (tanpa ongkir).
     // Ongkir tercatat terpisah di Customer.ongkir — mencegah double-ongkir
@@ -541,6 +556,10 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       purchaseValue,
       source: 'AGENT',
       status: intake.status,
+      // Snapshot ongkir (Fase 3 buku alamat): idempoten per-reservasi, fallback
+      // resolver membaca Customer.ongkir bila null.
+      deliveryFee: input.deliveryFee,
+      customerAddressId: input.savedAddress?.id || null,
       // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama.
       // FIX 173f: sertakan JAM WIB (HH:MM) agar dua booking treatment sama pada
       // slot BERBEDA (pagi & sore) tidak saling menimpa via short-circuit

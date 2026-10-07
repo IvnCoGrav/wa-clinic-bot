@@ -215,11 +215,11 @@ export const FollowUpQueue: React.FC = () => {
     try {
       const res = await apiRequest('follow-ups/reschedule-overdue', {
         method: 'POST',
-        body: JSON.stringify({ maxPerDay: 10 }),
+        body: JSON.stringify({ maxPerDay: 40 }),
       });
       setToastMsg({
         type: 'success',
-        text: res.message || 'Follow-up overdue berhasil dimajukan dan dijadwalkan (maks 10 blast/hari)!',
+        text: res.message || 'Follow-up overdue berhasil dimajukan dan dijadwalkan (maks 40 blast/hari)!',
       });
       loadFollowUps();
     } catch (err: any) {
@@ -266,6 +266,19 @@ export const FollowUpQueue: React.FC = () => {
       loadFollowUps();
     } catch (err: any) {
       setToastMsg({ type: 'error', text: `Gagal kirim: ${err.message}` });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRetry = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const res = await apiRequest(`follow-ups/${id}/retry`, { method: 'POST' });
+      setToastMsg({ type: 'success', text: res.message || 'Follow-up dijadwalkan ulang untuk dikirim.' });
+      loadFollowUps();
+    } catch (err: any) {
+      setToastMsg({ type: 'error', text: `Gagal coba ulang: ${err.message}` });
     } finally {
       setActionLoading(null);
     }
@@ -590,7 +603,7 @@ export const FollowUpQueue: React.FC = () => {
             onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
             disabled={actionLoading !== null}
             className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
-            title="Majukan follow-up overdue mulai hari ini/besok (maks 10 blast/hari)"
+            title="Majukan follow-up overdue mulai hari ini/besok (maks 40 blast/hari)"
           >
             <FastForward size={14} />
             <span>Majukan Overdue</span>
@@ -624,7 +637,7 @@ export const FollowUpQueue: React.FC = () => {
         <div>
           <p className="font-bold text-[#111b21]">Sistem Penjadwalan Antrian & Smart Context Guard</p>
           <p className="text-[#54656f] mt-0.5">
-            Pesan berstatus <strong>QUEUED</strong> akan terkirim otomatis tepat pada tanggal & jam yang sudah disetup (maksimal 10 blast per hari pada jam kerja).
+            Pesan berstatus <strong>QUEUED</strong> akan terkirim otomatis tepat pada tanggal & jam yang sudah disetup (maksimal 40 blast per hari pada jam kerja).
             Dilengkapi <strong>Smart Context Guard</strong>: jika customer baru saja aktif chat (&lt;3 hari terakhir), jadwal otomatis dimundurkan agar tidak menimpa obrolan baru.
             Klik tombol <strong>Chat</strong> untuk membuka modal riwayat obrolan langsung di sini tanpa pindah halaman.
           </p>
@@ -825,7 +838,7 @@ export const FollowUpQueue: React.FC = () => {
                       </button>
                     )}
 
-                    {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                    {(fu.status === 'PENDING' || fu.status === 'QUEUED' || fu.status === 'FAILED') && (
                       <button
                         type="button"
                         onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
@@ -834,6 +847,18 @@ export const FollowUpQueue: React.FC = () => {
                         title="Batalkan Follow-Up"
                       >
                         <XCircle size={15} />
+                      </button>
+                    )}
+
+                    {fu.status === 'FAILED' && (
+                      <button
+                        type="button"
+                        onClick={() => handleRetry(fu.id)}
+                        disabled={actionLoading === fu.id}
+                        className="p-2 min-w-[38px] min-h-[38px] rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-200 text-amber-700 transition shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
+                        title="Coba Lagi (Retry)"
+                      >
+                        <RotateCcw size={15} />
                       </button>
                     )}
                   </div>
@@ -1047,7 +1072,7 @@ export const FollowUpQueue: React.FC = () => {
                           )}
 
                           {/* Cancel Button */}
-                          {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                          {(fu.status === 'PENDING' || fu.status === 'QUEUED' || fu.status === 'FAILED') && (
                             <button
                               onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
                               disabled={actionLoading === fu.id}
@@ -1055,6 +1080,18 @@ export const FollowUpQueue: React.FC = () => {
                               title="Batalkan Follow-Up"
                             >
                               <XCircle size={13} />
+                            </button>
+                          )}
+
+                          {/* Retry Button (H5) — hanya untuk item FAILED */}
+                          {fu.status === 'FAILED' && (
+                            <button
+                              onClick={() => handleRetry(fu.id)}
+                              disabled={actionLoading === fu.id}
+                              className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-200 text-amber-700 text-xs font-semibold transition shadow-xs"
+                              title="Coba Lagi (Retry)"
+                            >
+                              <RotateCcw size={13} />
                             </button>
                           )}
                         </div>
@@ -1367,7 +1404,7 @@ export const FollowUpQueue: React.FC = () => {
               </h3>
               <p className="text-xs text-[#54656f] leading-relaxed">
                 {confirmAction.type === 'reschedule-overdue'
-                  ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 10 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
+                  ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 40 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
                   : confirmAction.type === 'bulk-cancel'
                   ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
                   : confirmAction.type === 'bulk-queue'

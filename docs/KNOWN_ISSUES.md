@@ -3,6 +3,34 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 242. [LiveChat/UX] Resolusi Perilaku Tombol Enter, Kontrak Paginasi Limit+1, dan Pencarian Word-Boundary (2026-10-07, RESOLVED)
+
+- **Keputusan Produk (Gerbang A):** Perilaku tombol Enter pada `LiveChatComposer.tsx` resmi dibalik:
+  - `Enter` biasa: baris baru (newline), tidak langsung mengirim.
+  - `Ctrl+Enter` / `Cmd+Enter` atau tombol `Kirim`: mengirim pesan.
+  - Tombol keyboard virtual HP (`enterKeyHint`): `"enter"` (Return ↵).
+  - Paste clipboard: dipaksa plaintext (`handlePaste`) lintas browser untuk mencegah injection style/tabel eksternal.
+  - Alasan: Mencegah staf mengirim pesan draft yang belum selesai secara tidak sengaja.
+- **Keputusan Teknis Search (Gerbang B):** Pencarian pesan menggunakan pencocokan word-boundary (`\b<query>\b` / `(^|\W)<query>($|\W)`) di layer JavaScript pasca-query (database online dan fallback memori offline). Nama pelanggan, telepon, dan anak tetap menggunakan substring matching. Menghilangkan false positive seperti pencarian "7km" memunculkan "17km".
+- **Kontrak Paginasi Limit+1:** `conversationService.listConversations` kini mengambil `take + 1` baris dan mengembalikan `{ items, hasMore }` secara deterministik, mengeliminasi bug false positive `hasMore: true` saat jumlah pesan tepat kelipatan limit (50/100).
+- **Status:** RESOLVED via Implementasi Optimalisasi Antarmuka & Sistem LiveChat (Fase 1-5).
+
+## 241. [FollowUp/Audit Kasus 6289660679070] Remediasi Fondasional Follow-Up Engine & WINBACK MQL Mutlak (2026-10-07, RESOLVED)
+
+- **Gejala:** Kontak non-MQL tanpa riwayat chat/treatment (`6289660679070` Hidayah Sri Wilujeng) terdaftar dalam antrean `WINBACK_60D`. Audit live menemukan 25 baris WINBACK_60D serupa berstatus QUEUED yang dikirimkan ke kontak non-MQL/impor lama.
+- **Akar Masalah (multi-layer):**
+  1. `enqueueDormantWinbackFollowUps:2411` dan Serious-Only Gate Stage 3 (`:1701`) memiliki bypass `OR: [{ is_mql: true }, { is_legacy_source: true }]`, sehingga kontak impor tanpa interaksi lolos ke antrean re-engagement.
+  2. Ketiadaan filter riwayat 2-cabang di WINBACK: kontak yang belum pernah treatment selesai dan belum pernah tuntas siklus follow-up ikut tersedot.
+  3. Konkurensi: tombol admin `sendNow` belum memiliki atomic lease guard sebelum eksekusi, berpotensi bentrok balapan dengan background worker.
+  4. Sebaran jadwal `computeScheduleAtWib0940` mengandalkan `Math.random()`, tidak deterministik dan berisiko menumpuk di jam bulat.
+  5. Penghapusan relasi reservasi `reservation_id: null` pada saat pembatalan follow-up di `broadcast-queue.service.ts` dan `waba-optout.service.ts` menghilangkan jejak relasi historis.
+- **Perbaikan Fondasional (Plan Revisi-1, Fase 0-5):**
+  1. **Fase 0 & 1 (Live DB Cleanup):** Backup tabel live `follow_ups_backup_20261008` (2.134 baris) dan `customers_backup_20261008` (836 baris). Pembatalan 25 antrean WINBACK non-MQL dan 1 NEXT_TREATMENT tanpa reservasi completed dengan reason kanonis `CANCEL_REASON.NON_SERIOUS_STAGE3`. Verifikasi duplikat aktif = 0.
+  2. **Fase 2 (Konkurensi & Deterministik):** Atomic lease check di `sendNow` via `processing_claimed_at`. Sebaran jadwal hash deterministik 09:30–10:15 WIB berbasis `customerId` seed (tanpa `Math.random`). Hapus `reservation_id: null` pada pembatalan follow-up.
+  3. **Fase 3 (MQL Mutlak & 2-Cabang WINBACK):** Cabut seluruh celah `is_legacy_source` dari follow-up engine. Terapkan 2 cabang kualifikasi di SQL: Cabang A (reservasi completed + SENT NEXT_TREATMENT stage 3) atau Cabang B (is_mql: true + SENT NO_PURCHASE stage 3).
+  4. **Fase 4 (UI & Operasional):** Tombol Cancel untuk item FAILED di card view & table view `FollowUpQueue.tsx`. Sinkronisasi teks kuota modal 40 blast/hari.
+- **Verifikasi & Test:** `followup-concurrency.test.ts` (2), `followup-winback-mql.test.ts` (4), suite lengkap follow-up (18/18 lolos). `npm run build` root dan `packages/admin-dashboard` lolos.
+
 ## 240. [Keuangan/CAPI] Reservasi `completed` tanpa catatan bayar (historis) — tampil "Selesai — verifikasi bayar" (2026-10-07, OPEN)
 
 - **Konteks:** bug lama — `completeReservationById` & `PATCH /status` tidak mengisi

@@ -66,7 +66,8 @@ describe('WahaHistorySyncService — backfill history WAHA', () => {
     const cust = await customerService.getCustomerByPhone('62812345678', DEFAULT_TENANT_ID);
     expect(cust).toBeTruthy();
     expect(cust.is_sandbox_test).not.toBe(true);
-    const conversations = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0);
+    const convResult = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0);
+    const conversations = Array.isArray(convResult) ? convResult : convResult.items;
     expect(conversations.length).toBeGreaterThanOrEqual(2);
   });
 

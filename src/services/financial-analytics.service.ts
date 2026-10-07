@@ -173,6 +173,7 @@ export class FinancialAnalyticsService {
               role: true,
             },
           },
+          items: true,
         },
         orderBy: {
           booking_date: 'asc',
@@ -214,6 +215,9 @@ export class FinancialAnalyticsService {
 
     for (const r of rows) {
       let treatmentFee = r.purchase_value || 0;
+      if (treatmentFee <= 0 && Array.isArray(r.items) && r.items.length > 0) {
+        treatmentFee = r.items.reduce((acc: number, it: any) => acc + (it.price || 0), 0);
+      }
       if (treatmentFee <= 0 && r.treatment_detail) {
         const resolved = await resolveTreatmentValue(r.treatment_detail);
         if (resolved && resolved > 0) {
@@ -300,13 +304,23 @@ export class FinancialAnalyticsService {
         staffEntry.revenue += totalFee;
         staffMap.set(staffId, staffEntry);
 
-        // Top services parsing
-        const serviceName = (r.treatment_detail || 'Treatment Homecare').split(/\r?\n|,|;/)[0].trim();
-        if (serviceName) {
-          const sEntry = serviceMap.get(serviceName) || { count: 0, revenue: 0 };
-          sEntry.count += 1;
-          sEntry.revenue += totalFee;
-          serviceMap.set(serviceName, sEntry);
+        // Top services parsing (Fase 3C/3.9: prioritaskan tabel relasional reservation_items)
+        if (Array.isArray(r.items) && r.items.length > 0) {
+          for (const it of r.items) {
+            const serviceName = it.custom_name?.trim() || 'Layanan Klinik';
+            const sEntry = serviceMap.get(serviceName) || { count: 0, revenue: 0 };
+            sEntry.count += 1;
+            sEntry.revenue += it.price || 0;
+            serviceMap.set(serviceName, sEntry);
+          }
+        } else {
+          const serviceName = (r.treatment_detail || 'Treatment Homecare').split(/\r?\n|,|;/)[0].trim();
+          if (serviceName) {
+            const sEntry = serviceMap.get(serviceName) || { count: 0, revenue: 0 };
+            sEntry.count += 1;
+            sEntry.revenue += totalFee;
+            serviceMap.set(serviceName, sEntry);
+          }
         }
       }
 

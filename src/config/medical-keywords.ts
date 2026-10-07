@@ -359,13 +359,13 @@ export function detectPersistentCoughRashEmergency(texts: string | string[]): {
   const hasFever = FEVER_TOKENS.some((t) => combined.includes(t));
 
   // Durasi kuantitatif (minggu/pekan/week, hari/day, bulan/month); ambang kronis >= 14 hari.
-  // Guard proksimitas penanda-usia: "3 bulan"/"2 minggu" setelah kata usia
-  // (anak/bayi/umur/usia/newborn/...) adalah USIA PASIEN, bukan durasi batuk —
-  // DILARANG dihitung kronis (mencegah false-positive "bayi 3 bulan batuk pilek").
-  const AGE_MARKERS = ['usia', 'umur', 'anak', 'anaknya', 'bayi', 'baby', 'newborn', 'neonatus', 'adik', 'kakak', 'kecil'];
-  // Verba gejala: bila token PERSIS sebelum angka adalah verba gejala
-  // ("anak BATUK 2 minggu"), angka itu DURASI, bukan usia — jangan disaring
-  // sebagai usia (celah audit RF-06: "anak batuk 2 minggu" terlewat).
+  // Guard proksimitas penanda-usia vs verba gejala:
+  // "3 bulan"/"2 minggu" setelah penanda usia (anak/bayi/umur/usia/newborn/...)
+  // adalah USIA PASIEN, BUKAN durasi batuk (mencegah false-positive "bayi 3 bulan batuk pilek",
+  // "anak saya (3 bulan) batuk pilek", "anak batuk pilek, usia 3 bulan").
+  // Angka HANYA dianggap durasi gejala jika verba gejala berada LEBIH DEKAT ke angka
+  // daripada penanda usia ("anak batuk 2 minggu", "batuk sudah 2 minggu").
+  const AGE_MARKERS = ['usia', 'umur', 'anak', 'anaknya', 'anakku', 'bayi', 'bayiku', 'baby', 'balita', 'newborn', 'neonatus', 'adik', 'kakak', 'kecil'];
   const SYMPTOM_VERBS = ['batuk', 'pilek', 'bapil', 'demam', 'panas', 'rewel', 'diare', 'muntah', 'sakit', 'grok', 'flu', 'sesak'];
   let maxDays = 0;
   const re = /(\d{1,3})\s*(minggu|pekan|week|hari|day|bulan|month)/g;
@@ -373,13 +373,30 @@ export function detectPersistentCoughRashEmergency(texts: string | string[]): {
   while ((m = re.exec(combined)) !== null) {
     const n = Number(m[1]);
     if (!Number.isFinite(n)) continue;
-    const before = combined.slice(Math.max(0, m.index - 24), m.index);
-    const beforeToks = before.split(/[^a-z0-9]+/).filter((t) => t.length > 0).slice(-3);
-    const ageMarkerNearby = beforeToks.some((t) => AGE_MARKERS.includes(t));
-    // Bila ada VERBA GEJALA di sekitar angka ("anak batuk ... 2 minggu"),
-    // angka itu durasi gejala, BUKAN usia → jangan disaring sebagai usia.
-    const symptomPresent = beforeToks.some((t) => SYMPTOM_VERBS.includes(t));
-    if (ageMarkerNearby && !symptomPresent) continue;
+
+    // Batasi jendela teks pendahulu pada baris/pesan saat ini (JANGAN menyeberang '\n'
+    // agar token gejala dari pesan/turn sebelumnya tidak mencemari penanda usia pesan saat ini).
+    const lineStart = Math.max(0, combined.lastIndexOf('\n', m.index - 1) + 1);
+    const before = combined.slice(Math.max(lineStart, m.index - 32), m.index);
+    const beforeToks = before.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+
+    let lastAgeIdx = -1;
+    let lastSymptomIdx = -1;
+    for (let i = 0; i < beforeToks.length; i++) {
+      const tok = beforeToks[i];
+      if (AGE_MARKERS.includes(tok) || AGE_MARKERS.some((a) => tok.startsWith(a))) lastAgeIdx = i;
+      if (SYMPTOM_VERBS.includes(tok) || SYMPTOM_VERBS.some((s) => tok.startsWith(s))) lastSymptomIdx = i;
+    }
+
+    // Guard Usia Pasien:
+    // 1. Berada dalam tanda kurung "(3 bulan)" setelah/bersama penanda usia.
+    // 2. Ada penanda usia tanpa verba gejala di jendela yang sama ("anak saya 3 bulan").
+    // 3. Penanda usia lebih dekat ke angka daripada verba gejala ("anak batuk pilek, usia 3 bulan").
+    const isParenthesizedAge = before.includes('(') && (lastAgeIdx !== -1 || /^\s*\(\s*$/.test(before.slice(-4)));
+    if (isParenthesizedAge || (lastAgeIdx !== -1 && (lastSymptomIdx === -1 || lastAgeIdx > lastSymptomIdx))) {
+      continue;
+    }
+
     const unit = m[2];
     const days = unit === 'minggu' || unit === 'pekan' || unit === 'week'
       ? n * 7

@@ -7,14 +7,22 @@ const stringArrayPreprocess = (val: unknown): unknown => {
   return val;
 };
 
-export const CalculateDeliveryArgsSchema = z.object({
-  locationText: z.string().min(1, 'locationText tidak boleh kosong'),
-  streetDetail: z.string().optional(),
-  candidateTreatmentName: z.string().optional(),
-  asksDeliveryFee: z.boolean().optional().default(false),
-  /** ST6 shadow: verdict komitmen semantik dari Call 1 (belum dipakai keputusan). */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
-});
+export const CalculateDeliveryArgsSchema = z
+  .object({
+    // locationText opsional: bila customer MEMILIH alamat tersimpan, cukup
+    // savedAddressId (pipeline mengisi area dari entri tersimpan). Minimal salah
+    // satu wajib terisi — dijaga `refine` di bawah.
+    locationText: z.string().optional().default(''),
+    savedAddressId: z.string().optional(),
+    streetDetail: z.string().optional(),
+    candidateTreatmentName: z.string().optional(),
+    asksDeliveryFee: z.boolean().optional().default(false),
+    /** ST6 shadow: verdict komitmen semantik dari Call 1 (belum dipakai keputusan). */
+    commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
+  })
+  .refine((d) => d.locationText.trim().length > 0 || Boolean(d.savedAddressId), {
+    message: 'locationText atau savedAddressId wajib diisi',
+  });
 
 export const GetCatalogArgsSchema = z.object({
   category: z.enum(['BABY', 'KIDS', 'MOMS', 'BOTH']).optional(),

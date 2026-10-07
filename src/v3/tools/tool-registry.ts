@@ -47,6 +47,21 @@ export interface ToolExecutionContext {
   };
   /** Teks pesan user turn ini (evaluasi afirmasi kandidat lokasi). */
   incomingText?: string;
+  /** Alamat tersimpan terpilih (disuntik pipeline setelah validasi kepemilikan). */
+  savedAddressSnapshot?: {
+    id?: string;
+    label?: string;
+    address?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    ongkir?: number | null;
+    distanceKm?: number | null;
+  };
+  /** Snapshot nominal ongkir sesi (hartan deterministik untuk save_reservation). */
+  deliveryFeeSnapshot?: number;
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -63,6 +78,7 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         priceDiscussed: ctx.priceDiscussedSnapshot,
         pendingLocation: ctx.pendingLocationSnapshot,
         incomingText: ctx.incomingText,
+        savedAddress: ctx.savedAddressSnapshot,
       };
       return await executeCalculateDelivery(input);
     }
@@ -107,6 +123,10 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
         address: args.address,
         conversationId: ctx.conversationId,
         tenantId: ctx.tenantId,
+        savedAddress: ctx.savedAddressSnapshot
+          ? { id: ctx.savedAddressSnapshot.id, label: ctx.savedAddressSnapshot.label }
+          : undefined,
+        deliveryFee: ctx.deliveryFeeSnapshot,
       };
       return await executeSaveReservation(input);
     }

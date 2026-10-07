@@ -133,7 +133,7 @@ function renderHighlightedText(text: string, query: string) {
   const q = query.trim();
   const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   try {
-    const regex = new RegExp(`(${escaped})`, 'gi');
+    const regex = new RegExp(`(^|\\W)(${escaped})($|\\W)`, 'gi');
     const parts = text.split(regex);
     if (parts.length <= 1) return text;
     const testRegex = new RegExp(`^${escaped}$`, 'i');
@@ -154,6 +154,17 @@ function renderHighlightedText(text: string, query: string) {
 function cleanSnippetText(s: string): string {
   const c = extractImageCaption(s);
   return (c || s || '').trim();
+}
+
+function extractSmartSearchSnippet(fullText: string, query: string, maxLength = 85): string {
+  const text = cleanSnippetText(fullText);
+  if (!query || !query.trim() || text.length <= maxLength) return text;
+  const q = query.trim().toLowerCase();
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return text.slice(0, maxLength) + '...';
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(text.length, start + maxLength);
+  return `${start > 0 ? '...' : ''}${text.slice(start, end).trim()}${end < text.length ? '...' : ''}`;
 }
 
 interface QuotedMessageData {
@@ -4531,13 +4542,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       {/* Chat Preview — snippet pencarian didahulukan saat search aktif */}
                       {(() => {
                         const matchedSnippet = searchQuery.trim()
-                          ? ((chat as any).matchedMessage?.content || (chat.lastMessages || []).find((m: any) => (m.content || '').toLowerCase().includes(searchQuery.trim().toLowerCase()))?.content || null)
+                          ? (() => {
+                              const q = searchQuery.trim();
+                              const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                              const wbRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
+                              const mmContent = (chat as any).matchedMessage?.content;
+                              if (mmContent && wbRegex.test(mmContent)) return mmContent;
+                              const fallbackMsg = (chat.lastMessages || []).find((m: any) => wbRegex.test(m.content || ''));
+                              return fallbackMsg?.content || null;
+                            })()
                           : null;
                         if (searchQuery.trim() && matchedSnippet) {
                           return (
                             <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-[#111b21] dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
                               <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-500/60" />
-                              <span className="flex-1 min-w-0">&quot;{renderHighlightedText(cleanSnippetText(matchedSnippet), searchQuery)}&quot;</span>
+                              <span className="flex-1 min-w-0">&quot;{renderHighlightedText(extractSmartSearchSnippet(matchedSnippet, searchQuery), searchQuery)}&quot;</span>
                             </div>
                           );
                         }
@@ -5002,7 +5021,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                        type="button"
                        onClick={() => setSelectedReservation(activeConfirmedReservation)}
                        className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden text-left cursor-pointer hover:opacity-90 transition-opacity"
-                       title="Klik untuk lihat detail jadwal"
+                       title="Lihat Ringkasan Jadwal & Bukti Bayar Pasien"
                      >
                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                        <div className="flex flex-col justify-center leading-tight min-w-0">
@@ -5036,7 +5055,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                            setShowQuickBookingModal(true);
                          }}
                          className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
-                         title="Edit reservasi ini"
+                         title="Ubah Jadwal, Jam, atau Bidan Bertugas"
                        >
                          <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
                        </button>

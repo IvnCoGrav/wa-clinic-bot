@@ -167,6 +167,22 @@ describe('Legacy & Repeat Patient Manual Bypass Tests', () => {
       expect(res.eligible).toBe(true);
     });
 
+    it('5c. Label Admin/bypass MENANG atas FORCE_ON (kontak internal tidak dibalas bot)', () => {
+      const forcedAdmin = {
+        id: 'cust_forced_admin',
+        is_admin_labeled: true,
+        ai_override: 'FORCE_ON',
+      };
+      expect(resolveAiEligibilityWithReason(forcedAdmin, baseTenantConfig).eligible).toBe(false);
+
+      const forcedBypass = {
+        id: 'cust_forced_bypass',
+        ai_override: 'FORCE_ON',
+        labels: [{ label: { name: 'Skip' } }],
+      };
+      expect(resolveAiEligibilityWithReason(forcedBypass, baseTenantConfig).eligible).toBe(false);
+    });
+
     it('6. Scope NEW_ONLY tetap membungkam customer sebelum tanggal cutoff', () => {
       const newOnlyConfig = {
         ai_customer_scope: 'NEW_ONLY' as const,

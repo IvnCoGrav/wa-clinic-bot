@@ -6,6 +6,7 @@ import { treatmentCatalogService, resolveServiceAudience } from '../../../servic
 import { maskPhoneNumber, maskToolArgsForLogging } from '../../../utils/pii-masker';
 import { TEMPLATES } from '../../../config/persona';
 import type { GroundingOutput } from './context-grounder';
+import type { ToolExecutionContext } from '../../tools/tool-registry';
 import type { V3RetrievedChunk } from '../agent-runner';
 
 export interface ToolCallPayload {
@@ -296,6 +297,40 @@ export class ToolExecutionPipeline {
       // `extractFastIntents` (satu sumber kebenaran intent ask_price/ongkir).
       const priceIntent = await ToolExecutionPipeline.detectPriceIntent(cleanIncomingText);
       if (fnName === 'calculate_delivery') {
+        // Buku alamat (deterministik, ID-based): bila router memilih alamat
+        // tersimpan, validasi kepemilikan lalu suntik koordinat terverifikasi —
+        // TANPA geocoding ulang. ID tak dikenal → dibuang, jalur normal berjalan.
+        if (typeof fnArgs.savedAddressId === 'string' && fnArgs.savedAddressId.trim() && input.customerId) {
+          try {
+            const { customerService } = await import('../../../services/customer.service');
+            const list = await customerService.getSavedAddresses(input.customerId, tenantId);
+            const hit = list.find((a) => a.id === fnArgs.savedAddressId.trim());
+            if (hit) {
+              toolContext.savedAddressSnapshot = {
+                id: hit.id,
+                label: hit.label,
+                address: hit.address,
+                kelurahan: hit.kelurahan,
+                kecamatan: hit.kecamatan,
+                kota: hit.kota,
+                lat: hit.lat,
+                lng: hit.lng,
+                ongkir: hit.ongkir,
+                distanceKm: hit.distanceKm,
+              };
+              if (!fnArgs.locationText || String(fnArgs.locationText).trim().length < 2) {
+                fnArgs.locationText =
+                  [hit.kelurahan, hit.kecamatan, hit.kota].filter(Boolean).join(' ') || hit.label || 'alamat tersimpan';
+              }
+            } else {
+              delete fnArgs.savedAddressId;
+            }
+          } catch {
+            delete fnArgs.savedAddressId;
+          }
+        } else if (fnArgs.savedAddressId) {
+          delete fnArgs.savedAddressId;
+        }
         // Verbatim Gate (wdoro→Wonodoro): tolak halusinasi elongasi LLM.
         // Jika locationText LLM tak punya irisan token dengan cleanIncomingText,
         // cari entitas gazetteer verbatim di teks asli customer dan pakai itu.
@@ -483,6 +518,28 @@ export class ToolExecutionPipeline {
               .map((h) => h.content),
             cleanIncomingText,
           ];
+          // Buku alamat (Fase 3): alamat tersimpan aktif dari sesi (dikunci oleh
+          // calculate_delivery saat customer memilih rumah tersimpan) diteruskan
+          // ke save_reservation untuk tag [SAVED_ADDR] + snapshot delivery_fee.
+          if (fnName === 'save_reservation') {
+            const activeSa = (session as any).activeSavedAddress;
+            if (activeSa?.id && !toolContext.savedAddressSnapshot) {
+              toolContext.savedAddressSnapshot = {
+                id: activeSa.id,
+                label: activeSa.label,
+                address: activeSa.address,
+                kelurahan: activeSa.kelurahan,
+                kecamatan: activeSa.kecamatan,
+                kota: activeSa.kota,
+                lat: activeSa.lat,
+                lng: activeSa.lng,
+                ongkir: activeSa.ongkir,
+                distanceKm: activeSa.distanceKm,
+              };
+            }
+            const locOngkir = session.location?.ongkirPromo ?? session.location?.ongkirNormal;
+            toolContext.deliveryFeeSnapshot = typeof locOngkir === 'number' ? locOngkir : undefined;
+          }
           // Phase 4 (audit 222655): snapshot ongkir sesi agar
           // get_catalog_and_price menyusun template total otomatis.
           // Fase 4' (anti-kaset rusak): sertakan keluhan yang SUDAH diketahui
@@ -600,6 +657,7 @@ export class ToolExecutionPipeline {
         cleanIncomingText,
         seenChunkKeys: input.seenChunkKeys,
         retrievedChunks: input.retrievedChunks,
+        savedAddressSnapshot: toolContext.savedAddressSnapshot,
       });
       session = reduced.session;
       if (fnName === 'escalate_to_human') isEscalated = true;
@@ -639,9 +697,12 @@ export class ToolExecutionPipeline {
     cleanIncomingText: string;
     seenChunkKeys: Set<string>;
     retrievedChunks: V3RetrievedChunk[];
+    /** Alamat tersimpan terpilih turn ini (dari toolContext; null bila tak dipilih). */
+    savedAddressSnapshot?: ToolExecutionContext['savedAddressSnapshot'];
   }): Promise<{ session: CustomerGoalSession }> {
     const { fnName, fnArgs, toolResult, tenantId, conversationId, cleanIncomingText } = args;
     let { session } = args;
+    const savedHit = args.savedAddressSnapshot;
 
     // C4 (audit #199): gate verbatim gejala — `fnArgs.symptoms` dari LLM Call 1
     // HANYA boleh dipersist bila benar-benar muncul di pesan user turn ini.
@@ -687,6 +748,29 @@ export class ToolExecutionPipeline {
           isOutOfCoverage: toolResult.isOutOfCoverage,
         },
       }, tenantId);
+      // Buku alamat (Fase 3): pilihan rumah tersimpan DIKUNCI ke sesi agar
+      // save_reservation pada giliran berikutnya tahu titik kunjungan mana
+      // yang disepakati. Lokasi baru (bukan pilihan tersimpan) → kunci dibuka.
+      if ((savedHit?.id || savedHit?.label || (savedHit?.lat != null))) {
+        session = await GoalTracker.updateGoalSession(conversationId, {
+          activeSavedAddress: {
+            id: savedHit.id,
+            label: savedHit.label,
+            address: savedHit.address,
+            kelurahan: savedHit.kelurahan,
+            kecamatan: savedHit.kecamatan,
+            kota: savedHit.kota,
+            lat: savedHit.lat,
+            lng: savedHit.lng,
+            ongkir: savedHit.ongkir,
+            distanceKm: savedHit.distanceKm,
+          },
+        }, tenantId);
+      } else if ((session as any).activeSavedAddress) {
+        session = await GoalTracker.updateGoalSession(conversationId, {
+          activeSavedAddress: undefined,
+        }, tenantId);
+      }
       // Auto-sync Google Contacts saat kelurahan/kecamatan baru terverifikasi di chat.
       // Jalur chat V3 persist via mirror GoalTracker (bukan customerService) sehingga
       // hook updateCustomerLocation tidak terpicu — sinkronisasi eksplisit non-blocking.

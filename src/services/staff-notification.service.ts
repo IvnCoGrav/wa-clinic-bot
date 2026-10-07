@@ -106,6 +106,8 @@ export class StaffNotificationService {
             },
           },
           children: true,
+          customer_address: true,
+          items: true,
         },
       });
 
@@ -132,14 +134,16 @@ export class StaffNotificationService {
         })
         .join(', ');
 
-      // 2. Format Alamat Lengkap & Patokan Rumah
+      // 2. Format Alamat Lengkap & Patokan Rumah (Fase 3C: prioritaskan CustomerAddress)
+      const addrEntity = (reservation as any).customer_address;
       const addressParts: string[] = [];
-      if (cust?.kelurahan) addressParts.push(`Kel. ${cust.kelurahan}`);
-      if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
-      if (cust?.kota) addressParts.push(cust.kota);
+      if (addrEntity?.address) addressParts.push(addrEntity.address);
+      if (addrEntity?.kelurahan || cust?.kelurahan) addressParts.push(`Kel. ${addrEntity?.kelurahan || cust?.kelurahan}`);
+      if (addrEntity?.kecamatan || cust?.kecamatan) addressParts.push(`Kec. ${addrEntity?.kecamatan || cust?.kecamatan}`);
+      if (addrEntity?.kota || cust?.kota) addressParts.push(addrEntity?.kota || cust?.kota);
       const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
 
-      const landmark = (cust?.preferences as any)?.landmark || null;
+      const landmark = addrEntity?.landmark || (cust?.preferences as any)?.landmark || null;
       const housePhotoUrl = (cust?.preferences as any)?.house_photo_url || null;
 
       // 3. Format Waktu & Tanggal (WIB)
@@ -225,11 +229,16 @@ export class StaffNotificationService {
         console.warn(`[StaffNotificationService] SSE task_assigned broadcast error:`, hubErr.message);
       }
 
+      // Format Layanan terstruktur (Fase 3C)
+      const treatmentDetail = (Array.isArray(reservation.items) && reservation.items.length > 0)
+        ? reservation.items.map((it: any) => it.custom_name || it.name).filter(Boolean).join(' + ')
+        : (reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
+
       // 10. Real-time In-System Web Push PWA (Service Worker)
       try {
         await webPushService.sendPushToStaff(staff.id, tenantId, {
           title: 'Tugas Kunjungan Baru 💆‍♀️',
-          body: `${reservation.treatment_detail || 'Treatment'} untuk ${cust?.name || 'Bunda'} (${dateStr} - ${timeStr} WIB)`,
+          body: `${treatmentDetail} untuk ${cust?.name || 'Bunda'} (${dateStr} - ${timeStr} WIB)`,
           url: '/admin/staff/today',
           tag: `staff_task_${reservation.id}`,
           icon: '/admin/icon-192.png',
@@ -254,7 +263,7 @@ Halo *${staff.name}*, Anda memiliki jadwal kunjungan pasien baru:
 
 👤 *Pasien:* ${cust?.name || 'Bunda'}
 👶 *Anak:* ${childrenStr || 'Belum diisi'}
-💆‍♀️ *Layanan:* ${reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare'}
+💆‍♀️ *Layanan:* ${treatmentDetail}
 📅 *Waktu:* ${dateStr} — *Pukul ${timeStr} WIB*
 
 📍 *Alamat:* ${addressText}

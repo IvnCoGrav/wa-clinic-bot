@@ -532,14 +532,23 @@ const LiveChatComposerInner = (
       }
     }
 
-    // Enter = kirim; Shift+Enter = baris baru. Tombol "Send" keyboard virtual HP
-    // (enterKeyHint="send") memicu `keydown` Enter tanpa shift → ikut terkirim.
-    if (e.key === 'Enter') {
-      if (e.shiftKey) return; // biarkan default menambahkan newline
+    // Enter biasa: biarkan default browser menyisipkan baris baru (newline).
+    // Desktop power-user: Ctrl+Enter atau Cmd+Enter untuk kirim cepat.
+    // Shift+Enter: default browser (newline) — sama seperti sebelumnya.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSend();
+      return;
     }
   }, [showQuickReplyPopover, filteredQuickReplies, quickReplyActiveIdx, applyQuickReply, handleSend]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const plainText = e.clipboardData.getData('text/plain');
+    if (!plainText) return;
+    document.execCommand('insertText', false, plainText);
+    handleInput();
+  }, [handleInput]);
 
   const sendDisabled = sending || (!hasText && !selectedImage);
 
@@ -848,7 +857,7 @@ const LiveChatComposerInner = (
           aria-multiline="true"
           tabIndex={0}
           inputMode="text"
-          enterKeyHint="send"
+          enterKeyHint="enter"
           autoCapitalize="sentences"
           autoCorrect="on"
           spellCheck={true}
@@ -856,12 +865,10 @@ const LiveChatComposerInner = (
           onFocus={() => {
             if (typeof window !== 'undefined') {
               window.scrollTo(0, 0);
-              setTimeout(() => {
-                window.scrollTo(0, 0);
-                onRequestScrollToBottom?.();
-              }, 100);
+              onRequestScrollToBottom?.();
             }
           }}
+          onPaste={handlePaste}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none ${

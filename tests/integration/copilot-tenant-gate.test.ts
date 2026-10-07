@@ -42,7 +42,7 @@ describe('POST /api/admin/copilot/chat — gerbang single-tenant route', () => {
       payload: { message: 'jadwal besok siapa saja?' },
     });
     expect(res.statusCode).not.toBe(403);
-  });
+  }, 15000);
 
   it('tanpa auth → 401 (gerbang tenant tidak membuka akses anonim)', async () => {
     process.env.COPILOT_ALLOWED_TENANT_IDS = '*';

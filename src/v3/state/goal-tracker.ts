@@ -437,8 +437,27 @@ export class GoalTracker {
 
     if (pregroundedRecommendation) lines.push(pregroundedRecommendation);
 
+    const savedAddresses = Array.isArray((session as any).savedAddresses) ? (session as any).savedAddresses : [];
+    if (savedAddresses.length > 1) {
+      // Multi-rumah: prunning deterministik — jangan kirim larangan tanya alamat
+      // absolut; beri daftar agar AI bisa mengonfirmasi pilihan rumah SEKALI.
+      const priceOk = (session as any).priceDiscussed === true;
+      const addrLines = savedAddresses.slice(0, 10).map((a: any, i: number) => {
+        const area = [a.kelurahan, a.kecamatan, a.kota].filter(Boolean).join(', ') || a.address || '-';
+        const ongkirPart = priceOk && a.ongkir != null ? ` (Ongkir: Rp ${Number(a.ongkir).toLocaleString('id-ID')})` : '';
+        const primaryTag = a.isPrimary ? ' [utama]' : '';
+        return `${i + 1}. ${a.label}${primaryTag}: ${area}${ongkirPart} (id: ${a.id})`;
+      });
+      lines.push(
+        `[ALAMAT TERSIMPAN CUSTOMER — ${savedAddresses.length} rumah]\n${addrLines.join('\n')}\n` +
+          `Jika customer melakukan pemesanan baru tanpa menyebut alamat, konfirmasi RAMAH SEKALI rumah mana yang ingin dikunjungi kali ini (bukan menanyakan alamat lengkap dari nol). Bila customer memilih salah satu, teruskan savedAddressId (id di atas) ke tool calculate_delivery.`
+      );
+    }
     if (session.location?.kelurahan || session.location?.distanceKm) {
-      lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!]`);
+      const locStatus = savedAddresses.length > 1
+        ? 'SUDAH DIKETAHUI (boleh konfirmasi pilihan rumah tersimpan via [ALAMAT TERSIMPAN CUSTOMER])'
+        : 'SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!';
+      lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: ${locStatus}]`);
       // Rule 2 (Strict Information Hiding, state-gated prompt pruning): nominal
       // ongkir DILARANG disuntik ke prompt LLM bila customer belum pernah
       // menanyakan biaya/ongkir (mode konsultasi). Menyembunyikan di payload

@@ -1491,7 +1491,8 @@ export class MessageService {
 
     try {
       const { conversationService } = await import('./conversation.service');
-      const convs = await conversationService.listConversations(tenantId, 1000, 0, 'all');
+      const convResult = await conversationService.listConversations(tenantId, 1000, 0, 'all');
+      const convs = Array.isArray(convResult) ? convResult : convResult.items;
       for (const c of convs) {
         if (c.is_manual_unread) {
           await conversationService.setManualUnread(c.id, tenantId, false);

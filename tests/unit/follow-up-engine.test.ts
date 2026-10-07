@@ -199,6 +199,11 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
   });
 
   it('7. createReservationFollowUps schedules REMINDER_H1 and REVIEW_H1_BABY / REVIEW_H1_MOMS', async () => {
+    // M7: pembuatan REMINDER/REVIEW kini default OFF (anti baris zombie). Uji jalur
+    // pembuatan dengan mengaktifkan env secara eksplisit, lalu pulihkan.
+    const prevEnv = process.env.FOLLOWUP_CREATE_REMINDER_REVIEW;
+    process.env.FOLLOWUP_CREATE_REMINDER_REVIEW = 'true';
+    try {
     const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
     const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null);
 
@@ -256,6 +261,36 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         }),
       })
     );
+    } finally {
+      if (prevEnv === undefined) delete process.env.FOLLOWUP_CREATE_REMINDER_REVIEW;
+      else process.env.FOLLOWUP_CREATE_REMINDER_REVIEW = prevEnv;
+    }
+  });
+
+  it('7b. M7: createReservationFollowUps default TIDAK membuat baris REMINDER/REVIEW (anti zombie)', async () => {
+    const prevEnv = process.env.FOLLOWUP_CREATE_REMINDER_REVIEW;
+    delete process.env.FOLLOWUP_CREATE_REMINDER_REVIEW;
+    try {
+      const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+      vi.spyOn(prisma.customer, 'findUnique').mockResolvedValue(null as any);
+      const booking = new Date();
+      booking.setDate(booking.getDate() + 3);
+
+      await followUpService.createReservationFollowUps({
+        reservationId: 'res-m7',
+        customerId: 'cust-m7',
+        bookingDate: booking,
+        treatmentCategory: 'BABY',
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const zombie = createSpy.mock.calls.filter((c: any) =>
+        ['REMINDER_H1', 'REVIEW_H1_BABY', 'REVIEW_H1_MOMS'].includes(c[0]?.data?.type)
+      );
+      expect(zombie.length).toBe(0);
+    } finally {
+      if (prevEnv !== undefined) process.env.FOLLOWUP_CREATE_REMINDER_REVIEW = prevEnv;
+    }
   });
 
   it('8. onReservationCancelled cancels follow-ups for reservation', async () => {
@@ -268,11 +303,12 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         tenant_id: DEFAULT_TENANT_ID,
         status: { in: ['PENDING', 'QUEUED'] },
       },
-      // reservation_id dinetralkan ke null agar baris CANCELLED (jejak historis) tidak
-      // menabrak @@unique([tenant_id, reservation_id, type, stage]) saat reservasi
-      // yang sama membuat follow-up pengganti.
-      data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED, reservation_id: null },
+      // V2: reservation_id DIPERTAHANKAN (bukan dinetralkan ke null) agar audit trail
+      // relasi reservasi utuh. Keunikan baris aktif dijaga kolom sentinel active_slot_key
+      // (V1), sehingga tak perlu lagi menabrak-nolkan reservation_id.
+      data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
     });
+    expect((updateManySpy.mock.calls[0][0] as any).data).not.toHaveProperty('reservation_id');
   });
 
   it('9. onReservationRescheduled updates scheduled_at for REMINDER_H1 and REVIEW_H1', async () => {

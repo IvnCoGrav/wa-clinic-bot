@@ -46,6 +46,15 @@ export interface ReservationMutationParams {
    * ganda. Dipakai jalur bot/webhook untuk retry-safe.
    */
   requestId?: string;
+  /** ID entri tabel customer_addresses yang digunakan reservasi ini (Fase 3C). */
+  customerAddressId?: string | null;
+  /** Rincian layanan terstruktur untuk tabel reservation_items (Fase 3C). */
+  items?: Array<{
+    clinicServiceId?: string | null;
+    serviceName: string;
+    price: number;
+    durationMinutes?: number | null;
+  }>;
 }
 
 export interface ReservationResult {
@@ -422,6 +431,152 @@ export function resolveDeliveryFeeSnapshot(reservation: any): number {
   return 0;
 }
 
+/**
+ * Fase 3C: Resolusi ID alamat customer_addresses.
+ * Prioritas: addressId eksplisit -> primary address -> alamat terakhir digunakan.
+ */
+async function resolveCustomerAddressId(params: {
+  tenantId: string;
+  customerId: string;
+  explicitAddressId?: string | null;
+  db?: any;
+}): Promise<string | null> {
+  const { tenantId, customerId, explicitAddressId } = params;
+  if (explicitAddressId) return explicitAddressId;
+  const db = params.db || prisma;
+  try {
+    if (typeof db.customerAddress?.findFirst === 'function') {
+      const active = await db.customerAddress.findFirst({
+        where: { tenant_id: tenantId, customer_id: customerId, is_primary: true },
+        select: { id: true },
+      });
+      if (active?.id) return active.id;
+      const latest = await db.customerAddress.findFirst({
+        where: { tenant_id: tenantId, customer_id: customerId },
+        orderBy: { last_used_at: 'desc' },
+        select: { id: true },
+      });
+      return latest?.id || null;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Fase 3C: Sinkronisasi rincian layanan ke tabel relasional reservation_items.
+ * Idempoten: menghapus item lama reservasi tsb lalu menuliskan item baru.
+ */
+async function syncReservationItems(params: {
+  reservationId: string;
+  tenantId: string;
+  treatmentDetail?: string | null;
+  treatmentCategory?: string | null;
+  durationMinutes?: number | null;
+  purchaseValue?: number | null;
+  items?: Array<{
+    clinicServiceId?: string | null;
+    serviceName: string;
+    price: number;
+    durationMinutes?: number | null;
+  }>;
+  db?: any;
+}): Promise<void> {
+  const { reservationId, tenantId, treatmentDetail, durationMinutes, purchaseValue, items } = params;
+  const db = params.db || prisma;
+  if (typeof db.reservationItem?.createMany !== 'function' && typeof db.reservationItem?.create !== 'function') {
+    return;
+  }
+
+  try {
+    let itemsToInsert: Array<{
+      tenant_id: string;
+      reservation_id: string;
+      service_id: string | null;
+      custom_name: string;
+      price: number;
+      duration_minutes: number | null;
+    }> = [];
+
+    if (items && items.length > 0) {
+      itemsToInsert = items.map((it) => ({
+        tenant_id: tenantId,
+        reservation_id: reservationId,
+        service_id: it.clinicServiceId || null,
+        custom_name: it.serviceName,
+        price: it.price,
+        duration_minutes: it.durationMinutes ?? durationMinutes ?? 60,
+      }));
+    } else if (treatmentDetail && treatmentDetail.trim().length > 0) {
+      const rawNames = treatmentDetail
+        .split(/[,;\n+]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      let catalogServices: any[] = [];
+      try {
+        catalogServices = await db.clinicService.findMany({
+          where: { tenant_id: tenantId },
+          select: { id: true, service_id: true, name: true, promo_price: true, original_price: true, duration_minutes: true },
+        });
+      } catch {}
+
+      for (const name of rawNames) {
+        const matched = (catalogServices || []).find(
+          (s: any) =>
+            s.name.toLowerCase() === name.toLowerCase() ||
+            s.service_id.toLowerCase() === name.toLowerCase() ||
+            name.toLowerCase().includes(s.name.toLowerCase())
+        );
+
+        let price = 0;
+        let duration = durationMinutes || 60;
+        let serviceId: string | null = null;
+        let finalName = name;
+
+        if (matched) {
+          serviceId = matched.id;
+          price = matched.promo_price ?? matched.original_price ?? 0;
+          duration = matched.duration_minutes ?? duration;
+          finalName = matched.name;
+        } else {
+          try {
+            const { resolveTreatmentValue } = await import('./capi.service');
+            const resolved = await resolveTreatmentValue(name, tenantId);
+            price = (resolved && resolved > 0) ? resolved : (purchaseValue ? Math.round(purchaseValue / rawNames.length) : 0);
+          } catch {
+            price = purchaseValue ? Math.round(purchaseValue / rawNames.length) : 0;
+          }
+        }
+
+        itemsToInsert.push({
+          tenant_id: tenantId,
+          reservation_id: reservationId,
+          service_id: serviceId,
+          custom_name: finalName,
+          price,
+          duration_minutes: duration,
+        });
+      }
+    }
+
+    if (itemsToInsert.length > 0) {
+      try {
+        await db.reservationItem.deleteMany({ where: { reservation_id: reservationId } });
+      } catch {}
+
+      if (typeof db.reservationItem.createMany === 'function') {
+        await db.reservationItem.createMany({ data: itemsToInsert });
+      } else {
+        for (const item of itemsToInsert) {
+          await db.reservationItem.create({ data: item });
+        }
+      }
+    }
+  } catch (err: any) {
+    // Best-effort dual-write ke reservation_items
+  }
+}
+
 export class ReservationCoreService {
   async saveReservation(params: ReservationMutationParams): Promise<ReservationResult> {
     const {
@@ -446,6 +601,8 @@ export class ReservationCoreService {
       status = 'confirmed',
       requestId,
       deliveryFee,
+      customerAddressId,
+      items,
     } = params;
 
     // A2 (KB-4): booking_date WAJIB untuk JALUR CUSTOMER (BOT/AGENT) — gerbang
@@ -505,6 +662,13 @@ export class ReservationCoreService {
     type SaveOutcome = { mode: 'idempotent' | 'reactivated' | 'merged' | 'created'; result: ReservationResult };
 
     const outcome = await runWithAdvisoryLock<SaveOutcome>(lockKey, async (db) => {
+    const resolvedAddressId = await resolveCustomerAddressId({
+      tenantId,
+      customerId,
+      explicitAddressId: customerAddressId,
+      db,
+    });
+
     // Stage 7 (R6): idempotency — bila request_id sudah pernah tersimpan untuk
     // tenant ini, kembalikan baris yang ada (retry webhook / concurrency aman).
     if (requestId && requestId.trim().length > 0) {
@@ -530,6 +694,7 @@ export class ReservationCoreService {
                 ...(hasValidDate ? {} : { pendingScheduleCheck: false }),
                 // KB-6: snapshot ongkir ikut direaktivasi bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
+                ...(resolvedAddressId ? { customer_address_id: resolvedAddressId } : {}),
               },
             });
             console.log(`[RESERVATION CORE] Reactivated cancelled reservation ${existingByRequest.id} via request_id=${requestId}.`);
@@ -645,6 +810,7 @@ export class ReservationCoreService {
                 is_repeat_order: isRepeatOrder,
                 // KB-6: snapshot ongkir bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
+                ...(resolvedAddressId ? { customer_address_id: resolvedAddressId } : {}),
               },
             });
 
@@ -699,6 +865,7 @@ export class ReservationCoreService {
             duration_minutes: duration ?? recentPending.duration_minutes ?? null,
             assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : recentPending.assigned_staff_id,
             ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
+            ...(resolvedAddressId ? { customer_address_id: resolvedAddressId } : {}),
           },
         });
         return { mode: 'merged', result: { reservation: updated, isNew: false, isUpdate: true } };
@@ -719,6 +886,7 @@ export class ReservationCoreService {
       purchase_value: purchaseValue ?? null,
       // KB-6: snapshot ongkir saat booking (riwayat abadi).
       delivery_fee: deliveryFee ?? null,
+      customer_address_id: resolvedAddressId || null,
       is_repeat_order: isRepeatOrder,
       request_id: requestId && requestId.trim().length > 0 ? requestId : null,
       // CG-05 (opsi flag): bot/agent non-same-day berstatus confirmed = slot
@@ -736,6 +904,19 @@ export class ReservationCoreService {
 
     // === Efek samping pasca-commit (di luar lock; best-effort) ===
     const reservation = outcome.result.reservation;
+
+    // Sinkronisasi item reservasi ke tabel relasional reservation_items (Fase 3C)
+    if (outcome.mode === 'merged' || outcome.mode === 'created' || outcome.mode === 'reactivated') {
+      await syncReservationItems({
+        reservationId: reservation.id,
+        tenantId,
+        treatmentDetail: treatmentDetail ?? reservation.treatment_detail,
+        treatmentCategory: validCategory,
+        durationMinutes: duration,
+        purchaseValue,
+        items,
+      }).catch(() => {});
+    }
 
     if (outcome.mode === 'merged' || outcome.mode === 'created') {
       const { reservationLifecycleService } = await import('./reservation-lifecycle.service');

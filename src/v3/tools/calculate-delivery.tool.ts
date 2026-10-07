@@ -61,6 +61,24 @@ export interface CalculateDeliveryInput {
   };
   /** Teks pesan user turn ini (untuk evaluasi afirmasi kandidat lokasi). */
   incomingText?: string;
+  /**
+   * Pilihan alamat tersimpan (buku alamat) — DISUNTIK deterministik oleh
+   * tool-pipeline setelah validasi kepemilikan (customer+tenant). Bila terisi,
+   * jarak/ongkir dihitung langsung dari koordinat tersimpan TANPA geocoding ulang.
+   * Bukan berasal dari argumen LLM mentah.
+   */
+  savedAddress?: {
+    id?: string;
+    label?: string;
+    address?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    ongkir?: number | null;
+    distanceKm?: number | null;
+  };
 }
 
 export interface ScheduleCtaOptions {
@@ -271,6 +289,10 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
           type: 'string',
           description: 'Nama perawatan yang disebut customer pada pesan saat ini, bila ada; kosongkan bila tidak disebut.'
         },
+        savedAddressId: {
+          type: 'string',
+          description: 'ID alamat tersimpan yang sedang dipilih customer dari daftar [ALAMAT TERSIMPAN CUSTOMER] (bila customer memilih salah satu rumah yang sudah pernah dipakai). ID ditulis APA ADANYA dari daftar. Kosongkan bila customer menyebut alamat/daerah baru.'
+        },
         asksDeliveryFee: {
           type: 'boolean',
           description: 'TRUE hanya bila customer eksplisit menanyakan ongkir/biaya/promo ("ada ongkir?", "berapa ongkirnya"). Bila ragu, isi false.'
@@ -281,7 +303,10 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
           description: 'Penilaian SEMANTIK atas seluruh percakapan: apakah customer pada giliran ini SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Isi berdasarkan makna & konteks (bukan sekadar ada tanda tanya).'
         }
       },
-      required: ['locationText']
+      // locationText ATAU savedAddressId wajib terisi — dijaga zod refine
+      // (validateToolArgs). Daftar kosong agar LLM bebas kirim savedAddressId
+      // saja tanpa locationText saat customer memilih alamat tersimpan.
+      required: []
     }
   }
 };
@@ -415,6 +440,58 @@ function findKecamatanInQuery(query: string): string | null {
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
   const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName, cartSnapshot, preferredDate, priceDiscussed, asksDeliveryFee } = input;
+
+  // ── Buku alamat: alamat tersimpan (deterministik, koordinat terverifikasi) ──
+  // Bila pipeline menyuntik entri alamat tersimpan yang valid milik customer ini,
+  // pakai koordinatnya langsung — tanpa geocoding ulang (anti degradasi akurasi).
+  const sa = input.savedAddress;
+  if (sa && sa.lat != null && sa.lng != null && Number.isFinite(sa.lat) && Number.isFinite(sa.lng)) {
+    const shouldShowCartRecapSa = priceDiscussed === true;
+    const askedFeeSa = asksDeliveryFee === true;
+    const deliveryResult = await deliveryService.calculateDelivery({ lat: sa.lat, lng: sa.lng }, undefined, tenantId);
+    const distanceKm = deliveryResult.distanceKm;
+    const ongkirNormal = deliveryResult.normalPrice;
+    const ongkirPromo = deliveryResult.ongkir;
+    const maxCoverageKm = deliveryResult.maxCoverageKm ?? clinicConfig.maxDeliveryDistanceKm;
+    const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > maxCoverageKm;
+    const kelurahan = sa.kelurahan || sa.kecamatan || sa.address || 'Titik Lokasi Tersimpan';
+    const hasCartItems = (cartSnapshot || []).length > 0;
+    const showFeeNominal = askedFeeSa || !isOutOfCoverage;
+    const scheduleCta = !isOutOfCoverage
+      ? buildScheduleCta({ preferredDate, candidateTreatmentName, hasCartItems })
+      : undefined;
+    const saTemplate = isOutOfCoverage
+      ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm })
+      : showFeeNominal
+        ? TEMPLATES.ongkirInfo({
+            distanceKm,
+            normalPrice: ongkirNormal,
+            promoPrice: ongkirPromo,
+            freeTierKm: deliveryResult.freeTierKm,
+            candidateTreatmentName,
+            ...(scheduleCta && preferredDate ? { scheduleCta } : {}),
+          })
+        : TEMPLATES.inCoverageNoFee({ kelurahan, scheduleCta: scheduleCta! });
+    const saRecap = isOutOfCoverage || !shouldShowCartRecapSa ? null : buildCartTotalRecap(cartSnapshot, ongkirPromo);
+    const saTemplateWithRecap = saRecap ? `${saTemplate}\n\n${saRecap.block}` : saTemplate;
+    const saMessageBase = isOutOfCoverage
+      ? `Alamat tersimpan (${sa.label || kelurahan}) berada di luar batas jangkauan layanan homecare klinik (${distanceKm} km, maks ${maxCoverageKm} km).`
+      : `Alamat tersimpan ${sa.label ? `"${sa.label}" ` : ''}(${kelurahan}) masuk dalam area jangkauan layanan homecare Bidan kami (${distanceKm} km).`;
+    const saOutput: CalculateDeliveryOutput = {
+      success: true,
+      isPrecise: true,
+      kelurahan: sa.kelurahan ?? undefined,
+      kecamatan: sa.kecamatan ?? undefined,
+      kota: sa.kota ?? undefined,
+      distanceKm,
+      ongkirNormal,
+      ongkirPromo,
+      isOutOfCoverage,
+      suggestedTemplateReply: saTemplateWithRecap,
+      message: saRecap ? `${saMessageBase}\n\n${saRecap.block}` : saMessageBase,
+    };
+    return applyFeeInformationHiding(saOutput, showFeeNominal);
+  }
   // Audit 694493: gatekeeper mode konsultasi vs transaksional — rekap nota
   // HANYA bila customer sudah tanya harga/total.
   const shouldShowCartRecap = priceDiscussed === true;

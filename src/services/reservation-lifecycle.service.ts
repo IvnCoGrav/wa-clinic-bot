@@ -506,3 +506,110 @@ export async function upsertReservationForm(params: UpsertReservationFormParams)
   });
   return { reservation: result.reservation, isNew: result.isNew, isUpdate: result.isUpdate };
 }
+
+/**
+ * Helper kanonis (Fase 1.2 audit arsitektur): menangkap form reservasi dari teks mentah
+ * webhook inbound. Menggantikan 3 blok duplikat di webhook.route.ts (lines 1280/1354/1465).
+ *
+ * Alur:
+ * 1. Cek apakah raw adalah form reservasi (isReservationFormMessage)
+ * 2. Parse struktur (parseReservationText)
+ * 3. Cari jam eksplisit dari riwayat (findExplicitTimeFromHistory inline)
+ * 4. Resolve nilai treatment untuk CAPI (resolveTreatmentValue)
+ * 5. Simpan via reservationCoreService.saveReservation (kanonis, bukan upsertReservationForm DEPRECATED)
+ * 6. Fire CAPI InitiateCheckout bila isNew/isUpdate
+ */
+export interface TryCaptureReservationParams {
+  tenantId: string;
+  customerId: string;
+  chatId: string;
+  raw: string;
+  history: Array<{ role: string; content: string }>;
+  source: string;
+  customer: any;
+}
+
+export interface TryCaptureReservationResult {
+  captured: boolean;
+  isNew?: boolean;
+  isUpdate?: boolean;
+  parseError?: string;
+  missingFields?: string[];
+}
+
+export async function tryCaptureReservationFormFromRaw(params: TryCaptureReservationParams): Promise<TryCaptureReservationResult> {
+  const { tenantId, customerId, chatId, raw, history, source, customer } = params;
+  if (!raw || !raw.trim()) return { captured: false };
+
+  const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
+  if (!isReservationFormMessage(raw)) return { captured: false };
+
+  const pr = parseReservationText(raw);
+  if (!pr.success || !pr.reservation) {
+    return { captured: false, parseError: pr.error, missingFields: pr.missingFields };
+  }
+
+  const p = pr.reservation;
+
+  // Cari jam eksplisit dari N pesan terakhir riwayat (inline untuk hindari dep baru)
+  const timeRe = /(?:jam|pukul|waktu)\s*(\d{1,2})[.:](\d{2})/g;
+  let explicitTime: string | null = null;
+  for (let i = history.length - 1; i >= Math.max(0, history.length - 3); i--) {
+    const m = timeRe.exec(history[i]?.content || '');
+    if (m) { explicitTime = `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}:00`; break; }
+  }
+
+  // Resolve nilai treatment untuk CAPI (payment > totalPrice > katalog)
+  const { resolveTreatmentValue } = await import('./capi.service');
+  const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await resolveTreatmentValue(p.treatmentDetail, tenantId)) || undefined;
+
+  // Hitung bookingDate dengan jam eksplisit WIB (+07:00) jika ada
+  const bookingDate = (explicitTime && p.bookingDate)
+    ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTime + '+07:00')
+    : p.bookingDate;
+
+  // Simpan via core kanonis (DEPRECATED upsertReservationForm tidak dipakai lagi)
+  const { reservationCoreService } = await import('./reservation-core.service');
+  // Map source ke tipe kanonis (sama seperti upsertReservationForm)
+  const upper = String(source || 'WEBHOOK').toUpperCase();
+  const mappedSource = upper.includes('AGENT') || upper.includes('V3_NATIVE')
+    ? 'AGENT'
+    : upper.includes('ADMIN_PANEL')
+      ? 'ADMIN_PANEL'
+      : upper.includes('BOT')
+        ? 'BOT'
+        : 'WEBHOOK';
+  const result = await reservationCoreService.saveReservation({
+    tenantId,
+    customerId,
+    chatId,
+    treatmentCategory: p.treatmentCategory,
+    treatmentDetail: p.treatmentDetail,
+    bookingDate,
+    rawText: raw,
+    purchaseValue: initialVal,
+    babies: p.babies || [],
+    customerName: p.name,
+    kecamatan: p.kec,
+    kota: p.kota,
+    // Integritas spasial: p.address = alamat jalan lengkap, DILARANG disalin ke kolom kelurahan.
+    kelurahan: undefined,
+    address: p.address || undefined,
+    source: mappedSource,
+  });
+
+  // Fire CAPI InitiateCheckout bila reservasi baru/terupdate
+  if (result.isNew || result.isUpdate) {
+    try {
+      const { fireCapiEvent } = await import('./capi.service');
+      fireCapiEvent({
+        eventName: 'InitiateCheckout',
+        customer,
+        tenantId,
+        customData: { source, treatment: p.treatmentDetail },
+      });
+    } catch {}
+  }
+
+  return { captured: true, isNew: result.isNew, isUpdate: result.isUpdate };
+}

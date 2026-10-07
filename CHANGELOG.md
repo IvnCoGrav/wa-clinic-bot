@@ -4,6 +4,168 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-07 - Fixed: Optimalisasi Antarmuka & Sistem LiveChat (Fase 1-5)
+
+- **Akar (multi-layer & UX audit):**
+  - Staf sering kali tidak sengaja mengirim pesan yang belum tuntas karena tombol Enter memicu pengiriman langsung, bukan baris baru.
+  - Paginasi `getConversationList` mengandalkan komparasi rapuh `conversations.length === take` yang menghasilkan `hasMore: true` palsu saat jumlah item tepat kelipatan limit.
+  - Pencarian cuplikan pesan di monitor live chat menggunakan substring matching naif sehingga pencarian seperti "7km" memunculkan false positive percakapan dengan "17km", dan cuplikan pesan panjang terpotong tanpa fokus pada kata kunci.
+  - Tombol aksi dan banner jadwal membingungkan staf antara tampilan ringkasan reservasi read-only vs formulir pengubahan jadwal.
+- **Fixed & Hardened (fondasional):**
+  - **Fase 1 (Komposisi & Input Editor):** Membalik perilaku tombol Enter di `LiveChatComposer.tsx` (Enter = newline, Ctrl/Cmd+Enter = kirim), menyetel `enterKeyHint="enter"`, menambahkan pengaman clipboard `handlePaste` plaintext lintas browser, dan meniadakan double scroll timeout jitter saat onFocus.
+  - **Fase 2 (Kontrak Paginasi Limit+1 & Word-Boundary Backend):** `conversationService.listConversations` mengadopsi pola Limit+1 (`take: take + 1`) dan mengembalikan `{ items, hasMore }`. Query pencarian pesan dilengkapi filter word-boundary regex `(^|\W)<query>($|\W)` (post-query JS & in-memory fallback) tanpa mengganggu substring matching nama/telepon. Sinkronisasi pemanggil `live-chat.service.ts` dan `message.service.ts`.
+  - **Fase 3 (Snippet Cerdas & Highlight Aman Frontend):** Menambahkan `extractSmartSearchSnippet` di `LiveChatMonitor.tsx` untuk menampilkan jendela teks relevan di sekitar kata kunci pencarian, serta memperketat regex highlight dengan word-boundary agar "17km" tidak tersorot saat mencari "7km".
+  - **Fase 4 (Copy UI Banner & Modal):** Memperjelas tooltip dan hirarki visual: banner kartu terkonfirmasi mengarah ke ringkasan ("Lihat Ringkasan Jadwal & Bukti Bayar Pasien") dan pensil ke ubah jadwal ("Ubah Jadwal, Jam, atau Bidan Bertugas"). Tombol ubah pada `ReservationDetailModal.tsx` diubah menjadi secondary outline.
+  - **Fase 5 (Validasi):** Harmonisasi unit tests dan penambahan uji ketahanan adversarial word boundary 7km vs 17km pada `conversation-filter.test.ts`.
+- **Test:** Unit test `conversation-filter.test.ts` (14/14), `waha-history-sync.test.ts` (4/4), `conversation-sandbox-mode.test.ts` (4/4) lulus 100%. `npm run build` root dan `packages/admin-dashboard` lulus tanpa error.
+
+#### 2026-10-07 - Refactored: Penyatuan Route Helper Admin & Eliminasi Dummy Timeout (Fase A)
+
+- **Akar (multi-layer & modularity audit):**
+  - Fungsi `tenantOf` terduplikasi di berkas route admin (`reservation-crud`, `reservation-dispatch`, `reservation-series`, `customers`, `reservations`), dan `sanitizeDurationMinutes` terduplikasi di `reservation-crud` dan `reservation-dispatch`.
+  - Fungsi `trackIntervalStaggered` pada `src/lifecycle/background-crons.ts` mengembalikan `setTimeout(() => {}, intervalMs + jitter)` dummy alih-alih referensi timer awal (`starter`).
+- **Refactored & Fixed (fondasional):**
+  - **Shared Route Helper:** Membuat modul terpusat `src/routes/admin/route-helpers.ts` yang mengekspor `tenantOf` dan `sanitizeDurationMinutes`. Menghapus seluruh duplikasi definisi lokal pada berkas subroute terkait.
+  - **Interval Stagger Clean Return:** Mengembalikan timer starter langsung dari `trackIntervalStaggered`, mengeliminasi alokasi timer tiruan mubazir.
+- **Test:** Regression gate Fase A (`npm run build`, `queue-fallback-per-message.test.ts`, `queue.test.ts`, `waha-webhook.test.ts`) lulus 100% tanpa error.
+
+#### 2026-10-07 - Fixed: Deteksi Durasi Batuk Kronis vs Penanda Usia Anak (Anti-Bleed Multi-Turn & Proksimitas Gejala)
+
+- **Akar (multi-layer & semantic audit):**
+  - `detectPersistentCoughRashEmergency` pada `src/config/medical-keywords.ts` memeriksa jendela teks sebelum angka menggunakan irisan statis karakter tanpa membatasi batas pesan/baris (`\n`). Pada riwayat percakapan multi-turn, token gejala dari turn terdahulu (`batuk pilek`) mencemari baris pesan aktif (`Anak saya (3 bulan)`), memicu `symptomPresent = true` semu.
+  - Pada kalimat tunggal dengan verba gejala mendahului usia (`"anak batuk pilek, usia 3 bulan"`), ketiadaan komparasi posisi token membuat angka usia pasien terbaca sebagai durasi gejala, memicu false positive eskalasi CS `batuk kronis (90 hari)` dan membatalkan pemanggilan tool bot (`get_catalog_and_price`).
+- **Fixed & Hardened (fondasional):**
+  - **Anti-Bleed Pesan/Baris:** Menentukan batas awal baris aktif (`lineStart` via `lastIndexOf('\n')`) sehingga token antar-pesan atau antar-turn tidak saling mencemari.
+  - **Relational Proximity & Parenthesis Guard:** Angka deterministik diperlakukan sebagai USIA pasien jika: (1) berada di dalam kurung bersama penanda usia (`(3 bulan)`), (2) didahului penanda usia tanpa verba gejala di jendela yang sama, atau (3) penanda usia berada lebih dekat ke angka daripada verba gejala (`lastAgeIdx > lastSymptomIdx`).
+  - **Katalog Penanda Usia:** Diperluas mencakup `anakku`, `bayiku`, `balita` serta mendukung variasi awalan token.
+- **Test:** Skenario `CM-22` dan seluruh matrix integrasi `tests/integration/v3-conversation-matrix.test.ts` (23/23) lulus 100%. Unit test `tests/unit/persistent-cough-rash-redflag.test.ts` (25/25) lulus 100% termasuk pengujian adversarial variasi urutan kata dan duplikasi riwayat pesan.
+
+#### 2026-10-07 - Fixed: Remediasi Fondasional Follow-Up Engine & WINBACK MQL Mutlak (Plan Revisi-1)
+
+- **Akar (multi-layer audit):**
+  - Kontak non-MQL impor/legacy tanpa riwayat chat/reservasi (`6289660679070` Hidayah Sri Wilujeng dan 25 kontak serupa) dijadwalkan `WINBACK_60D` karena kueri generator memuat bypass `is_legacy_source: true`.
+  - Serious-Only Gate di worker (`follow-up.service.ts:1701`) meloloskan kontak non-MQL jika berlabel legacy source.
+  - Tombol admin `sendNow` belum memiliki atomic lease guard sebelum eksekusi, rentan tabrakan balapan dengan background worker.
+  - Sebaran jadwal antrean mengandalkan `Math.random()`, tidak deterministik dan rentan memicu burst di menit/detik yang sama.
+  - Pembatalan follow-up di beberapa rute menghapus `reservation_id` menjadi `null`, merusak audit relasi historis.
+- **Fixed & Hardened (fondasional):**
+  - **Fase 1 (Live DB Cleanup Terverifikasi):** Tabel backup `follow_ups_backup_20261008` (2.134 baris) dan `customers_backup_20261008` (836 baris). Membatalkan 25 antrean WINBACK non-MQL dan 1 NEXT_TREATMENT tanpa reservasi completed dengan `cancel_reason` kanonis `CANCEL_REASON.NON_SERIOUS_STAGE3`.
+  - **Fase 2 (Konkurensi & Sebaran Deterministik):**
+    - `src/services/follow-up.service.ts`: `sendNow` menambahkan atomic claim via `processing_claimed_at` lease window; `computeScheduleAtWib0940` kini menggunakan hash deterministik berbasis seed `customerId` (rentang 09:30–10:15 WIB).
+    - `src/services/broadcast-queue.service.ts` & `src/services/waba-optout.service.ts`: Menghapus `reservation_id: null` pada operasi cancel follow-up, menggantikannya dengan `cancel_reason` kanonis.
+  - **Fase 3 (MQL Mutlak & 2-Cabang WINBACK):**
+    - `src/services/follow-up.service.ts`: Menghapus total `is_legacy_source` dari generator WINBACK dan Serious-Only Gate Stage 3.
+    - Kueri `enqueueDormantWinbackFollowUps` difilter secara deterministik di level SQL menggunakan 2 cabang kualifikasi:
+      - **Cabang A (Purna-Treatment):** Reservasi completed + pernah `SENT NEXT_TREATMENT` Stage 3 + antrean kosong + tanpa jadwal depan.
+      - **Cabang B (Lead Serius):** `is_mql: true` + pernah `SENT NO_PURCHASE` Stage 3 + antrean kosong + tanpa jadwal depan.
+    - `buildWinbackScheduleSlots` menggunakan agregat `groupBy` DB untuk kalkulasi beban harian yang efisien memori.
+  - **Fase 4 (UI & Operasional):**
+    - `packages/admin-dashboard/src/pages/tenant/FollowUpQueue.tsx`: Menambahkan tombol Cancel untuk item berstatus `FAILED` di card view dan table view. Memperbarui deskripsi modal konfirmasi reschedule dari 10 ke 40 blast/hari (selaras env `FOLLOWUP_MAX_PER_DAY`).
+- **Test:** Unit test baru `tests/unit/followup-concurrency.test.ts` (2) dan `tests/unit/followup-winback-mql.test.ts` (4). Harmonisasi ekspektasi sebaran jadwal 09:30–10:15 WIB pada `follow-up-schedule.test.ts` dan `follow-up-inbound-sliding.test.ts`, serta kueri 2-cabang pada `winback-60d.test.ts`. Seluruh test suite follow-up (21/21 test) lulus 100%. `npm run build` root dan admin dashboard lulus tanpa error.
+
+#### 2026-10-07 - Added: Fase 3 Prisma Dual-Write Relasional & Dedicated Worker Split (Fase 3A-3D)
+
+- **Akar (multi-layer & scalability):**
+  - Data buku alamat pelanggan sebelumnya hanya tersimpan di JSON blob `Customer.preferences.saved_addresses` dan item layanan reservasi tergabung di teks `treatment_detail`, menyulitkan query relasional pelaporan dan analisis analitik multi-layanan.
+  - Seluruh cron jobs, sweeps, dan background workers sebelumnya berjalan di dalam satu proses utama Web Fastify (`src/app.ts`), membebani Event Loop HTTP server saat menjalankan sweep berkala.
+- **Added & Refactored (fondasional, non-breaking dual-write):**
+  - **Fase 3A (Skema Relasional & DDL Aditif):**
+    - `prisma/schema.prisma`: Ditambahkan model `ReservationItem` dan `CustomerAddress` serta relasinya ke `Reservation`, `Customer`, dan `ClinicService`.
+    - DDL SQL aditif tanpa downtime di `prisma/migrations/20261007000000_add_reservation_items_and_customer_addresses/migration.sql`.
+  - **Fase 3B (Skrip Backfill Historis):**
+    - `src/scripts/backfill-customer-addresses.ts`: Skrip backfill aman (--dry-run) untuk mengisi `customer_addresses` dari root fields + `preferences.saved_addresses` dan menautkan `reservations.customer_address_id`.
+    - `src/scripts/backfill-reservation-items.ts`: Skrip backfill aman (--dry-run) untuk mendekomposisi `treatment_detail` ke baris relasional `reservation_items` dengan pencocokan `ClinicService` dan CAPI resolver fallback.
+  - **Fase 3C (Dual-Write Transaksional):**
+    - `src/services/customer.service.ts`: `persistSavedAddresses` menjalankan dual-write ke `customer_addresses` dengan graceful fallback in-memory untuk test offline.
+    - `src/services/reservation-core.service.ts`: Mendukung `customerAddressId` dan `items`, auto-link alamat aktif, serta sinkronisasi idempoten ke tabel `reservation_items`.
+    - `src/v3/tools/save-reservation.tool.ts`: Meneruskan `customerAddressId` dari `savedAddress.id` ke `reservationCoreService.saveReservation`.
+    - `tests/setup.ts`: Ditambahkan mock `upsert` pada `customerAddress` dan `reservationItem` untuk isolasi offline tests.
+  - **Fase 3D (Dedicated Worker Process):**
+    - `src/lifecycle/background-crons.ts`: Abstraksi sentral seluruh cron jobs, sweeps, dan background workers.
+    - `src/worker.ts`: Dedicated background worker entry point dengan graceful shutdown (`SIGTERM`/`SIGINT`), flushing queue, dan disconnecting Prisma.
+    - `src/app.ts`: Melewati inisialisasi cron jika `SEPARATE_WORKER === 'true'`.
+    - `docker-compose.yml`: Ditambahkan service `worker` (limit RAM 512MB) dan konfigurasi env `SEPARATE_WORKER`.
+    - `package.json`: Ditambahkan script `start:worker` dan `worker:dev`.
+- **Prinsip:** Zero breaking change, zero downtime, backward-compatible dual-write, dan modularity-first.
+- **Test:** Seluruh unit & integrasi test lolos 100% (`multi-address-fase3`, `customer-saved-addresses`, `reservation-capture-helper`, `reservation-security-and-integrity`, `staff-trip-dispatch`, `dispatch-map-projection`, `followup-*`). `npm run build` (`tsc`) hijau tanpa error.
+
+#### 2026-10-07 - Fixed: God Controller split — reservation-dispatch & reservation-series routes (audit arsitektur Fase 2.3)
+
+- **Akar (multi-layer):** `reservations.subroute.ts` 3889 baris menggabungkan CRUD, dispatch, Sheets sync, series management — *Shotgun Surgery* untuk perubahan operasional. `fastify.get('/api/admin/dispatch/trip/...')` & 14+ handler dispatch + 7 handler series di file sama.
+- **Fixed (fondasional, bertahap):**
+  - **CRUD split (Fase 2.3 tahap 1-3):** `src/routes/admin/reservation-crud.route.ts` (1071 lines) → `count`, `daily-slots`, `list`, `parse`, `quick-hold`, `create` (6 handler). Dead code `findExplicitTimeFromHistory` dihapus.
+  - **Dispatch split (Fase 2.3 tahap 4):** `src/routes/admin/reservation-dispatch.route.ts` (2629 lines) → 15 handler dipulihkan utuh dari backup git: `trip`, `release-hold`, `detail`, `confirm`, `complete`, `bulk-complete`, `edit`, `status`, `set-date`, `proof`, `assign-staff`, `delete`, `approve-purchase`, `reject-purchase`, `capi-queue` beserta helpers (`completeReservationById`, `runCompletionSideEffects`, dll).
+  - **Series split (Fase 2.3 tahap 5):** `src/routes/admin/reservation-series.route.ts` (245 lines) → 7 handler dipulihkan utuh dari backup git: `create`, `get`, `get-by-customer`, `pause`, `resume`, `cancel`, `session-update`.
+  - `src/routes/admin/reservations.subroute.ts` → hanya cache invalidation hook (29 lines).
+  - `src/routes/admin/route.ts` register 3 route baru.
+- **Prinsip:** Pecah God Controller per domain (CRUD / Dispatch / Series) tanpa ubah logika bisnis; handler pindah utuh ke file baru (pindah utuh tanpa rewrite → risiko regresi minimal).
+- **Test:** `tests/unit/reservation-security-and-integrity.test.ts` (11/11), `tests/unit/reservation-series.test.ts` (8/8), `tests/integration/staff-trip-dispatch.test.ts` (11/11), `tests/unit/dispatch-map-projection.test.ts` (15/15); `npm run build` lolos tanpa error.
+- **Hasil Verifikasi Blocker Fase 3:**
+  - **Drift check live (43.173.11.79):** Terkonfirmasi drift `active_slot_key` dan tabel backup historis di live DB (`KNOWN_ISSUES` #238 / #234).
+  - **Beban produksi live:** Load average 0.47, RAM 2.9GB/7.4GB, disk 56%, request rate idle/sangat ringan. Ready untuk perencanaan migrasi terstruktur.
+
+#### 2026-10-07 - Fixed: Webhook echo detection tenant-aware (audit arsitektur Fase 1.3)
+
+- **Akar (multi-layer):** `src/routes/webhook.route.ts:358` memfilter echo pesan keluar
+  HP dengan string hardcode `'Bidan Yusi'`/`'Kala Spa'`/`'rumah'`. Tenant baru
+  (nama brand beda) tidak terdeteksi sebagai bot-echo → pesan admin manual
+  salah dikategorikan sebagai bot, memicu logika salah. Sumber pola sebenarnya
+  sudah ada di DB: `Tenant.greetings_text`, `format_visit`, `name`.
+- **Fixed (fondasional):**
+  - `src/services/capi.service.ts`: tambah `getTenantEchoPatterns(tenantId)` ambil
+    pola dari DB tenant, fallback `[]` bila offline.
+  - `src/routes/webhook.route.ts`: ganti hardcode `includes('Bidan Yusi')` dgn
+    `echoPatterns.some(p => adminReplyText.includes(p))`.
+  - `senderName` logging: `'Bot (Kala Spa)'` → `Bot (${tenantName || 'Klinik'})` ambil
+    `Tenant.name` di resolve tenant.
+- **Prinsip:** nol hardcode brand di kode; pola & nama dari DB per-tenant.
+- **Test:** `tests/unit/webhook-echo-tenant.test.ts` (5 kasus: pola DB dipakai,
+  fallback tenantName, pola kosong fail-safe).
+- **Regresi:** `npm run build` + `npm test` (28 test webhook/queue hijau).
+
+#### 2026-10-07 - Fixed: 3x duplikat capture reservasi webhook → 1 helper kanonis (audit arsitektur Fase 1.2)
+
+- **Akar (Shotgun Surgery):** `webhook.route.ts` lines 1280/1354/1465 — 3 blok
+  identik ~35 baris parse form + explicit time + CAPI InitiateCheckout. Perubahan
+  format form mengharuskan edit 3 tempat (risiko regresi tinggi).
+- **Fixed (fondasional):**
+  - `src/services/reservation-lifecycle.service.ts`: helper baru
+    `tryCaptureReservationFormFromRaw(params)` → 1 tempat, pakai
+    `reservationCoreService.saveReservation` (kanonis, DEPRECATED
+    `upsertReservationForm` tidak dipakai).
+  - 3 blok di `webhook.route.ts` diganti panggilan 6 baris.
+  - Dead code `findExplicitTimeFromHistory` (hanya dipakai 3 blok tsb) dihapus.
+- **Prinsip:** DRY di level service kanonis; tool contract `saveReservation`
+  jadi single source of truth.
+- **Test:** `tests/unit/reservation-capture-helper.test.ts` (5 kasus adversarial:
+  form valid → captured+CAPI, bukan form → false, parse fail → error info,
+  explicit time WIB→UTC, source mapping WEBHOOK_*→WEBHOOK).
+- **Regresi:** `npm run build` + `npm test` (28 test webhook/queue hijau).
+
+#### 2026-10-07 - Fixed: QueueService sticky Redis downgrade (audit arsitektur Fase 1.1)
+
+- **Akar (multi-layer):** `enqueueMessage` men-set `this.redisEnabled = false` di
+  dalam `catch` ketika `queue.add()` gagal satu kali (mis. hiccup Redis sesaat).
+  Akibatnya SELURUH pesan berikutnya jatuh ke in-memory queue tanpa pemulihan
+  (sticky downgrade) — antrean tak lagi persisten dan hilang saat container
+  restart. Flag koneksi seharusnya HANYA dikendalikan event `on('error')`/
+  `on('ready')` di `initQueueSystem()`, bukan per-kegagalan enqueue.
+- **Fixed (fondasional, bukan tambal-sulam):** `src/services/queue.service.ts`
+  `enqueueMessage` kini fallback in-memory HANYA untuk pesan yang gagal
+  (`this.enqueueInMemory(phone, payload); return;`) dan TIDAK menyentuh
+  `redisEnabled`; log per-pesan diperjelas (`[QUEUE WARN]`).
+- **Prinsip:** flag status koneksi (state machine) dipisahkan dari keputusan
+  fallback per-request; pesan berikutnya selalu dicoba ke BullMQ selama Redis
+  dinyatakan hidup, sehingga antrean kembali persisten otomatis pasca-hiccup.
+- **Test:** `tests/unit/queue-fallback-per-message.test.ts` (2 kasus adversarial:
+  gagal-1x-lalu-sukses tetap coba BullMQ + Redis-flag-utuh; Redis benar-benar
+  offline tetap ke in-memory) — hijau bersama `tests/unit/queue.test.ts` (8/8);
+  `npm run build` root lolos.
+- **OPEN (Fase 0 blocker):** verifikasi drift `active_slot_key` live
+  (`43.173.11.79`) & ukur beban produksi BELUM bisa dilakukan lokal (DB
+  `localhost:5432` offline). Wajib diverifikasi di server sebelum Fase 2/3.
+  Lihat `docs/KNOWN_ISSUES.md` #234/#238.
+
 #### 2026-10-07 - Fixed: Pemisahan "Selesai" vs "Lunas" — status bayar tri-state & moderasi CAPI outlier tidak mengubah keuangan
 
 - **Akar (multi-layer):**

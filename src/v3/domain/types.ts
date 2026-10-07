@@ -179,6 +179,42 @@ export interface CustomerGoalSession {
    * diisi ulang dari riwayat konsultasi.
    */
   lastCommitment?: CommitmentLevel;
+  /**
+   * Buku alamat pelanggan (multi-address). Dicerminkan dari
+   * `Customer.preferences.saved_addresses` saat turn mulai (deterministik).
+   * Dipakai prompt grounding agar AI sadar beberapa rumah & bisa mengonfirmasi
+   * pilihan rumah saat repeat order. Bukan sumber keputusan tool (tool memakai
+   * ID valid dari DB via pipeline).
+   */
+  savedAddresses?: Array<{
+    id: string;
+    label: string;
+    address: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    ongkir?: number | null;
+    distanceKm?: number | null;
+    isPrimary?: boolean;
+  }>;
+  /**
+   * Alamat tersimpan AKTIF yang disepakati untuk pesanan berjalan (dikunci
+   * deterministik oleh calculate_delivery saat customer memilih rumah dari
+   * buku alamat; dibuka saat customer memberi lokasi baru). Dibaca pipeline
+   * untuk menulis tag `[SAVED_ADDR]` + snapshot delivery_fee di save_reservation.
+   */
+  activeSavedAddress?: {
+    id?: string;
+    label?: string;
+    address?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    ongkir?: number | null;
+    distanceKm?: number | null;
+  };
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */

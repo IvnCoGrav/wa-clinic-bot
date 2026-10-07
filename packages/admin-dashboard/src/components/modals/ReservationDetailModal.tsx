@@ -446,8 +446,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
-            title="Edit Data Reservasi"
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+            title="Buka Form Ubah Jadwal/Data Reservasi"
           >
             <PenLine size={13} />
             <span>Edit Reservasi</span>
@@ -856,8 +856,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-[#008069] hover:bg-emerald-100 transition text-xs font-bold flex items-center space-x-1.5 shadow-2xs cursor-pointer"
-                  title="Buka Formulir Edit Reservasi"
+                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-white border border-emerald-300 text-[#008069] hover:bg-emerald-50 transition text-xs font-bold flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                  title="Buka Form Ubah Jadwal/Data Reservasi"
                 >
                   <PenLine size={13} />
                   <span>Edit Reservasi</span>

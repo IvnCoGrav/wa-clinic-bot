@@ -27,21 +27,6 @@ import { safeCompare } from '../utils/auth';
 import { hasBypassLabel, isBypassLabelName, checkCustomerBypass } from '../utils/customer-bypass';
 dotenv.config();
 
-/** Cari penawaran jam eksplisit (pola "jam 11.00-11.30", "pukul 10.00", dst)
- *  dari N pesan terakhir riwayat percakapan. Mengembalikan jam dalam format
- *  ISO string bagian waktu ("HH:mm:ss") atau null bila tidak ditemukan. */
-function findExplicitTimeFromHistory(
-  history: Array<{ role: string; content: string }>,
-  lookback = 3
-): string | null {
-  const timeRe = /(?:jam|pukul|waktu)\s*(\d{1,2})[.:](\d{2})/g;
-  for (let i = history.length - 1; i >= Math.max(0, history.length - lookback); i--) {
-    const m = timeRe.exec(history[i]?.content || '');
-    if (m) return `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}:00`;
-  }
-  return null;
-}
-
 /**
  * Handler event label.chat.added / label.chat.deleted dari WAHA.
  * Meng-update kolom Customer.is_admin_labeled / is_hold_labeled (best-effort)
@@ -120,6 +105,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // (vektor lintas-tenant). DB offline → resolver mengembalikan DEFAULT_TENANT_ID
       // demi ketersediaan + alert CRITICAL (lihat waha-tenant.service.ts).
       let resolvedTenantId = DEFAULT_TENANT_ID;
+      let tenantName: string | undefined;
       try {
         const eventSession = (event as any)?.session as string | undefined;
         const resolved = await wahaTenantService.resolveTenantBySession(eventSession);
@@ -128,6 +114,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ status: 'UNKNOWN_TENANT_REJECTED' });
         }
         resolvedTenantId = resolved;
+        // Ambil nama tenant untuk senderName logging (fallback 'Klinik')
+        try {
+          const { prisma } = await import('../db/client');
+          const t = await prisma.tenant.findUnique({ where: { id: resolvedTenantId }, select: { name: true } });
+          tenantName = t?.name?.trim();
+        } catch {}
         if (eventSession && resolvedTenantId !== DEFAULT_TENANT_ID) {
           console.log(`[WAHA TENANT] session=${eventSession} → tenant=${resolvedTenantId}`);
         }
@@ -370,8 +362,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const adminReplyText = imageCaption || payload.body || '';
 
             // CRITICAL FILTER: Ignore bot automated emergency/waiting templates & device welcome greetings if echoed back
-            const isDeviceAutoGreeting = 
-              (adminReplyText.includes('Terima kasih sudah menghubungi kami') && (adminReplyText.includes('Bidan Yusi') || adminReplyText.includes('Homecare') || adminReplyText.includes('rumah')));
+            // Tenant-aware: pola salam dari DB (greetings_text, format_visit, name), bukan hardcode 'Bidan Yusi'/'Kala Spa'.
+            const { getTenantEchoPatterns } = await import('../services/capi.service');
+            const echoPatterns = await getTenantEchoPatterns(resolvedTenantId);
+            const isDeviceAutoGreeting = echoPatterns.some((p) => p && adminReplyText.includes(p));
 
             const isBotAutoReply = 
               adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
@@ -599,7 +593,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 content: outboundContent,
                 waMessageId: payload.id,
                 senderType: isBotAutoReply ? 'BOT' : 'ADMIN',
-                senderName: isBotAutoReply ? 'Bot (Kala Spa)' : 'Admin (WhatsApp HP)',
+                senderName: isBotAutoReply ? `Bot (${tenantName || 'Klinik'})` : 'Admin (WhatsApp HP)',
                 createdAt: msgDate,
                 payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
               }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log outbound reply:', err));
@@ -1276,45 +1270,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           // Siska #777 FIX: tetap coba capture reservasi meski dalam grace period — jangan silent-drop form.
           try {
             const raw = incomingMessage.text?.body || '';
-            if (raw.trim()) {
-              const { isReservationFormMessage: _isFormG, parseReservationText: _parseG } = await import('../utils/reservation-text-parser');
-              if (_isFormG(raw)) {
-                const pr = _parseG(raw);
-                if (pr.success && pr.reservation) {
-                  const p = pr.reservation;
-                  const { resolveTreatmentValue: _rtvG } = await import('../services/capi.service');
-                  const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvG(p.treatmentDetail)) || undefined;
-                   const { upsertReservationForm: _upsertG } = await import('../services/reservation-lifecycle.service');
-                   const history = conversation?.history || [];
-                   const explicitTimeG = findExplicitTimeFromHistory(history);
-                   const bookingDateG = (explicitTimeG && p.bookingDate)
-                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeG + '+07:00')
-                     : p.bookingDate;
-                   const { reservation: r, isNew, isUpdate } = await _upsertG({
-                     tenantId: resolvedTenantId,
-                     customerId: customer.id,
-                     chatId,
-                     treatmentCategory: p.treatmentCategory,
-                     treatmentDetail: p.treatmentDetail,
-                     bookingDate: bookingDateG,
-                     rawText: raw,
-                     purchaseValue: initialVal,
-                     babies: p.babies || [],
-                     customerName: p.name,
-                     kecamatan: p.kec,
-                     kota: p.kota,
-                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
-                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
-                     kelurahan: undefined,
-                     address: p.address || undefined,
-                     source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
-                   });
-                  if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcG } = await import('../services/capi.service'); _fcG({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HUMAN_GRACE_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
-                  }
-                }
-              }
-            }
+            const { tryCaptureReservationFormFromRaw } = await import('../services/reservation-lifecycle.service');
+            await tryCaptureReservationFormFromRaw({
+              tenantId: resolvedTenantId,
+              customerId: customer.id,
+              chatId,
+              raw,
+              history: conversation?.history || [],
+              source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
+              customer,
+            });
           } catch (e: any) { console.warn('[HUMAN GRACE AUTO-CAPTURE ERROR]', e.message); }
           // PRIORITAS GPS PIN: Sinkron instan koordinat asli WA (is_native_pin=true) sebelum early-return
           try {
@@ -1350,46 +1315,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           // Siska #777 FIX: tetap coba capture reservasi meski label sync disabled — fallback inline sebelum silent return.
           try {
             const raw = incomingMessage.text?.body || '';
-            if (raw.trim()) {
-              const { isReservationFormMessage: _isFormL, parseReservationText: _parseL } = await import('../utils/reservation-text-parser');
-              if (_isFormL(raw)) {
-                const pr = _parseL(raw);
-                if (pr.success && pr.reservation) {
-                  const p = pr.reservation;
-                  const { resolveTreatmentValue: _rtvL } = await import('../services/capi.service');
-                  const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvL(p.treatmentDetail)) || undefined;
-                   const { upsertReservationForm: _upsertL } = await import('../services/reservation-lifecycle.service');
-                   const historyL = conversation?.history || [];
-                   const explicitTimeL = findExplicitTimeFromHistory(historyL);
-                   const bookingDateL = (explicitTimeL && p.bookingDate)
-                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeL + '+07:00')
-                     : p.bookingDate;
-                   const { reservation: r, isNew, isUpdate } = await _upsertL({
-                     tenantId: resolvedTenantId,
-                     customerId: customer.id,
-                     chatId,
-                     treatmentCategory: p.treatmentCategory,
-                     treatmentDetail: p.treatmentDetail,
-                     bookingDate: bookingDateL,
-                     rawText: raw,
-                     purchaseValue: initialVal,
-                     babies: p.babies || [],
-                     customerName: p.name,
-                     kecamatan: p.kec,
-                     kota: p.kota,
-                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
-                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
-                     kelurahan: undefined,
-                     address: p.address || undefined,
-                     source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
-                   });
-                  if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcL } = await import('../services/capi.service'); _fcL({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HOLD_DISABLED_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
-                  }
-                } else {
-                  console.warn(`[HUMAN HOLD-DISABLED PARSE FAIL] ${pr.error} missing=${pr.missingFields?.join(',')}`);
-                }
-              }
+            const { tryCaptureReservationFormFromRaw } = await import('../services/reservation-lifecycle.service');
+            const result = await tryCaptureReservationFormFromRaw({
+              tenantId: resolvedTenantId,
+              customerId: customer.id,
+              chatId,
+              raw,
+              history: conversation?.history || [],
+              source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
+              customer,
+            });
+            if (!result.captured && result.parseError) {
+              console.warn(`[HUMAN HOLD-DISABLED PARSE FAIL] ${result.parseError} missing=${result.missingFields?.join(',')}`);
             }
           } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED AUTO-CAPTURE ERROR]', e.message); }
           // PRIORITAS GPS PIN: Sinkron instan sebelum early-return (HOLD_DISABLED path)
@@ -1461,45 +1398,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           // Siska #777 FIX: attempt capture sebelum silent return — form jangan hilang.
           try {
             const raw = incomingMessage.text?.body || '';
-            if (raw.trim()) {
-              const { isReservationFormMessage: _isFormE, parseReservationText: _parseE } = await import('../utils/reservation-text-parser');
-              if (_isFormE(raw)) {
-                const pr = _parseE(raw);
-                if (pr.success && pr.reservation) {
-                  const p = pr.reservation;
-                  const { resolveTreatmentValue: _rtvE } = await import('../services/capi.service');
-                  const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvE(p.treatmentDetail)) || undefined;
-                   const { upsertReservationForm: _upsertE } = await import('../services/reservation-lifecycle.service');
-                   const historyE = conversation?.history || [];
-                   const explicitTimeE = findExplicitTimeFromHistory(historyE);
-                   const bookingDateE = (explicitTimeE && p.bookingDate)
-                     ? new Date(p.bookingDate.toISOString().slice(0, 11) + explicitTimeE + '+07:00')
-                     : p.bookingDate;
-                   const { reservation: r, isNew, isUpdate } = await _upsertE({
-                     tenantId: resolvedTenantId,
-                     customerId: customer.id,
-                     chatId,
-                     treatmentCategory: p.treatmentCategory,
-                     treatmentDetail: p.treatmentDetail,
-                     bookingDate: bookingDateE,
-                     rawText: raw,
-                     purchaseValue: initialVal,
-                     babies: p.babies || [],
-                     customerName: p.name,
-                     kecamatan: p.kec,
-                     kota: p.kota,
-                     // Integritas spasial: p.address = alamat jalan lengkap, DILARANG
-                     // disalin ke kolom kelurahan. Alamat jalan hidup di preferences.address.
-                     kelurahan: undefined,
-                     address: p.address || undefined,
-                     source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
-                   });
-                  if (isNew || isUpdate) {
-                    try { const { fireCapiEvent: _fcE } = await import('../services/capi.service'); _fcE({ eventName: 'InitiateCheckout', customer, tenantId: resolvedTenantId, customData: { source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
-                  }
-                }
-              }
-            }
+            const { tryCaptureReservationFormFromRaw } = await import('../services/reservation-lifecycle.service');
+            await tryCaptureReservationFormFromRaw({
+              tenantId: resolvedTenantId,
+              customerId: customer.id,
+              chatId,
+              raw,
+              history: conversation?.history || [],
+              source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',
+              customer,
+            });
           } catch (e: any) { console.warn('[HUMAN EXPLICIT AUTO-CAPTURE ERROR]', e.message); }
 
           // Passive Background Location & Distance Enrichment (GPS Pin prioritas sinkron)

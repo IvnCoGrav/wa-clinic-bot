@@ -154,6 +154,26 @@ export class V3AgentRunner {
     session = prepared.session;
     const { conversationHistory, cleanIncomingText, isFollowUp } = prepared;
 
+    // Buku alamat: cerminkan `Customer.preferences.saved_addresses` ke sesi
+    // (deterministik, best-effort) agar grounding AI sadar multi-rumah.
+    try {
+      const { customerService } = await import('../../services/customer.service');
+      const saved = await customerService.getSavedAddresses(customerId, tenantId);
+      if (saved && saved.length > 0) {
+        (session as any).savedAddresses = saved.map((a) => ({
+          id: a.id,
+          label: a.label,
+          address: a.address,
+          kelurahan: a.kelurahan,
+          kecamatan: a.kecamatan,
+          kota: a.kota,
+          ongkir: a.ongkir,
+          distanceKm: a.distanceKm,
+          isPrimary: a.isPrimary,
+        }));
+      }
+    } catch { /* best-effort — jangan gagalkan turn */ }
+
     // Ringkasan + direktif fase + prompt router Call 1.
     const contextSummary = ContextGrounder.buildContextSummary(session, cleanIncomingText, conversationHistory);
     let lastContextSummary = contextSummary;

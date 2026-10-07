@@ -8,10 +8,7 @@ import { ConversationState } from '@prisma/client';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
-
-function tenantOf(request: FastifyRequest): string {
-  return (request as any).tenantId || DEFAULT_TENANT_ID;
-}
+import { tenantOf } from './route-helpers';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer

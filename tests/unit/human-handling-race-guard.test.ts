@@ -109,4 +109,68 @@ describe('Human Handling & Anti-Race Guards (Case #1155 & #319)', () => {
       expect(mockWahaClient.sendText).not.toHaveBeenCalled();
     });
   });
+
+  describe('5. F3 — gerbang proaktif (bolehKirimProaktif)', () => {
+    it('is_human_handling + aktivitas baru → DILARANG kirim proaktif', () => {
+      expect(
+        conversationService.bolehKirimProaktif(
+          { is_human_handling: true, last_message_at: new Date() },
+          { phone: '628111' }
+        )
+      ).toBe(false);
+    });
+
+    it('kontak admin/bypass → DILARANG', () => {
+      expect(
+        conversationService.bolehKirimProaktif({ is_human_handling: false }, { is_admin_labeled: true })
+      ).toBe(false);
+      expect(
+        conversationService.bolehKirimProaktif(
+          { is_human_handling: false },
+          { labels: [{ label: { name: 'Skip' } }] }
+        )
+      ).toBe(false);
+    });
+
+    it('bot aktif & bukan bypass → BOLEH', () => {
+      expect(
+        conversationService.bolehKirimProaktif({ is_human_handling: false }, { phone: '628111' })
+      ).toBe(true);
+    });
+
+    it('human handling tapi sudah lewat ambang jam → BOLEH', () => {
+      const old = new Date(Date.now() - 100 * 3600000);
+      expect(
+        conversationService.bolehKirimProaktif({ is_human_handling: true, last_message_at: old }, {})
+      ).toBe(true);
+    });
+  });
+
+  describe('4. V-B — previous_state tidak boleh diracuni', () => {
+    it('escalate saat SUDAH HUMAN_HANDLING tidak menimpa previous_state (undefined)', async () => {
+      const spy = vi.spyOn(conversationService, 'updateConversationState').mockResolvedValue({} as any);
+      await conversationService.escalateToHumanHandling(
+        { id: 'conv_poison', current_state: ConversationState.HUMAN_HANDLING, customer: {} },
+        '628123450001',
+        'uji racun',
+        DEFAULT_TENANT_ID,
+        'manual_reply'
+      );
+      const patch = spy.mock.calls[0][1] as any;
+      expect(patch.previousState).toBeUndefined();
+    });
+
+    it('escalate dari state riil menyimpan previous_state yang benar', async () => {
+      const spy = vi.spyOn(conversationService, 'updateConversationState').mockResolvedValue({} as any);
+      await conversationService.escalateToHumanHandling(
+        { id: 'conv_ok', current_state: ConversationState.AWAITING_LOCATION, customer: {} },
+        '628123450002',
+        'uji normal',
+        DEFAULT_TENANT_ID,
+        'manual_reply'
+      );
+      const patch = spy.mock.calls[0][1] as any;
+      expect(patch.previousState).toBe(ConversationState.AWAITING_LOCATION);
+    });
+  });
 });

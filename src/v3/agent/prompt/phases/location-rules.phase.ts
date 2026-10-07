@@ -56,10 +56,18 @@ export function buildLocationHierarchyBlock(session?: {
     distanceKm?: number | null;
   } | null;
   priceDiscussed?: boolean;
+  savedAddresses?: Array<{ id: string; label: string }>;
 }): string {
   const loc = session?.location;
   const priceDiscussed = session?.priceDiscussed === true;
+  const savedCount = Array.isArray(session?.savedAddresses) ? session!.savedAddresses!.length : 0;
   if (!loc || !(loc.kelurahan || loc.kecamatan || loc.kota || loc.rawText)) {
+    // Pruning multi-address (state-gated): cabang "menanyakan alamat dari nol"
+    // SELURUHNYA DICABUT bila pelanggan sudah punya >1 rumah tersimpan —
+    // diganti konfirmasi pilihan rumah (bukan tanya alamat dari nol).
+    if (savedCount > 1) {
+      return `[ALAMAT TERSIMPAN — MULTI-RUMAH]\nCustomer sudah memiliki ${savedCount} alamat tersimpan (lihat [ALAMAT TERSIMPAN CUSTOMER] di status data). DILARANG menanyakan alamat/daerah baru dari nol; tanyakan hanya MANA rumah yang dipakai pada pesanan ini, lalu teruskan savedAddressId (id tercantum) ke tool calculate_delivery.`;
+    }
     return buildUnknownLocationBlock(priceDiscussed);
   }
   // Kontrak 779408: begitu lokasi presisi diketahui, jarak & ongkir promo BOLEH
@@ -71,8 +79,11 @@ export function buildLocationHierarchyBlock(session?: {
   const treatmentPricePin = priceDiscussed
     ? ''
     : '\nDILARANG menyebutkan nominal HARGA PAKET perawatan (treatment) atau grand total sebelum customer menanyakan biaya/harga/paket atau sebelum paket dipilih! Menyampaikan JARAK dan ONGKIR PROMO dari data tool calculate_delivery TETAP DIPERBOLEHKAN.';
+  const multiPin = savedCount > 1
+    ? '\nMULTI-RUMAH: bila customer melakukan pesanan baru di lokasi berbeda dari lokasi di atas, konfirmasi dulu rumah mana (dari [ALAMAT TERSIMPAN CUSTOMER]) yang dimaksud — JANGAN menimpa lokasi atas tanpa pilihan eksplisit.'
+    : '';
   return `[HIERARKI & ALUR MENJAWAB (ANTI-MENODONG DATA & ANTI-AMNESIA)]
-LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah customer lagi! Rujuk langsung lokasi yang sudah ada jika relevan. Sampaikan jarak dan ongkir promo resmi ke lokasi customer sesuai data hasil tool calculate_delivery, lalu lanjutkan menanyakan perawatan yang diinginkan atau keluhan si kecil.${treatmentPricePin}`;
+LOKASI SUDAH TERKONFIRMASI: Customer beralamat di ${label}${dist}. DILARANG KERAS menanyakan alamat, kelurahan, kecamatan, daerah, atau patokan rumah customer lagi! Rujuk langsung lokasi yang sudah ada jika relevan. Sampaikan jarak dan ongkir promo resmi ke lokasi customer sesuai data hasil tool calculate_delivery, lalu lanjutkan menanyakan perawatan yang diinginkan atau keluhan si kecil.${treatmentPricePin}${multiPin}`;
 }
 
 /**

@@ -103,6 +103,10 @@ describe('Medical Escalation — Alert Admin + Balasan Keselamatan Deterministik
     expect(result.shouldSendReply).toBe(true);
     expect(String(result.replyText || '')).toMatch(/dokter\/faskes|IGD/i);
     expect(String(result.replyText || '')).toMatch(/tim Bidan kami/i);
+    // V-A anti-mask: balasan keselamatan WAJIB benar-benar dikirim ke customer
+    // (bukan hanya dikembalikan). Tanpa assertion ini, bug "return tanpa kirim"
+    // lolos hijau.
+    expect(sentToCustomer.some((t) => /dokter\/faskes|IGD/i.test(t))).toBe(true);
     // Nol risiko nasihat medis: tanpa dosis/angka obat, tanpa klaim sembuh,
     // tanpa ajakan jadwal. ("pijat"/"hari" telanjang tidak dilarang: template
     // memakai negasi klarifikasi "tidak bisa ditangani dengan pijat".)
@@ -136,6 +140,8 @@ describe('Medical Escalation — Alert Admin + Balasan Keselamatan Deterministik
     expect(result.shouldSendReply).toBe(true);
     expect(String(result.replyText || '')).toMatch(/tim Bidan kami/i);
     expect(String(result.replyText || '')).toMatch(/dokter\/faskes/i);
+    // V-A anti-mask: balasan concern WAJIB benar-benar terkirim.
+    expect(sentToCustomer.some((t) => /tim Bidan kami/i.test(t))).toBe(true);
   });
 
   it('Non-medical message → normal flow, tidak ter-escalate', async () => {

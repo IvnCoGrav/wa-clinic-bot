@@ -58,7 +58,7 @@ export class WabaOptOutService {
 
     const result = await prisma.followUp.updateMany({
       where,
-      data: { status: 'CANCELLED', reservation_id: null },
+      data: { status: 'CANCELLED', cancel_reason: 'Customer melakukan opt-out promosi' },
     });
     cancelledFollowUps = result.count;
 

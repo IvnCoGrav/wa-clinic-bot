@@ -177,7 +177,7 @@ export class LiveChatService {
     filter: 'all' | 'unread' | 'reservation' = 'all',
     staffId?: string
   ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter, staffId);
+    const { items: conversations, hasMore } = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter, staffId);
     if (conversations.length === 0) {
       return { items: [], hasMore: false };
     }
@@ -268,7 +268,10 @@ export class LiveChatService {
           },
           orderBy: { created_at: 'desc' },
         });
+        const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wordRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
         for (const m of matchedRows) {
+          if (!wordRegex.test(m.content || '')) continue;
           if (!matchedMessageByConv.has(m.conversation_id)) {
             matchedMessageByConv.set(m.conversation_id, {
               id: m.id,
@@ -315,7 +318,7 @@ export class LiveChatService {
       )
     );
     // Urutan sudah dijamin DB (pinned desc, lalu last_message_at desc absolut waktu) — stabil antar halaman.
-    return { items, hasMore: conversations.length === take };
+    return { items, hasMore };
   }
 
   /**

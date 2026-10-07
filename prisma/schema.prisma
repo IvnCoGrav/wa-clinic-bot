@@ -129,6 +129,7 @@ model Customer {
 
   preferences             Json?
   labels                  CustomerLabel[]
+  addresses               CustomerAddress[]
   profile_picture_url        String?
   profile_picture_updated_at DateTime?
 
@@ -145,6 +146,7 @@ model Customer {
   @@index([tenant_id, is_mql])
   @@index([tenant_id, is_sandbox_test, created_at])
   @@index([tenant_id, deleted_at])
+  @@index([tenant_id, deleted_at, status])
   @@index([ltv_cache])
   @@unique([tenant_id, phone])
   @@map("customers")
@@ -324,6 +326,9 @@ model Reservation {
   assigned_staff_id        String?
   assigned_staff           Staff?            @relation(fields: [assigned_staff_id], references: [id], onDelete: SetNull)
   follow_ups               FollowUp[]
+  customer_address_id      String?
+  customer_address         CustomerAddress?  @relation(fields: [customer_address_id], references: [id], onDelete: SetNull)
+  items                    ReservationItem[]
   // Sinkronisasi rekapan Google Sheets (cermin satu-arah; sumber kebenaran tetap DB).
   // row_index = nomor baris 1-based di tab (header baris 1) → update baris yang sama
   // saat admin menugaskan bidan/mencatat bayar (anti baris ganda). Harga hanya ditulis
@@ -340,6 +345,7 @@ model Reservation {
   @@index([customer_id, status])
   @@index([assigned_staff_id])
   @@index([series_id])
+  @@index([customer_address_id])
   @@unique([tenant_id, request_id])
   @@map("reservations")
 }
@@ -364,6 +370,49 @@ model ReservationSeries {
   @@index([tenant_id, status])
   @@map("reservation_series")
 }
+
+model ReservationItem {
+  id               String         @id @default(uuid())
+  tenant_id        String         @default("default-tenant")
+  reservation_id   String
+  reservation      Reservation    @relation(fields: [reservation_id], references: [id], onDelete: Cascade)
+  service_id       String?
+  service          ClinicService? @relation(fields: [service_id], references: [id], onDelete: SetNull)
+  custom_name      String
+  price            Int
+  duration_minutes Int?
+  created_at       DateTime       @default(now())
+
+  @@index([tenant_id, reservation_id])
+  @@index([service_id])
+  @@map("reservation_items")
+}
+
+model CustomerAddress {
+  id              String         @id @default(uuid())
+  tenant_id       String         @default("default-tenant")
+  customer_id     String
+  customer        Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  label           String
+  address         String         @default("")
+  kelurahan       String?
+  kecamatan       String?
+  kota            String?
+  lat             Float?
+  lng             Float?
+  distance_km     Float?
+  ongkir          Int?
+  landmark        String?
+  location_source String?
+  is_primary      Boolean        @default(false)
+  created_at      DateTime       @default(now())
+  last_used_at    DateTime       @default(now())
+  reservations    Reservation[]
+
+  @@index([tenant_id, customer_id])
+  @@map("customer_addresses")
+}
+
 
 enum FollowUpType {
   NO_PURCHASE
@@ -434,6 +483,7 @@ model ClinicService {
   session_schedule_type String? // "manual" = admin atur jam per sesi
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+  reservation_items ReservationItem[]
 
   @@unique([tenant_id, service_id])
   @@index([tenant_id])
@@ -532,14 +582,25 @@ model FollowUp {
   sent_at        DateTime?
   status         FollowUpStatus @default(QUEUED)
   cancel_reason  String?
+  // Sentinel anti-duplikat (V1): diisi customer_id HANYA saat status aktif
+  // (PENDING/QUEUED), NULL saat non-aktif. Dijaga otomatis oleh trigger Postgres
+  // `follow_ups_active_slot_key_trg` (lihat migrasi 20261006000000). Karena
+  // kolom nullable, PostgreSQL mengizinkan banyak NULL -> baris historis bebas
+  // tanpa partial index (yang tak dapat direpresentasikan Prisma / memicu drift).
+  active_slot_key String?
+  // V5/H3: lease klaim pengiriman. Diisi atomik saat satu pemroses (worker/sendNow)
+  // mulai mengirim; NULL saat idle. Mencegah dobel-kirim antara worker periodik vs
+  // tombol admin "Kirim Sekarang". Lease kedaluwarsa otomatis bila pemroses crash.
+  processing_claimed_at DateTime?
   created_at     DateTime       @default(now())
   updated_at     DateTime       @updatedAt
 
   @@index([tenant_id])
   @@index([reservation_id])
   @@index([status, scheduled_at])
+  @@index([tenant_id, status, scheduled_at])
   @@index([tenant_id, customer_id, type, status])
-  @@unique([tenant_id, reservation_id, type, stage])
+  @@unique([tenant_id, active_slot_key, type, stage])
   @@map("follow_ups")
 }
 

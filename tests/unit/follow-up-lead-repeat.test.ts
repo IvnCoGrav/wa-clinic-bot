@@ -37,7 +37,6 @@ describe('followUpService.onReservationCreated — DILARANG menyentuh is_repeat_
         data: expect.objectContaining({
           status: 'CANCELLED',
           cancel_reason: CANCEL_REASON.RESERVATION_CREATED,
-          reservation_id: null,
         }),
       })
     );

@@ -45,7 +45,10 @@ export class GoogleCalendarService {
    * Menambahkan event baru ke Google Calendar
    * @returns ID event Google Calendar
    */
-  public async createEvent(reservation: { booking_date: Date | null; treatment_detail: string | null }, customerName: string): Promise<string> {
+  public async createEvent(
+    reservation: { booking_date: Date | null; treatment_detail: string | null; items?: any[] },
+    customerName: string
+  ): Promise<string> {
     if (!reservation.booking_date) {
       throw new Error('Booking date is required to create a calendar event');
     }
@@ -54,9 +57,13 @@ export class GoogleCalendarService {
     // Asumsi durasi default 60 menit jika detail tidak di-parse, atau disesuaikan
     const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
+    const treatmentText = (Array.isArray(reservation.items) && reservation.items.length > 0)
+      ? reservation.items.map((i: any) => i.custom_name || i.name).filter(Boolean).join(' + ')
+      : (reservation.treatment_detail || 'Moms / Baby Spa');
+
     const event = {
       summary: `${getBrandIdentity().businessName} Treatment - ${customerName}`,
-      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nCreated automatically by ${getBrandIdentity().businessName} Chatbot.`,
+      description: `Treatment: ${treatmentText}\nCreated automatically by ${getBrandIdentity().businessName} Chatbot.`,
       start: {
         dateTime: startDateTime.toISOString(),
         timeZone: 'Asia/Jakarta',
@@ -88,7 +95,11 @@ export class GoogleCalendarService {
   /**
    * Memperbarui detail / waktu event di Google Calendar
    */
-  public async updateEvent(eventId: string, reservation: { booking_date: Date | null; treatment_detail: string | null }, customerName: string): Promise<void> {
+  public async updateEvent(
+    eventId: string,
+    reservation: { booking_date: Date | null; treatment_detail: string | null; items?: any[] },
+    customerName: string
+  ): Promise<void> {
     if (!reservation.booking_date) {
       throw new Error('Booking date is required to update a calendar event');
     }
@@ -96,9 +107,13 @@ export class GoogleCalendarService {
     const startDateTime = new Date(reservation.booking_date);
     const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
+    const treatmentText = (Array.isArray(reservation.items) && reservation.items.length > 0)
+      ? reservation.items.map((i: any) => i.custom_name || i.name).filter(Boolean).join(' + ')
+      : (reservation.treatment_detail || 'Moms / Baby Spa');
+
     const event = {
       summary: `${getBrandIdentity().businessName} Treatment - ${customerName}`,
-      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nUpdated automatically by ${getBrandIdentity().businessName} Chatbot.`,
+      description: `Treatment: ${treatmentText}\nUpdated automatically by ${getBrandIdentity().businessName} Chatbot.`,
       start: {
         dateTime: startDateTime.toISOString(),
         timeZone: 'Asia/Jakarta',

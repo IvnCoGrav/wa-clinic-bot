@@ -18,6 +18,10 @@ import {
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
 const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
+// M3/H8: jendela wajar pasca-treatment sebelum pasien loyal dicap 'lost' (bukan 3 hari).
+const LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS, 60);
+// H8: grace lead dingin NO_PURCHASE Stage 3 tanpa respons sebelum dicap 'lost'.
+const NO_PURCHASE_LOST_GRACE_DAYS = parsePositiveInt(process.env.NO_PURCHASE_LOST_GRACE_DAYS, 7);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
 // Recent/Upcoming-Visit Guard (fondasional, kasus Bunda Rina 2026-10-05):
@@ -46,6 +50,7 @@ export const CANCEL_REASON = {
   RESERVATION_CANCELLED: 'Reservasi terkait dibatalkan',
   HAS_ACTIVE_RESERVATION: 'Customer sudah memiliki reservasi aktif',
   INBOUND_HAS_RESERVATION: 'Customer sudah memiliki reservasi',
+  INBOUND_CHAT: 'Customer membalas chat (pelanggan aktif kembali)',
   OVERDUE_48H: 'Jadwal kadaluarsa (>48 jam)',
   BYPASS_LABEL: 'Nomor berlabel Skip/Admin CS',
   WABA_TEMPLATE_NOT_APPROVED: 'Template WABA belum disetujui',
@@ -63,6 +68,16 @@ export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
   REVIEW_H1_BABY: 5,
   REVIEW_H1_MOMS: 6,
 };
+
+/**
+ * V8: true bila `now` berada dalam jam operasional follow-up (09:00–17:00 WIB).
+ * Murni fungsi waktu (deterministik & unit-testable), bukan pencocokan teks.
+ */
+export function isWithinFollowUpWorkingHours(now: Date): boolean {
+  const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const hour = nowWib.getUTCHours();
+  return hour >= 9 && hour < 17;
+}
 
 export class FollowUpService {
   /**
@@ -401,8 +416,9 @@ export class FollowUpService {
       
       await Promise.all(
         stages.map(async (stage, idx) => {
-          const scheduledAt = new Date();
-          scheduledAt.setDate(scheduledAt.getDate() + days[idx]);
+          // Jadwalkan pada rentang ramah 09:30–10:15 WIB menggunakan sebaran hash
+          // deterministik per customerId agar tersebar merata tanpa lonjakan serentak.
+          const scheduledAt = this.computeScheduleAtWib0940(new Date(), days[idx], customerId);
           
           try {
             await prisma.followUp?.create?.({
@@ -425,15 +441,17 @@ export class FollowUpService {
   }
 
   /**
-   * Hitung waktu kirim pada jam operasional ramah 09:40 WIB (= 02:40 UTC)
-   * untuk tanggal anchor + dayOffset hari kalender (mengikuti tanggal WIB).
+   * Hitung waktu kirim pada rentang jam operasional ramah 09:30–10:15 WIB (= 02:30–03:15 UTC)
+   * menggunakan hash deterministik dari seed (customerId) untuk tanggal anchor + dayOffset hari.
+   * Menghindari lonjakan serentak (burst) tanpa bergantung pada Math.random().
    */
-  private computeScheduleAtWib0940(anchor: Date, dayOffset: number): Date {
+  private computeScheduleAtWib0940(anchor: Date, dayOffset: number, seed: string = ''): Date {
     const anchorWib = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
-    const year = anchorWib.getUTCFullYear();
-    const month = anchorWib.getUTCMonth();
-    const day = anchorWib.getUTCDate();
-    return new Date(Date.UTC(year, month, day + dayOffset, 2, 40, 0, 0));
+    let h = 0;
+    const s = `${seed}|${anchorWib.toISOString().slice(0, 10)}|${dayOffset}`;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const offsetMin = h % 46; // 0..45 → 09:30 + offset (09:30 - 10:15 WIB)
+    return new Date(Date.UTC(anchorWib.getUTCFullYear(), anchorWib.getUTCMonth(), anchorWib.getUTCDate() + dayOffset, 2, 30 + offsetMin, (h % 60), 0));
   }
 
   /**
@@ -476,10 +494,11 @@ export class FollowUpService {
             where: {
               customer_id: customerId,
               tenant_id: tenantId,
-              type: 'NO_PURCHASE',
+              // H7: batalkan juga WINBACK_60D — pelanggan sudah punya reservasi aktif.
+              type: { in: ['NO_PURCHASE', 'WINBACK_60D'] },
               status: { in: ['PENDING', 'QUEUED'] },
             },
-            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_HAS_RESERVATION, reservation_id: null },
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_HAS_RESERVATION },
           });
           cancelled = res?.count || 0;
         } catch (_) {}
@@ -488,6 +507,23 @@ export class FollowUpService {
         }
         return { rescheduled: 0, cancelled };
       }
+
+      // H7: customer membalas chat → batalkan antrean WINBACK_60D aktif (re-engagement
+      // tak perlu lagi; ini berbasis state pesan masuk, bukan pencocokan kalimat).
+      try {
+        const wb = await prisma.followUp.updateMany({
+          where: {
+            customer_id: customerId,
+            tenant_id: tenantId,
+            type: 'WINBACK_60D',
+            status: { in: ['PENDING', 'QUEUED'] },
+          },
+          data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.INBOUND_CHAT },
+        });
+        if ((wb?.count || 0) > 0) {
+          console.log(`[FollowUp Service] Inbound chat: cancelled ${wb.count} WINBACK_60D for customer ${customerId}.`);
+        }
+      } catch (_) {}
 
       // 2. Geser jadwal antrian NO_PURCHASE aktif relatif ke chat terakhir.
       let active: any[] = [];
@@ -509,7 +545,7 @@ export class FollowUpService {
       let rescheduled = 0;
       for (const fu of active) {
         const stageIdx = Math.min(3, Math.max(1, fu.stage)) - 1;
-        const scheduledAt = this.computeScheduleAtWib0940(anchor, NO_PURCHASE_STAGE_DAYS[stageIdx] ?? 14);
+        const scheduledAt = this.computeScheduleAtWib0940(anchor, NO_PURCHASE_STAGE_DAYS[stageIdx] ?? 14, customerId);
         try {
           await prisma.followUp.update({
             where: { id: fu.id },
@@ -562,7 +598,7 @@ export class FollowUpService {
             },
             // Neutralkan reservation_id: baris CANCELLED tidak lagi terkait reservasi
             // aktif, menjaga invarian @@unique([tenant_id, reservation_id, type, stage]).
-            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null },
+            data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED },
           });
         } catch (_) {}
         console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId} (reservation ${reservationId}).`);
@@ -619,6 +655,15 @@ export class FollowUpService {
 
       const bDate = new Date(bookingDate);
       if (isNaN(bDate.getTime())) return;
+
+      // M7: Pengiriman REMINDER_H1 & REVIEW_H1 di-postpone oleh kebijakan klinik
+      // (worker melewati tipe ini). Membuat baris PENDING hanya menghasilkan baris
+      // ZOMBIE yang lalu dibunuh `expiredPending`. Default: JANGAN buat.
+      // Set env FOLLOWUP_CREATE_REMINDER_REVIEW='true' untuk mengaktifkan kembali.
+      if (process.env.FOLLOWUP_CREATE_REMINDER_REVIEW !== 'true') {
+        console.log(`[FollowUp Service] REMINDER_H1/REVIEW_H1 tidak dibuat (kebijakan postpone; reservation=${reservationId}).`);
+        return;
+      }
 
       const now = new Date();
 
@@ -734,10 +779,10 @@ export class FollowUpService {
           tenant_id: tenantId,
           status: { in: ['PENDING', 'QUEUED'] },
         },
-        // Baris CANCELLED tetap tersimpan sebagai jejak historis, namun reservation_id
-        // dinetralkan agar tidak menabrak unique (tenant_id, reservation_id, type, stage)
-        // saat reservasi yang sama membuat follow-up pengganti.
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED, reservation_id: null },
+        // Baris CANCELLED tetap tersimpan sebagai jejak historis. reservation_id
+        // DIPERTAHANKAN utuh (V2) agar audit trail relasi tidak rusak; keunikan
+        // baris aktif kini dijaga kolom sentinel active_slot_key (V1), bukan reservation_id.
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CANCELLED },
       });
       console.log(`[FollowUp Service] Cancelled follow-ups for reservation ${reservationId}`);
     } catch (err: any) {
@@ -802,11 +847,20 @@ export class FollowUpService {
    */
   private computeNextTreatmentAtWib0900(bookingDate: Date, monthOffset: number): Date {
     const bWib = new Date(bookingDate.getTime() + 7 * 60 * 60 * 1000);
-    const y = bWib.getUTCFullYear();
-    const m = bWib.getUTCMonth() + monthOffset;
-    const d = bWib.getUTCDate();
-    // 09:00 WIB = 02:00 UTC pada tanggal hasil (clamp day overflow via Date.UTC)
-    return new Date(Date.UTC(y, m, d, 2, 0, 0, 0));
+    const year = bWib.getUTCFullYear();
+    const month = bWib.getUTCMonth();
+    const day = bWib.getUTCDate();
+
+    // M2: jepit akhir bulan agar tanggal 31 tidak meluap (mis. 31 Okt +1 bulan = 30
+    // Nov, BUKAN 1 Des). Tanpa penjepitan, Date.UTC menggeser satu bulan penuh.
+    const targetMonthIndex = month + monthOffset;
+    const targetYear = year + Math.floor(targetMonthIndex / 12);
+    const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
+    const daysInTargetMonth = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+    const finalDay = Math.min(day, daysInTargetMonth);
+
+    // 09:00 WIB = 02:00 UTC
+    return new Date(Date.UTC(targetYear, normalizedMonth, finalDay, 2, 0, 0, 0));
   }
 
   /**
@@ -1120,9 +1174,30 @@ export class FollowUpService {
     const fu = await prisma.followUp.findFirst({
       where: { id, tenant_id: tenantId },
       include: {
+        // H10: relasi LENGKAP (paritas dengan processDueFollowUps) agar {time} terisi
+        // jam booking, dan gerbang proaktif (CS handoff/bypass) benar-benar bekerja.
+        reservation: {
+          select: {
+            id: true,
+            booking_date: true,
+            treatment_category: true,
+            treatment_detail: true,
+          },
+        },
         customer: {
           include: {
             children: true,
+            labels: {
+              include: { label: true },
+            },
+            conversations: {
+              select: {
+                last_message_at: true,
+                is_human_handling: true,
+              },
+              take: 1,
+              orderBy: { last_message_at: 'desc' },
+            },
           },
         },
       },
@@ -1136,6 +1211,23 @@ export class FollowUpService {
       throw new Error('Follow-up ini sudah pernah dikirim sebelumnya.');
     }
 
+    const leaseMs = parsePositiveInt(process.env.FOLLOWUP_CLAIM_LEASE_MS, 5 * 60 * 1000);
+    const claimed = await prisma.followUp.updateMany({
+      where: {
+        id,
+        tenant_id: tenantId,
+        status: { in: ['PENDING', 'QUEUED'] },
+        OR: [
+          { processing_claimed_at: null },
+          { processing_claimed_at: { lt: new Date(Date.now() - leaseMs) } },
+        ],
+      },
+      data: { processing_claimed_at: new Date() },
+    });
+    if (claimed.count === 0) {
+      throw new Error('Follow-up sedang diproses atau sudah selesai diproses.');
+    }
+
     const { whatsappProviderService } = await import('./whatsapp-provider.service');
     const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
     if (isCutOff) {
@@ -1145,6 +1237,21 @@ export class FollowUpService {
     console.log(`[FollowUp Service] Manual Send Triggered by Admin for Follow-Up #${id} (${fu.customer?.phone})`);
     const success = await this.executeFollowUp(fu, tenantId);
     return success;
+  }
+
+  /**
+   * H5: Coba ulang follow-up berstatus FAILED → kembalikan ke QUEUED agar worker
+   * memprosesnya lagi (menghormati jam kerja & kuota harian). Hanya untuk FAILED.
+   */
+  public async retryFollowUp(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const res = await prisma.followUp.updateMany({
+      where: { id, tenant_id: tenantId, status: 'FAILED' },
+      data: { status: 'QUEUED', processing_claimed_at: null, cancel_reason: null },
+    });
+    if (res.count > 0) {
+      console.log(`[FollowUp Service] Retried follow-up #${id} (FAILED → QUEUED).`);
+    }
+    return res.count > 0;
   }
 
   /**
@@ -1185,7 +1292,7 @@ export class FollowUpService {
     const reason = (options.reason || '').trim() || CANCEL_REASON.MANUAL_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { id, tenant_id: tenantId },
-      data: { status: 'CANCELLED', cancel_reason: reason, reservation_id: null },
+      data: { status: 'CANCELLED', cancel_reason: reason },
     });
     return res.count > 0;
   }
@@ -1235,7 +1342,7 @@ export class FollowUpService {
     const reason = (options.reason || '').trim() || CANCEL_REASON.BULK_ADMIN;
     const res = await prisma.followUp.updateMany({
       where: { tenant_id: tenantId, status: status as any },
-      data: { status: 'CANCELLED', cancel_reason: reason, reservation_id: null },
+      data: { status: 'CANCELLED', cancel_reason: reason },
     });
     console.log(`[FollowUp Service] Bulk cancelled ${res.count} follow-ups with status ${status}.`);
     return res.count;
@@ -1396,11 +1503,42 @@ export class FollowUpService {
    * - Status 'PENDING': Hanya diproses otomatis jika AUTO_FOLLOWUP_ENABLED === 'true'.
    *   Jika AUTO_FOLLOWUP_ENABLED !== 'true', status PENDING menunggu admin mengklik "Jadwalkan" di Dashboard.
    */
+  /**
+   * M1: Hitung jumlah follow-up berstatus SENT pada hari kalender WIB berjalan.
+   * Dipakai sebagai rem kuota harian runtime. DB error → 0 (fail-open, agar
+   * gangguan DB tidak menghentikan pengiriman sah; cap tetap aktif saat DB sehat).
+   */
+  private async countDailySent(tenantId: string, now: Date): Promise<number> {
+    try {
+      const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      const startOfDayWibUtc = new Date(
+        Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate()) - 7 * 60 * 60 * 1000,
+      );
+      const endOfDayWibUtc = new Date(startOfDayWibUtc.getTime() + 24 * 60 * 60 * 1000);
+      return await prisma.followUp.count({
+        where: {
+          tenant_id: tenantId,
+          status: 'SENT',
+          sent_at: { gte: startOfDayWibUtc, lt: endOfDayWibUtc },
+        },
+      });
+    } catch {
+      return 0;
+    }
+  }
+
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
     const { whatsappProviderService } = await import('./whatsapp-provider.service');
     const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
     if (isCutOff) {
       console.log(`[FollowUp Worker] Outbound Cut-Off is ACTIVE for tenant ${tenantId}. Skipping follow-up execution until cut-off is deactivated.`);
+      return 0;
+    }
+
+    // V8: Gerbang jam kerja deterministik (09:00–17:00 WIB). Ini GATE KODE level-worker,
+    // bukan imbauan prompt — worker menolak mengirim di luar jam operasional (mis. subuh 06:00).
+    if (process.env.NODE_ENV !== 'test' && !isWithinFollowUpWorkingHours(new Date())) {
+      console.log('[FollowUp Worker] Di luar jam kerja (09:00 - 17:00 WIB). Pengiriman ditunda.');
       return 0;
     }
 
@@ -1459,6 +1597,17 @@ export class FollowUpService {
         console.warn('[FollowUp Worker] Prune zombie follow-ups error:', pruneErr.message);
       }
 
+      // M1: Rem kuota harian runtime (bukan sekadar sebaran jadwal). Hitung follow-up
+      // yang sudah SENT hari ini (WIB). Bila penuh, hentikan; batch dibatasi sisa kuota.
+      const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
+      const sentToday = await this.countDailySent(tenantId, now);
+      const remainingQuota = maxPerDay - sentToday;
+      if (remainingQuota <= 0) {
+        console.log(`[FollowUp Worker] Kuota harian tercapai (${sentToday}/${maxPerDay}). Menghentikan pengiriman hari ini.`);
+        return 0;
+      }
+      const batchLimit = Math.max(1, Math.min(FOLLOWUP_BATCH_LIMIT, remainingQuota));
+
       const rawDueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
@@ -1494,7 +1643,7 @@ export class FollowUpService {
           },
         },
         orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
-        take: FOLLOWUP_BATCH_LIMIT,
+        take: batchLimit,
       });
 
       // Urutkan due items berdasarkan prioritas bisnis: NEXT_TREATMENT (#1) > NO_PURCHASE (#2)
@@ -1542,16 +1691,15 @@ export class FollowUpService {
         }
 
         // Serious-Only Gate (state-based, bukan pencocokan teks): pengingat hari ke-14
-        // (NO_PURCHASE stage 3) HANYA dikirim ke kontak berkualifikasi (MQL/legacy).
-        // Kontak yang tidak pernah serius (tak cukup bubble / bukan legacy) dihentikan
-        // di sini agar tidak boros & tidak memicu penandaan spam. Admin tetap bisa
-        // kirim manual via sendNow (jalur override sengaja tidak digerbangi).
+        // (NO_PURCHASE stage 3) HANYA dikirim ke kontak berkualifikasi (MQL).
+        // Kontak yang tidak pernah serius dihentikan di sini agar tidak boros & tidak memicu
+        // penandaan spam. Admin tetap bisa kirim manual via sendNow (jalur override sengaja tidak digerbangi).
         if (
           fu.type === 'NO_PURCHASE' &&
           fu.stage >= 3 &&
-          !(fu.customer?.is_mql || fu.customer?.is_legacy_source)
+          !fu.customer?.is_mql
         ) {
-          console.log(`[FollowUp Worker] FollowUp #${fu.id} (NO_PURCHASE stage 3) for ${fu.customer?.phone} is SKIPPED (bukan MQL/legacy).`);
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} (NO_PURCHASE stage 3) for ${fu.customer?.phone} is SKIPPED (bukan MQL).`);
           await prisma.followUp.update({
             where: { id: fu.id },
             data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.NON_SERIOUS_STAGE3 },
@@ -1617,8 +1765,10 @@ export class FollowUpService {
     tenantId: string
   ): Promise<FollowUpTemplateType | null> {
     if (fu.type !== 'NEXT_TREATMENT') return null;
-    const child = fu.customer?.children?.[0];
-    if (!child?.birth_date) return null;
+    // M11: pindai SELURUH anak (bukan hanya children[0]) agar anak sekunder
+    // (mis. anak ke-2) tetap memicu milestone yang sesuai.
+    const children: any[] = Array.isArray(fu.customer?.children) ? fu.customer.children : [];
+    if (!children.some((c) => c?.birth_date)) return null;
 
     try {
       const lastRes = await prisma.reservation.findFirst({
@@ -1626,12 +1776,12 @@ export class FollowUpService {
         orderBy: { created_at: 'desc' },
         select: { treatment_category: true },
       });
-      if (!lastRes || lastRes.treatment_category !== 'BABY') return null;
+      // M11: terima kategori BABY maupun BOTH (paket ibu & anak sekaligus).
+      if (!lastRes || (lastRes.treatment_category !== 'BABY' && lastRes.treatment_category !== 'BOTH')) return null;
     } catch {
       return null; // DB offline -> jangan blokir follow-up normal
     }
 
-    const age = this.ageInFullMonths(child.birth_date);
     const windowMonths = parseInt(process.env.MILESTONE_WINDOW_DAYS || '15', 10) / 30;
 
     const milestones: Record<number, FollowUpTemplateType> = {
@@ -1641,8 +1791,12 @@ export class FollowUpService {
       12: 'MILESTONE_12M',
     };
 
-    for (const t of Object.keys(milestones).map(Number)) {
-      if (Math.abs(age - t) <= windowMonths) return milestones[t];
+    for (const child of children) {
+      if (!child?.birth_date) continue;
+      const age = this.ageInFullMonths(new Date(child.birth_date));
+      for (const t of Object.keys(milestones).map(Number)) {
+        if (Math.abs(age - t) <= windowMonths) return milestones[t];
+      }
     }
     return null;
   }
@@ -1682,13 +1836,11 @@ export class FollowUpService {
       const anchorDate = new Date(anchorRaw);
       if (isNaN(anchorDate.getTime())) return false;
 
-      // Jadwal baru = anchor + N hari, snap 09:40 WIB (02:40 UTC); minimal now + 24 jam.
-      const target = new Date(anchorDate.getTime() + FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS * 24 * 60 * 60 * 1000);
-      const targetWib = new Date(target.getTime() + 7 * 60 * 60 * 1000);
-      const adjusted = new Date(
-        Date.UTC(targetWib.getUTCFullYear(), targetWib.getUTCMonth(), targetWib.getUTCDate(), 2, 40, 0, 0)
-      );
-      const finalDate = adjusted.getTime() > now.getTime() ? adjusted : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      // M4: PERTAHANKAN ritme bulanan. Jadwal baru = kunjungan terakhir + `stage` bulan
+      // (bukan +N hari yang merusak siklus +1/+2/+3 bulan). Snapi 09:00 WIB; minimal now + 24 jam.
+      const stage = Math.min(3, Math.max(1, Number(fu.stage) || 1));
+      const target = this.computeNextTreatmentAtWib0900(anchorDate, stage);
+      const finalDate = target.getTime() > now.getTime() ? target : new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
       await prisma.followUp.update({
         where: { id: fu.id },
@@ -1717,12 +1869,55 @@ export class FollowUpService {
         return false;
       }
 
+      // V5/H3: Klaim atomik (lease) anti dobel-kirim. Hanya satu pemroses
+      // (worker periodik ATAU tombol admin "Kirim Sekarang") yang boleh mengirim.
+      // Lease kedaluwarsa otomatis bila pemroses crash, sehingga baris tak macet.
+      {
+        const leaseMs = parsePositiveInt(process.env.FOLLOWUP_CLAIM_LEASE_MS, 5 * 60 * 1000);
+        const claimNow = new Date();
+        const staleBefore = new Date(claimNow.getTime() - leaseMs);
+        let claim: any = null;
+        try {
+          claim = await prisma.followUp.updateMany({
+            where: {
+              id: fu.id,
+              tenant_id: tenantId,
+              status: { in: ['PENDING', 'QUEUED'] },
+              OR: [{ processing_claimed_at: null }, { processing_claimed_at: { lt: staleBefore } }],
+            },
+            data: { processing_claimed_at: claimNow },
+          });
+        } catch {
+          // DB offline (atau mock tanpa return) → fail-open: lanjutkan pengiriman.
+          claim = null;
+        }
+        if (claim && claim.count === 0) {
+          console.log(`[FollowUp Service] FollowUp #${fu.id} sudah diklaim/diproses proses lain. Dilewati (anti dobel-kirim).`);
+          return false;
+        }
+      }
+
       if (!fu.customer || !fu.customer.phone) {
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'FAILED' },
+          data: { status: 'FAILED', processing_claimed_at: null },
         });
         return false;
+      }
+
+      // F3 (V-fondasional): gerbang proaktif TUNGGAL — DILARANG kirim pengingat
+      // saat chat sedang dipegang manusia (< ambang jam) atau kontak bypass/admin.
+      {
+        const { conversationService } = await import('./conversation.service');
+        const proactiveConv = fu.customer.conversations?.[0] || null;
+        if (!conversationService.bolehKirimProaktif(proactiveConv, fu.customer)) {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) SKIPPED — chat sedang ditangani manusia / kontak bypass.`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.BYPASS_LABEL, processing_claimed_at: null },
+          }).catch(() => {});
+          return false;
+        }
       }
 
       // Map DB type + stage -> Rolling Template Type. Milestone hijack duluan:
@@ -1754,7 +1949,7 @@ export class FollowUpService {
             console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is NO_PURCHASE but customer already has reservation (${res.id}, status: ${res.status}). Auto-cancelling.`);
             await prisma.followUp.update({
               where: { id: fu.id },
-              data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.HAS_ACTIVE_RESERVATION, reservation_id: null },
+              data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.HAS_ACTIVE_RESERVATION, processing_claimed_at: null },
             });
             return false;
           }
@@ -1786,8 +1981,19 @@ export class FollowUpService {
       // Provider-aware send: WABA â†’ HSM template + consent gatekeeper; WAHA â†’ rolling text (existing)
       const gateway = await resolveGatewayForTenant(tenantId);
       if (gateway.providerType === 'WABA') {
-        return this.executeFollowUpWaba(fu, templateType, cleanName || 'Bunda', tenantId);
+        return this.executeFollowUpWaba(fu, templateType, cleanName || 'Bunda', tenantId, timeStr, babyName);
       }
+
+      // M9: normalizer sapaan deterministik terpusat (kuota "Bunda" 1x, dobel "dek dek",
+      // spasi berlebih). Dipakai di SEMUA cabang agar tak ada kebocoran placeholder.
+      const normalizeFollowUpGreeting = (text: string): string =>
+        text
+          .replace(/Bunda\s+Bunda/gi, 'Bunda')
+          .replace(/dek\s+dek\s+/gi, 'dek ')
+          .replace(/dek\s+si kecil/gi, 'si kecil')
+          .replace(/[^\S\r\n]{2,}/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
 
       let messageText: string;
 
@@ -1832,7 +2038,7 @@ export class FollowUpService {
               time: timeStr,
               index: rollingVariant - 1,
             });
-            messageText = text;
+            messageText = normalizeFollowUpGreeting(text);
           }
         } catch (err) {
           // DB fallback -> gunakan default
@@ -1842,7 +2048,7 @@ export class FollowUpService {
             time: timeStr,
             index: rollingVariant - 1,
           });
-          messageText = text;
+          messageText = normalizeFollowUpGreeting(text);
         }
       }
 
@@ -1855,23 +2061,22 @@ export class FollowUpService {
         await new Promise((r) => setTimeout(r, delay));
       }
 
-      // Pre-log / Catat pesan follow-up ke percakapan Live Chat
+      // V6: Cek-ulang status dari DB tepat sebelum kirim fisik. Selama kita tidur
+      // throttle (5–15 dtk), inbound chat customer bisa membatalkan / memindahkan
+      // follow-up ini. Bila status tak lagi aktif → abort (jangan kirim pesan basi).
       try {
-        const { conversationService } = await import('./conversation.service');
-        const { messageService } = await import('./message.service');
-        const conv = await conversationService.getOrCreateConversation(fu.customer_id, tenantId);
-        if (conv) {
-          await messageService.logMessage({
-            tenantId,
-            conversationId: conv.id,
-            direction: 'OUTBOUND',
-            content: messageText,
-            senderType: 'BOT',
-            senderName: 'Bot (Follow-Up)',
-          });
+        const fresh = await prisma.followUp.findUnique({
+          where: { id: fu.id },
+          select: { status: true, scheduled_at: true },
+        });
+        // `null` = baris benar-benar hilang → abort. `undefined` (tak terbaca /
+        // DB offline / mock) → fail-open, lanjutkan (degradasi).
+        if (fresh === null || (fresh && !['PENDING', 'QUEUED'].includes(fresh.status as string))) {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} berubah status (${fresh?.status}) saat menunggu. Abort pengiriman.`);
+          return false;
         }
-      } catch (logErr: any) {
-        console.warn('[FollowUp Worker] Failed to pre-log outbound message:', logErr.message);
+      } catch (_) {
+        /* DB offline → lanjut (degradasi) */
       }
 
       const sendResult = await typingService.simulateHumanReply({
@@ -1890,7 +2095,7 @@ export class FollowUpService {
         try {
           await prisma.followUp.update({
             where: { id: fu.id },
-            data: { status: 'FAILED' },
+            data: { status: 'FAILED', processing_claimed_at: null },
           });
         } catch (dbErr: any) {
           console.warn(`[FollowUp Worker] FollowUp FAILED status update warning:`, dbErr.message);
@@ -1907,6 +2112,26 @@ export class FollowUpService {
         return false;
       }
 
+      // V7 (write-after-send): catat bubble ke Live Chat HANYA setelah kirim benar-benar
+      // SUKSES. Bila WAHA gagal, tidak ada bubble bot fiktif di riwayat percakapan.
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(fu.customer_id, tenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Follow-Up)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[FollowUp Worker] Failed to log outbound message after send:', logErr.message);
+      }
+
       // Mark as SENT (hanya bila kirim benar-benar sukses)
       try {
         await prisma.followUp.update({
@@ -1914,6 +2139,7 @@ export class FollowUpService {
           data: {
             status: 'SENT',
             sent_at: new Date(),
+            processing_claimed_at: null,
           },
         });
       } catch (dbErr: any) {
@@ -1934,7 +2160,7 @@ export class FollowUpService {
       try {
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'FAILED' },
+          data: { status: 'FAILED', processing_claimed_at: null },
         });
       } catch (_) {}
       return false;
@@ -1950,7 +2176,9 @@ export class FollowUpService {
     fu: any,
     templateType: FollowUpTemplateType,
     name: string,
-    tenantId: string
+    tenantId: string,
+    timeStr?: string,
+    babyName?: string
   ): Promise<boolean> {
     try {
       const gateway = await resolveGatewayForTenant(tenantId);
@@ -1962,7 +2190,7 @@ export class FollowUpService {
         console.warn(`[FollowUp WABA] Template ${templateType} status=${mapping.status} (tenant=${tenantId}). Skipped: NOT_APPROVED.`);
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_TEMPLATE_NOT_APPROVED },
+          data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_TEMPLATE_NOT_APPROVED, processing_claimed_at: null },
         });
         this.notifyTemplateNotApproved(tenantId, templateType, mapping.status);
         return false;
@@ -1975,15 +2203,25 @@ export class FollowUpService {
           console.log(`[FollowUp WABA] Skipped ${templateType} to ${fu.customer.phone}: NO_OPT_IN (tenant=${tenantId}).`);
           await prisma.followUp.update({
             where: { id: fu.id },
-            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_NO_MARKETING_CONSENT },
+            data: { status: 'SKIPPED', cancel_reason: CANCEL_REASON.WABA_NO_MARKETING_CONSENT, processing_claimed_at: null },
           });
           return false;
         }
       }
 
-      // 3. Kirim HSM template
+      // V10: jeda aman antar pengiriman Meta WABA (hindari penembakan serentak /
+      // rate-limit). Env-drivable; dilewati saat test agar deterministik.
+      const isTest = process.env.NODE_ENV === 'test';
+      if (!isTest) {
+        const base = parsePositiveInt(process.env.WABA_SEND_THROTTLE_BASE_MS, 1500);
+        const delay = base + Math.floor(Math.random() * base);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      // H4: kirim SEMUA parameter yang dibutuhkan template (name, time, babyName),
+      // bukan hanya {name} — mencegah penolakan template Meta yang butuh waktu/nama bayi.
       console.log(`[FollowUp WABA] Sending ${templateType} (${mapping.templateName}) to ${fu.customer.phone}`);
-      const components = wabaTemplateService.buildBodyComponents({ name });
+      const components = wabaTemplateService.buildBodyComponents({ name, time: timeStr, babyName });
       const result = await gateway.sendTemplateMessage(
         fu.customer.phone,
         mapping.templateName,
@@ -1992,6 +2230,32 @@ export class FollowUpService {
       );
 
       if (result.success) {
+        // V11: catat TEKS pesan yang terbaca jelas ke Live Chat (bukan kode teknis).
+        let renderedContent = `[TEMPLATE: ${mapping.templateName}]`;
+        try {
+          const custom = await prisma.followUpTemplate.findFirst({
+            where: { tenant_id: tenantId, type: templateType, variant, is_active: true },
+          });
+          if (custom?.text) {
+            renderedContent = custom.text
+              .replace(/Bunda\s*\{name\}/gi, name)
+              .replace(/\{name\}/g, name)
+              .replace(/\{time\}/g, timeStr || '')
+              .replace(/\{babyName\}/g, babyName || '')
+              .trim();
+          } else {
+            const { text } = getRollingFollowUpMessage(templateType as any, {
+              name,
+              babyName: babyName || '',
+              time: timeStr || '',
+              index: Math.max(0, variant - 1),
+            });
+            renderedContent = text;
+          }
+        } catch {
+          /* fallback ke label template */
+        }
+
         try {
           const { conversationService } = await import('./conversation.service');
           const { messageService } = await import('./message.service');
@@ -2001,7 +2265,7 @@ export class FollowUpService {
               tenantId,
               conversationId: conv.id,
               direction: 'OUTBOUND',
-              content: `[TEMPLATE: ${mapping.templateName}]`,
+              content: renderedContent,
               waMessageId: result.messageId,
               senderType: 'BOT',
               senderName: 'Bot (Follow-Up WABA)',
@@ -2011,7 +2275,7 @@ export class FollowUpService {
 
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'SENT', sent_at: new Date() },
+          data: { status: 'SENT', sent_at: new Date(), processing_claimed_at: null },
         });
         return true;
       }
@@ -2019,7 +2283,7 @@ export class FollowUpService {
       console.error(`[FollowUp WABA] Send failed ${fu.id}:`, result.error?.message);
       await prisma.followUp.update({
         where: { id: fu.id },
-        data: { status: 'FAILED' },
+        data: { status: 'FAILED', processing_claimed_at: null },
       });
       return false;
     } catch (err: any) {
@@ -2027,7 +2291,7 @@ export class FollowUpService {
       try {
         await prisma.followUp.update({
           where: { id: fu.id },
-          data: { status: 'FAILED' },
+          data: { status: 'FAILED', processing_claimed_at: null },
         });
       } catch (_) {}
       return false;
@@ -2071,24 +2335,40 @@ export class FollowUpService {
     );
 
     let existing: Array<{ scheduled_at: Date }> = [];
+    const loadByDate = new Map<string, number>();
     try {
-      existing = (await prisma.followUp.findMany({
+      const grouped = await (prisma.followUp as any)?.groupBy?.({
+        by: ['scheduled_at'],
         where: {
           tenant_id: tenantId,
           status: { in: ['PENDING', 'QUEUED'] },
           scheduled_at: { gte: startOfTodayUtc },
         },
-        select: { scheduled_at: true },
-      })) as any;
+        _count: { _all: true },
+      });
+      if (Array.isArray(grouped) && grouped.length > 0) {
+        for (const g of grouped) {
+          if (!g?.scheduled_at) continue;
+          const key = getWibDateKey(g.scheduled_at);
+          if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + (g._count?._all || 1));
+        }
+      } else {
+        existing = (await prisma.followUp.findMany({
+          where: {
+            tenant_id: tenantId,
+            status: { in: ['PENDING', 'QUEUED'] },
+            scheduled_at: { gte: startOfTodayUtc },
+          },
+          select: { scheduled_at: true },
+        })) as any;
+        for (const e of existing || []) {
+          if (!e?.scheduled_at) continue;
+          const key = getWibDateKey(e.scheduled_at);
+          if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + 1);
+        }
+      }
     } catch {
-      existing = [];
-    }
-
-    const loadByDate = new Map<string, number>();
-    for (const e of existing || []) {
-      if (!e?.scheduled_at) continue;
-      const key = getWibDateKey(e.scheduled_at);
-      if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + 1);
+      // Offline fallback: loadByDate tetap kosong
     }
 
     const slots: Date[] = [];
@@ -2115,12 +2395,14 @@ export class FollowUpService {
   }
 
   /**
-   * Generator antrean WINBACK_60D (re-engagement pelanggan dormant MQL/legacy).
+   * Generator antrean WINBACK_60D (re-engagement pelanggan dormant MQL/purna-treatment).
    *
    * Kandidat = semua kondisi AND (tenant-scoped, offline-safe):
    *  - status 'active', belum dihapus, bukan sandbox/internal/admin-held/bypass
    *      (memakai seam kanonis buildNonBypassCustomerWhere + isDummyOrTestContact)
-   *  - is_mql = true ATAU is_legacy_source = true
+   *  - memenuhi salah satu dari 2 cabang riwayat:
+   *      Cabang A: pernah treatment selesai (reservations completed) + tuntas NEXT_TREATMENT stage 3 SENT
+   *      Cabang B: lead serius (is_mql = true) + tuntas NO_PURCHASE stage 3 SENT
    *  - dormant: last_message_at (aktivitas apa pun, termasuk outbound) <= now - 60 hari
    *  - antrean kosong: tidak ada FollowUp PENDING/QUEUED tipe apa pun (guard
    *      deterministik anti-tumpang-tindih dengan rangkaian NEXT_TREATMENT)
@@ -2143,7 +2425,6 @@ export class FollowUpService {
           deleted_at: null,
           is_internal_staff: false,
           is_hold_labeled: false,
-          OR: [{ is_mql: true }, { is_legacy_source: true }],
           conversations: { every: { last_message_at: { lte: dormantCutoff } } },
           follow_ups: {
             none: {
@@ -2160,6 +2441,18 @@ export class FollowUpService {
           reservations: {
             none: { booking_date: { gte: now }, status: { not: 'cancelled' } },
           },
+          OR: [
+            // Cabang A: Pasien riil yang sudah pernah treatment selesai + tuntas NEXT_TREATMENT Stage 3
+            {
+              reservations: { some: { status: 'completed' } },
+              follow_ups: { some: { type: 'NEXT_TREATMENT', stage: 3, status: 'SENT' } },
+            },
+            // Cabang B: Lead MQL yang belum beli tapi tuntas NO_PURCHASE Stage 3
+            {
+              is_mql: true,
+              follow_ups: { some: { type: 'NO_PURCHASE', stage: 3, status: 'SENT' } },
+            },
+          ],
         },
         select: { id: true, phone: true, name: true },
         take: WINBACK_ENQUEUE_LIMIT,
@@ -2204,7 +2497,7 @@ export class FollowUpService {
   public async checkAndSetLostCustomers(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
       const thresholdDate = new Date();
-      thresholdDate.setDate(thresholdDate.getDate() - LOST_CUSTOMER_GRACE_DAYS);
+      thresholdDate.setDate(thresholdDate.getDate() - LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS);
 
       const sentStage3FollowUps = await prisma.followUp.findMany({
         where: {
@@ -2256,8 +2549,54 @@ export class FollowUpService {
             where: { id: f.customer_id },
             data: { status: 'lost' },
           });
-          console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no new reservation ${LOST_CUSTOMER_GRACE_DAYS} days after Stage 3 follow-up).`);
+          console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no new reservation ${LOST_CUSTOMER_NEXT_TREATMENT_GRACE_DAYS} days after Stage 3 follow-up).`);
         }
+      }
+
+      // H8/M3: lead dingin NO_PURCHASE Stage 3 yang tak merespons & tak booking setelah
+      // grace → 'lost' (sebelumnya dibiarkan 'active' selamanya di live DB).
+      try {
+        const npThreshold = new Date();
+        npThreshold.setDate(npThreshold.getDate() - NO_PURCHASE_LOST_GRACE_DAYS);
+        const sentNpStage3 = (await prisma.followUp.findMany({
+          where: {
+            type: 'NO_PURCHASE',
+            stage: 3,
+            status: 'SENT',
+            sent_at: { lte: npThreshold },
+            tenant_id: tenantId,
+            customer: { status: 'active', is_sandbox_test: false },
+          },
+          select: { id: true, customer_id: true, sent_at: true },
+        })) as any[];
+        const npMinSentAt = sentNpStage3
+          .map((f) => f.sent_at)
+          .filter(Boolean)
+          .sort((a: any, b: any) => new Date(a).getTime() - new Date(b).getTime())[0];
+        let npRes: Array<{ customer_id: string; created_at: Date }> = [];
+        if (npMinSentAt) {
+          npRes = (await prisma.reservation
+            .findMany({
+              where: {
+                customer_id: { in: sentNpStage3.map((f) => f.customer_id) },
+                created_at: { gt: new Date(npMinSentAt) },
+                tenant_id: tenantId,
+              },
+              select: { customer_id: true, created_at: true },
+            })
+            .catch(() => [])) as any;
+        }
+        for (const f of sentNpStage3) {
+          const responded = npRes.some(
+            (r) => r.customer_id === f.customer_id && new Date(r.created_at).getTime() > new Date(f.sent_at).getTime()
+          );
+          if (!responded) {
+            await prisma.customer.update({ where: { id: f.customer_id }, data: { status: 'lost' } });
+            console.log(`[FollowUp Service] Customer ${f.customer_id} marked 'lost' (NO_PURCHASE Stage 3 no response after ${NO_PURCHASE_LOST_GRACE_DAYS} days).`);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[FollowUp Service] NO_PURCHASE lost sweep failed:', e?.message);
       }
 
       // --- WINBACK_60D: grace period terpisah (default 7 hari) ---

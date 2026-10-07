@@ -7,6 +7,14 @@ import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
 import { sanitizeCustomerNameForStorage } from '../utils/name-sanitizer';
+import {
+  SavedCustomerAddress,
+  UpsertSavedAddressInput,
+  parseSavedAddresses,
+  upsertAddressIntoList,
+  ensureSinglePrimary,
+  resolveActiveAddress as resolveActiveAddressFromList,
+} from '../domain/customer-address';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -259,6 +267,13 @@ export class CustomerService {
        * benar-benar pindah rumah. DILARANG di-set true oleh jalur otomatis.
        */
       forceUpdateGps?: boolean;
+      /**
+       * Pilihan alamat tersimpan (buku alamat). Bila ID valid milik customer ini,
+       * koordinat/wilayah diambil dari entri tersebut dan dianggap PINDAH RUMAH
+       * eksplisit (boleh melewati penguncian pin presisi lama). Sumber deterministik,
+       * BUKAN pencocokan kalimat.
+       */
+      savedAddressId?: string;
     },
     tenantId: string
   ): Promise<any> {
@@ -277,13 +292,34 @@ export class CustomerService {
         throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
       }
 
+      // Pilihan alamat tersimpan = pindah rumah EKSPLISIT deterministik (bukan
+      // tebakan kalimat): ambil koordinat/wilayah dari entri buku alamat.
+      const savedEntry = data.savedAddressId
+        ? parseSavedAddresses(existing.preferences).find((a) => a.id === data.savedAddressId)
+        : undefined;
+      if (savedEntry) {
+        data = {
+          ...data,
+          kelurahan: savedEntry.kelurahan ?? data.kelurahan,
+          kecamatan: savedEntry.kecamatan ?? data.kecamatan,
+          kota: savedEntry.kota ?? data.kota,
+          lat: savedEntry.lat ?? data.lat,
+          lng: savedEntry.lng ?? data.lng,
+          distanceKm: savedEntry.distanceKm ?? data.distanceKm,
+          ongkir: savedEntry.ongkir ?? data.ongkir,
+          locationSource: (savedEntry.locationSource as LocationSource | null) ?? data.locationSource,
+        };
+      }
+      const explicitMove = data.forceUpdateGps === true || Boolean(savedEntry);
+
       // GPS PRIORITY GUARD (fondasional): customer dengan koordinat PRESISI
       // (pin GPS asli / shareloc / link Maps ber-koordinat → location_source
       // 'gps_pin' ATAU share_location_sent=true) TIDAK BOLEH ditimpa oleh hasil
       // geocoding teks / sentroid gazetteer. Update hanya sah bila datang dari
-      // pin GPS baru (isNativePin / locationSource gps_pin) atau override eksplisit.
+      // pin GPS baru (isNativePin / locationSource gps_pin), pilih alamat tersimpan,
+      // atau override eksplisit (forceUpdateGps).
       const isNewGpsInput = data.isNativePin === true || data.locationSource === LocationSource.gps_pin;
-      const preserveExactGps = CustomerService.isPreciseGps(existing) && !isNewGpsInput && !data.forceUpdateGps;
+      const preserveExactGps = CustomerService.isPreciseGps(existing) && !isNewGpsInput && !explicitMove;
 
       const effectiveLat = preserveExactGps
         ? existing.lat
@@ -382,6 +418,54 @@ export class CustomerService {
           .catch(() => {});
       }
 
+      // Sinkronkan lokasi tulis ke buku alamat (deterministik). Pada mode
+      // preserve pin (teks area rumah-2), catat area BARU sebagai estimated_area
+      // tanpa menyentuh pin root (anti data hibrida).
+      try {
+        const prevAddress = (existing.preferences as any)?.address || '';
+        const writeLoc = savedEntry
+          ? {
+              address: prevAddress,
+              kelurahan: data.kelurahan ?? existing.kelurahan,
+              kecamatan: data.kecamatan ?? existing.kecamatan,
+              kota: data.kota ?? existing.kota,
+              lat: effectiveLat,
+              lng: effectiveLng,
+              distanceKm: effectiveDistance,
+              ongkir: effectiveOngkir,
+              locationSource: (effectiveSource as any) ?? 'manual_staff',
+              isPrimary: true,
+            }
+          : preserveExactGps
+            ? {
+                kelurahan: data.kelurahan ?? existing.kelurahan,
+                kecamatan: data.kecamatan ?? existing.kecamatan,
+                kota: data.kota ?? existing.kota,
+                lat: data.lat ?? null,
+                lng: data.lng ?? null,
+                distanceKm: data.distanceKm ?? null,
+                ongkir: data.ongkir ?? null,
+                locationSource: 'estimated_area' as const,
+              }
+            : {
+                address: prevAddress,
+                kelurahan: data.kelurahan ?? existing.kelurahan,
+                kecamatan: data.kecamatan ?? existing.kecamatan,
+                kota: data.kota ?? existing.kota,
+                lat: effectiveLat,
+                lng: effectiveLng,
+                distanceKm: effectiveDistance,
+                ongkir: effectiveOngkir,
+                locationSource: (effectiveSource as any) ?? undefined,
+              };
+        const hasLoc = Boolean(
+          data.kelurahan || data.kecamatan || data.kota || data.lat !== undefined || data.lng !== undefined || savedEntry
+        );
+        if (hasLoc) await this.syncSavedAddressFromLocation(existing, tenantId, writeLoc as any);
+      } catch (syncErr) {
+        console.warn('[CustomerService] syncSavedAddressFromLocation failed (best-effort):', (syncErr as Error)?.message);
+      }
+
       return updated;
     } catch (error) {
       if (!isTestRuntime()) {
@@ -390,35 +474,97 @@ export class CustomerService {
       }
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
-          const isNewGpsInput = data.isNativePin === true || data.locationSource === LocationSource.gps_pin;
-          const preserveGps = CustomerService.isPreciseGps(cust) && !isNewGpsInput && !data.forceUpdateGps;
-          const effLat = preserveGps ? cust.lat : (data.lat !== undefined ? (CustomerService.toNumberOrNull(data.lat) ?? cust.lat) : cust.lat);
-          const effLng = preserveGps ? cust.lng : (data.lng !== undefined ? (CustomerService.toNumberOrNull(data.lng) ?? cust.lng) : cust.lng);
-          const effDist = preserveGps ? cust.distance_km : (data.distanceKm !== undefined ? data.distanceKm : cust.distance_km);
-          const effOngkir = preserveGps ? cust.ongkir : (data.ongkir !== undefined ? data.ongkir : cust.ongkir);
+          const savedEntry = data.savedAddressId
+            ? parseSavedAddresses(cust.preferences).find((a) => a.id === data.savedAddressId)
+            : undefined;
+          const d = savedEntry
+            ? {
+                ...data,
+                kelurahan: savedEntry.kelurahan ?? data.kelurahan,
+                kecamatan: savedEntry.kecamatan ?? data.kecamatan,
+                kota: savedEntry.kota ?? data.kota,
+                lat: savedEntry.lat ?? data.lat,
+                lng: savedEntry.lng ?? data.lng,
+                distanceKm: savedEntry.distanceKm ?? data.distanceKm,
+                ongkir: savedEntry.ongkir ?? data.ongkir,
+                locationSource: (savedEntry.locationSource as LocationSource | null) ?? data.locationSource,
+              }
+            : data;
+          const explicitMove = d.forceUpdateGps === true || Boolean(savedEntry);
+          const isNewGpsInput = d.isNativePin === true || d.locationSource === LocationSource.gps_pin;
+          const preserveGps = CustomerService.isPreciseGps(cust) && !isNewGpsInput && !explicitMove;
+          const effLat = preserveGps ? cust.lat : (d.lat !== undefined ? (CustomerService.toNumberOrNull(d.lat) ?? cust.lat) : cust.lat);
+          const effLng = preserveGps ? cust.lng : (d.lng !== undefined ? (CustomerService.toNumberOrNull(d.lng) ?? cust.lng) : cust.lng);
+          const effDist = preserveGps ? cust.distance_km : (d.distanceKm !== undefined ? d.distanceKm : cust.distance_km);
+          const effOngkir = preserveGps ? cust.ongkir : (d.ongkir !== undefined ? d.ongkir : cust.ongkir);
           const effSource = preserveGps
             ? cust.location_source
-            : data.locationSource
-              ? data.locationSource
-              : data.isNativePin
+            : d.locationSource
+              ? d.locationSource
+              : d.isNativePin
                 ? LocationSource.gps_pin
-                : (data.lat !== undefined || data.lng !== undefined)
+                : (d.lat !== undefined || d.lng !== undefined)
                   ? LocationSource.estimated_area
                   : cust.location_source;
           Object.assign(cust, {
             kelurahan: safeKelurahan ?? cust.kelurahan,
-            kecamatan: data.kecamatan ?? cust.kecamatan,
-            kota: data.kota ?? cust.kota,
+            kecamatan: d.kecamatan ?? cust.kecamatan,
+            kota: d.kota ?? cust.kota,
             lat: effLat,
             lng: effLng,
             distance_km: effDist,
             ongkir: effOngkir,
-            is_out_of_coverage: data.isOutOfCoverage ?? cust.is_out_of_coverage,
-            zipcode: data.zipcode !== undefined ? data.zipcode : cust.zipcode,
+            is_out_of_coverage: d.isOutOfCoverage ?? cust.is_out_of_coverage,
+            zipcode: d.zipcode !== undefined ? d.zipcode : cust.zipcode,
             ...(effSource !== undefined ? { location_source: effSource } : {}),
             updated_at: new Date(),
           });
-          if (data.isNativePin) cust.share_location_sent = true;
+          if (d.isNativePin) cust.share_location_sent = true;
+          // Sinkronkan ke buku alamat (best-effort — jangan gagalkan update lokasi).
+          try {
+            const prevAddress = (cust.preferences as any)?.address || '';
+            const writeLoc = savedEntry
+              ? {
+                  address: prevAddress,
+                  kelurahan: d.kelurahan ?? cust.kelurahan,
+                  kecamatan: d.kecamatan ?? cust.kecamatan,
+                  kota: d.kota ?? cust.kota,
+                  lat: effLat,
+                  lng: effLng,
+                  distanceKm: effDist,
+                  ongkir: effOngkir,
+                  locationSource: (effSource as any) ?? 'manual_staff',
+                  isPrimary: true,
+                }
+              : preserveGps
+                ? {
+                    kelurahan: d.kelurahan ?? cust.kelurahan,
+                    kecamatan: d.kecamatan ?? cust.kecamatan,
+                    kota: d.kota ?? cust.kota,
+                    lat: d.lat ?? null,
+                    lng: d.lng ?? null,
+                    distanceKm: d.distanceKm ?? null,
+                    ongkir: d.ongkir ?? null,
+                    locationSource: 'estimated_area' as const,
+                  }
+                : {
+                    address: prevAddress,
+                    kelurahan: d.kelurahan ?? cust.kelurahan,
+                    kecamatan: d.kecamatan ?? cust.kecamatan,
+                    kota: d.kota ?? cust.kota,
+                    lat: effLat,
+                    lng: effLng,
+                    distanceKm: effDist,
+                    ongkir: effOngkir,
+                    locationSource: (effSource as any) ?? undefined,
+                  };
+            const hasLoc = Boolean(
+              d.kelurahan || d.kecamatan || d.kota || d.lat !== undefined || d.lng !== undefined || savedEntry
+            );
+            if (hasLoc) await this.syncSavedAddressFromLocation(cust, tenantId, writeLoc as any);
+          } catch (syncErr) {
+            console.warn('[CustomerService] sync (mem) failed (best-effort):', (syncErr as Error)?.message);
+          }
           return cust;
         }
       }
@@ -949,6 +1095,27 @@ export class CustomerService {
 
       const finalCustomer = await this.getCustomerById(customerId, tenantId);
 
+      // Sinkronkan profil ke buku alamat (edit admin) — best-effort, deterministik.
+      try {
+        const hasAny = Boolean(
+          data.address !== undefined || data.kelurahan !== undefined ||
+          data.kecamatan !== undefined || data.kota !== undefined
+        );
+        if (hasAny && finalCustomer) {
+          await this.upsertSavedAddress(customerId, {
+            address: (data.address !== undefined ? data.address : (finalCustomer.preferences as any)?.address) || undefined,
+            kelurahan: (data.kelurahan !== undefined ? data.kelurahan : finalCustomer.kelurahan) ?? null,
+            kecamatan: (data.kecamatan !== undefined ? data.kecamatan : finalCustomer.kecamatan) ?? null,
+            kota: (data.kota !== undefined ? data.kota : finalCustomer.kota) ?? null,
+            lat: (data.lat !== undefined ? data.lat : finalCustomer.lat) ?? null,
+            lng: (data.lng !== undefined ? data.lng : finalCustomer.lng) ?? null,
+            locationSource: 'manual_staff',
+          }, tenantId);
+        }
+      } catch (syncErr) {
+        console.warn('[CustomerService] updateCustomer saved-address sync failed (best-effort):', (syncErr as Error)?.message);
+      }
+
       // Auto-recalculate distance_km & ongkir if lat/lng or address components changed.
       // Gerbang presisi: admin yang mengubah komponen TEKS (kelurahan/kecamatan/kota)
       // pada customer ber-pin GPS presisi TIDAK BOLEH memicu geocode-ulang yang menimpa
@@ -1120,6 +1287,149 @@ export class CustomerService {
       console.warn('[Customer Service] getCustomerByPhone DB error (fail-closed, cek cache baca):', (error as Error)?.message);
       return memoryCustomers.get(phone) || null;
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUKU ALAMAT PELANGGAN (Multi-Address Support) — zero-migration.
+  // Disimpan sebagai JSON terstruktur di Customer.preferences.saved_addresses.
+  // Logika murni (dedup/label/primary) ada di src/domain/customer-address.ts;
+  // service ini hanya lapisan baca/tulis tenant-scoped + fallback memori test.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Baca daftar alamat tersimpan customer (tahan data kosong/kotor). */
+  public async getSavedAddresses(customerId: string, tenantId: string): Promise<SavedCustomerAddress[]> {
+    const customer = await this.getCustomerById(customerId, tenantId);
+    if (!customer) return [];
+    return parseSavedAddresses(customer.preferences);
+  }
+
+  /**
+   * Tambah/perbarui satu alamat tersimpan. Dedup & label otomatis deterministik.
+   * Mengembalikan entri yang tersimpan (atau null bila customer tak ditemukan).
+   */
+  public async upsertSavedAddress(
+    customerId: string,
+    input: UpsertSavedAddressInput,
+    tenantId: string
+  ): Promise<SavedCustomerAddress | null> {
+    const customer = await this.getCustomerById(customerId, tenantId);
+    if (!customer) return null;
+    const list = parseSavedAddresses(customer.preferences);
+    const nowIso = new Date().toISOString();
+    const { list: nextList, entry } = upsertAddressIntoList(list, input, nowIso);
+    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
+    return entry;
+  }
+
+  /** Tetapkan alamat utama (primary) — pastikan tepat 1 primary. */
+  public async setDefaultAddress(customerId: string, addressId: string, tenantId: string): Promise<void> {
+    const customer = await this.getCustomerById(customerId, tenantId);
+    if (!customer) return;
+    const list = parseSavedAddresses(customer.preferences);
+    if (!list.some((a) => a.id === addressId)) return;
+    const nowIso = new Date().toISOString();
+    const next = ensureSinglePrimary(list, addressId).map((a) =>
+      a.id === addressId ? { ...a, lastUsedAt: nowIso } : a
+    );
+    await this.persistSavedAddresses(customer, tenantId, next, nowIso);
+  }
+
+  /** Resolusi alamat aktif: primary menang, fallback lastUsedAt terbaru. */
+  public async resolveActiveSavedAddress(customerId: string, tenantId: string): Promise<SavedCustomerAddress | null> {
+    const list = await this.getSavedAddresses(customerId, tenantId);
+    return resolveActiveAddressFromList(list);
+  }
+
+  /**
+   * Tulis daftar alamat ke preferences via seam repository (Postgres produksi /
+   * InMemory test). Fail-closed di produksi; fallback memori HANYA di test.
+   */
+  private async persistSavedAddresses(
+    customer: any,
+    tenantId: string,
+    list: SavedCustomerAddress[],
+    nowIso: string
+  ): Promise<void> {
+    const currentPrefs = (customer?.preferences as any) || {};
+    const newPrefs = { ...currentPrefs, saved_addresses: list, saved_addresses_updated_at: nowIso };
+    try {
+      const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+      await repo.update(customer.id, { preferences: newPrefs });
+      customer.preferences = newPrefs;
+    } catch (error) {
+      if (!isTestRuntime()) {
+        console.error('[CustomerService] persistSavedAddresses DB failed (fail-fast):', (error as Error)?.message);
+        throw error;
+      }
+      for (const cust of memoryCustomers.values()) {
+        if (cust.id === customer.id && cust.tenant_id === tenantId) {
+          cust.preferences = newPrefs;
+        }
+      }
+      customer.preferences = newPrefs;
+    }
+
+    // Dual-write ke tabel relasional customer_addresses (Fase 3C)
+    try {
+      if (typeof (prisma as any).customerAddress?.upsert === 'function') {
+        for (const addr of list) {
+          await prisma.customerAddress.upsert({
+            where: { id: addr.id },
+            create: {
+              id: addr.id,
+              tenant_id: tenantId,
+              customer_id: customer.id,
+              label: addr.label,
+              address: addr.address || '',
+              kelurahan: addr.kelurahan ?? null,
+              kecamatan: addr.kecamatan ?? null,
+              kota: addr.kota ?? null,
+              lat: addr.lat ?? null,
+              lng: addr.lng ?? null,
+              distance_km: addr.distanceKm ?? null,
+              ongkir: addr.ongkir != null ? Math.round(addr.ongkir) : null,
+              landmark: addr.landmark ?? null,
+              location_source: addr.locationSource ?? null,
+              is_primary: Boolean(addr.isPrimary),
+              created_at: new Date(addr.createdAt),
+              last_used_at: new Date(addr.lastUsedAt),
+            },
+            update: {
+              label: addr.label,
+              address: addr.address || '',
+              kelurahan: addr.kelurahan ?? null,
+              kecamatan: addr.kecamatan ?? null,
+              kota: addr.kota ?? null,
+              lat: addr.lat ?? null,
+              lng: addr.lng ?? null,
+              distance_km: addr.distanceKm ?? null,
+              ongkir: addr.ongkir != null ? Math.round(addr.ongkir) : null,
+              landmark: addr.landmark ?? null,
+              location_source: addr.locationSource ?? null,
+              is_primary: Boolean(addr.isPrimary),
+              last_used_at: new Date(addr.lastUsedAt),
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch {
+      // Best-effort dual-write ke customer_addresses
+    }
+  }
+
+  /**
+   * Sinkronkan sebuah lokasi tulis ke buku alamat (dipakai seam update lokasi).
+   * Deterministik — tidak pernah menebak dari kalimat.
+   */
+  private async syncSavedAddressFromLocation(
+    customer: any,
+    tenantId: string,
+    loc: UpsertSavedAddressInput & { isPrimary?: boolean }
+  ): Promise<void> {
+    const list = parseSavedAddresses(customer?.preferences);
+    const nowIso = new Date().toISOString();
+    const { list: nextList } = upsertAddressIntoList(list, loc, nowIso);
+    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
   }
 
   /**

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { followUpService } from '../../services/follow-up.service';
 import { auditService } from '../../services/audit.service';
+import { parsePositiveInt } from '../../utils/env-numeric';
 
 export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -140,6 +141,34 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         }
       } catch (err: any) {
         return reply.status(400).send({ error: err.message || 'Gagal memproses pengiriman follow-up.' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/follow-ups/:id/retry
+   * H5: Coba ulang item FAILED → kembalikan ke QUEUED agar worker mengirim ulang.
+   */
+  fastify.post(
+    '/api/admin/follow-ups/:id/retry',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const ok = await followUpService.retryFollowUp(id, DEFAULT_TENANT_ID);
+        if (!ok) {
+          return reply.status(404).send({ error: 'Tidak ada item FAILED dengan id tersebut.' });
+        }
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'RETRY_FOLLOWUP',
+          targetId: id,
+          payload: { status: 'QUEUED' },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, message: 'Follow-up dijadwalkan ulang untuk dikirim.' });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message || 'Gagal mencoba ulang follow-up.' });
       }
     }
   );
@@ -301,7 +330,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/admin/follow-ups/reschedule-overdue
    * Memajukan seluruh follow-up PENDING yang sudah lewat ke tanggal sekarang / besok
-   * dengan kuota terjadwal maksimal X pesan per hari (default: 10).
+   * dengan kuota terjadwal maksimal X pesan per hari (default: 40 / FOLLOWUP_MAX_PER_DAY).
    */
   fastify.post(
     '/api/admin/follow-ups/reschedule-overdue',
@@ -317,8 +346,11 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       try {
         const { maxPerDay, startDate } = request.body || {};
         const parsedStartDate = startDate ? new Date(startDate) : undefined;
+        const effectiveMaxPerDay = maxPerDay
+          ? Number(maxPerDay)
+          : parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
         const result = await followUpService.rescheduleOverdueFollowUps(DEFAULT_TENANT_ID, {
-          maxPerDay: maxPerDay ? Number(maxPerDay) : 10,
+          maxPerDay: effectiveMaxPerDay,
           startDate: parsedStartDate,
         });
 
@@ -332,7 +364,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({
           success: true,
-          message: `Berhasil memajukan & menjadwalkan ${result.rescheduledCount} follow-up ke ${result.daysCount} hari ke depan (maks ${maxPerDay || 10} pesan/hari).`,
+          message: `Berhasil memajukan & menjadwalkan ${result.rescheduledCount} follow-up ke ${result.daysCount} hari ke depan (maks ${effectiveMaxPerDay} pesan/hari).`,
           data: result,
         });
       } catch (err: any) {

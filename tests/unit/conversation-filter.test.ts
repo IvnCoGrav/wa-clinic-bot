@@ -90,7 +90,7 @@ describe('conversationService.listConversations — server-side filter', () => {
 
 describe('liveChatService.getConversationList — pass-through filter', () => {
   it('meneruskan filter + staffId ke conversationService.listConversations', async () => {
-    const spy = vi.spyOn(conversationService, 'listConversations').mockResolvedValue([] as any);
+    const spy = vi.spyOn(conversationService, 'listConversations').mockResolvedValue({ items: [], hasMore: false } as any);
     try {
       await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'reservation', 'unassigned');
       expect(spy).toHaveBeenCalledWith(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'reservation', 'unassigned');
@@ -117,13 +117,37 @@ describe('conversationService.listConversations — fallback memory (DB offline)
       content: 'Halo masih ada slot?',
     });
 
-    const unread = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
+    const unreadRes = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
+    const unread = Array.isArray(unreadRes) ? unreadRes : unreadRes.items;
     expect(unread.some((c: any) => c.id === conv.id)).toBe(true);
 
     await messageService.markConversationMessagesAsRead(conv.id, DEFAULT_TENANT_ID);
 
-    const afterRead = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
+    const afterReadRes = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', undefined, undefined, 'unread');
+    const afterRead = Array.isArray(afterReadRes) ? afterReadRes : afterReadRes.items;
     expect(afterRead.some((c: any) => c.id === conv.id)).toBe(false);
+  });
+
+  it('search filter: word-boundary pesan tidak mencocokkan 7km pada chat yang hanya berisi 17km', async () => {
+    const phone = `6281${Date.now().toString().slice(-8)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Jarak', DEFAULT_TENANT_ID);
+    const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conv.id,
+      direction: Direction.INBOUND,
+      content: 'Jarak rumah saya sekitar 17km dari klinik',
+    });
+
+    // Cari "7km" -> chat dengan "17km" tidak boleh muncul
+    const search7km = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', '7km');
+    const items7km = Array.isArray(search7km) ? search7km : search7km.items;
+    expect(items7km.some((c: any) => c.id === conv.id)).toBe(false);
+
+    // Cari "17km" -> chat harus muncul
+    const search17km = await conversationService.listConversations(DEFAULT_TENANT_ID, 50, 0, 'real', '17km');
+    const items17km = Array.isArray(search17km) ? search17km : search17km.items;
+    expect(items17km.some((c: any) => c.id === conv.id)).toBe(true);
   });
 });
 

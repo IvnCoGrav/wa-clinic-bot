@@ -471,6 +471,27 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
 }
 
 /**
+ * Pola salam otomatis HP untuk deteksi echo (tenant-aware).
+ * Dipakai webhook untuk memfilter pesan keluar HP yang bukan balasan admin manual.
+ * Sumber: Tenant.greetings_text, format_visit, name.
+ */
+export async function getTenantEchoPatterns(tenantId?: string): Promise<string[]> {
+  if (!tenantId) return [];
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) return [];
+    const patterns: string[] = [];
+    if (tenant.greetings_text?.trim()) patterns.push(tenant.greetings_text.trim());
+    if (tenant.format_visit?.trim()) patterns.push(tenant.format_visit.trim());
+    if (tenant.name?.trim()) patterns.push(tenant.name.trim());
+    return patterns.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Ekstrak nominal rupiah murni dari teks berdasarkan template formatValue tenant (misal: "Treatment = %VALUE%").
  * Mengubah formatValue menjadi regex dinamis yang menangkap angka di sekitar %VALUE%.
  */

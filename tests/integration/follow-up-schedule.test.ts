@@ -66,15 +66,31 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     expect(followUpCreateSpy.mock.calls[1][0].data.stage).toBe(2);
     expect(followUpCreateSpy.mock.calls[2][0].data.stage).toBe(3);
 
-    // Pastikan scheduled_at ditambahkan hari (+3, +7, +14)
+    // M5/M6: scheduled_at kini di jam ramah 09:40 WIB (= 02:40 UTC) pada tanggal
+    // WIB +3/+7/+14 (bukan jam pendaftaran). Jitter dinolkan saat test.
     const now = new Date();
     const scheduled1 = new Date(followUpCreateSpy.mock.calls[0][0].data.scheduled_at);
     const scheduled2 = new Date(followUpCreateSpy.mock.calls[1][0].data.scheduled_at);
     const scheduled3 = new Date(followUpCreateSpy.mock.calls[2][0].data.scheduled_at);
-    
-    expect(Math.round((scheduled1.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))).toBe(3);
-    expect(Math.round((scheduled2.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))).toBe(7);
-    expect(Math.round((scheduled3.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))).toBe(14);
+
+    const wibDayDiff = (a: Date, b: Date) => {
+      const da = new Date(a.getTime() + 7 * 60 * 60 * 1000);
+      const db = new Date(b.getTime() + 7 * 60 * 60 * 1000);
+      const ua = Date.UTC(da.getUTCFullYear(), da.getUTCMonth(), da.getUTCDate());
+      const ub = Date.UTC(db.getUTCFullYear(), db.getUTCMonth(), db.getUTCDate());
+      return Math.round((ua - ub) / 86400000);
+    };
+
+    expect(wibDayDiff(scheduled1, now)).toBe(3);
+    expect(wibDayDiff(scheduled2, now)).toBe(7);
+    expect(wibDayDiff(scheduled3, now)).toBe(14);
+
+    // Semua jatuh pada rentang 09:30–10:15 WIB (02:30–03:15 UTC deterministik per customerId).
+    for (const s of [scheduled1, scheduled2, scheduled3]) {
+      const utcMin = s.getUTCHours() * 60 + s.getUTCMinutes();
+      expect(utcMin).toBeGreaterThanOrEqual(2 * 60 + 30); // 02:30 UTC = 09:30 WIB
+      expect(utcMin).toBeLessThanOrEqual(3 * 60 + 15);    // 03:15 UTC = 10:15 WIB
+    }
   });
 
   it('Reservation creation -> cancels all active PENDING/QUEUED follow-ups', async () => {
@@ -95,7 +111,7 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: { in: ['f-1', 'f-2'] } },
-        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED, reservation_id: null }
+        data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED }
       })
     );
 
