@@ -127,7 +127,7 @@ services:
     command: postgres -c shared_buffers=256MB -c work_mem=16MB -c max_connections=100
     restart: always
     environment:
-      - TZ=Asia/Jakarta
+      TZ: Asia/Jakarta
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: wa_clinic_db
