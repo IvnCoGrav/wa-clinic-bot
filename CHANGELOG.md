@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-08 - Fixed: Penyelarasan Penuh Zona Waktu WIB (Asia/Jakarta) pada Admin Dashboard & Kalender
+
+- **Akar (multi-layer audit):**
+  - Pada pagi hari antara pukul 00:00 s/d 06:59 WIB, UTC masih berada di tanggal kemarin (H-1).
+  - Berbagai komponen frontend kalender dan reservasi (`CreateReservationModal`, `TodayTreatments`, `Reservations`, `DayScheduleGrid`, `MonthScheduleGrid`, `WeekScheduleGrid`, `DailyScheduleModal`, `QuickHoldModal`, `StaffToday`) menggunakan `new Date().toISOString().split('T')[0]`, `toLocaleDateString()` tanpa parameter `timeZone: 'Asia/Jakarta'`, atau `start.toISOString()` pada rentang kalender yang mengembalikan tanggal kemarin di UTC.
+  - Parameter `startDate` & `endDate` kalender dikirim dalam format ISO string dengan `T`, menyebabkan helper backend `wibDayRangeToUtc` gagal melakukan regex match dan beralih ke parsing lokal yang rentan pergeseran hari.
+  - Kontainer Docker `app`, `worker`, dan `postgres` belum memiliki environment variable `TZ=Asia/Jakarta`.
+- **Fixed & Hardened (fondasional):**
+  - **Penyelarasan Utilitas WIB Terpusat:** Menambahkan `getTodayWibDateKey()` (menggunakan `en-CA` dengan `timeZone: 'Asia/Jakarta'`), `getTodayWibDate()` (objek Date jam 12:00 WIB), dan `formatWibDate()` pada `dateWib.ts`.
+  - **Penyeragaman Tanggal Reservasi & Kalender:** Seluruh fallback inisialisasi "Hari Ini" dan pemformatan tanggal pada modal reservasi, jadwal harian, dan ringkasan tugas staf kini deterministik mengacu pada zona waktu `Asia/Jakarta`.
+  - **Kontrak Kanonis Query Kalender:** `getCalendarDateRange` pada `Reservations.tsx` mengembalikan tanggal murni `YYYY-MM-DD` WIB sehingga helper `wibDayRangeToUtc` di backend mengeksekusi batasan waktu 00:00:00 s/d 23:59:59.999 WIB secara sempurna.
+  - **Lingkungan Kontainer:** Menambahkan `TZ=Asia/Jakarta` pada konfigurasi `app`, `worker`, dan `postgres` di `docker-compose.yml`.
+- **Test:** `npm run build` di `packages/admin-dashboard` dan root backend lulus 100% tanpa error.
+
 #### 2026-10-07 - Fixed: Optimalisasi Antarmuka & Sistem LiveChat (Fase 1-5)
 
 - **Akar (multi-layer & UX audit):**

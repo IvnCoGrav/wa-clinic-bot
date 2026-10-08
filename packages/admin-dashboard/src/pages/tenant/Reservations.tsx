@@ -4,7 +4,7 @@ import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
-import { getWibDateKey } from '../../utils/dateWib';
+import { getWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
@@ -121,7 +121,7 @@ export const Reservations: React.FC = () => {
   // Calendar View State — deep-link `?date=YYYY-MM-DD` (notifikasi tumpang jadwal)
   // membuka mode "day" pada tanggal terkait; tanpa param → hari ini, mode tabel.
   const deepLinkDate = useMemo(() => readInitialDateFromQuery(), []);
-  const [selectedDate, setSelectedDate] = useState<Date>(() => deepLinkDate ?? new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => deepLinkDate ?? getTodayWibDate());
   const [viewMode, setViewMode] = useState<CalendarViewMode>(() => (deepLinkDate ? 'day' : 'table'));
   const [filterState, setFilterState] = useState<CalendarFilterState>({
     searchQuery: '',
@@ -240,25 +240,20 @@ export const Reservations: React.FC = () => {
 
   const getCalendarDateRange = (mode: CalendarViewMode, date: Date) => {
     if (mode === 'day') {
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-      return { startDate: start.toISOString(), endDate: end.toISOString() };
+      const key = getWibDateKey(date);
+      return { startDate: key, endDate: key };
     } else if (mode === 'week') {
       const d = new Date(date);
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       const start = new Date(d.setDate(diff));
-      start.setHours(0, 0, 0, 0);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
-      return { startDate: start.toISOString(), endDate: end.toISOString() };
+      return { startDate: getWibDateKey(start), endDate: getWibDateKey(end) };
     } else if (mode === 'month') {
-      const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-      return { startDate: start.toISOString(), endDate: end.toISOString() };
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      return { startDate: getWibDateKey(start), endDate: getWibDateKey(end) };
     }
     return null;
   };
@@ -397,7 +392,7 @@ export const Reservations: React.FC = () => {
   };
 
   const handleToday = () => {
-    setSelectedDate(new Date());
+    setSelectedDate(getTodayWibDate());
   };
 
   const handleQuickAdd = (target: QuickSlotTarget) => {
@@ -1015,6 +1010,7 @@ export const Reservations: React.FC = () => {
   const headerDateTitle = selectedDate.toLocaleDateString('id-ID', {
     month: 'long',
     year: 'numeric',
+    timeZone: 'Asia/Jakarta',
   });
 
   return (

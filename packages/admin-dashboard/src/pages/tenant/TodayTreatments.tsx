@@ -52,6 +52,7 @@ import {
 import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
 import { isEnRouteStatus } from '../../utils/reservationStatus';
 import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
+import { getTodayWibDateKey } from '../../utils/dateWib';
 
 interface TaskChild {
   name: string;
@@ -127,10 +128,7 @@ export const TodayTreatments: React.FC = () => {
 
   // Date selection states: 'today' | 'tomorrow' | 'custom'
   const [dateTab, setDateTab] = useState<'today' | 'tomorrow' | 'custom'>('today');
-  const [customDate, setCustomDate] = useState<string>(() => {
-    const d = new Date();
-    return d.toISOString().split('T')[0];
-  });
+  const [customDate, setCustomDate] = useState<string>(() => getTodayWibDateKey());
   const [dateMeta, setDateMeta] = useState<DateMeta | null>(null);
 
   const cachedTasksRes = getCachedApiResponse<any>('/api/staff/today-tasks?scope=mine') || getCachedApiResponse<any>('/api/staff/today-tasks?scope=all');

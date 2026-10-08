@@ -30,6 +30,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=Asia/Jakarta
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
@@ -79,6 +80,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=Asia/Jakarta
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=512
       - SEPARATE_WORKER=true
@@ -125,6 +127,7 @@ services:
     command: postgres -c shared_buffers=256MB -c work_mem=16MB -c max_connections=100
     restart: always
     environment:
+      - TZ=Asia/Jakarta
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: wa_clinic_db

@@ -79,6 +79,22 @@ export function getTodayWibDateKey(): string {
   return getWibDateKey(new Date());
 }
 
+/** Ambil Date object yang tepat merepresentasikan hari ini di WIB (pukul 12:00 siang WIB untuk cegah edge midnight) */
+export function getTodayWibDate(): Date {
+  const key = getTodayWibDateKey();
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+/** Format tanggal dengan zona waktu Asia/Jakarta (WIB) */
+export function formatWibDate(dateStr: string | Date, options?: Intl.DateTimeFormatOptions): string {
+  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+  return d.toLocaleDateString('id-ID', {
+    timeZone: WIB_TZ,
+    ...(options || { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+  });
+}
+
 /** Rakit ISO WIB dari date-key + jam (tanpa zona browser). Murni. */
 export function buildWibIso(dateKey: string, timeHHMM: string): string {
   const d = String(dateKey || '').trim();

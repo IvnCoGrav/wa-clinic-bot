@@ -4,7 +4,7 @@ import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight
 import { QuickSlotTarget } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
-import { getWibHoursAndMinutes } from '../../utils/dateWib';
+import { getWibHoursAndMinutes, getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 
 interface WeekScheduleGridProps {
   selectedDate: Date;
@@ -275,14 +275,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   }
 
   const isSameDay = (d1: Date, d2: Date) => {
-    return (
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate()
-    );
+    return getWibDateKey(d1) === getWibDateKey(d2);
   };
 
-  const isToday = (d: Date) => isSameDay(d, new Date());
+  const isToday = (d: Date) => getWibDateKey(d) === getTodayWibDateKey();
 
   const scrollToDayIndex = (idx: number) => {
     const el = containerRef.current;

@@ -4,17 +4,10 @@ import { X, Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { DayScheduleGrid } from './DayScheduleGrid';
 import { Reservation } from '../../types';
-
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
+import { getWibDateKey, getTodayWibDate, formatWibDate } from '../../utils/dateWib';
 
 function formatDateLabel(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return formatWibDate(`${iso}T12:00:00+07:00`, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 interface Props {
@@ -35,9 +28,9 @@ export const DailyScheduleModal: React.FC<Props> = ({
   onInsertToChat: _onInsertToChat,
 }) => {
   const getTomorrowISO = () => {
-    const t = new Date();
+    const t = getTodayWibDate();
     t.setDate(t.getDate() + 1);
-    return toISODate(t);
+    return getWibDateKey(t);
   };
 
   const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
@@ -92,12 +85,13 @@ export const DailyScheduleModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
-  const selectedDate = new Date(`${selectedDateStr}T00:00:00`);
+  const selectedDate = new Date(`${selectedDateStr}T12:00:00+07:00`);
 
   const shiftDate = (delta: number) => {
-    const d = new Date(`${selectedDateStr}T00:00:00`);
-    d.setDate(d.getDate() + delta);
-    setSelectedDateStr(toISODate(d));
+    const [y, m, d] = selectedDateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+    dateObj.setDate(dateObj.getDate() + delta);
+    setSelectedDateStr(getWibDateKey(dateObj));
   };
 
   const filteredReservations =
@@ -192,7 +186,7 @@ export const DailyScheduleModal: React.FC<Props> = ({
               }}
               onQuickAdd={(target) => {
                 const timeStr = `${String(target.hour).padStart(2, '0')}:00`;
-                const dateStr = toISODate(target.date);
+                const dateStr = getWibDateKey(target.date);
                 if (onSelectSlot) onSelectSlot(dateStr, timeStr);
                 onClose();
               }}

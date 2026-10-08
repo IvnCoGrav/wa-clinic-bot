@@ -44,7 +44,7 @@ import {
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
-import { getWibDateKey, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
+import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
@@ -608,16 +608,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (isOpen && initialSlotTarget) {
       // Dukung dua bentuk date: Date object (kalender) & string YYYY-MM-DD (LiveChat)
       const rawDate: any = (initialSlotTarget as any).date;
-      let yyyy: string, mm: string, dd: string;
       if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-        [yyyy, mm, dd] = rawDate.split('-');
         setBookingDate(rawDate);
-      } else {
-        const d = new Date(rawDate);
-        yyyy = String(d.getFullYear());
-        mm = String(d.getMonth() + 1).padStart(2, '0');
-        dd = String(d.getDate()).padStart(2, '0');
-        setBookingDate(`${yyyy}-${mm}-${dd}`);
+      } else if (rawDate) {
+        setBookingDate(getWibDateKey(rawDate));
       }
       // Prioritas timeStr (HH:MM dari chat), fallback hour
       const ts = (initialSlotTarget as any).timeStr as string | undefined;
@@ -633,11 +627,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     } else if (isOpen && !bookingDate && mode !== 'edit') {
       // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
       // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      setBookingDate(`${yyyy}-${mm}-${dd}`);
+      setBookingDate(getTodayWibDateKey());
       setBookingTime('');
     }
   }, [isOpen, initialSlotTarget, mode]);
@@ -900,13 +890,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setMultiSessionTotal(srv.totalSessions);
       // Generate default schedule: starting from tomorrow, daily 09:00 + 15:00
       const schedule = [];
-      const tomorrow = new Date();
+      const tomorrow = getTodayWibDate();
       tomorrow.setDate(tomorrow.getDate() + 1);
       for (let i = 0; i < srv.totalSessions; i++) {
         const dayOffset = Math.floor(i / 2);
         const date = new Date(tomorrow);
         date.setDate(date.getDate() + dayOffset);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = getWibDateKey(date);
         const time = i % 2 === 0 ? '09:00' : '15:00';
         schedule.push({ sessionNumber: i + 1, date: dateStr, time, staffId: assignedStaffId || '' });
       }
@@ -1681,7 +1671,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             babies: formBabies,
             sessions: multiSessionSchedule.map((s) => ({
               sessionNumber: s.sessionNumber,
-              bookingDate: new Date(`${s.date}T${s.time}:00`).toISOString(),
+              bookingDate: buildWibIso(s.date, s.time),
               assignedStaffId: s.staffId || assignedStaffId || undefined,
             })),
           }),

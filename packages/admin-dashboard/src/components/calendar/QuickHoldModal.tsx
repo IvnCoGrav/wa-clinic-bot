@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
-import { buildWibIso } from '../../utils/dateWib';
+import { buildWibIso, getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes } from '../../utils/dateWib';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
 interface QuickHoldModalProps {
@@ -63,13 +63,10 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
     }
     if (typeof initialDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
       setBookingDate(initialDate);
+    } else if (initialDate) {
+      setBookingDate(getWibDateKey(initialDate as any));
     } else {
-      const today = new Date();
-      const d = initialDate ? new Date(initialDate as any) : today;
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      setBookingDate(`${yyyy}-${mm}-${dd}`);
+      setBookingDate(getTodayWibDateKey());
     }
     if (initialTime) {
       setBookingTime(initialTime);
@@ -85,12 +82,9 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
   }, [isOpen, initialCustomer, initialDate, initialTime]);
 
   const handleDateShortcut = (offsetDays: number) => {
-    const target = new Date();
+    const target = getTodayWibDate();
     target.setDate(target.getDate() + offsetDays);
-    const yyyy = target.getFullYear();
-    const mm = String(target.getMonth() + 1).padStart(2, '0');
-    const dd = String(target.getDate()).padStart(2, '0');
-    setBookingDate(`${yyyy}-${mm}-${dd}`);
+    setBookingDate(getWibDateKey(target));
   };
 
   useEffect(() => {

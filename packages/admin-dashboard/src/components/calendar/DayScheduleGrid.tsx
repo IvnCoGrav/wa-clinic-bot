@@ -88,6 +88,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'Asia/Jakarta',
   });
 
   const getCategoryTheme = (cat: string) => {

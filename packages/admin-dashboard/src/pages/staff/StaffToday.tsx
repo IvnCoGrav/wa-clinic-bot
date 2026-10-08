@@ -626,6 +626,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
+        timeZone: 'Asia/Jakarta',
       });
     } catch {
       return isoString;

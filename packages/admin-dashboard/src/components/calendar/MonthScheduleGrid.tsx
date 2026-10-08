@@ -2,6 +2,7 @@ import React from 'react';
 import { Reservation } from '../../types';
 import { QuickSlotTarget } from './types';
 import { resolveReservationDuration } from '../../utils/durationCalculator';
+import { getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
@@ -57,14 +58,10 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   const allCalendarDays = [...prevDays, ...currentDays, ...nextDays];
 
   const isSameDay = (d1: Date, d2: Date) => {
-    return (
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate()
-    );
+    return getWibDateKey(d1) === getWibDateKey(d2);
   };
 
-  const isToday = (d: Date) => isSameDay(d, new Date());
+  const isToday = (d: Date) => getWibDateKey(d) === getTodayWibDateKey();
 
   const getEventsForDay = (date: Date) => {
     return reservations
