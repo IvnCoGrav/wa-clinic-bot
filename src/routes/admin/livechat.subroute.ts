@@ -402,12 +402,13 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           acknowledgeOutsideWindow?: boolean;
           replyToMessageId?: string;
           isInternalNote?: boolean;
+          dispatchOrigin?: boolean;
         };
       }>,
       reply
     ) => {
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote } = request.body || {};
+      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote, dispatchOrigin } = request.body || {};
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -421,6 +422,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         acknowledgeOutsideWindow,
         replyToMessageId,
         isInternalNote,
+        dispatchOrigin,
       });
 
       if (!result.success) {

@@ -433,8 +433,12 @@ export class LiveChatService {
      * masih dalam TTL 5 menit → balikan hasil pengiriman pertama (tanpa kirim dobel).
      */
     clientTempId?: string;
+    /**
+     * Penanda bahwa pengiriman dipicu dari aksi widget/drawer dispatch lapangan.
+     */
+    dispatchOrigin?: boolean;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId, clientTempId } = params;
+    const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId, clientTempId, dispatchOrigin } = params;
 
     // Fase 1.2: idempotensi retry berbasis clientTempId (retry timeout sinyal 1-bar).
     const prevClientTemp = LiveChatService.recentClientTemps.get(clientTempId);
@@ -513,30 +517,26 @@ export class LiveChatService {
     // MT-2.1: Deteksi palang pintu kunjungan lapangan tanpa reservasi aktif (state, bukan regex teks obrolan)
     let dispatchWarning: string | undefined = undefined;
     try {
-      const hasMedia = !!imageB64 || !!mediaUrl;
-      const hasShareloc = /\[LOCATION[:\s]*Lat/i.test(text || '');
-      if (hasMedia || hasShareloc) {
-        const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
-        const nowWib = new Date(Date.now() + WIB_OFFSET_MS);
-        const y = nowWib.getUTCFullYear();
-        const m = nowWib.getUTCMonth();
-        const d = nowWib.getUTCDate();
-        const startTodayWib = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - WIB_OFFSET_MS);
-        const endTodayWib = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - WIB_OFFSET_MS);
+      const isSharelocSend = /\[LOCATION[:\s]*Lat/i.test(text || '') || Boolean((params as any).location);
+      const isDispatchMediaSend = (!!imageB64 || !!mediaUrl) && (params.dispatchOrigin === true || params.forceEscalate === true);
+      if (isSharelocSend || isDispatchMediaSend) {
+        const { wibDayBoundsUtc } = await import('../utils/wib-time');
+        const { start, end } = wibDayBoundsUtc(0);
 
         const todayRes = await prisma.reservation.findFirst({
           where: {
             tenant_id: tenantId,
             customer_id: conversation.customer_id,
-            booking_date: { gte: startTodayWib, lte: endTodayWib },
+            booking_date: { gte: start, lte: end },
             status: { in: ['confirmed', 'en_route'] },
           },
         });
 
         const { staffTripTrackingService } = await import('./staff-trip-tracking.service');
         const activeTrip = todayRes?.id ? staffTripTrackingService.getTrip(tenantId, todayRes.id) : null;
+        const otwActive = Boolean((todayRes as any)?.otw_sent_at && !(todayRes as any)?.arrived_at);
 
-        if (!todayRes && !activeTrip) {
+        if (!todayRes && !activeTrip && !otwActive) {
           dispatchWarning = 'NO_ACTIVE_RESERVATION_TODAY';
           const { auditService } = await import('./audit.service');
           await auditService.logAdminAction({
@@ -547,8 +547,8 @@ export class LiveChatService {
             payload: {
               conversationId,
               customerId: conversation.customer_id,
-              hasMedia,
-              hasShareloc,
+              isSharelocSend,
+              isDispatchMediaSend,
             },
           }).catch(() => {});
         }

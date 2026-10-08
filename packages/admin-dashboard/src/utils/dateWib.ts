@@ -103,3 +103,16 @@ export function buildWibIso(dateKey: string, timeHHMM: string): string {
   else t = '09:00';
   return `${d}T${t}:00+07:00`;
 }
+
+/**
+ * Batas awal & akhir hari WIB (00:00:00 - 23:59:59.999) sebagai objek Date absolut.
+ * Cermin matematis identik dari wibDayBoundsUtc(0) di backend.
+ */
+export function wibDayStartEnd(now: Date = new Date()): { start: Date; end: Date } {
+  const key = getWibDateKey(now);
+  const [y, m, d] = key.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 7 * 3600 * 1000);
+  const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) - 7 * 3600 * 1000);
+  return { start, end };
+}
+

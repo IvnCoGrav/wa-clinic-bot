@@ -124,7 +124,8 @@ async function getWilayahRef(): Promise<WilayahReference | null> {
   }
   return wilayahRefInflight;
 }
-import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime, getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
+import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime, getWibDateKey, getWibHoursAndMinutes, wibDayStartEnd } from '../../utils/dateWib';
+import { shouldWarnUnregisteredVisit } from '../../utils/dispatchVisitContext';
 import { shouldReloadForSseEvent, shouldPreserveActiveChat, isSameConversation, type SourceFilter } from '../../utils/livechatSourceFilter';
 import { emitBootPhase } from '../../lib/bootProgress';
 
@@ -579,6 +580,7 @@ export const LiveChatMonitor: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
   const composerRef = useRef<LiveChatComposerHandle | null>(null);
+  const dispatchOriginRef = useRef<boolean>(false);
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -3522,13 +3524,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       !activePendingReservation
   );
 
-  // MT-2.2: Palang Pintu Dispatch — Deteksi kunjungan lapangan tanpa reservasi aktif di DB
+  // MT-2.2: Palang Pintu Dispatch — Deteksi kunjungan lapangan tanpa reservasi aktif di DB (state-based)
   const hasVisitIndicators = useMemo(() => {
-    if (!messages || messages.length === 0) return false;
-    const hasMedia = messages.some((m) => Boolean(m.media || (m.content && m.content.startsWith('[IMAGE'))));
-    const hasShareloc = messages.some((m) => Boolean(m.location || (m.content && /\[LOCATION[:\s]*Lat/i.test(m.content))));
-    return hasMedia || hasShareloc;
-  }, [messages]);
+    const { start, end } = wibDayStartEnd(new Date());
+    return shouldWarnUnregisteredVisit({
+      messages,
+      dayStart: start,
+      dayEnd: end,
+      field: {
+        hasTodayReservation: Boolean(activeConfirmedReservation || activePendingReservation),
+        hasActiveTrip: Boolean(dispatchReservationId),
+        hasOtwActive: Boolean((activeConfirmedReservation as any)?.otw_sent_at && !(activeConfirmedReservation as any)?.arrived_at),
+      },
+    });
+  }, [messages, activeConfirmedReservation, activePendingReservation, dispatchReservationId]);
 
   const showUnregisteredVisitBanner = Boolean(
     hasVisitIndicators &&
@@ -3553,6 +3562,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   const handleInsertDispatchDraft = (text: string) => {
     const draft = (text || '').trim();
     if (!draft) return;
+    dispatchOriginRef.current = true;
     composerRef.current?.setText(draft);
     replyTextRef.current = draft;
     setHasReplyText(true);
@@ -3755,6 +3765,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         body.imageB64 = image.dataUrl;
         body.mimeType = image.mimeType;
         body.fileName = image.fileName;
+      }
+      if (dispatchOriginRef.current) {
+        body.dispatchOrigin = true;
+        dispatchOriginRef.current = false;
       }
 
       const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {

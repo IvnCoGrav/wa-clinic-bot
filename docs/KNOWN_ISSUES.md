@@ -21,21 +21,31 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. **Fase 1 (Resolusi 22 Reservasi Zombie & Watchdog Kategori 4):**
      - 22 reservasi lampau `confirmed` berhasil diselesaikan via seam kanonis `reservationLifecycleService.onReservationCompleted`. LTV 20 customer terdampak berhasil disinkronkan. Sisa reservasi lampau confirmed = 0.
      - `NightlyWatchdogService` diperluas dengan kategori ke-4 `pastUnresolved` (reservasi lampau `confirmed`/`en_route` sebelum hari ini WIB).
-  3. **Fase 2 & 3 (Palang Pintu Dispatch & Negosiasi Auto-Draft Komitmen Aktif):**
-     - Backend (`live-chat.service.ts`): Deteksi pengiriman media/shareloc tanpa reservasi aktif hari ini dan tanpa active trip bidan. Mencatat audit log `UNREGISTERED_VISIT_DISPATCH_DETECTED` dan mengembalikan warning `NO_ACTIVE_RESERVATION_TODAY` tanpa memutus pengiriman WhatsApp.
-     - Frontend (`LiveChatMonitor.tsx`): Menampilkan banner peringatan oranye saat terapis mengirim media/shareloc tanpa reservasi hari ini, dengan tombol cepat "Buat Reservasi Sekarang".
+  3. **Fase 2 & 3 (Palang Pintu Dispatch v2 Presisi Tanpa-Hafalan & Negosiasi Auto-Draft Komitmen Aktif):**
+     - **Revisi Dispatch Guard v2 (State-Based, Zero Keyword-Memorization)**:
+       - *Diagnosis*: Gejala false positive (misal kasus Ariesta) muncul karena media apa pun (termasuk brosur/pricelist) di seluruh riwayat percakapan masa lalu dianggap sebagai indikator kunjungan hari ini.
+       - *Keputusan Arsitektur Fondasional*: Menolak keras `ARRIVAL_PHRASE_REGEX` ("disini bunda", "otw", "sudah sampai") dan `MARKETING_MEDIA_REGEX` ("pricelist", dsb). Pengambilan keputusan murni bersandar pada status:
+         1. Satu definisi hari kalender WIB kanonis: `wibDayBoundsUtc(0)` di backend (`src/utils/wib-time.ts:22`) dan cerminnya `wibDayStartEnd` di frontend (`packages/admin-dashboard/src/utils/dateWib.ts`).
+         2. Media tidak pernah memicu peringatan sendirian; hanya dihitung bila berpasangan dengan penanda asal-dispatch (`dispatchOrigin === true`), staf lapangan (`isFieldStaff === true` / `forceEscalate === true`), atau merupakan pesan terakhir obrolan di hari WIB yang sama.
+         3. Hanya membaca format teknis mesin GPS (`/\[LOCATION[:\s]*Lat/i` atau objek `.location`).
+         4. Peringatan padam bila terdeteksi reservasi hari ini, trip Bidan aktif (`staffTripTrackingService.getTrip`), atau status OTW aktif (`otw_sent_at` tanpa `arrived_at`).
+     - Backend (`live-chat.service.ts` & `src/routes/admin/livechat.subroute.ts`): Memeriksa pesan yang *sedang dikirim* dengan batas hari WIB kanonis dan plumbing flag `dispatchOrigin`.
+     - Frontend (`LiveChatMonitor.tsx`): Menghubungkan `shouldWarnUnregisteredVisit` dari modul daun `dispatchVisitContext.ts` dan plumbing `dispatchOriginRef`.
      - Extractor (`chatScheduleExtractor.ts`): Fungsi `isNegotiatedScheduleCommitted` memastikan auto-draft reservasi hanya aktif bila ada tanggal/jam valid DAN pesan terakhir inbound customer menunjukkan afirmasi/komitmen aktif (bukan tanya harga, bukan tanya info, dan menolak tawaran bot yang belum direspons). Tag question santun bermuatan afirmasi ("Oke jam 9 ya?", "Boleh jam 10 ya?") diperbolehkan lolos.
-- **Bukti Redacted Produksi (Verifikasi Independen):**
+- **Bukti Redacted Produksi & Uji Vektor (Verifikasi Independen):**
   - **Bukti 1 (Reservasi & LTV Karina):**
     `id: edc8b4c1-0742-4c59-98f8-943f8fdcb932 | phone: 628383****608 | name: Karina | status: completed | treatment: Kala Baby – Pijat Ceria | purchase_value: 70000 | ltv_cache: 70000 | purchase_event_sent_at: 2026-10-08 01:57:26.953 | booking_date: 2026-10-04 00:30:00 UTC (07:30 WIB)`
   - **Bukti 2 (Pembatalan Follow-up Karina):**
     `id: 961b30c8... | type: NO_PURCHASE | stage: 3 | status: CANCELLED | cancel_reason: CUSTOMER_ALREADY_PURCHASED_VISIT_DONE_OCT_4`
   - **Bukti 3 (Sisa Zombie Confirmed Lampau < 2026-10-08 WIB):**
     `SELECT count(*) FROM reservations WHERE status = 'confirmed' AND booking_date BETWEEN '2020-01-01' AND '2026-10-07 17:00:00+00' -> 0 baris (Sisa = 0)`
+  - **Bukti 4 (Uji 7 Vektor Dispatch Guard v2 Tanpa-Hafalan):**
+    `tests/unit/dispatch-visit-context.test.ts` (8 passing) + `tests/unit/dispatch-visit-context-frontend-mirror.test.ts` (2 passing) + `tests/unit/live-chat-dispatch-warning.test.ts` (3 passing). Total 13/13 passing dengan 0 regex kalimat manusia.
 - **Catatan Utang Teknis (Wajib Diselesaikan Selanjutnya):**
   1. **Utang (a) — Intent Reasoner Semantik:** Mengganti regex komitmen kata hafalan di `isNegotiatedScheduleCommitted` dengan AI Reasoner maksud semantik berbasis LLM + DB state, menjadikan regex hanya sebagai filter awal lapis dua.
   2. **Utang (b) — Tag Question Sanitisasi:** Tag question santun ("Oke jam 9 ya?") telah diperbaiki pada commit ini (18/18 test hijau), namun variasi bahasa daerah (Jawa/Surabayaan seperti "Jam 9 yo?") perlu dimasukkan ke kamus semantik AI.
-  3. **Utang (c) — Pemisahan Scope Commit:** Memisahkan staging git antara Issue #245 (data operasional/watchdog/dispatch), Issue #244 (multi-address), dan Issue #243 (audio streaming range 206) agar blast radius terisolasi per PR.
+  3. **Utang (c) — Metadata Dispatch Historis:** Pesan lampau sebelum penerapan flag `dispatchOrigin` belum memiliki metadata asal-dispatch di database pesan, sehingga penandaan pada riwayat masih mengandalkan aturan posisi pesan terakhir hari ini secara aman.
+  4. **Utang (d) — Pemisahan Scope Commit:** Memisahkan staging git antara Issue #245 (data operasional/watchdog/dispatch), Issue #244 (multi-address), dan Issue #243 (audio streaming range 206) agar blast radius terisolasi per PR.
 - **Status:** VERIFIED (KODE LOKAL & TES UNIT) / PROOF CAPTURED (PRODUKSI) — Menunggu Review Akhir Manusia Sebelum Deploy.
 
 ## 244. [MultiAddress] Resolusi Alamat Multi-Rumah Pelanggan & Penautan Reservasi Historis (2026-10-08, RESOLVED)
