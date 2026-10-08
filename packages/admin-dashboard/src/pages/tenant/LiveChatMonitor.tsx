@@ -3499,32 +3499,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     ]
   );
 
-  // MT-3.1: Deteksi jadwal hasil negosiasi dengan komitmen aktif user (anti false-positive)
-  const negotiatedScheduleState = useMemo(() => {
-    return isNegotiatedScheduleCommitted(messages, formBannerExtracted);
-  }, [messages, formBannerExtracted]);
-
-  const hasValidNegotiatedSchedule = Boolean(
-    negotiatedScheduleState && !hasExistingReservationForExtractedSchedule
-  );
-
-  // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
-  // form BARU (konten beda) otomatis tampil lagi.
-  const formBannerKey =
-    (formBannerExtracted?.hasExplicitReservationForm || hasValidNegotiatedSchedule) && selectedChat && formBannerExtracted
-      ? `${selectedChat.conversationId}|${formBannerExtracted.dateDisplay}|${formBannerExtracted.timeDisplay}|${formBannerExtracted.treatmentName}`
-      : null;
-
-  const showFormReservasiBanner = Boolean(
-    formBannerKey &&
-      formBannerKey !== dismissedFormBanner &&
-      !hasExistingReservationForExtractedSchedule &&
-      !activeHoldReservation &&
-      !activeConfirmedReservation &&
-      !activePendingReservation
-  );
-
-  // MT-2.2: Palang Pintu Dispatch — Deteksi kunjungan lapangan tanpa reservasi aktif di DB (state-based)
+  // MT-2.2: Palang Pintu Dispatch — Deteksi reservasi selesai hari ini di DB (state-based)
   const hasTodayCompletedReservation = useMemo(() => {
     if (!selectedChat) return false;
     const { start, end } = wibDayStartEnd(new Date());
@@ -3540,6 +3515,38 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const fromChat = (selectedChat as any).activeConfirmedReservation;
     return Boolean(fromChat && isCompletedToday(fromChat));
   }, [selectedChat, customerDetailData]);
+
+  // MT-3.1: Deteksi jadwal hasil negosiasi dengan komitmen aktif user (anti false-positive)
+  const negotiatedScheduleState = useMemo(() => {
+    return isNegotiatedScheduleCommitted(messages, formBannerExtracted);
+  }, [messages, formBannerExtracted]);
+
+  const hasValidNegotiatedSchedule = Boolean(
+    negotiatedScheduleState &&
+      formBannerExtracted?.isExtractedFromChat &&
+      Boolean(formBannerExtracted?.treatmentName || formBannerExtracted?.hasExplicitReservationForm) &&
+      !hasExistingReservationForExtractedSchedule &&
+      !hasTodayCompletedReservation &&
+      selectedChat?.escalationReason !== 'recruitment_inquiry'
+  );
+
+  // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
+  // form BARU (konten beda) otomatis tampil lagi.
+  const formBannerKey =
+    (formBannerExtracted?.hasExplicitReservationForm || hasValidNegotiatedSchedule) && selectedChat && formBannerExtracted
+      ? `${selectedChat.conversationId}|${formBannerExtracted.dateDisplay}|${formBannerExtracted.timeDisplay}|${formBannerExtracted.treatmentName}`
+      : null;
+
+  const showFormReservasiBanner = Boolean(
+    formBannerKey &&
+      formBannerKey !== dismissedFormBanner &&
+      !hasExistingReservationForExtractedSchedule &&
+      !activeHoldReservation &&
+      !activeConfirmedReservation &&
+      !activePendingReservation &&
+      !hasTodayCompletedReservation &&
+      selectedChat?.escalationReason !== 'recruitment_inquiry'
+  );
 
   const visitMessages = useMemo(
     () =>

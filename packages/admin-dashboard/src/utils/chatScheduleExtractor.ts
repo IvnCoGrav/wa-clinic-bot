@@ -1101,6 +1101,7 @@ export function isNegotiatedScheduleCommitted(
 ): boolean {
   if (!messages || messages.length === 0) return false;
   if (!extractedSchedule?.bookingDate || !extractedSchedule?.timeDisplay) return false;
+  if (!extractedSchedule.isExtractedFromChat) return false;
 
   // Jika pesan terakhir di obrolan berasal dari bot (OUTBOUND), negosiasi belum disepakati user
   const lastMsg = messages[messages.length - 1];

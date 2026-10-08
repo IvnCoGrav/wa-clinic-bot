@@ -179,5 +179,58 @@ describe('isNegotiatedScheduleCommitted (adversarial multi-phrase MT-3.2)', () =
     ];
     expect(isNegotiatedScheduleCommitted(messages, dummySchedule)).toBe(false);
   });
+
+  it('negatif: Cindy pelamar kerja "boleh saya mengetahui info loker...?" dengan isExtractedFromChat:false ditolak', () => {
+    const messages = [
+      { direction: 'INBOUND', content: 'Apakah Kala Baby Spa sedang membuka lowongan Bidan Freelance?' },
+      { direction: 'OUTBOUND', content: 'Halo kak, untuk info lowongan bisa dicek ya' },
+      { direction: 'INBOUND', content: 'Jika iya, boleh saya mengetahui informasi lebih lanjut mengenai kualifikasi dan persyaratannya? Terima kasih' },
+    ];
+    const fallbackSchedule = {
+      ...dummySchedule,
+      treatmentName: '',
+      isExtractedFromChat: false,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, fallbackSchedule)).toBe(false);
+  });
+
+  it('negatif: user tanya "boleh minta pricelist?" dengan fallback schedule (isExtractedFromChat:false) ditolak', () => {
+    const messages = [
+      { direction: 'INBOUND', content: 'Halo kak, boleh minta pricelist?' },
+    ];
+    const fallbackSchedule = {
+      ...dummySchedule,
+      treatmentName: '',
+      isExtractedFromChat: false,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, fallbackSchedule)).toBe(false);
+  });
+
+  it('negatif: kalimat santun "bisa tanya-tanya dulu?" dengan fallback schedule ditolak', () => {
+    const messages = [
+      { direction: 'INBOUND', content: 'Siang kak, bisa tanya-tanya dulu?' },
+    ];
+    const fallbackSchedule = {
+      ...dummySchedule,
+      treatmentName: '',
+      isExtractedFromChat: false,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, fallbackSchedule)).toBe(false);
+  });
+
+  it('positif: alur Karina "Oke" setelah bot tawar 07.30 dengan isExtractedFromChat:true + ada treatment diterima', () => {
+    const messages = [
+      { direction: 'INBOUND', content: 'Minggu depan tgl 4 pagi ya kak' },
+      { direction: 'OUTBOUND', content: 'Untuk pagi ada bunda, kami ada slot jam 07.30-08.00. Bagaimana bund? 🤗' },
+      { direction: 'INBOUND', content: 'Oke' },
+    ];
+    const karinaSchedule = {
+      ...dummySchedule,
+      timeDisplay: '07.30',
+      treatmentName: 'Kala Baby – Pijat Ceria',
+      isExtractedFromChat: true,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, karinaSchedule)).toBe(true);
+  });
 });
 
