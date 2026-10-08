@@ -22,6 +22,7 @@ export interface NightlyWatchdogData {
   unreplied: Array<{ name: string; phone: string; conversationId: string; lastInboundAt: Date | null; waitingMinutes: number }>;
   stalledInquiries: Array<{ name: string; phone: string; conversationId: string; treatment: string | null }>;
   confirmedTomorrow: Array<{ time: string; name: string; treatment: string | null; staff: string | null }>;
+  pastUnresolved: Array<{ id: string; name: string; date: string; treatment: string | null; status: string }>;
   summary: string;
 }
 
@@ -142,20 +143,49 @@ export class NightlyWatchdogService {
       // DB offline.
     }
 
+    // 4. Reservasi lampau belum terselesaikan (pastUnresolved): confirmed / en_route dengan booking_date < awal hari WIB ini
+    const pastUnresolved: NightlyWatchdogData['pastUnresolved'] = [];
+    try {
+      const today = wibDayBoundsUtc(0);
+      const pastRows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          status: { in: ['confirmed', 'en_route'] },
+          booking_date: { lt: today.start },
+        },
+        include: { customer: { select: { name: true } } },
+        orderBy: { booking_date: 'asc' },
+        take: 100,
+      });
+      for (const r of pastRows) {
+        pastUnresolved.push({
+          id: r.id,
+          name: r.customer?.name || 'Bunda',
+          date: r.booking_date ? formatReportDateWib(r.booking_date) : '-',
+          treatment: r.treatment_detail || r.treatment_category || null,
+          status: r.status,
+        });
+      }
+    } catch {
+      // DB offline.
+    }
+
     return {
       reportDateStr,
       unreplied,
       stalledInquiries,
       confirmedTomorrow,
-      summary: this.buildSummary(unreplied.length, stalledInquiries.length, confirmedTomorrow.length),
+      pastUnresolved,
+      summary: this.buildSummary(unreplied.length, stalledInquiries.length, confirmedTomorrow.length, pastUnresolved.length),
     };
   }
 
-  private buildSummary(unreplied: number, stalled: number, confirmed: number): string {
+  private buildSummary(unreplied: number, stalled: number, confirmed: number, pastUnresolved: number = 0): string {
     return (
       `Chat belum dibalas: ${unreplied}. ` +
       `Tanya jadwal belum booking: ${stalled}. ` +
-      `Jadwal terkonfirmasi besok: ${confirmed}.`
+      `Jadwal terkonfirmasi besok: ${confirmed}.` +
+      (pastUnresolved > 0 ? ` Reservasi lampau belum selesai: ${pastUnresolved}.` : '')
     );
   }
 
@@ -187,6 +217,15 @@ export class NightlyWatchdogService {
       lines.push(`${i + 1}. ${c.time} WIB — ${c.name}${c.treatment ? ` (${c.treatment})` : ''}${c.staff ? ` — ${c.staff}` : ''}`);
     });
     if (data.confirmedTomorrow.length === 0) lines.push('• Tidak ada.');
+
+    if (data.pastUnresolved && data.pastUnresolved.length > 0) {
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      lines.push(`⚠️ RESERVASI LAMPAU BELUM SELESAI (${data.pastUnresolved.length} Reservasi)`);
+      data.pastUnresolved.slice(0, 10).forEach((p, i) => {
+        lines.push(`${i + 1}. [${p.date}] ${p.name}${p.treatment ? ` (${p.treatment})` : ''} — Status: ${p.status}`);
+      });
+      lines.push(`   🔗 ${dashboardUrl}/admin/reservations`);
+    }
 
     return lines.join('\n');
   }

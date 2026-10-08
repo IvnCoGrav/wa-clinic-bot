@@ -54,6 +54,32 @@ function extractCustomerNameFromMessages(messages: { body: string; fromMe?: bool
   return undefined;
 }
 
+function isMediaOrNonText(m: any): boolean {
+  const type = String(m?.type || '').toLowerCase();
+  return (
+    type === 'ptt' ||
+    type === 'audio' ||
+    type === 'voice' ||
+    type === 'voice_note' ||
+    type === 'image' ||
+    type === 'video' ||
+    type === 'document' ||
+    type === 'sticker' ||
+    type === 'location'
+  );
+}
+
+function resolveMediaPlaceholder(msgType: string): string {
+  const t = (msgType || '').toLowerCase();
+  if (t === 'ptt' || t === 'voice' || t === 'voice_note') return '[VOICE_NOTE]';
+  if (t === 'audio') return '[AUDIO]';
+  if (t === 'image') return '[IMAGE]';
+  if (t === 'video') return '[VIDEO]';
+  if (t === 'document') return '[DOCUMENT]';
+  if (t === 'location') return '[LOCATION]';
+  return '[MEDIA]';
+}
+
 /**
  * Sinkronisasi history chat dari WAHA ke DB bot (mirip WhatsApp Web):
  * - Ambil daftar chat dan contacts lengkap dari WAHA (matching by address book name & pushname).
@@ -193,9 +219,9 @@ export class WahaHistorySyncService {
 
             const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
             const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
-            const textMessages = (rawMessages || [])
-              .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
-              .sort((a, b) => a.timestamp - b.timestamp);
+            const validMessages = (rawMessages || [])
+              .filter((m) => (m.body && typeof m.body === 'string' && m.body.trim().length > 0) || isMediaOrNonText(m))
+              .sort((a, b) => ((a as any).timestamp || 0) - ((b as any).timestamp || 0));
 
             // Matching nama dari contacts buku telepon / pushname / chat name / form text
             let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
@@ -206,7 +232,7 @@ export class WahaHistorySyncService {
               } catch (e) {}
             }
             if (!customerName) {
-              customerName = extractCustomerNameFromMessages(textMessages);
+              customerName = extractCustomerNameFromMessages(validMessages);
             }
 
             initialProgress.currentChatName = customerName || phone;
@@ -227,7 +253,7 @@ export class WahaHistorySyncService {
             let chatSynced = 0;
             let latestMsgDate: Date | null = null;
 
-            for (const msg of textMessages) {
+            for (const msg of validMessages) {
               if (!msg.id) continue;
 
               let msgDate: Date | undefined = undefined;
@@ -249,11 +275,61 @@ export class WahaHistorySyncService {
               const duplicate = await messageService.isDuplicateMessage(msg.id, tenantId);
               if (duplicate) continue;
 
+              let content = typeof msg.body === 'string' ? msg.body.trim() : '';
+              const msgType = String((msg as any).type || '').toLowerCase();
+              const isMedia = isMediaOrNonText(msg);
+
+              if (!content) {
+                content = resolveMediaPlaceholder(msgType);
+              }
+
+              let payloadRaw: any = undefined;
+              if (isMedia) {
+                try {
+                  const { mediaService } = await import('./media.service');
+                  const buffer = await wahaClient.downloadMedia(msg.id, targetChatId);
+                  if (buffer && buffer.length > 0) {
+                    let mimeType = (msg as any).media?.mimetype || (msg as any).mimetype || (msg as any).mime_type;
+                    if (!mimeType) {
+                      if (msgType === 'ptt' || msgType === 'voice' || msgType === 'voice_note' || msgType === 'audio') {
+                        mimeType = 'audio/ogg';
+                      } else if (msgType === 'image') {
+                        mimeType = 'image/jpeg';
+                      } else if (msgType === 'video') {
+                        mimeType = 'video/mp4';
+                      } else if (msgType === 'document') {
+                        mimeType = 'application/pdf';
+                      } else {
+                        mimeType = 'application/octet-stream';
+                      }
+                    }
+                    const saved = await mediaService.saveInboundMedia({
+                      tenantId,
+                      buffer,
+                      mimeType,
+                    });
+                    payloadRaw = {
+                      id: msg.id,
+                      type: msgType,
+                      media: {
+                        url: saved.hdUrl || saved.thumbUrl,
+                        hdUrl: saved.hdUrl,
+                        thumbUrl: saved.thumbUrl,
+                        mimeType,
+                        fileName: (msg as any).media?.filename || (msg as any).fileName || undefined,
+                      },
+                    };
+                  }
+                } catch {
+                  // Best-effort
+                }
+              }
+
               await messageService.logMessage({
                 tenantId,
                 conversationId: conversation.id,
                 direction: msg.fromMe ? Direction.OUTBOUND : Direction.INBOUND,
-                content: msg.body,
+                content,
                 waMessageId: msg.id,
                 senderType: msg.fromMe ? 'BOT' : undefined,
                 senderName: msg.fromMe ? 'Bot' : undefined,
@@ -261,6 +337,7 @@ export class WahaHistorySyncService {
                 readAt: msgDate || new Date(),
                 isHistorical: true,
                 skipMqlEvaluation: true,
+                payloadRaw,
               });
               chatSynced++;
             }
@@ -376,9 +453,9 @@ export class WahaHistorySyncService {
 
         const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
         const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
-        const textMessages = (rawMessages || [])
-          .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
-          .sort((a, b) => a.timestamp - b.timestamp);
+        const validMessages = (rawMessages || [])
+          .filter((m) => (m.body && typeof m.body === 'string' && m.body.trim().length > 0) || isMediaOrNonText(m))
+          .sort((a, b) => ((a as any).timestamp || 0) - ((b as any).timestamp || 0));
 
         // Matching nama dari contacts buku telepon / pushname / chat name / form text
         let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
@@ -389,7 +466,7 @@ export class WahaHistorySyncService {
           } catch (e) {}
         }
         if (!customerName) {
-          customerName = extractCustomerNameFromMessages(textMessages);
+          customerName = extractCustomerNameFromMessages(validMessages);
         }
 
         const customer = await customerService.getOrCreateCustomer(phone, customerName, tenantId, {
@@ -410,7 +487,7 @@ export class WahaHistorySyncService {
         let chatSynced = 0;
         let latestMsgDate: Date | null = null;
 
-        for (const msg of textMessages) {
+        for (const msg of validMessages) {
           if (!msg.id) continue;
 
           let msgDate: Date | undefined = undefined;
@@ -432,11 +509,61 @@ export class WahaHistorySyncService {
           const duplicate = await messageService.isDuplicateMessage(msg.id, tenantId);
           if (duplicate) continue;
 
+          let content = typeof msg.body === 'string' ? msg.body.trim() : '';
+          const msgType = String((msg as any).type || '').toLowerCase();
+          const isMedia = isMediaOrNonText(msg);
+
+          if (!content) {
+            content = resolveMediaPlaceholder(msgType);
+          }
+
+          let payloadRaw: any = undefined;
+          if (isMedia) {
+            try {
+              const { mediaService } = await import('./media.service');
+              const buffer = await wahaClient.downloadMedia(msg.id, targetChatId);
+              if (buffer && buffer.length > 0) {
+                let mimeType = (msg as any).media?.mimetype || (msg as any).mimetype || (msg as any).mime_type;
+                if (!mimeType) {
+                  if (msgType === 'ptt' || msgType === 'voice' || msgType === 'voice_note' || msgType === 'audio') {
+                    mimeType = 'audio/ogg';
+                  } else if (msgType === 'image') {
+                    mimeType = 'image/jpeg';
+                  } else if (msgType === 'video') {
+                    mimeType = 'video/mp4';
+                  } else if (msgType === 'document') {
+                    mimeType = 'application/pdf';
+                  } else {
+                    mimeType = 'application/octet-stream';
+                  }
+                }
+                const saved = await mediaService.saveInboundMedia({
+                  tenantId,
+                  buffer,
+                  mimeType,
+                });
+                payloadRaw = {
+                  id: msg.id,
+                  type: msgType,
+                  media: {
+                    url: saved.hdUrl || saved.thumbUrl,
+                    hdUrl: saved.hdUrl,
+                    thumbUrl: saved.thumbUrl,
+                    mimeType,
+                    fileName: (msg as any).media?.filename || (msg as any).fileName || undefined,
+                  },
+                };
+              }
+            } catch {
+              // Best-effort
+            }
+          }
+
           await messageService.logMessage({
             tenantId,
             conversationId: conversation.id,
             direction: msg.fromMe ? Direction.OUTBOUND : Direction.INBOUND,
-            content: msg.body,
+            content,
             waMessageId: msg.id,
             senderType: msg.fromMe ? 'BOT' : undefined,
             senderName: msg.fromMe ? 'Bot' : undefined,
@@ -444,6 +571,7 @@ export class WahaHistorySyncService {
             readAt: msgDate || new Date(),
             isHistorical: true,
             skipMqlEvaluation: true,
+            payloadRaw,
           });
           chatSynced++;
         }

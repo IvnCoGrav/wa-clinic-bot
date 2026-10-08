@@ -10,6 +10,8 @@
 
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
+import { ensureSinglePrimary, addressesMatch, UpsertSavedAddressInput } from '../domain/customer-address';
+import { extractAddressFromRawText } from '../utils/reservation-address';
 
 async function main() {
   const isDryRun = process.argv.includes('--dry-run');
@@ -51,18 +53,30 @@ async function main() {
     }
 
     const prefs = (customer.preferences as any) || {};
-    const savedList = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+    const rawSavedList = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+    let savedList = rawSavedList;
 
     let primaryAddressId: string | null = null;
+    let primaryAddressEntity: UpsertSavedAddressInput | null = null;
 
     if (savedList.length > 0) {
+      // Pastikan tepat 1 primary (bila tidak ada isPrimary → tetapkan dari lastUsedAt terbaru)
+      savedList = ensureSinglePrimary(savedList);
+      const primaryEntry = savedList.find((a: any) => a.isPrimary) || savedList[0];
+      primaryAddressId = primaryEntry.id;
+      primaryAddressEntity = {
+        address: primaryEntry.address || '',
+        kelurahan: primaryEntry.kelurahan || null,
+        kecamatan: primaryEntry.kecamatan || null,
+        kota: primaryEntry.kota || null,
+        lat: typeof primaryEntry.lat === 'number' ? primaryEntry.lat : null,
+        lng: typeof primaryEntry.lng === 'number' ? primaryEntry.lng : null,
+      };
+
       // Migrasikan entri dari buku alamat JSON
       for (const item of savedList) {
         const addrId = item.id || randomUUID();
-        const isPrimary = Boolean(item.isPrimary);
-        if (isPrimary && !primaryAddressId) {
-          primaryAddressId = addrId;
-        }
+        const isPrimary = item.id === primaryAddressId;
 
         if (!isDryRun) {
           await prisma.customerAddress.create({
@@ -101,6 +115,14 @@ async function main() {
       if (hasLocation) {
         const addrId = randomUUID();
         primaryAddressId = addrId;
+        primaryAddressEntity = {
+          address: prefs.address || '',
+          kelurahan: customer.kelurahan || null,
+          kecamatan: customer.kecamatan || null,
+          kota: customer.kota || null,
+          lat: customer.lat || null,
+          lng: customer.lng || null,
+        };
 
         if (!isDryRun) {
           await prisma.customerAddress.create({
@@ -133,19 +155,45 @@ async function main() {
       }
     }
 
-    // Tautkan reservasi yang belum punya alamat ke primary address ini
-    if (primaryAddressId) {
-      if (!isDryRun) {
-        const updateRes = await prisma.reservation.updateMany({
-          where: {
-            customer_id: customer.id,
-            customer_address_id: null,
-          },
-          data: {
-            customer_address_id: primaryAddressId,
-          },
-        });
-        linkedReservationsCount += updateRes.count;
+    // Tautkan reservasi yang belum punya alamat ke primary address HANYA jika cocok via addressesMatch
+    if (primaryAddressId && primaryAddressEntity) {
+      const unlinkedReservations = await prisma.reservation.findMany({
+        where: {
+          customer_id: customer.id,
+          customer_address_id: null,
+        },
+        select: {
+          id: true,
+          raw_text: true,
+        },
+      });
+
+      for (const res of unlinkedReservations) {
+        const extractedAddr = extractAddressFromRawText(res.raw_text);
+        let matches = false;
+
+        if (extractedAddr) {
+          // Bandingkan teks alamat di reservasi dengan primary address via addressesMatch
+          matches = addressesMatch(primaryAddressEntity, {
+            address: extractedAddr,
+            kelurahan: primaryAddressEntity.kelurahan,
+            kecamatan: primaryAddressEntity.kecamatan,
+            kota: primaryAddressEntity.kota,
+          });
+        } else if (savedList.length <= 1) {
+          // Pelanggan hanya punya 1 alamat dan reservasi tidak memiliki alamat alternatif di teks
+          matches = true;
+        }
+
+        if (matches) {
+          linkedReservationsCount++;
+          if (!isDryRun) {
+            await prisma.reservation.update({
+              where: { id: res.id },
+              data: { customer_address_id: primaryAddressId },
+            });
+          }
+        }
       }
     }
   }

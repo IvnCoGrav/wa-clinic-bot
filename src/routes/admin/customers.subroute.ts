@@ -467,12 +467,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         const customerAddress = (customer as any).address || (customer as any).preferences?.address || (customer as any).preferences?.full_address || null;
+        const savedAddresses = await customerService.getSavedAddresses(customer.id, DEFAULT_TENANT_ID).catch(() => []);
 
         return reply.status(200).send({
           success: true,
           data: {
             ...customer,
             address: customerAddress,
+            saved_addresses: savedAddresses,
             children: enrichedChildren,
             reservations: customer.reservations || [],
             labels: customerLabels,
@@ -481,6 +483,24 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             purchaseCount: purchaseCount as any,
           },
         });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/customers/:id/addresses
+   * Mengambil daftar alamat tersimpan (multi-rumah) milik customer
+   */
+  fastify.get(
+    '/api/admin/customers/:id/addresses',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const tenantId = tenantOf(request);
+      try {
+        const addresses = await customerService.getSavedAddresses(id, tenantId);
+        return reply.status(200).send({ success: true, addresses });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }

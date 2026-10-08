@@ -50,9 +50,17 @@ export interface SheetRowChild {
   age_months_at_registration?: number | null;
 }
 
+export interface SheetRowCustomerAddress {
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  ongkir?: number | null;
+}
+
 export interface SheetRowInput {
   reservation: SheetRowReservation;
   customer?: SheetRowCustomer | null;
+  customerAddress?: SheetRowCustomerAddress | null;
   child?: SheetRowChild | null;
   assignedStaffName?: string | null;
   /** Nama 12 tab bulan dari DB (TenantSheetsConfig.month_tab_names). */
@@ -82,15 +90,29 @@ function toCell(value: string | null | undefined): string {
   return s.length > 0 ? s : EMPTY_CELL;
 }
 
-/** Lokasi: kelurahan saja; fallback ke kecamatan/kota bila kelurahan kosong. */
-function resolveLocation(customer?: SheetRowCustomer | null): string {
-  if (!customer) return EMPTY_CELL;
-  const kel = (customer.kelurahan || '').trim();
-  if (kel) return kel;
-  const kec = (customer.kecamatan || '').trim();
-  if (kec) return kec;
-  const kota = (customer.kota || '').trim();
-  if (kota) return kota;
+/** Lokasi: kelurahan saja; fallback ke kecamatan/kota bila kelurahan kosong.
+ * Prioritas KANONIS: customerAddress (alamat spesifik reservasi) -> customer (alamat profil).
+ */
+export function resolveLocation(
+  customer?: SheetRowCustomer | null,
+  customerAddress?: SheetRowCustomerAddress | null
+): string {
+  if (customerAddress) {
+    const kel = (customerAddress.kelurahan || '').trim();
+    if (kel) return kel;
+    const kec = (customerAddress.kecamatan || '').trim();
+    if (kec) return kec;
+    const kota = (customerAddress.kota || '').trim();
+    if (kota) return kota;
+  }
+  if (customer) {
+    const kel = (customer.kelurahan || '').trim();
+    if (kel) return kel;
+    const kec = (customer.kecamatan || '').trim();
+    if (kec) return kec;
+    const kota = (customer.kota || '').trim();
+    if (kota) return kota;
+  }
   return EMPTY_CELL;
 }
 
@@ -128,18 +150,24 @@ export function resolveCustomerType(
   return hasAds ? 'New Ads' : 'New';
 }
 
-/** Ongkir: snapshot reservasi menang, fallback ke Customer.ongkir (pola KB-6). */
+/** Ongkir: snapshot reservasi menang, fallback ke customerAddress.ongkir -> Customer.ongkir (pola KB-6). */
 function resolveOngkir(
   reservation: SheetRowReservation,
-  customer?: SheetRowCustomer | null
+  customer?: SheetRowCustomer | null,
+  customerAddress?: SheetRowCustomerAddress | null
 ): number {
   if (typeof reservation.delivery_fee === 'number') return reservation.delivery_fee;
+  if (customerAddress && typeof customerAddress.ongkir === 'number') return customerAddress.ongkir;
   if (customer && typeof customer.ongkir === 'number') return customer.ongkir;
   return 0;
 }
 
-function resolveDiscount(reservation: SheetRowReservation): number {
-  return typeof reservation.discount_amount === 'number' ? reservation.discount_amount : 0;
+function resolveDiscount(reservation: SheetRowReservation): number | string {
+  const d = reservation.discount_amount;
+  if (typeof d === 'number' && Number.isFinite(d) && d > 0) {
+    return d;
+  }
+  return '';
 }
 
 /**
@@ -147,20 +175,18 @@ function resolveDiscount(reservation: SheetRowReservation): number {
  * @throws INVALID_BOOKING_DATE bila `booking_date` kosong/rusak.
  */
 export function formatReservationToRow(input: SheetRowInput): (string | number)[] {
-  const { reservation, customer, child, assignedStaffName } = input;
+  const { reservation, customer, customerAddress, child, assignedStaffName } = input;
 
   const target = resolveSheetTarget(
     reservation.booking_date,
     input.monthTabNames ?? DEFAULT_MONTH_TAB_NAMES
   );
 
-  const ongkir = resolveOngkir(reservation, customer);
+  const ongkir = resolveOngkir(reservation, customer, customerAddress);
   const discount = resolveDiscount(reservation);
   // Di spreadsheet klinik: "Total" = Layanan + Ongkir (sebelum diskon).
   const hargaLayanan = typeof reservation.purchase_value === 'number' ? reservation.purchase_value : 0;
   const total = hargaLayanan + ongkir;
-  // "Harga akhir" = Total - Diskon (bersih yang ditagihkan/dibayar).
-  const hargaAkhir = total - discount;
 
   // Bayi: hanya nama bayi saja, tanpa usia
   const childName = child && child.name ? child.name.trim() : '';
@@ -169,19 +195,19 @@ export function formatReservationToRow(input: SheetRowInput): (string | number)[
     target.isoDate,                                             // A Tanggal
     target.dayName,                                             // B Hari
     toCell(customer?.name),                                     // C Customer
-    resolveLocation(customer),                                  // D Lokasi (kelurahan saja)
+    resolveLocation(customer, customerAddress),                 // D Lokasi (kelurahan saja)
     toCell(childName),                                          // E Bayi/Layanan (nama saja)
     resolveCustomerType(reservation.is_repeat_order, customer, reservation.prior_reservations_count), // F Tipe Customer (Repeat / New Ads / New)
     toCell(reservation.treatment_detail),                       // G Layanan Detail
     ongkir,                                                     // H Ongkir
     total,                                                      // I Total
-    discount,                                                   // J Diskon
-    hargaAkhir,                                                 // K Harga akhir
+    discount,                                                   // J Diskon (nominal bila >0, else '')
+    '',                                                         // K Harga akhir (selalu kosong, dihitung rumus spreadsheet klinik)
     toCell(reservation.payment_method),                         // L Metode Bayar
     sanitizeStaffName(assignedStaffName),                       // M Bidan (nama saja tanpa kata "Bidan")
-    '',                                                         // N Tip (kosong / null)
-    toCell(reservation.status === 'completed' ? 'Sudah' : 'Belum'), // O Follow up
-    '',                                                         // P Catatan (tidak perlu diisi)
+    '',                                                         // N Tip (kosong / tulisan manual admin di sheet)
+    '',                                                         // O Follow up (selalu kosong, tulisan manual admin di sheet)
+    '',                                                         // P Catatan (tidak perlu diisi / tulisan manual admin)
   ];
 
   if (row.length !== SHEET_COLUMN_COUNT) {

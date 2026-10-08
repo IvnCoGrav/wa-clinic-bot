@@ -3,6 +3,88 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 245. [Data/Dispatch/Negotiation] Penyelamatan Data Operasional, 22 Reservasi Zombie, Palang Pintu Kunjungan Tanpa Reservasi, dan Negosiasi Jadwal Komitmen Aktif (2026-10-08, VERIFIED LOKAL & BUKTI PRODUKSI TERCATAT)
+
+- **Gejala & Masalah:**
+  1. Kasus Karina (`6283831464608`): Kunjungan 4 Okt 2026 sudah selesai tetapi tidak tercatat di reservasi sistem, menyebabkan antrean follow-up `NO_PURCHASE` salah sasaran dan event Meta CAPI Purchase tidak terkirim.
+  2. 22 reservasi lampau berstatus `confirmed` menggantung tanpa penyelesaian (zombie reservations), mendistorsi metrik LTV dan analitik operasional.
+  3. Nightly Watchdog belum memonitor reservasi lampau menggantung (`pastUnresolved`).
+  4. Bidan/admin mengirim pesan media/shareloc lapangan tanpa tiket reservasi resmi di DB, menyebabkan kunjungan tak tercatat (*unregistered dispatch*).
+  5. Auto-draft form reservasi di LiveChat mendeteksi jadwal dari sekadar tawaran sepihak bot atau tanya-tanya harga tanpa komitmen aktif customer.
+- **Akar Masalah & Solusi Fondasional (Fase 0 - Fase 4):**
+  1. **Fase 0 (Penyelamatan Data Darurat):**
+     - Audit read-only membuktikan Karina memiliki 0 reservasi dan antrean follow-up Stage 3 aktif untuk 18 Okt 2026. Backup CSV tersimpan di `/tmp/bak_karina_followups.csv`.
+     - Antrean follow-up dibatalkan dengan alasan `CUSTOMER_ALREADY_PURCHASED_VISIT_DONE_OCT_4`.
+     - Backfill reservasi completed (`edc8b4c1-0742-4c59-98f8-943f8fdcb932`) dengan layanan katalog resmi `Kala Baby – Pijat Ceria` (Rp 70.000), booking_date 2026-10-04 07:30 WIB. LTV dihitung ulang menjadi Rp 70.000. Label tenant "Tanya Jadwal" dihapus.
+     - Event Meta CAPI Purchase terkirim dengan status 200, fbtrace_id `AxZxyvRbn9JyHtztqDiKjGq`, dan `purchase_event_sent_at` tercatat di DB (`2026-10-08 01:57:26.953`).
+     - Audit 4 nomor lain (`62895339397003`, `6285340894854`, `6288989530895`, `6283172360876`) membuktikan koordinasi internal terapis/staf (babyspanisa, Hanifah, Thabita/Dita), bukan pasien. Tidak ada tiket fiktif dibuat.
+  2. **Fase 1 (Resolusi 22 Reservasi Zombie & Watchdog Kategori 4):**
+     - 22 reservasi lampau `confirmed` berhasil diselesaikan via seam kanonis `reservationLifecycleService.onReservationCompleted`. LTV 20 customer terdampak berhasil disinkronkan. Sisa reservasi lampau confirmed = 0.
+     - `NightlyWatchdogService` diperluas dengan kategori ke-4 `pastUnresolved` (reservasi lampau `confirmed`/`en_route` sebelum hari ini WIB).
+  3. **Fase 2 & 3 (Palang Pintu Dispatch & Negosiasi Auto-Draft Komitmen Aktif):**
+     - Backend (`live-chat.service.ts`): Deteksi pengiriman media/shareloc tanpa reservasi aktif hari ini dan tanpa active trip bidan. Mencatat audit log `UNREGISTERED_VISIT_DISPATCH_DETECTED` dan mengembalikan warning `NO_ACTIVE_RESERVATION_TODAY` tanpa memutus pengiriman WhatsApp.
+     - Frontend (`LiveChatMonitor.tsx`): Menampilkan banner peringatan oranye saat terapis mengirim media/shareloc tanpa reservasi hari ini, dengan tombol cepat "Buat Reservasi Sekarang".
+     - Extractor (`chatScheduleExtractor.ts`): Fungsi `isNegotiatedScheduleCommitted` memastikan auto-draft reservasi hanya aktif bila ada tanggal/jam valid DAN pesan terakhir inbound customer menunjukkan afirmasi/komitmen aktif (bukan tanya harga, bukan tanya info, dan menolak tawaran bot yang belum direspons). Tag question santun bermuatan afirmasi ("Oke jam 9 ya?", "Boleh jam 10 ya?") diperbolehkan lolos.
+- **Bukti Redacted Produksi (Verifikasi Independen):**
+  - **Bukti 1 (Reservasi & LTV Karina):**
+    `id: edc8b4c1-0742-4c59-98f8-943f8fdcb932 | phone: 628383****608 | name: Karina | status: completed | treatment: Kala Baby – Pijat Ceria | purchase_value: 70000 | ltv_cache: 70000 | purchase_event_sent_at: 2026-10-08 01:57:26.953 | booking_date: 2026-10-04 00:30:00 UTC (07:30 WIB)`
+  - **Bukti 2 (Pembatalan Follow-up Karina):**
+    `id: 961b30c8... | type: NO_PURCHASE | stage: 3 | status: CANCELLED | cancel_reason: CUSTOMER_ALREADY_PURCHASED_VISIT_DONE_OCT_4`
+  - **Bukti 3 (Sisa Zombie Confirmed Lampau < 2026-10-08 WIB):**
+    `SELECT count(*) FROM reservations WHERE status = 'confirmed' AND booking_date BETWEEN '2020-01-01' AND '2026-10-07 17:00:00+00' -> 0 baris (Sisa = 0)`
+- **Catatan Utang Teknis (Wajib Diselesaikan Selanjutnya):**
+  1. **Utang (a) — Intent Reasoner Semantik:** Mengganti regex komitmen kata hafalan di `isNegotiatedScheduleCommitted` dengan AI Reasoner maksud semantik berbasis LLM + DB state, menjadikan regex hanya sebagai filter awal lapis dua.
+  2. **Utang (b) — Tag Question Sanitisasi:** Tag question santun ("Oke jam 9 ya?") telah diperbaiki pada commit ini (18/18 test hijau), namun variasi bahasa daerah (Jawa/Surabayaan seperti "Jam 9 yo?") perlu dimasukkan ke kamus semantik AI.
+  3. **Utang (c) — Pemisahan Scope Commit:** Memisahkan staging git antara Issue #245 (data operasional/watchdog/dispatch), Issue #244 (multi-address), dan Issue #243 (audio streaming range 206) agar blast radius terisolasi per PR.
+- **Status:** VERIFIED (KODE LOKAL & TES UNIT) / PROOF CAPTURED (PRODUKSI) — Menunggu Review Akhir Manusia Sebelum Deploy.
+
+## 244. [MultiAddress] Resolusi Alamat Multi-Rumah Pelanggan & Penautan Reservasi Historis (2026-10-08, RESOLVED)
+
+- **Gejala & Masalah:**
+  1. Pelanggan dengan >1 rumah (contoh: Rumah 1 di Grogol dan Rumah 2 di Buduran) mengalami penguncian pesanan selalu ke Rumah 1 karena `reservation-core.service.ts` (`resolveCustomerAddressId`) selalu mengembalikan alamat utama (`is_primary: true`).
+  2. Siklus reservasi (`reservation-lifecycle.service.ts`) menimpa data kelurahan/kecamatan/kota dan alamat jalan di baris induk `Customer` sehingga data Rumah 1 hilang.
+  3. Notifikasi telegram bidan dan 3 query kartu tugas PWA terapis (`staff-reservation.service.ts`) hanya membaca koordinat/alamat dari profil induk `cust` bukan dari `reservation.customer_address`, menyebabkan penunjuk arah Google Maps berisiko salah rumah.
+  4. Formatter rekapan spreadsheet (`row-formatter.ts`) hanya membaca lokasi dari profil induk customer sehingga kolom D mencatat kelurahan Rumah 1 bukannya alamat tindakan reservasi.
+  5. Multi-address: backfill historis menautkan buta ke primary; reservasi lama tanpa koordinat tetap fallback ke profil induk.
+- **Solusi Fondasional yang Telah Diselesaikan (6 Fase Berurutan):**
+  1. **Fase 0 (Kunci Kontrak):** Mengunci `addressesMatch` dan `upsertAddressIntoList` di `src/domain/customer-address.ts` sebagai otoritas tunggal dedup spasial (<150 meter atau kesamaan teks jalan/kelurahan/kecamatan).
+  2. **Fase 1 (Backfill & DDL):** Memperbarui `src/scripts/backfill-customer-addresses.ts` agar menautkan reservasi ke `customer_addresses` HANYA bila cocok via `addressesMatch`, tanpa memaksa ke primary.
+  3. **Fase 2 (Intake & Lifecycle):**
+     - `resolveCustomerAddressId` di `reservation-core.service.ts` otomatis membuat entri Rumah 2 (`is_primary: false`) jika kandidat alamat berbeda dari Rumah 1.
+     - `onReservationCreated` di `reservation-lifecycle.service.ts` tidak lagi menimpa profil root `Customer` jika pelanggan sudah memiliki alamat utama; memanggil `customerService.upsertSavedAddress` (secondary) dan mengaitkan reservasi ke ID yang tepat.
+     - Endpoint admin (`/parse`, `/quick-hold`, POST `/api/admin/reservation`, dan PATCH `/api/admin/reservation/:id`) menerima `customerAddressId` dari body.
+  4. **Fase 3 (Dispatch Bidan & Peta):**
+     - `staff-notification.service.ts`: Notifikasi Telegram staf memprioritaskan `r.customer_address ?? r.customer` untuk koordinat, jarak tempuh, ongkir, dan URL Google Maps.
+     - `staff-reservation.service.ts`: Query `getTodayTasks`, `getUpcomingSchedule`, dan `getCompletedTasks` menyertakan `customer_address: true` dan konsisten memakai `effectiveAddr` untuk format teks alamat, mapsUrl, navigationUrl, dan objek address.
+  5. **Fase 4 (Admin Modal & Spreadsheet):**
+     - Endpoint `GET /api/admin/customers/:id` menyertakan `saved_addresses` dan rute `GET /api/admin/customers/:id/addresses` ditambahkan.
+     - `CreateReservationModal.tsx` di admin dashboard menyediakan pemilih alamat rumah (Rumah Utama / Rumah Kedua) bila pelanggan memiliki >1 alamat tersimpan, serta mengirimkan `customerAddressId`.
+     - `row-formatter.ts` dan `sheets-sync.service.ts`: Kolom D Google Sheets rekapan memprioritaskan kelurahan Rumah 2 (`customerAddress`), dan Kolom H menggunakan snapshot ongkir Rumah 2.
+  6. **Fase 5 (Uji Adversarial & Regresi):**
+     - File uji `tests/unit/customer-address-rumah-kedua.test.ts` membuktikan seluruh skenario: resolusi Rumah 2, perlindungan profil root Rumah 1, dedup spasial <150m, dispatch bidan, dan rekapan Google Sheets.
+     - Seluruh suite terkait lulus (107/107 tes passed), dan `npm run build` di root server serta admin-dashboard lulus 100%.
+- **Status:** RESOLVED.
+
+## 243. [LiveChat/Audio] Penyimpanan Media Outbound WhatsApp HP, Streaming HTTP 206 Partial Content, dan Pemutar Audio Terotentikasi (2026-10-08, RESOLVED)
+
+- **Gejala & Masalah:**
+  1. Staf/bidan mengirimkan voice note atau media non-teks langsung dari HP WhatsApp asli, namun file media tidak tersimpan permanen ke disk lokal backend (hanya tautan MMG/CDN sementara yang kedaluwarsa setelah 24 jam).
+  2. Live Chat Dashboard menolak memutar audio (`401 Unauthorized`) karena tag `<audio src="...">` bawaan browser tidak menyertakan kredensial sesi admin/staff. Usulan awal menempelkan kunci di URL (`?token=`) ditolak karena melanggar aturan keamanan audit #199 (`tests/unit/media-query-auth-ban.test.ts`).
+  3. Pemutar browser di HP/mobile tidak dapat menggeser durasi (scrubbing) karena endpoint `/media/*` dan `/api/files/*` belum mendukung pemotongan byte HTTP 206 Partial Content (`Accept-Ranges: bytes`, `Content-Range`).
+  4. Riwayat chat WAHA (`waha-history-sync.service.ts`) membuang pesan non-teks tanpa caption karena filter `msg.body.trim()` yang terlalu restriktif.
+- **Akar Masalah & Solusi Fondasional (Fase 1-4):**
+  1. **Pipeline Webhook Outbound Asinkron:** `webhook.route.ts` memisahkan ekstraksi metadata instan dari proses unduhan berat. Pesan dicatat seketika, dan background worker non-blocking (`void (async () => { ... })()`) mengunduh file media outbound via `wahaClient.downloadMedia` / `fetchUrl`, menyimpannya ke storage lokal via `mediaService.saveInboundMedia`, dan mengaitkannya ke database serta siaran SSE via `messageService.attachMediaToMessage`.
+  2. **Deduplikasi Pesan Outbound Audio:** `messageService.checkAndAttachOutboundDuplicate` diperluas dengan parameter `isMediaOrImage: true` dan pengenalan placeholder `[VOICE_NOTE]`, `[AUDIO]`, `[DOCUMENT]`, `[VIDEO]`, `[DOKUMEN]`, mencegah pencatatan baris ganda saat staf mengirim audio via dashboard.
+  3. **HTTP 206 Partial Content (RFC 7233):** Helper `parseRangeHeader` ditambahkan pada `media.route.ts`. Endpoint `/media/:scope/:tenant/:file` (disk stream) dan `/api/files/:session/:file` (WAHA proxy buffer) kini merespons status `206 Partial Content` dengan header `Content-Range`, `Content-Length`, dan `Accept-Ranges: bytes` (atau status `416 Range Not Satisfiable` bila rentang tidak valid).
+  4. **Pemutar Audio Terotentikasi (Blob URL + Memory Hygiene):** Komponen `VoiceNotePlayer` di `LiveChatMonitor.tsx` dan `StaffToday.tsx` kini memuat audio secara aman via `fetch(url, { credentials: 'include' })` menjadi Object URL lokal (`blob:`), dilengkapi tombol "Coba lagi", pembersihan memori otomatis (`URL.revokeObjectURL`), dan reaktivitas instan saat event SSE `message.updated` tiba.
+  5. **Normalisasi Ekstensi Audio:** `packages/admin-dashboard/src/utils/mediaExtractor.ts` kini mengenali ekstensi `.oga` dan URL dengan parameter query (`/\.(oga|ogg|opus|mp3|m4a|wav|aac)($|\?)/i`), dengan penetapan fallback MIME kanonis `audio/ogg; codecs=opus`.
+  6. **Sinkronisasi Riwayat Chat Media:** `waha-history-sync.service.ts` kini memproses pesan media tanpa caption (gambar, audio, dokumen, video) dengan placeholder kanonis, mengunduh data secara asinkron, dan menyimpannya ke database pesan.
+- **Verifikasi & Status:**
+  - Unit test baru `tests/unit/media-route-range.test.ts` (9/9 lulus), `tests/unit/media-extractor.test.ts` (14/14 lulus), `tests/unit/outbound-audio-pipeline.test.ts` (5/5 lulus).
+  - Kluster pengujian keamanan & streaming media (73/73 lulus).
+  - Build server TypeScript (`npm run build`) dan admin dashboard (`npm run build` di packages/admin-dashboard) lulus 100% dengan 0 error.
+  - **Status:** RESOLVED.
+
 ## 242. [LiveChat/UX] Resolusi Perilaku Tombol Enter, Kontrak Paginasi Limit+1, dan Pencarian Word-Boundary (2026-10-07, RESOLVED)
 
 - **Keputusan Produk (Gerbang A):** Perilaku tombol Enter pada `LiveChatComposer.tsx` resmi dibalik:
@@ -380,45 +462,28 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
 - **Sisa (di luar cakupan):** isu "two clocks" umum (#67) untuk cooldown worker
   follow-up belum disentuh; baris Rina terjadwal non-baku (#128) tetap terpisah.
 
-## 228. [Google Sheets Rekapan] Pondasi Fase 0–4 dieksekusi — sisa debt (2026-10-05, FASE 0–4 EXECUTED)
+## 228. [Google Sheets Rekapan] Transisi ke Buku Rekapan Selesai (Completed-Only) & Proteksi Manual (2026-10-08, REVISED & EXECUTED)
 
-- **Konteks:** otomatisasi rekapan reservasi ke Google Sheets (16 kolom A–P, tab
-  bulanan, file tahunan). Diputuskan fondasional: config tenant-aware di DB, antrean
-  outbox (bukan panggil API dari webhook chat), harga write-once agar koreksi manual
-  admin tidak tertimpa. Fase 0 = DB + scope + migrasi; Fase 1 = resolver murni + formatter.
-- **Sudah dieksekusi:** `TenantSheetsConfig` + `SheetsSyncOutbox` (`schema.prisma`),
-  kolom `Reservation` (`discount_amount`, `sheets_spreadsheet_id`, `sheets_tab_name`,
-  `sheets_row_index`, `sheets_synced_at`, `sheets_sync_status`), scope
-  `spreadsheets` di `google-oauth.client.ts`, migrasi idempoten
-  `20261005000000_add_sheets_sync_fondasional`, seed `default-tenant` dengan ID file
-  milik user. **Fase 1:** `src/services/sheets/month-resolver.ts` +
-  `src/services/sheets/row-formatter.ts` (murni, 16 kolom), test
-  `tests/unit/sheets-rekapan-formatter.test.ts` 17/17 hijau. **Fase 2–3:**
-  `sheets-client.ts` (SheetsGateway OAuth) + `sheets-sync.service.ts` (enqueue/
-  processOutbox/syncReservation, harga write-once), hook di lifecycle & admin,
-  worker cron `runSheetsSyncWorker` (gated `ENABLE_SHEETS_SYNC_CRON`, default aktif),
-  test `tests/unit/sheets-sync.service.test.ts` 12/12 hijau. **Fase 4:** endpoint admin
-  `GET/PUT sheets-config` + `POST sheets-test` & UI sub-tab "Rekapan Pasien" di panel
-  Google (toggle, link/ID spreadsheet, uji koneksi). Gerbang: `prisma validate`
-  hijau, `prisma generate` hijau, `npm run typecheck` hijau, `typing.test.ts` 12/12,
-  dashboard `npm run build` hijau.
+- **Konteks & Perubahan Peran Bisnis:** Google Sheets bertransformasi dari "kalender jadwal harian" menjadi "buku rekapan selesai" (completed-only). Jadwal dan penugasan harian dikelola via dashboard admin & staff app. Sheets hanya mencatat reservasi setelah layanan selesai (status `completed`).
+- **Kontrak Kolom Baru:**
+  - **Kolom J (Diskon):** nominal hanya bila > 0; jika 0, null, negatif, atau NaN dikosongkan (`''`). Baris lama dengan J=0 dibiarkan apa adanya (write-once) agar koreksi manual tidak tertimpa.
+  - **Kolom K (Harga Akhir):** SELALU kosong (`''`) agar rumus kalkulasi spreadsheet klinik tidak tertimpa oleh bot.
+  - **Kolom O (Follow Up):** SELALU kosong (`''`), merupakan kolom catatan follow-up manual yang diketik admin klinik di spreadsheet.
+  - **Kolom N (Tip) & P (Catatan):** SELALU kosong (`''`) dari bot.
+- **Proteksi Kolom Manual (Anti-Data Loss):** Set kolom terproteksi saat update diperluas menjadi `{7, 8, 9, 10, 13, 14, 15}` (0-based: H, I, J, K untuk harga/diskon write-once + N, O, P untuk input manual admin). Update reservasi completed di kemudian hari TIDAK AKAN mengosongkan tulisan manual yang diketik staf/admin di spreadsheet.
+- **Gerbang Status Completed (Dua Lapis):**
+  - Outbox dispatch: route admin edit dan assign-staff hanya melakukan enqueue bila status reservasi `completed`.
+  - Jaring pengaman `syncReservation`: melempar `SHEETS_SKIP_NON_COMPLETED` bila status bukan completed; ditangkap di `processOutbox` untuk langsung `markDone` dan dicatat di metrik `skipped` tanpa mencemari `succeeded` atau `failed`.
+- **Pindai Seam Lifecycle:** enqueue sheets dihapus dari `onReservationCreated` dan dipindahkan ke `onReservationCompleted`. Staff `recordPayment` tetap melakukan enqueue sheets walau review follow-up sudah berstatus `SENT`.
+- **Anti-Infinite-Defer:** reservasi completed dengan `INVALID_BOOKING_DATE` atau `SHEETS_YEAR_NOT_CONFIGURED` dibatasi percobaan penundaannya (maksimal 10x / 2.5 jam); setelah batas tercapai ditandai `failed` dengan pesan log eksplisit `EXCEEDED_MAX_DEFERRALS`.
 - **Sisa debt OPEN (verifikasi live belum dikerjakan):**
-  - **Scope `drive` (duplikat file tahunan) DITUNDA** demi least-privilege. Wajib
-    ditambah sebelum Desember 2026 agar booking tahun 2027 tidak kehilangan tab.
-  - **`Tip` (kolom N) belum punya sumber data di DB.** Saat ini diisi `0` eksplisit
-    di row formatter. Bila klinik butuh tip riil, perlu kolom DB baru.
-  - **Token OAuth butuh re-consent manual sekali** (`is_enabled=false` sampai user
-    menyambungkan ulang Google agar token membawa scope `spreadsheets`).
-  - **Drift-verifikasi migrasi ke DB live BELUM dijalankan** (DB lokal offline saat
-    eksekusi). Jalankan `npx prisma migrate deploy` lalu
-    `npx prisma migrate diff --from-url "$DATABASE_URL"
-    --to-schema-datamodel prisma/schema.prisma --script` (harus `-- This is an empty
-    migration.`) di lingkungan ber-DB.
-  - **Uji tulis ke spreadsheet ASLI belum dilakukan** (butuh akun Google tersambung
-    + `is_enabled=true`). Jalankan tombol "Uji Koneksi & Siapkan Tab" di dashboard.
-  - **`sheets_row_index` rapuh bila admin menghapus baris manual** di spreadsheet
-    (nomor bergeser). Aturan: jangan hapus baris, hanya tambah; rekonsiliasi
-    otomatis ditahan (butuh tabel state tambahan).
+  - **Scope `drive` (duplikat file tahunan) DITUNDA** demi least-privilege. Wajib ditambah sebelum Desember 2026 agar booking tahun 2027 tidak kehilangan tab.
+  - **`Tip` (kolom N) belum punya sumber data di DB.** Saat ini dikosongkan `''` di row formatter dan dilindungi dari penulisan ulang. Bila klinik butuh input tip riil via bot/app, perlu kolom DB baru.
+  - **Token OAuth butuh re-consent manual sekali** (`is_enabled=false` sampai user menyambungkan ulang Google agar token membawa scope `spreadsheets`).
+  - **Drift-verifikasi migrasi ke DB live BELUM dijalankan** (DB lokal offline saat eksekusi). Jalankan `npx prisma migrate deploy` lalu `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` (harus `-- This is an empty migration.`) di lingkungan ber-DB.
+  - **Uji tulis ke spreadsheet ASLI belum dilakukan** (butuh akun Google tersambung + `is_enabled=true`). Jalankan tombol "Uji Koneksi & Siapkan Tab" di dashboard.
+  - **`sheets_row_index` rapuh bila admin menghapus baris manual** di spreadsheet (nomor bergeser). Aturan klinik: jangan hapus baris manual di sheet, biarkan bertambah ke bawah.
+  - **Reversal completed → cancelled:** bila reservasi yang sudah completed kemudian dibatalkan, baris Sheets dibiarkan sebagai arsip rekapan historis tanpa penghapusan baris otomatis.
 
 ## 227. [Tool Masker / Intent / Katalog] Perbaikan PL, Pin Lokasi & Usia Newborn — sisa debt (2026-10-05, EXECUTED)
 

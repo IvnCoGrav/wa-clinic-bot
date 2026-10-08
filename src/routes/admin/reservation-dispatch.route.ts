@@ -123,6 +123,7 @@ async function runCompletionSideEffects(existing: any, tenantId: string): Promis
         tenantId: existing.tenant_id || tenantId,
       });
     } else {
+      console.warn(`[Admin API] runCompletionSideEffects: reservasi ${existing?.id} completed tanpa booking_date, sheets sync & follow-up dilewati`);
       // Tanpa booking_date: tetap reset sesi V3
       const activeConv = await prisma.conversation.findFirst({
         where: { customer_id: existing.customer_id, tenant_id: existing.tenant_id || tenantId },
@@ -828,8 +829,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           kecamatan?: string;
           kota?: string;
           kelurahan?: string;
-          landmark?: string;
-          babies?: Array<{ name: string; ageText?: string; birthDate?: string }>;
+          customerAddressId?: string | null;
+          customer_address_id?: string | null;
           durationMinutes?: number | null;
         };
       }>,
@@ -851,6 +852,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         payment_method: 'paymentMethod',
         customer_name: 'customerName',
         customer_phone: 'customerPhone',
+        customer_address_id: 'customerAddressId',
       };
       for (const [snakeKey, camelKey] of Object.entries(dualCaseMap)) {
         if (body[camelKey] === undefined && body[snakeKey] !== undefined) body[camelKey] = body[snakeKey];
@@ -880,7 +882,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       try {
         existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: tenantId },
-          include: { customer: { include: { children: true } } },
+          include: { customer: { include: { children: true } }, customer_address: true },
         });
       } catch (dbErr: any) {
         console.warn(`[Admin API] DB query failed for reservation ${id}, checking in-memory store:`, dbErr.message);
@@ -918,6 +920,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
           if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
+          if (body.customerAddressId !== undefined || body.customer_address_id !== undefined) {
+            const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
+            mock.customer_address_id = caId || null;
+          }
           if (status !== undefined) mock.status = status;
           if (notes !== undefined) {
             mock.notes = notes;
@@ -981,6 +987,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
         if (status !== undefined) updateData.status = status;
+        if (body.customerAddressId !== undefined || body.customer_address_id !== undefined) {
+          const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
+          updateData.customer_address_id = caId || null;
+        }
         
         // Handle notes via raw_text: TIDAK menugaskan updateData.notes karena model Reservation tidak punya kolom notes di Prisma
         if (rawText !== undefined) {
@@ -1075,6 +1085,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
                 children: true,
               },
             },
+            customer_address: true,
             assigned_staff: true,
           },
         });
@@ -1253,11 +1264,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
         }
 
-        // Cermin Sheets: update baris yang sama (bayar/bidan/status/treatment).
+        // Cermin Sheets: update baris yang sama (bayar/bidan/status/treatment) HANYA bila completed.
         // Fire-and-forget; kolom harga H/I/J/K write-once tidak tersentuh.
-        import('../../services/sheets/sheets-sync.service')
-          .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, existing.tenant_id || tenantId))
-          .catch((err) => console.warn('[Admin API] sheets enqueue on edit failed:', err?.message));
+        if ((updated?.status || existing?.status) === 'completed') {
+          import('../../services/sheets/sheets-sync.service')
+            .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, existing.tenant_id || tenantId))
+            .catch((err) => console.warn('[Admin API] sheets enqueue on edit failed:', err?.message));
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -1738,11 +1751,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // Cermin Sheets: update kolom Bidan di baris yang sama (bukan baris baru).
+        // Cermin Sheets: update kolom Bidan di baris yang sama HANYA bila status completed.
         // Fire-and-forget; harga write-once tidak tersentuh (lihat sheets-sync).
-        import('../../services/sheets/sheets-sync.service')
-          .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, tenantId))
-          .catch((err) => console.warn('[Admin API] sheets enqueue on assign failed:', err?.message));
+        if ((reservation?.status || existing?.status) === 'completed') {
+          import('../../services/sheets/sheets-sync.service')
+            .then(({ sheetsSyncService }) => sheetsSyncService.enqueue(id, tenantId))
+            .catch((err) => console.warn('[Admin API] sheets enqueue on assign failed:', err?.message));
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

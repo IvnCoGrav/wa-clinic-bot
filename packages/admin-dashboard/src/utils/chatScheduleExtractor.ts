@@ -1086,3 +1086,54 @@ export function extractScheduleFromMessages(
     hasExplicitReservationForm,
   };
 }
+
+/**
+ * MT-3.1: Deteksi jadwal hasil negosiasi dengan komitmen aktif user (anti false-positive & anti-overfitting).
+ * Mengharuskan:
+ * 1. Jadwal dan jam ter-ekstrak valid.
+ * 2. Pesan inbound terakhir customer menunjukkan persetujuan aktif (misal: "oke", "deal", "bisa", "siap")
+ *    atau menyebutkan tanggal/jam secara eksplisit.
+ * 3. Menolak pertanyaan harga/info umum yang belum menyepakati jadwal ("berapa harganya?", "lokasi dimana?").
+ */
+export function isNegotiatedScheduleCommitted(
+  messages: Array<{ direction?: string; content?: string }>,
+  extractedSchedule?: ExtractedScheduleData | null
+): boolean {
+  if (!messages || messages.length === 0) return false;
+  if (!extractedSchedule?.bookingDate || !extractedSchedule?.timeDisplay) return false;
+
+  // Jika pesan terakhir di obrolan berasal dari bot (OUTBOUND), negosiasi belum disepakati user
+  const lastMsg = messages[messages.length - 1];
+  if ((lastMsg.direction || '').toUpperCase() === 'OUTBOUND') return false;
+
+  const lastInboundMsg = [...messages].reverse().find(
+    (m) => (m.direction || '').toUpperCase() === 'INBOUND'
+  );
+  if (!lastInboundMsg || !lastInboundMsg.content) return false;
+
+  const content = lastInboundMsg.content.trim().toLowerCase();
+
+  // Pertanyaan info tarif/biaya/ongkir murni BUKAN komitmen final
+  if (/(?:berapa|biaya|tarif|ongkir|lokasi|alamat|syarat)\b/i.test(content) && !/(?:deal|fix|jadi|booking)/i.test(content)) {
+    return false;
+  }
+
+  // Pertanyaan ketersediaan slot / keraguan ("ada slot gak?", "bisa gak ya?", "kosong gak?", "jam berapa aja?")
+  if (/(?:ada\s+(?:slot|kuota|jadwal)|bisa\s+gak|bisa\s+ngga|kosong\s+gak|kosong\s+ngga|masih\s+ada|jam\s+berapa\s+(?:aja|saja|bisa)|apakah\s+(?:bisa|ada))\b/i.test(content)) {
+    return false;
+  }
+
+  // Komitmen aktif: baik berupa konfirmasi persetujuan maupun penyebutan waktu/tanggal oleh user
+  const hasStrongAffirmative = /(?:^|\b)(?:oke|ok|deal|bisa|siap|mau|jadi|boleh|fix|setuju|booking)(?:\b|$)/i.test(content);
+  const hasTimeOrDate = /(?:jam|pukul)\s*\d{1,2}|(?:\b\d{1,2}[.:]\d{2}\b)|besok|lusa|hari ini|tgl?\s*\d|senin|selasa|rabu|kamis|jumat|sabtu|minggu/i.test(content);
+
+  // Jika kalimat mengandung tanda tanya '?', jangan tolak jika itu tag-question santun berkonfirmasi aktif
+  // (contoh: "Oke jam 9 ya?", "Boleh jam 10 ya bun?", "Deal jam 14.00 ya?").
+  // Tolak HANYA jika TIDAK ADA afirmasi persetujuan aktif (murni bertanya).
+  if (content.includes('?') && !hasStrongAffirmative) {
+    return false;
+  }
+
+  return Boolean(hasStrongAffirmative || hasTimeOrDate);
+}
+

@@ -264,12 +264,18 @@ export class MessageService {
     waMessageId: string,
     tenantId: string,
     windowSeconds = 60,
-    isImage = false
+    isMediaOrImage = false
   ): Promise<boolean> {
     const cutoff = new Date(Date.now() - windowSeconds * 1000);
     const normalizedContent = (content || '').trim();
-    const isImagePlaceholder = isImage || !normalizedContent || /^\[(IMAGE|MEDIA|GAMBAR)/i.test(normalizedContent);
-    const strippedCaption = normalizedContent.replace(/^\[(IMAGE|MEDIA|GAMBAR)(?::\s*([^\]]+))?\]/i, '$2').trim();
+    const isMediaPlaceholder =
+      isMediaOrImage ||
+      !normalizedContent ||
+      /^\[(IMAGE|MEDIA|GAMBAR|VOICE_NOTE|AUDIO|DOCUMENT|VIDEO|DOKUMEN)/i.test(normalizedContent);
+    const strippedCaption = normalizedContent.replace(
+      /^\[(IMAGE|MEDIA|GAMBAR|VOICE_NOTE|AUDIO|DOCUMENT|VIDEO|DOKUMEN)(?::\s*([^\]]+))?\]/i,
+      '$2'
+    ).trim();
     const shortId = extractShortMessageId(waMessageId);
 
     // 1. Cek memoryMessages fallback
@@ -280,14 +286,14 @@ export class MessageService {
         m.direction === 'OUTBOUND' &&
         new Date(m.created_at) >= cutoff &&
         (
-          (isImagePlaceholder && (
+          (isMediaPlaceholder && (
             !m.content ||
-            /^\[(IMAGE|MEDIA|GAMBAR)/i.test((m.content || '').trim()) ||
+            /^\[(IMAGE|MEDIA|GAMBAR|VOICE_NOTE|AUDIO|DOCUMENT|VIDEO|DOKUMEN)/i.test((m.content || '').trim()) ||
             !!(m.payload_raw as any)?.media ||
             (m.content || '').toLowerCase().startsWith('pricelist') ||
             (strippedCaption && (m.content || '').trim().toLowerCase() === strippedCaption.toLowerCase())
           )) ||
-          (!isImagePlaceholder && (
+          (!isMediaPlaceholder && (
             (m.content || '').trim().toLowerCase() === normalizedContent.toLowerCase() ||
             (normalizedContent.length >= 20 && (m.content || '').toLowerCase().includes(normalizedContent.toLowerCase()))
           ))
@@ -313,13 +319,22 @@ export class MessageService {
         created_at: { gte: cutoff },
       };
 
-      if (isImagePlaceholder) {
+      if (isMediaPlaceholder) {
         whereClause.OR = [
           { content: { startsWith: '[IMAGE' } },
           { content: { startsWith: '[MEDIA' } },
           { content: { startsWith: '[GAMBAR' } },
+          { content: { startsWith: '[VOICE_NOTE' } },
+          { content: { startsWith: '[AUDIO' } },
+          { content: { startsWith: '[DOCUMENT' } },
+          { content: { startsWith: '[VIDEO' } },
+          { content: { startsWith: '[DOKUMEN' } },
           { content: '[IMAGE]' },
           { content: '[MEDIA]' },
+          { content: '[VOICE_NOTE]' },
+          { content: '[AUDIO]' },
+          { content: '[DOCUMENT]' },
+          { content: '[VIDEO]' },
           { content: { startsWith: 'Pricelist', mode: 'insensitive' } },
           ...(strippedCaption ? [
             { content: { equals: strippedCaption, mode: 'insensitive' } },

@@ -113,12 +113,12 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(row[6]).toBe('Kala Baby – Pijat Pulih Ceria'); // G Layanan
     expect(row[7]).toBe(15000);              // H Ongkir
     expect(row[8]).toBe(150000);             // I Total (135000 layanan + 15000 ongkir)
-    expect(row[9]).toBe(0);                  // J Diskon
-    expect(row[10]).toBe(150000);            // K Harga akhir (150000 - 0)
+    expect(row[9]).toBe('');                 // J Diskon (kosong bila 0)
+    expect(row[10]).toBe('');                // K Harga akhir (selalu kosong, rumus sheet)
     expect(row[11]).toBe('Transfer');        // L Metode Bayar
     expect(row[12]).toBe('Siti');            // M Bidan (tanpa kata "Bidan")
-    expect(row[13]).toBe('');                // N Tip (kosong / null)
-    expect(row[14]).toBe('Belum');           // O Follow up
+    expect(row[13]).toBe('');                // N Tip (kosong / tulisan manual di sheet)
+    expect(row[14]).toBe('');                // O Follow up (selalu kosong, tulisan manual di sheet)
     expect(row[15]).toBe('');                // P Catatan (kosong)
   });
 
@@ -133,7 +133,7 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(row[5]).toBe('New Ads');
   });
 
-  it('Repeat customer → kolom F "Repeat", diskon dihitung ke Harga akhir', () => {
+  it('Repeat customer → kolom F "Repeat", diskon nominal di kolom J, kolom K tetap kosong', () => {
     const row = formatReservationToRow({
       ...base,
       reservation: {
@@ -144,8 +144,8 @@ describe('row-formatter — 16 kolom A–P', () => {
     });
     expect(row[5]).toBe('Repeat');
     expect(row[8]).toBe(150000);             // I Total (135000 + 15000)
-    expect(row[9]).toBe(30000);
-    expect(row[10]).toBe(150000 - 30000);    // K Harga akhir (150000 - 30000 = 120000)
+    expect(row[9]).toBe(30000);              // J Diskon nominal bila > 0
+    expect(row[10]).toBe('');                // K Harga akhir tetap kosong
   });
 
   it('ongkir fallback ke Customer.ongkir bila delivery_fee null', () => {
@@ -154,7 +154,7 @@ describe('row-formatter — 16 kolom A–P', () => {
       reservation: { ...base.reservation, delivery_fee: null },
     });
     expect(row[7]).toBe(15000);
-    expect(row[10]).toBe(150000);
+    expect(row[10]).toBe('');
   });
 
   it('EDGE data kosong: nama anak/alamat/metode/bidan kosong → "-", susunan tetap 16', () => {
@@ -183,7 +183,9 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(row[15]).toBe('');          // Catatan (kosong)
     expect(row[7]).toBe(0);
     expect(row[8]).toBe(0);
-    expect(row[10]).toBe(0);
+    expect(row[9]).toBe('');
+    expect(row[10]).toBe('');
+    expect(row[14]).toBe('');
   });
 
   it('membersihkan tag internal dari Layanan Detail', () => {
@@ -198,12 +200,28 @@ describe('row-formatter — 16 kolom A–P', () => {
     expect(String(row[6])).not.toContain('[SAME_DAY_REQUEST]');
   });
 
-  it('status completed → kolom O "Sudah"', () => {
-    const row = formatReservationToRow({
+  it('kolom O selalu kosong ("") terlepas dari status (diisi manual admin di sheet)', () => {
+    const rowCompleted = formatReservationToRow({
       ...base,
       reservation: { ...base.reservation, status: 'completed' },
     });
-    expect(row[14]).toBe('Sudah');
+    expect(rowCompleted[14]).toBe('');
+
+    const rowConfirmed = formatReservationToRow({
+      ...base,
+      reservation: { ...base.reservation, status: 'confirmed' },
+    });
+    expect(rowConfirmed[14]).toBe('');
+  });
+
+  it('diskon invalid (negatif, 0, NaN, null) menghasilkan string kosong ""', () => {
+    for (const invalidDiscount of [0, -5000, NaN, null as any, undefined as any]) {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: { ...base.reservation, discount_amount: invalidDiscount },
+      });
+      expect(row[9]).toBe('');
+    }
   });
 
   it('ADVERSARIAL: booking_date null → throw, bukan menulis baris salah tab', () => {
@@ -282,4 +300,73 @@ describe('row-formatter — otoritas ordinal atas flag DB terkontaminasi', () =>
     expect(resolveCustomerType(true, null, null)).toBe('Repeat');
     expect(resolveCustomerType(false, { adClick: { id: 'a' } }, undefined)).toBe('New Ads');
   });
+
+  describe('Multi-Address / Rumah Kedua — Kolom D & Ongkir', () => {
+    it('Kolom D: customerAddress (Rumah 2 di Buduran) MENANG atas customer.kelurahan (Rumah 1 di Grogol)', () => {
+      const row = formatReservationToRow({
+        ...base,
+        customer: {
+          ...base.customer,
+          kelurahan: 'grogol',
+          kecamatan: 'tulangan',
+          kota: 'sidoarjo',
+        },
+        customerAddress: {
+          kelurahan: 'buduran',
+          kecamatan: 'buduran',
+          kota: 'sidoarjo',
+        },
+      });
+      // Kolom D wajib 'buduran' (Rumah 2), bukan 'grogol' (Rumah 1)!
+      expect(row[3]).toBe('buduran');
+    });
+
+    it('Kolom D: fallback ke customerAddress.kecamatan bila kelurahan customerAddress kosong', () => {
+      const row = formatReservationToRow({
+        ...base,
+        customer: {
+          ...base.customer,
+          kelurahan: 'grogol',
+        },
+        customerAddress: {
+          kelurahan: '',
+          kecamatan: 'candi',
+          kota: 'sidoarjo',
+        },
+      });
+      expect(row[3]).toBe('candi');
+    });
+
+    it('Kolom D: fallback ke customer.kelurahan bila customerAddress null (backward-compatible)', () => {
+      const row = formatReservationToRow({
+        ...base,
+        customer: {
+          ...base.customer,
+          kelurahan: 'grogol',
+        },
+        customerAddress: null,
+      });
+      expect(row[3]).toBe('grogol');
+    });
+
+    it('Kolom H: customerAddress.ongkir digunakan bila reservation.delivery_fee null', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          delivery_fee: null,
+        },
+        customer: {
+          ...base.customer,
+          ongkir: 10000,
+        },
+        customerAddress: {
+          kelurahan: 'buduran',
+          ongkir: 25000,
+        },
+      });
+      expect(row[7]).toBe(25000);
+    });
+  });
 });
+

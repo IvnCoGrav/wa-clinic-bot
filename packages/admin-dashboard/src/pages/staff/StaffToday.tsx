@@ -257,12 +257,46 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
   const fmt = (s: number) => {
     if (!isFinite(s) || isNaN(s)) return '0:00';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60).toString().padStart(2, '0');
     return `${m}:${sec}`;
   };
+
+  useEffect(() => {
+    let isCancelled = false;
+    let localBlobUrl: string | null = null;
+    setIsLoading(true);
+    setHasError(false);
+
+    fetch(src, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (isCancelled) return;
+        localBlobUrl = URL.createObjectURL(blob);
+        setBlobUrl(localBlobUrl);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (isCancelled) return;
+        setHasError(true);
+        setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
+      }
+    };
+  }, [src, retryCount]);
+
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -281,29 +315,40 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
       a.removeEventListener('ended', onEnd);
       a.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [blobUrl]);
+
   const toggle = () => {
     const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => setHasError(true)); }
+    if (!a || isLoading) return;
+    if (playing) {
+      a.pause();
+      setPlaying(false);
+    } else {
+      a.play().then(() => setPlaying(true)).catch(() => setHasError(true));
+    }
   };
+
   const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     if (audioRef.current) audioRef.current.currentTime = v;
     setCurrent(v);
   };
+
   return (
     <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
       <button
         type="button"
-        onClick={toggle}
-        title={hasError ? 'Audio gagal dimuat' : playing ? 'Jeda' : 'Putar rekaman'}
-        className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition ${
-          hasError ? 'bg-amber-500' : 'bg-[#008069]'
+        onClick={hasError ? () => setRetryCount((c) => c + 1) : toggle}
+        disabled={isLoading}
+        title={hasError ? 'Coba lagi memuat audio' : playing ? 'Jeda' : 'Putar rekaman'}
+        className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50 ${
+          hasError ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#008069]'
         }`}
       >
-        {hasError ? (
-          <AlertTriangle size={16} />
+        {isLoading ? (
+          <RefreshCw size={16} className="animate-spin text-white" />
+        ) : hasError ? (
+          <RefreshCw size={16} />
         ) : playing ? (
           <span className="w-3 h-3 bg-white rounded-sm" />
         ) : (
@@ -313,28 +358,44 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
       <div className="flex-1 min-w-0">
         {hasError ? (
           <div className="text-[11px] font-semibold text-amber-700">
-            Audio tak bisa diputar di browser ini.{' '}
-            <a
-              href={src}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="underline text-[#008069] hover:text-[#00a884]"
+            Audio belum siap / gagal dimuat.{' '}
+            <button
+              type="button"
+              onClick={() => setRetryCount((c) => c + 1)}
+              className="underline text-[#008069] hover:text-[#00a884] font-medium mr-1.5"
             >
-              Buka / unduh
-            </a>
+              Coba lagi
+            </button>
+            {blobUrl && (
+              <a
+                href={blobUrl}
+                download="voice_note.oga"
+                className="underline text-[#008069] hover:text-[#00a884]"
+              >
+                Unduh
+              </a>
+            )}
           </div>
         ) : (
           <>
-            <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={current}
+              onChange={seek}
+              disabled={isLoading}
+              className="w-full accent-[#008069] h-1"
+            />
             <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
-              <span>{fmt(current)}</span><span>{fmt(duration)}</span>
+              <span>{fmt(current)}</span>
+              <span>{fmt(duration)}</span>
             </div>
           </>
         )}
       </div>
       <Volume2 size={14} className={hasError ? 'text-amber-500 shrink-0' : 'text-[#008069] shrink-0'} />
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      {blobUrl && <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />}
     </div>
   );
 };
@@ -1362,7 +1423,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             setMessages((prev) =>
               prev.map((m) =>
                 matchesUpdated(m)
-                  ? { ...m, content: content != null ? (isSupervisorRef.current ? String(content) : maskPhoneInTextClient(String(content))) : m.content, is_revoked: isRevoked ?? m.is_revoked, is_edited: isEdited ?? m.is_edited, payload_raw: { ...(m.payload_raw || {}), is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked, is_edited: isEdited ?? (m.payload_raw as any)?.is_edited } }
+                  ? {
+                      ...m,
+                      content: content != null ? (isSupervisorRef.current ? String(content) : maskPhoneInTextClient(String(content))) : m.content,
+                      is_revoked: isRevoked ?? m.is_revoked,
+                      is_edited: isEdited ?? m.is_edited,
+                      media: payload.media || (m as any).media,
+                      payload_raw: {
+                        ...((m as any).payload_raw || {}),
+                        is_revoked: isRevoked ?? (m.payload_raw as any)?.is_revoked,
+                        is_edited: isEdited ?? (m.payload_raw as any)?.is_edited,
+                        ...(payload.media ? { media: payload.media } : {}),
+                      },
+                    }
                   : m
               )
             );

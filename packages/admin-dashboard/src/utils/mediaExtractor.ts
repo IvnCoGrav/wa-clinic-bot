@@ -365,11 +365,12 @@ export function extractAudio(msg: any): ChatAudioData | null {
     };
   }
 
-  if (isAudioPlaceholder || isAudioMime || (url && /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test(url))) {
+  if (isAudioPlaceholder || isAudioMime || (!!url && /\.(oga|ogg|opus|mp3|m4a|wav|aac)($|\?)/i.test(url))) {
     const matchName = c.match(/^\[AUDIO:\s*(.+?)\]$/);
+    const isOgg = !!url && /\.(oga|ogg|opus)($|\?)/i.test(url);
     return {
       url,
-      mimeType: mime || 'audio/mp3',
+      mimeType: mime || (isOgg ? 'audio/ogg; codecs=opus' : 'audio/mpeg'),
       isPtt: false,
       fileName: matchName ? matchName[1] : (m?.fileName || 'Audio'),
     };

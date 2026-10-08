@@ -433,33 +433,87 @@ export function resolveDeliveryFeeSnapshot(reservation: any): number {
 
 /**
  * Fase 3C: Resolusi ID alamat customer_addresses.
- * Prioritas: addressId eksplisit -> primary address -> alamat terakhir digunakan.
+ * Prioritas: addressId eksplisit -> cocok via addressesMatch -> buat Rumah 2 baru bila ada kandidat beda -> primary/terbaru.
  */
-async function resolveCustomerAddressId(params: {
+export async function resolveCustomerAddressId(params: {
   tenantId: string;
   customerId: string;
   explicitAddressId?: string | null;
+  candidate?: {
+    address?: string | null;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    distanceKm?: number | null;
+    ongkir?: number | null;
+  };
   db?: any;
 }): Promise<string | null> {
-  const { tenantId, customerId, explicitAddressId } = params;
-  if (explicitAddressId) return explicitAddressId;
-  const db = params.db || prisma;
+  const { tenantId, customerId, explicitAddressId, candidate } = params;
+  if (explicitAddressId) return explicitAddressId; // pilihan eksplisit menang mutlak
+
+  const { customerService } = await import('./customer.service');
+  const { addressesMatch } = await import('../domain/customer-address');
+
   try {
-    if (typeof db.customerAddress?.findFirst === 'function') {
-      const active = await db.customerAddress.findFirst({
-        where: { tenant_id: tenantId, customer_id: customerId, is_primary: true },
-        select: { id: true },
-      });
-      if (active?.id) return active.id;
-      const latest = await db.customerAddress.findFirst({
-        where: { tenant_id: tenantId, customer_id: customerId },
-        orderBy: { last_used_at: 'desc' },
-        select: { id: true },
-      });
-      return latest?.id || null;
+    let list: any[] = await customerService.getSavedAddresses(customerId, tenantId);
+    if (!list.length && params.db && typeof params.db.customerAddress?.findMany === 'function') {
+      try {
+        list = await params.db.customerAddress.findMany({
+          where: { tenant_id: tenantId, customer_id: customerId },
+          orderBy: [{ is_primary: 'desc' }, { last_used_at: 'desc' }],
+        });
+      } catch {}
     }
-  } catch {}
-  return null;
+    if (!list.length) return null;
+
+    if (
+      candidate &&
+      (candidate.address ||
+        candidate.kelurahan ||
+        candidate.kecamatan ||
+        (typeof candidate.lat === 'number' && typeof candidate.lng === 'number'))
+    ) {
+      const hit = list.find((a: any) =>
+        addressesMatch(
+          {
+            address: a.address,
+            kelurahan: a.kelurahan,
+            kecamatan: a.kecamatan,
+            kota: a.kota,
+            lat: a.lat,
+            lng: a.lng,
+          },
+          candidate as any
+        )
+      );
+      if (hit) return hit.id; // cocok → pakai entri itu
+
+      // tidak cocok + ada kandidat alamat baru → BUAT Rumah 2 via customerService
+      const upserted = await customerService.upsertSavedAddress(
+        customerId,
+        {
+          address: candidate.address || '',
+          kelurahan: candidate.kelurahan ?? null,
+          kecamatan: candidate.kecamatan ?? null,
+          kota: candidate.kota ?? null,
+          lat: candidate.lat ?? null,
+          lng: candidate.lng ?? null,
+          distanceKm: candidate.distanceKm ?? null,
+          ongkir: candidate.ongkir ?? null,
+        },
+        tenantId
+      );
+      if (upserted) return upserted.id;
+    }
+
+    const primary = list.find((a: any) => a.isPrimary || a.is_primary) || list[0];
+    return primary?.id || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -666,6 +720,12 @@ export class ReservationCoreService {
       tenantId,
       customerId,
       explicitAddressId: customerAddressId,
+      candidate: (address || kelurahan || kecamatan || kota) ? {
+        address: address || null,
+        kelurahan: kelurahan || null,
+        kecamatan: kecamatan || null,
+        kota: kota || null,
+      } : undefined,
       db,
     });
 

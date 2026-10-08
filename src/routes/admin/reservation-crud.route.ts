@@ -581,9 +581,10 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/reservation/parse',
-    async (request: FastifyRequest<{ Body: { customerId: string; rawText: string; force?: boolean } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { customerId: string; rawText: string; force?: boolean; customerAddressId?: string } }>, reply: FastifyReply) => {
       const tenantId = tenantOf(request);
       const { customerId, rawText, force } = request.body || {};
+      const customerAddressId = (request.body as any)?.customerAddressId || null;
       if (!customerId || !rawText) {
         return reply.status(400).send({ error: 'customerId and rawText are required' });
       }
@@ -604,6 +605,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           const result = await reservationCoreService.saveReservation({
             tenantId: tenantId,
             customerId,
+            customerAddressId,
             chatId: (await customerService.getCustomerById(customerId, tenantId))?.phone
               ? `${(await customerService.getCustomerById(customerId, tenantId))?.phone}@c.us`
               : '',
@@ -761,6 +763,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           coreResult = await reservationCoreService.saveReservation({
             tenantId: tenantId,
             customerId,
+            customerAddressId: (request.body as any)?.customerAddressId || null,
             bookingDate: parsedDate,
             treatmentCategory: dbCategory,
             treatmentDetail,
@@ -857,12 +860,14 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           address?: string;
           landmark?: string;
           force?: boolean;
+          customerAddressId?: string;
         };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
+      const customerAddressId = (request.body as any)?.customerAddressId || null;
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
       const force = (request.body as any)?.force === true;
       const address = (request.body as any)?.address as string | undefined;
@@ -932,6 +937,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           coreResult = await reservationCoreService.saveReservation({
             tenantId: tenantId,
             customerId,
+            customerAddressId,
             chatId: `${customer.phone}@c.us`,
             bookingDate: parsedDate,
             treatmentCategory: dbCategory,

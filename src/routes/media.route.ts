@@ -100,6 +100,53 @@ function isValidExternalUrl(urlStr: string): boolean {
   }
 }
 
+/**
+ * Helper untuk parsing Range header format `bytes=start-end`.
+ * Mendukung `bytes=start-end`, `bytes=start-`, dan `bytes=-suffix`.
+ * Mengembalikan:
+ * - { start, end } jika rentang valid
+ * - null jika tidak ada Range header
+ * - 'INVALID' jika format salah atau di luar batas totalSize (respons 416)
+ */
+function parseRangeHeader(
+  rangeHeader: string | undefined,
+  totalSize: number
+): { start: number; end: number } | null | 'INVALID' {
+  if (!rangeHeader || !rangeHeader.startsWith('bytes=')) return null;
+  const rawRange = rangeHeader.slice(6).trim();
+  const match = rawRange.match(/^(\d*)-(\d*)$/);
+  if (!match) return 'INVALID';
+  const startStr = match[1];
+  const endStr = match[2];
+
+  if (!startStr && !endStr) return 'INVALID';
+
+  let start: number;
+  let end: number;
+
+  if (startStr && endStr) {
+    start = parseInt(startStr, 10);
+    end = parseInt(endStr, 10);
+  } else if (startStr && !endStr) {
+    start = parseInt(startStr, 10);
+    end = totalSize - 1;
+  } else {
+    // Suffix range: bytes=-500 (ambil 500 byte terakhir)
+    const suffix = parseInt(endStr, 10);
+    if (suffix <= 0) return 'INVALID';
+    start = Math.max(0, totalSize - suffix);
+    end = totalSize - 1;
+  }
+
+  if (isNaN(start) || isNaN(end) || start < 0 || end < start || start >= totalSize) {
+    return 'INVALID';
+  }
+
+  // Batasi end tidak boleh melebihi totalSize - 1
+  end = Math.min(end, totalSize - 1);
+  return { start, end };
+}
+
 export async function mediaRoutes(fastify: FastifyInstance) {
   const { mediaService } = await import('../services/media.service');
 
@@ -133,16 +180,45 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       }
     }
 
+    const stat = fs.statSync(finalAbs);
+    const totalSize = stat.size;
     const ext = (path.extname(finalAbs) || '').replace(/^\./, '').toLowerCase();
+    const contentType = MIME_MAP[ext] || 'application/octet-stream';
+
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Cache-Control', 'public, max-age=86400');
     if (isFallback) {
       reply.header('X-Media-Fallback', 'thumbnail');
       console.log(`[MEDIA FALLBACK] HD→thumb served: /media/${scope}/${tenant}/${file}`);
     }
-    reply.type(MIME_MAP[ext] || 'application/octet-stream');
-    // Streaming audio/video: dukung seek + inisialisasi pemutar (Safari/iOS minta Range).
     reply.header('Accept-Ranges', 'bytes');
+    reply.type(contentType);
+
+    const range = parseRangeHeader(request.headers.range, totalSize);
+    if (range === 'INVALID') {
+      reply.status(416);
+      reply.type('application/json');
+      reply.header('Content-Range', `bytes */${totalSize}`);
+      return reply.send({ error: 'Range Not Satisfiable' });
+    }
+
+    if (range) {
+      const { start, end } = range;
+      const chunkSize = end - start + 1;
+      reply.status(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+      reply.header('Content-Length', chunkSize);
+      if (request.method === 'HEAD') {
+        return reply.send();
+      }
+      const stream = fs.createReadStream(finalAbs, { start, end });
+      return reply.send(stream);
+    }
+
+    reply.header('Content-Length', totalSize);
+    if (request.method === 'HEAD') {
+      return reply.send();
+    }
     const stream = fs.createReadStream(finalAbs);
     return reply.send(stream);
   });
@@ -168,10 +244,40 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'File tidak ditemukan di server WAHA' });
     }
 
+    const totalSize = result.data.length;
     const ext = (path.extname(file) || '').replace(/^\./, '').toLowerCase();
+    const contentType = result.contentType || MIME_MAP[ext] || 'image/jpeg';
+
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Cache-Control', 'private, max-age=86400');
-    reply.type(result.contentType || MIME_MAP[ext] || 'image/jpeg');
+    reply.header('Accept-Ranges', 'bytes');
+    reply.type(contentType);
+
+    const range = parseRangeHeader(request.headers.range, totalSize);
+    if (range === 'INVALID') {
+      reply.status(416);
+      reply.type('application/json');
+      reply.header('Content-Range', `bytes */${totalSize}`);
+      return reply.send({ error: 'Range Not Satisfiable' });
+    }
+
+    if (range) {
+      const { start, end } = range;
+      const chunkSize = end - start + 1;
+      reply.status(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+      reply.header('Content-Length', chunkSize);
+      if (request.method === 'HEAD') {
+        return reply.send();
+      }
+      const chunk = result.data.subarray(start, end + 1);
+      return reply.send(chunk);
+    }
+
+    reply.header('Content-Length', totalSize);
+    if (request.method === 'HEAD') {
+      return reply.send();
+    }
     return reply.send(result.data);
   });
 

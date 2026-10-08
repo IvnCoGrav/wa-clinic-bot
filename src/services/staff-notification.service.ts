@@ -167,17 +167,19 @@ export class StaffNotificationService {
         : '-';
 
       // 4. Navigasi Google Maps Motor
-      const lat = cust?.lat;
-      const lng = cust?.lng;
+      const lat = addrEntity?.lat ?? cust?.lat;
+      const lng = addrEntity?.lng ?? cust?.lng;
       const navigationUrl =
         lat && lng
           ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
+          : addressText && addressText !== 'Alamat belum tercatat lengkap'
+          ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText)}&travelmode=two-wheeler`
           : 'https://maps.google.com';
 
       // 5. Jarak Tempuh — Fase 4 (RC-6, KNOWN_ISSUES #138 G5): sumber resmi jarak klinik→pasien
       // adalah deliveryService.calculateDelivery (tenant-aware: ORS + fallback + tier DB), sehingga
       // angka konsisten dengan pipeline chatbot/refresh. Rumus lokal Haversine×1.6 dihapus.
-      let distanceKm = cust?.distance_km ?? null;
+      let distanceKm = addrEntity?.distance_km ?? cust?.distance_km ?? null;
       if (distanceKm == null && typeof lat === 'number' && typeof lng === 'number') {
         try {
           const { deliveryService } = await import('./delivery.service');
@@ -191,7 +193,7 @@ export class StaffNotificationService {
 
       // 6. Rincian Biaya & Status Bayar
       const purchaseValue = reservation.purchase_value || 0;
-      const ongkir = cust?.ongkir || 0;
+      const ongkir = reservation.delivery_fee ?? addrEntity?.ongkir ?? cust?.ongkir ?? 0;
       const totalFee = purchaseValue || (ongkir > 0 ? ongkir : 0);
       // Seam kanonis: jangan klaim "Transfer" tanpa bukti metode. completed
       // tanpa bayar → "SELESAI — BELUM VERIFIKASI BAYAR", bukan TAGIH.
@@ -838,22 +840,26 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         );
 
         // 4. Alamat & Google Maps
+        const addrEntity = (reservation as any).customer_address;
         const addressParts: string[] = [];
-        if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
-        if (cust?.kecamatan) addressParts.push(`Kec. ${this.escapeMarkdown(cust.kecamatan)}`);
-        if (cust?.kota) addressParts.push(this.escapeMarkdown(cust.kota));
+        if (addrEntity?.address) addressParts.push(this.escapeMarkdown(addrEntity.address));
+        if (addrEntity?.kelurahan || cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(addrEntity?.kelurahan || cust?.kelurahan)}`);
+        if (addrEntity?.kecamatan || cust?.kecamatan) addressParts.push(`Kec. ${this.escapeMarkdown(addrEntity?.kecamatan || cust?.kecamatan)}`);
+        if (addrEntity?.kota || cust?.kota) addressParts.push(this.escapeMarkdown(addrEntity?.kota || cust?.kota));
         const addressText = addressParts.join(', ') || 'Alamat tercatat di sistem';
 
-        const lat = cust?.lat;
-        const lng = cust?.lng;
+        const lat = addrEntity?.lat ?? cust?.lat;
+        const lng = addrEntity?.lng ?? cust?.lng;
         const navigationUrl =
           lat && lng
             ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
+            : addressText !== 'Alamat tercatat di sistem'
+            ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText)}&travelmode=two-wheeler`
             : `https://maps.google.com/?q=${encodeURIComponent(addressText)}`;
 
         // 5. Total Biaya
         const purchaseValue = reservation.purchase_value || 0;
-        const ongkir = cust?.ongkir || 0;
+        const ongkir = reservation.delivery_fee ?? addrEntity?.ongkir ?? cust?.ongkir ?? 0;
         const totalFee = purchaseValue || (ongkir > 0 ? ongkir : 0);
         let totalFeeStr = '';
         if (totalFee > 0) {
@@ -976,6 +982,7 @@ _Semangat melayani Bunda & Buah Hati hari ini! ✨_`;
             },
           },
           children: true,
+          customer_address: true,
         },
         orderBy: {
           booking_date: 'asc',

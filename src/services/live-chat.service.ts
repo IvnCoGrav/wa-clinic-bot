@@ -126,6 +126,7 @@ export interface AdminReplyResult {
   conversation?: any;
   /** True bila balasan adalah CATATAN INTERNAL (/notes) — TIDAK dikirim ke WhatsApp. */
   isInternal?: boolean;
+  warning?: string;
   error?: { code: string; message?: string };
 }
 
@@ -509,6 +510,51 @@ export class LiveChatService {
       };
     }
 
+    // MT-2.1: Deteksi palang pintu kunjungan lapangan tanpa reservasi aktif (state, bukan regex teks obrolan)
+    let dispatchWarning: string | undefined = undefined;
+    try {
+      const hasMedia = !!imageB64 || !!mediaUrl;
+      const hasShareloc = /\[LOCATION[:\s]*Lat/i.test(text || '');
+      if (hasMedia || hasShareloc) {
+        const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const nowWib = new Date(Date.now() + WIB_OFFSET_MS);
+        const y = nowWib.getUTCFullYear();
+        const m = nowWib.getUTCMonth();
+        const d = nowWib.getUTCDate();
+        const startTodayWib = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - WIB_OFFSET_MS);
+        const endTodayWib = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - WIB_OFFSET_MS);
+
+        const todayRes = await prisma.reservation.findFirst({
+          where: {
+            tenant_id: tenantId,
+            customer_id: conversation.customer_id,
+            booking_date: { gte: startTodayWib, lte: endTodayWib },
+            status: { in: ['confirmed', 'en_route'] },
+          },
+        });
+
+        const { staffTripTrackingService } = await import('./staff-trip-tracking.service');
+        const activeTrip = todayRes?.id ? staffTripTrackingService.getTrip(tenantId, todayRes.id) : null;
+
+        if (!todayRes && !activeTrip) {
+          dispatchWarning = 'NO_ACTIVE_RESERVATION_TODAY';
+          const { auditService } = await import('./audit.service');
+          await auditService.logAdminAction({
+            apiKey: 'internal',
+            tenantId,
+            action: 'UNREGISTERED_VISIT_DISPATCH_DETECTED',
+            adminIdentity: adminName || 'Staff',
+            payload: {
+              conversationId,
+              customerId: conversation.customer_id,
+              hasMedia,
+              hasShareloc,
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch (_) {}
+
     const gateway = await resolveGatewayForTenant(tenantId);
 
     const { whatsappProviderService } = await import('./whatsapp-provider.service');
@@ -828,6 +874,7 @@ export class LiveChatService {
       id: logged?.id,
       provider: gateway.providerType,
       conversation: updated ? buildConversationUpdatedPayload(updated) : undefined,
+      warning: dispatchWarning,
     };
   }
 

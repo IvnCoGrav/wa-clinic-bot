@@ -102,7 +102,7 @@ import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { BRAND } from '../../config/brand';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, WilayahReference } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -319,12 +319,46 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
   const fmt = (s: number) => {
     if (!isFinite(s) || isNaN(s)) return '0:00';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60).toString().padStart(2, '0');
     return `${m}:${sec}`;
   };
+
+  useEffect(() => {
+    let isCancelled = false;
+    let localBlobUrl: string | null = null;
+    setIsLoading(true);
+    setHasError(false);
+
+    fetch(src, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (isCancelled) return;
+        localBlobUrl = URL.createObjectURL(blob);
+        setBlobUrl(localBlobUrl);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (isCancelled) return;
+        setHasError(true);
+        setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
+      }
+    };
+  }, [src, retryCount]);
+
   useEffect(() => {
     setHasError(false);
     const a = audioRef.current;
@@ -343,53 +377,93 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
       a.removeEventListener('ended', onEnd);
       a.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [blobUrl]);
+
   const toggle = () => {
     const a = audioRef.current;
-    if (!a || hasError) return;
-    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => setHasError(true)); }
+    if (!a || hasError || isLoading) return;
+    if (playing) {
+      a.pause();
+      setPlaying(false);
+    } else {
+      a.play().then(() => setPlaying(true)).catch(() => setHasError(true));
+    }
   };
+
   const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     if (audioRef.current) audioRef.current.currentTime = v;
     setCurrent(v);
   };
+
   if (hasError) {
     return (
       <div className="flex items-center gap-2 py-1.5 min-w-[180px] max-w-[260px] text-amber-700">
-        <span className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
-          <Volume2 size={14} />
-        </span>
+        <button
+          type="button"
+          onClick={() => setRetryCount((c) => c + 1)}
+          title="Coba lagi memuat audio"
+          className="w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
+        >
+          <RefreshCw size={13} />
+        </button>
         <div className="flex-1 min-w-0 text-[11px] leading-tight">
-          <p className="font-bold">Audio gagal dimuat</p>
+          <p className="font-bold">Audio belum siap / gagal</p>
           <p className="text-amber-600/80">
-            Format tidak didukung atau file tidak tersedia.{' '}
-            <a
-              href={src}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="underline text-[#008069] hover:text-[#00a884]"
+            <button
+              type="button"
+              onClick={() => setRetryCount((c) => c + 1)}
+              className="underline text-[#008069] hover:text-[#00a884] font-medium mr-1.5"
             >
-              Buka / unduh
-            </a>
+              Coba lagi
+            </button>
+            {blobUrl && (
+              <a
+                href={blobUrl}
+                download="voice_note.oga"
+                className="underline text-[#008069] hover:text-[#00a884]"
+              >
+                Unduh
+              </a>
+            )}
           </p>
         </div>
       </div>
     );
   }
+
   return (
     <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
-      <button type="button" onClick={toggle} className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition">
-        {playing ? <span className="w-2.5 h-2.5 bg-white rounded-sm" /> : <Play size={14} className="ml-0.5 fill-white" />}
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={isLoading}
+        className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50"
+      >
+        {isLoading ? (
+          <RefreshCw size={13} className="animate-spin text-white" />
+        ) : playing ? (
+          <span className="w-2.5 h-2.5 bg-white rounded-sm" />
+        ) : (
+          <Play size={14} className="ml-0.5 fill-white" />
+        )}
       </button>
       <div className="flex-1 min-w-0">
-        <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={current}
+          onChange={seek}
+          disabled={isLoading}
+          className="w-full accent-[#008069] h-1"
+        />
         <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
-          <span>{fmt(current)}</span><span>{fmt(duration)}</span>
+          <span>{fmt(current)}</span>
+          <span>{fmt(duration)}</span>
         </div>
       </div>
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      {blobUrl && <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />}
     </div>
   );
 };
@@ -2349,7 +2423,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             setMessages((prev) =>
               prev.map((m) =>
                 matchesUpdated(m)
-                  ? { ...m, content, is_revoked: isRevoked, is_edited: isEdited ?? (m as any).is_edited }
+                  ? {
+                      ...m,
+                      content: content !== undefined ? content : m.content,
+                      is_revoked: isRevoked ?? m.is_revoked,
+                      is_edited: isEdited ?? (m as any).is_edited,
+                      media: payload.media || (m as any).media,
+                      payload_raw: {
+                        ...((m as any).payload_raw || {}),
+                        ...(payload.media ? { media: payload.media } : {}),
+                      },
+                    }
                   : m
               )
             );
@@ -3413,10 +3497,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     ]
   );
 
+  // MT-3.1: Deteksi jadwal hasil negosiasi dengan komitmen aktif user (anti false-positive)
+  const negotiatedScheduleState = useMemo(() => {
+    return isNegotiatedScheduleCommitted(messages, formBannerExtracted);
+  }, [messages, formBannerExtracted]);
+
+  const hasValidNegotiatedSchedule = Boolean(
+    negotiatedScheduleState && !hasExistingReservationForExtractedSchedule
+  );
+
   // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
   // form BARU (konten beda) otomatis tampil lagi.
   const formBannerKey =
-    formBannerExtracted?.hasExplicitReservationForm && selectedChat
+    (formBannerExtracted?.hasExplicitReservationForm || hasValidNegotiatedSchedule) && selectedChat && formBannerExtracted
       ? `${selectedChat.conversationId}|${formBannerExtracted.dateDisplay}|${formBannerExtracted.timeDisplay}|${formBannerExtracted.treatmentName}`
       : null;
 
@@ -3427,6 +3520,23 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       !activeHoldReservation &&
       !activeConfirmedReservation &&
       !activePendingReservation
+  );
+
+  // MT-2.2: Palang Pintu Dispatch — Deteksi kunjungan lapangan tanpa reservasi aktif di DB
+  const hasVisitIndicators = useMemo(() => {
+    if (!messages || messages.length === 0) return false;
+    const hasMedia = messages.some((m) => Boolean(m.media || (m.content && m.content.startsWith('[IMAGE'))));
+    const hasShareloc = messages.some((m) => Boolean(m.location || (m.content && /\[LOCATION[:\s]*Lat/i.test(m.content))));
+    return hasMedia || hasShareloc;
+  }, [messages]);
+
+  const showUnregisteredVisitBanner = Boolean(
+    hasVisitIndicators &&
+      !showFormReservasiBanner &&
+      !activeConfirmedReservation &&
+      !activeHoldReservation &&
+      !activePendingReservation &&
+      !hasExistingReservationForExtractedSchedule
   );
 
   const handleInsertInvoiceToChat = (text: string) => {
@@ -5177,6 +5287,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         title="Abaikan banner form ini"
                       >
                         <X size={14} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MT-2.2: Banner Oranye Palang Pintu Kunjungan Tanpa Reservasi Aktif */}
+                {showUnregisteredVisitBanner && selectedChat && (
+                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                          PERINGATAN KUNJUNGAN LAPANGAN
+                        </span>
+                        <span className="font-semibold truncate text-[11px]">
+                          ⚠️ Kunjungan lapangan terdeteksi tetapi belum ada reservasi aktif di kalender.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenQuickReservation()}
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        title="Buat reservasi sekarang dengan data chat yang ada"
+                      >
+                        <CalendarPlus size={14} />
+                        <span>Buat Reservasi Sekarang (+)</span>
                       </button>
                     </div>
                   </div>

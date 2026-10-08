@@ -198,13 +198,14 @@ export function buildMapsUrls(
 }
 
 export function buildAddressText(c: {
+  address?: string | null;
   kelurahan?: string | null;
   kecamatan?: string | null;
   kota?: string | null;
   preferences?: any;
 }): string {
   const pref = (c.preferences as any) || {};
-  const addressDetail = String(pref.address || pref.full_address || '').trim();
+  const addressDetail = String((c as any).address || pref.address || pref.full_address || '').trim();
   const parts: string[] = [];
   if (addressDetail) parts.push(addressDetail);
   const kel = (c.kelurahan || '').trim();
@@ -513,8 +514,9 @@ export class StaffReservationService {
               birth_date: true,
               age_months_at_registration: true,
               created_at: true,
-},
+            },
           },
+          customer_address: true,
         },
         orderBy: { booking_date: 'asc' },
       });
@@ -541,19 +543,20 @@ export class StaffReservationService {
         >();
         for (const r of rows) {
           const c = r.customer;
+          const addr = (r as any).customer_address;
           const staffKey = (r as any).assigned_staff?.id || 'unassigned';
           const tracker = trackerByStaff.get(staffKey) || {
             coords: { lat: clinicConfig.lat, lng: clinicConfig.lng },
             originName: clinicConfig.name || 'Klinik',
             isFirst: true,
           };
-          const lat = c?.lat;
-          const lng = c?.lng;
+          const lat = addr?.lat ?? c?.lat;
+          const lng = addr?.lng ?? c?.lng;
 
           if (typeof lat !== 'number' || typeof lng !== 'number') {
             // Tanpa koordinat: fallback distance_km, route tak berlanjut (waypoint diabaikan).
             itineraryById.set(r.id, {
-              distanceKm: c?.distance_km ?? null,
+              distanceKm: addr?.distance_km ?? c?.distance_km ?? null,
               distanceSource: 'CLINIC',
               originName: clinicConfig.name || 'Klinik',
             });
@@ -562,7 +565,7 @@ export class StaffReservationService {
 
           const currentCoords: Coordinates = { lat, lng };
           if (tracker.isFirst) {
-            let dist: number | null = c?.distance_km ?? null;
+            let dist: number | null = addr?.distance_km ?? c?.distance_km ?? null;
             if (dist == null) {
               try {
                 const calc = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
@@ -601,10 +604,30 @@ export class StaffReservationService {
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
-        const lat = cust?.lat;
-        const lng = cust?.lng;
-        const addressText = buildAddressText(cust || {});
-        const locationSource = resolveLocationSource(cust);
+        const addr = (r as any).customer_address;
+        const effectiveAddr = addr
+          ? {
+              address: addr.address,
+              kelurahan: addr.kelurahan,
+              kecamatan: addr.kecamatan,
+              kota: addr.kota,
+              lat: addr.lat,
+              lng: addr.lng,
+              distance_km: addr.distance_km,
+              ongkir: addr.ongkir,
+              landmark: addr.landmark,
+              location_source: addr.location_source,
+              preferences: {
+                ...((cust?.preferences as any) || {}),
+                address: addr.address,
+                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
+              },
+            }
+          : cust;
+        const lat = effectiveAddr?.lat ?? cust?.lat;
+        const lng = effectiveAddr?.lng ?? cust?.lng;
+        const addressText = buildAddressText(effectiveAddr || {});
+        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -655,20 +678,20 @@ export class StaffReservationService {
           mapsUrl,
           navigationUrl,
           address: {
-            kelurahan: cust?.kelurahan || null,
-            kecamatan: cust?.kecamatan || null,
-            kota: cust?.kota || null,
-            lat: cust?.lat ?? null,
-            lng: cust?.lng ?? null,
+            kelurahan: effectiveAddr?.kelurahan || cust?.kelurahan || null,
+            kecamatan: effectiveAddr?.kecamatan || cust?.kecamatan || null,
+            kota: effectiveAddr?.kota || cust?.kota || null,
+            lat: lat ?? null,
+            lng: lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
-            landmark: (cust?.preferences as any)?.landmark || null,
-            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
-            locationSource: resolveLocationSource(cust),
+            landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
+            addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource,
           },
           children: childrenList,
           pricing,
@@ -809,8 +832,9 @@ export class StaffReservationService {
               birth_date: true,
               age_months_at_registration: true,
               created_at: true,
-},
+            },
           },
+          customer_address: true,
         },
         orderBy: { booking_date: 'asc' },
       });
@@ -835,6 +859,7 @@ export class StaffReservationService {
         >();
         for (const r of rows) {
           const c = r.customer;
+          const addr = (r as any).customer_address;
           const staffKey = (r as any).assigned_staff?.id || 'unassigned';
           const dateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
           const chainKey = `${staffKey}::${dateKey}`;
@@ -843,12 +868,12 @@ export class StaffReservationService {
             originName: clinicConfig.name || 'Klinik',
             isFirst: true,
           };
-          const lat = c?.lat;
-          const lng = c?.lng;
+          const lat = addr?.lat ?? c?.lat;
+          const lng = addr?.lng ?? c?.lng;
 
           if (typeof lat !== 'number' || typeof lng !== 'number') {
             itineraryById.set(r.id, {
-              distanceKm: c?.distance_km ?? null,
+              distanceKm: addr?.distance_km ?? c?.distance_km ?? null,
               distanceSource: 'CLINIC',
               originName: clinicConfig.name || 'Klinik',
             });
@@ -857,7 +882,7 @@ export class StaffReservationService {
 
           const currentCoords: Coordinates = { lat, lng };
           if (tracker.isFirst) {
-            let dist: number | null = c?.distance_km ?? null;
+            let dist: number | null = addr?.distance_km ?? c?.distance_km ?? null;
             if (dist == null) {
               try {
                 const calc = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
@@ -896,10 +921,30 @@ export class StaffReservationService {
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
-        const lat = cust?.lat;
-        const lng = cust?.lng;
-        const addressText = buildAddressText(cust || {});
-        const locationSource = resolveLocationSource(cust);
+        const addr = (r as any).customer_address;
+        const effectiveAddr = addr
+          ? {
+              address: addr.address,
+              kelurahan: addr.kelurahan,
+              kecamatan: addr.kecamatan,
+              kota: addr.kota,
+              lat: addr.lat,
+              lng: addr.lng,
+              distance_km: addr.distance_km,
+              ongkir: addr.ongkir,
+              landmark: addr.landmark,
+              location_source: addr.location_source,
+              preferences: {
+                ...((cust?.preferences as any) || {}),
+                address: addr.address,
+                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
+              },
+            }
+          : cust;
+        const lat = effectiveAddr?.lat ?? cust?.lat;
+        const lng = effectiveAddr?.lng ?? cust?.lng;
+        const addressText = buildAddressText(effectiveAddr || {});
+        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -947,20 +992,20 @@ export class StaffReservationService {
           mapsUrl,
           navigationUrl,
           address: {
-            kelurahan: cust?.kelurahan || null,
-            kecamatan: cust?.kecamatan || null,
-            kota: cust?.kota || null,
-            lat: cust?.lat ?? null,
-            lng: cust?.lng ?? null,
+            kelurahan: effectiveAddr?.kelurahan || cust?.kelurahan || null,
+            kecamatan: effectiveAddr?.kecamatan || cust?.kecamatan || null,
+            kota: effectiveAddr?.kota || cust?.kota || null,
+            lat: lat ?? null,
+            lng: lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
-            landmark: (cust?.preferences as any)?.landmark || null,
-            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
-            locationSource: resolveLocationSource(cust),
+            landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
+            addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource,
           },
           children: childrenList,
           pricing,
@@ -1059,8 +1104,9 @@ export class StaffReservationService {
               birth_date: true,
               age_months_at_registration: true,
               created_at: true,
-},
+            },
           },
+          customer_address: true,
         },
         orderBy: { booking_date: 'desc' },
       });
@@ -1068,11 +1114,33 @@ export class StaffReservationService {
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
-        const addressText = buildAddressText(cust || {});
-        const locationSource = resolveLocationSource(cust);
-        const { mapsUrl, navigationUrl } = buildMapsUrls(cust?.lat, cust?.lng, locationSource, addressText);
+        const addr = (r as any).customer_address;
+        const effectiveAddr = addr
+          ? {
+              address: addr.address,
+              kelurahan: addr.kelurahan,
+              kecamatan: addr.kecamatan,
+              kota: addr.kota,
+              lat: addr.lat,
+              lng: addr.lng,
+              distance_km: addr.distance_km,
+              ongkir: addr.ongkir,
+              landmark: addr.landmark,
+              location_source: addr.location_source,
+              preferences: {
+                ...((cust?.preferences as any) || {}),
+                address: addr.address,
+                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
+              },
+            }
+          : cust;
+        const lat = effectiveAddr?.lat ?? cust?.lat;
+        const lng = effectiveAddr?.lng ?? cust?.lng;
+        const addressText = buildAddressText(effectiveAddr || {});
+        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
+        const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
-        const distanceKm = cust?.distance_km ?? null;
+        const distanceKm = effectiveAddr?.distance_km ?? cust?.distance_km ?? null;
 
         // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
         const childrenList = selectTaskChildren(r.children, cust?.children);
@@ -1116,20 +1184,20 @@ export class StaffReservationService {
           mapsUrl,
           navigationUrl,
           address: {
-            kelurahan: cust?.kelurahan || null,
-            kecamatan: cust?.kecamatan || null,
-            kota: cust?.kota || null,
-            lat: cust?.lat ?? null,
-            lng: cust?.lng ?? null,
+            kelurahan: effectiveAddr?.kelurahan || cust?.kelurahan || null,
+            kecamatan: effectiveAddr?.kecamatan || cust?.kecamatan || null,
+            kota: effectiveAddr?.kota || cust?.kota || null,
+            lat: lat ?? null,
+            lng: lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource: 'CLINIC',
             originName: 'Klinik',
             fullText: addressText,
             housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
-            landmark: (cust?.preferences as any)?.landmark || null,
-            addressDetail: (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
-            locationSource: resolveLocationSource(cust),
+            landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
+            addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
+            locationSource,
           },
           children: childrenList,
           pricing,
@@ -1692,7 +1760,15 @@ export class StaffReservationService {
               treatmentCategory: reservation.treatment_category,
               tenantId,
             });
+          } else {
+            // Review sudah pernah terkirim (SENT), tetapi rekapan Sheets tetap wajib disinkronkan
+            const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
+            await sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) =>
+              console.warn('[STAFF RESERVATION] sheetsSync enqueue on payment failed:', err?.message)
+            );
           }
+        } else {
+          console.warn(`[STAFF RESERVATION] recordPayment: reservasi ${reservation.id} completed tanpa booking_date, sheets sync dilewati`);
         }
       } catch (fuErr: any) {
         console.warn('[STAFF RESERVATION] Failed to trigger follow-up on payment:', fuErr.message);
@@ -2483,6 +2559,8 @@ export class StaffReservationService {
             treatmentCategory: reservation.treatment_category,
             tenantId,
           });
+        } else {
+          console.warn(`[STAFF RESERVATION] completeTask: reservasi ${reservation.id} completed tanpa booking_date, sheets sync dilewati`);
         }
       } catch (lcErr: any) {
         console.warn('[STAFF RESERVATION] completeTask lifecycle warning:', lcErr?.message);

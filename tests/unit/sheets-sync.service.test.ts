@@ -7,6 +7,7 @@ import {
   ReservationForSheets,
   OutboxRow,
   SHEETS_YEAR_NOT_CONFIGURED,
+  SHEETS_SKIP_NON_COMPLETED,
 } from '../../src/services/sheets/sheets-sync.service';
 import { prisma } from '../../src/db/client';
 import {
@@ -138,7 +139,7 @@ function makeReservation(over: Partial<ReservationForSheets> = {}): ReservationF
     discount_amount: 0,
     payment_method: null,
     is_repeat_order: false,
-    status: 'confirmed',
+    status: 'completed',
     raw_text: 'Batuk pilek',
     sheets_spreadsheet_id: null,
     sheets_tab_name: null,
@@ -186,19 +187,27 @@ describe('SheetsSyncService — append/update idempoten', () => {
     expect(gw.updated[0].rowIndex).toBe(2);
   });
 
-  it('WRITE-ONCE HARGA: update TIDAK menyentuh kolom H/I/J/K (ongkir/harga)', async () => {
+  it('WRITE-ONCE HARGA & PROTEKSI MANUAL: update TIDAK menyentuh kolom H/I/J/K dan N/O/P', async () => {
     store.reservations.set('res-1', makeReservation());
     await svc.syncReservation('res-1', TENANT);
     await svc.syncReservation('res-1', TENANT);
 
     const cols = gw.updated[0].cells.map((c) => c.col);
-    // Kolom 1-based: H=8, I=9, J=10, K=11 HARAM ditulis saat update.
-    for (const protectedCol of [8, 9, 10, 11]) {
+    // Kolom 1-based: H=8, I=9, J=10, K=11 serta N=14, O=15, P=16 HARAM ditulis saat update.
+    for (const protectedCol of [8, 9, 10, 11, 14, 15, 16]) {
       expect(cols).not.toContain(protectedCol);
     }
-    // Kolom non-harga (mis. M Bidan=13, O Follow up=15) tetap diperbarui.
+    // Kolom non-protected (mis. L Metode Bayar=12, M Bidan=13) tetap diperbarui.
+    expect(cols).toContain(12);
     expect(cols).toContain(13);
-    expect(cols).toContain(15);
+  });
+
+  it('GERBANG COMPLETED-ONLY: status non-completed melempar SHEETS_SKIP_NON_COMPLETED', async () => {
+    for (const nonCompleted of ['confirmed', 'pending', 'cancelled', 'hold', 'en_route']) {
+      store.reservations.set('res-non', makeReservation({ status: nonCompleted }));
+      await expect(svc.syncReservation('res-non', TENANT)).rejects.toThrow(SHEETS_SKIP_NON_COMPLETED);
+    }
+    expect(gw.appended).toHaveLength(0);
   });
 
   it('EDGE ganti tahun belum dipetakan → SHEETS_YEAR_NOT_CONFIGURED (tunda, bukan tulis ke file salah)', async () => {
@@ -362,5 +371,29 @@ describe('SheetsSyncService — processOutbox retry/backoff', () => {
     const finalRow = [...store.outbox.values()][0];
     expect(finalRow.status).toBe('failed');
     expect(finalRow.attempts).toBeGreaterThanOrEqual(9);
+  });
+
+  it('outbox item dengan status non-completed → dilewati (skipped: 1, outbox markDone)', async () => {
+    store.reservations.set('res-1', makeReservation({ status: 'confirmed' }));
+    await svc.enqueue('res-1', TENANT);
+    const res = await svc.processOutbox(TENANT);
+    expect(res.skipped).toBe(1);
+    expect(res.succeeded).toBe(0);
+    expect([...store.outbox.values()][0].status).toBe('done');
+    expect(gw.appended).toHaveLength(0);
+  });
+
+  it('anti-infinite-defer: INVALID_BOOKING_DATE setelah MAX_ATTEMPTS → markFailed', async () => {
+    store.reservations.set('res-1', makeReservation({ booking_date: null }));
+    await svc.enqueue('res-1', TENANT);
+
+    for (let i = 0; i < 10; i++) {
+      const o = [...store.outbox.values()][0];
+      if (o.nextRetryAt) o.nextRetryAt = new Date(Date.now() - 1000);
+      await svc.processOutbox(TENANT);
+    }
+    const finalRow = [...store.outbox.values()][0];
+    expect(finalRow.status).toBe('failed');
+    expect(finalRow.lastError).toContain('EXCEEDED_MAX_DEFERRALS');
   });
 });

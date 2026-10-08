@@ -381,44 +381,27 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               const conversation = await conversationService.getOrCreateConversation(customer.id, resolvedTenantId);
 
               let outboundMedia: any = null;
-              if (isOutboundImage) {
-                try {
-                  const { mediaService } = await import('../services/media.service');
-                  let buffer: Buffer | null = null;
-                  const mimeType = pAny.message?.imageMessage?.mimetype || pAny.media?.mimetype || pAny.media?.mime_type || pAny._data?.mimetype || pAny.mimetype || 'image/jpeg';
-                  const mediaUrlCandidate = pAny.media?.url || pAny._data?.mediaUrl || pAny._data?.deprecatedMms3Url || pAny.media?.deprecatedMms3Url || null;
-                  
-                  if (mediaUrlCandidate) {
-                    buffer = await wahaClient.fetchUrl(String(mediaUrlCandidate));
-                  } else if (pAny.media?.url) {
-                    buffer = await wahaClient.fetchUrl(String(pAny.media.url));
-                  }
-                  if (!buffer || buffer.length === 0) {
-                    buffer = await wahaClient.downloadMedia(payload.id, customerJid);
-                  }
-                  // Catatan: JANGAN fallback ke jpegThumbnail untuk outbound WhatsApp Web karena rawan cache collision di level socket Baileys.
-                  if (buffer && buffer.length > 0) {
-                    const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType });
-                    outboundMedia = {
-                      url: saved.hdUrl || saved.thumbUrl,
-                      hdUrl: saved.hdUrl,
-                      thumbUrl: saved.thumbUrl,
-                      mimeType,
-                      caption: imageCaption || null,
-                    };
-                  } else if (mediaUrlCandidate || pAny.media?.url) {
-                    const rawUrl = String(mediaUrlCandidate || pAny.media?.url);
-                    const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-                    outboundMedia = {
-                      url: urlPath,
-                      hdUrl: urlPath,
-                      mimeType,
-                      caption: imageCaption || null,
-                    };
-                  }
-                } catch (mediaErr: any) {
-                  console.warn('[WAHA OUTBOUND MEDIA] Gagal menyimpan media outbound dari WhatsApp HP:', mediaErr.message);
-                }
+              const mediaUrlCandidate = pAny.media?.url || pAny._data?.mediaUrl || pAny._data?.deprecatedMms3Url || pAny.media?.deprecatedMms3Url || null;
+              const candidateMime = pAny.message?.imageMessage?.mimetype ||
+                pAny.message?.audioMessage?.mimetype ||
+                pAny.message?.documentMessage?.mimetype ||
+                pAny.message?.videoMessage?.mimetype ||
+                pAny.media?.mimetype ||
+                pAny.media?.mime_type ||
+                pAny._data?.mimetype ||
+                pAny.mimetype ||
+                (isOutboundImage ? 'image/jpeg' : isOutboundAudio ? 'audio/ogg' : isOutboundVideo ? 'video/mp4' : isOutboundDocument ? 'application/pdf' : null);
+
+              if (mediaUrlCandidate) {
+                const rawUrl = String(mediaUrlCandidate);
+                const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+                outboundMedia = {
+                  url: urlPath,
+                  hdUrl: urlPath,
+                  mimeType: candidateMime,
+                  caption: imageCaption || null,
+                  fileName: pAny.media?.filename || pAny.media?.fileName || undefined,
+                };
               }
 
               // 1. Cek duplikasi pesan outbound (apakah ini pesan yang baru saja dikirim oleh bot/sistem)
@@ -435,7 +418,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 payload.id,
                 resolvedTenantId,
                 60,
-                isOutboundImage
+                isOutboundNonText
               );
               const isInFlightBot = messageService.isInFlightBotOutbound(
                 customerJid || `${phone}@c.us`,
@@ -598,7 +581,54 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
               }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log outbound reply:', err));
 
-              console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) (${isBotAutoReply ? 'BOT' : 'ADMIN'}) tercatat & disiarkan ke Live Chat.`);
+              const outTypeLabel = (outCanonical.type || (isOutboundImage ? 'GAMBAR' : 'TEKS')).toUpperCase();
+              console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp ke ${phone} (${outTypeLabel}) (${isBotAutoReply ? 'BOT' : 'ADMIN'}) tercatat & disiarkan ke Live Chat.`);
+
+              // Background worker: unduh media outbound non-teks dari WhatsApp HP secara asinkron tanpa memblokir webhook
+              if (isOutboundNonText && !isBotAutoReply) {
+                void (async () => {
+                  try {
+                    const { mediaService } = await import('../services/media.service');
+                    let buffer: Buffer | null = null;
+                    const heavyMediaUrl =
+                      mediaUrlCandidate ||
+                      pAny.media?.url ||
+                      pAny._data?.mediaUrl ||
+                      pAny._data?.deprecatedMms3Url ||
+                      null;
+
+                    if (heavyMediaUrl) {
+                      try {
+                        buffer = await wahaClient.fetchUrl(String(heavyMediaUrl));
+                      } catch {
+                        buffer = null;
+                      }
+                    }
+                    if (!buffer || buffer.length === 0) {
+                      buffer = await wahaClient.downloadMedia(payload.id, customerJid || `${phone}@c.us`);
+                    }
+                    if (buffer && buffer.length > 0) {
+                      const effectiveMime = candidateMime || (isOutboundImage ? 'image/jpeg' : isOutboundAudio ? 'audio/ogg' : 'application/octet-stream');
+                      const saved = await mediaService.saveInboundMedia({
+                        tenantId: resolvedTenantId,
+                        buffer,
+                        mimeType: effectiveMime,
+                      });
+                      await messageService.attachMediaToMessage(conversation.id, payload.id, resolvedTenantId, {
+                        url: saved.hdUrl || saved.thumbUrl,
+                        hdUrl: saved.hdUrl,
+                        thumbUrl: saved.thumbUrl,
+                        mimeType: effectiveMime,
+                        caption: imageCaption || null,
+                        fileName: pAny.media?.filename || pAny.media?.fileName || undefined,
+                      });
+                      console.log(`[WAHA OUTBOUND MEDIA WORKER] Berhasil menyimpan media outbound ${outCanonical.type} ke lokal & broadcast SSE (${payload.id}).`);
+                    }
+                  } catch (bgMediaErr: any) {
+                    console.warn('[WAHA OUTBOUND MEDIA WORKER ERROR] Gagal mengunduh media outbound di background:', bgMediaErr.message);
+                  }
+                })();
+              }
 
               // 5. Background Auto-Capture Reservasi dari Konfirmasi Admin
               try {

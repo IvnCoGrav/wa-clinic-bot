@@ -162,6 +162,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Alamat jalan fisik & patokan rumah (persist ke preferences.address/landmark)
   const [address, setAddress] = useState(initialAddress || '');
   const [landmark, setLandmark] = useState(initialLandmark || '');
+  const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
+
+  const savedAddresses: any[] = useMemo(() => {
+    if (!selectedCustomerInfo) return [];
+    if (Array.isArray(selectedCustomerInfo.saved_addresses)) return selectedCustomerInfo.saved_addresses;
+    if (Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)) return selectedCustomerInfo.preferences.saved_addresses;
+    return [];
+  }, [selectedCustomerInfo]);
 
   // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
   // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
@@ -188,6 +196,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       : (isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
     setLandmark(lm);
   }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
+
+  // Sinkronisasi pilihan alamat saat customer atau reservasi berganti
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialReservation?.customer_address_id) {
+      setCustomerAddressId(initialReservation.customer_address_id);
+    } else if (savedAddresses.length > 0 && !customerAddressId) {
+      const primary = savedAddresses.find((a: any) => a.isPrimary) || savedAddresses[0];
+      if (primary) {
+        setCustomerAddressId(primary.id);
+      }
+    }
+  }, [isOpen, initialReservation, savedAddresses]);
 
   // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
   const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
@@ -267,6 +288,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     notes,
     address,
     landmark,
+    customerAddressId,
     ongkir,
     discount,
     babies,
@@ -292,6 +314,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     notes,
     address,
     landmark,
+    customerAddressId,
     ongkir,
     discount,
     babies,
@@ -343,6 +366,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.notes !== undefined) setNotes(restored.notes);
     if (restored.address !== undefined) setAddress(restored.address);
     if (restored.landmark !== undefined) setLandmark(restored.landmark);
+    if (restored.customerAddressId !== undefined) setCustomerAddressId(restored.customerAddressId);
     if (restored.ongkir !== undefined) setOngkir(restored.ongkir);
     if (restored.discount !== undefined) setDiscount(restored.discount);
     if (restored.babies !== undefined) setBabies(restored.babies);
@@ -1472,6 +1496,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         assignedStaffId: assignedStaffId || undefined,
         status,
         notes: notes.trim() || undefined,
+        customerAddressId: customerAddressId || undefined,
         address: address.trim() || undefined,
         landmark: landmark.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
@@ -1494,6 +1519,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       assignedStaffId: assignedStaffId ? assignedStaffId : null,
       status,
       notes: notes.trim() ? notes.trim() : null,
+      customerAddressId: customerAddressId || undefined,
       address: address.trim() || undefined,
       landmark: landmark.trim() || undefined,
       babies: babies.filter((b) => b.name.trim().length > 0),
@@ -1522,6 +1548,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           ? { id: selectedStaffObj.id, name: selectedStaffObj.name, phone: selectedStaffObj.phone }
           : null),
       babies: formBabies,
+      customer_address_id: (savedRes?.customer_address_id ?? customerAddressId) || null,
       customer: savedRes?.customer || selectedCustomerInfo || undefined,
       ongkir: Number(ongkir) || 0,
       _withInvoice: Boolean(withInvoice),
@@ -1965,6 +1992,57 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </div>
               </div>
             )}
+            {/* Multi-Address Selector (Jika customer memiliki > 1 alamat tersimpan) */}
+            {savedAddresses.length > 1 && (
+              <div className="p-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#2a3942] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
+                    <Home size={12} className="text-[#008069]" />
+                    <span>Pilih Alamat Rumah ({savedAddresses.length} Alamat Tersimpan):</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {savedAddresses.map((addrItem: any) => {
+                    const isSelected = customerAddressId === addrItem.id;
+                    return (
+                      <button
+                        key={addrItem.id}
+                        type="button"
+                        onClick={() => {
+                          setCustomerAddressId(addrItem.id);
+                          if (addrItem.address) setAddress(addrItem.address);
+                          if (addrItem.landmark) setLandmark(addrItem.landmark);
+                          if (addrItem.ongkir != null) setOngkir(addrItem.ongkir);
+                        }}
+                        className={`text-left p-2 rounded-lg border text-xs transition-all ${
+                          isSelected
+                            ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] font-medium shadow-sm'
+                            : 'bg-white dark:bg-[#111b21] border-[#e9edef] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f5f6f6]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold text-[11px]">
+                          <span>{addrItem.label || (addrItem.isPrimary ? 'Rumah Utama' : 'Rumah Kedua')}</span>
+                          {addrItem.isPrimary && (
+                            <span className="text-[9px] bg-[#008069]/10 text-[#008069] px-1 py-0.2 rounded font-semibold">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] truncate text-[#667781] dark:text-[#8696a0] mt-0.5">
+                          {addrItem.address || `${addrItem.kelurahan || ''}, ${addrItem.kecamatan || ''}`}
+                        </p>
+                        {addrItem.distanceKm != null && (
+                          <p className="text-[9px] text-[#8696a0] mt-0.5">
+                            {addrItem.distanceKm} km · Ongkir Rp{(addrItem.ongkir || 0).toLocaleString('id-ID')}
+                          </p>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
             {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">

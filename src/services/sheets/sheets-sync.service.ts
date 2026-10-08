@@ -69,6 +69,12 @@ export interface ReservationForSheets {
     adClick?: any;
     hasAds?: boolean | null;
   } | null;
+  customer_address?: {
+    kelurahan: string | null;
+    kecamatan: string | null;
+    kota: string | null;
+    ongkir: number | null;
+  } | null;
   children: Array<{ name: string | null; raw_age_text: string | null; age_months_at_registration: number | null }>;
   assigned_staff: { name: string | null } | null;
 }
@@ -98,11 +104,13 @@ export interface SheetsSyncStore {
 
 export const SHEETS_CONFIG_DISABLED = 'SHEETS_CONFIG_DISABLED';
 export const SHEETS_YEAR_NOT_CONFIGURED = 'SHEETS_YEAR_NOT_CONFIGURED';
+export const SHEETS_SKIP_NON_COMPLETED = 'SHEETS_SKIP_NON_COMPLETED';
 
 /** Hasil siklus pemrosesan outbox (untuk observability/log). */
 export interface ProcessOutboxResult {
   processed: number;
   succeeded: number;
+  skipped: number;
   deferred: number;
   failed: number;
 }
@@ -116,15 +124,16 @@ function backoffMinutes(attempts: number): number {
   return 60;
 }
 
-/** Error yang menandakan "belum siap, coba lagi nanti" (tidak menghabiskan attempts). */
-function isNotReadyError(err: unknown): boolean {
+/** Error lingkungan/koneksi yang menandakan "tunda tanpa menghabiskan kuota attempts". */
+function isEnvNotReadyError(err: unknown): boolean {
   const msg = (err as Error)?.message || '';
-  return (
-    msg === SHEETS_NOT_CONNECTED ||
-    msg === SHEETS_CONFIG_DISABLED ||
-    msg === 'INVALID_BOOKING_DATE' ||
-    msg === SHEETS_YEAR_NOT_CONFIGURED
-  );
+  return msg === SHEETS_NOT_CONNECTED || msg === SHEETS_CONFIG_DISABLED;
+}
+
+/** Error data reservasi yang perlu ditunda dengan batasan attempts (anti infinite-defer). */
+function isDataNotReadyError(err: unknown): boolean {
+  const msg = (err as Error)?.message || '';
+  return msg === 'INVALID_BOOKING_DATE' || msg === SHEETS_YEAR_NOT_CONFIGURED;
 }
 
 export class SheetsSyncService {
@@ -158,7 +167,7 @@ export class SheetsSyncService {
    * Proses antrean outbox tenant. Dipanggil worker cron. Best-effort per item.
    */
   public async processOutbox(tenantId: string, limit = 10): Promise<ProcessOutboxResult> {
-    const result: ProcessOutboxResult = { processed: 0, succeeded: 0, deferred: 0, failed: 0 };
+    const result: ProcessOutboxResult = { processed: 0, succeeded: 0, skipped: 0, deferred: 0, failed: 0 };
     let pending: OutboxRow[] = [];
     try {
       pending = await this.store.listPending(tenantId, new Date(), limit);
@@ -176,11 +185,25 @@ export class SheetsSyncService {
       } catch (err: any) {
         const message = err?.message || String(err);
         const attempts = item.attempts + 1;
-        if (isNotReadyError(err)) {
-          // Belum siap (belum connect / tanggal kosong / tahun belum dipetakan):
+        if (message === SHEETS_SKIP_NON_COMPLETED) {
+          // Reservasi bukan completed (misal outbox lama atau transisi dibatalkan) -> selesai tanpa aksi
+          await this.store.markDone(item.id);
+          result.skipped++;
+          console.info(`[SHEETS] sync ${item.reservation_id} dilewati (status bukan completed)`);
+        } else if (isEnvNotReadyError(err)) {
+          // Belum siap di level env (belum connect / config nonaktif):
           // tunda lama tanpa menghabiskan kuota percobaan.
           await this.store.reschedule(item.id, new Date(Date.now() + 15 * 60 * 1000), message);
           result.deferred++;
+        } else if (isDataNotReadyError(err)) {
+          // Tanggal kosong / tahun belum dipetakan: tunda dengan batas percobaan agar tidak infinite defer.
+          if (attempts >= MAX_ATTEMPTS) {
+            await this.store.markFailed(item.id, `EXCEEDED_MAX_DEFERRALS: ${message}`);
+            result.failed++;
+          } else {
+            await this.store.incrementAttempt(item.id, new Date(Date.now() + 15 * 60 * 1000), message);
+            result.deferred++;
+          }
         } else if (attempts >= MAX_ATTEMPTS) {
           await this.store.markFailed(item.id, message);
           result.failed++;
@@ -188,7 +211,9 @@ export class SheetsSyncService {
           await this.store.incrementAttempt(item.id, new Date(Date.now() + backoffMinutes(attempts) * 60 * 1000), message);
           result.failed++;
         }
-        console.warn(`[SHEETS] sync ${item.reservation_id} gagal (attempt ${attempts}):`, message);
+        if (message !== SHEETS_SKIP_NON_COMPLETED) {
+          console.warn(`[SHEETS] sync ${item.reservation_id} gagal (attempt ${attempts}):`, message);
+        }
       }
     }
     return result;
@@ -196,7 +221,7 @@ export class SheetsSyncService {
 
   /**
    * Sinkronkan satu reservasi (append baris pertama atau update baris yang ada).
-   * @throws saat belum siap (config nonaktif / belum connect / tanggal kosong).
+   * @throws saat belum siap (config nonaktif / belum connect / tanggal kosong) atau status !== 'completed'.
    */
   public async syncReservation(reservationId: string, tenantId: string): Promise<void> {
     const config = await this.store.getConfig(tenantId);
@@ -204,6 +229,11 @@ export class SheetsSyncService {
 
     const reservation = await this.store.getReservation(reservationId, tenantId);
     if (!reservation) throw new Error('RESERVATION_NOT_FOUND');
+
+    const statusNorm = String(reservation.status || '').trim().toLowerCase();
+    if (statusNorm !== 'completed') {
+      throw new Error(SHEETS_SKIP_NON_COMPLETED);
+    }
 
     const target = resolveSheetTarget(reservation.booking_date, config.month_tab_names); // throw INVALID_BOOKING_DATE
     const spreadsheetId = this.resolveSpreadsheetId(config, target.year);
@@ -219,6 +249,7 @@ export class SheetsSyncService {
     const row = formatReservationToRow({
       reservation,
       customer: reservation.customer,
+      customerAddress: reservation.customer_address ?? null,
       child,
       assignedStaffName: reservation.assigned_staff?.name ?? null,
       monthTabNames: config.month_tab_names,
@@ -231,9 +262,9 @@ export class SheetsSyncService {
       reservation.sheets_spreadsheet_id === spreadsheetId;
 
     if (samePlace && existingRow != null && existingRow >= 2) {
-      // Update: TULIS ULANG semua kolom KECUALI H/I/J/K (ongkir/harga) agar
-      // koreksi manual admin pada harga tidak tertimpa (write-once harga).
-      const PROTECTED = new Set([7, 8, 9, 10]); // 0-based: H,Ongkir..K,Harga akhir
+      // Update: TULIS ULANG semua kolom KECUALI H/I/J/K (ongkir/harga write-once)
+      // dan N/O/P (Tip/Follow up/Catatan manual admin klinik) agar tidak tertimpa.
+      const PROTECTED = new Set([7, 8, 9, 10, 13, 14, 15]); // 0-based: H..K + N..P
       const cells = row
         .map((value, idx) => ({ col: idx + 1, value }))
         .filter((c) => !PROTECTED.has(c.col - 1));
@@ -369,6 +400,14 @@ export class PrismaSheetsSyncStore implements SheetsSyncStore {
             adClick: {
               select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, ctwa_clid: true },
             },
+          },
+        },
+        customer_address: {
+          select: {
+            kelurahan: true,
+            kecamatan: true,
+            kota: true,
+            ongkir: true,
           },
         },
         children: {

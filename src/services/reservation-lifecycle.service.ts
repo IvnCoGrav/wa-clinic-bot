@@ -58,29 +58,60 @@ export class ReservationLifecycleService {
       }
 
       if (kecamatan || kota || kelurahan || address) {
-        await customerService.updateCustomerLocation(customerId, {
-          kecamatan: kecamatan?.trim() || undefined,
-          kota: kota?.trim() || undefined,
-          kelurahan: kelurahan?.trim() || undefined,
-        }, tenantId).catch((e: any) => {
-          console.warn('[RESERVATION LIFECYCLE] updateCustomerLocation failed (wilayah):', e?.message);
-        });
+        const currentCust = await customerService.getCustomerById(customerId, tenantId);
+        const hasExistingPrimary = Boolean(
+          currentCust &&
+          (currentCust.kelurahan || currentCust.kecamatan || (currentCust.preferences as any)?.address || (currentCust.preferences as any)?.saved_addresses?.length)
+        );
 
-        // Integritas spasial: alamat lengkap (nama perumahan + blok + patokan)
-        // WAJIB tersimpan di preferences.address/full_address — bukan di kolom
-        // `kelurahan` (kolom itu khusus entitas desa resmi). Tanpa ini, kartu
-        // tugas terapis kehilangan nama perumahan/blok (insiden Terapis Tersasar).
-        if (address && address.trim()) {
-          await customerService
-            .updateCustomer(customerId, { address: address.trim() }, tenantId)
-            .catch((e: any) => {
-              console.warn('[RESERVATION LIFECYCLE] updateCustomer(address) failed — alamat jalan tidak tersimpan:', e?.message);
-            });
+        if (hasExistingPrimary) {
+          // Bila customer sudah punya primary → panggil customerService.upsertSavedAddress (secondary, root TIDAK disentuh)
+          try {
+            const upserted = await customerService.upsertSavedAddress(customerId, {
+              address: address?.trim() || undefined,
+              kelurahan: kelurahan?.trim() || null,
+              kecamatan: kecamatan?.trim() || null,
+              kota: kota?.trim() || null,
+              locationSource: 'manual_staff',
+              isPrimary: false,
+            }, tenantId);
+
+            // Setelah upsert, PATCH reservation.customer_address_id ke ID hasil upsert (tutup lubang urutan)
+            if (upserted?.id && reservationId) {
+              await prisma.reservation.update({
+                where: { id: reservationId },
+                data: { customer_address_id: upserted.id },
+              }).catch(() => {});
+            }
+          } catch (e: any) {
+            console.warn('[RESERVATION LIFECYCLE] upsertSavedAddress failed:', e?.message);
+          }
+        } else {
+          // Root hanya ditulis bila customer belum punya alamat sama sekali
+          await customerService.updateCustomerLocation(customerId, {
+            kecamatan: kecamatan?.trim() || undefined,
+            kota: kota?.trim() || undefined,
+            kelurahan: kelurahan?.trim() || undefined,
+          }, tenantId).catch((e: any) => {
+            console.warn('[RESERVATION LIFECYCLE] updateCustomerLocation failed (wilayah):', e?.message);
+          });
+
+          // Integritas spasial: alamat lengkap (nama perumahan + blok + patokan)
+          // WAJIB tersimpan di preferences.address/full_address — bukan di kolom
+          // `kelurahan` (kolom itu khusus entitas desa resmi). Tanpa ini, kartu
+          // tugas terapis kehilangan nama perumahan/blok (insiden Terapis Tersasar).
+          if (address && address.trim()) {
+            await customerService
+              .updateCustomer(customerId, { address: address.trim() }, tenantId)
+              .catch((e: any) => {
+                console.warn('[RESERVATION LIFECYCLE] updateCustomer(address) failed — alamat jalan tidak tersimpan:', e?.message);
+              });
+          }
         }
 
         // Background Auto-Distance Calculation jika customer belum memiliki distance_km
-        const currentCust = await customerService.getCustomerById(customerId, tenantId);
-        if (currentCust && (currentCust.distance_km == null || currentCust.lat == null)) {
+        const custForDistance = await customerService.getCustomerById(customerId, tenantId);
+        if (custForDistance && (custForDistance.distance_km == null || custForDistance.lat == null)) {
           void (async () => {
             try {
               const fullAddressStr = [kelurahan, address, kecamatan, kota].filter(Boolean).join(', ');
@@ -233,15 +264,6 @@ export class ReservationLifecycleService {
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] googleContactsService.syncCustomer failed:', err?.message);
     }
-
-    // 5. Rekapan Google Sheets — HANYA enqueue ke outbox (non-blocking). Worker cron
-    // yang memanggil API Google, sehingga webhook chat tidak pernah menunggu Google.
-    try {
-      const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
-      await sheetsSyncService.enqueue(reservationId, tenantId);
-    } catch (err: any) {
-      console.warn('[RESERVATION LIFECYCLE] sheetsSync enqueue failed:', err?.message);
-    }
   }
 
   /**
@@ -342,6 +364,15 @@ export class ReservationLifecycleService {
       }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted reset V3 session failed:', err?.message || err);
+    }
+
+    // 4. Rekapan Google Sheets — HANYA enqueue ke outbox untuk reservasi completed (buku rekapan selesai).
+    // Non-blocking best-effort: kegagalan Google tidak boleh menggagalkan completion atau follow-up.
+    try {
+      const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
+      await sheetsSyncService.enqueue(reservationId, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] onReservationCompleted sheetsSync enqueue failed:', err?.message || err);
     }
   }
 
