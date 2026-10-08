@@ -3525,19 +3525,54 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   );
 
   // MT-2.2: Palang Pintu Dispatch — Deteksi kunjungan lapangan tanpa reservasi aktif di DB (state-based)
+  const hasTodayCompletedReservation = useMemo(() => {
+    if (!selectedChat) return false;
+    const { start, end } = wibDayStartEnd(new Date());
+    const isCompletedToday = (r: any) => {
+      if (!r || r.status !== 'completed' || !r.booking_date) return false;
+      const bd = new Date(r.booking_date).getTime();
+      if (isNaN(bd)) return false;
+      return bd >= start.getTime() && bd <= end.getTime();
+    };
+    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
+      return (customerDetailData.reservations || []).some(isCompletedToday);
+    }
+    const fromChat = (selectedChat as any).activeConfirmedReservation;
+    return Boolean(fromChat && isCompletedToday(fromChat));
+  }, [selectedChat, customerDetailData]);
+
+  const visitMessages = useMemo(
+    () =>
+      (messages || []).map((m: any) => ({
+        direction: m.direction,
+        sender_type: m.sender_type,
+        content: m.content,
+        media: m.media,
+        location: m.location,
+        created_at: m.created_at,
+        dispatchOrigin: Boolean(m.payload_raw?.dispatchOrigin),
+        isFieldStaff:
+          String(m.sender_type || '').toUpperCase() === 'STAFF' ||
+          Boolean(m.payload_raw?.forceEscalate),
+      })),
+    [messages]
+  );
+
   const hasVisitIndicators = useMemo(() => {
     const { start, end } = wibDayStartEnd(new Date());
     return shouldWarnUnregisteredVisit({
-      messages,
+      messages: visitMessages,
       dayStart: start,
       dayEnd: end,
       field: {
-        hasTodayReservation: Boolean(activeConfirmedReservation || activePendingReservation),
+        hasTodayReservation: Boolean(
+          activeConfirmedReservation || activePendingReservation || hasTodayCompletedReservation
+        ),
         hasActiveTrip: Boolean(dispatchReservationId),
         hasOtwActive: Boolean((activeConfirmedReservation as any)?.otw_sent_at && !(activeConfirmedReservation as any)?.arrived_at),
       },
     });
-  }, [messages, activeConfirmedReservation, activePendingReservation, dispatchReservationId]);
+  }, [visitMessages, activeConfirmedReservation, activePendingReservation, hasTodayCompletedReservation, dispatchReservationId]);
 
   const showUnregisteredVisitBanner = Boolean(
     hasVisitIndicators &&
@@ -3545,6 +3580,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       !activeConfirmedReservation &&
       !activeHoldReservation &&
       !activePendingReservation &&
+      !hasTodayCompletedReservation &&
       !hasExistingReservationForExtractedSchedule
   );
 

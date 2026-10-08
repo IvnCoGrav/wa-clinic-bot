@@ -532,11 +532,20 @@ export class LiveChatService {
           },
         });
 
+        const completedTodayRes = await prisma.reservation.findFirst({
+          where: {
+            tenant_id: tenantId,
+            customer_id: conversation.customer_id,
+            booking_date: { gte: start, lte: end },
+            status: 'completed',
+          },
+        });
+
         const { staffTripTrackingService } = await import('./staff-trip-tracking.service');
         const activeTrip = todayRes?.id ? staffTripTrackingService.getTrip(tenantId, todayRes.id) : null;
         const otwActive = Boolean((todayRes as any)?.otw_sent_at && !(todayRes as any)?.arrived_at);
 
-        if (!todayRes && !activeTrip && !otwActive) {
+        if (!todayRes && !completedTodayRes && !activeTrip && !otwActive) {
           dispatchWarning = 'NO_ACTIVE_RESERVATION_TODAY';
           const { auditService } = await import('./audit.service');
           await auditService.logAdminAction({
@@ -730,6 +739,8 @@ export class LiveChatService {
     if (mediaMeta) payloadRaw.media = mediaMeta;
     if (quotedMeta) payloadRaw.quoted_message = quotedMeta;
     if (replyToWaMessageId) payloadRaw.reply_to = replyToWaMessageId;
+    if (params.dispatchOrigin === true) payloadRaw.dispatchOrigin = true;
+    if (params.forceEscalate === true) payloadRaw.forceEscalate = true;
 
     // Audit Trail + Live Chat publish (message.created)
     const logged = await messageService.logMessage({

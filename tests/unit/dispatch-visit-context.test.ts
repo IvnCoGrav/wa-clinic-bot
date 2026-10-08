@@ -145,8 +145,9 @@ describe('Dispatch Visit Context — Presisi Tanpa-Hafalan (MT-3.1)', () => {
     expect(shouldWarnUnregisteredVisit({ messages, dayStart, dayEnd, field: emptyField })).toBe(true);
   });
 
-  it('7. ACCEPT: Media OUTBOUND hari ini sebagai pesan terakhir atau membawa isFieldStaff=true memicu peringatan jika tanpa reservasi', () => {
-    const messagesLast: VisitMessageLike[] = [
+  it('7. REJECT pesan terakhir tanpa cap & ACCEPT jika membawa isFieldStaff=true / dispatchOrigin=true', () => {
+    // Pesan terakhir tanpa cap dispatchOrigin atau isFieldStaff = false (brosur/gambar biasa)
+    const messagesLastWithoutCap: VisitMessageLike[] = [
       {
         direction: 'OUTBOUND',
         sender_type: 'ADMIN',
@@ -154,9 +155,10 @@ describe('Dispatch Visit Context — Presisi Tanpa-Hafalan (MT-3.1)', () => {
         created_at: todayMid,
       },
     ];
-    expect(hasFreshDispatchMediaToday(messagesLast, dayStart, dayEnd)).toBe(true);
-    expect(shouldWarnUnregisteredVisit({ messages: messagesLast, dayStart, dayEnd, field: emptyField })).toBe(true);
+    expect(hasFreshDispatchMediaToday(messagesLastWithoutCap, dayStart, dayEnd)).toBe(false);
+    expect(shouldWarnUnregisteredVisit({ messages: messagesLastWithoutCap, dayStart, dayEnd, field: emptyField })).toBe(false);
 
+    // Staf lapangan dengan isFieldStaff=true = true
     const messagesStaff: VisitMessageLike[] = [
       {
         direction: 'OUTBOUND',
@@ -215,5 +217,43 @@ describe('Dispatch Visit Context — Presisi Tanpa-Hafalan (MT-3.1)', () => {
         field: { hasTodayReservation: false, hasActiveTrip: false, hasOtwActive: true },
       })
     ).toBe(false);
+  });
+
+  it('9. STATUS RESERVASI: completed hari ini meredam alarm (anti-dobel booking)', () => {
+    const freshShareloc: VisitMessageLike[] = [
+      {
+        direction: 'INBOUND',
+        location: { lat: -7.267, lng: 112.698 },
+        created_at: todayMid,
+      },
+    ];
+    // Reservasi completed hari ini dipetakan ke hasTodayReservation=true
+    expect(
+      shouldWarnUnregisteredVisit({
+        messages: freshShareloc,
+        dayStart,
+        dayEnd,
+        field: { hasTodayReservation: true, hasActiveTrip: false, hasOtwActive: false },
+      })
+    ).toBe(false);
+  });
+
+  it('10. STATUS RESERVASI: cancelled hari ini tidak meredam alarm (batal tetap picu peringatan jika ada shareloc)', () => {
+    const freshShareloc: VisitMessageLike[] = [
+      {
+        direction: 'INBOUND',
+        location: { lat: -7.267, lng: 112.698 },
+        created_at: todayMid,
+      },
+    ];
+    // Reservasi cancelled tidak memberikan perlindungan (hasTodayReservation=false)
+    expect(
+      shouldWarnUnregisteredVisit({
+        messages: freshShareloc,
+        dayStart,
+        dayEnd,
+        field: { hasTodayReservation: false, hasActiveTrip: false, hasOtwActive: false },
+      })
+    ).toBe(true);
   });
 });

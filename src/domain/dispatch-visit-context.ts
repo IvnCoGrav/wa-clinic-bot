@@ -38,20 +38,14 @@ export function hasFreshSharelocToday(msgs: VisitMessageLike[], s: Date, e: Date
   );
 }
 
-// Media(segar, OUTBOUND, hari ini) + (asal-dispatch ATAU staf lapangan ATAU pesan terakhir) — tanpa baca nama file / caption.
+// Gambar segar + OUTBOUND (pesan keluar) + hari WIB ini + ADA cap asal.
+// Tanpa cap = bukan bukti lapangan (brosur, bukti bayar, katalog).
 export function hasFreshDispatchMediaToday(msgs: VisitMessageLike[], s: Date, e: Date): boolean {
   const fresh = (msgs || []).filter(
     (m) => (m.direction || '').toUpperCase() === 'OUTBOUND' && Boolean((m as any).media) && isWithinWibDay(m.created_at, s, e)
   );
   if (fresh.length === 0) return false;
-  if (fresh.some((m) => m.dispatchOrigin === true || m.isFieldStaff === true)) return true;
-  const last = (msgs || [])[(msgs || []).length - 1];
-  return Boolean(
-    last &&
-      (last.direction || '').toUpperCase() === 'OUTBOUND' &&
-      (last as any).media &&
-      isWithinWibDay(last.created_at, s, e)
-  );
+  return fresh.some((m) => m.dispatchOrigin === true || m.isFieldStaff === true);
 }
 
 export function shouldWarnUnregisteredVisit(args: {

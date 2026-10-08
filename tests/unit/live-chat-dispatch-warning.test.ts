@@ -98,4 +98,28 @@ describe('LiveChatService — Unregistered Visit Dispatch Warning (MT-2.1)', () 
     expect(result.warning).toBeUndefined();
     expect(fakeGateway.sendTextMessage).toHaveBeenCalled();
   });
+
+  it('mengirim media saat reservasi completed hari ini ada di DB → sukses tanpa warning (anti-dobel booking)', async () => {
+    vi.spyOn(prisma.reservation, 'findFirst').mockImplementation(async (args: any) => {
+      // Jika mencari status completed hari ini, kembalikan reservasi completed
+      if (args?.where?.status === 'completed') {
+        return {
+          id: 'res-completed-1',
+          status: 'completed',
+          booking_date: new Date(),
+        } as any;
+      }
+      return null;
+    });
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: convId,
+      text: '[LOCATION: Lat -7.267, Lng 112.698] Terima kasih bunda',
+      tenantId,
+      adminName: 'Bidan Nisa',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.warning).toBeUndefined();
+  });
 });
