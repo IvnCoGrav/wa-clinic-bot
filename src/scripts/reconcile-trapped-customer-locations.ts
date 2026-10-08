@@ -20,12 +20,15 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { customerService } from '../services/customer.service';
-import { getGazetteerCoordinates } from '../utils/gazetteer';
+import { getGazetteerCoordinates, isCrossCityDuplicate, haversineKm } from '../utils/gazetteer';
 import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 import { classifyLocationDrift, type ResolvedLocation } from '../utils/location-drift';
+import { STAFF_VERIFIED_LOCATION_LABEL } from '../services/staff-reservation.service';
 
 const isCommit = process.argv.includes('--commit');
 const isDryRun = !isCommit;
+const isSyncStaffLabels = process.argv.includes('--sync-staff-labels');
+const isAuditHomonym = process.argv.includes('--audit-homonym');
 const tenantArg = process.argv.find((a) => a.startsWith('--tenant='));
 const limitArg = process.argv.find((a) => a.startsWith('--limit='));
 const tenantId = tenantArg ? tenantArg.split('=')[1]!.trim() : DEFAULT_TENANT_ID;
@@ -39,7 +42,171 @@ function getReferenceText(cust: any): string | null {
   return name || null;
 }
 
+async function runSyncStaffLabels() {
+  console.log(`\n======================================================`);
+  console.log(`[SYNC STAFF LABELS] Mode: ${isDryRun ? 'DRY-RUN (READ-ONLY)' : 'COMMIT (MENULIS KE DB)'}`);
+  console.log(`[SYNC STAFF LABELS] Tenant: ${tenantId} | limit=${limit}`);
+  console.log(`======================================================\n`);
+
+  const staffRows = await prisma.customer.findMany({
+    where: {
+      tenant_id: tenantId,
+      deleted_at: null,
+      location_source: 'manual_staff',
+    },
+    select: {
+      id: true,
+      phone: true,
+      name: true,
+      location_source: true,
+      preferences: true,
+    },
+    take: limit,
+  });
+
+  const desynced = staffRows.filter((c) => {
+    const prefs = (c.preferences as any) || {};
+    return prefs.location_source !== 'manual_staff' || prefs.location_source_label !== STAFF_VERIFIED_LOCATION_LABEL;
+  });
+
+  console.log(`Ditemukan ${staffRows.length} customer manual_staff. ${desynced.length} baris metadata preferences belum tersinkronisasi.`);
+
+  let synced = 0;
+  let failed = 0;
+  const summary: Array<Record<string, unknown>> = [];
+
+  for (const c of desynced) {
+    const currentPrefs = (c.preferences as any) || {};
+    const updatedPrefs = {
+      ...currentPrefs,
+      location_source: 'manual_staff',
+      location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
+    };
+
+    console.log(`[DESYNC] ${c.name || 'No Name'} (${c.phone}) - Prefs lama: source=${currentPrefs.location_source || 'null'}, label=${currentPrefs.location_source_label || 'null'}`);
+
+    if (isDryRun) {
+      summary.push({
+        id: c.id,
+        phone: c.phone,
+        name: c.name,
+        old_location_source: currentPrefs.location_source || null,
+        new_location_source: 'manual_staff',
+        new_location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
+      });
+      continue;
+    }
+
+    try {
+      await prisma.customer.update({
+        where: { id: c.id },
+        data: { preferences: updatedPrefs },
+      });
+      synced++;
+      console.log(`  [SYNCED] preferences.location_source & location_source_label diperbarui.`);
+    } catch (err: any) {
+      failed++;
+      console.error(`  [FAILED] ${err.message}`);
+    }
+  }
+
+  console.log(`\n======================================================`);
+  console.log(`[RINGKASAN SYNC STAFF] Total Desync: ${desynced.length} | Berhasil Sync: ${synced} | Gagal: ${failed}`);
+  if (isDryRun) {
+    console.log(`\n[DRY-RUN] Tidak ada data diubah. Jalankan ulang dengan --commit untuk menerapkan pembaruan.`);
+  }
+  console.log(`======================================================\n`);
+}
+
+async function runAuditHomonym() {
+  console.log(`\n======================================================`);
+  console.log(`[AUDIT CROSS-CITY HOMONYM] (READ-ONLY)`);
+  console.log(`[AUDIT CROSS-CITY HOMONYM] Tenant: ${tenantId} | Ambang Drift: 3.0 km`);
+  console.log(`======================================================\n`);
+
+  const rows = await prisma.customer.findMany({
+    where: {
+      tenant_id: tenantId,
+      deleted_at: null,
+      lat: { not: null },
+      lng: { not: null },
+    },
+    select: {
+      id: true,
+      phone: true,
+      name: true,
+      kelurahan: true,
+      kecamatan: true,
+      kota: true,
+      lat: true,
+      lng: true,
+      location_source: true,
+      preferences: true,
+    },
+    take: limit,
+  });
+
+  const duplicateCandidates = rows.filter((c) => {
+    const kel = (c.kelurahan || '').trim().toLowerCase();
+    const kec = (c.kecamatan || '').trim().toLowerCase();
+    return (kel && isCrossCityDuplicate(kel)) || (kec && isCrossCityDuplicate(kec));
+  });
+
+  console.log(`Memeriksa ${rows.length} customer dengan koordinat... Ditemukan ${duplicateCandidates.length} customer dengan nama wilayah duplikat lintas kota.`);
+
+  let driftedCount = 0;
+  const auditReport: Array<Record<string, unknown>> = [];
+
+  for (const c of duplicateCandidates) {
+    const kel = (c.kelurahan || '').trim();
+    const kec = (c.kecamatan || '').trim();
+    const kota = (c.kota || '').trim();
+    const queryWithCity = [kel, kec, kota].filter(Boolean).join(', ');
+    const hitWithCity = getGazetteerCoordinates(queryWithCity);
+
+    if (hitWithCity && c.lat != null && c.lng != null) {
+      const driftKm = haversineKm(c.lat, c.lng, hitWithCity.lat, hitWithCity.lng);
+      if (driftKm > 3.0) {
+        driftedCount++;
+        const item = {
+          id: c.id,
+          phone: c.phone,
+          name: c.name,
+          wilayah_tercatat: `${kel ? kel + ', ' : ''}${kec ? kec + ', ' : ''}${kota}`,
+          current_coords: `${c.lat}, ${c.lng}`,
+          expected_centroid: `${hitWithCity.lat}, ${hitWithCity.lng} (${hitWithCity.kelurahan || ''}, ${hitWithCity.kecamatan}, ${hitWithCity.kota})`,
+          drift_km: Math.round(driftKm * 100) / 100,
+          location_source: c.location_source,
+        };
+        auditReport.push(item);
+        console.log(`[DRIFT > 3KM] ${c.name || 'No Name'} (${c.phone}) | Drift: ${item.drift_km} km`);
+        console.log(`  Tercatat: ${item.wilayah_tercatat}`);
+        console.log(`  Titik DB: ${item.current_coords} vs Centroid Wilayah: ${item.expected_centroid}`);
+      }
+    }
+  }
+
+  console.log(`\n======================================================`);
+  console.log(`[HASIL AUDIT] Kandidat Duplikat: ${duplicateCandidates.length} | Terdeteksi Drift > 3 km: ${driftedCount}`);
+  if (auditReport.length > 0) {
+    console.log(`\nDaftar customer terdampak (rekomendasi: review via geocode-text-wilayah-drift atau admin refresh):`);
+    console.log(JSON.stringify(auditReport, null, 2));
+  } else {
+    console.log(`Tidak ada customer di wilayah duplikat lintas kota yang menyimpang > 3 km.`);
+  }
+  console.log(`======================================================\n`);
+}
+
 async function main() {
+  if (isSyncStaffLabels) {
+    await runSyncStaffLabels();
+    return;
+  }
+  if (isAuditHomonym) {
+    await runAuditHomonym();
+    return;
+  }
+
   console.log(`\n======================================================`);
   console.log(`[RECONCILE TRAPPED LOCATIONS] Mode: ${isDryRun ? 'DRY-RUN (READ-ONLY)' : 'COMMIT (MENULIS KE DB)'}`);
   console.log(`[RECONCILE TRAPPED LOCATIONS] Tenant: ${tenantId} | limit=${limit}`);

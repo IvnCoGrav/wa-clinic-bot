@@ -80,6 +80,7 @@ import {
   isWithinDepartWindow,
   formatWibClock,
   needsNavigationPreflight,
+  getLocationBadgeConfig,
   startDepartGpsWarmup,
   stopDepartGpsWarmup,
   getDepartPositionFast,
@@ -117,37 +118,23 @@ interface StaffTaskAddress {
  * (wajib minta shareloc/patokan) → mencegah terapis tersasar.
  */
 function AccuracyBadge({ source }: { source?: string | null }) {
-  if (source === 'gps_pin') {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#008069] bg-[#d9fdd3] border border-[#b7e4c7] px-1.5 py-0.5 rounded-md"
-        title="Titik koordinat presisi dari pin GPS / shareloc pasien."
-      >
-        📍 Titik Presisi
-      </span>
-    );
-  }
-  if (source === 'estimated_area') {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md"
-        title="Titik masih estimasi wilayah (belum ada pin GPS rumah). Konfirmasi shareloc/patokan ke pasien sebelum berangkat."
-      >
-        <AlertTriangle size={10} /> Estimasi Wilayah
-      </span>
-    );
-  }
-  if (source === 'manual_staff') {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-md"
-        title="Titik di-set/diedit oleh bidan/staf."
-      >
-        <PenLine size={10} /> Titik Staf
-      </span>
-    );
-  }
-  return null;
+  const badge = getLocationBadgeConfig(source);
+  if (!badge.source) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] font-semibold ${badge.badgeClass} px-1.5 py-0.5 rounded-md`}
+      title={
+        badge.source === 'gps_pin'
+          ? 'Titik koordinat presisi dari pin GPS / shareloc pasien.'
+          : badge.source === 'manual_staff'
+            ? 'Titik koordinat diverifikasi oleh bidan/staf di lapangan.'
+            : 'Titik masih estimasi wilayah (belum ada pin GPS rumah). Konfirmasi shareloc/patokan ke pasien sebelum berangkat.'
+      }
+    >
+      {badge.source === 'estimated_area' ? <AlertTriangle size={10} /> : null}
+      {badge.label}
+    </span>
+  );
 }
 
 interface StaffTaskPricing {
@@ -2647,6 +2634,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           reservationId: targetResId,
           lat: locCoords?.lat,
           lng: locCoords?.lng,
+          accuracyM: locCoords?.accuracy,
           housePhotoB64: photoPayload,
           landmark: locLandmark,
         }),

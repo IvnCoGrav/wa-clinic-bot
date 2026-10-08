@@ -138,6 +138,13 @@ export class InMemoryCustomerRepository implements CustomerRepository {
   clear(): void {
     this.store.clear();
   }
+
+  /** Untuk test: seed / simpan record langsung. */
+  seed(customer: any): void {
+    if (customer?.id) {
+      this.store.set(customer.id, customer);
+    }
+  }
 }
 
 let activeRepo: CustomerRepository = new PostgresCustomerRepository();

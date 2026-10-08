@@ -388,7 +388,7 @@ export class LiveChatService {
     limit = 50,
     before?: string | Date,
     focusMessageId?: string
-  ): Promise<{ messages: any[]; hasMore: boolean }> {
+  ): Promise<{ messages: any[]; hasMore: boolean; pinnedMessage?: any }> {
     return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before, focusMessageId);
   }
 

@@ -15,6 +15,7 @@ import {
   ensureSinglePrimary,
   resolveActiveAddress as resolveActiveAddressFromList,
 } from '../domain/customer-address';
+import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -1854,6 +1855,9 @@ export class CustomerService {
             kelurahan: c.kelurahan || c.pending_kelurahan || null,
             distanceKm: c.distance_km ?? null,
             ongkir: c.ongkir ?? null,
+            location_source: c.location_source || null,
+            effective_location_source: resolveLocationSource(c),
+            location_source_label: (c.preferences as any)?.location_source_label || null,
           };
         });
 
@@ -2087,7 +2091,7 @@ export class CustomerService {
     success: boolean;
     data?: {
       customerId: string;
-      source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded';
+      source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded' | 'manual_staff';
       sourceLabel: string;
       lat: number;
       lng: number;
@@ -2207,7 +2211,7 @@ export class CustomerService {
         if (tier1Candidate && tier2Candidate) break;
       }
 
-      let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded'; sourceLabel: string; detail: string } | null = null;
+      let chosen: { lat: number; lng: number; source: 'bidan_shareloc' | 'customer_shareloc' | 'db_coords' | 'geocoding' | 'url_coords' | 'url_text_geocoded' | 'manual_staff'; sourceLabel: string; detail: string } | null = null;
 
       // Hierarki tier diputus oleh pickGpsTier BERSAMA (location-ingest.service) —
       // otoritas tunggal dipakai refresh, choke point webhook, dan enrich GPS
@@ -2227,7 +2231,14 @@ export class CustomerService {
       } else if (pickedTier?.source === 'customer_shareloc' && tier2Candidate) {
         chosen = { lat: tier2Candidate.lat, lng: tier2Candidate.lng, source: 'customer_shareloc', sourceLabel: '🔵 Shareloc Customer', detail: tier2Candidate.detail };
       } else if (customer.lat != null && customer.lng != null) {
-        chosen = { lat: Number(customer.lat), lng: Number(customer.lng), source: 'db_coords', sourceLabel: '🟡 Koordinat Tersimpan', detail: 'DB lat/lng' };
+        const isManualStaff = customer.location_source === LocationSource.manual_staff || (customer.location_source as any) === 'manual_staff';
+        chosen = {
+          lat: Number(customer.lat),
+          lng: Number(customer.lng),
+          source: isManualStaff ? 'manual_staff' : 'db_coords',
+          sourceLabel: isManualStaff ? STAFF_VERIFIED_LOCATION_LABEL : '🟡 Koordinat Tersimpan',
+          detail: isManualStaff ? 'Manual Staff (Presisi Terverifikasi)' : 'DB lat/lng',
+        };
       } else {
         // Tier4: geocoding kelurahan/kecamatan/kota
         const kel = customer.kelurahan || customer.pending_kelurahan || (customer.preferences as any)?.address || '';
@@ -2312,9 +2323,11 @@ export class CustomerService {
             location_source:
               isPinSourceChosen
                 ? LocationSource.gps_pin
-                : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
-                  ? LocationSource.estimated_area
-                  : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
+                : chosen.source === 'manual_staff'
+                  ? LocationSource.manual_staff
+                  : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
+                    ? LocationSource.estimated_area
+                    : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
             kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
             kecamatan: resolvedAdmin.kecamatan || customer.kecamatan,
             kota: resolvedAdmin.kota || customer.kota,
@@ -2362,9 +2375,11 @@ export class CustomerService {
           mem.location_source =
             isPinSourceChosen
               ? LocationSource.gps_pin
-              : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
-                ? LocationSource.estimated_area
-                : mem.location_source ?? LocationSource.estimated_area;
+              : chosen.source === 'manual_staff'
+                ? LocationSource.manual_staff
+                : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
+                  ? LocationSource.estimated_area
+                  : mem.location_source ?? LocationSource.estimated_area;
         }
       }
 

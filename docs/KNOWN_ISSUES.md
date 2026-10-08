@@ -3,6 +3,25 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 246. [Geo/Dispatch/Location] Remediasi Fondasional: Resolusi Wilayah Anti-Homonim Lintas Kota & Penyelarasan Status Presisi Lapangan Staf (2026-10-08, VERIFIED LOKAL & LIVE DB RESYNC 90/90)
+
+- **Status:** SOLVED & RECONCILED.
+- **Gejala & Dampak:**
+  1. Insiden Bidan tersasar di Wonocolo: Query polos "Wonocolo" terlempar ke Desa Wonocolo Taman Sidoarjo karena bobot ranking kelurahan > kecamatan, padahal pasien berada di Kecamatan Wonocolo Kota Surabaya.
+  2. Insiden Status Bunda Megga: Pasien yang sudah diverifikasi staf di lapangan kembali berstatus "⚪ Estimasi Wilayah" atau "🟡 Koordinat Tersimpan" saat admin menekan tombol "Refresh Lokasi" karena split-brain kolom `manual_staff` vs preferences.
+- **Akar Masalah:**
+  1. Pembobotan ranking gazetteer menangkan level kelurahan tanpa memeriksa apakah nama tersebut ambigu/duplikat di lebih dari 1 kota.
+  2. Penulisan lokasi staf di `staff-reservation.service.ts` menulis kolom tapi tidak menyinkronkan preferences, dan `refreshCustomerLocationAndOngkir` tidak memprioritaskan status `manual_staff`.
+  3. Frontend dashboard menduplikasi pemetaan string badge lokal sehingga status `manual_staff` jatuh ke fallback abu-abu di CustomerDatabase & LiveChat.
+- **Penyelesaian & Bukti:**
+  - Himpunan `crossCityDuplicateSet` dinamis dari dataset saat init di `gazetteer.ts` (14 nama duplikat lintas kota terdeteksi tanpa hardcode).
+  - Gate akurasi GPS lapangan `<= 50m` diaktifkan di endpoint staff & service.
+  - Single source of truth badge lokasi di `geoUtils.ts` (hijau "📍 Terverifikasi Staf"), dengan navigasi tetap lewat preflight.
+  - Rekonsiliasi `--sync-staff-labels --commit` di live DB berhasil memulihkan 90/90 baris desync (termasuk Bunda Megga `6281280800021`) menjadi 0 desync.
+- **Tech Debt / Catatan Lanjutan:**
+  1. Label `"📍 Terverifikasi Staf"` saat ini menggunakan konstanta shared (`STAFF_VERIFIED_LOCATION_LABEL`). Untuk masa depan SaaS multi-tenant penuh, label ini dapat dipindahkan ke konfigurasi tenant di database (`TenantSettings`).
+  2. Data historis pembaruan lokasi sebelum implementasi ini belum mencatat metadata akurasi GPS `accuracyM`.
+
 ## 245. [Data/Dispatch/Negotiation] Penyelamatan Data Operasional, 22 Reservasi Zombie, Palang Pintu Kunjungan Tanpa Reservasi, dan Negosiasi Jadwal Komitmen Aktif (2026-10-08, VERIFIED LOKAL & BUKTI PRODUKSI TERCATAT)
 
 - **Gejala & Masalah:**

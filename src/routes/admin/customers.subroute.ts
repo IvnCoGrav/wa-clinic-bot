@@ -9,6 +9,7 @@ import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.
 import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
 import { tenantOf } from './route-helpers';
+import { resolveLocationSource } from '../../services/staff-reservation.service';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
@@ -473,6 +474,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           success: true,
           data: {
             ...customer,
+            effective_location_source: resolveLocationSource(customer),
             address: customerAddress,
             saved_addresses: savedAddresses,
             children: enrichedChildren,

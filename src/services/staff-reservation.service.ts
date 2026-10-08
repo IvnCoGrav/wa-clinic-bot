@@ -231,6 +231,19 @@ export function buildAddressText(c: {
  *   5. Tidak diketahui → null (netral: DILARANG menampilkan badge "presisi"
  *      palsu; lebih baik tanpa badge daripada menyesatkan terapis).
  */
+export const STAFF_VERIFIED_LOCATION_LABEL = '📍 Terverifikasi Staf';
+
+/**
+ * Resolver sumber lokasi tunggal (Single Source of Truth).
+ * Urutan (deterministik, berbasis state — bukan tebakan teks):
+ *   1. Kolom `location_source` (kanonis).
+ *   2. `preferences.location_source`/`preferences.source` (provenance jalur
+ *      enrich/refresh) → dinormalkan ke makna yang sama.
+ *   3. Penanda edit staf → manual_staff.
+ *   4. `share_location_sent` + koordinat valid → gps_pin (data lama).
+ *   5. Tidak diketahui → null (netral: DILARANG menampilkan badge "presisi"
+ *      palsu; lebih baik tanpa badge daripada menyesatkan terapis).
+ */
 export function resolveLocationSource(
   c: any
 ): 'gps_pin' | 'estimated_area' | 'manual_staff' | null {
@@ -242,7 +255,7 @@ export function resolveLocationSource(
   const src = pref.location_source || pref.source;
   if (src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') return 'gps_pin';
   if (src === 'geocoding' || src === 'url_text_geocoded' || src === 'gazetteer') return 'estimated_area';
-  if (src === 'manual_staff') return 'manual_staff';
+  if (src === 'manual_staff' || src === 'FIELD_STAFF_GPS') return 'manual_staff';
 
   if (pref.location_updated_by_staff_name || pref.location_updated_by_staff_id || pref.field_gps_lat) {
     return 'manual_staff';
@@ -2003,6 +2016,7 @@ export class StaffReservationService {
     tenantId?: string;
     lat?: number | null;
     lng?: number | null;
+    accuracyM?: number | null;
     housePhotoB64?: string | null;
     landmark?: string | null;
     isSupervisor?: boolean;
@@ -2014,6 +2028,7 @@ export class StaffReservationService {
       tenantId = DEFAULT_TENANT_ID,
       lat,
       lng,
+      accuracyM,
       housePhotoB64,
       landmark,
       isSupervisor = false,
@@ -2021,6 +2036,13 @@ export class StaffReservationService {
 
     if (!reservationId || !staffId) {
       return { success: false, error: 'reservationId dan staffId wajib disertakan.' };
+    }
+
+    if (lat != null && lng != null && typeof accuracyM === 'number' && accuracyM > 50) {
+      return {
+        success: false,
+        error: `Akurasi sinyal GPS perangkat kurang presisi (±${Math.round(accuracyM)}m, melebihi batas toleransi maksimal 50m). Mohon aktifkan GPS akurasi tinggi atau tunggu beberapa saat di area terbuka sebelum mengunci titik lokasi.`,
+      };
     }
 
     const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
@@ -2163,14 +2185,18 @@ export class StaffReservationService {
 
       const currentPrefs = (customer.preferences as any) || {};
       const existingHistory: any[] = Array.isArray(currentPrefs.location_history) ? currentPrefs.location_history : [];
+      const isPrimaryUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;
       const newHistoryEntry = (targetLat != null && targetLng != null && distanceKm != null)
         ? {
-            source: 'FIELD_STAFF_GPS',
+            source: isPrimaryUpdated ? 'manual_staff' : 'FIELD_STAFF_GPS',
+            raw_source: 'FIELD_STAFF_GPS',
+            sourceLabel: isPrimaryUpdated ? STAFF_VERIFIED_LOCATION_LABEL : '📍 GPS Lapangan (Diverged)',
             lat: targetLat,
             lng: targetLng,
             staffName: staffName || 'Staff',
             distanceKm: typeof distanceKm === 'number' ? Number(distanceKm.toFixed(2)) : null,
             ongkir: newOngkir,
+            ...(typeof accuracyM === 'number' ? { accuracyM: Math.round(accuracyM) } : {}),
             updatedAt: new Date().toISOString(),
           }
         : null;
@@ -2184,6 +2210,13 @@ export class StaffReservationService {
               field_gps_lng: lng,
               field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
               field_gps_diverged: true,
+            }
+          : {}),
+        ...(typeof accuracyM === 'number' ? { location_accuracy_m: accuracyM } : {}),
+        ...(isPrimaryUpdated
+          ? {
+              location_source: 'manual_staff',
+              location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
             }
           : {}),
         location_updated_at: new Date().toISOString(),

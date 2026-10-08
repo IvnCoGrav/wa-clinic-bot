@@ -359,7 +359,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
         const focusMessageId = request.query.focusMessageId?.trim() || undefined;
-        const { messages, hasMore } = await liveChatService.getConversationMessagesPaged(
+        const { messages, hasMore, pinnedMessage } = await liveChatService.getConversationMessagesPaged(
           id,
           tenantId,
           limit,
@@ -373,6 +373,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           data: messages,
           hasMore,
           oldestCursor: oldest ? new Date(oldest).toISOString() : null,
+          pinnedMessage: pinnedMessage || null,
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -657,6 +658,134 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
   fastify.post('/api/admin/live-chat/conversations/:id/messages/:messageId/reaction', reactionHandler);
   fastify.post('/api/admin/conversations/:id/messages/:messageId/reaction', reactionHandler);
+
+  /**
+   * PATCH /api/admin/live-chat/conversations/:id/messages/:messageId/pin
+   * Menyematkan / melepas sematan bubble chat (Single Pin per percakapan).
+   */
+  const pinMessageHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string; messageId: string };
+      Body: { isPinned?: boolean };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id, messageId } = request.params;
+    const { isPinned } = request.body || {};
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const adminName =
+      (request.headers['x-admin-name'] as string) ||
+      (request.body as any)?.adminName ||
+      (request as any).adminIdentity ||
+      'Admin';
+    const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
+    const ip = request.ip;
+
+    const result = await messageService.toggleMessagePin(id, messageId, tenantId, adminName, isPinned);
+    if (!result.success) {
+      return reply.status(400).send({ success: false, error: result.error });
+    }
+
+    // Audit log
+    await auditService.logAdminAction({
+      apiKey,
+      adminIdentity: adminName,
+      action: result.isPinned ? 'MESSAGE_PIN' : 'MESSAGE_UNPIN',
+      targetId: messageId,
+      payload: { conversationId: id, messageId, isPinned: result.isPinned },
+      tenantId,
+      ipAddress: ip,
+    });
+
+    return reply.status(200).send({
+      success: true,
+      isPinned: result.isPinned,
+      messageId: result.messageId,
+      pinnedMessage: result.pinnedMessage,
+      message: (result as any).message,
+      text: result.isPinned ? 'Bubble chat berhasil disematkan.' : 'Sematan bubble chat dilepas.',
+    });
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/messages/:messageId/pin', pinMessageHandler);
+  fastify.patch('/api/admin/conversations/:id/messages/:messageId/pin', pinMessageHandler);
+
+  /**
+   * PATCH /api/admin/live-chat/conversations/:id/messages/:messageId/hide
+   * Menyembunyikan / memulihkan bubble chat internal (UI only).
+   */
+  const hideMessageHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string; messageId: string };
+      Body: { isHidden?: boolean };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id, messageId } = request.params;
+    const { isHidden } = request.body || {};
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const adminName =
+      (request.headers['x-admin-name'] as string) ||
+      (request.body as any)?.adminName ||
+      (request as any).adminIdentity ||
+      'Admin';
+    const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
+    const ip = request.ip;
+
+    const result = await messageService.toggleMessageHide(id, messageId, tenantId, adminName, isHidden);
+    if (!result.success) {
+      return reply.status(400).send({ success: false, error: result.error });
+    }
+
+    // Audit log
+    await auditService.logAdminAction({
+      apiKey,
+      adminIdentity: adminName,
+      action: result.isHidden ? 'MESSAGE_HIDE' : 'MESSAGE_UNHIDE',
+      targetId: messageId,
+      payload: { conversationId: id, messageId, isHidden: result.isHidden },
+      tenantId,
+      ipAddress: ip,
+    });
+
+    return reply.status(200).send({
+      success: true,
+      isHidden: result.isHidden,
+      messageId: result.messageId,
+      message: (result as any).message,
+      text: result.isHidden ? 'Bubble chat berhasil disembunyikan.' : 'Bubble chat ditampilkan kembali.',
+    });
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/messages/:messageId/hide', hideMessageHandler);
+  fastify.patch('/api/admin/conversations/:id/messages/:messageId/hide', hideMessageHandler);
+
+  /**
+   * GET /api/admin/live-chat/conversations/:id/pinned-message
+   * Mengambil pesan yang disematkan dalam percakapan.
+   */
+  const getPinnedHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    try {
+      const pinnedMessage = await messageService.getPinnedMessage(id, tenantId);
+      return reply.status(200).send({
+        success: true,
+        pinnedMessage,
+        data: pinnedMessage,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  };
+
+  fastify.get('/api/admin/live-chat/conversations/:id/pinned-message', getPinnedHandler);
+  fastify.get('/api/admin/conversations/:id/pinned-message', getPinnedHandler);
 
   /**
    * GET /api/admin/live-chat/events

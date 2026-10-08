@@ -5,6 +5,8 @@
  * diuji secara deterministik.
  */
 
+import { resolveEffectiveLocationSource } from './geoUtils';
+
 export interface MapPointLike {
   lat: number;
   lng: number;
@@ -138,7 +140,7 @@ const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'
     fillOpacity: 0.5,
     radius: UNIFORM_MARKER_RADIUS,
   },
-  manual_staff: { label: '🛠️ Diedit Bidan/Staf', borderColor: '#ffffff', fillOpacity: 1, radius: UNIFORM_MARKER_RADIUS },
+  manual_staff: { label: '📍 Terverifikasi Staf', borderColor: '#ffffff', fillOpacity: 1, radius: UNIFORM_MARKER_RADIUS },
 };
 
 /**
@@ -147,13 +149,8 @@ const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'
  * `is_estimated_centroid` (sentroid → estimated_area, selain itu → gps_pin).
  */
 export function locationVisual(point: MapPointLike): LocationVisual {
-  const raw = point.location_source;
-  const source: LocationSourceKind =
-    raw === 'gps_pin' || raw === 'estimated_area' || raw === 'manual_staff'
-      ? raw
-      : point.is_estimated_centroid
-        ? 'estimated_area'
-        : 'gps_pin';
+  const source = resolveEffectiveLocationSource(point.location_source) ||
+    (point.is_estimated_centroid ? 'estimated_area' : 'gps_pin');
   return { source, ...LOCATION_VISUALS[source] };
 }
 

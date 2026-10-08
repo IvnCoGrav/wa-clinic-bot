@@ -70,6 +70,7 @@ import {
   BellOff,
   MessageSquareDot,
   Radar,
+  EyeOff,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -103,6 +104,9 @@ import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorM
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { BRAND } from '../../config/brand';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
+import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
+import { HiddenMessageStrip } from '../../components/livechat/HiddenMessageStrip';
+import { resolveEffectiveLocationSource, getLocationBadgeConfig } from '../../utils/geoUtils';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -194,6 +198,12 @@ interface ChatMessage {
   quoted_message?: QuotedMessageData;
   is_revoked?: boolean;
   is_edited?: boolean;
+  is_message_pinned?: boolean;
+  is_message_hidden?: boolean;
+  pinned_by?: string | null;
+  pinned_at?: string | null;
+  hidden_by?: string | null;
+  hidden_at?: string | null;
   payload_raw?: any;
 }
 
@@ -497,6 +507,10 @@ export const LiveChatMonitor: React.FC = () => {
   });
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pinnedBubble, setPinnedBubble] = useState<PinnedMessageData | null>(null);
+  const [revealedHiddenIds, setRevealedHiddenIds] = useState<Set<string>>(new Set());
+  const [isPinningMessageId, setIsPinningMessageId] = useState<string | null>(null);
+  const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const activeThreadRequestIdRef = useRef(0);
   // #160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
@@ -1490,6 +1504,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const isRefreshSameThread = isSameConversation(loadedThreadConvIdRef.current, conversationId);
     if (!isRefreshSameThread) {
       setIsThreadLoading(true);
+      setRevealedHiddenIds(new Set());
     }
     // Reset cursor pagination setiap ganti/refresh percakapan
     setHasMoreOlderMessages(false);
@@ -1534,7 +1549,41 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
 
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
-        setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) })));
+        const mappedMessages = deduped.map((m) => ({
+          ...m,
+          is_message_pinned: !!(m.is_message_pinned || (m as any).payload_raw?.is_pinned),
+          is_message_hidden: !!(m.is_message_hidden || (m as any).payload_raw?.is_hidden),
+          pinned_by: m.pinned_by || (m as any).payload_raw?.pinned_by || null,
+          pinned_at: m.pinned_at || (m as any).payload_raw?.pinned_at || null,
+          hidden_by: m.hidden_by || (m as any).payload_raw?.hidden_by || null,
+          hidden_at: m.hidden_at || (m as any).payload_raw?.hidden_at || null,
+          media: extractMedia(m),
+          location: (m as any).location || extractLocation(m),
+          quoted_message: extractQuotedMessage(m),
+        }));
+        setMessages(mappedMessages);
+
+        // Inisialisasi pinnedBubble dari response API atau cari di list pesan
+        if (res?.pinnedMessage) {
+          setPinnedBubble(res.pinnedMessage);
+        } else {
+          const foundPinned = mappedMessages.find((m) => m.is_message_pinned);
+          if (foundPinned) {
+            setPinnedBubble({
+              id: foundPinned.id,
+              wa_message_id: foundPinned.wa_message_id,
+              content: foundPinned.content,
+              sender_name: foundPinned.sender_name,
+              sender_type: foundPinned.sender_type,
+              created_at: foundPinned.created_at,
+              pinned_by: foundPinned.pinned_by,
+              pinned_at: foundPinned.pinned_at,
+            });
+          } else {
+            setPinnedBubble(null);
+          }
+        }
+
         loadedThreadConvIdRef.current = conversationId; // #160: tandai thread ini sudah termuat
         // Direct jump: DOM #msg-<focus> sudah ada setelah batch focus-window termuat.
         if (effectiveFocus) {
@@ -2413,7 +2462,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             reservationRefreshRef.current?.();
           }
         } else if (type === 'message.updated' && (payload?.messageId || payload?.waMessageId)) {
-          const { messageId, waMessageId, content, isRevoked, isEdited } = payload;
+          const { messageId, waMessageId, content, isRevoked, isEdited, isMessagePinned, isMessageHidden, payload_raw } = payload;
           const matchesUpdated = (m: any) => {
             if (messageId && (m.id === messageId || m.wa_message_id === messageId)) return true;
             if (waMessageId && (m.id === waMessageId || m.wa_message_id === waMessageId)) return true;
@@ -2428,17 +2477,55 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   ? {
                       ...m,
                       content: content !== undefined ? content : m.content,
-                      is_revoked: isRevoked ?? m.is_revoked,
-                      is_edited: isEdited ?? (m as any).is_edited,
-                      media: payload.media || (m as any).media,
+                      is_revoked: isRevoked !== undefined ? isRevoked : m.is_revoked,
+                      is_edited: isEdited !== undefined ? isEdited : (m as any).is_edited,
+                      is_message_pinned: isMessagePinned !== undefined ? isMessagePinned : ((m as any).is_message_pinned ?? (m as any).payload_raw?.is_pinned),
+                      is_message_hidden: isMessageHidden !== undefined ? isMessageHidden : ((m as any).is_message_hidden ?? (m as any).payload_raw?.is_hidden),
+                      pinned_by: payload.pinnedBy !== undefined ? payload.pinnedBy : (m.pinned_by || (m as any).payload_raw?.pinned_by),
+                      pinned_at: payload.pinnedAt !== undefined ? payload.pinnedAt : (m.pinned_at || (m as any).payload_raw?.pinned_at),
+                      hidden_by: payload.hiddenBy !== undefined ? payload.hiddenBy : (m.hidden_by || (m as any).payload_raw?.hidden_by),
+                      hidden_at: payload.hiddenAt !== undefined ? payload.hiddenAt : (m.hidden_at || (m as any).payload_raw?.hidden_at),
+                      media: payload.media !== undefined ? payload.media : (m as any).media,
                       payload_raw: {
                         ...((m as any).payload_raw || {}),
-                        ...(payload.media ? { media: payload.media } : {}),
+                        ...(payload_raw || {}),
+                        ...(payload.media !== undefined ? { media: payload.media } : {}),
+                        ...(isMessagePinned !== undefined ? { is_pinned: isMessagePinned } : {}),
+                        ...(isMessageHidden !== undefined ? { is_hidden: isMessageHidden } : {}),
                       },
                     }
-                  : m
+                  : (isMessagePinned ? {
+                      // single-pin: jika pesan lain di-pin di percakapan yang sama, unpin pesan ini
+                      ...m,
+                      is_message_pinned: false,
+                      payload_raw: {
+                        ...((m as any).payload_raw || {}),
+                        is_pinned: false,
+                      },
+                    } : m)
               )
             );
+
+            // Sinkronkan state pinnedBubble di header percakapan aktif
+            if (isMessagePinned === true) {
+              setPinnedBubble({
+                id: messageId || waMessageId,
+                wa_message_id: waMessageId || messageId,
+                content: content || 'Pesan yang disematkan',
+                sender_name: payload.sender_name,
+                sender_type: payload.sender_type,
+                created_at: payload.created_at || new Date().toISOString(),
+                pinned_by: payload.pinnedBy,
+                pinned_at: payload.pinnedAt,
+              });
+            } else if (isMessagePinned === false) {
+              setPinnedBubble((current) => {
+                if (!current) return null;
+                const matchId = messageId || waMessageId;
+                if (current.id === matchId || (current.wa_message_id && current.wa_message_id === matchId)) return null;
+                return current;
+              });
+            }
           }
         } else if ((type === 'message:reaction' || type === 'message.reaction') && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, conversationId, reactions } = payload;
@@ -2896,6 +2983,139 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     } catch (err: any) {
       toast(`Gagal mengirim reaksi: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    }
+  };
+
+  const handleToggleMessagePin = async (msg: ChatMessage, explicitPinned?: boolean) => {
+    if (!selectedChat?.conversationId || isPinningMessageId) return;
+    const nextPinned = explicitPinned !== undefined
+      ? explicitPinned
+      : !(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
+    setIsPinningMessageId(msg.id);
+
+    // Optimistic update
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id
+          ? {
+              ...m,
+              is_message_pinned: nextPinned,
+              payload_raw: {
+                ...((m as any).payload_raw || {}),
+                is_pinned: nextPinned,
+              },
+            }
+          : nextPinned
+          ? {
+              ...m,
+              is_message_pinned: false,
+              payload_raw: {
+                ...((m as any).payload_raw || {}),
+                is_pinned: false,
+              },
+            }
+          : m
+      )
+    );
+
+    if (nextPinned) {
+      setPinnedBubble({
+        id: msg.id,
+        wa_message_id: msg.wa_message_id,
+        content: msg.content,
+        sender_name: msg.sender_name,
+        sender_type: msg.sender_type,
+        created_at: msg.created_at,
+      });
+    } else {
+      setPinnedBubble((cur) => (cur?.id === msg.id ? null : cur));
+    }
+
+    try {
+      const res = await apiRequest(
+        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}/pin`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ isPinned: nextPinned }),
+        }
+      );
+      if (res?.success) {
+        toast(nextPinned ? 'Pesan berhasil disematkan.' : 'Sematan pesan dilepas.', 'success');
+      } else {
+        toast(`Gagal mengubah sematan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+        void loadThread(selectedChat.conversationId);
+      }
+    } catch (err: any) {
+      toast(`Gagal mengubah sematan: ${err.message || 'Terjadi kesalahan'}`, 'error');
+      void loadThread(selectedChat.conversationId);
+    } finally {
+      setIsPinningMessageId(null);
+    }
+  };
+
+  const handleToggleMessageHide = async (msg: ChatMessage, explicitHidden?: boolean) => {
+    if (!selectedChat?.conversationId || isHidingMessageId) return;
+    const nextHidden = explicitHidden !== undefined
+      ? explicitHidden
+      : !(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
+    setIsHidingMessageId(msg.id);
+
+    // Optimistic update
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id
+          ? {
+              ...m,
+              is_message_hidden: nextHidden,
+              payload_raw: {
+                ...((m as any).payload_raw || {}),
+                is_hidden: nextHidden,
+              },
+            }
+          : m
+      )
+    );
+
+    // Hapus dari status buka lokal jika disembunyikan
+    if (nextHidden) {
+      setRevealedHiddenIds((prev) => {
+        const next = new Set(prev);
+        next.delete(msg.id);
+        return next;
+      });
+    }
+
+    try {
+      const res = await apiRequest(
+        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}/hide`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ isHidden: nextHidden }),
+        }
+      );
+      if (res?.success) {
+        toast(nextHidden ? 'Pesan disembunyikan dari dashboard.' : 'Pesan ditampilkan kembali.', 'success');
+      } else {
+        toast(`Gagal menyembunyikan pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+        void loadThread(selectedChat.conversationId);
+      }
+    } catch (err: any) {
+      toast(`Gagal menyembunyikan pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
+      void loadThread(selectedChat.conversationId);
+    } finally {
+      setIsHidingMessageId(null);
+    }
+  };
+
+  const handleJumpToPinnedMessage = (msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-3', 'ring-[#008069]', 'bg-emerald-50/50');
+      setTimeout(() => el.classList.remove('ring-3', 'ring-[#008069]', 'bg-emerald-50/50'), 2000);
+    } else if (selectedChat?.conversationId) {
+      // Belum termuat di paginasi saat ini: trigger focusMessageId
+      void loadThread(selectedChat.conversationId, msgId);
     }
   };
 
@@ -3616,20 +3836,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     toast('Draf posisi Bidan disisipkan. Tekan Kirim untuk mengirim.', 'info');
   };
 
-  // Fase 4 (plan 2026-10-02): derivasi provenance akurasi lokasi dari data
-  // customer-detail (state, bukan tebakan). `null` = tak diketahui (netral).
-  const dispatchLocationSource = ((): 'gps_pin' | 'estimated_area' | 'manual_staff' | null => {
-    const c: any = customerDetailData;
-    if (!c) return null;
-    if (c.location_source === 'gps_pin' || c.location_source === 'estimated_area' || c.location_source === 'manual_staff') {
-      return c.location_source;
-    }
-    const src = c.preferences?.location_source || c.preferences?.source;
-    if (src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') return 'gps_pin';
-    if (src === 'geocoding' || src === 'url_text_geocoded' || src === 'gazetteer') return 'estimated_area';
-    if (src === 'manual_staff') return 'manual_staff';
-    return null;
-  })();
+  // Provenance akurasi lokasi dari data customer-detail via shared geoUtils
+  const dispatchLocationSource = resolveEffectiveLocationSource(customerDetailData);
 
   // Fase 4: susun draf permintaan shareloc lalu sisipkan ke composer (CS tetap
   // menekan Kirim). Draf dari data pasien; tanpa hardcode tarif/SOP.
@@ -4438,9 +4646,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
                   const chatName = chat.customerName || 'Customer';
-                  const preview = chat.lastMessages && chat.lastMessages.length > 0
-                    ? chat.lastMessages[chat.lastMessages.length - 1]?.content
+                  const lastMsg = chat.lastMessages && chat.lastMessages.length > 0
+                    ? chat.lastMessages[chat.lastMessages.length - 1]
                     : null;
+                  const isLastMsgHidden = !!((lastMsg as any)?.is_message_hidden || (lastMsg as any)?.payload_raw?.is_hidden);
+                  const preview = isLastMsgHidden
+                    ? '[Pesan disembunyikan]'
+                    : lastMsg?.content || null;
                   // Draf typing tersimpan sementara (24 jam): untuk chat yang sedang dibuka
                   // pakai teks live composer, untuk lainnya baca dari penyimpanan. draftTick
                   // memastikan nilai ini segar setiap render ulang terjadwal.
@@ -4713,9 +4925,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               const q = searchQuery.trim();
                               const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                               const wbRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
-                              const mmContent = (chat as any).matchedMessage?.content;
+                              const mm = (chat as any).matchedMessage;
+                              const isMmHidden = !!(mm?.is_message_hidden || mm?.payload_raw?.is_hidden);
+                              const mmContent = isMmHidden ? null : mm?.content;
                               if (mmContent && wbRegex.test(mmContent)) return mmContent;
-                              const fallbackMsg = (chat.lastMessages || []).find((m: any) => wbRegex.test(m.content || ''));
+                              const fallbackMsg = (chat.lastMessages || []).find((m: any) => !m?.is_message_hidden && !m?.payload_raw?.is_hidden && wbRegex.test(m.content || ''));
                               return fallbackMsg?.content || null;
                             })()
                           : null;
@@ -5397,6 +5611,35 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
                 )}
 
+                {/* Sticky Pinned Message Banner */}
+                {pinnedBubble && (
+                  <MessagePinBanner
+                    pinnedMessage={pinnedBubble}
+                    onJumpToMessage={handleJumpToPinnedMessage}
+                    onUnpin={(msgId) => {
+                      const target = messages.find((m) => m.id === msgId);
+                      if (target) {
+                        void handleToggleMessagePin(target);
+                      } else if (selectedChat?.conversationId) {
+                        setIsPinningMessageId(msgId);
+                        apiRequest(`/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msgId}/pin`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ isPinned: false }),
+                        })
+                          .then(() => {
+                            toast('Sematan pesan dilepas.', 'success');
+                            setPinnedBubble(null);
+                          })
+                          .catch((err: any) => {
+                            toast(`Gagal melepas sematan: ${err.message}`, 'error');
+                          })
+                          .finally(() => setIsPinningMessageId(null));
+                      }
+                    }}
+                    isUnpinning={isPinningMessageId === pinnedBubble.id}
+                  />
+                )}
+
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   key={selectedChat?.conversationId || 'empty'}
@@ -5567,6 +5810,40 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       }
                       const groupedReactions = Array.from(groupedReactionsMap.values());
 
+                      const isMessagePinned = !!(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
+                      const isMessageHidden = !!(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
+                      const isRevealedLocally = revealedHiddenIds.has(msg.id);
+
+                      if (isMessageHidden && !isRevealedLocally) {
+                        return (
+                          <React.Fragment key={msg.id}>
+                            {showDateSeparator && (
+                              <div className="flex justify-center my-2 sm:my-2.5">
+                                <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-[#54656f] shadow-2xs border border-black/5 select-none tracking-wide">
+                                  {formatChatDateSeparator(msg.created_at)}
+                                </div>
+                              </div>
+                            )}
+                            <div id={`msg-${msg.id}`} className="w-full">
+                              <HiddenMessageStrip
+                                messageId={msg.id}
+                                hiddenBy={msg.hidden_by || (msg as any).payload_raw?.hidden_by}
+                                isRevealedLocally={false}
+                                onToggleRevealLocal={() => {
+                                  setRevealedHiddenIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(msg.id);
+                                    return next;
+                                  });
+                                }}
+                                onUnhidePermanent={() => handleToggleMessageHide(msg, false)}
+                                isUnhiding={isHidingMessageId === msg.id}
+                              />
+                            </div>
+                          </React.Fragment>
+                        );
+                      }
+
                       return (
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
@@ -5659,6 +5936,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                               }`}
                             >
+                              {isMessageHidden && isRevealedLocally && (
+                                <HiddenMessageStrip
+                                  messageId={msg.id}
+                                  hiddenBy={msg.hidden_by || (msg as any).payload_raw?.hidden_by}
+                                  isRevealedLocally={true}
+                                  onToggleRevealLocal={() => {
+                                    setRevealedHiddenIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(msg.id);
+                                      return next;
+                                    });
+                                  }}
+                                  onUnhidePermanent={() => handleToggleMessageHide(msg, false)}
+                                  isUnhiding={isHidingMessageId === msg.id}
+                                />
+                              )}
+                              {isMessagePinned && !isRevoked && (
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
+                                  <Pin size={10} className="text-amber-600 fill-amber-500" />
+                                  <span>Disematkan{msg.pinned_by ? ` • ${msg.pinned_by}` : ''}</span>
+                                </div>
+                              )}
                               {isInternalNote && !isRevoked && (
                                 <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-amber-300">
                                   <Lock size={10} />
@@ -5966,6 +6265,44 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     )}
                                   </button>
                                 )}
+                                {!isRevoked && (
+                                  <button
+                                    type="button"
+                                    disabled={isPinningMessageId === msg.id}
+                                    onClick={() => handleToggleMessagePin(msg, !isMessagePinned)}
+                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
+                                      isMessagePinned
+                                        ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 font-bold'
+                                        : 'text-[#8696a0] hover:text-amber-600 hover:bg-amber-50'
+                                    }`}
+                                    title={isMessagePinned ? 'Lepas sematan pesan (Unpin)' : 'Sematkan pesan ini (Pin ke atas)'}
+                                  >
+                                    {isPinningMessageId === msg.id ? (
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-amber-500 border-t-transparent" />
+                                    ) : (
+                                      <Pin size={11} className={isMessagePinned ? 'fill-amber-500 text-amber-600' : ''} />
+                                    )}
+                                  </button>
+                                )}
+                                {!isRevoked && !isInternalNote && (
+                                  <button
+                                    type="button"
+                                    disabled={isHidingMessageId === msg.id}
+                                    onClick={() => handleToggleMessageHide(msg, !isMessageHidden)}
+                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
+                                      isMessageHidden
+                                        ? 'text-slate-600 bg-slate-100 hover:bg-slate-200'
+                                        : 'text-[#8696a0] hover:text-slate-700 hover:bg-slate-100'
+                                    }`}
+                                    title={isMessageHidden ? 'Tampilkan kembali pesan ini (Unhide)' : 'Sembunyikan bubble ini di dashboard (Hide internal)'}
+                                  >
+                                    {isHidingMessageId === msg.id ? (
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-slate-500 border-t-transparent" />
+                                    ) : (
+                                      <EyeOff size={11} />
+                                    )}
+                                  </button>
+                                )}
                               </div>
 
                               {/* Reaction Badges (WhatsApp Style Pill attached to bottom corner of bubble) */}
@@ -6237,24 +6574,31 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         <span>{refreshingLocation ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
                       </button>
                     </div>
-                    {customerDetailData?.preferences?.location_source_label || customerDetailData?.preferences?.location_source ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          (customerDetailData?.preferences?.location_source === 'bidan_shareloc') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          (customerDetailData?.preferences?.location_source === 'customer_shareloc') ? 'bg-sky-50 text-sky-700 border-sky-200' :
-                          (customerDetailData?.preferences?.location_source === 'db_coords') ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          'bg-gray-50 text-gray-700 border-gray-200'
-                        }`}>
-                          {customerDetailData?.preferences?.location_source_label ||
-                            (customerDetailData?.preferences?.location_source === 'bidan_shareloc' ? '🟢 Terverifikasi Bidan' :
-                             customerDetailData?.preferences?.location_source === 'customer_shareloc' ? '🔵 Shareloc Customer' :
-                             customerDetailData?.preferences?.location_source === 'db_coords' ? '🟡 Koordinat Tersimpan' : '⚪ Estimasi Wilayah')}
-                        </span>
-                        {customerDetailData?.preferences?.location_refreshed_at ? (
-                          <span className="text-[10px] text-[#8696a0]">{new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID')}</span>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    {(() => {
+                      const badge = getLocationBadgeConfig(
+                        customerDetailData,
+                        customerDetailData?.preferences?.location_source_label
+                      );
+                      const hasSource = !!(
+                        customerDetailData?.location_source ||
+                        customerDetailData?.effective_location_source ||
+                        customerDetailData?.preferences?.location_source ||
+                        customerDetailData?.preferences?.location_source_label
+                      );
+                      if (!hasSource) return null;
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.badgeClass}`}>
+                            {badge.label}
+                          </span>
+                          {customerDetailData?.preferences?.location_refreshed_at ? (
+                            <span className="text-[10px] text-[#8696a0]">
+                              {new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
                         <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat Lengkap</p>

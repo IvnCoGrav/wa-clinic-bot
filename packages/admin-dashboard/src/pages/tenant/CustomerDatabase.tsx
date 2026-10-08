@@ -13,6 +13,7 @@ import { ReservationDetailModal } from '../../components/modals/ReservationDetai
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
+import { getLocationBadgeConfig } from '../../utils/geoUtils';
 import {
   Users,
   Search,
@@ -1219,21 +1220,31 @@ export const CustomerDatabase: React.FC = () => {
                         <span>{refreshingLocationDb ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
                       </button>
                     </div>
-                    {detailData?.preferences?.location_source_label || detailData?.preferences?.location_source ? (
-                      <div className="flex items-center gap-1.5 -mt-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          detailData.preferences.location_source === 'bidan_shareloc' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          detailData.preferences.location_source === 'customer_shareloc' ? 'bg-sky-50 text-sky-700 border-sky-200' :
-                          detailData.preferences.location_source === 'db_coords' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          'bg-gray-50 text-gray-700 border-gray-200'
-                        }`}>
-                          {detailData.preferences.location_source_label || detailData.preferences.location_source}
-                        </span>
-                        {detailData.preferences.location_refreshed_at ? (
-                          <span className="text-[10px] text-[#8696a0]">{new Date(detailData.preferences.location_refreshed_at).toLocaleString('id-ID')}</span>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    {(() => {
+                      const badge = getLocationBadgeConfig(
+                        detailData,
+                        detailData?.preferences?.location_source_label
+                      );
+                      const hasSource = !!(
+                        detailData?.location_source ||
+                        detailData?.effective_location_source ||
+                        detailData?.preferences?.location_source ||
+                        detailData?.preferences?.location_source_label
+                      );
+                      if (!hasSource) return null;
+                      return (
+                        <div className="flex items-center gap-1.5 -mt-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.badgeClass}`}>
+                            {badge.label}
+                          </span>
+                          {detailData?.preferences?.location_refreshed_at ? (
+                            <span className="text-[10px] text-[#8696a0]">
+                              {new Date(detailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>

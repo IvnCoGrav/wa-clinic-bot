@@ -1039,6 +1039,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           reservationId: string;
           lat?: number;
           lng?: number;
+          accuracyM?: number;
           housePhotoB64?: string;
           landmark?: string;
         };
@@ -1050,7 +1051,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const isSupervisor = isStaffSupervisorRole(role);
-      const { reservationId, lat, lng, housePhotoB64, landmark } = request.body || {};
+      const { reservationId, lat, lng, accuracyM, housePhotoB64, landmark } = request.body || {};
 
       if (!reservationId) {
         return reply.status(400).send({ success: false, error: 'reservationId wajib disertakan.' });
@@ -1063,6 +1064,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         tenantId,
         lat,
         lng,
+        accuracyM,
         housePhotoB64,
         landmark,
         isSupervisor,

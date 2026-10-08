@@ -4,6 +4,49 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-08 - Fixed: Resolusi Wilayah Anti-Homonim Lintas Kota & Penyelarasan Status Presisi Lapangan Staf (Fase 0 - Fase 5)
+
+- **Akar Masalah (multi-layer audit):**
+  - **Gazetteer Homonim**: Pada pencarian toponimi tanpa nama kota (`cityScope == null`), pembobotan `kelurahan > kecamatan` di `rankedGazetteerScan` menyebabkan nama wilayah duplikat lintas kota (seperti Wonocolo, Krembangan, Semampir) terlempar ke desa/kelurahan di kabupaten tetangga (mis. Wonocolo Surabaya terlempar ke Desa Wonocolo Taman Sidoarjo). Tool `calculate-delivery.tool.ts` memanggil nama kecamatan terkelupas tanpa konteks kota.
+  - **Desync Lokasi Staf**: Terjadi split-brain di mana kolom `customers.location_source = 'manual_staff'`, namun `preferences.location_source` bernilai `null` atau `db_coords` (seperti insiden Bunda Megga). Saat admin menekan "Refresh Lokasi", status visual terdegradasi menjadi "🟡 Koordinat Tersimpan" atau "⚪ Estimasi Wilayah".
+  - **Akurasi GPS Lapangan**: Endpoint staf tidak memvalidasi akurasi meter GPS perangkat, berisiko mengunci titik indoor yang drift sebagai terverifikasi.
+  - **Duplikasi UI Badge**: Badge status lokasi tersebar dengan logika if-else lokal yang tidak seragam di LiveChatMonitor, CustomerDatabase, dan StaffToday.
+- **Fixed & Hardened (Fondasional 5 Fase):**
+  - **Fase 0 (Audit Fakta Read-Only)**: Audit read-only live DB via SSH membuktikan desync riil berjumlah 90 baris (58 null, 14 customer_shareloc, 12 db_coords, 6 geocoding). Terbukti dataset gazetteer memuat 14 nama wilayah duplikat lintas kota (11 Sby–Sda, 3 Sda–Gresik).
+  - **Fase 1 (Gazetteer Anti-Homonim Data-Driven)**:
+    - Di `src/utils/gazetteer.ts`, himpunan duplikat `crossCityDuplicateSet` dihitung secara dinamis dari dataset saat init (zero-hardcode). Export helper `isCrossCityDuplicate()`.
+    - Di `rankedGazetteerScan()`, jika frasa ada di duplikat lintas kota dan tanpa filter kota, kandidat dengan kecamatan yang disebutkan (`kecMentioned`) dimenangkan di atas pembobotan kelurahan.
+    - Di `calculate-delivery.tool.ts`, fallback centroid memanfaatkan query lengkap dengan konteks kota.
+  - **Fase 2 (Single Source of Truth Lokasi Staf & Gate Akurasi)**:
+    - Di `staff-reservation.service.ts`, penulisan kolom `manual_staff` disinkronkan 100% dengan `preferences.location_source = 'manual_staff'` dan `location_source_label = '📍 Terverifikasi Staf'`, HANYA jika titik diperbarui sebagai koordinat primer. Karantina divergence >1 km tetap utuh.
+    - Menambahkan validasi gerbang toleransi akurasi GPS `<= 50m` (ditolak bila `accuracyM > 50`).
+    - Memastikan `refreshCustomerLocationAndOngkir()` mempertahankan status `manual_staff` tanpa terdegradasi ke `db_coords`.
+  - **Fase 3 (Dashboard Satu Seam & Pemisahan Badge vs Navigasi)**:
+    - Modul shared `geoUtils.ts` menyediakan helper kanonis `resolveEffectiveLocationSource`, `getLocationBadgeConfig`, dan `needsNavigationPreflight`.
+    - Komponen `LiveChatMonitor`, `CustomerDatabase`, `CustomerMapTab`, dan `StaffToday` menggunakan satu resolver dan konfigurasi badge hijau `📍 Terverifikasi Staf` seragam.
+    - Navigasi Maps untuk `manual_staff` tetap mewajibkan gerbang konfirmasi preflight (safety net 2026-09-30 terjaga).
+  - **Fase 4 (Rekonsiliasi Skrip & Eksekusi Live)**:
+    - Memperluas `reconcile-trapped-customer-locations.ts` dengan mode `--sync-staff-labels` dan `--audit-homonym`.
+    - Dry-run live membuktikan 90 baris desync. Setelah konfirmasi manusia eksplisit, `--commit` berhasil menyinkronkan 90/90 baris menjadi 0 desync tanpa menyentuh koordinat/ongkir dan tanpa menyentuh reservasi completed.
+  - **Fase 5 (Regresi & Build)**:
+    - Seluruh unit tests (34 tests di 4 test files relevan) lulus 100%.
+    - `npm run build` di root dan `packages/admin-dashboard` lulus tanpa error.
+
+#### 2026-10-08 - Added: Fitur PIN (Sematkan Bubble) & HIDE (Sembunyikan Internal) di Live Chat
+
+- **Akar & Kebutuhan Fitur (multi-layer audit):**
+  - Staf CS butuh menyematkan pesan krusial (misal: alergi obat anak, nomor rekening khusus, instruksi darurat) agar tetap terlihat saat percakapan panjang bergulir.
+  - Staf CS butuh menyembunyikan bubble internal yang sensitif atau memuat typo/kesalahan internal di monitor dashboard tanpa menghapus pesan dari WhatsApp pasien (zero gateway disruption).
+  - Penanganan SSE `message.updated` terdahulu menimpa `content` secara naif, sehingga payload parsial dapat mengosongkan teks bubble di browser admin lain.
+  - Penulisan `Conversation.session_data` rentan menimpa data state machine v3 (booking, keranjang, keluhan) jika tidak menggunakan spread/merge aman.
+- **Fixed & Hardened (fondasional 5 fase):**
+  - **Fase 0 (SSE Merge Aman):** Handler `message.updated` di `LiveChatMonitor.tsx` diperbaiki agar hanya memperbarui field yang terdefinisi (`!== undefined`) dan menggabungkan `payload_raw`, mencegah penghapusan konten bubble saat broadcast status.
+  - **Fase 1 (Service Seam Kanonis & Single Pin):** Menambahkan `toggleMessagePin`, `toggleMessageHide`, dan `getPinnedMessage` pada `message.service.ts` dengan transaksi atomik Prisma, aturan single-pin otomatis (melepas sematan pesan lama bila pesan baru disematkan), safe merge `session_data.pinned_message_id`, memory fallback offline, pembersihan otomatis pointer basi saat revoke (`markMessageDeleted`), dan invalidasi cache `livechat:`.
+  - **Fase 2 (Route, RBAC & Audit Trail):** Endpoint REST `PATCH .../messages/:messageId/pin`, `PATCH .../messages/:messageId/hide`, dan `GET .../pinned-message` di `livechat.subroute.ts`. Validasi body boolean, pelindung anti-IDOR lintas-tenant, dan pencatatan audit `MESSAGE_PIN`, `MESSAGE_UNPIN`, `MESSAGE_HIDE`, `MESSAGE_UNHIDE` dengan identitas staf dan IP lengkap.
+  - **Fase 3 & 4 (Modular Frontend & Masking UI):** Komponen modular terpisah `MessagePinBanner.tsx` (banner sticky, auto-scroll/jump ke bubble) dan `HiddenMessageStrip.tsx` (placeholder collapsed + penampil sementara lokal per browser). Tombol semat dan sembunyikan di footer bubble. Penyamaran teks preview kartu sidebar dan snippet pencarian menjadi `[Pesan disembunyikan]`.
+  - **Fase 5 (Pengujian Adversarial & Regresi):** 13 skenario adversarial di `tests/unit/live-chat-pin-hide.test.ts` lulus 100% (single-pin unpinning, safe session merge, tenant isolation anti-IDOR, larangan sembunyikan catatan internal atau pesan ditarik, pembersihan otomatis pointer saat revoke, dan in-memory fallback).
+- **Test:** `npm run build` root dan `packages/admin-dashboard` lulus 100% tanpa error; 13/13 test unit baru dan 4/4 test paginasi pesan hijau.
+
 #### 2026-10-08 - Fixed: Penyelarasan Penuh Zona Waktu WIB (Asia/Jakarta) pada Admin Dashboard & Kalender
 
 - **Akar (multi-layer audit):**

@@ -701,6 +701,7 @@ export const TodayTreatments: React.FC = () => {
           landmark: locLandmark || null,
           lat: locCoords?.lat || null,
           lng: locCoords?.lng || null,
+          accuracyM: locCoords?.accuracy || null,
           housePhotoB64: photoPayload,
         }),
       });

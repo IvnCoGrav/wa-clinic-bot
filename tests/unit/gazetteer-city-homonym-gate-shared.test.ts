@@ -74,4 +74,11 @@ describe('calculate_delivery centroid — homonim kota tidak dikunci ke Suko', (
     expect(isSuko).toBe(false);
     expect(res.isEstimatedCentroid).not.toBe(true);
   });
+
+  it('calculate_delivery: "Jl Jemur Andayani Wonocolo Surabaya" → Kota Surabaya Wonocolo (tutup pintu homonim kedua)', async () => {
+    const { executeCalculateDelivery } = await import('../../src/v3/tools/calculate-delivery.tool');
+    const res: any = await executeCalculateDelivery({ locationText: 'Jl Jemur Andayani Wonocolo Surabaya' });
+    expect(res.kota).toBe('Kota Surabaya');
+    expect(res.kecamatan).toBe('Wonocolo');
+  });
 });

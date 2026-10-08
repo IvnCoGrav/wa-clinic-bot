@@ -162,6 +162,118 @@ export function checkTravelTimeSufficiency(
   };
 }
 
+export type LocationSourceKind = 'gps_pin' | 'estimated_area' | 'manual_staff';
+
+/**
+ * Memetakan berbagai bentuk format lokasi (string, preferences, customer)
+ * menjadi kategori kanonikal: 'manual_staff' | 'gps_pin' | 'estimated_area' | null.
+ * Single source of truth di dashboard selaras dengan backend `resolveLocationSource`.
+ */
+export function resolveEffectiveLocationSource(
+  input?: string | {
+    location_source?: string | null;
+    effective_location_source?: string | null;
+    source?: string | null;
+    preferences?: {
+      location_source?: string | null;
+      source?: string | null;
+      [key: string]: any;
+    } | null;
+    [key: string]: any;
+  } | null
+): LocationSourceKind | null {
+  if (!input) return null;
+
+  if (typeof input === 'string') {
+    const raw = input.trim();
+    if (raw === 'manual_staff' || raw === 'FIELD_STAFF_GPS') return 'manual_staff';
+    if (raw === 'gps_pin' || raw === 'bidan_shareloc' || raw === 'customer_shareloc' || raw === 'url_coords') return 'gps_pin';
+    if (raw === 'estimated_area' || raw === 'geocoding' || raw === 'url_text_geocoded' || raw === 'gazetteer' || raw === 'db_coords') return 'estimated_area';
+    return null;
+  }
+
+  if (input.effective_location_source) {
+    return resolveEffectiveLocationSource(input.effective_location_source);
+  }
+
+  const col = input.location_source;
+  if (col === 'manual_staff' || col === 'gps_pin' || col === 'estimated_area') {
+    return col;
+  }
+
+  const pref = input.preferences?.location_source || input.preferences?.source || input.source;
+  if (pref) {
+    return resolveEffectiveLocationSource(pref);
+  }
+
+  return null;
+}
+
+export function isPreciseLocationSource(source?: string | null): boolean {
+  return source === 'gps_pin';
+}
+
+export interface LocationBadgeConfig {
+  source: LocationSourceKind | null;
+  label: string;
+  badgeClass: string;
+  dotColor: string;
+}
+
+/**
+ * Single source of truth pemetaan badge lokasi untuk seluruh dashboard
+ * (LiveChat, CustomerDatabase, StaffToday, MapTab).
+ */
+export function getLocationBadgeConfig(
+  customerOrSource?: any,
+  explicitLabel?: string | null
+): LocationBadgeConfig {
+  const source = resolveEffectiveLocationSource(customerOrSource);
+  const rawPref = typeof customerOrSource === 'object' && customerOrSource !== null
+    ? (customerOrSource.preferences?.location_source || customerOrSource.preferences?.source || customerOrSource.source)
+    : null;
+
+  if (source === 'manual_staff') {
+    return {
+      source: 'manual_staff',
+      label: explicitLabel || '📍 Terverifikasi Staf',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      dotColor: '#008069',
+    };
+  }
+
+  if (source === 'gps_pin') {
+    const isCustomerShareloc = rawPref === 'customer_shareloc';
+    return {
+      source: 'gps_pin',
+      label: explicitLabel || (isCustomerShareloc ? '🔵 Shareloc Customer' : '📍 Titik Presisi'),
+      badgeClass: isCustomerShareloc
+        ? 'bg-sky-50 text-sky-700 border-sky-200'
+        : 'bg-[#d9fdd3] text-[#008069] border-[#b7e4c7]',
+      dotColor: isCustomerShareloc ? '#0284c7' : '#008069',
+    };
+  }
+
+  if (source === 'estimated_area') {
+    const isDbCoords = rawPref === 'db_coords';
+    return {
+      source: 'estimated_area',
+      label: explicitLabel || (isDbCoords ? '🟡 Koordinat Tersimpan' : '⚪ Estimasi Wilayah'),
+      badgeClass: isDbCoords
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
+        : 'bg-gray-50 text-gray-700 border-gray-200',
+      dotColor: isDbCoords ? '#d97706' : '#64748b',
+    };
+  }
+
+  return {
+    source: null,
+    label: explicitLabel || '⚪ Estimasi Wilayah',
+    badgeClass: 'bg-gray-50 text-gray-700 border-gray-200',
+    dotColor: '#64748b',
+  };
+}
+
 /**
  * Insiden Bidan tersasar (2026-09-30): titik NON-presisi (`manual_staff`/
  * `estimated_area`/belum diketahui) DILARANG membuka Google Maps langsung —

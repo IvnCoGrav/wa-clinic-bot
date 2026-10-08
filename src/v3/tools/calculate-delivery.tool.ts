@@ -762,7 +762,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     if (!resolved.isPrecise && !resolved.kelurahan && !(resolved.lat != null && resolved.lng != null)) {
       const kecName = findKecamatanInQuery(compositeQuery);
       if (kecName && hasSpecificAddressDetail(compositeQuery, streetDetail)) {
-        const centro = getGazetteerCoordinates(kecName);
+        const centro = getGazetteerCoordinates(compositeQuery) || getGazetteerCoordinates(kecName);
         // Homonym Safety Gate: kecamatan yang sekadar homonim nama kota (mis.
         // "Sidoarjo" ⊂ "Kabupaten Sidoarjo") DILARANG jadi sentroid (desa-pertama
         // = Suko). Kecamatan asli ("Jambangan") tetap sah.

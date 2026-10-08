@@ -749,6 +749,7 @@ export class MessageService {
   /**
    * Varian paged: mengambil `limit` pesan + flag hasMore (take limit+1).
    * Backward-compatible: tanpa `before` hasilnya identik dengan getRecentMessages.
+   * Dilengkapi enrich metadata pin/hide bubble chat dan ringkasan pinnedMessage.
    */
   public async getRecentMessagesWithHasMore(
     conversationId: string,
@@ -756,7 +757,17 @@ export class MessageService {
     tenantId: string,
     before?: string | Date,
     focusMessageId?: string
-  ): Promise<{ messages: any[]; hasMore: boolean }> {
+  ): Promise<{ messages: any[]; hasMore: boolean; pinnedMessage?: any }> {
+    const enrichMessage = (m: any) => ({
+      ...m,
+      is_message_pinned: !!(m.is_message_pinned || m.payload_raw?.is_pinned),
+      is_message_hidden: !!(m.is_message_hidden || m.payload_raw?.is_hidden),
+      pinned_by: m.pinned_by || m.payload_raw?.pinned_by || null,
+      pinned_at: m.pinned_at || m.payload_raw?.pinned_at || null,
+      hidden_by: m.hidden_by || m.payload_raw?.hidden_by || null,
+      hidden_at: m.hidden_at || m.payload_raw?.hidden_at || null,
+    });
+
     const beforeDate = before ? new Date(before) : null;
     const validBefore = beforeDate && !isNaN(beforeDate.getTime()) ? beforeDate : null;
     // Focus-window: kembalikan batch yang pasti memuat pesan target (search-to-message direct jump).
@@ -806,7 +817,8 @@ export class MessageService {
             });
             hasMore = olderCount > 0;
           }
-          return { messages, hasMore };
+          const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
+          return { messages: messages.map(enrichMessage), hasMore, pinnedMessage };
         }
       } catch (_) {
         // Fallback memory di bawah bila DB offline
@@ -820,7 +832,8 @@ export class MessageService {
         const half = Math.max(10, Math.floor(limit / 2));
         const start = Math.max(0, targetIdx - half);
         const end = Math.min(memAll.length, targetIdx + half + 1);
-        return { messages: memAll.slice(start, end), hasMore: start > 0 };
+        const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
+        return { messages: memAll.slice(start, end).map(enrichMessage), hasMore: start > 0, pinnedMessage };
       }
       // Target tak ditemukan → lanjut ke path normal di bawah
     }
@@ -835,12 +848,14 @@ export class MessageService {
         take: limit + 1,
       });
       const hasMore = rows.length > limit;
-      return { messages: rows.slice(0, limit).reverse(), hasMore };
+      const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
+      return { messages: rows.slice(0, limit).reverse().map(enrichMessage), hasMore, pinnedMessage };
     } catch (error) {
       const all = memoryMessages
         .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && (!validBefore || new Date(m.created_at) < validBefore))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      return { messages: all.slice(0, limit).reverse(), hasMore: all.length > limit };
+      const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
+      return { messages: all.slice(0, limit).reverse().map(enrichMessage), hasMore: all.length > limit, pinnedMessage };
     }
   }
 
@@ -971,11 +986,13 @@ export class MessageService {
 
   /**
    * Menandai pesan telah ditarik / dihapus untuk semua orang.
-   * Memperbarui konten pesan menjadi teks penanda ditarik dan mem-broadcast update via SSE.
+   * Memperbarui konten pesan menjadi teks penanda ditarik, membersihkan status pin bila sedang disematkan,
+   * dan mem-broadcast update via SSE.
    */
   public async markMessageDeleted(messageId: string, tenantId: string): Promise<boolean> {
     const revokedContent = '🚫 Pesan ini telah ditarik';
     let conversationId: string | null = null;
+    let wasPinned = false;
 
     // ID kanonik untuk SSE (lihat updateMessageContent): frontend match via id internal.
     let resolvedMessageId = messageId;
@@ -998,15 +1015,21 @@ export class MessageService {
           conversationId = msgWa.conversation_id;
           resolvedMessageId = msgWa.id;
           resolvedWaMessageId = msgWa.wa_message_id ?? null;
+          wasPinned = !!(msgWa.payload_raw as any)?.is_pinned;
+          const updatedPayload = {
+            ...(typeof msgWa.payload_raw === 'object' && msgWa.payload_raw ? (msgWa.payload_raw as any) : {}),
+            is_revoked: true,
+            revoked_at: new Date().toISOString(),
+            is_pinned: false,
+          };
+          delete updatedPayload.pinned_by;
+          delete updatedPayload.pinned_at;
+
           await prisma.message.update({
             where: { id: msgWa.id },
             data: {
               content: revokedContent,
-              payload_raw: {
-                ...(typeof msgWa.payload_raw === 'object' && msgWa.payload_raw ? msgWa.payload_raw : {}),
-                is_revoked: true,
-                revoked_at: new Date().toISOString(),
-              },
+              payload_raw: updatedPayload,
             },
           });
         }
@@ -1014,17 +1037,41 @@ export class MessageService {
         conversationId = msg.conversation_id;
         resolvedMessageId = msg.id;
         resolvedWaMessageId = msg.wa_message_id ?? null;
+        wasPinned = !!(msg.payload_raw as any)?.is_pinned;
+        const updatedPayload = {
+          ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? (msg.payload_raw as any) : {}),
+          is_revoked: true,
+          revoked_at: new Date().toISOString(),
+          is_pinned: false,
+        };
+        delete updatedPayload.pinned_by;
+        delete updatedPayload.pinned_at;
+
         await prisma.message.update({
           where: { id: msg.id },
           data: {
             content: revokedContent,
-            payload_raw: {
-              ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}),
-              is_revoked: true,
-              revoked_at: new Date().toISOString(),
-            },
+            payload_raw: updatedPayload,
           },
         });
+      }
+
+      // Bersihkan pointer session_data.pinned_message_id bila merujuk ke pesan ini atau pesan sedang di-pin
+      if (conversationId) {
+        try {
+          const conv = await prisma.conversation.findFirst({
+            where: { id: conversationId, tenant_id: tenantId },
+            select: { id: true, session_data: true },
+          });
+          const session = conv?.session_data && typeof conv.session_data === 'object' ? { ...(conv.session_data as any) } : {};
+          if (session.pinned_message_id === resolvedMessageId || session.pinned_message_id === resolvedWaMessageId || wasPinned) {
+            delete session.pinned_message_id;
+            await prisma.conversation.update({
+              where: { id: conv!.id },
+              data: { session_data: session },
+            });
+          }
+        } catch (_) {}
       }
     } catch (error) {
       console.warn('DB markMessageDeleted error (using memory fallback):', (error as Error).message);
@@ -1033,13 +1080,41 @@ export class MessageService {
         (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
       );
       if (inMem) {
+        if (inMem.payload_raw?.is_pinned) wasPinned = true;
         inMem.content = revokedContent;
-        inMem.payload_raw = { ...inMem.payload_raw, is_revoked: true };
+        inMem.payload_raw = {
+          ...inMem.payload_raw,
+          is_revoked: true,
+          is_pinned: false,
+        };
+        delete inMem.payload_raw.pinned_by;
+        delete inMem.payload_raw.pinned_at;
         conversationId = inMem.conversation_id;
         resolvedMessageId = inMem.id;
         resolvedWaMessageId = inMem.wa_message_id ?? null;
+
+        if (conversationId) {
+          try {
+            const { conversationService } = await import('./conversation.service');
+            const inMemConv = await conversationService.getConversationById(conversationId, tenantId);
+            if (inMemConv && inMemConv.session_data && typeof inMemConv.session_data === 'object') {
+              if (
+                inMemConv.session_data.pinned_message_id === resolvedMessageId ||
+                inMemConv.session_data.pinned_message_id === resolvedWaMessageId ||
+                wasPinned
+              ) {
+                delete inMemConv.session_data.pinned_message_id;
+              }
+            }
+          } catch (_) {}
+        }
       }
     }
+
+    // Invalidate response cache
+    try {
+      await responseCacheService.invalidatePrefix('livechat:');
+    } catch (_) {}
 
     // Broadcast update via LiveChatHub
     try {
@@ -1053,6 +1128,7 @@ export class MessageService {
           waMessageId: resolvedWaMessageId,
           content: revokedContent,
           isRevoked: true,
+          isMessagePinned: false,
         },
       });
     } catch (hubErr: any) {
@@ -1060,6 +1136,565 @@ export class MessageService {
     }
 
     return true;
+  }
+
+  /**
+   * Menyematkan / melepas sematan bubble chat (Single Pin per Percakapan).
+   * Menerapkan transaksi DB atomik, merge aman session_data (anti-data loss booking),
+   * unpin pesan lama secara otomatis, cache invalidation, dan broadcast SSE kanonis.
+   */
+  public async toggleMessagePin(
+    conversationId: string,
+    messageId: string,
+    tenantId: string,
+    pinnedBy: string = 'Admin',
+    isPinned?: boolean
+  ): Promise<{ success: boolean; isPinned: boolean; messageId: string; pinnedMessage?: any; message?: any; error?: string }> {
+    try {
+      // 1. Cari pesan dengan verifikasi kepemilikan tenant & conversation (anti-IDOR)
+      let msg: any = null;
+      try {
+        msg = await prisma.message.findFirst({
+          where: {
+            OR: [
+              { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+              { wa_message_id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+            ],
+          },
+        });
+      } catch (err: any) {
+        console.warn('DB findFirst error in toggleMessagePin (using memory fallback):', err.message);
+      }
+
+      if (!msg) {
+        msg = memoryMessages.find(
+          (m) =>
+            (m.id === messageId || m.wa_message_id === messageId) &&
+            m.conversation_id === conversationId &&
+            m.tenant_id === tenantId
+        );
+      }
+
+      if (!msg) {
+        return { success: false, error: 'Pesan tidak ditemukan dalam percakapan ini.', isPinned: false, messageId };
+      }
+
+      const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || !!(msg.payload_raw as any)?.is_revoked;
+      if (isRevoked) {
+        return { success: false, error: 'Pesan yang telah ditarik tidak dapat disematkan.', isPinned: false, messageId: msg.id };
+      }
+
+      const currentPinned = !!(msg.payload_raw as any)?.is_pinned;
+      const nextPinned = typeof isPinned === 'boolean' ? isPinned : !currentPinned;
+      const nowIso = new Date().toISOString();
+
+      let targetDbId = msg.id;
+      let targetWaId = msg.wa_message_id ?? null;
+
+      // 2. Persistensi: Transaksi DB atau Fallback Memori
+      try {
+        await prisma.$transaction(async (tx) => {
+          const conv = await tx.conversation.findFirst({
+            where: { id: conversationId, tenant_id: tenantId },
+          });
+          if (!conv) {
+            throw new Error('Percakapan tidak ditemukan.');
+          }
+
+          const existingSession =
+            conv.session_data && typeof conv.session_data === 'object'
+              ? { ...(conv.session_data as any) }
+              : {};
+
+          if (nextPinned) {
+            // Single-pin atomik: jika ada pesan lama yang sedang disematkan, unpin pesan lama
+            const prevPinnedId = existingSession.pinned_message_id;
+            if (prevPinnedId && prevPinnedId !== msg.id) {
+              const oldMsg = await tx.message.findFirst({
+                where: {
+                  OR: [
+                    { id: prevPinnedId, conversation_id: conversationId, tenant_id: tenantId },
+                    { wa_message_id: prevPinnedId, conversation_id: conversationId, tenant_id: tenantId },
+                  ],
+                },
+              });
+              if (oldMsg) {
+                const oldPayload =
+                  oldMsg.payload_raw && typeof oldMsg.payload_raw === 'object'
+                    ? { ...(oldMsg.payload_raw as any) }
+                    : {};
+                delete oldPayload.pinned_by;
+                delete oldPayload.pinned_at;
+                oldPayload.is_pinned = false;
+                await tx.message.update({
+                  where: { id: oldMsg.id },
+                  data: { payload_raw: oldPayload },
+                });
+              }
+            }
+
+            // Tulis flag pin pada pesan target
+            const targetPayload =
+              msg.payload_raw && typeof msg.payload_raw === 'object'
+                ? { ...(msg.payload_raw as any) }
+                : {};
+            targetPayload.is_pinned = true;
+            targetPayload.pinned_by = pinnedBy;
+            targetPayload.pinned_at = nowIso;
+
+            await tx.message.update({
+              where: { id: msg.id },
+              data: { payload_raw: targetPayload },
+            });
+
+            // Merge aman session_data (jangan menimpa data booking/cart)
+            existingSession.pinned_message_id = msg.id;
+            await tx.conversation.update({
+              where: { id: conv.id },
+              data: { session_data: existingSession },
+            });
+          } else {
+            // Unpin pesan target
+            const targetPayload =
+              msg.payload_raw && typeof msg.payload_raw === 'object'
+                ? { ...(msg.payload_raw as any) }
+                : {};
+            targetPayload.is_pinned = false;
+            delete targetPayload.pinned_by;
+            delete targetPayload.pinned_at;
+
+            await tx.message.update({
+              where: { id: msg.id },
+              data: { payload_raw: targetPayload },
+            });
+
+            // Hapus pointer jika merujuk ke pesan ini
+            if (
+              existingSession.pinned_message_id === msg.id ||
+              existingSession.pinned_message_id === msg.wa_message_id
+            ) {
+              delete existingSession.pinned_message_id;
+              await tx.conversation.update({
+                where: { id: conv.id },
+                data: { session_data: existingSession },
+              });
+            }
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('DB transaction error in toggleMessagePin (using memory fallback):', dbErr.message);
+        // Fallback in-memory
+        if (nextPinned) {
+          // Unpin pesan lama di memori
+          for (const m of memoryMessages) {
+            if (m.conversation_id === conversationId && m.tenant_id === tenantId && m.id !== msg.id) {
+              if (m.payload_raw) {
+                m.payload_raw.is_pinned = false;
+                delete m.payload_raw.pinned_by;
+                delete m.payload_raw.pinned_at;
+              }
+            }
+          }
+          if (msg.payload_raw) {
+            msg.payload_raw.is_pinned = true;
+            msg.payload_raw.pinned_by = pinnedBy;
+            msg.payload_raw.pinned_at = nowIso;
+          } else {
+            msg.payload_raw = { is_pinned: true, pinned_by: pinnedBy, pinned_at: nowIso };
+          }
+        } else {
+          if (msg.payload_raw) {
+            msg.payload_raw.is_pinned = false;
+            delete msg.payload_raw.pinned_by;
+            delete msg.payload_raw.pinned_at;
+          }
+        }
+
+        // Sinkronkan pointer session_data pada memori
+        try {
+          const { conversationService } = await import('./conversation.service');
+          const inMemConv = await conversationService.getConversationById(conversationId, tenantId);
+          if (inMemConv) {
+            const sess = inMemConv.session_data && typeof inMemConv.session_data === 'object'
+              ? { ...inMemConv.session_data }
+              : {};
+            if (nextPinned) {
+              sess.pinned_message_id = msg.id;
+            } else if (sess.pinned_message_id === msg.id || sess.pinned_message_id === msg.wa_message_id) {
+              delete sess.pinned_message_id;
+            }
+            inMemConv.session_data = sess;
+          }
+        } catch (_) {}
+      }
+
+      // Sinkronkan cache memori lokal bila ada
+      const inMem = memoryMessages.find(
+        (m) => (m.id === msg.id || m.wa_message_id === msg.id) && m.tenant_id === tenantId
+      );
+      if (inMem) {
+        inMem.payload_raw = {
+          ...(inMem.payload_raw || {}),
+          is_pinned: nextPinned,
+          ...(nextPinned ? { pinned_by: pinnedBy, pinned_at: nowIso } : {}),
+        };
+        if (!nextPinned) {
+          delete inMem.payload_raw.pinned_by;
+          delete inMem.payload_raw.pinned_at;
+        }
+        if (nextPinned) {
+          for (const other of memoryMessages) {
+            if (other.conversation_id === conversationId && other.tenant_id === tenantId && other.id !== inMem.id) {
+              if (other.payload_raw) {
+                other.payload_raw.is_pinned = false;
+                delete other.payload_raw.pinned_by;
+                delete other.payload_raw.pinned_at;
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Invalidate response cache livechat
+      try {
+        await responseCacheService.invalidatePrefix('livechat:');
+      } catch (_) {}
+
+      // 4. Siarkan event SSE 'message.updated'
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'message.updated',
+          tenantId,
+          payload: {
+            conversationId,
+            messageId: targetDbId,
+            waMessageId: targetWaId,
+            content: msg.content,
+            sender_name: msg.sender_name,
+            sender_type: msg.sender_type,
+            created_at: msg.created_at,
+            isMessagePinned: nextPinned,
+            pinnedBy: nextPinned ? pinnedBy : undefined,
+            pinnedAt: nextPinned ? nowIso : undefined,
+            payload_raw: { is_pinned: nextPinned },
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn('[HUB] Failed to publish message.updated event for pin:', hubErr.message);
+      }
+
+      const pinnedMessageData = nextPinned
+        ? {
+            id: targetDbId,
+            wa_message_id: targetWaId,
+            content: msg.content,
+            sender_name: msg.sender_name,
+            sender_type: msg.sender_type,
+            created_at: msg.created_at,
+            is_message_pinned: true,
+            pinned_by: pinnedBy,
+            pinned_at: nowIso,
+          }
+        : null;
+
+      const messageObj = {
+        id: targetDbId,
+        wa_message_id: targetWaId,
+        content: msg.content,
+        sender_name: msg.sender_name,
+        sender_type: msg.sender_type,
+        created_at: msg.created_at,
+        is_message_pinned: nextPinned,
+        pinned_by: nextPinned ? pinnedBy : null,
+        pinned_at: nextPinned ? nowIso : null,
+      };
+
+      return {
+        success: true,
+        isPinned: nextPinned,
+        messageId: targetDbId,
+        pinnedMessage: pinnedMessageData,
+        message: messageObj,
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Gagal mengubah status sematan pesan.', isPinned: false, messageId };
+    }
+  }
+
+  /**
+   * Menyembunyikan / menampilkan kembali bubble chat internal (UI only).
+   * Data percakapan, database WhatsApp pasien, CRM, dan audit tetap utuh (zero side effect ke gateway WA).
+   */
+  public async toggleMessageHide(
+    conversationId: string,
+    messageId: string,
+    tenantId: string,
+    hiddenBy: string = 'Admin',
+    isHidden?: boolean
+  ): Promise<{ success: boolean; isHidden: boolean; messageId: string; message?: any; error?: string }> {
+    try {
+      // 1. Cari pesan dengan verifikasi tenant & conversation (anti-IDOR)
+      let msg: any = null;
+      try {
+        msg = await prisma.message.findFirst({
+          where: {
+            OR: [
+              { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+              { wa_message_id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+            ],
+          },
+        });
+      } catch (err: any) {
+        console.warn('DB findFirst error in toggleMessageHide (using memory fallback):', err.message);
+      }
+
+      if (!msg) {
+        msg = memoryMessages.find(
+          (m) =>
+            (m.id === messageId || m.wa_message_id === messageId) &&
+            m.conversation_id === conversationId &&
+            m.tenant_id === tenantId
+        );
+      }
+
+      if (!msg) {
+        return { success: false, error: 'Pesan tidak ditemukan dalam percakapan ini.', isHidden: false, messageId };
+      }
+
+      // Validasi kontrak HIDE: catatan internal & pesan revoked tidak boleh di-hide
+      const senderUpper = (msg.sender_type || '').toUpperCase();
+      if (senderUpper === 'INTERNAL_NOTE') {
+        return { success: false, error: 'Catatan internal tidak dapat disembunyikan.', isHidden: false, messageId: msg.id };
+      }
+      const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || !!(msg.payload_raw as any)?.is_revoked;
+      if (isRevoked) {
+        return { success: false, error: 'Pesan yang telah ditarik tidak dapat disembunyikan.', isHidden: false, messageId: msg.id };
+      }
+
+      const currentHidden = !!(msg.payload_raw as any)?.is_hidden;
+      const nextHidden = typeof isHidden === 'boolean' ? isHidden : !currentHidden;
+      const nowIso = new Date().toISOString();
+
+      let targetDbId = msg.id;
+      let targetWaId = msg.wa_message_id ?? null;
+
+      // 2. Persistensi: DB atau Fallback Memori
+      try {
+        const payload =
+          msg.payload_raw && typeof msg.payload_raw === 'object'
+            ? { ...(msg.payload_raw as any) }
+            : {};
+        payload.is_hidden = nextHidden;
+        if (nextHidden) {
+          payload.hidden_by = hiddenBy;
+          payload.hidden_at = nowIso;
+        } else {
+          delete payload.hidden_by;
+          delete payload.hidden_at;
+        }
+
+        await prisma.message.update({
+          where: { id: msg.id },
+          data: { payload_raw: payload },
+        });
+      } catch (dbErr: any) {
+        console.warn('DB update error in toggleMessageHide (using memory fallback):', dbErr.message);
+        if (msg.payload_raw) {
+          msg.payload_raw.is_hidden = nextHidden;
+          if (nextHidden) {
+            msg.payload_raw.hidden_by = hiddenBy;
+            msg.payload_raw.hidden_at = nowIso;
+          } else {
+            delete msg.payload_raw.hidden_by;
+            delete msg.payload_raw.hidden_at;
+          }
+        } else {
+          msg.payload_raw = nextHidden ? { is_hidden: true, hidden_by: hiddenBy, hidden_at: nowIso } : { is_hidden: false };
+        }
+      }
+
+      // Sinkronkan memory fallback
+      const inMem = memoryMessages.find(
+        (m) => (m.id === msg.id || m.wa_message_id === msg.id) && m.tenant_id === tenantId
+      );
+      if (inMem) {
+        inMem.payload_raw = {
+          ...(inMem.payload_raw || {}),
+          is_hidden: nextHidden,
+          ...(nextHidden ? { hidden_by: hiddenBy, hidden_at: nowIso } : {}),
+        };
+        if (!nextHidden) {
+          delete inMem.payload_raw.hidden_by;
+          delete inMem.payload_raw.hidden_at;
+        }
+      }
+
+      // 3. Invalidate cache
+      try {
+        await responseCacheService.invalidatePrefix('livechat:');
+      } catch (_) {}
+
+      // 4. Siarkan event SSE
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'message.updated',
+          tenantId,
+          payload: {
+            conversationId,
+            messageId: targetDbId,
+            waMessageId: targetWaId,
+            content: msg.content,
+            isMessageHidden: nextHidden,
+            hiddenBy: nextHidden ? hiddenBy : undefined,
+            hiddenAt: nextHidden ? nowIso : undefined,
+            payload_raw: { is_hidden: nextHidden },
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn('[HUB] Failed to publish message.updated event for hide:', hubErr.message);
+      }
+
+      const messageObj = {
+        id: targetDbId,
+        wa_message_id: targetWaId,
+        content: msg.content,
+        sender_name: msg.sender_name,
+        sender_type: msg.sender_type,
+        created_at: msg.created_at,
+        is_message_hidden: nextHidden,
+        hidden_by: nextHidden ? hiddenBy : null,
+        hidden_at: nextHidden ? nowIso : null,
+      };
+
+      return {
+        success: true,
+        isHidden: nextHidden,
+        messageId: targetDbId,
+        message: messageObj,
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Gagal mengubah status sembunyi pesan.', isHidden: false, messageId };
+    }
+  }
+
+  /**
+   * Mengambil pesan yang sedang disematkan dalam percakapan.
+   * Sumber primer: Conversation.session_data.pinned_message_id (O(1)).
+   * Fallback: query message.payload_raw.is_pinned (O(N)).
+   * Membersihkan pointer basi otomatis jika pesan telah ditarik / tidak ditemukan.
+   */
+  public async getPinnedMessage(conversationId: string, tenantId: string): Promise<any | null> {
+    try {
+      let pinnedId: string | null = null;
+      try {
+        const conv = await prisma.conversation.findFirst({
+          where: { id: conversationId, tenant_id: tenantId },
+          select: { session_data: true },
+        });
+        pinnedId = (conv?.session_data as any)?.pinned_message_id || null;
+      } catch (_) {}
+
+      if (!pinnedId) {
+        try {
+          const { conversationService } = await import('./conversation.service');
+          const inMemConv = await conversationService.getConversationById(conversationId, tenantId);
+          pinnedId = (inMemConv?.session_data as any)?.pinned_message_id || null;
+        } catch (_) {}
+      }
+
+      if (pinnedId) {
+        let msg: any = null;
+        try {
+          msg = await prisma.message.findFirst({
+            where: {
+              OR: [
+                { id: pinnedId, conversation_id: conversationId, tenant_id: tenantId },
+                { wa_message_id: pinnedId, conversation_id: conversationId, tenant_id: tenantId },
+              ],
+            },
+          });
+        } catch (_) {}
+
+        if (!msg) {
+          msg = memoryMessages.find(
+            (m) =>
+              (m.id === pinnedId || m.wa_message_id === pinnedId) &&
+              m.conversation_id === conversationId &&
+              m.tenant_id === tenantId
+          );
+        }
+
+        if (msg) {
+          const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || !!(msg.payload_raw as any)?.is_revoked;
+          if (isRevoked) {
+            // Pointer basi: pesan telah ditarik. Bersihkan pointer secara proaktif.
+            try {
+              const conv = await prisma.conversation.findFirst({
+                where: { id: conversationId, tenant_id: tenantId },
+                select: { id: true, session_data: true },
+              });
+              if (conv) {
+                const session = conv.session_data && typeof conv.session_data === 'object' ? { ...(conv.session_data as any) } : {};
+                delete session.pinned_message_id;
+                await prisma.conversation.update({
+                  where: { id: conv.id },
+                  data: { session_data: session },
+                });
+              }
+            } catch (_) {}
+            try {
+              const { conversationService } = await import('./conversation.service');
+              const inMemConv = await conversationService.getConversationById(conversationId, tenantId);
+              if (inMemConv && inMemConv.session_data) {
+                delete (inMemConv.session_data as any).pinned_message_id;
+              }
+            } catch (_) {}
+            return null;
+          }
+
+          return {
+            id: msg.id,
+            wa_message_id: msg.wa_message_id ?? null,
+            content: msg.content,
+            sender_name: msg.sender_name ?? null,
+            sender_type: msg.sender_type ?? null,
+            created_at: msg.created_at,
+            is_message_pinned: true,
+            pinned_by: (msg.payload_raw as any)?.pinned_by ?? null,
+            pinned_at: (msg.payload_raw as any)?.pinned_at ?? null,
+          };
+        }
+      }
+
+      // Fallback: cari di memoryMessages bila DB offline atau belum ada session_data pointer
+      const memPinned = memoryMessages.find(
+        (m) =>
+          m.conversation_id === conversationId &&
+          m.tenant_id === tenantId &&
+          m.payload_raw?.is_pinned &&
+          !m.payload_raw?.is_revoked &&
+          m.content !== '🚫 Pesan ini telah ditarik'
+      );
+      if (memPinned) {
+        return {
+          id: memPinned.id,
+          wa_message_id: memPinned.wa_message_id ?? null,
+          content: memPinned.content,
+          sender_name: memPinned.sender_name ?? null,
+          sender_type: memPinned.sender_type ?? null,
+          created_at: memPinned.created_at,
+          is_message_pinned: true,
+          pinned_by: memPinned.payload_raw?.pinned_by ?? null,
+          pinned_at: memPinned.payload_raw?.pinned_at ?? null,
+        };
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /**

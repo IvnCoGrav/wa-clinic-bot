@@ -35,6 +35,7 @@ let cachedKecamatanNames: string[] | null = null;
 let cachedKecamatanEntries: Array<{ lower: string; orig: string }> | null = null;
 let cachedCanonicalCities: string[] = [];
 let cachedCompoundToponymMap: Map<string, string> = new Map();
+let cachedCrossCityDuplicateSet: Set<string> | null = null;
 
 // For O(1) coordinate lookups
 let coordByKelLower = new Map<string, { lat: number; lng: number; row: GazetteerRow }>();
@@ -173,6 +174,27 @@ function ensureInit(): void {
   sortedByKelLengthDesc = [...data].sort((a, b) => (b.Kelurahan_Desa || '').length - (a.Kelurahan_Desa || '').length);
   sortedByKecLengthDesc = [...data].sort((a, b) => (b.Kecamatan || '').length - (a.Kecamatan || '').length);
 
+  // Himpunan nama duplikat lintas kota (data-driven dari dataset, tanpa hardcode literal).
+  const nameToCities = new Map<string, Set<string>>();
+  for (const row of data) {
+    const city = (row.Kabupaten_Kota || '').trim();
+    if (!city) continue;
+    for (const field of [row.Kelurahan_Desa, row.Kecamatan]) {
+      if (!field) continue;
+      const name = field.trim().toLowerCase();
+      if (name.length < 3 || ['desa', 'kelurahan', 'kecamatan', 'kabupaten', 'kota'].includes(name)) continue;
+      if (!nameToCities.has(name)) nameToCities.set(name, new Set());
+      nameToCities.get(name)!.add(city);
+    }
+  }
+  const crossCityDups = new Set<string>();
+  for (const [name, cities] of nameToCities.entries()) {
+    if (cities.size > 1) {
+      crossCityDups.add(name);
+    }
+  }
+  cachedCrossCityDuplicateSet = crossCityDups;
+
   initialized = true;
 }
 
@@ -195,6 +217,16 @@ export function getGazetteerAreas(): Map<string, string> {
 export function getGazetteerCanonicalCities(): string[] {
   ensureInit();
   return [...cachedCanonicalCities];
+}
+
+/**
+  * Helper data-driven untuk mengecek apakah suatu nama wilayah (kelurahan/kecamatan)
+  * muncul di lebih dari 1 Kabupaten/Kota dalam dataset (mis. Wonocolo, Krembangan, Semampir).
+  */
+export function isCrossCityDuplicate(name: string): boolean {
+  ensureInit();
+  if (!name || !cachedCrossCityDuplicateSet) return false;
+  return cachedCrossCityDuplicateSet.has(name.trim().toLowerCase());
 }
 
 /**
@@ -332,15 +364,17 @@ export function getGazetteerCoordinates(query: string): GazetteerCoordinateHit |
   }
 
   // Fast exact map lookups (O(1)) — city-aware: bila query menyebut kota dan
-  // exact-hit bertentangan kota, biarkan ranked scan menentukannya (jangan return).
+  // exact-hit bertentangan kota, atau nama merupakan duplikat lintas kota tanpa city scope,
+  // biarkan ranked scan menentukannya (jangan short-circuit).
+  const isCrossDup = isCrossCityDuplicate(qNorm);
   const exactKel = coordByKelLower.get(qNorm);
-  if (exactKel) {
+  if (exactKel && (!isCrossDup || cityScope != null)) {
     if (!cityScope || exactKel.row.Kabupaten_Kota === cityScope) {
       return { lat: exactKel.lat, lng: exactKel.lng, kelurahan: exactKel.row.Kelurahan_Desa, kecamatan: exactKel.row.Kecamatan, kota: exactKel.row.Kabupaten_Kota, zipcode: exactKel.row.Kode_Pos, matchedLevel: 'kelurahan' };
     }
   }
   const exactKec = coordByKecLower.get(qNorm);
-  if (exactKec) {
+  if (exactKec && (!isCrossDup || cityScope != null)) {
     if (!cityScope || exactKec.row.Kabupaten_Kota === cityScope) {
       return { lat: exactKec.lat, lng: exactKec.lng, kelurahan: exactKec.row.Kelurahan_Desa, kecamatan: exactKec.row.Kecamatan, kota: exactKec.row.Kabupaten_Kota, zipcode: exactKec.row.Kode_Pos, matchedLevel: 'kecamatan' };
     }
@@ -479,13 +513,28 @@ function rankedGazetteerScan(
   const normalizeParen = (s: string): string => s.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
   const isSpecificDistrict = (c: PhraseCandidate): boolean => !cityBaseTokens.has(normalizeParen(c.phrase));
 
-  const kecMentioned = (c: PhraseCandidate): boolean =>
-    !!c.row.Kecamatan && boundedMatchIndex(qNorm, c.row.Kecamatan.toLowerCase().trim()) != null;
+  const kecMentioned = (c: PhraseCandidate): boolean => {
+    if (!c.row.Kecamatan) return false;
+    const kecLower = c.row.Kecamatan.toLowerCase().trim();
+    if (c.level === 'kecamatan' && c.phrase === kecLower) return true;
+    return boundedMatchIndex(qNorm, kecLower) != null;
+  };
+
+  // Anti-homonim lintas kota (data-driven): jika query tanpa scope kota dan mengandung
+  // nama yang duplikat di >1 kota dengan kandidat tersebar lintas kota,
+  // kandidat dengan kecMentioned diprioritaskan di atas bobot kelurahan > kecamatan.
+  const distinctCities = new Set(scoped.map((c) => c.row.Kabupaten_Kota)).size;
+  const hasCrossCityDup = scoped.some((c) => isCrossCityDuplicate(c.phrase));
+  const isCrossCityAmbiguity = cityScope == null && distinctCities > 1 && hasCrossCityDup;
 
   const best = scoped.reduce<PhraseCandidate | null>((bestSoFar, c) => {
     if (!bestSoFar) return c;
-    const a = [wordCount(c.phrase), c.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(c) ? 1 : 0, kecMentioned(c) ? 1 : 0, c.phrase.length];
-    const b = [wordCount(bestSoFar.phrase), bestSoFar.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(bestSoFar) ? 1 : 0, kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.phrase.length];
+    const a = isCrossCityAmbiguity
+      ? [wordCount(c.phrase), kecMentioned(c) ? 1 : 0, c.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(c) ? 1 : 0, c.phrase.length]
+      : [wordCount(c.phrase), c.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(c) ? 1 : 0, kecMentioned(c) ? 1 : 0, c.phrase.length];
+    const b = isCrossCityAmbiguity
+      ? [wordCount(bestSoFar.phrase), kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(bestSoFar) ? 1 : 0, bestSoFar.phrase.length]
+      : [wordCount(bestSoFar.phrase), bestSoFar.level === 'kelurahan' ? 1 : 0, isSpecificDistrict(bestSoFar) ? 1 : 0, kecMentioned(bestSoFar) ? 1 : 0, bestSoFar.phrase.length];
     for (let i = 0; i < a.length; i++) {
       if (a[i] !== b[i]) return a[i] > b[i] ? c : bestSoFar;
     }
@@ -584,6 +633,7 @@ export function __resetGazetteerCache(): void {
   coordByKelKecKey = new Map();
   sortedByKelLengthDesc = [];
   sortedByKecLengthDesc = [];
+  cachedCrossCityDuplicateSet = null;
   try {
     // Also reset dependent resolver cache so next resolveZipcode re-reads fresh central data
     const resolver = require('./gazetteer-zipcode-resolver') as { __resetGazetteerResolverCache?: () => void };
