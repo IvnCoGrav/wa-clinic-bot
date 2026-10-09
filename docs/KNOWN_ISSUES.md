@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 247. [CAPI/Pipeline/TechDebt] Pipeline Meta Conversions API (CAPI) & Ad Attribution Backlog (2026-10-09, POST-F1-F5 AUDIT)
+
+- **Status:** RECORDED TECH DEBT (Perbaikan Kritis Fase 1-5 Selesai; 5 Item Backlog Dicatat).
+- **Temuan & Tech Debt Terbuka:**
+  1. **Filter Antrean Pembayaran & Staf Internal**: Query antrean CAPI di `reservation-dispatch.route.ts:2367-2375` masih menerima status `completed` tanpa verifikasi status pembayaran lunas di tabel pembayaran, serta belum memfilter `customer.is_internal_staff`.
+  2. **Penggabungan Objek Pelanggan**: Di `capi.service.ts:825`, penggabungan data masih memakai spread `{ ...dbCust, ...customer }` yang berisiko menimpa data primer database dengan objek memori event yang parsial.
+  3. **Manipulasi String Promo & Memory Cache**: Pemotongan prefix `Promo[...]` masih menggunakan manipulasi string teks masuk, dan `memoryAdClicks` masih bersifat lokal in-memory per-proses Node tanpa persistensi Redis/DB terdistribusi antar multi-tenant.
+  4. **Perhitungan LTV Pelanggan**: Layanan `customer.service.ts` masih menghitung nilai LTV dari seluruh reservasi yang tidak berstatus `cancelled`, meskipun status pembayaran belum diverifikasi lunas.
+  5. **Ukuran File Modul Dispatch (God Object)**: File `reservation-dispatch.route.ts` telah mencapai >2700 baris kode dan memerlukan pemecahan modular per domain (CRUD, dispatch, CAPI queue, export) pada refactoring berikutnya.
+- **Rencana Tindak Lanjut:** Item 1-5 dijadwalkan untuk sprint refaktor pipeline pasca-deploy Fase 6.
+
 ## 246. [Geo/Dispatch/Location] Remediasi Fondasional: Resolusi Wilayah Anti-Homonim Lintas Kota & Penyelarasan Status Presisi Lapangan Staf (2026-10-08, VERIFIED LOKAL & LIVE DB RESYNC 90/90)
 
 - **Status:** SOLVED & RECONCILED.

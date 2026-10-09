@@ -111,6 +111,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (clientKey && safeCompare(clientKey, adminKey)) {
       isAuthenticated = true;
       identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
+      (request as any).tenantId = (request.headers['x-tenant-id'] as string) || DEFAULT_TENANT_ID;
     } else {
       // PRIORITAS IDENTITAS: sesi STAF divalidasi LEBIH DULU daripada sesi admin.
       // Rasional (bug ghost push live): perangkat yang menyimpan `admin_session`
@@ -153,6 +154,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           if (validSession) {
             isAuthenticated = true;
             identity = validSession.adminIdentity;
+            (request as any).tenantId = (request.headers['x-tenant-id'] as string) || DEFAULT_TENANT_ID;
           }
         } catch (err) {
           if (err instanceof SessionStoreUnavailable) {

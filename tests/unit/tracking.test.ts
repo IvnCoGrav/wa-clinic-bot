@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateTrackingCode, isBotOrCrawler } from '../../src/routes/tracking.route';
+import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 
 import { safeCompare } from '../../src/utils/auth';
 import { normalizePhoneToE164, sha256Hash, capiService, capiBreaker } from '../../src/services/capi.service';
@@ -225,6 +226,27 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       expect(userData.fbp).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
     });
 
+    it('should sanitize emojis and parentheticals from customer name before PII hashing', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      await capiService.sendCapiEvent({
+        eventName: 'Lead',
+        customer: { id: 'cust_emoji', phone: '08123456788', name: 'Humaira 🌹 (Homecare)' },
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const payload = executeSpy.mock.calls[0][1];
+      const userData = payload.data[0].user_data;
+
+      const builder = new ParamBuilder();
+      const expectedFn = builder.getNormalizedAndHashedPII('humaira', PII_DATA_TYPE.FIRST_NAME);
+      expect(userData.fn[0].split('.')[0]).toBe(expectedFn.split('.')[0]);
+      expect(userData.ln).toBeUndefined();
+    });
+
     it('should include raw (unhashed) ctwa_clid in user_data when AdClick is a CTWA touchpoint', async () => {
       const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
         status: 200,
@@ -312,6 +334,41 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       expect(event.messaging_channel).toBeUndefined();
       expect(event.user_data.ctwa_clid).toBe('RAW_CLID_NO_WABA');
       expect(event.user_data.whatsapp_business_account_id).toBeUndefined();
+    });
+
+    it('should clamp future event_time to current time to avoid Meta 400 rejection', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 jam di masa depan
+      await capiService.sendCapiEvent({
+        eventName: 'Lead',
+        customer: { id: 'cust_future', phone: '6289667285399', name: 'Bunda Future' },
+        eventTime: futureTime,
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const event = executeSpy.mock.calls[0][1].data[0];
+      expect(event.event_time).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+    });
+
+    it('should not include value when value is NaN or infinite', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      await capiService.sendCapiEvent({
+        eventName: 'Purchase',
+        customer: { id: 'cust_nan', phone: '6289667285398', name: 'Bunda NaN' },
+        value: NaN as any,
+        tenantId: DEFAULT_TENANT_ID,
+      });
+
+      const event = executeSpy.mock.calls[0][1].data[0];
+      expect(event.custom_data.value).toBeUndefined();
     });
   });
 

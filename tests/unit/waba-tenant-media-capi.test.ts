@@ -64,12 +64,11 @@ describe('wabaTenantService.resolveTenantByPhoneNumberId', () => {
     });
   });
 
-  it('should fallback to default tenant when phone_number_id unknown', async () => {
+  it('should throw UNKNOWN_PHONE_NUMBER_ID when phone_number_id unknown (fail-closed)', async () => {
     const { prisma } = await import('../../src/db/client');
     vi.mocked(prisma.tenant.findFirst).mockResolvedValueOnce(null);
 
-    const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId('UNKNOWN_PNID');
-    expect(tenantId).toBe('default-tenant');
+    await expect(wabaTenantService.resolveTenantByPhoneNumberId('UNKNOWN_PNID')).rejects.toThrow('UNKNOWN_PHONE_NUMBER_ID');
   });
 
   it('should fallback to default tenant when DB offline', async () => {
@@ -80,9 +79,8 @@ describe('wabaTenantService.resolveTenantByPhoneNumberId', () => {
     expect(tenantId).toBe('default-tenant');
   });
 
-  it('should return default tenant for empty input', async () => {
-    const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(undefined);
-    expect(tenantId).toBe('default-tenant');
+  it('should throw UNKNOWN_PHONE_NUMBER_ID for empty input (fail-closed)', async () => {
+    await expect(wabaTenantService.resolveTenantByPhoneNumberId(undefined)).rejects.toThrow('UNKNOWN_PHONE_NUMBER_ID');
   });
 });
 

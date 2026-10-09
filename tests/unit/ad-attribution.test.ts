@@ -34,7 +34,7 @@ describe('ad-attribution.service Unit Tests', () => {
     expect(result.trackingCode).toBe('a7');
     expect(result.strippedText).toBe('halo min');
     expect(prisma.adClick.updateMany).toHaveBeenCalledWith({
-      where: { trackingCode: 'a7', matchedAt: null },
+      where: { trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null },
       data: { matchedAt: expect.any(Date), customerId: 'cust_1' },
     });
     expect(capiService.sendCapiEvent).toHaveBeenCalledWith(
@@ -68,7 +68,7 @@ describe('ad-attribution.service Unit Tests', () => {
     expect(result.trackingCode).toBe('a7');
     expect(result.strippedText).toBe('halo min');
     expect(prisma.adClick.updateMany).toHaveBeenCalledWith({
-      where: { trackingCode: 'a7', matchedAt: null },
+      where: { trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null },
       data: { matchedAt: expect.any(Date), customerId: 'cust_existing' },
     });
     expect(capiService.sendCapiEvent).toHaveBeenCalledWith(

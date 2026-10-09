@@ -130,7 +130,17 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     let processed = 0;
     for (const msg of normalizedMessages) {
       // Tenant resolution per phone_number_id dari payload (multi-tenant WABA)
-      const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(msg.phoneNumberId);
+      let tenantId: string;
+      try {
+        tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(msg.phoneNumberId);
+      } catch (err: any) {
+        if (err.message === 'UNKNOWN_PHONE_NUMBER_ID') {
+          console.warn(`[WABA TENANT] phone_number_id=${msg.phoneNumberId} tidak terdaftar → webhook DITOLAK (fail-closed).`);
+          return reply.status(200).send({ status: 'UNKNOWN_TENANT_REJECTED' });
+        }
+        throw err;
+      }
+
 
       // --- EVENT REACTION DARI CUSTOMER (WABA Message Reaction) ---
       if (msg.type === 'reaction') {

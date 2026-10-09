@@ -50,12 +50,102 @@ export function normalizePhoneToE164(phone: string): string {
 }
 
 /**
+ * Mask nomor telepon untuk privasi log (GDPR/UU PDP).
+ * Menjaga 4 digit pertama dan 4 digit terakhir, menyamarkan bagian tengah dengan bintang (*).
+ * Jika ada suffix :tenantId, bagian tenantId tetap dipertahankan.
+ */
+export function maskPhone(phone?: string | null): string {
+  if (!phone || !phone.trim()) return '(no-phone)';
+  const trimmed = phone.trim();
+  if (trimmed.includes(':')) {
+    const [p, ...rest] = trimmed.split(':');
+    return `${maskPhone(p)}:${rest.join(':')}`;
+  }
+  if (trimmed.length <= 4) return '****';
+  if (trimmed.length < 8) {
+    return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`;
+  }
+  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`;
+}
+
+/**
+ * Mask nama untuk privasi log.
+ * Menyamarkan huruf tengah setiap kata. Misal: "Siti Aminah" -> "S**i A****h"
+ */
+export function maskName(name?: string | null): string {
+  if (!name || !name.trim()) return '(no-name)';
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((word) => {
+      if (word.length <= 2) return word.slice(0, 1) + '*';
+      return word.slice(0, 1) + '*'.repeat(Math.max(1, word.length - 2)) + word.slice(-1);
+    })
+    .join(' ');
+}
+
+/**
+ * Memvalidasi dan menormalisasi nominal CAPI (Fase 2.1):
+ * - Tolak null/undefined/''/NaN/Infinity/negatif
+ * - Format ribuan Indonesia "90.000" diubah menjadi 90000
+ * - Nilai 0 hanya diizinkan bila allowZero = true
+ */
+export function parseCapiValue(v: unknown, allowZero: boolean = false): number | undefined {
+  if (v === null || v === undefined || v === '') return undefined;
+  let parsed: number;
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (!trimmed) return undefined;
+    if (/^\d{1,3}(\.\d{3})+$/.test(trimmed)) {
+      parsed = Number(trimmed.replace(/\./g, ''));
+    } else {
+      parsed = Number(trimmed);
+    }
+  } else if (typeof v === 'number') {
+    parsed = v;
+  } else {
+    return undefined;
+  }
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.warn(`[CAPI VALUE SKIP] Nilai invalid atau negatif diabaikan: ${v}`);
+    return undefined;
+  }
+
+  if (parsed === 0 && !allowZero) {
+    console.warn(`[CAPI VALUE SKIP] Nilai 0 tanpa flag allowZero diabaikan: ${v}`);
+    return undefined;
+  }
+
+  return parsed;
+}
+
+/**
+ * Format string _fbc sesuai standar resmi Meta Conversions API:
+ * fb.1.<creationTimeInMs>.<fbclid>
+ */
+export function formatMetaFbc(fbclidOrFbc: string | null | undefined, creationTimeMs: number = Date.now()): string | undefined {
+  if (!fbclidOrFbc || !fbclidOrFbc.trim()) return undefined;
+  const trimmed = fbclidOrFbc.trim();
+  if (trimmed.startsWith('fb.1.')) {
+    const parts = trimmed.split('.');
+    if (parts.length >= 4 && Number.isFinite(Number(parts[2]))) {
+      return trimmed;
+    }
+  }
+  const ts = Math.floor(creationTimeMs);
+  const cleanId = trimmed.replace(/^fb\.\d+\.[^.]+\./, '');
+  return `fb.1.${ts}.${cleanId}`;
+}
+
+/**
  * Menghasilkan hash SHA-256 lowercase dari string input
  */
 export function sha256Hash(text: string): string {
   if (!text) return '';
   return crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
 }
+
 
 /**
  * Mencari harga (promoPrice ?? originalPrice) treatment di katalog berdasarkan
@@ -75,6 +165,7 @@ function findCatalogPrice(term: string, catalogServices: any[]): number | undefi
   const q = term.trim().toLowerCase();
   const qNorm = normalizeForMatch(q);
   if (!catalogServices || catalogServices.length === 0) return undefined;
+  const genericStop = new Set(['perawatan','misterius','tidak','dikenal','treatment','homecare','pijat','massage','layanan','tanya','paket','konsultasi']);
   const sorted = [...catalogServices].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
   for (const s of sorted) {
     const raw = (s.name || '').toLowerCase().trim();
@@ -83,11 +174,10 @@ function findCatalogPrice(term: string, catalogServices: any[]): number | undefi
     if (raw && (q === raw || qNorm === norm)) return s.promoPrice ?? s.originalPrice;
     if (norm && norm.length >= 5 && (q.includes(norm) || qNorm.includes(norm))) return s.promoPrice ?? s.originalPrice;
     if (raw && raw.length >= 5 && (q.includes(raw) || raw === q)) return s.promoPrice ?? s.originalPrice;
-    if (desc && q.length >= 4 && desc.includes(q)) return s.promoPrice ?? s.originalPrice;
+    if (desc && q.length >= 8 && desc.includes(q) && !genericStop.has(q)) return s.promoPrice ?? s.originalPrice;
   }
   // Token-overlap fallback untuk alias informal — pilih layanan dengan skor kecocokan token tertinggi
   const qTokens = q.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-  const genericStop = new Set(['perawatan','misterius','tidak','dikenal','treatment','homecare']);
   const filteredTokens = qTokens.filter((t) => !genericStop.has(t));
   if (filteredTokens.length > 0) {
     let best: any = null;
@@ -235,9 +325,10 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
     if (cleanLower.includes('kids') || cleanLower.includes('anak')) {
       return pickCategoryFallback('KIDS');
     }
-    if (cleanLower.includes('baby') || cleanLower.includes('bayi') || cleanLower.includes('pijat') || cleanLower.includes('homecare')) {
+    if (cleanLower.includes('baby') || cleanLower.includes('bayi')) {
       return pickCategoryFallback('BABY');
     }
+
 
     return undefined;
   } catch {
@@ -627,8 +718,15 @@ export function fireCapiEvent(params: {
 
 
 export class CapiService {
-  private contactCooldown = new Map<string, number>();
+  private organicContactCooldown = new Map<string, number>();
+  private paidContactCooldown = new Map<string, { timestamp: number; campaignKey?: string }>();
   private checkoutCooldown = new Map<string, number>();
+
+  public __clearCooldowns(): void {
+    this.organicContactCooldown.clear();
+    this.paidContactCooldown.clear();
+    this.checkoutCooldown.clear();
+  }
 
   /**
    * Mengirimkan server-side event ke Meta Conversions API (CAPI).
@@ -668,30 +766,49 @@ export class CapiService {
       hasBypassLabel(customer) ||
       (await checkCustomerBypass({ customerId: customer?.id, phone: customer?.phone, tenantId }))
     ) {
-      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${customer?.phone}`);
+      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${maskPhone(customer?.phone)}`);
       return { success: false, message: 'Skipped: Sandbox, dummy test, or non-customer bypass contact (skip/admin cs)' };
     }
 
     // 1b. Centralized Event Cooldown Guard (Anti-Burst & Idempotency)
+    //     Fase 1.1: Memisahkan cooldown organik vs berbayar agar chat organik tidak memblokir iklan berbayar
     const phoneKey = (customer?.phone || '').replace(/\D/g, '');
+    const isPaidTouch = Boolean(
+      customData?.isPaidTouch ||
+      adClick?.ctwa_clid ||
+      adClick?.trackingCode ||
+      (customer as any)?.adClick?.trackingCode ||
+      (customer as any)?.adClick?.ctwa_clid
+    );
+    const campaignKey = adClick?.utmCampaign || adClick?.adId || (customer as any)?.adClick?.utmCampaign || '';
     if (phoneKey) {
       const now = Date.now();
       if (eventName === 'Contact') {
-        const lastSent = this.contactCooldown.get(phoneKey);
-        if (lastSent && now - lastSent < 24 * 60 * 60 * 1000) {
-          console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: Centralized 24h cooldown active.`);
-          return { success: false, message: 'Skipped: Contact event 24h cooldown active' };
+        if (isPaidTouch) {
+          const lastPaid = this.paidContactCooldown.get(phoneKey);
+          if (lastPaid && now - lastPaid.timestamp < 24 * 60 * 60 * 1000 && (!campaignKey || lastPaid.campaignKey === campaignKey)) {
+            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: Centralized 24h paid cooldown active.`);
+            return { success: false, message: 'Skipped: Paid Contact event 24h cooldown active' };
+          }
+          this.paidContactCooldown.set(phoneKey, { timestamp: now, campaignKey });
+        } else {
+          const lastOrganic = this.organicContactCooldown.get(phoneKey);
+          if (lastOrganic && now - lastOrganic < 24 * 60 * 60 * 1000) {
+            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: Centralized 24h organic cooldown active.`);
+            return { success: false, message: 'Skipped: Organic Contact event 24h cooldown active' };
+          }
+          this.organicContactCooldown.set(phoneKey, now);
         }
-        this.contactCooldown.set(phoneKey, now);
       } else if (eventName === 'InitiateCheckout') {
         const lastSent = this.checkoutCooldown.get(phoneKey);
         if (lastSent && now - lastSent < 60 * 60 * 1000) {
-          console.log(`[CAPI GUARD] Skipped InitiateCheckout event for ${phoneKey}: Centralized 1h cooldown active.`);
+          console.log(`[CAPI GUARD] Skipped InitiateCheckout event for ${maskPhone(phoneKey)}: Centralized 1h cooldown active.`);
           return { success: false, message: 'Skipped: InitiateCheckout event 1h cooldown active' };
         }
         this.checkoutCooldown.set(phoneKey, now);
       }
     }
+
 
     let effectiveAdClick = adClick || (customer as any)?.adClick;
     let fullCustomer = customer;
@@ -769,8 +886,13 @@ export class CapiService {
       }
 
       if (rawName) {
-        // Strip honorifics seperti "Bunda", "Ibu", "Mama", "Mom", "Mbak", "Mas", "Kak", "Kakak" di awal nama
-        const cleanedName = rawName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
+        // Strip honorifics di awal nama, catatan kurung (mis. "(Homecare)"), dan simbol/emoji non-huruf
+        const cleanedName = rawName
+          .replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.|mrs|mrs\.)\s+/i, '')
+          .replace(/\([^)]*\)/g, '')
+          .replace(/[^\p{L}\s'-]/gu, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         const lowerClean = cleanedName.toLowerCase();
         const isGenericAlone = ['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(lowerClean);
         if (cleanedName && !isGenericAlone && cleanedName.length > 1) {
@@ -779,7 +901,7 @@ export class CapiService {
           if (firstName && firstName.length > 1) {
             hashedFn = builder.getNormalizedAndHashedPII(firstName, PII_DATA_TYPE.FIRST_NAME) || undefined;
             const lastName = parts.length > 1 ? parts.slice(1).join(' ') : undefined;
-            if (lastName) {
+            if (lastName && lastName.length > 1) {
               hashedLn = builder.getNormalizedAndHashedPII(lastName, PII_DATA_TYPE.LAST_NAME) || undefined;
             }
           }
@@ -903,11 +1025,9 @@ export class CapiService {
         effectiveAdClick?.ipAddress || null // remoteAddress
       );
 
-      let fbc = builder.getFbc() || effectiveAdClick?.fbc;
-      if (!fbc && effectiveAdClick?.fbclid) {
-        const ts = effectiveAdClick.createdAt ? new Date(effectiveAdClick.createdAt).getTime() : Date.now();
-        fbc = effectiveAdClick.fbclid.startsWith('fb.1.') ? effectiveAdClick.fbclid : `fb.1.${ts}.${effectiveAdClick.fbclid}`;
-      }
+      const rawFbc = builder.getFbc() || effectiveAdClick?.fbc || effectiveAdClick?.fbclid;
+      const fbcTs = effectiveAdClick?.createdAt ? new Date(effectiveAdClick.createdAt).getTime() : Date.now();
+      const fbc = formatMetaFbc(rawFbc, fbcTs);
       const fbp = builder.getFbp() || effectiveAdClick?.fbp;
       const clientIp = builder.getClientIpAddress() || effectiveAdClick?.ipAddress;
 
@@ -997,9 +1117,9 @@ export class CapiService {
       }
 
       // 4a. TEMPORAL GUARD — Meta CAPI menolak event_time >7 hari (HTTP 400 subcode 2804003).
-      //     Jika eventTime lebih tua dari 6.9 hari (596.160 detik), jepit ke waktu sekarang
+      //     Jika eventTime lebih tua dari 7 hari (604.800 detik), jepit ke waktu sekarang
       //     agar konversi tetap diterima Meta. Simpan waktu asli di custom_data.
-      const META_7DAY_LIMIT_SEC = 596160; // 6.9 hari dalam detik
+      const META_7DAY_LIMIT_SEC = 604800; // 7 hari pas dalam detik
       const nowSec = Math.floor(Date.now() / 1000);
       let effectiveEventTime = eventTime ?? nowSec;
       const originalEventTime = effectiveEventTime;
@@ -1009,6 +1129,12 @@ export class CapiService {
         console.warn(
           `[CAPI TEMPORAL GUARD] event_time ${effectiveEventTime} melampaui batas 7 hari Meta ` +
           `(usia ${Math.floor(eventAgeSec / 86400)} hari). Dijepit ke waktu sekarang agar konversi tetap diterima Meta.`
+        );
+        effectiveEventTime = nowSec;
+      } else if (effectiveEventTime > nowSec + 120) {
+        console.warn(
+          `[CAPI TEMPORAL GUARD] event_time ${effectiveEventTime} berada di masa depan ` +
+          `(selisih ${effectiveEventTime - nowSec} detik). Dijepit ke waktu sekarang agar tidak ditolak Meta.`
         );
         effectiveEventTime = nowSec;
       }
@@ -1042,9 +1168,13 @@ export class CapiService {
       } else if (eventId) {
         eventData.event_id = eventId;
       } else if (eventName === 'Purchase') {
-        eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${reservationId || customer.id}_${effectiveEventTime}`;
+        // OriginalEventTime membuat event_id Purchase stabil (idempotent) saat retry / re-approve
+        eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${reservationId || customer.id}_${originalEventTime}`;
       } else if (effectiveAdClick?.trackingCode) {
         eventData.event_id = effectiveAdClick.trackingCode;
+      } else if (effectiveAdClick?.ctwa_clid) {
+        // ID stabil satu perjalanan untuk CTWA native tanpa promo code
+        eventData.event_id = `ctwa_${effectiveAdClick.ctwa_clid.slice(0, 20)}_${customer.id}`;
       } else {
         eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;
       }
@@ -1053,10 +1183,12 @@ export class CapiService {
         Object.assign(userData, customUserData);
       }
 
-      if (value !== undefined) {
-        eventData.custom_data.value = Number(value);
+      const parsedVal = parseCapiValue(value, customData?.allowZero === true);
+      if (parsedVal !== undefined) {
+        eventData.custom_data.value = parsedVal;
         eventData.custom_data.currency = currency || 'IDR';
       }
+
 
       // Resolusi New vs Repeat HANYA untuk Purchase: standard event name dipertahankan,
       // pembeda disematkan ke custom_data (advertiser dapat membuat Custom Conversion).
@@ -1082,7 +1214,7 @@ export class CapiService {
 
       const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
 
-      console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${customer.phone}`);
+      console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${maskPhone(customer.phone)}`);
 
       // 5. EXECUTE VIA CIRCUIT BREAKER
       const response: any = await capiBreaker.execute(url, payload);
@@ -1090,7 +1222,7 @@ export class CapiService {
       // Fallback breaker aktif (error/400/500) → event TIDAK terkirim. Jangan
       // mencatat SUCCESS palsu: fallback mengembalikan fake status 200.
       if (response?.isFallback) {
-        console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${customer.phone} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
+        console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${maskPhone(customer.phone)} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
         return { success: false, message: 'Circuit breaker fallback: event tidak terkirim' };
       }
 

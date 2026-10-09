@@ -5,8 +5,8 @@ import { FastifyInstance } from 'fastify';
 import { queueService } from '../../src/services/queue.service';
 
 const ADMIN_KEY = 'test_admin_key_capi_attribution';
-const HEADERS = { 'x-api-key': ADMIN_KEY };
 const TENANT = 'default-tenant';
+const HEADERS = { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT };
 const NOW = new Date('2026-10-01T04:00:00.000Z');
 
 function mainRow(over: Record<string, any> = {}) {

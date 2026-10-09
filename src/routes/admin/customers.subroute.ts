@@ -29,7 +29,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/customers/stats', async (request, reply) => {
     try {
-      const stats = await customerService.getCustomerStats(DEFAULT_TENANT_ID);
+      const tenantId = tenantOf(request);
+      const stats = await customerService.getCustomerStats(tenantId);
       return reply
         .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
         .status(200)
@@ -325,12 +326,13 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/customers/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
         let customer: any = null;
         try {
           customer = await prisma.customer.findFirst({
-            where: { id, tenant_id: DEFAULT_TENANT_ID },
+            where: { id, tenant_id: tenantId },
             include: {
               children: true,
               reservations: { orderBy: { created_at: 'desc' }, include: { assigned_staff: { select: { id: true, name: true } } } },
@@ -376,7 +378,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         if (!Array.isArray((customer as any).follow_ups)) {
           try {
             const fus = await prisma.followUp.findMany({
-              where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID },
+              where: { customer_id: customer.id, tenant_id: tenantId },
               orderBy: { scheduled_at: 'asc' },
               include: {
                 reservation: {
@@ -453,7 +455,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             if (r.purchase_value != null && Number.isFinite(Number(r.purchase_value))) {
               val = Number(r.purchase_value);
             } else {
-              val = (await resolveTreatmentValue(r.treatment_detail || r.raw_text)) ?? null;
+              val = (await resolveTreatmentValue(r.treatment_detail || r.raw_text, tenantId)) ?? null;
             }
             if (val) {
               ltv += val;

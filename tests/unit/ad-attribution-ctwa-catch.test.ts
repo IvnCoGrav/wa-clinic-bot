@@ -121,6 +121,9 @@ describe('ad-attribution — CTWA Greeting Catcher (Priority 3)', () => {
   it('idle >24 jam: percakapan lama tetap boleh match fuzzy', async () => {
     seedCatcher();
     vi.spyOn(prisma.adClick, 'findUnique').mockResolvedValue({ id: 'existing', customerId: 'cust5', ctwa_clid: 'OLD', utmCampaign: 'OLD' } as any);
+    const updateSpy = vi
+      .spyOn(prisma.adClick, 'update')
+      .mockResolvedValue({ id: 'existing', utmMedium: 'ctwa_fuzzy' } as any);
     const createSpy = vi
       .spyOn(prisma.adClick, 'create')
       .mockResolvedValue({ id: 'c5', utmMedium: 'ctwa_fuzzy' } as any);
@@ -134,7 +137,7 @@ describe('ad-attribution — CTWA Greeting Catcher (Priority 3)', () => {
     });
 
     expect(res.matched).toBe(true);
-    const arg = createSpy.mock.calls[0][0] as any;
+    const arg = (updateSpy.mock.calls[0]?.[0] || createSpy.mock.calls[0]?.[0]) as any;
     expect(arg.data.utmMedium).toBe('ctwa_fuzzy');
   });
 

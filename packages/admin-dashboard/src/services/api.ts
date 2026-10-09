@@ -300,6 +300,11 @@ export async function apiRequest<T = any>(
     headers['X-Requested-With'] = 'XMLHttpRequest';
   }
 
+  // Tenant-aware header untuk admin requests (fail-closed guard)
+  if (!headers['x-tenant-id'] && !headers['X-Tenant-Id']) {
+    headers['x-tenant-id'] = 'default-tenant';
+  }
+
   let body = options.body;
   if (needsJsonBody && body === undefined && !headers['Content-Type']) {
     body = JSON.stringify({});

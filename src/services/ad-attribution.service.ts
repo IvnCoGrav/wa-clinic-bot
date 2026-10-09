@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { memoryAdClicks } from '../routes/tracking.route';
-import { capiService } from './capi.service';
+import { capiService, maskPhone } from './capi.service';
 import { ctwaTextCatcherService } from './ctwa-text-catcher.service';
 import type { AdReferral } from '../integrations/whatsapp/gateway.types';
 
@@ -91,7 +91,7 @@ export async function matchAdClickAndFireContact(
         matched = true;
         isNewlyLinked = true;
         matchedAdClick = updated;
-        console.log(`[ATTRIBUTION SUCCESS - CTWA REPEAT] Updated ctwa_clid ${ctwaClid} on existing customer ${customer.phone}`);
+        console.log(`[ATTRIBUTION SUCCESS - CTWA REPEAT] Updated ctwa_clid ${ctwaClid} on existing customer ${maskPhone(customer.phone)}`);
       } else {
         const result = await prisma.adClick.create({
           data: {
@@ -109,7 +109,7 @@ export async function matchAdClickAndFireContact(
         matched = true;
         isNewlyLinked = true;
         matchedAdClick = result;
-        console.log(`[ATTRIBUTION SUCCESS - CTWA] Linked ctwa_clid ${ctwaClid} to customer ${customer.phone}`);
+        console.log(`[ATTRIBUTION SUCCESS - CTWA] Linked ctwa_clid ${ctwaClid} to customer ${maskPhone(customer.phone)}`);
       }
     } catch (err: any) {
       console.error('[ATTRIBUTION ERROR - CTWA] Failed to link CTWA AdClick:', err.message);
@@ -122,14 +122,18 @@ export async function matchAdClickAndFireContact(
     if (memoryAdClicks && typeof memoryAdClicks.get === 'function') {
       const memClick = memoryAdClicks.get(trackingCode);
       if (memClick) {
-        if (!memClick.matchedAt) {
-          memClick.matchedAt = new Date();
-          memClick.customerId = customer.id;
-          isNewlyLinked = true;
-          console.log(`[ATTRIBUTION SUCCESS - MEMORY] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
+        if (memClick.tenant_id && memClick.tenant_id !== tenantId) {
+          console.warn(`[ATTRIBUTION ISOLATION] Memory click ${trackingCode} belongs to tenant ${memClick.tenant_id}, not ${tenantId}. Skipped.`);
+        } else {
+          if (!memClick.matchedAt) {
+            memClick.matchedAt = new Date();
+            memClick.customerId = customer.id;
+            isNewlyLinked = true;
+            console.log(`[ATTRIBUTION SUCCESS - MEMORY] Linked trackingCode ${trackingCode} to customer ${maskPhone(customer.phone)}`);
+          }
+          matched = true;
+          matchedAdClick = memClick;
         }
-        matched = true;
-        matchedAdClick = memClick;
       }
     }
 
@@ -138,8 +142,10 @@ export async function matchAdClickAndFireContact(
       const updateResult = await prisma.adClick.updateMany({
         where: {
           trackingCode,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
           matchedAt: null,
         },
+
         data: {
           matchedAt: new Date(),
           customerId: customer.id,
@@ -149,7 +155,7 @@ export async function matchAdClickAndFireContact(
       if (updateResult.count === 1) {
         matched = true;
         isNewlyLinked = true;
-        console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
+        console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${maskPhone(customer.phone)}`);
         matchedAdClick = await prisma.adClick.findFirst({
           where: { trackingCode, customerId: customer.id },
         });
@@ -186,7 +192,7 @@ export async function matchAdClickAndFireContact(
             matched = true;
             isNewlyLinked = true;
             matchedAdClick = updated;
-            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA REPEAT] Updated campaign tag ${trackingCode} on customer ${customer.phone}`);
+            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA REPEAT] Updated campaign tag ${trackingCode} on customer ${maskPhone(customer.phone)}`);
           }
         } else {
           // Customer baru tanpa AdClick -> Buat record AdClick baru
@@ -207,7 +213,7 @@ export async function matchAdClickAndFireContact(
             matched = true;
             isNewlyLinked = true;
             matchedAdClick = directAdClick;
-            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} (code: ${uniqueTrackingCode}) on customer ${customer.phone}`);
+            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} (code: ${uniqueTrackingCode}) on customer ${maskPhone(customer.phone)}`);
           } catch (createErr: any) {
             console.warn('[ATTRIBUTION WARNING - DIRECT CTWA] Failed to create direct AdClick:', createErr.message);
           }
@@ -228,16 +234,38 @@ export async function matchAdClickAndFireContact(
     const isIdle = Number.isFinite(lastTs) ? Date.now() - lastTs > IDLE_THRESHOLD_MS : false;
 
     let hasExistingAttribution = false;
+    let isRepeatCustomer = false;
     if (!isNewCustomerRecord) {
       try {
         const existing = await prisma.adClick.findUnique({ where: { customerId: customer.id } });
-        hasExistingAttribution = Boolean(existing && (existing.ctwa_clid || existing.utmCampaign));
+        if (existing) {
+          hasExistingAttribution = Boolean(existing.ctwa_clid || existing.utmCampaign);
+        }
       } catch {
         // Best-effort: DB offline / unit test mock → anggap belum ber-atribusi.
       }
+
+      try {
+        const resCount = await prisma.reservation.count({
+          where: {
+            customer_id: customer.id,
+            ...(tenantId ? { tenant_id: tenantId } : {}),
+            status: { in: ['confirmed', 'en_route', 'completed'] },
+          },
+        });
+        isRepeatCustomer = resCount > 0;
+      } catch {
+        // Best-effort: DB offline / unit test mock
+      }
     }
 
-    const isEligibleForFuzzyMatch = isNewCustomerRecord || !hasExistingAttribution || isIdle;
+    // Fase 3.2: State-Gated Fuzzy CTWA Greeting Catcher
+    // HANYA aktif jika:
+    // 1. Customer BUKAN repeat customer (belum pernah memiliki reservasi closing/confirmed)
+    // 2. Merupakan customer baru ATAU belum memiliki atribusi sama sekali ATAU percakapan sudah idle >24 jam
+    const isEligibleForFuzzyMatch =
+      !isRepeatCustomer &&
+      (isNewCustomerRecord || !hasExistingAttribution || isIdle);
 
     if (isEligibleForFuzzyMatch) {
       try {
@@ -245,26 +273,52 @@ export async function matchAdClickAndFireContact(
         if (catchResult?.matched) {
           const uniqueTrackingCode = `ctwa_fuzzy_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
           try {
-            const fuzzyClick = await prisma.adClick.create({
-              data: {
-                trackingCode: uniqueTrackingCode,
-                utmCampaign: catchResult.campaignName || 'ctwa_fuzzy',
-                utmSource: catchResult.source || 'meta',
-                utmMedium: 'ctwa_fuzzy',
-                matchedAt: new Date(),
-                customerId: customer.id,
-                tenant_id: tenantId,
-                phone: customer.phone,
-              },
-            });
+            let existingAdClick: any = null;
+            try {
+              existingAdClick = await prisma.adClick.findUnique({
+                where: { customerId: customer.id },
+              });
+            } catch {
+              // Best-effort: bila DB offline atau unit test mock
+            }
+
+            let fuzzyClick: any = null;
+            if (existingAdClick) {
+              fuzzyClick = await prisma.adClick.update({
+                where: { id: existingAdClick.id },
+                data: {
+                  utmCampaign: catchResult.campaignName || 'ctwa_fuzzy',
+                  utmSource: catchResult.source || 'meta',
+                  utmMedium: 'ctwa_fuzzy',
+                  matchedAt: new Date(),
+                  phone: customer.phone,
+                },
+              });
+              console.log(
+                `[ATTRIBUTION SUCCESS - CTWA FUZZY REPEAT] Updated campaign ${catchResult.campaignName} (score ${catchResult.effectiveScore.toFixed(2)}) on customer ${maskPhone(customer.phone)}`
+              );
+            } else {
+              fuzzyClick = await prisma.adClick.create({
+                data: {
+                  trackingCode: uniqueTrackingCode,
+                  utmCampaign: catchResult.campaignName || 'ctwa_fuzzy',
+                  utmSource: catchResult.source || 'meta',
+                  utmMedium: 'ctwa_fuzzy',
+                  matchedAt: new Date(),
+                  customerId: customer.id,
+                  tenant_id: tenantId,
+                  phone: customer.phone,
+                },
+              });
+              console.log(
+                `[ATTRIBUTION SUCCESS - CTWA FUZZY] Linked campaign ${catchResult.campaignName} (score ${catchResult.effectiveScore.toFixed(2)}) to customer ${maskPhone(customer.phone)}`
+              );
+            }
             matched = true;
             isNewlyLinked = true;
             matchedAdClick = fuzzyClick;
             fuzzyScore = catchResult.effectiveScore;
             fuzzyCampaign = catchResult.campaignName || undefined;
-            console.log(
-              `[ATTRIBUTION SUCCESS - CTWA FUZZY] Linked campaign ${fuzzyCampaign} (score ${catchResult.effectiveScore.toFixed(2)}) to customer ${customer.phone}`
-            );
           } catch (createErr: any) {
             // DB offline pada test/fallback: pertahankan hasil match in-memory agar CAPI tetap bisa dinilai.
             matched = true;
@@ -279,7 +333,7 @@ export async function matchAdClickAndFireContact(
             };
             fuzzyScore = catchResult.effectiveScore;
             fuzzyCampaign = catchResult.campaignName || undefined;
-            console.warn('[ATTRIBUTION WARNING - CTWA FUZZY] Failed to create AdClick:', createErr.message);
+            console.warn('[ATTRIBUTION WARNING - CTWA FUZZY] Failed to link AdClick:', createErr.message);
           }
         }
       } catch (fuzzyErr: any) {
@@ -290,6 +344,7 @@ export async function matchAdClickAndFireContact(
 
   // 4. Fire Meta CAPI 'Contact' event DENGAN GUARD MULTI-LAPIS (Idempotensi + 10s Debounce + 24h Cooldown)
   const phoneKey = (customer?.phone || '').replace(/\D/g, '');
+  const isPaidTouch = Boolean(isNewlyLinked);
   const isNewTouchpoint = isNewlyLinked || isNewCustomerRecord;
 
   if (isNewTouchpoint && phoneKey) {
@@ -304,12 +359,14 @@ export async function matchAdClickAndFireContact(
     const isIn24hCooldown = last24h && now - last24h < 24 * 60 * 60 * 1000;
 
     if (isBursting) {
-      console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: concurrent burst lock active (< 10s).`);
+      console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: concurrent burst lock active (< 10s).`);
     } else if (isIn24hCooldown && !isNewlyLinked) {
-      console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: 24h cooldown active.`);
+      console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: 24h cooldown active.`);
     } else {
       contactBurstLock.set(phoneKey, now);
-      contactCooldown24h.set(phoneKey, now);
+      if (isNewlyLinked) {
+        contactCooldown24h.set(phoneKey, now);
+      }
 
       try {
         capiService.sendCapiEvent({
@@ -323,9 +380,11 @@ export async function matchAdClickAndFireContact(
             fuzzyScore: fuzzyScore !== undefined ? Number(fuzzyScore.toFixed(4)) : undefined,
             fuzzyCampaign: fuzzyCampaign || undefined,
             source: matched ? 'WHATSAPP_INBOUND_CTA' : 'WHATSAPP_INBOUND_ORGANIC',
+            isPaidTouch,
           },
         }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));
       } catch (capiErr: any) {
+
         console.error('[CAPI CONTACT ERROR]', capiErr.message);
       }
     }

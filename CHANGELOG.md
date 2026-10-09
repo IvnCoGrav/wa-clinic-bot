@@ -4,6 +4,47 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-09 - Fixed: Fondasi & Kunci Pipeline Meta Conversions API (CAPI) & Ad Attribution (Fase 1 - Fase 5)
+
+- **Akar Masalah (multi-layer audit):**
+  - **Kebocoran & Kegagalan Tenant (Fail-Closed)**: Caller webhook/admin yang kehilangan konteks tenant berisiko mengakses atau memproses event cross-tenant.
+  - **Cooldown Blocking Organik vs Berbayar**: Cooldown 24 jam global menyamakan touchpoint organik dan klik iklan berbayar, sehingga chat tanya jawab organik dapat memblokir pencatatan atribusi iklan berbayar (undercounting ROAS).
+  - **Idempotensi & Double-Send Event**: Pengiriman ulang event `Purchase` menghasilkan `event_id` acak baru berbasis timestamp saat kirim yang menyebabkan Meta mencatat konversi ganda, dan endpoint moderasi tidak menolak approve ulang tanpa alasan jelas.
+  - **Halusinasi Nilai & Default 90k**: Jika layanan tidak cocok dengan katalog, sistem menebak harga default "Baby (90.000)", mendistorsi nilai transaksi riil di Meta Ads Manager.
+  - **Pembajakan Fuzzy Catcher**: Fuzzy greeting catcher memproses repeat customer dan customer dengan native CTWA aktif, sehingga berisiko menimpa atribusi asli.
+  - **Format `_fbc` Non-Kanonis**: Parameter `_fbc` Meta tidak selalu mengikuti format standar resmi Meta `fb.1.<creationTimeInMs>.<fbclid>`.
+  - **Follow-up NO_PURCHASE Yatim**: Saat transaksi disetujui, antrean follow-up `NO_PURCHASE` tetap berjalan dan mengirimkan pesan "belum jadi order" kepada customer yang sudah closing.
+  - **Kebocoran PII di Log Mesin**: Nomor telepon dan nama customer tercetak dalam format plaintext di stdout/stderr log server.
+- **Fixed & Hardened (Fondasional 5 Fase):**
+  - **Fase 1 (Kunci Kritis Pipeline CAPI)**:
+    - Di `route-helpers.ts` & `admin.route.ts`, `tenantOf(request)` melakukan trim dan validasi string ketat, melempar 401 fail-closed jika tenant tidak terdefinisi.
+    - Isolasi WABA webhook fail-closed: nomor yang tidak terdaftar ditolak dengan 400 `UNKNOWN_PHONE_NUMBER_ID`.
+    - Memory cache `memoryAdClicks` memvalidasi `tenant_id` untuk mencegah kontaminasi cross-tenant.
+    - Memisahkan cooldown kontak di `capi.service.ts`: `organicContactCooldown` dan `paidContactCooldown`. Interaksi organik tidak lagi menghalangi pengiriman event `Contact` dari klik iklan berbayar.
+    - Idempotent `event_id`: format deterministik `org_pur_${resId}_${originalEventTime}` untuk Purchase dan `ctwa_${clid.slice(0,20)}_${customerId}` untuk CTWA.
+    - Guard double-send pada `approve-purchase`: reservasi dengan `purchase_event_sent_at` ditolak 400 kecuali mengirim `force: true` dan `reason` minimal 5 karakter yang diaudit ke action log.
+  - **Fase 2 (Integritas Nilai CAPI & Validasi Temporal)**:
+    - Helper `parseCapiValue`: membersihkan ribuan Indonesia ("90.000" -> 90000), menolak NaN/negatif, dan menolak 0 kecuali flag `allowZero: true`.
+    - Menghapus tebakan default "Baby 90.000": bila nominal tidak terdeteksi dari katalog tenant, moderasi menolak dengan 400 dan mewajibkan input manual.
+    - Memperluas stop words katalog (`genericStop`) untuk mencegah pencocokan acak token generik.
+    - Resolusi katalog tenant-aware di `customers.subroute.ts` dan `customer.service.ts`.
+    - Memblokir event transaksi > 7 hari dengan 400 kecuali disertai konfirmasi `allowAged: true`. Event masa depan (> now + 120s) dijepit ke waktu sekarang.
+  - **Fase 3 (Atribusi Jujur & Format Kanonis Meta)**:
+    - State-Gated Fuzzy Catcher: evaluasi salam fuzzy hanya diproses untuk lead baru tanpa histori AdClick/reservasi/CTWA resmi. Pelanggan repeat atau native CTWA dilindungi dari pembajakan atribusi.
+    - Pemisahan `try/catch` pada DB query di service atribusi menjamin ketahanan fallback offline.
+    - Helper `formatMetaFbc`: memastikan format kanonis Meta `fb.1.<ts>.<fbclid>`.
+  - **Fase 4 (Hilir Moderasi, Antrean, dan Follow-up)**:
+    - Menambahkan filter status pada `GET /api/admin/capi-queue?status=pending|approved|ignored_outlier|all`.
+    - Endpoint baru `POST /api/admin/reservation/:id/unreject-purchase` untuk memulihkan status outlier kembali ke `pending`.
+    - Pembatalan otomatis (auto-cancel) antrean follow-up `NO_PURCHASE` berstatus `PENDING`/`QUEUED` saat reservasi di-approve untuk CAPI.
+  - **Fase 5 (Privasi Log & Antarmuka Dashboard)**:
+    - Helper `maskPhone` (e.g. `6281****6789`) dan `maskName` (e.g. `S**i A****h`) menyamarkan PII di seluruh log stdout/stderr CAPI dan ad attribution.
+    - Antarmuka `MetaCapiQueue.tsx` diperbarui dengan tombol "Kembalikan" (`RotateCcw`) untuk item outlier, integrasi modal `useUiFeedback`, serta transmisi otomatis parameter `reason` dan `allowAged`.
+- **Test & Verifikasi:**
+  - 8 test file unit baru (60 tests) dibuat khusus mencakup setiap fase, seluruhnya lulus 100% green di Vitest offline suite.
+  - `npm run build` di root backend dan `packages/admin-dashboard` lulus 100% tanpa error.
+  - `npx tsc --noEmit` lulus dengan 0 kesalahan tipe.
+
 #### 2026-10-08 - Fixed: Resolusi Wilayah Anti-Homonim Lintas Kota & Penyelarasan Status Presisi Lapangan Staf (Fase 0 - Fase 5)
 
 - **Akar Masalah (multi-layer audit):**

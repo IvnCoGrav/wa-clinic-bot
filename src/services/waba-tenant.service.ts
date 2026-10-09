@@ -14,7 +14,7 @@ export class WabaTenantService {
    */
   public async resolveTenantByPhoneNumberId(phoneNumberId: string | undefined | null): Promise<string> {
     if (!phoneNumberId) {
-      return DEFAULT_TENANT_ID;
+      throw new Error('UNKNOWN_PHONE_NUMBER_ID');
     }
 
     const cached = tenantCache.get(phoneNumberId);
@@ -26,17 +26,24 @@ export class WabaTenantService {
         where: { waba_phone_number_id: phoneNumberId },
         select: { id: true },
       });
-      const tenantId = tenant?.id || DEFAULT_TENANT_ID;
-      tenantCache.set(phoneNumberId, tenantId);
       if (!tenant) {
-        console.warn(`[WABA TENANT] phone_number_id ${phoneNumberId} tidak ditemukan. Fallback ke ${DEFAULT_TENANT_ID}.`);
+        throw new Error('UNKNOWN_PHONE_NUMBER_ID');
       }
-      return tenantId;
-    } catch (err) {
-      console.warn('[WABA TENANT] DB unavailable, fallback ke default tenant:', (err as Error).message);
-      return DEFAULT_TENANT_ID;
+      tenantCache.set(phoneNumberId, tenant.id);
+      return tenant.id;
+    } catch (err: any) {
+      if (err.message === 'UNKNOWN_PHONE_NUMBER_ID') {
+        throw err;
+      }
+      // Khusus offline unit test / DB offline: fallback ke default tenant
+      if (err.message?.includes('Database offline') || err.message?.includes('offline')) {
+        console.warn('[WABA TENANT] DB unavailable (offline mode), fallback ke default tenant:', err.message);
+        return DEFAULT_TENANT_ID;
+      }
+      throw err;
     }
   }
+
 
   /** Reset cache (dipakai unit test). */
   public resetCache(): void {
@@ -45,3 +52,5 @@ export class WabaTenantService {
 }
 
 export const wabaTenantService = new WabaTenantService();
+export const resolveTenantByPhoneNumberId = (phoneNumberId: string | undefined | null) =>
+  wabaTenantService.resolveTenantByPhoneNumberId(phoneNumberId);

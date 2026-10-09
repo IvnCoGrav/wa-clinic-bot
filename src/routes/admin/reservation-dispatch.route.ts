@@ -35,24 +35,8 @@ import { wibDayRangeToUtc } from '../../utils/time-wib';
 import { responseCacheService } from '../../services/response-cache.service';
 
 /**
- * Harga fallback — fondasional: WAJIB dari katalog DB/seed, bukan angka magic 60000.
- * Throw bila katalog kosong/harga hilang agar fail-fast + alert, bukan diam-diam 60rb.
- */
-function getCatalogFallbackPrice(): number {
-  const all = treatmentCatalogService.getAllServices();
-  if (all.length === 0) throw new Error('CATALOG_EMPTY: tidak ada layanan di katalog — seed DB atau isi via admin API');
-  const baby = all.find((s: any) => s.category === 'BABY' && s.isActive !== false);
-  if (baby) {
-    const p = (baby as any).promoPrice ?? (baby as any).originalPrice;
-    if (p != null) return Number(p);
-  }
-  const any = all.find((s: any) => s.isActive !== false);
-  if (any) {
-    const p2 = (any as any).promoPrice ?? (any as any).originalPrice;
-    if (p2 != null) return Number(p2);
-  }
-  throw new Error('CATALOG_PRICE_MISSING: katalog ada tapi tanpa harga promo/original');
-}
+// Fase 2.1: getCatalogFallbackPrice dihapus — dilarang menebak harga layanan Baby secara sembarangan
+// Nilai transaksi wajib terdeteksi dari data reservasi atau diisi eksplisit oleh admin via customPayload.
 
 /**
  * Hasil operasi tandai-selesai. `reason` hanya terisi saat gagal, dan dipetakan
@@ -2014,12 +1998,30 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (!existing) {
           throw new Error('Reservation not found');
         }
+
         // Izinkan re-send jika force=true, bahkan jika status sudah approved
         const forceResend = (request.body as any)?.force === true;
+        const forceReason = typeof (request.body as any)?.reason === 'string' ? (request.body as any).reason.trim() : '';
+        const allowAged = (request.body as any)?.allowAged === true;
+
+        if (existing.purchase_event_sent_at != null && !forceResend) {
+          return reply.status(400).send({
+            success: false,
+            error: `Event Purchase untuk reservasi ini sudah pernah terkirim ke Meta CAPI pada ${existing.purchase_event_sent_at.toISOString()}. Gunakan force: true beserta alasan (reason) untuk mengirim ulang.`,
+          });
+        }
+
         if (existing.purchase_review_status !== 'pending' && !forceResend) {
           return reply.status(400).send({
             success: false,
-            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}). Gunakan force: true untuk mengirim ulang.`,
+            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}). Gunakan force: true beserta alasan (reason) untuk mengirim ulang.`,
+          });
+        }
+
+        if (forceResend && forceReason.length < 5) {
+          return reply.status(400).send({
+            success: false,
+            error: `Pengiriman ulang (force: true) wajib menyertakan alasan minimal 5 karakter pada field reason.`,
           });
         }
 
@@ -2027,14 +2029,20 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         const occurredAt = new Date(occurredDate);
         const daysOld = Math.floor((Date.now() - occurredAt.getTime()) / (24 * 60 * 60 * 1000));
         let warning: string | undefined;
+        if (daysOld > 7 && !allowAged) {
+          return reply.status(400).send({
+            success: false,
+            error: `Event terjadi ${daysOld} hari lalu (>7 hari). Meta CAPI menolak event berumur lebih dari 7 hari karena akan merusak akurasi atribusi. Gunakan allowAged: true jika Anda yakin ingin tetap mengirimkannya.`,
+          });
+        }
         if (daysOld > 7) {
-          warning = `Event terjadi ${daysOld} hari lalu (>7 hari). Meta CAPI kemungkinan akan mengabaikan event ini.`;
+          warning = `Event terjadi ${daysOld} hari lalu (>7 hari) dan dikirim dengan allowAged: true. Meta CAPI kemungkinan akan mengabaikan event ini.`;
         }
 
-        const body = (request.body || {}) as { customPayload?: any };
+        const body = (request.body || {}) as { customPayload?: any; reason?: string; force?: boolean; allowAged?: boolean };
         const customPayload = body.customPayload;
 
-      const formats = await getTenantCapiFormats(tenantId);
+        const formats = await getTenantCapiFormats(tenantId);
         
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
         if (!autoResolvedVal) {
@@ -2050,13 +2058,21 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             autoResolvedVal =
               extractValueByFormat(raw, formats.formatValue) ??
               extractRupiahAmount(raw, formats.formatValue) ??
-              (await resolveTreatmentValue(existing.treatment_detail || raw));
+              (await resolveTreatmentValue(existing.treatment_detail || raw, tenantId));
           }
         }
 
-        const resolvedVal = (customPayload && typeof customPayload.custom_data?.value === 'number')
+        const customValueProvided = typeof customPayload?.custom_data?.value === 'number';
+        const resolvedVal = customValueProvided
           ? customPayload.custom_data.value
-          : (autoResolvedVal ?? getCatalogFallbackPrice());
+          : autoResolvedVal;
+
+        if (resolvedVal == null || resolvedVal <= 0) {
+          return reply.status(400).send({
+            success: false,
+            error: `Nilai transaksi tidak terdeteksi dari data reservasi (nilai: ${resolvedVal ?? 'null'}). Harap tentukan nilai transaksi secara manual melalui form edit atau customPayload.custom_data.value.`,
+          });
+        }
 
         const eventName = (customPayload && typeof customPayload.event_name === 'string')
           ? customPayload.event_name
@@ -2132,12 +2148,37 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
         await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
 
+        // Fase 4.3: Otomatis batalkan follow-up NO_PURCHASE yang masih PENDING/QUEUED
+        // karena customer sudah terbukti purchase / closing
+        try {
+          await prisma.followUp.updateMany({
+            where: {
+              customer_id: existing.customer_id,
+              tenant_id: existing.tenant_id || tenantId,
+              status: { in: ['PENDING', 'QUEUED'] },
+              type: 'NO_PURCHASE',
+            },
+            data: {
+              status: 'CANCELLED',
+              cancel_reason: 'Transaksi pembelian disetujui (Purchase Approved)',
+            },
+          });
+        } catch (fuErr: any) {
+          console.warn('[CAPI APPROVE] Failed to cancel pending follow-ups:', fuErr.message);
+        }
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'APPROVE_PURCHASE_EVENT',
           targetId: id,
-          payload: { purchase_occurred_at: occurredAt.toISOString(), value: resolvedVal },
+          payload: {
+            purchase_occurred_at: occurredAt.toISOString(),
+            value: resolvedVal,
+            force: forceResend || undefined,
+            forceReason: forceResend ? forceReason : undefined,
+            allowAged: allowAged || undefined,
+          },
           ipAddress: request.ip,
         });
 
@@ -2244,6 +2285,71 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/reservation/:id/unreject-purchase
+   * Fase 4.2: Memulihkan transaksi yang salah ditandai outlier kembali ke status pending
+   * agar dapat dievaluasi atau disetujui ulang oleh admin.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/unreject-purchase',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = tenantOf(request);
+      const { id } = request.params;
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: tenantId },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+        if (existing.purchase_review_status !== 'ignored_outlier') {
+          return reply.status(400).send({
+            success: false,
+            error: `Reservasi bukan berstatus outlier (status saat ini: ${existing.purchase_review_status}).`,
+          });
+        }
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: { purchase_review_status: 'pending' },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UNREJECT_PURCHASE_OUTLIER',
+          targetId: id,
+          payload: { previous_status: 'ignored_outlier', new_status: 'pending' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          data: reservation,
+          message: 'Status moderasi berhasil dikembalikan ke pending',
+        });
+      } catch (error) {
+        console.error('[CAPI UNREJECT ERROR]', (error as Error).message);
+        if (process.env.NODE_ENV !== 'production') {
+          const mock = memoryReservations.get(id);
+          if (mock && mock.tenant_id === tenantId) {
+            mock.purchase_review_status = 'pending';
+            mock.updated_at = new Date();
+            memoryReservations.set(id, mock);
+            return reply.status(200).send({
+              success: true,
+              data: mock,
+              message: 'Status moderasi berhasil dikembalikan ke pending (fallback memory)',
+            });
+          }
+        }
+        const msg = (error as Error).message || 'Reservation not found';
+        const status = msg.includes('not found') || msg.includes('Not found') ? 404 : 500;
+        return reply.status(status).send({ success: false, error: msg });
+      }
+    }
+  );
+
+  /**
     * GET /api/admin/capi-queue
    * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi & lead yang masuk ke sistem
    * beserta data atribusi (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
@@ -2253,19 +2359,33 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
     reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
     reply.header('Pragma', 'no-cache');
     try {
+      const query = (request.query || {}) as { status?: string; limit?: string };
+      const statusFilter = query.status?.trim();
+      const limitParam = parseInt(query.limit || '200', 10);
+      const limit = Math.min(500, Math.max(10, Number.isFinite(limitParam) ? limitParam : 200));
+
+      const whereClause: any = {
+        tenant_id: tenantId,
+        status: { not: 'cancelled' },
+        customer: { is_sandbox_test: false },
+        OR: [
+          { purchase_occurred_at: { not: null } },
+          { status: 'completed' },
+        ],
+      };
+
+      if (statusFilter && statusFilter !== 'all') {
+        if (statusFilter === 'pending') {
+          whereClause.purchase_review_status = { in: ['pending'] };
+        } else {
+          whereClause.purchase_review_status = statusFilter;
+        }
+      }
+
       const rows = await prisma.reservation.findMany({
-        where: {
-          tenant_id: tenantId,
-          status: { not: 'cancelled' },
-          // Isolasi sandbox (lapis query): customer QA test tidak masuk antrean CAPI.
-          customer: { is_sandbox_test: false },
-          OR: [
-            { purchase_occurred_at: { not: null } },
-            { status: 'completed' },
-          ],
-        },
+        where: whereClause,
         orderBy: { created_at: 'desc' },
-        take: 100,
+        take: limit,
         include: {
           customer: {
             include: { adClick: true, children: true },
@@ -2302,7 +2422,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       const treatmentPriceCache = new Map<string, number | undefined>();
       const getCachedTreatmentValue = async (detail: string): Promise<number | undefined> => {
         if (treatmentPriceCache.has(detail)) return treatmentPriceCache.get(detail);
-        const v = await resolveTreatmentValue(detail);
+        const v = await resolveTreatmentValue(detail, tenantId);
         treatmentPriceCache.set(detail, v);
         return v;
       };

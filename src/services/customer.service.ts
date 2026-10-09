@@ -1809,7 +1809,7 @@ export class CustomerService {
       const treatmentMemoMap = new Map<string, number>();
       if (uniqueTexts.size > 0) {
         const textArr = Array.from(uniqueTexts);
-        const results = await Promise.all(textArr.map(async (t) => [t, (await resolveTreatmentValue(t)) ?? 0] as const));
+        const results = await Promise.all(textArr.map(async (t) => [t, (await resolveTreatmentValue(t, tenantId)) ?? 0] as const));
         for (const [t, v] of results) treatmentMemoMap.set(t, v);
       }
       const resolveMs = Date.now() - tResolve;
@@ -2002,7 +2002,7 @@ export class CustomerService {
           if (r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) {
             const text = r.treatment_detail || r.raw_text;
             if (text) {
-              const resolved = (await resolveTreatmentValue(text)) ?? 0;
+              const resolved = (await resolveTreatmentValue(text, tenantId)) ?? 0;
               ltv += resolved;
             }
           }

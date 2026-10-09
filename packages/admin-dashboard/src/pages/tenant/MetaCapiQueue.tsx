@@ -557,7 +557,13 @@ export const MetaCapiQueue: React.FC = () => {
       setLoading(true);
       // Kirim force: true untuk re-sends agar server mengizinkan pengiriman ulang
       const body: any = effectivePayload ? { customPayload: effectivePayload } : {};
-      if (isResend) body.force = true;
+      if (isResend) {
+        body.force = true;
+        body.reason = 'Kirim ulang manual oleh admin via dashboard';
+      }
+      if (item.metaDropRisk || (item.daysOld && item.daysOld > 7)) {
+        body.allowAged = true;
+      }
       const res = await apiRequest(`/api/admin/reservation/${item.id}/approve-purchase`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -622,6 +628,35 @@ export const MetaCapiQueue: React.FC = () => {
       await loadQueue();
     } catch (err: any) {
       toast(`Error rejecting event: ${err.message}`, 'error');
+      setLoading(false);
+    }
+  };
+
+  const handleUnreject = async (item: QueueItem) => {
+    const eventName = item.eventType || 'Purchase';
+    const ok = await confirm({
+      title: 'Kembalikan ke Antrean Pending?',
+      message:
+        `Event ${eventName} untuk ${item.customer.name} akan dikembalikan ke status 'pending' agar dapat di-review atau di-approve kembali. Lanjutkan?`,
+      confirmText: 'Ya, Kembalikan',
+    });
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      const res = await apiRequest(`/api/admin/reservation/${item.id}/unreject-purchase`, { method: 'POST' });
+      if (res && res.success === false) {
+        toast(res.error || `Gagal mengembalikan ${eventName} event.`, 'error');
+        setLoading(false);
+        return;
+      }
+      toast(`Event ${eventName} berhasil dikembalikan ke antrean review (pending).`, 'success');
+      setItems((prev) =>
+        prev.map((p) => (p.id === item.id ? { ...p, purchase_review_status: 'pending' } : p))
+      );
+      await loadQueue();
+    } catch (err: any) {
+      toast(`Error unrejecting event: ${err.message}`, 'error');
       setLoading(false);
     }
   };
@@ -928,6 +963,21 @@ export const MetaCapiQueue: React.FC = () => {
                               <span>Kirim Ulang</span>
                             </button>
                           </div>
+                        ) : item.purchase_review_status === 'ignored_outlier' ? (
+                          <div className="flex flex-col gap-1.5 items-end">
+                            <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
+                              <Zap size={12} className="text-rose-500" />
+                              <span>Diabaikan</span>
+                            </span>
+                            <button
+                              onClick={() => handleUnreject(item)}
+                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-emerald-200 dark:hover:border-emerald-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
+                              title="Kembalikan event ke antrean Review (Pending)"
+                            >
+                              <RotateCcw size={10} />
+                              <span>Kembalikan</span>
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
                             <Zap size={12} className="text-rose-500" />
@@ -1069,6 +1119,15 @@ export const MetaCapiQueue: React.FC = () => {
                         >
                           <RefreshCw size={11} />
                           <span>Kirim Ulang</span>
+                        </button>
+                      ) : item.purchase_review_status === 'ignored_outlier' ? (
+                        <button
+                          onClick={() => handleUnreject(item)}
+                          className="px-2.5 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+                          title="Kembalikan event ke antrean Review (Pending)"
+                        >
+                          <RotateCcw size={11} />
+                          <span>Kembalikan</span>
                         </button>
                       ) : null}
                     </div>
