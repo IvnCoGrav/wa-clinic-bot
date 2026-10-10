@@ -3,6 +3,14 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 248. [Tests/Unit/PreExisting] Pre-existing Test Drift di purchase-detection dan reservation-security-and-integrity (2026-10-10)
+
+- **Status:** RECORDED TECH DEBT (Pre-existing, terbukti independen dari perubahan frontend portal staf).
+- **Temuan:**
+  1. `tests/unit/purchase-detection.test.ts:334`: Penegasan alias "Terapi Bapil" mengembalikan `undefined` pada `resolveTreatmentValue` saat pengujian kamus alias statis.
+  2. `tests/unit/reservation-security-and-integrity.test.ts:297`: Penegasan spy route `release-hold` mengharapkan `tenant_id: 'default-tenant'` sedangkan payload `attacker-tenant` mengirimkan klausa `where` dengan `tenant_id: 'attacker-tenant'`.
+- **Rencana Tindak Lanjut:** Penyelarasan mock/fixture backend akan dikerjakan pada siklus backend maintenance berikutnya.
+
 ## 247. [CAPI/Pipeline/TechDebt] Pipeline Meta Conversions API (CAPI) & Ad Attribution Backlog (2026-10-09, POST-F1-F5 AUDIT)
 
 - **Status:** RECORDED TECH DEBT (Perbaikan Kritis Fase 1-5 Selesai; 5 Item Backlog Dicatat).

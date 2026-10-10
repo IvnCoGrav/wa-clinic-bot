@@ -508,6 +508,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [gpsAttemptInfo, setGpsAttemptInfo] = useState<string | null>(null);
   const [submittingLoc, setSubmittingLoc] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [zoomImageKind, setZoomImageKind] = useState<'proof' | 'house' | null>(null);
+  const [otwModal, setOtwModal] = useState<{
+    task: StaffTask;
+    navUrl: string | null;
+    draft: string;
+  } | null>(null);
+  const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
   const locHouseCameraInputRef = useRef<HTMLInputElement>(null);
   const locHouseGalleryInputRef = useRef<HTMLInputElement>(null);
   const [locProcessingPhoto, setLocProcessingPhoto] = useState(false);
@@ -548,6 +555,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const markConversationReadRef = useRef<((conversationId: string) => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const chatGalleryInputRef = useRef<HTMLInputElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
   const currentStaffRef = useRef(currentStaff);
   const isSupervisorRef = useRef(isSupervisor);
@@ -1007,12 +1015,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         if (res.success && Array.isArray(res.data)) {
           // Masking HP hanya untuk terapis; supervisor (CS/SPV) melihat apa adanya.
           const shouldMask = !isSupervisorRef.current;
-          const sanitized = res.data.slice(-30).map((m: any) => ({
-            ...m,
-            content: shouldMask && typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
-            sender_name: shouldMask && typeof m.sender_name === 'string' ? maskPhoneInTextClient(m.sender_name) : m.sender_name,
-            senderName: shouldMask && typeof m.senderName === 'string' ? maskPhoneInTextClient(m.senderName) : m.senderName,
-          }));
+          const sanitized = res.data
+            .slice(-30)
+            .filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && !!m.created_at && !isNaN(new Date(m.created_at).getTime()))
+            .map((m: any) => ({
+              ...m,
+              content: shouldMask && typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
+              sender_name: shouldMask && typeof m.sender_name === 'string' ? maskPhoneInTextClient(m.sender_name) : m.sender_name,
+              senderName: shouldMask && typeof m.senderName === 'string' ? maskPhoneInTextClient(m.senderName) : m.senderName,
+            }));
           setMessages((prev) => {
             // Rekonsiliasi idempoten: jangan ganti array bila tanda-tandanya identik
             // (mencegah re-render/kedip + reload gambar tiap poll).
@@ -1189,6 +1200,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Popstate event listener for hardware / browser back button
   useEffect(() => {
     const handlePopState = () => {
+      if (qrisZoomModal) {
+        setQrisZoomModal(false);
+        return;
+      }
+      if (otwModal) {
+        setOtwModal(null);
+        return;
+      }
+      if (preflightTask) {
+        setPreflightTask(null);
+        return;
+      }
       if (showMenuDrawer) {
         setShowMenuDrawer(false);
         return;
@@ -1211,6 +1234,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       }
       if (zoomImageUrl) {
         setZoomImageUrl(null);
+        setZoomImageKind(null);
         return;
       }
       if (mobileView === 'chat') {
@@ -1220,7 +1244,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [mobileView, detailModalTask, paymentModalTask, updateLocationModalTask, showStaffProfileModal, showMenuDrawer, zoomImageUrl]);
+  }, [mobileView, detailModalTask, paymentModalTask, updateLocationModalTask, showStaffProfileModal, showMenuDrawer, zoomImageUrl, qrisZoomModal, otwModal, preflightTask]);
 
   // Fetch Staff Telegram Pairing Status on Profile Modal Open
   useEffect(() => {
@@ -1604,6 +1628,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       setErrorMessage(err?.message || 'Gagal memproses foto.');
     } finally {
       if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+      if (chatGalleryInputRef.current) chatGalleryInputRef.current.value = '';
+      e.target.value = '';
     }
   };
 
@@ -1803,11 +1829,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // ganda ke customer. Pesan hanya di-POST dari modal konfirmasi; `sendingOtwId`
   // mengunci semua tombol selama proses. GMaps dibuka dari gesture tombol modal
   // (sinkron) agar tidak diblokir pop-up-blocker.
-  const [otwModal, setOtwModal] = useState<{
-    task: StaffTask;
-    navUrl: string | null;
-    draft: string;
-  } | null>(null);
   const [otwDepart, setOtwDepart] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [otwGpsChecking, setOtwGpsChecking] = useState(false);
 
@@ -1824,6 +1845,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
    * - Belum OTW tapi di luar jendela / offline / tanpa chat → mode intip / info.
    */
   const handleUnifiedDepart = async (task: StaffTask, navUrl: string | null) => {
+    const TERMINAL = ['completed', 'cancelled', 'rejected'];
+    if (TERMINAL.includes(String(task.status || '').toLowerCase())) {
+      openMapsIfAny(navUrl);
+      return;
+    }
     if (task.otwSentAt) {
       openMapsIfAny(navUrl);
       return;
@@ -1882,6 +1908,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     if (!m) return;
     const { task, navUrl, draft } = m;
 
+    const TERMINAL = ['completed', 'cancelled', 'rejected'];
+    if (TERMINAL.includes(String(task.status || '').toLowerCase())) {
+      setOtwModal(null);
+      openMapsIfAny(navUrl);
+      return;
+    }
+
     // Guard ganda (anti double-tap / lintas tombol saat in-flight).
     if (task.otwSentAt) {
       setOtwModal(null);
@@ -1912,6 +1945,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       try {
         const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
           method: 'POST',
+          keepalive: true,
           body: JSON.stringify({
             customText: draft,
             markEnRoute: true,
@@ -1928,8 +1962,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           setTasks((prev) => prev.map(updateOtw));
           setUpcomingTasks((prev) => prev.map(updateOtw));
           setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
-          if (selectedTaskRef.current?.conversationId === task.conversationId && res.data) {
-            setMessages((prev) => [...prev, res.data].slice(-10));
+          if (task.conversationId && selectedTaskRef.current?.conversationId === task.conversationId) {
+            void fetchMessages(task.conversationId, { silent: true });
           }
           toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'} 🛵`, 'success');
         } else {
@@ -1946,7 +1980,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Gerbang pengaman pra-navigasi (insiden Bidan tersasar 2026-09-30): titik
   // NON-presisi (manual_staff/estimated_area/belum diketahui) DILARANG membuka
   // Google Maps langsung — munculkan modal konfirmasi + opsi minta shareloc.
-  const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
 
   /**
    * Titik masuk tunggal tombol navigasi/OTW. Bila titik estimasi → gerbang
@@ -1976,21 +2009,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     );
   };
 
-  const handleRequestShareloc = async () => {
+  const handleRequestShareloc = () => {
     const task = preflightTask;
     if (!task) return;
     const draft = buildSharelocDraft(task);
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(draft);
-        toast('Draf permintaan shareloc disalin. Tempel ke chat Bunda & tekan Kirim.', 'success');
-      } else {
-        toast('Clipboard tidak tersedia. Salin manual dari modal.', 'info');
-      }
-    } catch {
-      toast('Gagal menyalin draf shareloc.', 'error');
-    }
+    setReplyText(draft);
     setPreflightTask(null);
+    handleOpenChat(task);
+    requestAnimationFrame(() => replyTextareaRef.current?.focus());
   };
 
   // Quick Action: Record Arrival and send "Sudah Sampai" notification
@@ -2425,7 +2451,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
-            timeout: 6000,
+            timeout: 3500,
             maximumAge: 0,
           });
         });
@@ -2442,23 +2468,23 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           setLocCoords(currentCoord);
         }
 
-        // Jika sudah mencapai target presisi tinggi (≤ 10 meter), langsung stop & selesai!
-        if (acc <= 10) {
+        // Jika sudah mencapai target presisi tinggi (≤ 10 meter, atau ≤ 15 meter pada attempt 1-2), langsung stop & selesai!
+        if (acc <= 10 || (attempt <= 2 && acc <= 15)) {
           setGpsAttemptInfo(null);
           setLocGettingGps(false);
           toast(`🟢 GPS presisi tinggi terkunci (±${acc}m pada percobaan ke-${attempt})!`, 'success');
           return;
         }
 
-        // Jika belum ≤ 10m dan masih ada sisa percobaan, tunggu sebentar lalu coba lagi
+        // Jika belum memenuhi target dan masih ada sisa percobaan, tunggu sebentar lalu coba lagi
         if (attempt < MAX_ATTEMPTS) {
           setGpsAttemptInfo(`Akurasi ±${acc}m. Mencari sinyal lebih kuat (${attempt + 1}/${MAX_ATTEMPTS})...`);
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, 300));
         }
       } catch (err: any) {
         console.warn(`[GPS] Percobaan ${attempt} gagal:`, err?.message);
         if (attempt < MAX_ATTEMPTS) {
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, 300));
         }
       }
     }
@@ -2983,7 +3009,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari pasien atau alamat..."
+                    placeholder="Cari pasien, alamat, atau layanan..."
                     className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] text-[16px] sm:text-xs text-[#111b21] placeholder-[#667781] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
                   />
                   {searchQuery && (
@@ -3145,7 +3171,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <h3 className="font-semibold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                 {task.customerName || 'Customer'}
                               </h3>
-                              <p className="text-[11px] text-[#008069] font-medium truncate">
+                              <p className="text-[11px] text-[#008069] font-medium line-clamp-2">
                                 {task.treatmentDetail || 'Treatment Spa'}
                               </p>
                             </div>
@@ -3246,6 +3272,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setZoomImageKind('house');
                                   setZoomImageUrl(task.address.housePhotoUrl || null);
                                 }}
                                 className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
@@ -3373,6 +3400,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (task.pricing.proofUrl) {
+                                  setZoomImageKind('proof');
                                   setZoomImageUrl(task.pricing.proofUrl);
                                 } else {
                                   setPaymentModalTask(task);
@@ -3406,7 +3434,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 title="Klik untuk mencatat pembayaran transaksi ini"
                               >
                                 <CreditCard size={12} />
-                                <span>TAGIH TUNAI: {formatRupiah(task.pricing.totalFee)}</span>
+                                <span>Catat Bayar ({formatRupiah(task.pricing.totalFee)})</span>
                               </button>
                             </div>
                           )}
@@ -3749,6 +3777,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       </div>
                     ) : (
                       messages.map((msg, idx) => {
+                        if (!msg || typeof msg !== 'object') return null;
                         const isInbound = msg.direction === 'INBOUND';
                         const isBot = !isInbound && msg.sender_type === 'BOT';
                         const isStaff = !isInbound && msg.sender_type === 'STAFF';
@@ -3760,19 +3789,32 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         const isRevoked = !!(msg.is_revoked || (msg as any).payload_raw?.is_revoked || (msg as any).isRevoked);
                         const isLocationMsg = !!locData;
                         const isAudioMsg = !!audioUrl && !isRevoked;
-                        const isValidDate = msg.created_at && !isNaN(new Date(msg.created_at).getTime());
-                        const timeStr = isValidDate ? formatWibTime(msg.created_at) : formatWibTime(new Date().toISOString());
+                        const isValidDate = !!msg.created_at && !isNaN(new Date(msg.created_at).getTime());
+                        const timeStr = isValidDate ? formatWibTime(msg.created_at) : '';
                         const fullDateTitle = (() => {
                           try {
-                            return new Date(msg.created_at).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) + ' WIB';
-                          } catch { return msg.created_at; }
+                            return isValidDate
+                              ? new Date(msg.created_at).toLocaleDateString('id-ID', {
+                                  weekday: 'long',
+                                  day: 'numeric',
+                                  month: 'long',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  timeZone: 'Asia/Jakarta',
+                                }) + ' WIB'
+                              : '';
+                          } catch {
+                            return '';
+                          }
                         })();
-                        const isDifferentDay = isDifferentDayWib(msg.created_at, idx > 0 ? messages[idx - 1]?.created_at : null);
-                        const separatorLabel = formatChatDateSeparatorWib(msg.created_at);
+                        const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                        const isDifferentDay = isValidDate && isDifferentDayWib(msg.created_at, prevMsg?.created_at || null);
+                        const separatorLabel = isValidDate ? formatChatDateSeparatorWib(msg.created_at) : '';
 
                         return (
-                          <React.Fragment key={msg.id}>
-                            {isDifferentDay && (
+                          <React.Fragment key={msg.id || `msg-${idx}`}>
+                            {isDifferentDay && separatorLabel && (
                               <div className="flex justify-center my-1.5">
                                 <div className="bg-white text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef]">
                                   {separatorLabel}
@@ -4095,10 +4137,27 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         onClick={() => chatFileInputRef.current?.click()}
                         disabled={sending}
                         className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
-                        title="Buka Kamera & Ambil Foto"
+                        title="Buka Kamera & Ambil Foto Langsung"
                         aria-label="Kamera"
                       >
                         <Camera size={18} />
+                      </button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        ref={chatGalleryInputRef}
+                        onChange={handlePickImage}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => chatGalleryInputRef.current?.click()}
+                        disabled={sending}
+                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
+                        title="Pilih Foto / Screenshot dari Galeri"
+                        aria-label="Galeri"
+                      >
+                        <ImageIcon size={18} />
                       </button>
                       <div className="flex-1 relative">
                         <textarea
@@ -4157,7 +4216,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari jadwal pasien mendatang (nama, kelurahan, treatment)..."
+                placeholder="Cari pasien, alamat, atau layanan..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
@@ -4227,7 +4286,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
-                                <p className="text-xs text-[#008069] font-medium truncate">
+                                <p className="text-xs text-[#008069] font-medium line-clamp-2">
                                   {item.treatmentDetail || 'Treatment Layanan Spa'}
                                 </p>
                               </div>
@@ -4270,6 +4329,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <div
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setZoomImageKind('house');
                                     setZoomImageUrl(item.address.housePhotoUrl || null);
                                   }}
                                   className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
@@ -4354,16 +4414,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 Chat aktif di hari-H
                               </span>
                               {item.navigationUrl || item.mapsUrl ? (
-                                <a
-                                  href={item.navigationUrl || item.mapsUrl || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  type="button"
+                                  onClick={(e) => requestNavigation(item, e)}
                                   className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg transition-all active:scale-95 shadow-xs"
                                   title="Buka Peta Google Maps"
                                 >
                                   <Navigation size={12} />
                                   <span>Peta Rute</span>
-                                </a>
+                                </button>
                               ) : (
                                 <span className="text-[11px] text-[#667781]">Tanpa Peta</span>
                               )}
@@ -4406,7 +4465,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari riwayat treatment yang sudah selesai (nama, kelurahan, treatment)..."
+                placeholder="Cari pasien, alamat, atau layanan..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
@@ -4476,7 +4535,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
-                                <p className="text-xs text-[#008069] font-medium truncate">
+                                <p className="text-xs text-[#008069] font-medium line-clamp-2">
                                   {item.treatmentDetail || 'Treatment Layanan Spa'}
                                 </p>
                               </div>
@@ -4510,6 +4569,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <div
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setZoomImageKind('house');
                                     setZoomImageUrl(item.address.housePhotoUrl || null);
                                   }}
                                   className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
@@ -4559,8 +4619,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
 
                           {/* Status Pembayaran & Detail Button */}
-                          <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5]">
-                            <div className="flex items-center gap-1 text-xs text-[#667781]">
+                          <div className="pt-2 border-t border-[#f0f2f5] space-y-1.5">
+                            <div className="flex items-center gap-1 text-xs text-[#667781] flex-wrap">
                               <CreditCard size={13} className="text-emerald-600" />
                               <strong className="text-emerald-700 font-bold ml-0.5">
                                 {formatRupiah(item.pricing.totalFee)}
@@ -4570,83 +4630,120 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-1.5">
-                              {item.conversationId && isChatWindowOpen(item) && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenChat(item);
-                                  }}
-                                  className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef]"
-                                  title="Buka Riwayat Chat WhatsApp"
-                                >
-                                  <MessageSquare size={12} className="text-[#008069]" />
-                                  <span>Chat</span>
-                                </button>
-                              )}
-
-                              {/* Aksi pembayaran pasca-selesai (tanpa gate jendela chat):
-                                  tagih di tempat → catat bayar; lunas → lihat/ganti bukti. */}
-                              {item.pricing.paymentStatus === 'TAGIH_DI_TEMPAT' ? (
-                                <>
+                            {item.pricing.paymentStatus === 'TAGIH_DI_TEMPAT' ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                {item.conversationId && isChatWindowOpen(item) && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setPaymentModalTask(item);
+                                      handleOpenChat(item);
                                     }}
-                                    className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all active:scale-95 border border-amber-300"
-                                    title="Catat pembayaran / unggah bukti transfer pasien"
+                                    className="min-h-[44px] py-2 px-2 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef] flex items-center justify-center gap-1"
+                                    title="Buka Riwayat Chat WhatsApp"
                                   >
-                                    <CreditCard size={12} className="text-amber-700" />
-                                    <span>Catat Bayar</span>
+                                    <MessageSquare size={13} className="text-[#008069]" />
+                                    <span>Chat</span>
                                   </button>
-                                  {item.conversationId && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleSendPaymentInfo(item);
-                                      }}
-                                      disabled={isSendingPaymentInfo}
-                                      className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 disabled:opacity-50"
-                                      title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
-                                    >
-                                      <MessageSquare size={12} />
-                                      <span>Kirim Tagihan</span>
-                                    </button>
-                                  )}
-                                </>
-                              ) : (
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenQrisFast(item, e)}
+                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center justify-center gap-1"
+                                  title="Tampilkan barcode QRIS langsung ke pasien"
+                                >
+                                  <QrCode size={13} />
+                                  <span>QRIS</span>
+                                </button>
+
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (item.pricing.proofUrl) {
-                                      setZoomImageUrl(item.pricing.proofUrl);
-                                    } else {
-                                      setPaymentModalTask(item);
-                                    }
+                                    setPaymentModalTask(item);
                                   }}
-                                  className="flex items-center space-x-1 py-1.5 px-2.5 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
-                                  title={item.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
+                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all active:scale-95 border border-amber-300 flex items-center justify-center gap-1"
+                                  title="Catat pembayaran / unggah bukti transfer pasien"
                                 >
-                                  <CheckCircle2 size={12} />
-                                  <span>{item.pricing.proofUrl ? 'Bukti Bayar' : 'Unggah Bukti'}</span>
+                                  <CreditCard size={13} className="text-amber-700" />
+                                  <span>Catat Bayar</span>
                                 </button>
-                              )}
 
-                              <button
-                                type="button"
-                                onClick={() => setDetailModalTask(item)}
-                                className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
-                                title="Lihat Detail Lengkap Pasien"
-                              >
-                                <Info size={12} />
-                                <span>Detail</span>
-                              </button>
-                            </div>
+                                {item.conversationId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSendPaymentInfo(item);
+                                    }}
+                                    disabled={isSendingPaymentInfo}
+                                    className="min-h-[44px] py-2 px-2 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 disabled:opacity-50 flex items-center justify-center gap-1"
+                                    title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
+                                  >
+                                    <MessageSquare size={13} />
+                                    <span>Kirim Tagihan</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => setDetailModalTask(item)}
+                                  className="min-h-[44px] py-2 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center justify-center gap-1"
+                                  title="Lihat Detail Lengkap Pasien"
+                                >
+                                  <Info size={13} />
+                                  <span>Detail</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                  {item.conversationId && isChatWindowOpen(item) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenChat(item);
+                                      }}
+                                      className="min-h-[44px] py-2 px-3 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef] flex items-center gap-1"
+                                      title="Buka Riwayat Chat WhatsApp"
+                                    >
+                                      <MessageSquare size={13} className="text-[#008069]" />
+                                      <span>Chat</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (item.pricing.proofUrl) {
+                                        setZoomImageKind('proof');
+                                        setZoomImageUrl(item.pricing.proofUrl);
+                                      } else {
+                                        setPaymentModalTask(item);
+                                      }
+                                    }}
+                                    className="min-h-[44px] py-2 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center gap-1"
+                                    title={item.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
+                                  >
+                                    <CheckCircle2 size={13} />
+                                    <span>{item.pricing.proofUrl ? 'Bukti Bayar' : 'Unggah Bukti'}</span>
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setDetailModalTask(item)}
+                                  className="min-h-[44px] py-2 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center gap-1"
+                                  title="Lihat Detail Lengkap Pasien"
+                                >
+                                  <Info size={13} />
+                                  <span>Detail</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -5143,6 +5240,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
+                      setZoomImageKind('house');
                       setZoomImageUrl(detailModalTask.address.housePhotoUrl || null);
                     }}
                     className="h-14 w-14 rounded-xl bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
@@ -5282,6 +5380,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     type="button"
                     onClick={() => {
                       if (detailModalTask.pricing.proofUrl) {
+                        setZoomImageKind('proof');
                         setZoomImageUrl(detailModalTask.pricing.proofUrl);
                       } else {
                         setPaymentModalTask(detailModalTask);
@@ -5695,7 +5794,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     />
                     <button
                       type="button"
-                      onClick={() => setZoomImageUrl(updateLocationModalTask.address.housePhotoUrl!)}
+                      onClick={() => {
+                        setZoomImageKind('house');
+                        setZoomImageUrl(updateLocationModalTask.address.housePhotoUrl!);
+                      }}
                       className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-semibold hover:bg-black/90 transition shadow-md flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
                     >
                       <Maximize2 size={13} />
@@ -6023,16 +6125,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL ZOOM LIGHTBOX FOTO RUMAH */}
+      {/* MODAL ZOOM LIGHTBOX FOTO RUMAH / BUKTI BAYAR */}
       {/* ========================================================================= */}
       {zoomImageUrl && (
         <div
           className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setZoomImageUrl(null)}
+          onClick={() => {
+            setZoomImageUrl(null);
+            setZoomImageKind(null);
+          }}
         >
           <div className="relative max-w-2xl w-full max-h-[90vh] flex flex-col items-center">
             <button
-              onClick={() => setZoomImageUrl(null)}
+              onClick={() => {
+                setZoomImageUrl(null);
+                setZoomImageKind(null);
+              }}
               className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white transition"
               title="Tutup Foto"
             >
@@ -6040,12 +6148,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </button>
             <img
               src={zoomImageUrl}
-              alt="Foto Depan Rumah"
+              alt={zoomImageKind === 'proof' ? 'Bukti Pembayaran' : 'Foto Depan Rumah'}
               className="max-h-[80vh] w-auto rounded-2xl shadow-2xl object-contain border border-white/20"
               onClick={(e) => e.stopPropagation()}
             />
             <div className="mt-2 text-xs text-white/80 font-medium">
-              🏠 Foto Panduan Tampak Depan Rumah Pasien
+              {zoomImageKind === 'proof' ? '🧾 Bukti Pembayaran Pasien' : '🏠 Foto Panduan Tampak Depan Rumah Pasien'}
             </div>
           </div>
         </div>

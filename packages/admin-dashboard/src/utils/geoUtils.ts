@@ -132,7 +132,8 @@ export function isWithinDepartWindow(
 /**
  * Format jam WIB "HH:MM" dari sebuah instant + offset menit (untuk estimasi tiba).
  */
-export function formatWibClock(date: Date, addMinutes = 0): string {
+export function formatWibClock(date?: Date | null, addMinutes = 0): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) return '00:00';
   const wib = new Date(date.getTime() + addMinutes * 60000 + 7 * 3600000);
   return `${String(wib.getUTCHours()).padStart(2, '0')}:${String(wib.getUTCMinutes()).padStart(2, '0')}`;
 }

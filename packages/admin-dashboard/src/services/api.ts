@@ -255,7 +255,7 @@ export async function refreshApi<T = any>(
 
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean; retryCount?: number } = {}
+  options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean; retryCount?: number; keepalive?: boolean } = {}
 ): Promise<T> {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
@@ -286,7 +286,7 @@ export async function apiRequest<T = any>(
     }
   }
 
-  const timeoutMs = options.timeoutMs ?? (isGet ? 10000 : 15000); // 10s default timeout untuk GET interaktif (agar cepat retry di mobile)
+  const timeoutMs = options.timeoutMs ?? (options.keepalive ? 60000 : (isGet ? 10000 : 15000)); // 60s untuk background keepalive (OTW)
   const needsJsonBody = ['POST', 'PUT', 'PATCH'].includes(method);
   
   const headers: Record<string, string> = {
@@ -332,6 +332,7 @@ export async function apiRequest<T = any>(
 
   const mergedOptions: RequestInit = {
     ...options,
+    keepalive: options.keepalive,
     cache: (options as any).cache ?? 'no-store',
     credentials: 'include',
     headers,

@@ -263,7 +263,9 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
               {messages.map((msg, idx) => {
                 const isInbound = (msg.direction || '').toUpperCase() === 'INBOUND';
                 const prev = idx > 0 ? messages[idx - 1] : null;
-                const showSeparator = !prev || isDifferentDayWib(msg.created_at, prev.created_at || null);
+                const msgHasDate = !!msg?.created_at && !isNaN(new Date(msg.created_at).getTime());
+                const prevHasDate = !!prev?.created_at && !isNaN(new Date(prev.created_at).getTime());
+                const showSeparator = msgHasDate && (!prevHasDate || isDifferentDayWib(msg.created_at, prev?.created_at || null));
                 const media = extractMedia(msg);
                 return (
                   <React.Fragment key={msg.id || `msg-${idx}`}>
@@ -279,7 +281,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
                         <span className="font-bold text-[#111b21]">{resolveSender(msg)}</span>
                         <span>•</span>
                         <Clock size={9} />
-                        <span>{formatWibTime(msg.created_at)}</span>
+                        <span>{msgHasDate ? formatWibTime(msg.created_at) : '-'}</span>
                       </div>
                       <div
                         className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
