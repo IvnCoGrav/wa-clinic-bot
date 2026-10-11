@@ -637,10 +637,18 @@ export class StaffReservationService {
               },
             }
           : cust;
-        const lat = effectiveAddr?.lat ?? cust?.lat;
-        const lng = effectiveAddr?.lng ?? cust?.lng;
+        // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
+        // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
+        // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
+        // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
+        const addrHasCoords =
+          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
+        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
+        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
+        const locationSource = addrHasCoords
+          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
+          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -954,10 +962,18 @@ export class StaffReservationService {
               },
             }
           : cust;
-        const lat = effectiveAddr?.lat ?? cust?.lat;
-        const lng = effectiveAddr?.lng ?? cust?.lng;
+        // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
+        // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
+        // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
+        // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
+        const addrHasCoords =
+          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
+        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
+        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
+        const locationSource = addrHasCoords
+          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
+          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -1147,10 +1163,18 @@ export class StaffReservationService {
               },
             }
           : cust;
-        const lat = effectiveAddr?.lat ?? cust?.lat;
-        const lng = effectiveAddr?.lng ?? cust?.lng;
+        // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
+        // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
+        // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
+        // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
+        const addrHasCoords =
+          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
+        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
+        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = resolveLocationSource(effectiveAddr) || resolveLocationSource(cust);
+        const locationSource = addrHasCoords
+          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
+          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const distanceKm = effectiveAddr?.distance_km ?? cust?.distance_km ?? null;
