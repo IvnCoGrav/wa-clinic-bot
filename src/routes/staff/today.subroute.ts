@@ -181,10 +181,15 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       }
 
       const allMessages = await liveChatService.getConversationMessages(id, tenantId);
-      // Masking nomor HP HANYA untuk staf terapis; CS/SPV/supervisor melihat nomor apa adanya.
-      const messages = Array.isArray(allMessages)
-        ? allMessages.slice(-30).map((m) => sanitizeMessageForStaff(m, { maskPhone: !isSupervisor }))
+      const isStaffHiddenMsg = (m: any): boolean =>
+        !!((m as any)?.is_message_hidden || (m as any)?.payload_raw?.is_hidden);
+      // Pesan yang di-hide admin: terapis biasa tidak menerimanya sama sekali.
+      // Supervisor (CS/SPV) tetap menerima dengan flag, seperti dashboard admin.
+      const visibleMessages = Array.isArray(allMessages)
+        ? (isSupervisor ? allMessages : allMessages.filter((m) => !isStaffHiddenMsg(m)))
         : [];
+      // Masking nomor HP HANYA untuk staf terapis; CS/SPV/supervisor melihat nomor apa adanya.
+      const messages = visibleMessages.slice(-30).map((m) => sanitizeMessageForStaff(m, { maskPhone: !isSupervisor }));
       return reply.status(200).send({ success: true, data: messages });
     }
   );
@@ -1262,6 +1267,21 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         let payloadToSend: any = event.payload || {};
         if (event.type === 'message.created' || event.type === 'message.updated') {
           payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type, { maskPhone: !isSupervisor });
+        }
+        // Pesan hidden: jangan bocorkan isi ke terapis biasa — samarkan content,
+        // pertahankan flag agar frontend bisa menyembunyikannya dari state.
+        const sseHidden =
+          (event.type === 'message.created' || event.type === 'message.updated') &&
+          ((event.payload as any)?.isMessageHidden === true ||
+            (event.payload as any)?.payload_raw?.is_hidden === true);
+        if (sseHidden && !isSupervisor) {
+          payloadToSend = { ...payloadToSend, content: '', isMessageHidden: true };
+          if (payloadToSend.payload_raw && typeof payloadToSend.payload_raw === 'object') {
+            payloadToSend.payload_raw = { ...payloadToSend.payload_raw, is_hidden: true };
+          }
+          if (payloadToSend.payloadRaw && typeof payloadToSend.payloadRaw === 'object') {
+            payloadToSend.payloadRaw = { ...payloadToSend.payloadRaw, is_hidden: true };
+          }
         }
         // Fase 0.4: id monotonik proses-wide (bukan acak). Klien menyimpan Last-Event-ID;
         // bila ada gap (tab tidur lalu bangun) ia tahu ada yang terlewat dan WAJIB

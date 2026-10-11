@@ -45,3 +45,19 @@ app.kalababyspa.online {
         }
     }
 }
+hermes.kalababyspa.online {
+    encode gzip zstd
+
+    handle /kala* {
+        reverse_proxy hermes-agent:8621
+    }
+
+    handle {
+        reverse_proxy hermes-agent:9119
+    }
+}
+
+router.kalababyspa.online {
+    encode gzip zstd
+    reverse_proxy hermes-9router:20128
+}

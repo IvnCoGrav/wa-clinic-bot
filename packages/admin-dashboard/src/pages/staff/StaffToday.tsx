@@ -1017,7 +1017,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           const shouldMask = !isSupervisorRef.current;
           const sanitized = res.data
             .slice(-30)
-            .filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && !!m.created_at && !isNaN(new Date(m.created_at).getTime()))
+            .filter(
+              (m: any) =>
+                m &&
+                typeof m === 'object' &&
+                typeof m.id === 'string' &&
+                !!m.created_at &&
+                !isNaN(new Date(m.created_at).getTime()) &&
+                // Pesan hidden admin: jangan masuk state terapis biasa (defense in depth;
+                // backend sudah memfilter, ini menutup sisa jalur cache/polling lama).
+                (isSupervisorRef.current || (!(m as any).is_message_hidden && !(m as any).payload_raw?.is_hidden))
+            )
             .map((m: any) => ({
               ...m,
               content: shouldMask && typeof m.content === 'string' ? maskPhoneInTextClient(m.content) : m.content,
@@ -1307,6 +1317,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           handleGap(event as MessageEvent);
           const payload = JSON.parse((event as MessageEvent).data);
           const convId = payload.conversationId || payload.conversation_id;
+          const incomingHidden = !!((payload as any).isMessageHidden || (payload as any).payload_raw?.is_hidden);
+          if (incomingHidden && !isSupervisorRef.current) {
+            // Pesan hidden: jangan tampilkan ke terapis; pastikan tidak ada di state.
+            const hid = String(payload.messageId || payload.id || '');
+            const hwa = (payload as any).waMessageId || (payload as any).wa_message_id;
+            if (selectedTaskRef.current?.conversationId === convId) {
+              setMessages((prev) => prev.filter((m) => m.id !== hid && (m as any).wa_message_id !== hwa));
+            }
+            return;
+          }
           const shouldMask = !isSupervisorRef.current;
           const maskP = (s: string): string => (shouldMask ? maskPhoneInTextClient(s) : s);
           const msg: ChatMessage = {
@@ -1431,6 +1451,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             return false;
           };
           if (selectedTaskRef.current?.conversationId === conversationId) {
+            const updatedHidden =
+              (payload as any).isMessageHidden === true || (payload as any).payload_raw?.is_hidden === true;
+            if (updatedHidden && !isSupervisorRef.current) {
+              // Admin me-hide: hapus bubble dari layar terapis seketika.
+              setMessages((prev) => prev.filter((m) => !matchesUpdated(m)));
+              return;
+            }
+            if ((payload as any).isMessageHidden === false && !isSupervisorRef.current) {
+              // Admin memulihkan: refetch agar pesan muncul kembali.
+              try {
+                refreshActiveChatRef.current?.({ keepScroll: true });
+              } catch {}
+            }
             setMessages((prev) =>
               prev.map((m) =>
                 matchesUpdated(m)
