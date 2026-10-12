@@ -5,6 +5,26 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Feature: Skema Baru Hide Message (Role-Based Privacy Display di LiveChatMonitor)
+
+- **Akar Masalah & Kebutuhan:**
+  - Sebelumnya pesan yang di-hide admin dicegat penuh oleh `HiddenMessageStrip` abu-abu gelap (`LiveChatMonitor.tsx`), sehingga teks dan media tertutup dari pandangan Admin/CS kecuali diklik buka.
+  - Di daftar chat sebelah kiri, cuplikan pesan terakhir hanya bertuliskan teks kaku `[Pesan disembunyikan]`.
+- **Fixed (fondasional & privacy-preserving):**
+  - Di `LiveChatMonitor.tsx`:
+    - Hapus pencegatan `HiddenMessageStrip` baris 5882–5910 agar gelembung pesan mengalir normal ke pipeline perenderan chat.
+    - Berikan styling abu-abu lembut transparan pada gelembung pesan saat `isMessageHidden === true` (`slate-100 / slate-800` untuk pesan customer, `slate-200 / slate-700` untuk pesan staf/bot).
+    - Tampilkan footer status di dalam gelembung: icon `EyeOff`, label `Disembunyikan dari Staf Bidan`, dan tombol interaktif `Pulihkan` (`handleToggleMessageHide(msg, false)`).
+    - Di kartu daftar obrolan kiri (baris 4724), ganti preview `[Pesan disembunyikan]` dengan teks asli bertanda `👁️🗨️ [Hidden] ${lastMsg?.content || 'Pesan'}`.
+    - Bersihkan state `revealedHiddenIds` dan import `HiddenMessageStrip` yang tidak lagi digunakan di file ini.
+  - Di `StaffToday.tsx`:
+    - Proteksi privasi staf bidan/terapis tetap 100% aman (filter `is_message_hidden` di baris 1029, 1320, dan 1455 mencegah pesan hidden tampil ke terapis).
+- **Verifikasi:**
+  - Dashboard build (`npm --prefix packages/admin-dashboard run build`): EXIT 0 (2494 modules transformed).
+  - Backend root build (`npm run build`): EXIT 0.
+  - Vitest `live_chat_monitor.test.ts`: 3/3 passed.
+
+
 #### 2026-10-12 - Fixed: Optimalisasi UI/UX LiveChat Mobile (Fase 1-4)
 
 - **Akar Masalah (terbukti di kode):**
