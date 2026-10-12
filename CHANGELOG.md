@@ -43,6 +43,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   `scripts/verify-livechat-revision.mjs`.
 - **Catatan:** rebuild dashboard (`vite build`) sudah dijalankan; deploy butuh
   approval manual terpisah.
+- **Susulan review (regresi modal status):** blok `{showStatusPopover}` dipindah dari dalam `<header>` ke sibling di bawah `</header>` -- `display:none` ancestor menelan modal `fixed` sehingga tombol status sidebar mobile mati; tambah 1 cek anti-regresi di verify script (22/22 PASS).
 
 #### 2026-10-12 - Fixed: Banner AI + Header + Search Ikut Scroll di LiveChat Mobile (Bukan Sticky)
 

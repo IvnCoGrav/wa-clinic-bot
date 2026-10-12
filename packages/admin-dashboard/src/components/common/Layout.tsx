@@ -835,8 +835,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             (chatListContainerRef di LiveChatMonitor), sehingga `static` pun tetap
             pinned permanen. Mobile memakai Mobile Page Header di dalam scroll
             (LiveChatMonitor) + Quick Controls di sidebar (status WAHA, suara,
-            tema, user); menu dibuka via swipe tepi-kanan global, copilot via
-            FAB di dalam LiveChatMonitor. Desktop & halaman lain tetap sticky z-40. */}
+            tema, user); menu/copilot dibuka via tombol di Mobile Page Header
+            dalam scroll (openMobileMenu/setCopilotOpen via CopilotContext).
+            Modal Status Sistem dirender di luar <header> agar tetap tampil
+            saat header hidden di mobile livechat. Desktop & halaman lain
+            tetap sticky z-40. */}
         <header className={`${isLiveChat ? 'hidden lg:block lg:sticky lg:top-0 z-40' : 'sticky top-0 z-40'} border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -976,9 +979,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <Menu size={20} />
             </button>
 
-            {/* Interactive Status Popover / Modal for Mobile & Desktop Touch */}
-            {showStatusPopover && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Status Popover dipindah ke luar <header> (lihat bawah) agar tampil saat header hidden di mobile livechat */}
+          </div>
+          </div>
+        </header>
+
+        {/* Interactive Status Popover / Modal — di luar <header> agar tidak ikut hidden di mobile livechat */}
+        {showStatusPopover && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div
                   className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
                   onClick={() => setShowStatusPopover(false)}
@@ -1076,9 +1084,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 </div>
               </div>
             )}
-          </div>
-          </div>
-        </header>
 
         {/* Content Body — isolated page ErrorBoundary (Fase 1: blank-page guard) */}
         <main

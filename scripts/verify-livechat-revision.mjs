@@ -67,5 +67,12 @@ check('disabled konsisten di semua situs', (live.match(/disabled=\{togglingBotCu
 check('tanpa addLabel/removeLabel', !live.includes('addLabel') && !live.includes('removeLabel'), 'label WAHA tersentuh');
 check('tanpa if-else hafalan kalimat user', !/msg\.includes\(["']kuota|includes\(["']bunda["']\)/i.test(live.slice(0, 200000)), 'hafalan kalimat');
 
+// 8. Anti-regresi review: modal Status Sistem di luar <header> (display:none ancestor menelan modal fixed)
+check(
+  'modal status di luar header (anti-regresi hidden)',
+  layout.indexOf('</header>') !== -1 && layout.indexOf('</header>') < layout.indexOf('{showStatusPopover'),
+  'modal masih descendant header hidden',
+);
+
 console.log(fails === 0 ? '\nSEMUA CEK LOLOS' : `\n${fails} CEK GAGAL`);
 process.exit(fails === 0 ? 0 : 1);
