@@ -4425,16 +4425,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
 
                 <div className="flex items-center space-x-1.5">
-                  {/* Pengganti tombol ☰ header global (disembunyikan di mobile livechat) */}
-                  <button
-                    type="button"
-                    onClick={openMobileMenu}
-                    aria-label="Buka Menu"
-                    title="Buka Menu Navigasi"
-                    className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
-                  >
-                    <Menu size={15} />
-                  </button>
                   {/* Pengganti tombol copilot header global (ADR-001: tenant non-owner disembunyikan) */}
                   {user?.copilotEnabled !== false && (
                     <button
@@ -4452,6 +4442,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <Sparkles size={15} />
                     </button>
                   )}
+                  {/* Tombol sinkronisasi chat */}
                   <button
                     onClick={() => setShowSyncInfoModal(true)}
                     disabled={bgSyncProgress.isSyncing}
@@ -4459,6 +4450,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     title="Sinkronisasi Seluruh Chat WhatsApp"
                   >
                     <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+                  </button>
+                  {/* Tombol ☰ menu navigasi mobile (paling kanan) */}
+                  <button
+                    type="button"
+                    onClick={openMobileMenu}
+                    aria-label="Buka Menu"
+                    title="Buka Menu Navigasi"
+                    className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
+                  >
+                    <Menu size={15} />
                   </button>
                 </div>
               </div>
