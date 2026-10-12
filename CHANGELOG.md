@@ -5,6 +5,24 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: Resolusi Diskrepansi Meta Ads vs Sistem (Anti-Race CTA, TrustProxy, Zero-Preflight Beacon, Taxonomy Gate & Anti Double-Count) (Fase 0-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - Race Condition Redirect CTA: Tombol CTA di `go.html` dan `html-sanitizer.ts` melakukan `window.location.href = redirectUrl` seketika setelah menerima respons tracking tanpa jeda, memicu pemutusan HTTP request Meta Pixel (`ERR_ABORTED`).
+  - Rate Limit Bucket Collapse: Fastify tanpa `trustProxy: true` membuat `request.ip` bernilai IP internal reverse-proxy Caddy (`172.19.0.4`), menyebabkan seluruh pengunjung web berbagi satu kuota rate-limit 60 req/menit di `/cta` dan `/api/tracking/click`.
+  - Beacon Preflight Failure: `navigator.sendBeacon` dengan `Blob` bertipe `application/json` memicu CORS preflight `OPTIONS` yang sering dibatalkan browser mobile saat navigasi. Server juga belum memiliki parser `text/plain` untuk membaca JSON string.
+  - Kebocoran Event Purchase di Klik CTA: Daftar `CLICK_EVENTS` memuat `Purchase`, membuka celah event Purchase tertembak dari klik tombol landing padahal funnel kanonis mewajibkan Purchase hanya dipicu pasca-pembayaran.
+  - Potensi Double-Count Dashboard: Baris rekonsiliasi Meta Ads (`meta-reconciliation`) tergabung ke dalam `totalPageViews` server sehingga berisiko terhitung dua kali saat kolom Meta LPV ditampilkan.
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 0 (Forensik Bukti Server & DB)**: Verifikasi 100% IP proxy di DB, pendaftaran domain landing eksternal `landing_domain = 'kalababyspa.online'` di tabel `tenants`.
+  - **Fase 1 (Anti-Race Redirect CTA)**: Seragamkan pola redirect dengan jeda `setTimeout 300ms` dan guard `isRedirecting` di `go.html` dan `html-sanitizer.ts`, konsisten dengan `/cta`.
+  - **Fase 2 (TrustProxy & Per-IP Rate Limiting)**: Aktifkan `trustProxy: true` di Fastify (`src/app.ts`), mengisolasi bucket rate limit per IP client asli dari header `X-Forwarded-For`.
+  - **Fase 3 (Zero-Preflight Plaintext Beacon)**: Ubah `sendBeacon` ke `text/plain;charset=UTF-8` di 5 titik (klien) dan tambahkan parser `text/plain` di `src/app.ts` serta route preflight `OPTIONS & POST /api/tracking/click` dengan CORS headers.
+  - **Fase 4 (Taxonomy Gate)**: Cabut `Purchase` dari `CLICK_EVENTS` pada `landing.route.ts` dan `html-sanitizer.ts`; blokir event `Purchase` pada klik tombol CTA.
+  - **Fase 5 (Dashboard Dual-Kolom Anti Double-Count)**: Endpoint `/api/admin/debug/meta-summary` mengekstrak `metaLpvOfficial` dan memotongnya dari `totalPageViews` subset server; UI `MetaClickCatcher.tsx` menyajikan kartu Meta LPV Resmi dan Server Views secara terpisah.
+- **File Dimodifikasi**: `src/app.ts`, `src/routes/tracking.route.ts`, `src/routes/landing.route.ts`, `src/services/html-sanitizer.ts`, `src/landing/public/go.html`, `src/landing/public/external-tracker.js`, `src/routes/admin/meta-attribution.subroute.ts`, `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx`, `docs/META_FUNNEL.md`, `docs/KNOWN_ISSUES.md`.
+
+
 #### 2026-10-12 - Fixed: AI Copilot Grounding Hardening, Deterministic Deep-Link Injection, Persona Hygiene & Spam Filtering (Fase 1-5)
 
 - **Akar Masalah (Audit Multi-Lapisan):**

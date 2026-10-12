@@ -3,6 +3,24 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 252. [Tracking/Meta] Resolusi Diskrepansi Meta Ads vs Sistem (77/222 LPV & 9/27 Klik) (2026-10-12, IMPLEMENTED lokal — Menunggu Deploy FASE 6)
+
+- **Status:** IMPLEMENTED lokal (Fase 0–5 selesai, build root + dashboard hijau, seluruh test baru hijau, zero regresi baru). Siap deploy ke server live.
+- **Hasil Forensik & Resolusi (Fondasional):**
+  1. `429` Rate Limit Bucket Collapse: 100% dari 881 baris `landing_page_views` yang tercatat mencatat IP internal Docker Caddy (`172.19.0.4` / `172.18.0.4`), membuktikan `src/app.ts` tanpa `trustProxy: true` membuat seluruh pengunjung berbagi satu kuota rate-limit 60 req/menit di `/cta` dan `/api/tracking/click`.
+     - **Resolusi Fase 2:** `trustProxy: true` diaktifkan di `src/app.ts`. Request IP kini mengekstrak IP client asli dari Caddy (`X-Forwarded-For`).
+     - **Risiko Jujur:** Bila klien mengirim header X-Forwarded-For palsu, reverse-proxy Caddy me-append IP asli di ujung rantai ("palsu, asli"). Karena port container app (3000) hanya diexpose ke jaringan internal docker dan satu-satunya ingress adalah Caddy, risikonya terkontrol. Jika di kemudian hari app diekspos langsung ke publik tanpa Caddy, konfigurasi trustProxy perlu diperketat ke daftar IP proxy eksplisit.
+  2. Untrusted Origin / 401: `Tenant.landing_domain` untuk `default-tenant` bernilai NULL/kosong di DB live, menyebabkan request lintas domain dari `kalababyspa.online` ke `app.kalababyspa.online` berisiko ditolak 401 pada origin check jika tanpa header API key.
+     - **Resolusi Fase 0:** Sudah diselesaikan via DB update: `landing_domain = 'kalababyspa.online'`.
+  3. Anti-Race Redirect CTA:
+     - **Resolusi Fase 1:** Diseragamkan jeda `setTimeout 300ms` sebelum `window.location.href` di `src/landing/public/go.html` dan `src/services/html-sanitizer.ts`, konsisten dengan `/cta`, memastikan browser sempat melakukan flush Meta Pixel HTTP beacon sebelum redirect.
+  4. Zero-Preflight Beacon:
+     - **Resolusi Fase 3:** `sendBeacon` diubah menggunakan `Blob([json], { type: 'text/plain;charset=UTF-8' })` di 5 titik (klien) sehingga browser mengirim simple request tanpa preflight OPTIONS. Server Fastify di `src/app.ts` dilengkapi parser `text/plain` yang mengekstrak JSON buffer, serta CORS headers lengkap pada `OPTIONS & POST /api/tracking/click`.
+  5. Taksonomi Event Purchase:
+     - **Resolusi Fase 4:** Gate deterministik di `landing.route.ts` dan `html-sanitizer.ts` menolak event `Purchase` pada klik tombol CTA. `Purchase` kanonis hanya dipicu pasca-pembayaran riil via `purchase-detection.service.ts`.
+  6. Dashboard Dual-Kolom Anti Double-Count:
+     - **Resolusi Fase 5:** Endpoint `/api/admin/debug/meta-summary` mengekstrak `metaLpvOfficial` (rekonsiliasi Meta LPV superset) dan mengeluarkan baris tersebut dari `totalPageViews` server subset. Dashboard `MetaClickCatcher.tsx` menampilkan kedua kartu secara berdampingan tanpa double-counting.
+
 ## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, IMPLEMENTED lokal — healing PROD + deploy MENUNGGU)
 
 - **Status:** Kode 4 tahap selesai lokal (build + dashboard hijau, 5359 test hijau;

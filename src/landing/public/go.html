@@ -50,7 +50,7 @@
         };
         var body = JSON.stringify(payload);
         if (navigator.sendBeacon) {
-          try { var blob = new Blob([body], {type:'application/json'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
+          try { var blob = new Blob([body], {type:'text/plain;charset=UTF-8'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
             fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
           }
         } else {
@@ -273,7 +273,7 @@
           };
           var body2 = JSON.stringify(payload2);
           if (navigator.sendBeacon) {
-            try { var blob2 = new Blob([body2], {type:'application/json'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
+            try { var blob2 = new Blob([body2], {type:'text/plain;charset=UTF-8'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
               fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
             }
           } else {
@@ -383,7 +383,9 @@
             const trackingCode = data.trackingCode || 'promo';
             __EVENTS_ONCLICK__
             const redirectUrl = `https://wa.me/${defaultPhone}?text=Promo%5B${trackingCode}%5D%20Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment`;
-            window.location.href = redirectUrl;
+            setTimeout(function() {
+              window.location.href = redirectUrl;
+            }, 300);
           })
           .catch(function(err) {
             console.error('Tracking API Failed:', err);

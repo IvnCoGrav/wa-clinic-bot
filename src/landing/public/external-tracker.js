@@ -256,7 +256,7 @@
 
       var jsonStr = JSON.stringify(payload);
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        var blob = new Blob([jsonStr], { type: 'application/json' });
+        var blob = new Blob([jsonStr], { type: 'text/plain;charset=UTF-8' });
         navigator.sendBeacon(endpoint, blob);
       } else if (typeof fetch === 'function') {
         fetch(endpoint, {
