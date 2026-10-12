@@ -4452,17 +4452,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <Sparkles size={15} />
                     </button>
                   )}
-                  <ToggleSwitch
-                    checked={chatBotActive}
-                    onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
-                    disabled={togglingBotCutoff}
-                    loading={togglingBotCutoff}
-                    variant={chatBotActive ? 'emerald' : 'rose'}
-                    onLabel="ON"
-                    offLabel="OFF"
-                    size="sm"
-                    title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}
-                  />
                   <button
                     onClick={() => setShowSyncInfoModal(true)}
                     disabled={bgSyncProgress.isSyncing}
@@ -4627,54 +4616,70 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
-              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Hanya Searchbar yang Stick Saat Scroll di Mobile) */}
+              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Searchbar & AI Toggle Stick Bersama Saat Scroll di Mobile) */}
               {(isDesktop || mobileView === 'list') && (
                 <div className="sticky top-0 z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
-                      {isSearching ? (
-                        <Loader size={13} className="animate-spin text-[#008069]" />
-                      ) : (
-                        <Search size={13} />
-                      )}
-                    </span>
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      tabIndex={mobileView === 'chat' ? -1 : 0}
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        triggerDebouncedSearch(e.target.value);
-                      }}
-                      onFocus={() => { searchInputFocusedRef.current = true; }}
-                      onBlur={(e) => {
-                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                          searchInputFocusedRef.current = false;
-                        }
-                      }}
-                      placeholder="Cari nama, no. HP, atau keyword chat..."
-                      className="w-full pl-8 pr-7 py-1.5 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (searchDebounceTimerRef.current) {
-                            clearTimeout(searchDebounceTimerRef.current);
-                            searchDebounceTimerRef.current = null;
-                          }
-                          setSearchQuery('');
-                          loadChats(true, '', true);
-                          // Unified clear: 1 klik X menutup toolbar in-chat, hapus <mark>, reset scroll.
-                          handleClearInChatSearch();
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1 min-w-0">
+                      <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                        {isSearching ? (
+                          <Loader size={13} className="animate-spin text-[#008069]" />
+                        ) : (
+                          <Search size={13} />
+                        )}
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        tabIndex={mobileView === 'chat' ? -1 : 0}
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          triggerDebouncedSearch(e.target.value);
                         }}
-                        className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
-                        title="Hapus pencarian"
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
+                        onFocus={() => { searchInputFocusedRef.current = true; }}
+                        onBlur={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            searchInputFocusedRef.current = false;
+                          }
+                        }}
+                        placeholder="Cari nama, no. HP, atau keyword chat..."
+                        className="w-full pl-8 pr-7 py-1.5 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (searchDebounceTimerRef.current) {
+                              clearTimeout(searchDebounceTimerRef.current);
+                              searchDebounceTimerRef.current = null;
+                            }
+                            setSearchQuery('');
+                            loadChats(true, '', true);
+                            // Unified clear: 1 klik X menutup toolbar in-chat, hapus <mark>, reset scroll.
+                            handleClearInChatSearch();
+                          }}
+                          className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
+                          title="Hapus pencarian"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Mobile Sticky AI Toggle: Melayang bersama Search Bar agar mudah diakses saat scroll */}
+                    <div className="lg:hidden shrink-0 flex items-center" title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}>
+                      <ToggleSwitch
+                        checked={chatBotActive}
+                        onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+                        disabled={togglingBotCutoff}
+                        loading={togglingBotCutoff}
+                        variant={chatBotActive ? 'emerald' : 'rose'}
+                        onLabel="ON"
+                        offLabel="OFF"
+                        size="sm"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
