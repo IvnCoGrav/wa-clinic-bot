@@ -1,4 +1,4 @@
-﻿import { Queue, Worker, Job } from 'bullmq';
+import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { randomUUID } from 'crypto';
 import { stateMachine } from '../state-machine/machine';
@@ -24,6 +24,16 @@ export interface QueuePayload {
   provider?: 'WAHA' | 'WABA';
   /** ID pesan asli provider. */
   inboundMessageId?: string;
+}
+
+/**
+ * FONDASIONAL (insiden kebocoran worker 12/10/2026): hanya proses app yang
+ * boleh menjalankan KONSUMEN chat WhatsApp. Dedicated background worker
+ * (SEPARATE_WORKER=true) hanya menjadi PRODUSEN (enqueue cron terjadwal) —
+ * tidak membuat BullMQ Worker. Diekstrak agar kontraknya terkunci unit test.
+ */
+export function shouldRunChatConsumers(): boolean {
+  return process.env.SEPARATE_WORKER !== 'true';
 }
 
 /**
@@ -83,6 +93,55 @@ export class QueueService {
     if (!ready) {
       throw new Error('FATAL_QUEUE_REDIS_REQUIRED');
     }
+  }
+
+  /**
+   * FONDASIONAL (insiden balasan ganda 12/10/2026): kunci in-flight per nomor
+   * TERDISTRIBUSI via Redis agar berlaku lintas kontainer app+worker — kunci
+   * in-memory lama (`bullProcessing`) hanya terlihat di satu proses.
+   * - Key tenant-aware: `lock:<tenantId>:<phone>` (anti-tabrakan lintas tenant).
+   * - Nilai UUID pemilik + `NX EX 60`: hanya pemegang yang boleh melepas;
+   *   TTL 60 dtk menutup jendela latensi ekstrem (insiden: 24,8 dtk).
+   * - Redis gagal/offline → fallback guard in-memory (tidak pernah crash job).
+   * - B ambigu dengan `turnRepository.claimForProcessing`: lock ini mencegah
+   *   PROSES PARALEL, sedangkan claim DB mencegah RETRY ganda. Keduanya
+   *   dipertahankan, tidak saling mengganti.
+   * @returns 'redis' | 'memory' bila terkunci, 'busy' bila nomor sedang diproses.
+   */
+  public async acquirePhoneLock(lockKey: string, token: string, ttlSec = 60): Promise<'redis' | 'memory' | 'busy'> {
+    if (this.redisEnabled && this.redisClient) {
+      try {
+        const res = await this.redisClient.set(lockKey, token, 'EX', ttlSec, 'NX');
+        if (res === 'OK') return 'redis';
+        return 'busy';
+      } catch (err: any) {
+        console.warn(`[QUEUE LOCK] Redis SET gagal (${err?.message}) — fallback guard in-memory.`);
+      }
+    }
+    if (this.bullProcessing.has(lockKey)) return 'busy';
+    this.bullProcessing.add(lockKey);
+    return 'memory';
+  }
+
+  /**
+   * Melepas kunci: bila `token` cocok (pemilik Redis) hapus atomik via Lua
+   * banding-dan-hapus agar TIDAK menghapus lock pemilik lain yang lahir
+   * setelah TTL kedaluwarsa. Guard in-memory selalu dibersihkan (idempoten).
+   */
+  public async releasePhoneLock(lockKey: string, token: string | null): Promise<void> {
+    if (token && this.redisEnabled && this.redisClient) {
+      try {
+        await this.redisClient.eval(
+          'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
+          1,
+          lockKey,
+          token
+        );
+      } catch {
+        // Best-effort: TTL Redis akan membersihkan sendiri.
+      }
+    }
+    this.bullProcessing.delete(lockKey);
   }
 
   /**
@@ -175,21 +234,34 @@ export class QueueService {
         maxRetriesPerRequest: null,
       });
 
-      // 1. Buat Queue dengan defaultJobOptions
+      // 1. Buat Queue dengan defaultJobOptions (produsen — SELALU dibuat di
+      // semua proses agar cron worker tetap bisa enqueue pesan terjadwal).
       const queue = new Queue(queueName, { connection, defaultJobOptions });
       this.bullQueues.set(queueName, queue);
+
+      // FONDASIONAL (insiden kebocoran worker 12/10/2026): dedicated background
+      // worker DILARANG mengonsumsi antrean chat WhatsApp — hanya proses app
+      // yang boleh memproses pesan masuk. Queue produsen di atas tetap dibuat
+      // agar cron/sweep di worker tetap bisa enqueue; yang di-skip HANYA
+      // pembuatan Worker (konsumen) di bawah ini.
+      if (!shouldRunChatConsumers()) {
+        continue;
+      }
 
       // 2. Buat Worker dengan concurrency = 1 (proses pesan berurutan per antrian)
       const worker = new Worker(
         queueName,
         async (job: Job<QueuePayload>) => {
           const phoneKey = job.data?.phone || job.data?.customerId || 'unknown';
-          if (this.bullProcessing.has(phoneKey)) {
+          const tenantForLock = (job.data as any)?.tenantId || DEFAULT_TENANT_ID;
+          const lockKey = `lock:${tenantForLock}:${phoneKey}`;
+          const lockToken = randomUUID();
+          const lockKind = await this.acquirePhoneLock(lockKey, lockToken);
+          if (lockKind === 'busy') {
             console.warn(`[QUEUE BullMQ - Shard ${i}] In-flight lock active for ${hashPiiPhone(phoneKey)}, re-queueing job ${job.id} dengan delay.`);
             // Throw agar BullMQ retry dengan backoff, FIFO tetap terjaga via concurrency 1 + retry
             throw new Error(`In-flight lock: phone ${hashPiiPhone(phoneKey)} masih diproses`);
           }
-          this.bullProcessing.add(phoneKey);
           try {
             const ctx = await this.resolveFreshContext(job.data);
             if (!ctx) return;
@@ -244,7 +316,7 @@ export class QueueService {
             console.error(`[QUEUE BullMQ - Shard ${i}] Exception during processMessage for job ${job.id}:`, err.message);
             throw err; // Throw agar BullMQ mencatat attempt gagal dan menjalankan retry backoff
           } finally {
-            this.bullProcessing.delete(phoneKey);
+            await this.releasePhoneLock(lockKey, lockKind === 'redis' ? lockToken : null);
           }
         },
         {
@@ -277,7 +349,11 @@ export class QueueService {
 
       this.bullWorkers.set(queueName, worker);
     }
-    console.log(`ðŸ“Œ [QUEUE] ${this.shardsCount} BullMQ shards initialized successfully.`);
+    if (process.env.SEPARATE_WORKER === 'true') {
+      console.log('[QUEUE] Shard queues initialized (PRODUSEN SAJA - Worker konsumen di-skip, chat diproses kontainer app).');
+    } else {
+      console.log('[QUEUE] BullMQ shards initialized successfully.');
+    }
   }
 
   /**

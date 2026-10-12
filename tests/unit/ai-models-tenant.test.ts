@@ -49,11 +49,17 @@ describe('AiModelConfigService — tenant-aware registry', () => {
     expect(defSum.modelName).toBe(defBefore.modelName);
   });
 
-  it('globalBotActive per-tenant: disable tenant A tidak memengaruhi tenant B', () => {
+  it('globalBotActive per-tenant fail-closed: unknown tenant default MATI; disable A tidak memengaruhi B', () => {
+    // Fail-closed (insiden kebocoran worker 12/10/2026): tenant yang belum
+    // dimuat dari DB (map kosong) → bot MATI, bukan hidup.
+    expect(AiModelConfigService.isBotActive('tenant-Y')).toBe(false);
+    expect(AiModelConfigService.isBotActive(DEFAULT_TENANT_ID)).toBe(false);
     AiModelConfigService.setBotActive('tenant-X', false);
     expect(AiModelConfigService.isBotActive('tenant-X')).toBe(false);
+    // Per-tenant independence tetap: mengaktifkan Y tidak menyalakan X.
+    AiModelConfigService.setBotActive('tenant-Y', true);
     expect(AiModelConfigService.isBotActive('tenant-Y')).toBe(true);
-    expect(AiModelConfigService.isBotActive(DEFAULT_TENANT_ID)).toBe(true);
+    expect(AiModelConfigService.isBotActive('tenant-X')).toBe(false);
   });
 
   it('MEDICAL_CHECK tetap terkunci (deterministik) untuk semua tenant', () => {

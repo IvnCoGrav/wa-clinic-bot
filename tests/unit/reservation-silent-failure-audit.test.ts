@@ -222,6 +222,11 @@ describe('AUDIT K1 — Customer form false acknowledgement', () => {
     const { ConversationState } = await import('@prisma/client');
     const { customerService } = await import('../../src/services/customer.service');
     const { conversationService } = await import('../../src/services/conversation.service');
+    // Fixture status (cermin boot produksi: GLOBAL_BOT_ENABLED=true dari DB).
+    // Tanpa ini bot fail-closed (MATI) sejak 12/10/2026 dan test tidak pernah
+    // mencapai kode penanganan form yang sedang diuji.
+    const { AiModelConfigService } = await import('../../src/config/ai-models.config');
+    await AiModelConfigService.setBotActive('default-tenant', true);
 
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
     const cust = await customerService.getOrCreateCustomer(phone, undefined, 'default-tenant');

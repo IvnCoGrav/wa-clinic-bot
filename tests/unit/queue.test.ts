@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
-import { queueService, QueuePayload, resolveQueueJobId } from '../../src/services/queue.service';
+import { queueService, QueuePayload, resolveQueueJobId, shouldRunChatConsumers } from '../../src/services/queue.service';
 import { stateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
@@ -186,5 +186,99 @@ describe('Message Queue Service Unit Tests', () => {
     const b = resolveQueueJobId('628111', mk());
     expect(a).not.toContain('undefined');
     expect(a).not.toBe(b);
+  });
+
+  // Insiden balasan ganda 12/10/2026 — kunci in-flight terdistribusi.
+  it('F4.1. acquirePhoneLock fallback in-memory saat Redis offline: lock → busy → release → lock lagi', async () => {
+    const svc = queueService as any;
+    const prevEnabled = svc.redisEnabled;
+    const prevClient = svc.redisClient;
+    svc.redisEnabled = false;
+    svc.redisClient = null;
+    try {
+      const key = 'lock:default-tenant:62899000111';
+      expect(await queueService.acquirePhoneLock(key, 'uuid-A')).toBe('memory');
+      expect(await queueService.acquirePhoneLock(key, 'uuid-B')).toBe('busy');
+      await queueService.releasePhoneLock(key, null);
+      expect(await queueService.acquirePhoneLock(key, 'uuid-C')).toBe('memory');
+      await queueService.releasePhoneLock(key, null);
+    } finally {
+      svc.redisEnabled = prevEnabled;
+      svc.redisClient = prevClient;
+    }
+  });
+
+  it('F4.2. acquirePhoneLock Redis: NX dipatuhi, release hanya oleh pemilik (Lua)', async () => {
+    const svc = queueService as any;
+    const prevEnabled = svc.redisEnabled;
+    const prevClient = svc.redisClient;
+    // Fake Redis sekecil mungkin: SET NX EX + EVAL banding-dan-hapus.
+    const store = new Map<string, string>();
+    const fake = {
+      set: async (k: string, v: string, _ex: string, _ttl: number, nx: string) => {
+        if (nx === 'NX' && store.has(k)) return null;
+        store.set(k, v);
+        return 'OK';
+      },
+      eval: async (_script: string, _n: number, k: string, token: string) => {
+        if (store.get(k) === token) {
+          store.delete(k);
+          return 1;
+        }
+        return 0;
+      },
+    };
+    svc.redisEnabled = true;
+    svc.redisClient = fake;
+    try {
+      const key = 'lock:tenant-Z:62899000222';
+      expect(await queueService.acquirePhoneLock(key, 'owner-1')).toBe('redis');
+      // Pemilik lain ditolak selama lock aktif.
+      expect(await queueService.acquirePhoneLock(key, 'owner-2')).toBe('busy');
+      // Release oleh BUKAN pemilik tidak menghapus lock.
+      await queueService.releasePhoneLock(key, 'owner-2');
+      expect(await queueService.acquirePhoneLock(key, 'owner-3')).toBe('busy');
+      // Release oleh pemilik membuka lock.
+      await queueService.releasePhoneLock(key, 'owner-1');
+      expect(await queueService.acquirePhoneLock(key, 'owner-3')).toBe('redis');
+      await queueService.releasePhoneLock(key, 'owner-3');
+    } finally {
+      svc.redisEnabled = prevEnabled;
+      svc.redisClient = prevClient;
+    }
+  });
+
+  it('F4.3. kunci tenant-aware: nomor sama beda tenant tidak saling mengunci', async () => {
+    const svc = queueService as any;
+    const prevEnabled = svc.redisEnabled;
+    const prevClient = svc.redisClient;
+    svc.redisEnabled = false;
+    svc.redisClient = null;
+    try {
+      expect(await queueService.acquirePhoneLock('lock:tenant-A:62899', 't1')).toBe('memory');
+      expect(await queueService.acquirePhoneLock('lock:tenant-B:62899', 't2')).toBe('memory');
+      await queueService.releasePhoneLock('lock:tenant-A:62899', null);
+      await queueService.releasePhoneLock('lock:tenant-B:62899', null);
+    } finally {
+      svc.redisEnabled = prevEnabled;
+      svc.redisClient = prevClient;
+    }
+  });
+
+  // Insiden kebocoran worker 12/10/2026 — dedicated worker dilarang menjadi
+  // konsumen chat (hanya produsen enqueue); selain itu tetap konsumen.
+  it('F1.1. shouldRunChatConsumers: worker bukan konsumen, app/monolith ya', () => {
+    const prev = process.env.SEPARATE_WORKER;
+    try {
+      delete process.env.SEPARATE_WORKER;
+      expect(shouldRunChatConsumers()).toBe(true);
+      process.env.SEPARATE_WORKER = 'false';
+      expect(shouldRunChatConsumers()).toBe(true);
+      process.env.SEPARATE_WORKER = 'true';
+      expect(shouldRunChatConsumers()).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.SEPARATE_WORKER;
+      else process.env.SEPARATE_WORKER = prev;
+    }
   });
 });

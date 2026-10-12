@@ -11,6 +11,7 @@ import { deliveryService } from '../../src/services/delivery.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { wahaClient } from '../../src/integrations/waha/client';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
+import { AiModelConfigService } from '../../src/config/ai-models.config';
 import { llmIntentService } from '../../src/integrations/llm/intent';
 
 // Mock LLM services secara global untuk mencegah panggilan API nyata / timeout
@@ -82,6 +83,10 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
       return fn(prisma);
     };
     await seedAiScopeAll();
+    // Fixture status (cermin boot produksi: GLOBAL_BOT_ENABLED=true dari DB).
+    // Tanpa ini bot fail-closed (MATI) sejak 12/10/2026 dan test yang
+    // melewati machine.ts ter-escalate sebelum mencapai subjek uji.
+    await AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, true);
   });
 
   afterEach(() => {

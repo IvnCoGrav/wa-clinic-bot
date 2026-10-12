@@ -787,18 +787,25 @@ export class ConversationService {
       }
 
       for (const conv of convsToRelease) {
-        const restoredState = conv.previous_state || ConversationState.INITIAL;
-        await this.updateConversationState(
-          conv.id,
-          {
-            currentState: restoredState,
-            isHumanHandling: false,
-            humanHandlingSince: null,
-            escalationReason: null,
-          },
-          tenantId
-        );
-        releasedCount++;
+        // Fondasional (regresi fail-closed 12/10/2026): satu baris basi/hilang
+        // (mis. store repo di-reset antar-test, atau baris DB terhapus) TIDAK
+        // boleh menggagalkan pelepasan seluruh batch — lewati per-item.
+        try {
+          const restoredState = conv.previous_state || ConversationState.INITIAL;
+          await this.updateConversationState(
+            conv.id,
+            {
+              currentState: restoredState,
+              isHumanHandling: false,
+              humanHandlingSince: null,
+              escalationReason: null,
+            },
+            tenantId
+          );
+          releasedCount++;
+        } catch (itemErr: any) {
+          console.warn(`[GLOBAL BOT RELEASE] Lewati ${conv?.id}: ${itemErr?.message}`);
+        }
 
         // Label hold tidak perlu dihapus karena saat global_bot_disabled label hold tidak ditambahkan
       }
