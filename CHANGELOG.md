@@ -5,6 +5,45 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Revisi: Header LiveChat Mobile Benar-Benar Ikut Scroll + Banner Sync/Error (Search Tetap Sticky)
+
+- **Keputusan user:** search TETAP STICKY di mobile (revert perubahan search fase lalu).
+  Yang diperbaiki hanya header global + banner sync/error.
+- **Akar Masalah (temuan reviewer, terverifikasi di kode):** (1) header `static`
+  tetap pinned karena header adalah sibling flex di luar satu-satunya
+  scroll-container (`chatListContainerRef`) + induk `overflow-hidden` + body-lock
+  iOS -- `static` di flex column = terlihat permanen; (2) `lg:z-40` menghilangkan
+  z-40 di mobile; (3) 3 banner sync/error masih sibling `shrink-0` di luar scroll.
+- **Fixed (desktop tidak berubah):**
+  - Header global: `hidden` di mobile livechat (benar-benar ikut scroll) +
+    `lg:sticky lg:top-0 z-40` di desktop; halaman lain tetap `sticky top-0 z-40`.
+  - State menu mobile + copilot diangkat dari `Layout.tsx` ke `CopilotContext`
+    (`openMobileMenu`/`dismissMobileMenu` + history back) agar tombol pengganti
+    menu + copilot di Mobile Page Header (dalam scroll) tetap membuka
+    sidebar/panel -- kontrol lain (status WAHA, suara, tema, user) sudah
+    mandiri di sidebar.
+  - Searchbar: kembali `sticky top-0 z-20` penuh semua viewport.
+  - Banner sync/error: global `hidden lg:flex` + duplikat ringkas `lg:hidden`
+    di dalam scroll daftar (pola sama seperti banner AI); loading branch ikut
+    tampilkan banner AI-off mobile.
+  - 4 situs tombol "Aktifkan AI" (global, list, loading, header chat) TIDAK
+    diekstrak komponen -- semuanya konsisten via handler tunggal
+    `handleToggleGlobalBot` + `confirm()` + `disabled={togglingBotCutoff}`
+    (blast radius ekstraksi lebih besar dari manfaatnya).
+- **Verifikasi:** dashboard `tsc --noEmit` EXIT=0; `vite build` EXIT=0 (12.12s);
+  `scripts/verify-livechat-revision.mjs` 21/21 PASS; subset livechat 5 file
+  44/44 hijau; full suite root 4 shard tanpa failure baru (s1 6F, s2 9F, s3 3F,
+  s4 8F -- pola time-rot parser tanggal + integrasi butuh env; sampel
+  reservation-text-parser + live_chat_monitor TERBUKTI pre-existing via
+  stash+rerun baseline tetap gagal); root `tsc` OOM exit 134 TERBUKTI
+  pre-existing via stash+rerun baseline.
+- **File:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`,
+  `packages/admin-dashboard/src/components/common/Layout.tsx`,
+  `packages/admin-dashboard/src/contexts/CopilotContext.tsx`,
+  `scripts/verify-livechat-revision.mjs`.
+- **Catatan:** rebuild dashboard (`vite build`) sudah dijalankan; deploy butuh
+  approval manual terpisah.
+
 #### 2026-10-12 - Fixed: Banner AI + Header + Search Ikut Scroll di LiveChat Mobile (Bukan Sticky)
 
 - **Laporan:** di halaman daftar chat mobile, 3 lapis menempel di atas saat scroll:

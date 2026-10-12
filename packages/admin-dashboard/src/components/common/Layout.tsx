@@ -57,33 +57,12 @@ import { useCopilot } from '../../contexts/CopilotContext';
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const { toast } = useUiFeedback();
-  const { open: copilotOpen, setOpen: setCopilotOpen } = useCopilot();
+  const { open: copilotOpen, setOpen: setCopilotOpen, mobileMenuOpen, setMobileMenuOpen, openMobileMenu, dismissMobileMenu } = useCopilot();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const isMenuHistoryPushedRef = useRef(false);
-
-  const openMobileMenu = () => {
-    setMobileMenuOpen(true);
-    try {
-      window.history.pushState({ modal: 'mobile-menu' }, '');
-      isMenuHistoryPushedRef.current = true;
-    } catch (_) {}
-  };
-
-  const dismissMobileMenu = () => {
-    setMobileMenuOpen(false);
-    if (isMenuHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.modal === 'mobile-menu')) {
-      isMenuHistoryPushedRef.current = false;
-      if (window.history.state?.modal === 'mobile-menu') {
-        window.history.back();
-      }
-    }
-  };
 
   const handleNavClick = () => {
     setMobileMenuOpen(false);
-    isMenuHistoryPushedRef.current = false;
     if (typeof window !== 'undefined' && window.history.state?.modal === 'mobile-menu') {
       window.history.replaceState(null, '');
     }
@@ -246,18 +225,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     },
   ];
 
-  // Tutup menu dan bersihkan ref history saat navigasi halaman
+  // Tutup menu saat navigasi halaman (history dirapikan oleh context saat dismiss)
   useEffect(() => {
     setMobileMenuOpen(false);
-    isMenuHistoryPushedRef.current = false;
-  }, [location.pathname]);
+  }, [location.pathname, setMobileMenuOpen]);
 
   // Handle browser / hardware back button so it dismisses sidebar menu instead of navigating back
   useEffect(() => {
     if (!mobileMenuOpen) return;
 
     const handlePopState = () => {
-      isMenuHistoryPushedRef.current = false;
       setMobileMenuOpen(false);
     };
 
@@ -265,7 +242,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, setMobileMenuOpen]);
 
   const justSwipedRef = useRef(false);
   const backdropTouchStartRef = useRef(false);
@@ -853,9 +830,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       >
         
         {/* Top Header — iPhone safe-area: notch/Dynamic Island.
-            LiveChat mobile: ikut scroll (static) agar tidak menumpuk dengan banner AI + searchbar;
-            desktop & halaman lain tetap sticky. */}
-        <header className={`border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] ${isLiveChat ? 'lg:sticky lg:top-0 lg:z-40' : 'sticky top-0 z-40'} shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
+            LiveChat mobile: disembunyikan (hidden) agar benar-benar ikut scroll —
+            header global adalah sibling flex di luar satu-satunya scroll-container
+            (chatListContainerRef di LiveChatMonitor), sehingga `static` pun tetap
+            pinned permanen. Mobile memakai Mobile Page Header di dalam scroll
+            (LiveChatMonitor) + Quick Controls di sidebar (status WAHA, suara,
+            tema, user); menu dibuka via swipe tepi-kanan global, copilot via
+            FAB di dalam LiveChatMonitor. Desktop & halaman lain tetap sticky z-40. */}
+        <header className={`${isLiveChat ? 'hidden lg:block lg:sticky lg:top-0 z-40' : 'sticky top-0 z-40'} border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img

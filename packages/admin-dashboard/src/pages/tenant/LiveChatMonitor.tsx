@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCopilot } from '../../contexts/CopilotContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
@@ -71,6 +72,7 @@ import {
   MessageSquareDot,
   Radar,
   EyeOff,
+  Menu,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -482,6 +484,9 @@ const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
+  // Shell global: buka sidebar mobile (☰) + panel copilot dari dalam scroll
+  // (pengganti tombol header global yang disembunyikan di mobile livechat).
+  const { open: copilotOpen, setOpen: setCopilotOpen, openMobileMenu } = useCopilot();
   const { resolved: currentTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -4313,9 +4318,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       )}
 
-      {/* Real-time Background Sync Banner */}
+      {/* Real-time Background Sync Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
       {bgSyncProgress.isSyncing && (
-        <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
             <RefreshCw size={14} className="text-[#008069] animate-spin shrink-0" />
             <div className="truncate">
@@ -4336,22 +4341,43 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       )}
 
       {syncProgress && !bgSyncProgress.isSyncing && (
-        <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-2 shrink-0">
+        <div className="hidden lg:flex p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium items-center space-x-2 shrink-0">
           <RefreshCw size={12} className="text-sky-600 animate-spin" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium flex items-center space-x-2 shrink-0">
+        <div className="hidden lg:flex p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium items-center space-x-2 shrink-0">
           <AlertTriangle size={13} className="text-rose-600" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {loading && chats.length === 0 ? (
-        <div className="flex-1 flex justify-center items-center py-20">
-          <Loader className="animate-spin text-[#008069]" size={32} />
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
+          {/* Loading: banner AI-off mobile ikut tampil agar konsisten dengan daftar (desktop memakai banner global di atas) */}
+          {!chatBotActive && (
+            <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="truncate">
+                  <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
+                  <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
+                </span>
+              </div>
+              <button
+                onClick={() => handleToggleGlobalBot(true)}
+                disabled={togglingBotCutoff}
+                className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+              >
+                Aktifkan AI
+              </button>
+            </div>
+          )}
+          <div className="flex-1 flex justify-center items-center py-20">
+            <Loader className="animate-spin text-[#008069]" size={32} />
+          </div>
         </div>
       ) : (
         <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-0 lg:gap-2 overflow-hidden">
@@ -4399,6 +4425,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
 
                 <div className="flex items-center space-x-1.5">
+                  {/* Pengganti tombol ☰ header global (disembunyikan di mobile livechat) */}
+                  <button
+                    type="button"
+                    onClick={openMobileMenu}
+                    aria-label="Buka Menu"
+                    title="Buka Menu Navigasi"
+                    className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
+                  >
+                    <Menu size={15} />
+                  </button>
+                  {/* Pengganti tombol copilot header global (ADR-001: tenant non-owner disembunyikan) */}
+                  {user?.copilotEnabled !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setCopilotOpen(!copilotOpen)}
+                      title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                      aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                      aria-pressed={copilotOpen}
+                      className={`lg:hidden p-1.5 rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
+                        copilotOpen
+                          ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 border-[#00a884]/40 text-[#008069] dark:text-[#00a884] ring-2 ring-[#00a884]/30'
+                          : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                      }`}
+                    >
+                      <Sparkles size={15} />
+                    </button>
+                  )}
                   <ToggleSwitch
                     checked={chatBotActive}
                     onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
@@ -4438,6 +4491,37 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   >
                     Aktifkan AI
                   </button>
+                </div>
+              )}
+
+              {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
+              {bgSyncProgress.isSyncing && (
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center justify-between shadow-2xs animate-fadeIn">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <RefreshCw size={13} className="text-[#008069] animate-spin shrink-0" />
+                    <span className="truncate">
+                      <span className="font-bold text-[#008069]">Sync:</span>{' '}
+                      {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} baru)
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCancelBackgroundSync}
+                    className="px-2 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-200 rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+                  >
+                    Batal
+                  </button>
+                </div>
+              )}
+              {syncProgress && !bgSyncProgress.isSyncing && (
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
+                  <RefreshCw size={12} className="text-sky-600 animate-spin shrink-0" />
+                  <span className="truncate">{syncProgress}</span>
+                </div>
+              )}
+              {errorMessage && (
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
+                  <AlertTriangle size={12} className="text-rose-600 shrink-0" />
+                  <span className="truncate">{errorMessage}</span>
                 </div>
               )}
 
@@ -4543,9 +4627,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
-              {/* 🔍 Search Bar Input: desktop sticky; mobile ikut scroll bersama daftar (anti 3-lapis sticky) */}
+              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Hanya Searchbar yang Stick Saat Scroll di Mobile) */}
               {(isDesktop || mobileView === 'list') && (
-                <div className="lg:sticky lg:top-0 lg:z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
+                <div className="sticky top-0 z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
                       {isSearching ? (
