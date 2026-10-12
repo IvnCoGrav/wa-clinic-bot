@@ -5,6 +5,26 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: Optimalisasi UI/UX LiveChat Mobile (Fase 1-4)
+
+- **Akar Masalah (terbukti di kode):**
+  - Header obrolan di layar sempit HP (375px) sesak oleh tombol unread (`handleToggleReadStatus`) dan tombol "Aktifkan AI" ganda. Fungsi tandai-baca sudah tersedia di menu konteks (klik kanan / tekan-lama).
+  - Banner AI Nonaktif di mobile terduplikasi di 2 tempat (`LiveChatMonitor.tsx`: loading branch dan list branch) dengan tombol "Aktifkan AI" hijau yang memicu dialog ganda dan potensi tipe `amber` tak valid. Sakelar ON/OFF kanonis sudah tersedia di sticky search bar.
+  - Di layar HP, tombol gembok composer disembunyikan via `hidden sm:flex` (`LiveChatComposer.tsx:885`), sehingga staf yang mengaktifkan mode catatan internal via menu `+` terjebak tanpa tombol batal (harus refresh halaman).
+- **Fixed (fondasional & modular):**
+  - Fase 1: Bersihkan header obrolan di `LiveChatMonitor.tsx` (hapus tombol unread dan tombol Aktifkan AI di header chat); nama pasien dan nomor telepon kini tampil lapang, tombol search in-chat dan ambil alih tetap utuh.
+  - Fase 2: Ekstraksi strip status ke komponen kanonis tunggal `packages/admin-dashboard/src/components/livechat/AiOffStrip.tsx` (teks saja, tanpa tombol toggle); ganti 2 banner duplikat mobile di loading dan list dengan `<AiOffStrip />`; satu-satunya toggle tetap di sticky search bar (`emerald/rose`, `useUiFeedback`).
+  - Fase 3: Tambah strip pembatalan mode internal `isInternalMode` di HP (`flex sm:hidden`) dengan tombol `Batal (✕)` tepat sebelum wrapper composer di `LiveChatComposer.tsx`.
+- **Verifikasi & Regresi:**
+  - `grep handleToggleReadStatus LiveChatMonitor.tsx`: tepat 3 hasil (1 definisi, 2 pemakai menu).
+  - `grep AiOffStrip LiveChatMonitor.tsx`: tepat 3 hasil (1 import, 2 pemakai).
+  - Area mobile tombol "Aktifkan AI": 0 (tombol hijau hilang dari HP).
+  - Dashboard build (`npm --prefix packages/admin-dashboard run build`): EXIT 0 (2495 modules transformed).
+  - Backend root build (`npm run build`): EXIT 0.
+  - Backend tests: 654 passed files / 5356 passed tests, zero regresi baru (kegagalan adalah pre-existing lama).
+  - File: `LiveChatMonitor.tsx`, `LiveChatComposer.tsx`, `AiOffStrip.tsx`.
+
+
 #### 2026-10-12 - Fixed: Split-Brain Lokasi, Healing Alamat & Navigasi Sadar-Akurasi (REVISI-1, Tahap 1-4)
 
 - **Akar (terbukti di kode + SELECT live):** endpoint admin lokasi hanya tulis

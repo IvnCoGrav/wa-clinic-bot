@@ -108,6 +108,7 @@ import { BRAND } from '../../config/brand';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
 import { HiddenMessageStrip } from '../../components/livechat/HiddenMessageStrip';
+import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
@@ -4356,25 +4357,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {loading && chats.length === 0 ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
-          {/* Loading: banner AI-off mobile ikut tampil agar konsisten dengan daftar (desktop memakai banner global di atas) */}
-          {!chatBotActive && (
-            <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
-              <div className="flex items-center space-x-1.5 min-w-0">
-                <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="truncate">
-                  <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                  <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
-                </span>
-              </div>
-              <button
-                onClick={() => handleToggleGlobalBot(true)}
-                disabled={togglingBotCutoff}
-                className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-              >
-                Aktifkan AI
-              </button>
-            </div>
-          )}
+          {/* Loading: strip status AI-off mobile (toggle ada di sticky search bar) */}
+          {!chatBotActive && <AiOffStrip />}
           <div className="flex-1 flex justify-center items-center py-20">
             <Loader className="animate-spin text-[#008069]" size={32} />
           </div>
@@ -4464,25 +4448,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
-              {/* Mobile Chatbot OFF Warning (ikut scroll bersama daftar; desktop memakai banner global) */}
-              {!chatBotActive && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="truncate">
-                      <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                      <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleToggleGlobalBot(true)}
-                    disabled={togglingBotCutoff}
-                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-                  >
-                    Aktifkan AI
-                  </button>
-                </div>
-              )}
+              {/* Mobile Chatbot OFF Warning (strip teks; toggle ada di sticky search bar) */}
+              {!chatBotActive && <AiOffStrip />}
 
               {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
               {bgSyncProgress.isSyncing && (
@@ -5351,37 +5318,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       )}
                       <button
                         type="button"
-                        onClick={() => handleToggleReadStatus(selectedChat)}
-                        title={(selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread ? 'Tandai sudah dibaca' : 'Tandai belum dibaca'}
-                        className={`p-1.5 rounded-xl border transition shadow-2xs cursor-pointer active:scale-95 ${
-                          (selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread
-                            ? 'bg-[#e8f5f2] dark:bg-[#1f3a34] text-[#008069] dark:text-[#25d366] border-[#c2e7e0] dark:border-[#2a4e45]'
-                            : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
-                        }`}
-                      >
-                        <MessageSquareDot size={14} />
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setInChatSearchOpen((v) => !v)}
                         title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
                         className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'}`}
                       >
                         <Search size={14} />
                       </button>
-                      {/* Mobile: Aktifkan AI global (banner global hanya tampil di desktop, banner list ikut scroll) */}
-                      {!chatBotActive && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleGlobalBot(true)}
-                          disabled={togglingBotCutoff}
-                          title="Aktifkan Chatbot AI"
-                          className="lg:hidden px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs disabled:opacity-50 cursor-pointer"
-                        >
-                          <Bot size={13} />
-                          <span>Aktifkan AI</span>
-                        </button>
-                      )}
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
