@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, IMPLEMENTED lokal — healing PROD + deploy MENUNGGU)
+
+- **Status:** Kode 4 tahap selesai lokal (build + dashboard hijau, 5359 test hijau;
+  6 gagal pre-existing lama). Commit lokal — BELUM push, BELUM healing DB prod,
+  BELUM deploy server.
+- **Isi:** domain enrichment asimetris + ghost-primary; endpoint lokasi delegasi
+  seam `updateCustomerLocation`; helper `buildEffectiveTaskAddress` (3 situs);
+  notifikasi reuse `buildMapsUrls`; 8 situs dashboard helper 4-arg; label
+  "Estimasi (Titik DB)"; prompt state-gated via `locationSource`; jalan di Contacts.
+- **Sisa open (butuh aksi manusia/server):**
+  1. Healing PROD (`node dist/scripts/heal-customer-addresses-split-brain.js`
+     `--dry-run` → `--commit`, setelah backup) — angkaAudit 14 ghost / 11 desync
+     (data bergerak; hitung ulang saat jalan).
+  2. Push + deploy (`up -d --build app worker`, migrasi tak perlu).
+  3. Verifikasi Bunda Mery & Bunda Sifa (Admin + StaffToday + link Maps).
+  4. Dual-store percakapan (service vs repo memory) tetap tech debt (#250).
+- **Artefak:** `docs/plans/FIXING_PLAN_LOCATION_SPLITBRAIN_2026-10-12_REVISI-1_PLAN.md`
+  (catatan: skrip di `src/scripts/`, bukan `scripts/`; runbook asli embryonic
+  diperbaiki di dokumen ini).
+
 ## 250. [Worker/Queue/LLM] Kebocoran Balasan AI via wa-clinic-bot-worker-1 + Latensi GLM 24,8 dtk (2026-10-12, FIXED — belum deploy server)
 
 - **Status:** FIXED di kode lokal (commit + tag `v1.16.1`, build + 5343 test hijau;

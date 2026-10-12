@@ -5,6 +5,24 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: Split-Brain Lokasi, Healing Alamat & Navigasi Sadar-Akurasi (REVISI-1, Tahap 1-4)
+
+- **Akar (terbukti di kode + SELECT live):** endpoint admin lokasi hanya tulis
+  tabel `customers`; `addressesMatch` tak kenal pengayaan asimetris (ghost
+  primary); `preferences.address` tertimpa string kosong di 3 builder tugas;
+  link mentah di notifikasi staf + 8 situs dashboard; prompt AI melarang mutlak
+  tanya alamat saat estimasi; Contacts tanpa teks jalan.
+- **Fixed (fondasional, reuse seam kanonis):** cabang asimetris domain (TDD);
+  endpoint delegasi `updateCustomerLocation`; helper `buildEffectiveTaskAddress`;
+  notifikasi reuse `buildMapsUrls`; dashboard helper 4-arg + hapus fungsi
+  bayangan; label "Estimasi (Titik DB)"; prompt state-gated via `locationSource`
+  (tipe + hidrasi + cabang prune); jalan di Contacts. Skrip healing idempoten
+  `src/scripts/heal-customer-addresses-split-brain.ts` (`--dry-run`/`--commit`).
+- **Test:** 91/91 gate plan; full suite 5359 hijau, 6 gagal pre-existing lama
+  (revert-and-rerun). Build backend + dashboard hijau.
+- **Belum:** healing PROD, push, deploy — lihat `docs/KNOWN_ISSUES.md` #251.
+
+
 #### 2026-10-12 - Fixed: Kebocoran Balasan AI Worker + Latensi GLM 24,8 dtk (Fase 1-6, v1.16.1)
 
 - **Akar Masalah (terbukti di kode):**

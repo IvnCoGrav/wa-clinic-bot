@@ -209,6 +209,9 @@ export class GoalTracker {
           kecamatan: conv.customer.kecamatan || undefined,
           kota: conv.customer.kota || undefined,
           distanceKm: conv.customer.distance_km != null ? Number(conv.customer.distance_km) : undefined,
+          // REVISI-1 Tahap 4.2: provenance titik untuk state-gated pruning
+          // (gps_pin vs estimasi) — dibaca dari kolom DB, bukan tebakan teks.
+          locationSource: (conv.customer as any)?.location_source ?? null,
           // Catatan: `Customer.ongkir` menyimpan HARGA PROMO (temuan audit:
           // label 'ongkirPromoFee' di preferences tak pernah ditulis siapa pun,
           // sehingga ongkir hilang lintas-turn → total katalog & rekap keranjang
@@ -454,10 +457,21 @@ export class GoalTracker {
       );
     }
     if (session.location?.kelurahan || session.location?.distanceKm) {
-      const locStatus = savedAddresses.length > 1
-        ? 'SUDAH DIKETAHUI (boleh konfirmasi pilihan rumah tersimpan via [ALAMAT TERSIMPAN CUSTOMER])'
-        : 'SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!';
-      lines.push(`• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km) [STATUS: ${locStatus}]`);
+      // REVISI-1 Tahap 4.2: STATE-GATED PRUNING (information hiding) — hanya
+      // SATU cabang status yang dikirim per kondisi sesi. Larangan absolut
+      // "DILARANG TANYA ALAMAT LAGI!" dihapus: pada titik ESTIMASI, AI wajib
+      // masih boleh meminta shareloc saat booking (anti-Bidan-tersasar).
+      // Gerbangnya kode di sini; teks prompt hanya lapis sekunder.
+      const locSource = (session.location as any)?.locationSource ?? null;
+      const isPrecisePin = locSource === 'gps_pin';
+      const locLine = `• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km)`;
+      if (savedAddresses.length > 1) {
+        lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (boleh konfirmasi pilihan rumah tersimpan via [ALAMAT TERSIMPAN CUSTOMER])]');
+      } else if (isPrecisePin) {
+        lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (titik presisi)]');
+      } else {
+        lines.push(locLine + ' [STATUS: ESTIMASI WILAYAH — bila customer sepakat booking, minta shareloc WhatsApp terkini agar Bidan tidak tersasar]');
+      }
       // Rule 2 (Strict Information Hiding, state-gated prompt pruning): nominal
       // ongkir DILARANG disuntik ke prompt LLM bila customer belum pernah
       // menanyakan biaya/ongkir (mode konsultasi). Menyembunyikan di payload

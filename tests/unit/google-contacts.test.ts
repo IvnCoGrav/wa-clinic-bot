@@ -144,6 +144,23 @@ describe('Google Contacts Integration Suite', () => {
       expect(notes).toContain('Reservasi Terakhir: Baby Massage + Bath');
     });
 
+    it('REVISI-1 4.3: baris Alamat menyertakan teks jalan bila ada (tanpa duplikat kelurahan)', () => {
+      const withStreet = buildContactNotes({
+        id: 'cust-124', name: 'Bunda Sari', phone: '081234567891',
+        address: 'Jl. Melati No. 5', kota: 'Sidoarjo', kecamatan: 'Waru', kelurahan: 'Waru',
+        children: [],
+      });
+      expect(withStreet).toContain('Alamat: Jl. Melati No. 5, Waru, Waru, Sidoarjo');
+      // Jalan yang sudah mengandung nama wilayah → wilayah itu tidak diulang.
+      const dup = buildContactNotes({
+        id: 'cust-125', name: 'Bunda Sari', phone: '081234567892',
+        address: 'Jl. Waru No. 5', kota: 'Sidoarjo', kecamatan: 'Waru', kelurahan: 'Waru',
+        children: [],
+      });
+      const line = dup.split('\n').find((l: string) => l.startsWith('Alamat:')) || '';
+      expect(line).toBe('Alamat: Jl. Waru No. 5, Sidoarjo');
+    });
+
     it('extracts contact details from Google Person payload', () => {
       const person = {
         resourceName: 'people/c999',

@@ -7,7 +7,8 @@ describe('GoalTracker.formatGoalSessionForPrompt — grounding bulletproof', () 
     customerName: 'Sandbox Customer',
   };
 
-  it('lokasi terisi → baris status eksplisit DILARANG TANYA ALAMAT LAGI', () => {
+  // REVISI-1 Tahap 4.2: state-gated pruning — status bergantung provenance titik.
+  it('lokasi presisi (gps_pin) → status diketahui-titik-presisi, tanpa larangan absolut', () => {
     const text = GoalTracker.formatGoalSessionForPrompt({
       ...baseSession,
       location: {
@@ -17,10 +18,28 @@ describe('GoalTracker.formatGoalSessionForPrompt — grounding bulletproof', () 
         distanceKm: 28.51,
         ongkirPromo: 30000,
         ongkirNormal: 35000,
+        locationSource: 'gps_pin',
       },
     } as any);
     expect(text).toContain('Pelemwatu');
-    expect(text).toContain('[STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!]');
+    expect(text).toContain('[STATUS: SUDAH DIKETAHUI (titik presisi)]');
+    expect(text).not.toContain('DILARANG TANYA ALAMAT LAGI');
+  });
+
+  it('lokasi estimasi (tanpa source) → status ESTIMASI + izin minta shareloc saat booking', () => {
+    const text = GoalTracker.formatGoalSessionForPrompt({
+      ...baseSession,
+      location: {
+        kelurahan: 'Pelemwatu',
+        kecamatan: 'Menganti',
+        kota: 'Kabupaten Gresik',
+        distanceKm: 28.51,
+      },
+    } as any);
+    expect(text).toContain('Pelemwatu');
+    expect(text).toContain('ESTIMASI WILAYAH');
+    expect(text).toContain('shareloc');
+    expect(text).not.toContain('DILARANG TANYA ALAMAT LAGI');
   });
 
   it('lokasi kosong → instruksi tanya kelurahan tetap muncul (tidak ada status larangan)', () => {

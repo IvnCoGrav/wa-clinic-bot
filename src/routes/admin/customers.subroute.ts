@@ -4,7 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { customerService } from '../../services/customer.service';
 import { auditService } from '../../services/audit.service';
 import { conversationService } from '../../services/conversation.service';
-import { ConversationState } from '@prisma/client';
+import { ConversationState, LocationSource } from '@prisma/client';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
@@ -1240,50 +1240,77 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               updatedAt: new Date().toISOString(),
             }
           : null;
-        const updatedPrefs = {
-          ...currentPrefs,
-          house_photo_url: housePhotoUrl,
-          landmark: finalLandmark,
-          ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
-            ? {
-                field_gps_lat: lat,
-                field_gps_lng: lng,
-                field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
-                field_gps_diverged: true,
-              }
-            : {}),
-          location_updated_at: new Date().toISOString(),
-          location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
-          ...(newHistoryEntry ? { location_history: [...existingHistory.slice(-9), newHistoryEntry] } : {}),
-        };
+        // (Dihapus REVISI-1 Tahap 2.1a: konstruksi preferences lama diganti
+        // mergedPrefs dari hasil seam — lihat blok patch media di bawah.)
 
+        // REVISI-1 Tahap 2.1a: tulis lokasi via SEAM KANONIS
+        // (customerService.updateCustomerLocation) — seam yang sama dipakai
+        // webhook/staf, sudah mencakup guard GPS, history, audit, sync Google
+        // Contacts, dan dual-write ke tabel customer_addresses via
+        // syncSavedAddressFromLocation. DILARANG tulis kolom lokasi langsung
+        // dari route (itulah akar split-brain). Admin adalah otoritas
+        // tertinggi: forceUpdateGps=true + manual_staff (perilaku lama
+        // shouldUpdatePrimaryCoords=true dipertahankan).
+        // Route HANYA menangani media/foto di bawah (bukan lokasi).
         let updatedCustomer: any = null;
         try {
-          updatedCustomer = await prisma.customer.update({
-            where: { id: customer.id },
-            data: {
-              ...(shouldUpdatePrimaryCoords && lat !== undefined ? { lat } : {}),
-              ...(shouldUpdatePrimaryCoords && lng !== undefined ? { lng } : {}),
-              ...(shouldUpdatePrimaryCoords && distanceKm !== undefined ? { distance_km: distanceKm } : {}),
-              ...(shouldUpdatePrimaryCoords && lat !== undefined && lng !== undefined
-                ? { location_source: 'manual_staff' as const }
-                : {}),
-              preferences: updatedPrefs,
+          updatedCustomer = await customerService.updateCustomerLocation(
+            customer.id,
+            {
+              kelurahan: customer.kelurahan ?? undefined,
+              kecamatan: customer.kecamatan ?? undefined,
+              kota: customer.kota ?? undefined,
+              lat: lat ?? undefined,
+              lng: lng ?? undefined,
+              locationSource:
+                lat !== undefined && lng !== undefined ? LocationSource.manual_staff : undefined,
+              forceUpdateGps: true,
             },
-          });
-        } catch (dbErr: any) {
-          // In-memory fallback
-          if (shouldUpdatePrimaryCoords) {
-            customer.lat = lat !== undefined ? lat : customer.lat;
-            customer.lng = lng !== undefined ? lng : customer.lng;
-            customer.distance_km = distanceKm;
-            if (lat !== undefined && lng !== undefined) customer.location_source = 'manual_staff';
+            DEFAULT_TENANT_ID
+          );
+          if (!updatedCustomer) updatedCustomer = customer;
+        } catch (seamErr: any) {
+          console.error('[ADMIN CUSTOMER] Seam lokasi gagal:', seamErr.message);
+          return reply.status(500).send({ success: false, error: seamErr.message });
+        }
+
+        // Media/foto + landmark: patch preferences SAJA (tanpa kolom lokasi).
+        let updatedPrefs: any = null;
+        try {
+          const seamPrefs = (updatedCustomer.preferences as any) || {};
+          const seamHistory: any[] = Array.isArray(seamPrefs.location_history) ? seamPrefs.location_history : [];
+          const mergedPrefs = {
+            ...seamPrefs,
+            house_photo_url: housePhotoUrl,
+            landmark: finalLandmark,
+            ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
+              ? {
+                  field_gps_lat: lat,
+                  field_gps_lng: lng,
+                  field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
+                  field_gps_diverged: true,
+                }
+              : {}),
+            location_updated_at: new Date().toISOString(),
+            location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
+            ...(newHistoryEntry ? { location_history: [...seamHistory.slice(-9), newHistoryEntry] } : {}),
+          };
+          try {
+            const patched = await prisma.customer.update({
+              where: { id: customer.id },
+              data: { preferences: mergedPrefs },
+            });
+            updatedCustomer = { ...updatedCustomer, preferences: (patched as any).preferences ?? mergedPrefs };
+          } catch {
+            updatedCustomer.preferences = mergedPrefs;
+            updatedCustomer.updated_at = new Date();
+            const mem = customerService.getMemoryCustomers();
+            mem.set(updatedCustomer.phone || customer.phone, updatedCustomer);
           }
-          customer.preferences = updatedPrefs;
-          customer.updated_at = new Date();
-          const mem = customerService.getMemoryCustomers();
-          mem.set(customer.phone, customer);
-          updatedCustomer = customer;
+          updatedPrefs = mergedPrefs;
+        } catch (prefErr: any) {
+          console.error('[ADMIN CUSTOMER] Patch media gagal:', prefErr.message);
+          return reply.status(500).send({ success: false, error: prefErr.message });
         }
 
         await auditService.logAdminAction({

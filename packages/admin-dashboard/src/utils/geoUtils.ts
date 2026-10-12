@@ -259,7 +259,8 @@ export function getLocationBadgeConfig(
     const isDbCoords = rawPref === 'db_coords';
     return {
       source: 'estimated_area',
-      label: explicitLabel || (isDbCoords ? '🟡 Koordinat Tersimpan' : '⚪ Estimasi Wilayah'),
+      // REVISI-1 Tahap 4.1: label jujur — titik DB bukan pin GPS rumah.
+      label: explicitLabel || (isDbCoords ? '🟡 Estimasi (Titik DB)' : '⚪ Estimasi Wilayah'),
       badgeClass: isDbCoords
         ? 'bg-amber-50 text-amber-700 border-amber-200'
         : 'bg-gray-50 text-gray-700 border-gray-200',

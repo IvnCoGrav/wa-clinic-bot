@@ -5,6 +5,7 @@ import { webPushService } from './web-push.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getStaffNotificationConfig } from '../config/staff-notification-config';
+import { buildMapsUrls } from './staff-reservation.service';
 import { getPaymentDisplayStatus } from '../domain/reservation-payment';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -166,15 +167,23 @@ export class StaffNotificationService {
           })
         : '-';
 
-      // 4. Navigasi Google Maps Motor
+      // 4. Navigasi Google Maps Motor — REVISI-1 Tahap 3.1: seam kanonis
+      // buildMapsUrls (source-aware, bukan template inline). Titik NON-presisi
+      // + teks alamat → URL TEKS agar Bidan tidak diarahkan ke titik tengah
+      // kelurahan/sawah. gps_pin → byte-identik perilaku lama.
       const lat = addrEntity?.lat ?? cust?.lat;
       const lng = addrEntity?.lng ?? cust?.lng;
+      const hasAddressText = !!addressText && addressText !== 'Alamat belum tercatat lengkap';
+      const { navigationUrl: seamNavUrl } = buildMapsUrls(
+        lat, lng,
+        (addrEntity as any)?.location_source ?? (cust as any)?.location_source ?? null,
+        hasAddressText ? addressText : null
+      );
       const navigationUrl =
-        lat && lng
-          ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
-          : addressText && addressText !== 'Alamat belum tercatat lengkap'
+        seamNavUrl ||
+        (hasAddressText
           ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText)}&travelmode=two-wheeler`
-          : 'https://maps.google.com';
+          : 'https://maps.google.com');
 
       // 5. Jarak Tempuh — Fase 4 (RC-6, KNOWN_ISSUES #138 G5): sumber resmi jarak klinik→pasien
       // adalah deliveryService.calculateDelivery (tenant-aware: ORS + fallback + tier DB), sehingga
@@ -848,14 +857,20 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         if (addrEntity?.kota || cust?.kota) addressParts.push(this.escapeMarkdown(addrEntity?.kota || cust?.kota));
         const addressText = addressParts.join(', ') || 'Alamat tercatat di sistem';
 
+        // REVISI-1 Tahap 3.1: seam kanonis buildMapsUrls (source-aware).
         const lat = addrEntity?.lat ?? cust?.lat;
         const lng = addrEntity?.lng ?? cust?.lng;
+        const hasAddressText2 = !!addressText && addressText !== 'Alamat tercatat di sistem';
+        const { navigationUrl: seamNavUrl2 } = buildMapsUrls(
+          lat, lng,
+          (addrEntity as any)?.location_source ?? (cust as any)?.location_source ?? null,
+          hasAddressText2 ? addressText : null
+        );
         const navigationUrl =
-          lat && lng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
-            : addressText !== 'Alamat tercatat di sistem'
+          seamNavUrl2 ||
+          (hasAddressText2
             ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText)}&travelmode=two-wheeler`
-            : `https://maps.google.com/?q=${encodeURIComponent(addressText)}`;
+            : `https://maps.google.com/?q=${encodeURIComponent(addressText)}`);
 
         // 5. Total Biaya
         const purchaseValue = reservation.purchase_value || 0;

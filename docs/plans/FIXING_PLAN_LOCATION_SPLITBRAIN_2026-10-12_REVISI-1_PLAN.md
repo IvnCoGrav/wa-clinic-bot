@@ -49,7 +49,9 @@
 - **Kriteria:** gate 1.1 hijau; tidak ada perubahan perilaku untuk kasus 3-4.
 
 ### Mikro 1.3: Skrip healing + otoritas deterministik
-- **File baru:** `scripts/heal-customer-addresses-split-brain.ts`
+- **File:** `src/scripts/heal-customer-addresses-split-brain.ts` (di `src/` agar
+  terkompilasi ke `dist/` dan bisa jalan di image prod via `node`; flag
+  `--dry-run` default / `--commit` eksplisit, sesuai konvensi `src/scripts/`)
 - **Aturan otoritas (final, tanpa "atau sebaliknya" kabur):** sumber kebenaran =
   sisi yang memegang `manual_staff` **BESERTA koordinat**; ghost primary =
   baris `is_primary` + `address` kosong → pindahkan ke baris terisi

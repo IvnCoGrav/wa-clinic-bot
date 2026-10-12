@@ -220,6 +220,42 @@ export function buildAddressText(c: {
 }
 
 /**
+ * REVISI-1 Tahap 2.2: konstruktor TUNGGAL alamat efektif kartu tugas.
+ * Dipakai getTodayTasks / getUpcomingSchedule / getCompletedTasks (dulu tiga
+ * salinan inline yang divergen).
+ *
+ * Bug yang diperbaiki ("penghapusan diam-diam"): `preferences.address` ditimpa
+ * `addr.address` mentah — bila entri alamat reservasi kosong, teks jalan yang
+ * tersimpan di profil customer terhapus. Kini jatuh-bertingkat (baris reservasi
+ * → preferences → kolom customers) + trim, berlaku untuk `address` maupun
+ * turunan preferences-nya. Geometri (lat/lng/distance) tetap milik baris
+ * reservasi; label sumber ditangani FIX 2026-10-11 di bawah.
+ */
+export function buildEffectiveTaskAddress(addr: any, cust: any): any {
+  if (!addr) return cust;
+  const fallbackAddress = String(
+    (addr as any)?.address || (cust?.preferences as any)?.address || (cust as any)?.address || ''
+  ).trim();
+  return {
+    address: fallbackAddress,
+    kelurahan: addr.kelurahan,
+    kecamatan: addr.kecamatan,
+    kota: addr.kota,
+    lat: addr.lat,
+    lng: addr.lng,
+    distance_km: addr.distance_km,
+    ongkir: addr.ongkir,
+    landmark: addr.landmark,
+    location_source: addr.location_source,
+    preferences: {
+      ...((cust?.preferences as any) || {}),
+      address: fallbackAddress,
+      landmark: addr.landmark || (cust?.preferences as any)?.landmark,
+    },
+  };
+}
+
+/**
  * Derivasi TUNGGAL sumber akurasi koordinat untuk kartu terapis (server-driven).
  *
  * Urutan (deterministik, berbasis state — bukan tebakan teks):
@@ -618,25 +654,7 @@ export class StaffReservationService {
         rows.map(async (r) => {
         const cust = r.customer;
         const addr = (r as any).customer_address;
-        const effectiveAddr = addr
-          ? {
-              address: addr.address,
-              kelurahan: addr.kelurahan,
-              kecamatan: addr.kecamatan,
-              kota: addr.kota,
-              lat: addr.lat,
-              lng: addr.lng,
-              distance_km: addr.distance_km,
-              ongkir: addr.ongkir,
-              landmark: addr.landmark,
-              location_source: addr.location_source,
-              preferences: {
-                ...((cust?.preferences as any) || {}),
-                address: addr.address,
-                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
-              },
-            }
-          : cust;
+        const effectiveAddr = buildEffectiveTaskAddress(addr, cust);
         // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
@@ -943,25 +961,7 @@ export class StaffReservationService {
         rows.map(async (r) => {
         const cust = r.customer;
         const addr = (r as any).customer_address;
-        const effectiveAddr = addr
-          ? {
-              address: addr.address,
-              kelurahan: addr.kelurahan,
-              kecamatan: addr.kecamatan,
-              kota: addr.kota,
-              lat: addr.lat,
-              lng: addr.lng,
-              distance_km: addr.distance_km,
-              ongkir: addr.ongkir,
-              landmark: addr.landmark,
-              location_source: addr.location_source,
-              preferences: {
-                ...((cust?.preferences as any) || {}),
-                address: addr.address,
-                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
-              },
-            }
-          : cust;
+        const effectiveAddr = buildEffectiveTaskAddress(addr, cust);
         // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
@@ -1144,25 +1144,7 @@ export class StaffReservationService {
         rows.map(async (r) => {
         const cust = r.customer;
         const addr = (r as any).customer_address;
-        const effectiveAddr = addr
-          ? {
-              address: addr.address,
-              kelurahan: addr.kelurahan,
-              kecamatan: addr.kecamatan,
-              kota: addr.kota,
-              lat: addr.lat,
-              lng: addr.lng,
-              distance_km: addr.distance_km,
-              ongkir: addr.ongkir,
-              landmark: addr.landmark,
-              location_source: addr.location_source,
-              preferences: {
-                ...((cust?.preferences as any) || {}),
-                address: addr.address,
-                landmark: addr.landmark || (cust?.preferences as any)?.landmark,
-              },
-            }
-          : cust;
+        const effectiveAddr = buildEffectiveTaskAddress(addr, cust);
         // FIX nyasar 2026-10-11: label sumber harus mengikuti entitas yang
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun

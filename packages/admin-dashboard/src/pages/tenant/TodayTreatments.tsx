@@ -1964,7 +1964,7 @@ export const TodayTreatments: React.FC = () => {
                           <span>Titik GPS Terkunci</span>
                         </div>
                         <a
-                          href={getGoogleMapsDirectionUrl(locationTask.address.lat, locationTask.address.lng)}
+                          href={getGoogleMapsDirectionUrl(locationTask.address.lat, locationTask.address.lng, locationTask.address.fullText || locationTask.address.kelurahan || null)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="px-2.5 py-1 rounded-lg bg-[#008069] text-white text-[11px] font-bold hover:bg-[#00a884] transition inline-flex items-center gap-1 shadow-2xs"
@@ -2058,7 +2058,7 @@ export const TodayTreatments: React.FC = () => {
                       </label>
                       {locCoords && (
                         <a
-                          href={getGoogleMapsDirectionUrl(locCoords.lat, locCoords.lng)}
+                          href={getGoogleMapsDirectionUrl(locCoords.lat, locCoords.lng, locLandmark || locationTask?.address?.fullText || null)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"

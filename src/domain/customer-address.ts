@@ -114,6 +114,18 @@ export function addressesMatch(
   if (sameStreet && sameKel && sameKec) return true;
   // Tanpa detail jalan di kedua sisi: samakan bila wilayah desa/kecamatan identik.
   if (!aAddr && !bAddr && sameKel && sameKec) return true;
+  // Pengayaan asimetris (ghost primary 2026-10-12): tepat SATU sisi kosong
+  // (tanpa teks jalan) dan wilayahnya cocok → rumah yang SAMA sedang
+  // dilengkapi, bukan rumah baru. Syarat kecamatan sama; kelurahan sama bila
+  // keduanya terisi (sisi yang belum punya kelurahan boleh mengikuti).
+  // Dua sisi ber-teleks beda jalan → tetap TIDAK match (rumah-2 aman).
+  if (aAddr !== bAddr && sameKec) {
+    const kelOk =
+      sameKel ||
+      !hasText(a.kelurahan) ||
+      !hasText(b.kelurahan);
+    if (kelOk) return true;
+  }
   return false;
 }
 

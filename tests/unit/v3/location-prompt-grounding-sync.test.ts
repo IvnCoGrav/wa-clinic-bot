@@ -55,7 +55,7 @@ describe('Location Prompt Grounding Sync & Cool-Off (anti-kaset rusak)', () => {
     expect(promptText).toContain('• Lokasi: Belum diketahui (Perlu ditanyakan kelurahan/kecamatannya)');
   });
 
-  it('formatGoalSessionForPrompt mencetak status SUDAH DIKETAHUI jika lokasi ada', () => {
+  it('formatGoalSessionForPrompt mencetak status ESTIMASI jika lokasi tanpa provenance presisi (REVISI-1 4.2)', () => {
     const session: any = {
       genderGreeting: 'Bunda',
       customerName: 'Bunda Test',
@@ -70,6 +70,7 @@ describe('Location Prompt Grounding Sync & Cool-Off (anti-kaset rusak)', () => {
 
     const promptText = GoalTracker.formatGoalSessionForPrompt(session);
 
-    expect(promptText).toContain('STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!');
+    expect(promptText).toContain('STATUS: ESTIMASI WILAYAH');
+    expect(promptText).not.toContain('DILARANG TANYA ALAMAT LAGI');
   });
 });

@@ -227,4 +227,27 @@ describe('CustomerService — pin presisi tidak jadi data hibrida', () => {
     const list = await customerService.getSavedAddresses(c.id, TENANT);
     expect(list.find((a) => a.isPrimary)?.id).toBe('home2');
   });
+
+  it('updateCustomer (edit jalan via profil) → sync ke tabel customer_addresses (kunci anti-split-brain REVISI-1 2.1b)', async () => {
+    const c = await seedCustomer();
+    // Simulasikan DB online agar jalur produksi (bukan fallback memori) tereksekusi:
+    // prisma.customer.update resolve, sisanya tetap mock offline bawaan setup.ts.
+    const updateSpy = vi.spyOn((prisma as any).customer, 'update').mockImplementation(async (args: any) => ({
+      ...(c as any), ...(args?.data || {}),
+    }));
+    const upsertSpy = vi.spyOn((prisma as any).customerAddress, 'upsert').mockResolvedValue({ id: 'addr-x' } as any);
+    try {
+      await customerService.updateCustomer(
+        (c as any).id,
+        { address: 'Jl. Mawar No. 9', kelurahan: 'Waru', kecamatan: 'Waru', kota: 'Sidoarjo', lat: -7.36, lng: 112.73 },
+        TENANT
+      );
+      expect(upsertSpy).toHaveBeenCalled();
+      const writes = upsertSpy.mock.calls.map((cl) => (cl?.[0] as any)?.create);
+      expect(writes.some((w) => w?.address === 'Jl. Mawar No. 9')).toBe(true);
+    } finally {
+      upsertSpy.mockRestore();
+      updateSpy.mockRestore();
+    }
+  });
 });

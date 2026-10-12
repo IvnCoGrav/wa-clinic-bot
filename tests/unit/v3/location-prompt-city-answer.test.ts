@@ -169,7 +169,7 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
       expect(promptText).toContain('Sudah ditanyakan di pesan sebelumnya — JANGAN menanyakan lokasi lagi');
     });
 
-    it('session.location sudah ada kelurahan → status SUDAH DIKETAHUI di goal-tracker', () => {
+    it('session.location estimasi → status ESTIMASI + boleh minta shareloc (REVISI-1 4.2, bukan larangan absolut)', () => {
       const session = {
         ...baseSession,
         location: {
@@ -182,7 +182,25 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
 
       const promptText = GoalTracker.formatGoalSessionForPrompt(session);
 
-      expect(promptText).toContain('STATUS: SUDAH DIKETAHUI - DILARANG TANYA ALAMAT LAGI!');
+      expect(promptText).toContain('STATUS: ESTIMASI WILAYAH');
+      expect(promptText).not.toContain('DILARANG TANYA ALAMAT LAGI');
+    });
+
+    it('session.location presisi (gps_pin) → status titik-presisi', () => {
+      const session = {
+        ...baseSession,
+        location: {
+          kelurahan: 'Kutisari',
+          kecamatan: 'Tenggilis Mejoyo',
+          kota: 'Surabaya',
+          distanceKm: 5,
+          locationSource: 'gps_pin',
+        },
+      };
+
+      const promptText = GoalTracker.formatGoalSessionForPrompt(session);
+
+      expect(promptText).toContain('STATUS: SUDAH DIKETAHUI (titik presisi)');
     });
   });
 

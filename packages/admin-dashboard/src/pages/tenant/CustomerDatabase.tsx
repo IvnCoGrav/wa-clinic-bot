@@ -13,7 +13,7 @@ import { ReservationDetailModal } from '../../components/modals/ReservationDetai
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
-import { getLocationBadgeConfig } from '../../utils/geoUtils';
+import { getLocationBadgeConfig, getGoogleMapsDirectionUrl, resolveEffectiveLocationSource } from '../../utils/geoUtils';
 import {
   Users,
   Search,
@@ -1271,7 +1271,7 @@ export const CustomerDatabase: React.FC = () => {
                       <div className="flex items-center space-x-2">
                         {detailData?.latitude && detailData?.longitude ? (
                           <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${detailData.latitude},${detailData.longitude}`}
+                            href={getGoogleMapsDirectionUrl(detailData.latitude, detailData.longitude, [detailData?.address, detailData?.kelurahan, detailData?.kecamatan, detailData?.kota].filter(Boolean).join(', ') || null, resolveEffectiveLocationSource(detailData))}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center space-x-1 text-[#008069] font-bold hover:underline"

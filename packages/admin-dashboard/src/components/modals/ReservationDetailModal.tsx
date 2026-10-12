@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
-import { calculateHaversineKm } from '../../utils/geoUtils';
+import { calculateHaversineKm, getGoogleMapsDirectionUrl, getLocationBadgeConfig } from '../../utils/geoUtils';
 import {
   X,
   Info,
@@ -550,7 +550,12 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     const landmark = prefs?.landmark;
                     const lat = displayReservation.customer?.lat;
                     const lng = displayReservation.customer?.lng;
-                    const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
+                    // REVISI-1 Tahap 3.2: URL sadar akurasi (titik non-presisi +
+                    // teks → tujuan teks) + badge status di judul seksi.
+                    const locSource = (displayReservation.customer as any)?.location_source || null;
+                    const addrText = [prefs?.address || (displayReservation.customer as any)?.address, prefs?.kelurahan || displayReservation.customer?.kelurahan, prefs?.kecamatan || displayReservation.customer?.kecamatan, displayReservation.customer?.kota].filter(Boolean).join(', ');
+                    const mapsUrl = lat && lng ? getGoogleMapsDirectionUrl(lat, lng, addrText || null, locSource) : null;
+                    const locBadge = getLocationBadgeConfig({ location_source: locSource, preferences: prefs });
 
                     if (!housePhoto && !landmark && !mapsUrl) {
                       return (
@@ -572,6 +577,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
                             Panduan Lokasi & Foto Rumah
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${locBadge.badgeClass}`} title="Status akurasi titik lokasi">
+                            {locBadge.label}
                           </span>
                           <div className="flex items-center space-x-2">
                             {mapsUrl && (

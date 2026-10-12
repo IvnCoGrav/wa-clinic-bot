@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { buildApp } from '../../src/app';
 import { customerService } from '../../src/services/customer.service';
+import { prisma } from '../../src/db/client';
 import { queueService } from '../../src/services/queue.service';
 import { FastifyInstance } from 'fastify';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
@@ -199,6 +200,29 @@ describe('Admin Customer Label (DB-column) API', () => {
     expect(body.data.landmark).toBe('Pagar abu-abu, seberang minimarket');
     expect(body.data.lat).toBe(-7.3488);
     expect(body.data.lng).toBe(112.7516);
+  });
+
+  it('PUT location → dual-write tabel customer_addresses (anti split-brain REVISI-1 2.1a)', async () => {
+    const upsertSpy = vi.spyOn((prisma as any).customerAddress, 'upsert').mockResolvedValue({ id: 'addr-dual' } as any);
+    try {
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/admin/customers/${customerId}/location`,
+        headers: ADMIN_HEADERS,
+        payload: { landmark: 'Tes dual write', lat: -7.3499, lng: 112.7527 },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(upsertSpy).toHaveBeenCalled();
+      // persistSavedAddresses meng-upsert SELURUH daftar (termasuk entri uji
+      // sebelumnya utk customer yang sama) — cari panggilan milik PUT ini.
+      const mine = upsertSpy.mock.calls
+        .map((c) => (c?.[0] as any)?.create)
+        .find((w) => w?.lat === -7.3499 && w?.lng === 112.7527);
+      expect(mine).toBeDefined();
+      expect(mine?.location_source).toBe('manual_staff');
+    } finally {
+      upsertSpy.mockRestore();
+    }
   });
 });
 

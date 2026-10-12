@@ -2004,7 +2004,7 @@ export const Reservations: React.FC = () => {
                   </label>
                   {editLat && editLng && (
                     <a
-                      href={getGoogleMapsDirectionUrl(parseFloat(editLat), parseFloat(editLng))}
+                      href={getGoogleMapsDirectionUrl(parseFloat(editLat), parseFloat(editLng), editLandmark || null)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"

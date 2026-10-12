@@ -108,7 +108,7 @@ import { BRAND } from '../../config/brand';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
 import { HiddenMessageStrip } from '../../components/livechat/HiddenMessageStrip';
-import { resolveEffectiveLocationSource, getLocationBadgeConfig } from '../../utils/geoUtils';
+import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -6245,7 +6245,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                         )}
                                       </div>
                                       <a
-                                        href={locData.url || `https://www.google.com/maps/search/?api=1&query=${locData.latitude},${locData.longitude}`}
+                                        href={locData.url || getGoogleMapsDirectionUrl(locData.latitude, locData.longitude, locData.name || locData.address || null, 'gps_pin')}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
@@ -6756,7 +6756,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Koordinat GPS</p>
                           {customerDetailData?.lat && customerDetailData?.lng ? (
                             <a
-                              href={`https://maps.google.com/?q=${customerDetailData.lat},${customerDetailData.lng}`}
+                              href={getGoogleMapsDirectionUrl(customerDetailData.lat, customerDetailData.lng, (customerDetailData as any)?.preferences?.address || (customerDetailData as any)?.address || (customerDetailData as any)?.kelurahan || null, resolveEffectiveLocationSource(customerDetailData))}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-[11px] font-bold text-sky-600 hover:underline flex items-center space-x-1"

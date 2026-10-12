@@ -175,9 +175,21 @@ export function buildContactNotes(customer: CustomerContactContext): string {
     lines.push(`Data Anak: ${childList}`);
   }
 
-  const addressParts = [customer.kelurahan, customer.kecamatan, customer.kota].filter(Boolean);
-  if (addressParts.length > 0) {
-    lines.push(`Alamat: ${addressParts.join(', ')}`);
+  // REVISI-1 Tahap 4.3: sertakan teks jalan agar kontak HP menampilkan alamat lengkap.
+  const streetText = String(
+    (customer as any).address || (customer as any).preferences?.address || (customer as any).preferences?.full_address || ''
+  ).trim();
+  const addressParts = [streetText || null, customer.kelurahan, customer.kecamatan, customer.kota]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean);
+  // Hindari duplikat: bila jalan sudah mengandung nama kelurahan, jangan ulang.
+  const deduped = addressParts.filter((part, idx) => {
+    if (idx === 0) return true;
+    const first = (addressParts[0] || '').toLowerCase();
+    return !first.includes(part.toLowerCase());
+  });
+  if (deduped.length > 0) {
+    lines.push(`Alamat: ${deduped.join(', ')}`);
   }
 
   if (customer.latestReservation?.service_name) {

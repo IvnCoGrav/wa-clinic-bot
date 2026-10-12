@@ -24,6 +24,12 @@ export interface LocationState {
   ongkirNormal?: number;
   ongkirPromo?: number;
   isOutOfCoverage?: boolean;
+  /**
+   * REVISI-1 Tahap 4.2: provenance titik (gps_pin presisi vs
+   * manual_staff/estimated_area). Dihidrasi dari customers.location_source —
+   * gerbang state untuk pruning prompt (bukan tebakan teks).
+   */
+  locationSource?: string | null;
 }
 
 export interface ChildState {

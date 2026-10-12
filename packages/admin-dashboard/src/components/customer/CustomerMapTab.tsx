@@ -7,6 +7,8 @@ import {
   ClinicMapMeta,
 } from '../../services/api';
 import { loadLeaflet } from '../../utils/leafletLoader';
+// REVISI-1 Tahap 3.2: hapus fungsi lokal bayangan — satu seam kanonis.
+import { getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 import {
   computeSpatialMetrics,
   disperseOverlappingPoints,
@@ -52,10 +54,6 @@ const BASEMAP_ATTR = CARTO_KEY
 // Set maxNativeZoom: 16 agar Leaflet melakukan stretching di zoom 17-18 tanpa me-request tile 404.
 const BASEMAP_MAX_NATIVE_ZOOM = CARTO_KEY ? 20 : 16;
 const BASEMAP_SUBDOMAINS: string | undefined = CARTO_KEY ? 'abcd' : undefined;
-
-function getGoogleMapsDirectionUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-}
 
 function escapeHtml(str: string): string {
   return String(str ?? '')
