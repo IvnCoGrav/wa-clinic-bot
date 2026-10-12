@@ -5,6 +5,36 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: Kebocoran Balasan AI Worker + Latensi GLM 24,8 dtk (Fase 1-6, v1.16.1)
+
+- **Akar Masalah (terbukti di kode):**
+  - Worker (`src/worker.ts`) ikut mengonsumsi antrean chat BullMQ karena
+    konstruktor `QueueService` otomatis membuat `Worker`; kunci `bullProcessing`
+    hanya in-memory per proses sehingga app + worker memproses pesan yang sama.
+  - `worker.ts` tidak memuat persona/katalog/delivery/AI-config dari DB.
+  - Call 2 ke `glm-5.3-flash` tanpa `thinking: { type: 'disabled' }` (±1.022
+    reasoning token terbuang, latensi 24,8 dtk); Call 1 sudah dipasang.
+  - `docker-compose.yml` app `SEPARATE_WORKER=false` → cron ganda.
+- **Fixed (fondasional):**
+  - Fase 1: gate `shouldRunChatConsumers()` (worker hanya produsen enqueue,
+    Queue tetap dibuat); `isBotActive` default fail-closed `false`;
+    `worker.ts` memuat 5 config tenant dari DB seperti `app.ts`.
+  - Fase 2: `thinking.disabled` di Call 2 via `supportsThinkingParam`
+    (GLM saja; DeepSeek/OpenAI-compatible tetap dilarang).
+  - Fase 3: `SEPARATE_WORKER=true` untuk service app di compose.
+  - Fase 4: kunci Redis `lock:<tenant>:<phone>` (UUID + NX EX 60 + release Lua
+    banding-dan-hapus) + fallback in-memory; `claimForProcessing` DB tetap
+    sebagai gerbang retry; `releaseDisabledBotConversations` tahan per-item.
+- **Test & Verifikasi:**
+  - Test baru: `shouldRunChatConsumers`, lock Redis (NX/owner/tenant),
+    Call 2 thinking gate + respons plain tak-kosong (multi-frasa).
+  - Fixture: `setupOfflineEnv` + 3 file uji men-set bot aktif eksplisit
+    (cermin boot produksi); `ai-models-tenant.test.ts` diperbarui ke fail-closed.
+  - `npm run build` hijau; full suite: 5343 passed, 6 gagal pre-existing
+    terbukti via revert-and-rerun (`purchase-detection` 1,
+    `reservation-security-and-integrity` 4, `staff-otw-chat-poison` 1).
+- **Belum deploy server** — lihat `docs/KNOWN_ISSUES.md` #250.
+
 #### 2026-10-12 - Revisi: Header LiveChat Mobile Benar-Benar Ikut Scroll + Banner Sync/Error (Search Tetap Sticky)
 
 - **Keputusan user:** search TETAP STICKY di mobile (revert perubahan search fase lalu).

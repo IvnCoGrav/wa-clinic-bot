@@ -410,7 +410,9 @@ export class AiModelConfigService {
   }
 
   static isBotActive(tenantId: string = DEFAULT_TENANT_ID): boolean {
-    return this.globalBotActive.get(tenantId) ?? true;
+    // FONDASIONAL fail-closed (insiden kebocoran worker 12/10/2026): proses yang
+    // belum memuat status dari DB default bot MATI, bukan hidup.
+    return this.globalBotActive.get(tenantId) ?? false;
   }
 
   static async setBotActive(tenantId: string, active: boolean): Promise<void> {

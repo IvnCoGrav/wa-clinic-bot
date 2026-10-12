@@ -3,6 +3,44 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 250. [Worker/Queue/LLM] Kebocoran Balasan AI via wa-clinic-bot-worker-1 + Latensi GLM 24,8 dtk (2026-10-12, FIXED — belum deploy server)
+
+- **Status:** FIXED di kode lokal (commit + tag `v1.16.1`, build + 5343 test hijau;
+  6 gagal sisanya pre-existing terbukti via revert-and-rerun) — **belum deploy
+  ke server** (butuh restart kontainer app+worker + verifikasi 2 langkah bila
+  menyentuh WAHA).
+- **Akar (terbukti di kode, bukan teori):**
+  1. `src/worker.ts` mengimpor `queueService` yang konstruktornya otomatis
+     membuat BullMQ `Worker` → app + worker dua-duanya memakan
+     `message_queue_shard_*` yang sama; kunci `bullProcessing` hanya `Set`
+     memori per proses (tidak lintas kontainer).
+  2. `src/worker.ts main()` tidak memuat persona/katalog/delivery/AI-config
+     dari DB (worker jalan tanpa konteks bisnis + status bot tak sinkron).
+  3. Call 2 ke `glm-5.3-flash` tidak membawa `thinking: { type: 'disabled' }`
+     (Call 1 sudah) → ±1.022 reasoning token + latensi 24,8 dtk.
+  4. `docker-compose.yml` app `SEPARATE_WORKER=false` → cron ganda app+worker.
+- **Perbaikan (6 fase, fondasional — tanpa regex hafalan, tanpa dependency baru):**
+  Fase 1.1 gate `shouldRunChatConsumers()` (worker hanya produsen enqueue);
+  1.2 `isBotActive` default fail-closed `false`; 1.3 load DB di worker;
+  Fase 2 `thinking.disabled` Call 2 + test; Fase 3 `SEPARATE_WORKER=true` di
+  compose; Fase 4 kunci Redis `lock:<tenant>:<phone>` (UUID + NX EX 60 +
+  release Lua) + fallback in-memory; `releaseDisabledBotConversations`
+  tahan per-item (satu baris basi tidak menggagalkan batch — regresi yang
+  ditemukan saat pengujian fail-closed).
+- **Sisa observasi (open):**
+  1. Deploy server + restart app/worker belum dilakukan; pasca-deploy cek log
+     `[QUEUE] Shard queues initialized (PRODUSEN SAJA...)` hanya di worker dan
+     tidak ada cron ganda.
+  2. CS manusia wajib membalas pertanyaan keunggulan klinik customer
+     `6285117415425` (mendesak, di luar kode).
+  3. Divergensi dual-store (service `memoryConversations` vs repo
+     `InMemoryConversationRepository.store` + reset `beforeEach`) adalah tech
+     debt arsitektur — pemisahan seam kanonis tunggal ditunda ke siklus
+     berikutnya (tidak disentuh plan ini).
+  4. Drift versi `package.json 1.16.0` vs tag `v1.4.0` ditutup sebagian via tag
+     `v1.16.1`; entri changelog 1.5→1.16 yang hilang tetap backlog.
+- **Artefak:** `docs/plans/FIXING_PLAN_WORKER_LEAK_2026-10-12_REVISI-1_PLAN.md`.
+
 ## 249. [LiveChat/Mobile] Revisi Unsticky Header+Banner: Uji Fisik iOS & Kasus Sync/Error on Mobile (2026-10-12)
 
 - **Status:** IMPLEMENTED (prosedural 21/21 + build hijau) + sisa observasi (open).

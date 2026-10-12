@@ -1,4 +1,5 @@
 import { MockWAHAClient } from '../../../src/cli/mock-waha-client';
+import { AiModelConfigService } from '../../../src/config/ai-models.config';
 import { TypingService } from '../../../src/services/typing.service';
 import { ConversationStateMachine } from '../../../src/state-machine/machine';
 import { Direction, ConversationState } from '@prisma/client';
@@ -20,6 +21,12 @@ export function setupOfflineEnv(): void {
   process.env.HUMANIZER_ENABLED = 'false';
   process.env.HUMANIZER_BUBBLE_SPLIT_ENABLED = 'false';
   process.env.CLINIC_PRICELIST_IMAGE_URL = 'assets/pricelist_spa.jpg';
+  // Cerminkan boot produksi (app.ts memuat GLOBAL_BOT_ENABLED=true dari DB):
+  // harness offline tidak punya DB sehingga tanpa ini bot fail-closed (MATI)
+  // sejak Fase 1.2 dan seluruh skenario matrix/golden ter-escalate. Test yang
+  // menguji perilaku bot-MATI (mis. bot-toggle) men-set eksplisit sendiri.
+  // setBotActive menelan gagal-persist offline di dalamnya (warn saja).
+  void AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, true);
 }
 
 /** WAHA mock yang merekam semua teks yang dikirim bot (untuk assertion). */

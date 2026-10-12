@@ -84,6 +84,35 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Muat data tenant dari DB (cermin boot app.ts — insiden 12/10/2026: worker
+  // jalan tanpa persona/katalog/AI-config sehingga follow-up memakai fallback
+  // dan status bot tak pernah sinkron). DB offline → fallback DEFAULT_TENANT_ID.
+  try {
+    const { DEFAULT_TENANT_ID } = await import('./config/tenant');
+    const { loadServicesFromDb } = await import('./services/treatment-catalog.service');
+    const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
+    const { loadPersonaFromDb } = await import('./config/persona');
+    const { AiModelConfigService } = await import('./config/ai-models.config');
+    const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
+    let tenantIds: string[] = [DEFAULT_TENANT_ID];
+    try {
+      const tenants = await prisma.tenant.findMany({ select: { id: true } });
+      if (tenants.length > 0) tenantIds = tenants.map((t: any) => t.id);
+    } catch {
+      console.warn('[WORKER INIT TENANT DATA] DB offline — fallback ke DEFAULT_TENANT_ID.');
+    }
+    for (const tid of tenantIds) {
+      await loadServicesFromDb(tid);
+      await getDeliveryTiersFromDb(tid);
+      await loadPersonaFromDb(tid);
+      await AiModelConfigService.loadConfigsFromDb(tid);
+      await AiEligibilityConfigService.loadConfigsFromDb(tid);
+    }
+    console.log(`📦 [WORKER] Data tenant dimuat untuk ${tenantIds.length} tenant(s) (katalog + delivery tiers + persona + AI config).`);
+  } catch (initErr: any) {
+    console.warn('[WORKER INIT TENANT DATA] Gagal memuat data tenant:', initErr?.message || initErr);
+  }
+
   // Jalankan seluruh cron jobs dan periodic sweeps
   startBackgroundCrons();
   console.log('🎯 [WORKER] Seluruh background cron & sweep worker telah aktif.');

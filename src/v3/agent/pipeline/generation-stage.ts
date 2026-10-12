@@ -941,11 +941,19 @@ export class GenerationStage {
 
     const call2Model = turn.generatorModel || turn.selectedModel;
     const call2MaxTokens = resolveMaxTokensForTask('CHAT_REPLY', turn.tenantId);
+    // FONDASIONAL (insiden latensi 24,8 dtk 12/10/2026): pola yang sama dengan
+    // Call 1 — flag `thinking: disabled` HANYA untuk keluarga GLM via
+    // supportsThinkingParam. Tanpa ini Call 2 ke glm-5.3-flash membakar ±1.022
+    // reasoning token per balasan. Task CHAT_REPLY agar model diambil dari
+    // tenant_ai_config (tenant-aware), bukan hardcode.
+    const call2RouterCfg = AiModelConfigService.getModelConfig('CHAT_REPLY', turn.tenantId);
+    const call2SupportsThinking = supportsThinkingParam(call2RouterCfg.provider, call2Model);
     const secondPayload: any = {
       model: call2Model,
       messages: cachedMessages,
       temperature: 0.65,
       ...(call2MaxTokens ? { max_tokens: call2MaxTokens } : {}),
+      ...(call2SupportsThinking ? { thinking: { type: 'disabled' } } : {}),
     };
 
     const secondStartedAt = Date.now();

@@ -55,7 +55,11 @@ services:
       - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-KalaReport_bot}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
-      - SEPARATE_WORKER=${SEPARATE_WORKER:-false}
+      # FONDASIONAL (insiden kebocoran worker 12/10/2026): di konteks compose,
+      # cron/sweep SELALU dijalankan container worker → app wajib skip agar
+      # tidak eksekusi ganda. Dev lokal tanpa compose (npm run dev) tidak
+      # terpengaruh karena memakai default kode (monolith).
+      - SEPARATE_WORKER=true
     depends_on:
       postgres:
         condition: service_healthy
