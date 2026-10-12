@@ -15,6 +15,16 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **R3:** banner sync/error kembali global `flex` biasa; hapus duplikat mobile `lg:hidden`.
 - **Tidak disentuh:** header-hidden (Layout), CopilotContext, tombol pengganti,
   search sticky, file di luar scope. TIDAK deploy (menunggu reviewer + approval manual).
+- **Verifikasi aktual (2026-10-12 ~07:14 UTC, branch fix/rollback-livechat-extras):**
+  dashboard `tsc --noEmit` EXIT=0; `vite build` EXIT=0 (12.31s,
+  LiveChatMonitor chunk 303.85 kB); `scripts/verify-livechat-revision.mjs`
+  22/22 PASS (SEMUA CEK LOLOS, EXIT=0); subset livechat 3 file 30/30 hijau
+  (`live-chat.service` + `livechat-source-filter` + `live-chat-sync-health`,
+  EXIT=0). Root `tsc --noEmit` OOM exit 134 TERBUKTI pre-existing via
+  stash+rerun (setelah perubahan exit 134, baseline stash exit 134 --
+  identik; RAM runner 7GB, sudah tercatat di docs/KNOWN_ISSUES.md butir 249).
+- **Susulan review:** hapus dead-loop `for marker + void marker` di verify script
+  (tidak memeriksa apa-apa); log mentah tersimpan sebagai artefak task.
 
 
 

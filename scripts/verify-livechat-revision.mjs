@@ -35,9 +35,6 @@ check('search sticky top-0 z-20 penuh', live.includes('sticky top-0 z-20 bg-whit
 check('tidak ada lg:sticky search tersisa', !live.includes('lg:sticky lg:top-0 lg:z-20'), 'search masih lg:sticky');
 
 // 3. Banner AI: desktop-only di luar + duplikat mobile di dalam; sync/error: global flex biasa
-for (const [name, marker] of [['AI-off', 'CHATBOT AI NONAKTIF'], ['AI-off mobile', 'AI NONAKTIF'], ['sync bg', 'Sinkronisasi Background Berjalan'], ['sync mobile', 'Sync:</span>'], ['error mobile', null]]) {
-  void marker;
-}
 check('banner AI global terang desktop-only', live.includes('hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 border'), 'banner AI global');
 check('banner sync global flex biasa', live.includes('flex p-2 sm:p-2.5 rounded-xl bg-emerald-50'), 'banner sync global');
 check('banner sky global flex biasa', live.includes('flex p-2 rounded-xl bg-sky-50'), 'banner sky global');
