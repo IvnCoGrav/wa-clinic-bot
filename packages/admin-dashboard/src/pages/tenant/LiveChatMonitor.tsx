@@ -4300,12 +4300,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {/* Internal Chatbot OFF Warning Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
       {!chatBotActive && (
-        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <ShieldAlert size={16} className="text-amber-600 shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-amber-700 dark:text-amber-300">CHATBOT AI NONAKTIF:</span>{' '}
-              <span className="text-amber-800 dark:text-amber-200">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
+              <span className="font-bold text-amber-700">CHATBOT AI NONAKTIF:</span>{' '}
+              <span className="text-amber-800">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
           <button
@@ -4318,9 +4318,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       )}
 
-      {/* Real-time Background Sync Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
+      {/* Real-time Background Sync Banner */}
       {bgSyncProgress.isSyncing && (
-        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="flex p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
             <RefreshCw size={14} className="text-[#008069] animate-spin shrink-0" />
             <div className="truncate">
@@ -4341,14 +4341,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       )}
 
       {syncProgress && !bgSyncProgress.isSyncing && (
-        <div className="hidden lg:flex p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium items-center space-x-2 shrink-0">
+        <div className="flex p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium items-center space-x-2 shrink-0">
           <RefreshCw size={12} className="text-sky-600 animate-spin" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="hidden lg:flex p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium items-center space-x-2 shrink-0">
+        <div className="flex p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium items-center space-x-2 shrink-0">
           <AlertTriangle size={13} className="text-rose-600" />
           <span>{errorMessage}</span>
         </div>
@@ -4358,12 +4358,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
           {/* Loading: banner AI-off mobile ikut tampil agar konsisten dengan daftar (desktop memakai banner global di atas) */}
           {!chatBotActive && (
-            <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
+            <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
               <div className="flex items-center space-x-1.5 min-w-0">
-                <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                <ShieldAlert size={14} className="text-amber-600 shrink-0" />
                 <span className="truncate">
-                  <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                  <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
+                  <span className="font-bold text-amber-700">AI NONAKTIF</span>{' '}
+                  <span className="text-amber-800">— CS manual.</span>
                 </span>
               </div>
               <button
@@ -4476,12 +4476,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
               {/* Mobile Chatbot OFF Warning (ikut scroll bersama daftar; desktop memakai banner global) */}
               {!chatBotActive && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
                   <div className="flex items-center space-x-1.5 min-w-0">
-                    <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <ShieldAlert size={14} className="text-amber-600 shrink-0" />
                     <span className="truncate">
-                      <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                      <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
+                      <span className="font-bold text-amber-700">AI NONAKTIF</span>{' '}
+                      <span className="text-amber-800">— CS manual.</span>
                     </span>
                   </div>
                   <button
@@ -4491,37 +4491,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   >
                     Aktifkan AI
                   </button>
-                </div>
-              )}
-
-              {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
-              {bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center justify-between shadow-2xs animate-fadeIn">
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <RefreshCw size={13} className="text-[#008069] animate-spin shrink-0" />
-                    <span className="truncate">
-                      <span className="font-bold text-[#008069]">Sync:</span>{' '}
-                      {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} baru)
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleCancelBackgroundSync}
-                    className="px-2 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-200 rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-                  >
-                    Batal
-                  </button>
-                </div>
-              )}
-              {syncProgress && !bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <RefreshCw size={12} className="text-sky-600 animate-spin shrink-0" />
-                  <span className="truncate">{syncProgress}</span>
-                </div>
-              )}
-              {errorMessage && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <AlertTriangle size={12} className="text-rose-600 shrink-0" />
-                  <span className="truncate">{errorMessage}</span>
                 </div>
               )}
 
@@ -5363,19 +5332,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       >
                         <Search size={14} />
                       </button>
-                      {/* Mobile: Aktifkan AI global (banner global hanya tampil di desktop, banner list ikut scroll) */}
-                      {!chatBotActive && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleGlobalBot(true)}
-                          disabled={togglingBotCutoff}
-                          title="Aktifkan Chatbot AI"
-                          className="lg:hidden px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs disabled:opacity-50 cursor-pointer"
-                        >
-                          <Bot size={13} />
-                          <span>Aktifkan AI</span>
-                        </button>
-                      )}
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}

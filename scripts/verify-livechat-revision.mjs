@@ -3,10 +3,11 @@
  * Menegaskan gerbang kode deterministik, bukan teks prompt:
  *  1. Header global hidden di mobile livechat (true ikut-scroll), sticky z-40 di desktop/halaman lain.
  *  2. Searchbar sticky top-0 z-20 penuh (keputusan user: search tetap sticky).
- *  3. Banner AI-off + sync + error: desktop-only di luar scroll + duplikat lg:hidden di dalam scroll.
+ *  3. Banner AI-off: desktop-only di luar scroll + duplikat lg:hidden di dalam scroll.
+ *     Banner sync + error: global flex biasa (rollback duplikat mobile).
  *  4. Loading branch: banner mobile AI-off ikut tampil.
  *  5. Tombol ☰ + copilot di Mobile Page Header via useCopilot (openMobileMenu/setCopilotOpen).
- *  6. Ke-4 situs Aktifkan AI konsisten via handler tunggal handleToggleGlobalBot + confirm + disabled.
+ *  6. Ke-3 situs Aktifkan AI konsisten via handler tunggal handleToggleGlobalBot + confirm + disabled.
  *  7. Larangan label WAHA: tidak ada addLabel/removeLabel.
  */
 import { readFileSync } from 'node:fs';
@@ -33,18 +34,18 @@ check('tidak ada lg:z-40 (z-40 hilang mobile)', !layout.includes('lg:z-40'), 'ma
 check('search sticky top-0 z-20 penuh', live.includes('sticky top-0 z-20 bg-white py-1.5'), 'searchbar class');
 check('tidak ada lg:sticky search tersisa', !live.includes('lg:sticky lg:top-0 lg:z-20'), 'search masih lg:sticky');
 
-// 3. Banner: desktop-only di luar + duplikat mobile di dalam
+// 3. Banner AI: desktop-only di luar + duplikat mobile di dalam; sync/error: global flex biasa
 for (const [name, marker] of [['AI-off', 'CHATBOT AI NONAKTIF'], ['AI-off mobile', 'AI NONAKTIF'], ['sync bg', 'Sinkronisasi Background Berjalan'], ['sync mobile', 'Sync:</span>'], ['error mobile', null]]) {
   void marker;
 }
-check('banner AI global desktop-only', live.includes('hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50'), 'banner AI global');
-check('banner sync global desktop-only', live.includes('hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-emerald-50'), 'banner sync global');
-check('banner sky global desktop-only', live.includes('hidden lg:flex p-2 rounded-xl bg-sky-50'), 'banner sky global');
-check('banner error global desktop-only', live.includes('hidden lg:flex p-2 rounded-xl bg-rose-50'), 'banner error global');
+check('banner AI global terang desktop-only', live.includes('hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 border'), 'banner AI global');
+check('banner sync global flex biasa', live.includes('flex p-2 sm:p-2.5 rounded-xl bg-emerald-50'), 'banner sync global');
+check('banner sky global flex biasa', live.includes('flex p-2 rounded-xl bg-sky-50'), 'banner sky global');
+check('banner error global flex biasa', live.includes('flex p-2 rounded-xl bg-rose-50'), 'banner error global');
 check(
-  'duplikat mobile sync+error di dalam scroll',
-  live.includes('Mobile Sync/Error Warnings') && (live.match(/lg:hidden mb-1\.5 p-2 rounded-xl bg-emerald-50/g) || []).length >= 1 && (live.match(/lg:hidden mb-1\.5 p-2 rounded-xl bg-rose-50/g) || []).length >= 1,
-  'duplikat lg:hidden sync/error',
+  'tanpa duplikat mobile sync/error',
+  !live.includes('Mobile Sync/Error Warnings') && !/lg:hidden mb-1\.5 p-2 rounded-xl bg-(emerald|sky|rose)-50/.test(live),
+  'duplikat lg:hidden sync/error tersisa',
 );
 
 // 4. Loading branch banner mobile
@@ -59,9 +60,9 @@ check('Layout pakai context (tanpa useState lokal menu)', !/const \[mobileMenuOp
 
 // 6. Handler tunggal Aktifkan AI + confirm + disabled konsisten
 const toggleSites = (live.match(/onClick=\{\(\) => handleToggleGlobalBot\(true\)\}/g) || []).length;
-check('4 situs Aktifkan AI via handler tunggal', toggleSites === 4, `ditemukan ${toggleSites}, harap 4 (global+list+loading+chat-header)`);
+check('3 situs Aktifkan AI via handler tunggal', toggleSites === 3, `ditemukan ${toggleSites}, harap 3 (global+list+loading)`);
 check('confirm() dipakai di toggle', /const handleToggleGlobalBot[\s\S]{0,400}confirm\(/.test(live), 'confirm di handler');
-check('disabled konsisten di semua situs', (live.match(/disabled=\{togglingBotCutoff\}/g) || []).length >= 4, 'disabled count');
+check('disabled konsisten di semua situs', (live.match(/disabled=\{togglingBotCutoff\}/g) || []).length >= 3, 'disabled count');
 
 // 7. Larangan label WAHA + guardrail state-based
 check('tanpa addLabel/removeLabel', !live.includes('addLabel') && !live.includes('removeLabel'), 'label WAHA tersentuh');

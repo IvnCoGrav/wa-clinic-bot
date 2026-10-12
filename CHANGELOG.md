@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-12 - Rollback R1-R3: Hapus Tombol AI ke-3 + Dark Banner + Sync/Error Duplikat (Kembali ke Baseline)
+
+- **Keputusan user:** "lakukan sampai semuanya sudah sesuai dengan sebelumnya. sampai live server"
+  (persetujuan eksekusi 2026-10-12 06:54 UTC). Rollback extras kembali ke baseline 5fb57bf9.
+- **R1:** hapus tombol Aktifkan AI ketiga di header detail chat (blok Mobile `lg:hidden`);
+  sisa 3 situs (global desktop, loading mobile, list mobile) via handler tunggal
+  `handleToggleGlobalBot` tetap.
+- **R2:** banner AI (global + loading + list) kembali terang saja -- hapus kelas dark amber.
+- **R3:** banner sync/error kembali global `flex` biasa; hapus duplikat mobile `lg:hidden`.
+- **Tidak disentuh:** header-hidden (Layout), CopilotContext, tombol pengganti,
+  search sticky, file di luar scope. TIDAK deploy (menunggu reviewer + approval manual).
+
+
 
 #### 2026-10-12 - Revisi: Header LiveChat Mobile Benar-Benar Ikut Scroll + Banner Sync/Error (Search Tetap Sticky)
 
