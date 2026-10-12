@@ -5,6 +5,23 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: AI Copilot Grounding Hardening, Deterministic Deep-Link Injection, Persona Hygiene & Spam Filtering (Fase 1-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - False-Negative Grounding: Jawaban akurat Copilot tentang pasien tertahan ("menunggu", "untuk") dicap grounded: false karena regex honorifik mendeteksi kata kerja/fungsi bahasa Indonesia huruf kecil sebagai nama pasien halusinasi.
+  - Tautan Live Chat Hilang: LLM kerap menghilangkan [Buka Chat] walau data tool menyediakan conversationId valid.
+  - Persona Bleeding: Copilot internal menyapa admin menggunakan sapaan dan empati konsumen ("Kami paham Bunda menunggu kepastian...").
+  - Infiltrasi Spam Operator: SMS/broadcast promo telekomunikasi ("SimpelRoam IM3") masuk sebagai prospek jadwal tertahan karena memuat kata "sekarang".
+  - Kebocoran Username Sistem: Pasien anonim/akun teknis tampil mentah ("aguspurnomo68301" / "Bunda").
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Deterministic Deep-Link Injection)**: Injeksi [Buka Chat](/admin/live-chat?conversationId=...) deterministik berbasis token unik terpanjang (\btoken\b) pada daftar bullet dan tabel | ... |, validasi format conversationId (^[A-Za-z0-9_-]+$), dan resolusi tautan terdekat sebelum placeholder.
+  - **Fase 2 (Grounding Validator Hardening)**: Aturan proper noun huruf kapital ([A-Z][a-zA-Z]+) + daftar stopword bahasa Indonesia (INDONESIAN_HONORIFIC_STOPWORDS) mengabaikan kata fungsi huruf kecil/kapital, simetrisasi honorifik (Ny|Tante), dan toleransi tanda baca pada labelRe.
+  - **Fase 3 (Persona Hygiene & Identity Masking)**: Klausul preseden mutlak pada buildSummarizePrompt melarang sapaan Bunda ke admin; formatCustomerDisplayName menyamarkan username teknis (aguspurnomo68301 -> Bunda (0812****7890)) dan nama kosong tanpa menyentuh nama asli manusia ("Chaterina", "Cindy Amalia").
+  - **Fase 4 (Telecom Spam Filter & Schedule Signal Hardening)**: stripCommercialSpam membuang baris spam operator tanpa menyentuh istilah klinik ("paket persalinan", "voucher USG"); extractTimeHint mewajibkan konteks jadwal/klinik untuk kata "sekarang".
+  - **Fase 5 (Adversarial Testing)**: 19 unit test baru di tests/unit/copilot-grounding-stopword.test.ts (total 146 copilot tests lulus, build clean).
+- **File Dimodifikasi**: src/services/copilot/copilot.service.ts, src/services/copilot/copilot-tools.ts, src/v3/agent/pipeline/medical-signal-detector.ts, tests/unit/copilot-grounding-stopword.test.ts.
+
+
 #### 2026-10-12 - Feature: Skema Baru Hide Message (Role-Based Privacy Display di LiveChatMonitor)
 
 - **Akar Masalah & Kebutuhan:**

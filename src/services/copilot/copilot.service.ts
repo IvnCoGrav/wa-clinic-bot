@@ -92,11 +92,16 @@ const INTERNAL_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
  * dikirim ke LLM. Prompt "jangan tampilkan UUID" saja tidak cukup — sumber kebocoran
  * ditutup di hulu (baris), bukan diserahkan pada kepatuhan teks LLM.
  */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function stripInternalIds(rows: any[]): any[] {
   return rows.map((r) => {
     const clone = { ...r };
     delete clone.customerId;
     delete clone.id;
+    delete clone.rawCustomerName;
     return clone;
   });
 }
@@ -115,65 +120,114 @@ export function sanitizeCopilotAnswer(answer: string): string {
 }
 
 /**
- * Normalizer deterministik tautan Live Chat (KNOWN_ISSUES #191e-a).
+ * Normalizer deterministik tautan Live Chat (#191e-a & Phase 1 Hardening).
  *
- * Akar: otak Hermes (agent framework) kadang menyalin placeholder
- * `conversationId=` tanpa mengisi nilainya dari data tool. Prompt saja tidak
- * cukup (LLM probabilistik). Gerbang ini mengisi HANYA bila tidak ambigu:
- *  - link kosong + tepat SATU conversationId unik di baris → isi id itu;
- *  - else bila segmen teks sebelum link memuat tepat satu nama customer yang
- *    unik di baris → isi id baris tersebut;
- *  - else biarkan kosong (JANGAN mengarang) + warning.
+ * 1. Sanitasi format conversationId (/^[A-Za-z0-9_-]+$/).
+ * 2. Bangun map token nama (>=3 karakter huruf/angka, dipangkas honorifik) -> conversationId unik.
+ * 3. Langkah A: Perbaiki tautan placeholder kosong [Buka Chat](/admin/live-chat?conversationId=).
+ * 4. Langkah B: Injeksi tautan deterministik pada baris pasien (format bullet -, *, 1. maupun baris tabel | ... |)
+ *    yang belum memiliki link, dengan pencocokan \btoken\b (word boundary, longest-match first).
  */
 export function repairCopilotChatLinks(answer: string, rows: any[]): string {
   if (!answer || typeof answer !== 'string') return answer;
-  const distinctConvIds = [
-    ...new Set(
-      (rows || [])
-        .map((r) => r?.conversationId)
-        .filter((v) => typeof v === 'string' && v.trim().length > 0)
-    ),
-  ] as string[];
-  const nameToId = new Map<string, string>();
-  const idCountByLowerName = new Map<string, number>();
-  for (const r of rows || []) {
-    const name = (r?.customerName || '').toString().toLowerCase().replace(/\b(bunda|ibu|mbak|bu|kak)\b/gi, ' ').trim();
-    const id = r?.conversationId;
-    if (name && typeof id === 'string' && id.trim()) {
-      nameToId.set(name, id);
-      idCountByLowerName.set(name, (idCountByLowerName.get(name) || 0) + 1);
+
+  const validRows = (rows || []).filter(
+    (r) => r?.conversationId && /^[A-Za-z0-9_-]+$/.test(String(r.conversationId).trim())
+  );
+  if (validRows.length === 0) return answer;
+
+  // Bangun token -> Set(conversationId) untuk memastikan keunikan (anti-salah tautan)
+  const tokenToConvIds = new Map<string, Set<string>>();
+  for (const r of validRows) {
+    const convId = String(r.conversationId).trim();
+    const candidateNames = [r.customerName, r.rawCustomerName].filter(Boolean);
+    for (const nameStr of candidateNames) {
+      const cleaned = String(nameStr)
+        .toLowerCase()
+        .replace(/\b(bunda|ibu|mbak|bu|kak|ny|tante)\b/gi, ' ');
+      const parts = cleaned.match(/[a-z0-9]{3,}/g) || [];
+      for (const p of parts) {
+        if (/^\d+$/.test(p) && p.length < 4) continue; // abaikan angka pendek < 4 digit
+        if (!tokenToConvIds.has(p)) tokenToConvIds.set(p, new Set());
+        tokenToConvIds.get(p)!.add(convId);
+      }
     }
   }
 
+  // Hanya pertahankan token yang memetakan ke tepat 1 conversationId
+  const uniqueTokenMap = new Map<string, string>();
+  for (const [token, convIds] of tokenToConvIds.entries()) {
+    if (convIds.size === 1) {
+      uniqueTokenMap.set(token, Array.from(convIds)[0]);
+    }
+  }
+
+  // Urutkan token terpanjang lebih dulu (longest-match first)
+  const sortedTokens = Array.from(uniqueTokenMap.keys()).sort((a, b) => b.length - a.length);
+
+  // Langkah A: Perbaiki placeholder [Buka Chat](/admin/live-chat?conversationId=...) yang kosong
   const linkRe = /\[([^\]]+)\]\(\/admin\/live-chat\?conversationId=([^)]*)\)/g;
-  return answer.replace(linkRe, (full, label: string, convId: string, offset: number) => {
-    if (convId && convId.trim()) return full; // sudah terisi — jangan sentuh
-    // 1. Unik deterministik: tepat satu conversationId di data.
+  let processedAnswer = answer.replace(linkRe, (full, label: string, convId: string, offset: number) => {
+    if (convId && convId.trim() && /^[A-Za-z0-9_-]+$/.test(convId.trim())) return full;
+    const before = answer.slice(Math.max(0, offset - 250), offset).toLowerCase();
+    let bestToken: string | null = null;
+    let bestPos = -1;
+    for (const token of sortedTokens) {
+      const re = new RegExp(`\\b${escapeRegExp(token)}\\b`, 'gi');
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(before)) !== null) {
+        if (match.index > bestPos || (match.index === bestPos && bestToken && token.length > bestToken.length)) {
+          bestPos = match.index;
+          bestToken = token;
+        }
+      }
+    }
+    if (bestToken) {
+      return `[${label}](/admin/live-chat?conversationId=${uniqueTokenMap.get(bestToken)})`;
+    }
+    const distinctConvIds = Array.from(new Set(validRows.map((r) => String(r.conversationId).trim())));
     if (distinctConvIds.length === 1) {
       return `[${label}](/admin/live-chat?conversationId=${distinctConvIds[0]})`;
     }
-    // 2. Kaitkan nama unik TERDEKAT sebelum link (bukan yang pertama cocok —
-    //    daftar bernomor: nama baris ini muncul paling dekat dengan link-nya).
-    if (nameToId.size > 0) {
-      const before = answer.slice(Math.max(0, offset - 200), offset).toLowerCase();
-      let best: { name: string; id: string; pos: number } | null = null;
-      for (const [name, id] of nameToId.entries()) {
-        if (idCountByLowerName.get(name) !== 1) continue;
-        const nameTokens = name.match(/[a-z]{3,}/g) || [];
-        if (nameTokens.length === 0) continue;
-        const positions = nameTokens.map((t) => before.lastIndexOf(t));
-        if (positions.some((p) => p < 0)) continue;
-        const pos = Math.min(...positions);
-        if (!best || pos > best.pos) best = { name, id, pos };
-      }
-      if (best) {
-        return `[${label}](/admin/live-chat?conversationId=${best.id})`;
-      }
-    }
-    // 3. Ambigu → biarkan kosong, catat (jangan karang link menyesatkan).
-    console.warn(JSON.stringify({ event: 'COPILOT_LINK_UNREPAIRABLE', label, candidates: distinctConvIds.length }));
     return full;
   });
+
+  // Langkah B: Injeksi tautan deterministik pada baris yang belum memiliki link
+  const lines = processedAnswer.split('\n');
+  const modifiedLines = lines.map((line) => {
+    if (line.includes('/admin/live-chat?conversationId=')) return line;
+
+    const trimmed = line.trim();
+    const isBullet = /^\s*([-*•]|\d+[\.)]|[a-zA-Z][\.)])\s+/.test(line);
+    const isTableRow = trimmed.startsWith('|') && trimmed.endsWith('|') && !trimmed.includes('---');
+
+    if (!isBullet && !isTableRow) return line;
+
+    // Cari token pasien yang cocok pada baris ini (word boundary + longest match)
+    let matchedConvId: string | null = null;
+    for (const token of sortedTokens) {
+      const re = new RegExp(`\\b${escapeRegExp(token)}\\b`, 'i');
+      if (re.test(line)) {
+        matchedConvId = uniqueTokenMap.get(token) || null;
+        break;
+      }
+    }
+
+    if (!matchedConvId) return line;
+
+    const linkMarkdown = `[Buka Chat](/admin/live-chat?conversationId=${matchedConvId})`;
+
+    if (isTableRow) {
+      const lastPipeIndex = line.lastIndexOf('|');
+      const beforeLastPipe = line.slice(0, lastPipeIndex).trimEnd();
+      const afterLastPipe = line.slice(lastPipeIndex);
+      return `${beforeLastPipe} ${linkMarkdown} ${afterLastPipe}`;
+    }
+
+    return `${line.trimEnd()} · ${linkMarkdown}`;
+  });
+
+  return modifiedLines.join('\n');
 }
 
 export interface RouterPriorStep {
@@ -298,6 +352,10 @@ export function buildSummarizePrompt(
   const tone = styleTone && styleTone.trim() ? styleTone.trim() : 'ringkas, profesional, langsung ke inti, tanpa basa-basi.';
   return `Berikut data riil dari database (JSON) dari beberapa sumber untuk menjawab pertanyaan admin: "${message}".
 Rangkum dalam bahasa Indonesia dengan gaya berikut (WAJIB dipatuhi): ${tone}
+PENTING: Aturan PANDUAN di bawah mengalahkan instruksi Gaya apapun.
+Kamu berbicara KEPADA ADMIN INTERNAL KLINIK (rekan kerja), BUKAN kepada pasien/customer.
+DILARANG memanggil admin dengan sapaan "Bunda" atau menggunakan empati berlebihan untuk konsumen.
+
 Ketentuan struktur:
 1. Kelompokkan data secara terstruktur bila ada beberapa kategori berbeda (mis. sudah terjadwal vs belum masuk sistem / menunggu konfirmasi). Header kelompok WAJIB jelas.
 2. DILARANG menambah nama, nomor HP, atau jadwal yang TIDAK ada di data.
@@ -307,7 +365,7 @@ Ketentuan struktur:
 6. Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
 7. Untuk pedoman medis/SOP/katalog, kutip HANYA dari baris berlabel sumber dan sebutkan judul sumbernya; JANGAN mengarang angka (harga, durasi, ketersediaan slot) yang tidak ada di data.
 Data:
-${labeledRows.slice(0, 8000)}`;
+${labeledRows}`;
 }
 
 /** Ubah menit tunggu jadi frasa manusia (deterministik, tanpa LLM). */
@@ -363,6 +421,51 @@ export function withDeadline<T>(factory: () => Promise<T>, ms: number): Promise<
 export function isCopilotDeadlineError(err: any): boolean {
   return err?.message === COPILOT_DEADLINE_ERROR;
 }
+
+/**
+ * Kata fungsi/verba/partikel bahasa Indonesia yang sering menyertai sapaan honorifik
+ * ("Bunda menunggu...", "Bunda untuk...", "Bunda yang...", "Bunda mohon...", dll).
+ * Menjadi lapis pertahanan sekunder setelah kapitalisasi nama orang ([A-Z][a-zA-Z]+).
+ */
+export const INDONESIAN_HONORIFIC_STOPWORDS = new Set([
+  'menunggu',
+  'untuk',
+  'yang',
+  'akan',
+  'bisa',
+  'sudah',
+  'sedang',
+  'belum',
+  'ingin',
+  'mau',
+  'mohon',
+  'harap',
+  'silakan',
+  'perlu',
+  'harus',
+  'jangan',
+  'dapat',
+  'juga',
+  'lagi',
+  'kok',
+  'ya',
+  'nih',
+  'dong',
+  'deh',
+  'saja',
+  'paham',
+  'terima',
+  'kasih',
+  'tahu',
+  'tanya',
+  'hubungi',
+  'konfirmasi',
+  'terkait',
+  'tentang',
+  'oleh',
+  'kepada',
+  'dengan',
+]);
 
 export class CopilotService {
   public async chat(params: CopilotChatParams): Promise<CopilotChatResult> {
@@ -616,8 +719,20 @@ export class CopilotService {
 
       // Langkah 3: LLM merangkum gabungan hasil tool (berlabel sumber).
       // Baris dibersihkan dari ID internal (UUID) SEBELUM ke LLM — gerbang kode, bukan imbauan prompt.
+      // Potong per-row agar JSON selalu utuh (tidak terpotong di tengah string/objek).
       const labeled = collected
-        .map((c) => `[${c.tool}] ${JSON.stringify(stripInternalIds(c.rows)).slice(0, 3000)}`)
+        .map((c) => {
+          const cleanRows = stripInternalIds(c.rows);
+          const rowStrings: string[] = [];
+          let currentLen = 0;
+          for (const row of cleanRows) {
+            const str = JSON.stringify(row);
+            if (currentLen + str.length > 2500 && rowStrings.length > 0) break;
+            rowStrings.push(str);
+            currentLen += str.length;
+          }
+          return `[${c.tool}] [${rowStrings.join(',')}]`;
+        })
         .join('\n');
       const summarizePrompt = buildSummarizePrompt(message, labeled, styleConfig?.summarizeTone ?? null);
 
@@ -716,38 +831,48 @@ export class CopilotService {
    * Validator grounding deterministik: nama customer yang muncul di jawaban
    * harus berasal dari hasil tool (anti-halusinasi nama).
    *
-   * Normalisasi: buang honorifik (Bunda/Ibu/Mbak/Bu/Kak/…) lalu cocokkan
+   * Normalisasi: buang honorifik (Bunda/Ibu/Mbak/Bu/Kak/Ny/Tante) lalu cocokkan
    * per-token (≥3 huruf) — toleran beda honorifik & kapitalisasi.
-   * Catatan: `chat()` sudah short-circuit saat rows kosong, jadi cabang
-   * `rows.length === 0` di sini tidak pernah tercapai dari jalur utama.
+   * Kata fungsi/verba bahasa Indonesia ("menunggu", "untuk") otomatis diabaikan
+   * lewat filter huruf kapital proper noun ([A-Z][a-zA-Z]+) dan daftar stopword.
    */
   public validateGrounding(answer: string, rows: any[]): boolean {
     if (!rows || rows.length === 0) return true;
 
     const knownTokens = new Set<string>();
     for (const r of rows) {
-      const raw = (r.customerName || '').toString().toLowerCase();
-      const cleaned = raw.replace(/\b(bunda|ibu|mbak|bu|kak|ny|tante)\b/gi, ' ');
-      const parts = cleaned.match(/[a-z]{3,}/g) || [];
-      for (const p of parts) knownTokens.add(p);
+      const candidates = [r.customerName, r.rawCustomerName].filter(Boolean);
+      for (const raw of candidates) {
+        const cleaned = raw.toString().toLowerCase().replace(/\b(bunda|ibu|mbak|bu|kak|ny|tante)\b/gi, ' ');
+        const parts = cleaned.match(/[a-z0-9]{3,}/g) || [];
+        for (const p of parts) {
+          if (/^\d+$/.test(p) && p.length < 4) continue;
+          knownTokens.add(p);
+        }
+      }
     }
     if (knownTokens.size === 0) return true;
 
     const unknown = (namePart: string) => {
       const n = namePart.trim().toLowerCase();
-      return n.length >= 3 && !knownTokens.has(n);
+      if (n.length < 3) return false;
+      if (INDONESIAN_HONORIFIC_STOPWORDS.has(n)) return false;
+      return !knownTokens.has(n);
     };
 
-    // 1. Sebutan pasien dengan honorifik, mis. "Bunda Risma", "Ibu Dara".
-    const honorificMatches = answer.match(/(?:Bunda|Ibu|Mbak|Bu|Kak)\s+([A-Za-z]+)/gi) || [];
+    // 1. Sebutan pasien dengan honorifik + NAMA KAPITAL (proper noun saja):
+    //    Hanya kata yang diawali huruf BESAR [A-Z][a-zA-Z]+ yang dianggap kandidat nama.
+    //    Kata huruf kecil (mis. "Bunda menunggu", "Bunda untuk", "Bunda sedang") otomatis diabaikan.
+    //    Lapis kedua: jika kata berawalan kapital ternyata stopword ("Bunda Menunggu"), juga diabaikan.
+    const honorificMatches = answer.match(/\b(?:Bunda|Ibu|Mbak|Bu|Kak|Ny|Tante)\b\s+([A-Z][a-zA-Z]+)/g) || [];
     for (const m of honorificMatches) {
-      const namePart = m.replace(/^(?:Bunda|Ibu|Mbak|Bu|Kak)\s+/i, '');
+      const namePart = m.replace(/^\b(?:Bunda|Ibu|Mbak|Bu|Kak|Ny|Tante)\b\s+/i, '');
       if (unknown(namePart)) return false;
     }
 
-    // 2. Label nama eksplisit, mis. "**Nama Pelanggan**: Dinda", "Nama Pasien: Siti".
-    //    Ketat: hanya label "Nama Pelanggan"/"Nama Pasien" + token kapital (bukan kata umum).
-    const labelRe = /(?:Nama\s+Pelanggan|Nama\s+Pasien)\s*[:*]+\s*\**\s*([A-Z][a-zA-Z]+)/g;
+    // 2. Label nama eksplisit, mis. "**Nama Pelanggan**: Dinda", "Nama Pasien: Siti", "Nama Pasien **Chaterina**".
+    //    Longgar terhadap titik-dua dan bintang, hanya kandidat berawalan huruf besar.
+    const labelRe = /(?:Nama\s+Pelanggan|Nama\s+Pasien)\s*[:*]*\s*([A-Z][a-zA-Z]+)/g;
     let lm: RegExpExecArray | null;
     while ((lm = labelRe.exec(answer)) !== null) {
       if (unknown(lm[1])) return false;
