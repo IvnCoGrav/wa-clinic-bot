@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 249. [LiveChat/Mobile] Revisi Unsticky Header+Banner: Uji Fisik iOS & Kasus Sync/Error on Mobile (2026-10-12)
+
+- **Status:** IMPLEMENTED (prosedural 21/21 + build hijau) + sisa observasi (open).
+- **Konteks:** Header global LiveChat mobile disembunyikan (`hidden lg:block`,
+  `Layout.tsx`) agar benar-benar ikut scroll; banner sync/error desktop-only di
+  luar + duplikat ringkas di dalam scroll daftar (`LiveChatMonitor.tsx`); search
+  kembali `sticky top-0 z-20` penuh (keputusan user). State menu/copilot diangkat
+  ke `CopilotContext` (`openMobileMenu`/`dismissMobileMenu` + history back).
+- **Sisa observasi (open, butuh verifikasi manual):**
+  1. Uji fisik iOS (iPhone notch/Dynamic Island, swipe tepi-kanan buka menu,
+     tombol back menutup menu dulu, body-lock tidak bocor) belum dilakukan --
+     fondasi anti-scroll window iOS tidak diubah, tapi perilaku Safari nyata
+     belum dikonfirmasi.
+  2. Kasus sync-on + error-on di daftar mobile (duplikat `lg:hidden` tampil dan
+     ikut scroll) belum diuji manual dengan kondisi sync/error sungguhan.
+  3. Root `tsc --noEmit` OOM (exit 134, RAM 7GB) -- pre-existing, terbukti via
+     stash+rerun baseline; bukan regresi perubahan ini.
+- **Artefak:** `scripts/verify-livechat-revision.mjs` (21/21 PASS),
+  `dist/` dashboard ter-rebuild (LiveChatMonitor chunk 306.03 kB).
+
 ## 248. [Tests/Unit/PreExisting] Pre-existing Test Drift di purchase-detection dan reservation-security-and-integrity (2026-10-10)
 
 - **Status:** RECORDED TECH DEBT (Pre-existing, terbukti independen dari perubahan frontend portal staf).
