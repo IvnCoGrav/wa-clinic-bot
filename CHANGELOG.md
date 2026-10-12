@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+#### 2026-10-12 - Fixed: Banner AI + Header + Search Ikut Scroll di LiveChat Mobile (Bukan Sticky)
+
+- **Laporan:** di halaman daftar chat mobile, 3 lapis menempel di atas saat scroll:
+  header global KALA SPA, banner CHATBOT AI NONAKTIF, dan searchbar. Toggle BOT ON/OFF
+  mobile sendiri sudah ikut scroll (bukan sumber masalah).
+- **Akar Masalah (audit berlapis):** (1) `Layout.tsx` header memakai `sticky top-0 z-40`
+  tanpa kecuali untuk semua halaman termasuk LiveChat; (2) banner AI dirender di luar
+  scroll-container daftar (sibling `shrink-0`, yang scroll hanya panel dalam
+  `chatListContainerRef`); (3) searchbar disengaja `sticky top-0 z-20` di semua viewport.
+- **Fixed (desktop tidak berubah):**
+  - Searchbar: `sticky` hanya di `lg:` — mobile ikut scroll bersama daftar.
+  - Banner AI global: hanya tampil di desktop (`hidden lg:flex`); duplikat ringkas
+    `lg:hidden` ditambahkan di dalam scroll-container daftar mobile (ikut scroll).
+  - Header global: saat rute live-chat, `static` di mobile + `lg:sticky` di desktop;
+    halaman lain tetap `sticky` penuh. Fondasi anti-scroll window iOS (body lock +
+    `overflow-hidden`) tidak diubah.
+  - Bonus: varian dark-mode pada banner AI (sebelumnya hanya terang) + tombol
+    "Aktifkan AI" di header detail chat mobile (banner list tak terlihat di sana).
+- **Verifikasi:** `tsc --noEmit` dashboard (1 error pre-existing `WeekScheduleGrid`
+  TS2503, terbukti via revert-and-rerun), `vite build` sukses, 15/15 cek
+  prosedural adversarial hijau, full suite root tanpa failure baru (failure yang ada
+  terbukti pre-existing via revert-and-rerun 3 file sampel).
+- **File:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`,
+  `packages/admin-dashboard/src/components/common/Layout.tsx`.
+- **Catatan:** rebuild `packages/admin-dashboard` (`vite build`) sudah dijalankan agar
+  perubahan terbawa ke `dist/`; deploy butuh approval manual terpisah.
+
 #### 2026-10-09 - Fixed: Fondasi & Kunci Pipeline Meta Conversions API (CAPI) & Ad Attribution (Fase 1 - Fase 5)
 
 - **Akar Masalah (multi-layer audit):**

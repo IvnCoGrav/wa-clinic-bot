@@ -852,8 +852,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
       >
         
-        {/* Top Header — iPhone safe-area: notch/Dynamic Island */}
-        <header className="border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
+        {/* Top Header — iPhone safe-area: notch/Dynamic Island.
+            LiveChat mobile: ikut scroll (static) agar tidak menumpuk dengan banner AI + searchbar;
+            desktop & halaman lain tetap sticky. */}
+        <header className={`border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] ${isLiveChat ? 'lg:sticky lg:top-0 lg:z-40' : 'sticky top-0 z-40'} shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img

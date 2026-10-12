@@ -4293,14 +4293,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       </div>
 
-      {/* Internal Chatbot OFF Warning Banner */}
+      {/* Internal Chatbot OFF Warning Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
       {!chatBotActive && (
-        <div className="p-2 sm:p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+            <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-amber-700">CHATBOT AI NONAKTIF:</span>{' '}
-              <span className="text-amber-800">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
+              <span className="font-bold text-amber-700 dark:text-amber-300">CHATBOT AI NONAKTIF:</span>{' '}
+              <span className="text-amber-800 dark:text-amber-200">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
           <button
@@ -4421,6 +4421,26 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
+              {/* Mobile Chatbot OFF Warning (ikut scroll bersama daftar; desktop memakai banner global) */}
+              {!chatBotActive && (
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="truncate">
+                      <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
+                      <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleToggleGlobalBot(true)}
+                    disabled={togglingBotCutoff}
+                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+                  >
+                    Aktifkan AI
+                  </button>
+                </div>
+              )}
+
               {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
               <div className="pb-1.5 border-b border-[#f0f2f5]">
                 <div className="flex items-center justify-between gap-1.5">
@@ -4523,9 +4543,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
-              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Hanya Searchbar yang Stick Saat Scroll di Mobile) */}
+              {/* 🔍 Search Bar Input: desktop sticky; mobile ikut scroll bersama daftar (anti 3-lapis sticky) */}
               {(isDesktop || mobileView === 'list') && (
-                <div className="sticky top-0 z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
+                <div className="lg:sticky lg:top-0 lg:z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
                       {isSearching ? (
@@ -5259,6 +5279,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       >
                         <Search size={14} />
                       </button>
+                      {/* Mobile: Aktifkan AI global (banner global hanya tampil di desktop, banner list ikut scroll) */}
+                      {!chatBotActive && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleGlobalBot(true)}
+                          disabled={togglingBotCutoff}
+                          title="Aktifkan Chatbot AI"
+                          className="lg:hidden px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                        >
+                          <Bot size={13} />
+                          <span>Aktifkan AI</span>
+                        </button>
+                      )}
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
