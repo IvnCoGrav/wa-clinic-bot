@@ -4,6 +4,74 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+#### 2026-10-12 - Revisi: Header LiveChat Mobile Benar-Benar Ikut Scroll + Banner Sync/Error (Search Tetap Sticky)
+
+- **Keputusan user:** search TETAP STICKY di mobile (revert perubahan search fase lalu).
+  Yang diperbaiki hanya header global + banner sync/error.
+- **Akar Masalah (temuan reviewer, terverifikasi di kode):** (1) header `static`
+  tetap pinned karena header adalah sibling flex di luar satu-satunya
+  scroll-container (`chatListContainerRef`) + induk `overflow-hidden` + body-lock
+  iOS -- `static` di flex column = terlihat permanen; (2) `lg:z-40` menghilangkan
+  z-40 di mobile; (3) 3 banner sync/error masih sibling `shrink-0` di luar scroll.
+- **Fixed (desktop tidak berubah):**
+  - Header global: `hidden` di mobile livechat (benar-benar ikut scroll) +
+    `lg:sticky lg:top-0 z-40` di desktop; halaman lain tetap `sticky top-0 z-40`.
+  - State menu mobile + copilot diangkat dari `Layout.tsx` ke `CopilotContext`
+    (`openMobileMenu`/`dismissMobileMenu` + history back) agar tombol pengganti
+    menu + copilot di Mobile Page Header (dalam scroll) tetap membuka
+    sidebar/panel -- kontrol lain (status WAHA, suara, tema, user) sudah
+    mandiri di sidebar.
+  - Searchbar: kembali `sticky top-0 z-20` penuh semua viewport.
+  - Banner sync/error: global `hidden lg:flex` + duplikat ringkas `lg:hidden`
+    di dalam scroll daftar (pola sama seperti banner AI); loading branch ikut
+    tampilkan banner AI-off mobile.
+  - 4 situs tombol "Aktifkan AI" (global, list, loading, header chat) TIDAK
+    diekstrak komponen -- semuanya konsisten via handler tunggal
+    `handleToggleGlobalBot` + `confirm()` + `disabled={togglingBotCutoff}`
+    (blast radius ekstraksi lebih besar dari manfaatnya).
+- **Verifikasi:** dashboard `tsc --noEmit` EXIT=0; `vite build` EXIT=0 (12.12s);
+  `scripts/verify-livechat-revision.mjs` 21/21 PASS; subset livechat 5 file
+  44/44 hijau; full suite root 4 shard tanpa failure baru (s1 6F, s2 9F, s3 3F,
+  s4 8F -- pola time-rot parser tanggal + integrasi butuh env; sampel
+  reservation-text-parser + live_chat_monitor TERBUKTI pre-existing via
+  stash+rerun baseline tetap gagal); root `tsc` OOM exit 134 TERBUKTI
+  pre-existing via stash+rerun baseline.
+- **File:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`,
+  `packages/admin-dashboard/src/components/common/Layout.tsx`,
+  `packages/admin-dashboard/src/contexts/CopilotContext.tsx`,
+  `scripts/verify-livechat-revision.mjs`.
+- **Catatan:** rebuild dashboard (`vite build`) sudah dijalankan; deploy butuh
+  approval manual terpisah.
+- **Susulan review (regresi modal status):** blok `{showStatusPopover}` dipindah dari dalam `<header>` ke sibling di bawah `</header>` -- `display:none` ancestor menelan modal `fixed` sehingga tombol status sidebar mobile mati; tambah 1 cek anti-regresi di verify script (22/22 PASS).
+
+#### 2026-10-12 - Fixed: Banner AI + Header + Search Ikut Scroll di LiveChat Mobile (Bukan Sticky)
+
+- **Laporan:** di halaman daftar chat mobile, 3 lapis menempel di atas saat scroll:
+  header global KALA SPA, banner CHATBOT AI NONAKTIF, dan searchbar. Toggle BOT ON/OFF
+  mobile sendiri sudah ikut scroll (bukan sumber masalah).
+- **Akar Masalah (audit berlapis):** (1) `Layout.tsx` header memakai `sticky top-0 z-40`
+  tanpa kecuali untuk semua halaman termasuk LiveChat; (2) banner AI dirender di luar
+  scroll-container daftar (sibling `shrink-0`, yang scroll hanya panel dalam
+  `chatListContainerRef`); (3) searchbar disengaja `sticky top-0 z-20` di semua viewport.
+- **Fixed (desktop tidak berubah):**
+  - Searchbar: `sticky` hanya di `lg:` — mobile ikut scroll bersama daftar.
+  - Banner AI global: hanya tampil di desktop (`hidden lg:flex`); duplikat ringkas
+    `lg:hidden` ditambahkan di dalam scroll-container daftar mobile (ikut scroll).
+  - Header global: saat rute live-chat, `static` di mobile + `lg:sticky` di desktop;
+    halaman lain tetap `sticky` penuh. Fondasi anti-scroll window iOS (body lock +
+    `overflow-hidden`) tidak diubah.
+  - Bonus: varian dark-mode pada banner AI (sebelumnya hanya terang) + tombol
+    "Aktifkan AI" di header detail chat mobile (banner list tak terlihat di sana).
+- **Verifikasi:** `tsc --noEmit` dashboard (1 error pre-existing `WeekScheduleGrid`
+  TS2503, terbukti via revert-and-rerun), `vite build` sukses, 15/15 cek
+  prosedural adversarial hijau, full suite root tanpa failure baru (failure yang ada
+  terbukti pre-existing via revert-and-rerun 3 file sampel).
+- **File:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`,
+  `packages/admin-dashboard/src/components/common/Layout.tsx`.
+- **Catatan:** rebuild `packages/admin-dashboard` (`vite build`) sudah dijalankan agar
+  perubahan terbawa ke `dist/`; deploy butuh approval manual terpisah.
+
 #### 2026-10-09 - Fixed: Fondasi & Kunci Pipeline Meta Conversions API (CAPI) & Ad Attribution (Fase 1 - Fase 5)
 
 - **Akar Masalah (multi-layer audit):**
