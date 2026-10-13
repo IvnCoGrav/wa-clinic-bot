@@ -59,6 +59,9 @@ export interface LiveChatConversationItem {
   activeHoldReservation?: LiveChatReservationItem | null;
   activeConfirmedReservation?: LiveChatReservationItem | null;
   activePendingReservation?: LiveChatReservationItem | null;
+  locationSource?: string | null;
+  shareLocationSent?: boolean;
+  sharelocRequestedAt?: string | Date | null;
 }
 
 /**
@@ -1363,6 +1366,12 @@ export class LiveChatService {
       activeConfirmedReservation,
       activePendingReservation,
       matchedMessage: (c as any).matchedMessage || null,
+      locationSource: (c.customer as any)?.location_source || null,
+      shareLocationSent: Boolean((c.customer as any)?.share_location_sent),
+      sharelocRequestedAt:
+        (c as any)?.session_data?.shareloc_requested_at ||
+        (c.customer as any)?.preferences?.share_location_requested_at ||
+        null,
     };
   }
 

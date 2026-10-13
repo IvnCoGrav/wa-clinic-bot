@@ -451,6 +451,29 @@ export class CronService {
   }
 
   /**
+   * Sapuan periodik pengingat shareloc (titik presisi GPS) untuk booking aktif tanpa pin GPS.
+   * Berbasis state DB, jam ramah WIB (08:00-19:59), dan idempoten via AdminNotificationLog.
+   * Diatur oleh flag ENABLE_SHARELOC_REMINDER_SWEEP (default false).
+   */
+  public async runSharelocReminderSweep(): Promise<void> {
+    try {
+      const { sharelocReminderService } = await import('./shareloc-reminder.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let totalSent = 0;
+      for (const tenantId of tenants) {
+        const res = await sharelocReminderService.sweep(tenantId);
+        totalSent += res.sent;
+      }
+      if (totalSent > 0) {
+        console.log(`[Cron Service] Shareloc reminder sweep: ${totalSent} pesan pengingat terkirim.`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running shareloc reminder sweep:', (err as Error).message);
+    }
+  }
+
+  /**
    * Fase 5r — Pre-Visit Brief: kirim kartu ringkasan pasien ke bidan H-30 menit.
    * Berbasis jendela waktu (now+20..35 mnt) + idempoten via pre_visit_brief_sent_at.
    */

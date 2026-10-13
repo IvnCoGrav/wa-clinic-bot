@@ -562,7 +562,7 @@ Terimakasih.  ☺️`;
 
     return `Berikut reservasi 🐣
 
-Hari dan tanggal : ${params.date} jam ${params.time}
+Hari dan tanggal : ${params.date}
 Nama Bunda: ${params.name}
 Alamat & Shareloc : ${params.address}
 Kec : ${params.kec}
@@ -581,13 +581,14 @@ Hari H Pagi sebelum treatment akan kami reminder kembali bunda 🥰
 Terimakasih.  ☺️`;
   },
 
-  morningReminder: (params: { name: string; time: string }) => {
+  // DEPRECATED: tidak ada pemanggil aktif di runtime, jangan dipakai
+  morningReminder: (params: { name: string; time?: string }) => {
     const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
     return `Selamat Pagi ${sapaan}! 😊
 
 Kami ingin mengingatkan untuk hari ini ada jadwal treatment dengan ${getBrandIdentity().businessName} 🤗
 
-Kami akan menuju rumah bunda, kemungkinan akan tiba di jam ${params.time} mohon ditunggu ya bund 🤗`;
+Kami akan menuju rumah bunda sesuai jadwal antrean, mohon ditunggu ya bund 🤗`;
   },
 
   // Follow-up H+1: versi BAYI/ANAK

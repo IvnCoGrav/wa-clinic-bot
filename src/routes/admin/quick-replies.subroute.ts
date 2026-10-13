@@ -66,6 +66,13 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     content:
       'Baik Bunda {name}, reservasi Anda telah kami batalkan sesuai permintaan.\nJika ingin reschedule di lain waktu, silakan hubungi kami kembali ya. Terima kasih 🙏',
   },
+  {
+    shortcut: 'shareloc',
+    title: 'Permintaan Titik Presisi (Shareloc GPS)',
+    category: 'Lokasi',
+    content:
+      'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏',
+  },
 ];
 
 export function normalizeShortcut(raw: string): string {

@@ -5,6 +5,58 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-13 - Fixed: Peringatan Titik Presisi (GPS Pin) & Pengingat Shareloc Otomatis (Fase 1-6)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - Bidan Tersasar ke Titik Tengah Kelurahan (Estimated Area): Customer yang memesan layanan homecare tanpa memberikan titik koordinat presisi (hanya nama jalan/kelurahan) menyebabkan Bidan diarahkan ke koordinat sentroid kelurahan karena admin lupa meminta shareloc setelah booking disepakati.
+  - Ketiadaan Peringatan Visual di Dashboard: Tidak ada kartu visual khusus yang membedakan pelanggan yang sudah memiliki pin GPS vs yang masih area perkiraan saat booking berstatus confirmed/hold.
+  - Risiko Shadow-ban & Template di Hardcode: Plan asli memiliki dependensi import salah (`dateWib` di backend), template di-hardcode di kode, menggunakan regex teks rapuh, dan rute gateway tidak sadar multi-tenant (hanya WAHA, mengabaikan WABA).
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Evaluator Murni & Background Sweep)**:
+    - `src/services/shareloc-signal.service.ts`: Fungsi murni matematis `computeSharelocSignal` dan `isFriendlyHoursWib` (08:00 - 19:59 WIB via `getWibNow().getUTCHours()`). Same-day booking langsung ditandai `needed=true, urgent=true`; advance booking menunggu 3 jam; cooldown 6 jam pasca-permintaan.
+    - `src/services/shareloc-reminder.service.ts`: Background sweep yang dilengkapi dedup persisten via `AdminNotificationLog.idempotency_key` (`${tenant}:SHARELOC:${customerId}:${wibDate}`), tenant-aware gateway (`resolveGatewayForTenant`), template dinamis dari DB (`QuickReply` shortcut `shareloc` / `ClinicPolicy topic='shareloc_request'`), pengecekan jam ramah, dan proteksi chat `is_human_handling`.
+  - **Fase 2 (Kontrak Data Dashboard & SSE)**:
+    - `src/services/live-chat.service.ts`: Menambahkan `locationSource`, `shareLocationSent`, dan `sharelocRequestedAt` pada payload `formatConversationItem`.
+    - `src/services/conversation.service.ts`: Meneruskan ketiga field di atas dalam payload standar `conversation.updated` via `buildConversationUpdatedPayload`.
+  - **Fase 3 (UI Kartu & Tombol 1-klik Human-in-the-Loop)**:
+    - Helper murni `packages/admin-dashboard/src/utils/sharelocCardStatus.ts`: Menghitung status kartu tanpa keterikatan React.
+    - `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`: Menampilkan border highlight (`border-l-4 border-l-orange-500` untuk same-day urgent, `border-l-4 border-l-amber-500` untuk advance), badge status `📍 Butuh Shareloc (Hari Ini)` / `📍 Butuh Shareloc`, dan tombol `[📍 Minta Shareloc]` di action bar percakapan yang mengisi composer balasan via `applyQuickReply` shortcut `shareloc` (human-in-the-loop, review sebelum kirim).
+  - **Fase 4 (Cron Lifecycle & Worker Separation)**:
+    - `src/services/cron.service.ts`: Menambahkan `runSharelocReminderSweep()` yang memproses seluruh tenant secara terisolasi.
+    - `src/lifecycle/background-crons.ts`: Mendaftarkan interval cron setiap 15 menit secara bertingkat (`trackIntervalStaggered`), dikunci di belakang flag proteksi `ENABLE_SHARELOC_REMINDER_SWEEP=false` (G0-c) untuk mencegah shadow-ban.
+  - **Fase 5 & 6 (Uji Adversarial & Regresi)**:
+    - `tests/unit/shareloc-signal.test.ts`: 14 pengujian adversarial mencakup jam ramah WIB, deteksi presisi GPS, same-day vs advance booking, cooldown 6 jam, fail-open reservasi, dan kekebalan terhadap variasi teks chat.
+    - `tests/unit/shareloc-reminder.test.ts`: 8 pengujian untuk template resolution DB, proteksi flag, skip human handling, gate same-day 1 jam bot, dan alur pengiriman sukses.
+    - `tests/unit/shareloc-card-status.test.ts`: 6 pengujian mirror frontend.
+    - 3 build hijau (`vitest`, `tsc`, `vite build`) tanpa regresi.
+- **File Dimodifikasi**: `src/services/shareloc-signal.service.ts`, `src/services/shareloc-reminder.service.ts`, `src/services/live-chat.service.ts`, `src/services/conversation.service.ts`, `src/services/cron.service.ts`, `src/lifecycle/background-crons.ts`, `src/routes/admin/quick-replies.subroute.ts`, `packages/admin-dashboard/src/utils/sharelocCardStatus.ts`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `tests/setup.ts`, `tests/unit/shareloc-signal.test.ts`, `tests/unit/shareloc-reminder.test.ts`, `tests/unit/shareloc-card-status.test.ts`, `docs/KNOWN_ISSUES.md`, `CHANGELOG.md`.
+
+#### 2026-10-13 - Fixed: Penjadwalan Staf vs Pasien (Pesan Tanpa Jam Opsi A) & Pengingat Foto Rumah HP Bidan (Fase 1-4)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - Diskrepansi Waktu Janji Pasien vs Target Internal Staf: Kolom tunggal `booking_date` digunakan bersama untuk target staf (yang dimajukan admin agar terapis bersiap/tiba tepat waktu) dan janji temu ke pasien.
+  - Kebocoran Jam di Pesan Pasien: Template pesan WhatsApp `reservationConfirmed` di `persona.ts` serta template reminder rolling `REMINDER_H0` dan `REMINDER_H1` mencantumkan `jam {time}` sehingga membingungkan pasien jika jam internal staf dimajukan.
+  - Ketiadaan Foto Depan Rumah Pasien Baru: Di lapangan, bidan sering kesulitan mengidentifikasi rumah pasien saat pertama kali berkunjung, sementara tombol perbarui lokasi di UI tersembunyi dan tidak ada pengingat ramah saat tiba/selesai.
+- **Fixed (Fondasional & Deterministik - Opsi A):**
+  - **Fase 1 (Pesan Pasien Bebas Jam)**:
+    - `src/config/followup-templates.ts`: 3 varian `REMINDER_H0` dan 3 varian `REMINDER_H1` dibersihkan dari indikator jam/waktu (`jam {time}` / `pukul {time}`), dengan tetap menjaga penyebutan brand klinik dinamis per-tenant (`getBrandIdentity().businessName`).
+    - `src/config/persona.ts`: Template `reservationConfirmed` menghapus `jam ${params.time}`, hanya mencantumkan tanggal kunjungan. Fungsi mati `morningReminder` ditandai `@deprecated` dan dibersihkan dari jam.
+    - `src/scripts/backfill-reminder-no-time-templates.ts`: Skrip pembaruan DB per-tenant untuk template kustom di tabel `followUpTemplate`.
+    - `packages/admin-dashboard/src/pages/tenant/FollowUpTemplates.tsx`: Label tipe diubah menjadi `Reminder Hari-H (Tanpa Jam)` dan chip placeholder `{time}` disembunyikan khusus untuk tipe `REMINDER_H0` dan `REMINDER_H1` agar admin tidak sengaja menyisipkan jam kembali.
+    - Catatan Kebijakan: Antrean `REMINDER_H1` secara default berstatus postponed (`FOLLOWUP_CREATE_REMINDER_REVIEW !== 'true'`); template baru siap aktif saat flag diaktifkan.
+  - **Fase 2 (Soft Guard Foto Rumah 3 Lapis)**:
+    - Helper murni `packages/admin-dashboard/src/pages/staff/housePhotoGuard.ts`: Menyediakan `needsHousePhoto` dan `resolveLocModalMode` yang decoupled dan stateless.
+    - Lapis 1 (Modal Langsung Siap Foto): Membuka modal lokasi pada tugas tanpa foto rumah langsung mengaktifkan mode `edit`, siap 1-tap kamera tanpa harus mencari tombol edit.
+    - Lapis 2 (Tombol Mencolok di Kartu): Tombol di kartu kunjungan (`StaffToday.tsx` & `TodayTreatments.tsx`) diberi styling amber berdaya tarik tinggi: `📸 Butuh Foto Rumah • Ambil Foto Sekarang`.
+    - Lapis 3 (Jaring Ramah Saat Tiba & Pulang): Notifikasi saat bidan menandai tiba ("Sudah Sampai") mengingatkan untuk mengambil foto rumah; dialog konfirmasi sebelum "Selesaikan Kunjungan" menawarkan opsi ambil foto sekarang atau lewati (soft guard, tidak memblokir penyelesaian darurat/hujan deras).
+  - **Fase 3 (Uji Adversarial)**:
+    - `tests/unit/patient-reminder-no-time.test.ts`: Uji 3 varian H0/H1 × ragam nama unik × ragam input jam menghasilkan pesan tanpa jam dengan brand identitas utuh, serta uji `reservationConfirmed`.
+    - `tests/unit/staff-house-photo-guard.test.ts`: Uji unit kontrak helper `needsHousePhoto` dan `resolveLocModalMode`.
+  - **Fase 4 (Dokumentasi & SOP)**:
+    - `docs/SOP_ADMIN_RESERVASI.md`: Panduan Bagian 3.10 mengenai kebijakan penjadwalan staf vs pesan pasien, cara komunikasi CS menjawab estimasi jam kunjungan, dan SOP pengambilan foto rumah.
+    - `docs/KNOWN_ISSUES.md`: Pencatatan Issue #253 mengenai utang sadar single `booking_date`, HSM WABA awaiting resubmit, dan status UI soft-guard.
+- **File Dimodifikasi**: `src/config/followup-templates.ts`, `src/config/persona.ts`, `src/scripts/backfill-reminder-no-time-templates.ts`, `packages/admin-dashboard/src/pages/tenant/FollowUpTemplates.tsx`, `packages/admin-dashboard/src/pages/staff/housePhotoGuard.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`, `packages/admin-dashboard/src/pages/tenant/TodayTreatments.tsx`, `tests/unit/patient-reminder-no-time.test.ts`, `tests/unit/staff-house-photo-guard.test.ts`, `docs/SOP_ADMIN_RESERVASI.md`, `docs/KNOWN_ISSUES.md`, `CHANGELOG.md`.
+
 #### 2026-10-12 - Fixed: Resolusi Diskrepansi Meta Ads vs Sistem (Anti-Race CTA, TrustProxy, Zero-Preflight Beacon, Taxonomy Gate & Anti Double-Count) (Fase 0-5)
 
 - **Akar Masalah (Audit Multi-Lapisan):**

@@ -475,15 +475,22 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Validasi batas waktu (maksimal 2 jam sebelum jam reservasi) — fail-closed bila booking_date null
+      // Validasi batas waktu (maksimal 2 jam sebelum jam reservasi s/d toleransi 15 menit setelah jam reservasi) — fail-closed bila booking_date null
       if ((reservation as any).booking_date) {
         const bookingTime = new Date((reservation as any).booking_date).getTime();
         const nowTime = Date.now();
         const twoHoursMs = 2 * 60 * 60 * 1000;
+        const graceMs = 15 * 60 * 1000; // toleransi telat 15 menit
         if (!isNaN(bookingTime) && nowTime < bookingTime - twoHoursMs && !isSupervisor) {
           return reply.status(400).send({
             success: false,
             error: 'Pesan OTW hanya dapat dikirim maksimal 2 jam sebelum jam reservasi.',
+          });
+        }
+        if (!isNaN(bookingTime) && nowTime > bookingTime + graceMs && !isSupervisor) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Jadwal treatment sudah masuk jam pelaksanaan / telah lewat. Pesan OTW tidak dapat dikirim ke pasien. Silakan gunakan tombol Catat Kedatangan / Sudah Sampai.',
           });
         }
       } else if (!isSupervisor) {
@@ -875,7 +882,9 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({
         success: true,
-        message: 'Status kedatangan berhasil dicatat & pesan telah dikirim ke pasien!',
+        message: result.data?.arrivalWaSuppressed
+          ? 'Status kedatangan berhasil dicatat (pesan WA tidak dikirim ulang karena pesan OTW baru saja terkirim).'
+          : 'Status kedatangan berhasil dicatat & pesan telah dikirim ke pasien!',
         data: result.data,
       });
     }

@@ -3,7 +3,30 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, DEPLOYED + HEALED)
+## 253. [Penjadwalan/Pesan Pasien] Opsi A Pesan Tanpa Jam & Soft Guard Foto Rumah (2026-10-13, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 1–4 selesai, build root + dashboard hijau, 13 test baru hijau).
+- **Latar Belakang & Akar Masalah:**
+  - Satu kolom `booking_date` di tabel `Reservation` saat ini digunakan untuk dua penonton: jam target internal staf (yang sengaja dimajukan admin agar staf bersiap/tiba tepat waktu) dan jam janji kepada pasien. Hal ini menyebabkan diskrepansi jika jam ditampilkan ke pasien.
+  - Template `REMINDER_H0`, `REMINDER_H1`, dan `reservationConfirmed` sebelumnya mencantumkan `jam {time}` sehingga membingungkan pasien jika jam internal staf dimajukan.
+  - Di lapangan, bidan membutuhkan pengingat ramah untuk mengambil foto depan rumah pasien baru tanpa mengganggu kecepatan kerja atau memblokir penyelesaian dalam kondisi darurat.
+- **Perbaikan Terpasang (Opsi A):**
+  1. **Pesan Pasien Bebas Jam (Default TS & Backfill DB)**:
+     - `src/config/followup-templates.ts`: 3 varian `REMINDER_H0` dan 3 varian `REMINDER_H1` diperbarui tanpa penyebutan jam/waktu, tetap dinamis menggunakan brand klinik (`getBrandIdentity().businessName`).
+     - `src/config/persona.ts`: Template `reservationConfirmed` menghapus `jam ${params.time}` (hanya mencantumkan hari dan tanggal). Fungsi `morningReminder` ditandai `@deprecated` dan teksnya dibersihkan dari parameter jam.
+     - `src/scripts/backfill-reminder-no-time-templates.ts`: Skrip pembaruan DB per-tenant untuk template kustom di tabel `followUpTemplate`.
+     - `packages/admin-dashboard/src/pages/tenant/FollowUpTemplates.tsx`: Label diubah menjadi `Reminder Hari-H (Tanpa Jam)` dan chip `{time}` disembunyikan khusus untuk tipe `REMINDER_H0` dan `REMINDER_H1`.
+  2. **Soft Guard Foto Rumah 3 Lapis (StaffToday & TodayTreatments)**:
+     - Helper murni `packages/admin-dashboard/src/pages/staff/housePhotoGuard.ts` menyediakan `needsHousePhoto` dan `resolveLocModalMode`.
+     - Lapis 1: Modal lokasi otomatis terbuka dalam mode `edit` jika foto rumah belum ada, langsung siap jepret kamera 1-tap.
+     - Lapis 2: Tombol di kartu kunjungan (`StaffToday.tsx` & `TodayTreatments.tsx`) tampil mencolok dengan warna amber: `📸 Butuh Foto Rumah • Ambil Foto Sekarang`.
+     - Lapis 3: Notifikasi ramah saat klik "Sudah Sampai" dan dialog konfirmasi sebelum "Selesaikan Kunjungan" yang memberikan opsi "Ambil Foto Rumah Sekarang" atau "Lewati & Selesaikan" (tanpa memblokir darurat/hujan).
+- **Utang Sadar & Catatan Arsitektur:**
+  1. **Single `booking_date` (Utang Sadar)**: Kolom tunggal `booking_date` tetap digunakan. Pemisahan fondasional (`patient_promised_at` vs `staff_target_at`, Opsi B) ditunda karena membutuhkan migrasi skema Prisma dan perombakan multi-modul.
+  2. **Template HSM WABA / Meta**: Template resmi Meta `reminder_treatment` dan `reminder_treatment_h1` masih menunggu resubmit/approval Meta tanpa variabel jam. Selama proses review Meta, antrean WABA fallback/skip secara aman.
+  3. **Soft Guard UI-Only**: Guard foto rumah berada di layer UI demi fleksibilitas staf lapangan; bypass langsung via API backend tetap dimungkinkan.
+  4. **Status Postponed H-1**: Worker follow-up secara default menahan antrean `REMINDER_H1` (`FOLLOWUP_CREATE_REMINDER_REVIEW !== 'true'`); template baru akan aktif saat env ini dibuka.
+
 ## 252. [Tracking/Meta] Resolusi Diskrepansi Meta Ads vs Sistem (77/222 LPV & 9/27 Klik) (2026-10-12, IMPLEMENTED lokal — Menunggu Deploy FASE 6)
 
 - **Status:** IMPLEMENTED lokal (Fase 0–5 selesai, build root + dashboard hijau, seluruh test baru hijau, zero regresi baru). Siap deploy ke server live.
@@ -2568,18 +2591,11 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   `calculate-delivery.tool.ts` hanya memakai koordinat sentroid + kecamatan). Kandidat fix
   fondasional: tambah flag `matchedLevel: 'kelurahan' | 'kecamatan'` pada return gazetteer
   agar konsumen tidak perlu menebak — butuh audit blast-radius seluruh konsumen.
-- **161b — Tombol 1-klik "Minta Shareloc WhatsApp" (Belum dieksekusi, sengaja):**
-  Fase 3.2 plan awal ditunda mengikuti prinsip reuse-first & anti-bloat: kapabilitas meminta
-  shareloc ke customer SUDAH ada via LiveChat + Quick Reply default ("Alamat Lengkap &
-  Shareloc"), dan menambah endpoint pengirim WhatsApp baru berisiko duplikasi + shadow-ban
-  (waha-testing-safety). Bila tetap diinginkan, wajib lewat Confirmation Gate (butuh endpoint
-  kirim tenant-aware + template dari DB + verifikasi 2-langkah).
-  **Klarifikasi (audit ulang):** override presisi untuk "pindah rumah" SUDAH tersedia dari
-  dashboard admin — `PUT /api/admin/customers/:id/location` (`Reservations.tsx`) dan tombol
-  "Refresh Lokasi" menulis koordinat langsung (bypass guard `isPreciseGps`) + audit
-  `ADMIN_UPDATE_CUSTOMER_LOCATION`. Karena itu tombol `forceUpdateGps` baru TIDAK dibuat
-  (redundan); param tetap sebagai escape-hatch API terprogram. Yang benar-benar belum ada
-  hanyalah kemudahan 1-klik kirim permintaan shareloc — bukan celah fungsional.
+- **161b — Peringatan Titik Presisi & Tombol 1-klik "Minta Shareloc" (DONE — 2026-10-13):**
+  Diselesaikan secara fondasional (2 lapis: kartu & tombol 1-klik di dashboard + background sweep aman):
+  1. **Evaluator Murni (`shareloc-signal.service.ts`):** Evaluasi matematis deterministik tanpa regex dan tanpa hardcode teks. Mendeteksi kebutuhan shareloc untuk booking aktif (`CONFIRMED_FAMILY_STATUSES` + `hold`), same-day booking instan, advance booking (tunggu 3 jam), dan cooldown 6 jam.
+  2. **Kartu & Tombol 1-klik (`sharelocCardStatus.ts` + `LiveChatMonitor.tsx`):** Highlight border (`border-l-4 border-l-orange-500` / `border-l-amber-500`), badge status, dan tombol `[📍 Minta Shareloc]` di header percakapan yang memanfaatkan `applyQuickReply` shortcut `shareloc` (human-in-the-loop, template dari DB tanpa hardcode).
+  3. **Auto-send Sweep (`shareloc-reminder.service.ts` + `background-crons.ts`):** Dilengkapi dedup persisten via `AdminNotificationLog.idempotency_key`, gateway sadar tenant (`resolveGatewayForTenant`), cek jam ramah 08:00-19:59 WIB, proteksi `is_human_handling`, dan default dinonaktifkan di belakang flag `ENABLE_SHARELOC_REMINDER_SWEEP=false` untuk mencegah shadow-ban.
 - **161c — Remediasi data live 6288000000009 (Belum dieksekusi, runbook):**
   Perbaikan record produksi (isi `preferences.address` bersih, koreksi `location_source`)
   DIPISAH dari deploy kode karena menyentuh data live → butuh verifikasi 2-langkah +

@@ -130,6 +130,20 @@ Dipakai saat pasien minta keep slot untuk transfer/berembuk.
 
 Tabel `ReservationSeries`: sesi bertambah tiap kunjungan dijadwalkan (misal Sesi 2/4). Status seri: `active | paused | completed | cancelled` (v1.0 lupa `cancelled` — sudah dikoreksi).
 
+### 3.10 Kebijakan Penjadwalan Staf vs Komunikasi Pasien (Pesan Tanpa Jam & Foto Rumah)
+
+1. **Jam Internal Staf vs Jam Janji Pasien:**
+   - Admin diperkenankan memajukan jam target staf di dashboard (misal jadwal aslinya 10:00 dimajukan menjadi 09:30) agar bidan terapis berangkat dan tiba di lokasi dengan persiapan matang.
+   - Untuk menghindari kebingungan pasien akibat perubahan jam internal tersebut, **seluruh pesan otomatis pasien (konfirmasi booking `reservationConfirmed`, Reminder Hari-H `REMINDER_H0`, dan Reminder H-1 `REMINDER_H1`) sengaja tidak mencantumkan jam spesifik (Opsi A)**.
+2. **Cara Menjawab Pertanyaan Pasien Mengenai Jam Kunjungan ("Kira-kira jam berapa ya kak?"):**
+   - Admin CS **dilarang** menjanjikan jam kedatangan yang terlalu kaku / presisi menit demi mengantisipasi kendala lalu lintas dan kondisi cuaca.
+   - Sampaikan sesi perkiraan umum (Pagi antara 08:30–11:30 atau Siang antara 12:30–15:30).
+   - Edukasikan kepada Bunda bahwa sistem dan terapis akan otomatis mengirim pesan konfirmasi keberangkatan saat terapis **mulai OTW menuju rumah**, serta mengirim konfirmasi saat **sudah tiba di depan rumah**.
+3. **Pengambilan Foto Rumah Pasien Baru (Soft Guard Bidan):**
+   - Kartu tugas di HP Bidan (`StaffToday`) dan Admin (`TodayTreatments`) secara otomatis menampilkan tombol amber mencolok: `📸 Butuh Foto Rumah • Ambil Foto Sekarang` jika alamat pasien belum memiliki foto depan rumah.
+   - Membuka modal lokasi pada tugas yang belum memiliki foto rumah akan langsung masuk ke mode `edit` siap jepret kamera 1-tap.
+   - Saat tiba dan saat menyelesaikan kunjungan, bidan akan diingatkan melalui dialog konfirmasi ramah. Bidan tetap dapat memilih `Lewati & Selesaikan` jika dalam kondisi darurat / cuaca buruk (hujan deras). Foto rumah yang diunggah otomatis dibubuhi watermark GPS, tanggal, dan nama kelurahan/kecamatan untuk panduan kunjungan tim di masa mendatang.
+
 ---
 
 ## 4. Navigasi Halaman Reservasi: Tabel vs Kalender (`/admin/reservations`)

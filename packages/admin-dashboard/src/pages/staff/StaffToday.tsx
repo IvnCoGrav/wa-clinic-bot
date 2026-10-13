@@ -87,6 +87,7 @@ import {
 } from '../../utils/geoUtils';
 import { NavigationPreflightModal } from '../../components/staff/NavigationPreflightModal';
 import { OtwConfirmModal } from '../../components/staff/OtwConfirmModal';
+import { needsHousePhoto, resolveLocModalMode } from './housePhotoGuard';
 
 interface StaffTaskChild {
   name: string;
@@ -642,10 +643,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Tombol OTW hanya bisa ditekan maksimal 2 jam sebelum jadwal treatment
+  // Tombol OTW hanya bisa ditekan maksimal 2 jam sebelum jadwal treatment s/d toleransi 15 menit setelah jadwal
   const isOtwAllowed = (task: StaffTask) => {
     if (!task.bookingDate) return false;
-    return Date.now() >= new Date(task.bookingDate).getTime() - 2 * 60 * 60 * 1000;
+    const start = new Date(task.bookingDate).getTime();
+    if (isNaN(start)) return false;
+    const now = Date.now();
+    return now >= start - 2 * 60 * 60 * 1000 && now <= start + 15 * 60 * 1000;
+  };
+
+  // Benar-benar jamnya tiba: H-10 menit s/d kapan pun setelah janji, belum OTW, belum Tiba.
+  const isTimeForArrival = (t: StaffTask): boolean => {
+    if (!t.bookingDate || t.otwSentAt || t.arrivedAt) return false;
+    const start = new Date(t.bookingDate).getTime();
+    if (isNaN(start)) return false;
+    return Date.now() >= start - 10 * 60 * 1000;
   };
 
   // Jendela akses chat: server-driven (chatWindow) dengan fallback aman bila field belum ada.
@@ -2071,9 +2083,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       }
     } catch (_) {}
 
+    const missingPhotoNotice = needsHousePhoto(task)
+      ? '\n\n💡 Catatan: Foto rumah pasien ini belum tersedia di sistem. Sempatkan mengambil foto depan rumah setelah tiba ya Bidan.'
+      : '';
+
     const confirmed = await confirm({
       title: 'Konfirmasi Tiba di Lokasi',
-      message: `Kirim pesan WhatsApp bahwa Anda sudah sampai di depan lokasi ${patientName}?\n\n"${arrivalMessage}"`,
+      message: `Kirim pesan WhatsApp bahwa Anda sudah sampai di depan lokasi ${patientName}?\n\n"${arrivalMessage}"${missingPhotoNotice}`,
       confirmText: 'Ya, Sudah Sampai',
       cancelText: 'Batal',
     });
@@ -2130,7 +2146,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         setPaymentModalTask(task);
         return;
       }
-    } else {
+    }
+
+    // Soft guard: Pengingat foto rumah jika belum ada (tidak memblokir darurat)
+    if (needsHousePhoto(task)) {
+      const wantToTake = await confirm({
+        title: '📸 Foto Rumah Belum Diunggah',
+        message: `Foto depan rumah untuk pasien ${patientName} belum ada di sistem.\n\nFoto rumah sangat membantu tim bidan lain menemukan lokasi dengan cepat untuk kunjungan berikutnya. Mau ambil foto rumah sekarang?`,
+        confirmText: 'Ambil Foto Rumah Sekarang',
+        cancelText: 'Lewati & Selesaikan',
+      });
+      if (wantToTake) {
+        handleOpenUpdateLocationModal(task);
+        return;
+      }
+    } else if (task.pricing?.paymentStatus !== 'TAGIH_DI_TEMPAT') {
       const confirmed = await confirm({
         title: 'Selesaikan Kunjungan',
         message: `Tandai kunjungan & tindakan untuk ${patientName} telah selesai dilakukan?`,
@@ -2446,22 +2476,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Open Location Update Modal
   const handleOpenUpdateLocationModal = (task: StaffTask) => {
     setUpdateLocationModalTask(task);
-    if (task.address.lat != null && task.address.lng != null) {
-      setLocCoords({ lat: task.address.lat, lng: task.address.lng });
-    } else {
-      setLocCoords(null);
-    }
+    const initialCoords =
+      task.address.lat != null && task.address.lng != null
+        ? { lat: task.address.lat, lng: task.address.lng }
+        : null;
+    setLocCoords(initialCoords);
     setLocHousePhotoB64(task.address.housePhotoUrl || null);
     setLocRawHousePhotoB64(null);
     setLocLandmark(task.address.landmark || '');
 
     const hasData = Boolean(
       task.address.housePhotoUrl ||
-      (task.address.lat != null && task.address.lng != null) ||
+      initialCoords != null ||
       task.address.landmark
     );
     setHasSavedLocData(hasData);
-    setLocModalMode(hasData ? 'view' : 'edit');
+    const mode = resolveLocModalMode(task);
+    setLocModalMode(mode);
+
+    // Warm up GPS jika buka mode edit dan koordinat belum tersedia (hemat baterai, tanpa izin berulang)
+    if (mode === 'edit' && !initialCoords && !locGettingGps && 'geolocation' in navigator) {
+      acquireBestGps(true).catch(() => {});
+    }
   };
 
   // Auto-retry polling GPS hingga 5 kali percobaan atau hingga akurasi ≤ 10m
@@ -3351,10 +3387,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 e.stopPropagation();
                                 handleOpenUpdateLocationModal(task);
                               }}
-                              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-[#e8f5f2] text-[#008069] text-[11px] font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                              className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 shadow-2xs transition-all active:scale-95"
+                              title="Ambil foto rumah untuk panduan visual kunjungan"
                             >
-                              <Camera size={12} />
-                              <span>+ Update Titik Lokasi & Foto Rumah</span>
+                              <Camera size={13} className="text-amber-600" />
+                              <span>📸 Butuh Foto Rumah • Ambil Foto Sekarang</span>
                             </button>
                           )}
                         </div>
@@ -3482,9 +3519,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           const isTerminal = task.status === 'completed';
                           const isArrived = !isTerminal && (task.arrivedAt || isScheduleOverdue(task));
                           const isOtw = !isTerminal && !isArrived && !!task.otwSentAt;
+                          const isDirectArrival = !isTerminal && !isArrived && !isOtw && isTimeForArrival(task);
+                          const showExtraNav = (isOtw || isDirectArrival) && !!navUrl;
                           const colsClass = isChatHidden
-                            ? (isOtw ? 'grid-cols-2' : 'grid-cols-1')
-                            : (isOtw ? 'grid-cols-3' : 'grid-cols-2');
+                            ? (showExtraNav ? 'grid-cols-2' : 'grid-cols-1')
+                            : (showExtraNav ? 'grid-cols-3' : 'grid-cols-2');
                           return (
                             <div className={`grid ${colsClass} gap-2 pt-2 mt-1`}>
                               {!isChatHidden && (
@@ -3535,6 +3574,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 )
                               )}
 
+                              {/* Mode jam tiba langsung (tanpa OTW): tombol Peta murni tanpa kirim pesan OTW */}
+                              {isDirectArrival && navUrl && (
+                                <a
+                                  href={navUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30"
+                                  title="Buka peta navigasi (tanpa kirim pesan OTW)"
+                                >
+                                  <Navigation size={15} />
+                                  <span>Peta</span>
+                                </a>
+                              )}
+
                               {/* Aksi operasional 3-state */}
                               {isTerminal || isArrived ? (
                                 <button
@@ -3557,7 +3611,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     </>
                                   )}
                                 </button>
-                              ) : isOtw ? (
+                              ) : (isOtw || isDirectArrival) ? (
                                 <button
                                   type="button"
                                   disabled={sendingArrivalId === task.reservationId}
@@ -3590,7 +3644,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   title={
                                     navUrl
                                       ? 'Buka peta navigasi & otomatis infokan OTW ke pasien'
-                                      : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
+                                      : `OTW H-2 jam s/d H+15 menit (${formatTime(task.bookingDate)}); lewat itu pakai Sudah Sampai`
                                   }
                                 >
                                   {isSendingOtw ? (
@@ -3746,7 +3800,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                              <CheckCircle2 size={16} />
                            )}
                          </button>
-                       ) : selectedTask.otwSentAt ? (
+                       ) : selectedTask.otwSentAt || isTimeForArrival(selectedTask) ? (
                          <button
                            onClick={() => handleRecordArrival(selectedTask)}
                            disabled={sendingArrivalId === selectedTask.reservationId}
@@ -3773,7 +3827,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               ? 'Buka peta navigasi & otomatis infokan OTW'
                               : isOtwAllowed(selectedTask)
                               ? 'Kirim info menuju lokasi (OTW) ke WhatsApp pasien'
-                              : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`
+                              : `OTW H-2 jam s/d H+15 menit (${formatTime(selectedTask.bookingDate)}); lewat itu pakai Sudah Sampai`
                           }
                         >
                           {sendingOtwId === selectedTask.reservationId ? (
@@ -4118,6 +4172,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           key={idx}
                           type="button"
                           onClick={() => {
+                            if (
+                              chip.label.includes('Sudah Sampai') &&
+                              selectedTask &&
+                              !selectedTask.arrivedAt &&
+                              !isTrulyCompleted(selectedTask)
+                            ) {
+                              handleRecordArrival(selectedTask);
+                              return;
+                            }
                             setReplyText(chip.text);
                             if (replyTextareaRef.current) {
                               replyTextareaRef.current.focus();

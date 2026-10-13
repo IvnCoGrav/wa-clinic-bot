@@ -53,22 +53,22 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
 > = {
   // 1. Reminder Hari-H (06:00 WIB)
   REMINDER_H0: [
-    ({ name, time }) =>
-      `Selamat pagi Bunda ${name}! ✨ Reminder untuk jadwal treatment homecare ${getBrandIdentity().businessName} hari ini jam ${time || 'sesuai kesepakatan'} ya bund. Tim bidan kami akan datang sesuai jadwal. Sampai jumpa Bunda! 🥰`,
-    ({ name, time }) =>
-      `Halo Bunda ${name}, selamat pagi! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} hari ini pukul ${time || 'sesuai kesepakatan'} ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
-    ({ name, time }) =>
-      `Pagi Bunda ${name}! 🥰 Nanti jam ${time || 'sesuai kesepakatan'} tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu nanti ya bund! ✨`,
+    ({ name }) =>
+      `Selamat pagi Bunda ${name}! ✨ Reminder untuk jadwal treatment homecare ${getBrandIdentity().businessName} hari ini ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa Bunda! 🥰`,
+    ({ name }) =>
+      `Halo Bunda ${name}, selamat pagi! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} hari ini ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
+    ({ name }) =>
+      `Pagi Bunda ${name}! 🥰 Hari ini tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu nanti ya bund! ✨`,
   ],
 
   // 1b. Reminder H-1 Malam (19:00 WIB)
   REMINDER_H1: [
-    ({ name, time }) =>
-      `Selamat malam Bunda ${name}! ✨ Mengingatkan kembali untuk jadwal treatment homecare ${getBrandIdentity().businessName} besok jam ${time || 'sesuai kesepakatan'} ya bund. Tim bidan kami akan datang sesuai jadwal. Sampai jumpa besok Bunda! 🥰`,
-    ({ name, time }) =>
-      `Halo Bunda ${name}, selamat malam! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} besok pukul ${time || 'sesuai kesepakatan'} ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
-    ({ name, time }) =>
-      `Malam Bunda ${name}! 🥰 Besok jam ${time || 'sesuai kesepakatan'} tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu besok ya bund! ✨`,
+    ({ name }) =>
+      `Selamat malam Bunda ${name}! ✨ Mengingatkan kembali untuk jadwal treatment homecare ${getBrandIdentity().businessName} besok ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa besok Bunda! 🥰`,
+    ({ name }) =>
+      `Halo Bunda ${name}, selamat malam! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} besok ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
+    ({ name }) =>
+      `Malam Bunda ${name}! 🥰 Besok tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu besok ya bund! ✨`,
   ],
 
   // 2. Review H+1 Baby (07:00 WIB)

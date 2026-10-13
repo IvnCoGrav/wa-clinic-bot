@@ -26,7 +26,7 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
-const isCommit = process.argv.includes('--commit');
+const isCommit = process.argv.includes('--commit') || process.argv.includes('--apply');
 const isDryRun = !isCommit;
 const tenantArg = process.argv.find((a) => a.startsWith('--tenant='));
 const limitArg = process.argv.find((a) => a.startsWith('--limit='));

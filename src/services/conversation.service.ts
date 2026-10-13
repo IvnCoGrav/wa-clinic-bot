@@ -43,6 +43,12 @@ export function buildConversationUpdatedPayload(conversation: any) {
     isFrustrated: !!conversation.is_frustrated,
     frustratedAt: conversation.frustrated_at ?? null,
     frustratedReason: conversation.frustrated_reason ?? null,
+    locationSource: (conversation.customer as any)?.location_source ?? null,
+    shareLocationSent: Boolean((conversation.customer as any)?.share_location_sent),
+    sharelocRequestedAt:
+      (conversation as any)?.session_data?.shareloc_requested_at ??
+      (conversation.customer as any)?.preferences?.share_location_requested_at ??
+      null,
   };
 }
 

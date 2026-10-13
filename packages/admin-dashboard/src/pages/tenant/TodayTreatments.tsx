@@ -53,6 +53,7 @@ import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayF
 import { isEnRouteStatus } from '../../utils/reservationStatus';
 import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
 import { getTodayWibDateKey } from '../../utils/dateWib';
+import { needsHousePhoto, resolveLocModalMode } from '../staff/housePhotoGuard';
 
 interface TaskChild {
   name: string;
@@ -510,7 +511,7 @@ export const TodayTreatments: React.FC = () => {
       task.address.landmark
     );
     setHasSavedLocData(hasData);
-    setLocModalMode(hasData ? 'view' : 'edit');
+    setLocModalMode(resolveLocModalMode(task));
   };
 
   // Helper untuk membubuhkan watermark GPS & info lokasi ke raw photo
@@ -1316,11 +1317,15 @@ export const TodayTreatments: React.FC = () => {
                         {/* Update GPS & Foto Rumah */}
                         <button
                           onClick={() => handleOpenLocationModal(task)}
-                          className="py-2.5 px-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
-                          title="Update Titik GPS & Foto Rumah Pasien"
+                          className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer ${
+                            needsHousePhoto(task)
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700/60 dark:text-amber-300'
+                              : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
+                          }`}
+                          title={needsHousePhoto(task) ? 'Foto rumah belum ada • Klik untuk unggah' : 'Update Titik GPS & Foto Rumah Pasien'}
                         >
-                          <Camera size={14} />
-                          <span>Lokasi</span>
+                          <Camera size={14} className={needsHousePhoto(task) ? 'text-amber-600 dark:text-amber-400' : ''} />
+                          <span>{needsHousePhoto(task) ? 'Butuh Foto' : 'Lokasi'}</span>
                         </button>
 
                         {/* Chat WhatsApp Pasien */}

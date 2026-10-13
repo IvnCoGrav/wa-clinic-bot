@@ -109,6 +109,7 @@ import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDat
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
 import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
+import { getSharelocCardStatus } from '../../utils/sharelocCardStatus';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -321,6 +322,9 @@ interface LiveChatItem {
     otw_sent_at?: string | null;
     arrived_at?: string | null;
   } | null;
+  locationSource?: string | null;
+  shareLocationSent?: boolean;
+  sharelocRequestedAt?: string | null;
 }
 
 // Katalog emoji & favorit dimiliki LiveChatComposer (Fase A v3) — single source of truth.
@@ -2453,6 +2457,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   isFrustrated: payload.isFrustrated !== undefined ? !!payload.isFrustrated : c.isFrustrated,
                   frustratedAt: payload.isFrustrated !== undefined ? (payload.frustratedAt ?? null) : c.frustratedAt,
                   frustratedReason: payload.isFrustrated !== undefined ? (payload.frustratedReason ?? null) : c.frustratedReason,
+                  locationSource: payload.locationSource !== undefined ? payload.locationSource : c.locationSource,
+                  shareLocationSent: payload.shareLocationSent !== undefined ? payload.shareLocationSent : c.shareLocationSent,
+                  sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
                 }
               : c
           );
@@ -4710,6 +4717,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {sortedChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
+                  const sharelocCard = getSharelocCardStatus(chat);
                   const chatName = chat.customerName || 'Customer';
                   const lastMsg = chat.lastMessages && chat.lastMessages.length > 0
                     ? chat.lastMessages[chat.lastMessages.length - 1]
@@ -4829,7 +4837,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   ? 'border-l-4 border-l-sky-500'
                                   : (chat as any).hasUpcomingBooking
                                     ? 'border-l-4 border-l-emerald-500'
-                                    : ''
+                                    : sharelocCard.needed && sharelocCard.borderClass
+                                      ? sharelocCard.borderClass
+                                      : ''
                             }`
                           : isMedical
                             ? 'border-rose-300 dark:border-rose-700/60 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/70 dark:hover:bg-rose-950/30 active:bg-rose-100/50'
@@ -4839,7 +4849,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-emerald-500 bg-emerald-50/65 dark:bg-emerald-950/30 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 active:bg-emerald-100'
                                 : (chat as any).hasPendingBooking
                                   ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-sky-500 bg-sky-100/90 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:bg-sky-200/70'
-                                  : 'border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#00a884]/50 hover:bg-[#f8fafc] dark:hover:bg-[#202c33] active:bg-[#f0f2f5] dark:active:bg-[#222e35]'
+                                  : sharelocCard.needed && sharelocCard.borderClass
+                                    ? `border-[#e9edef] dark:border-[#2a3942] ${sharelocCard.borderClass} ${sharelocCard.urgent ? 'bg-orange-50/40 dark:bg-orange-950/20' : 'bg-amber-50/40 dark:bg-amber-950/20'} hover:bg-[#f8fafc] dark:hover:bg-[#202c33]`
+                                    : 'border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#00a884]/50 hover:bg-[#f8fafc] dark:hover:bg-[#202c33] active:bg-[#f0f2f5] dark:active:bg-[#222e35]'
                       }`}
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
@@ -4900,6 +4912,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               {(chat as any).hasPendingBooking && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
                                   🕓 Pending
+                                </span>
+                              )}
+                              {sharelocCard.needed && (
+                                <span
+                                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold shadow-2xs border ${sharelocCard.badgeClass}`}
+                                  title={sharelocCard.label || 'Butuh Shareloc'}
+                                >
+                                  {sharelocCard.label}
                                 </span>
                               )}
                               {sourceFilter === 'reservation' &&
@@ -5304,6 +5324,28 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           <span className="hidden sm:inline">Radar OTW</span>
                         </button>
                       )}
+                      {(() => {
+                        const sharelocStatus = getSharelocCardStatus(selectedChat);
+                        if (!sharelocStatus.needed) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const qr = quickReplies.find((q) => q.shortcut === 'shareloc');
+                              const content =
+                                qr?.content ||
+                                'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏';
+                              applyQuickReply({ content });
+                              toast('Template shareloc dimasukkan ke composer balasan.', 'success');
+                            }}
+                            title={sharelocStatus.label || 'Minta Titik Presisi (Shareloc)'}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-300 dark:border-orange-800 text-xs font-bold shadow-2xs active:scale-95 transition cursor-pointer"
+                          >
+                            <MapPin size={14} className="text-orange-600 dark:text-orange-400 shrink-0" />
+                            <span className="hidden sm:inline">Minta Shareloc</span>
+                          </button>
+                        );
+                      })()}
                       <button
                         type="button"
                         onClick={() => setInChatSearchOpen((v) => !v)}

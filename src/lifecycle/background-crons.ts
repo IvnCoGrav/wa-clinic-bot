@@ -138,6 +138,16 @@ export function startBackgroundCrons(): void {
     }).catch(e => console.error('[FRUSTRATION SWEEP START ERROR]', e));
   }
 
+  // Pengingat shareloc otomatis (G0-c: default nonaktif di belakang flag ENABLE_SHARELOC_REMINDER_SWEEP=true).
+  if (process.env.ENABLE_SHARELOC_REMINDER_SWEEP === 'true') {
+    const intervalMinutes = parseInt(process.env.SHARELOC_REMINDER_SWEEP_INTERVAL_MINUTES || '15', 10);
+    import('../services/cron.service').then(({ CronService }) => {
+      const cron = new CronService();
+      trackIntervalStaggered(() => cron.runSharelocReminderSweep(), intervalMinutes * 60 * 1000);
+      console.log(`📍 Shareloc reminder sweep cron started (every ${intervalMinutes}m, staggered)`);
+    }).catch(e => console.error('[SHARELOC REMINDER SWEEP START ERROR]', e));
+  }
+
   // Nightly Watchdog (Fase 2r): laporan pengawasan malam 21:00 WIB.
   import('../services/nightly-watchdog.service').then(({ nightlyWatchdogService }) => {
     import('../services/notification-delivery.service').then(({ notificationDeliveryService }) => {

@@ -2412,8 +2412,9 @@ export class StaffReservationService {
     tenantId: string;
     staffName?: string;
     isSupervisor?: boolean;
+    skipWhatsApp?: boolean;
   }): Promise<{ success: boolean; data?: any; error?: string }> {
-    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false } = params;
+    const { reservationId, staffId, tenantId, staffName = 'Bidan Terapis', isSupervisor = false, skipWhatsApp = false } = params;
 
     try {
       const reservation = await prisma.reservation.findUnique({
@@ -2461,6 +2462,14 @@ export class StaffReservationService {
 
       const now = new Date();
 
+      // Anti-Spam (Rapid Arrival Guard):
+      // Jika pesan OTW baru saja dikirim (< 3 menit), tahan pengiriman WA "Sudah Sampai"
+      // agar pasien tidak menerima dua pesan beruntun dalam hitungan detik.
+      const otwMs = (reservation as any).otw_sent_at
+        ? new Date((reservation as any).otw_sent_at).getTime()
+        : 0;
+      const isRapid = otwMs > 0 && now.getTime() - otwMs < 3 * 60 * 1000;
+
       // 1. Update arrived_at di DB
       await prisma.reservation.update({
         where: { id: reservationId },
@@ -2475,7 +2484,7 @@ export class StaffReservationService {
       const therapistName = (reservation as any).assigned_staff?.name || staffName;
 
       let waResult: any = null;
-      if (conversation) {
+      if (conversation && !isRapid && !skipWhatsApp) {
         const { liveChatService } = await import('./live-chat.service');
         // Template data-driven (`STAFF_ARRIVAL`) + sanitasi nama + tanda tangan otomatis.
         const arrivalText = await StaffReservationService.getArrivalMessageText(tenantId, {
@@ -2501,6 +2510,8 @@ export class StaffReservationService {
         payload: {
           conversationId: conversation?.id || null,
           arrivedAt: now.toISOString(),
+          arrivalWaSuppressed: isRapid || skipWhatsApp,
+          otwSentAt: (reservation as any).otw_sent_at ? new Date((reservation as any).otw_sent_at).toISOString() : null,
         },
         tenantId,
       });
@@ -2511,6 +2522,7 @@ export class StaffReservationService {
           reservationId,
           arrivedAt: now,
           waResult,
+          arrivalWaSuppressed: isRapid || skipWhatsApp,
         },
       };
     } catch (err: any) {

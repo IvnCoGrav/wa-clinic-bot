@@ -30,9 +30,9 @@ interface TemplateItem {
 
 const TYPE_CONFIG: Record<string, { label: string; category: string; description: string }> = {
   REMINDER_H0: {
-    label: 'Reminder Hari-H (Jam Treatment)',
+    label: 'Reminder Hari-H (Tanpa Jam)',
     category: 'REMINDER',
-    description: 'Terkirim otomatis pagi hari treatment untuk mengingatkan jam kunjungan bidan / kedatangan pasien.',
+    description: 'Terkirim otomatis pagi hari treatment untuk mengingatkan jadwal kunjungan bidan / kedatangan pasien (tanpa patokan jam spesifik).',
   },
   STAFF_OTW: {
     label: 'Pesan Bidan OTW (Menuju Lokasi)',
@@ -526,7 +526,9 @@ export const FollowUpTemplates: React.FC = () => {
                           {/* Click-to-insert placeholder pills */}
                           <div className="flex flex-wrap items-center gap-1 mb-2">
                             <span className="text-[10px] text-[#8696a0] font-medium mr-0.5">Sisipkan:</span>
-                            {AVAILABLE_PLACEHOLDERS.map((p) => (
+                            {AVAILABLE_PLACEHOLDERS
+                              .filter((p) => !(p.tag === '{time}' && (item.type === 'REMINDER_H0' || item.type === 'REMINDER_H1')))
+                              .map((p) => (
                               <button
                                 key={p.tag}
                                 type="button"
