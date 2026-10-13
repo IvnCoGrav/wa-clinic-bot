@@ -236,6 +236,13 @@ export function extractTimeHint(text: string): string | null {
           if (c >= 48 && c <= 57) continue; // "3 minggu" = usia, bukan hari
         }
       }
+      if (t === 'sekarang') {
+        // 'sekarang' hanya sah sebagai petunjuk jadwal bila ada konteks jadwal/layanan klinik
+        // (mencegah "sekarang lagi di jalan", "beli sekarang" terdeteksi sebagai jadwal)
+        const hasScheduleContext =
+          /(?:bisa|slot|jadwal|reservasi|booking|kontrol|terapi|pijat|periksa|treatment|usg|bidan|layanan|homecare|tindakan|datang|kunjung|skrg|ready|kosong|jam|pukul|hari)\b/i.test(lower);
+        if (!hasScheduleContext) continue;
+      }
       valid.push(t);
     }
   }

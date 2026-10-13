@@ -126,14 +126,23 @@ export class TenantHtmlService {
     // Event yang di-fire saat landing load (setelah PageView)
     const ONLOAD_EVENTS: string[] = ['ViewContent', 'Search'];
     // Event yang di-fire saat klik CTA (konversi/intent) sebelum redirect
-    const CLICK_EVENTS: string[] = ['Lead', 'Purchase', 'InitiateCheckout', 'AddToCart', 'CompleteRegistration', 'Contact', 'StartTrial', 'Subscribe', 'CustomizeProduct'];
+    // 'Purchase' DILARANG untuk event klik CTA (Purchase kanonis hanya dari pembayaran real via purchase-detection.service)
+    const CLICK_EVENTS: string[] = ['Lead', 'InitiateCheckout', 'AddToCart', 'CompleteRegistration', 'Contact', 'StartTrial', 'Subscribe', 'CustomizeProduct'];
 
     const pixelOnloadLines = events
       .filter((e) => ONLOAD_EVENTS.includes(e))
       .map((e) => `        fbq('track', '${e}');`)
       .join('\n');
 
-    const clickPixelEvents = JSON.stringify(events.filter((e) => CLICK_EVENTS.includes(e)));
+    const filteredClickEvents = events.filter((e) => {
+      if (e === 'Purchase') {
+        console.warn(`[TAXONOMY GATE] Event 'Purchase' ditolak untuk klik tombol CTA (tenantId=${config.tenantId}). Purchase hanya boleh ditembakkan pasca-pembayaran.`);
+        return false;
+      }
+      return CLICK_EVENTS.includes(e);
+    });
+
+    const clickPixelEvents = JSON.stringify(filteredClickEvents);
 
     // 1. Inject Meta Pixel into <head> with nonce — DITIADAKAN bila ID kosong
     // (isolasi multi-tenant: tenant tanpa pixel tidak memuat fbevents.js sama sekali).
@@ -182,7 +191,7 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
             };
             var body = JSON.stringify(payload);
             if (navigator.sendBeacon) {
-              try { var blob = new Blob([body], {type:'application/json'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
+              try { var blob = new Blob([body], {type:'text/plain;charset=UTF-8'}); navigator.sendBeacon(endpoint, blob); } catch(e) {
                 fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,mode:'cors'}).catch(function(){});
               }
             } else {
@@ -240,7 +249,7 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
               };
               var body2 = JSON.stringify(payload2);
               if (navigator.sendBeacon) {
-                try { var blob2 = new Blob([body2], {type:'application/json'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
+                try { var blob2 = new Blob([body2], {type:'text/plain;charset=UTF-8'}); navigator.sendBeacon(endpoint2, blob2); } catch(e) {
                   fetch(endpoint2,{method:'POST',headers:{'Content-Type':'application/json'},body:body2,keepalive:true,mode:'cors'}).catch(function(){});
                 }
               } else {
@@ -326,7 +335,9 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
                 const trackingCode = data.trackingCode || 'promo';
                 clickPixelEvents.forEach(function(ev) { if (window.fbq) fbq('track', ev, {}, { eventID: trackingCode }); });
                 const redirectUrl = 'https://wa.me/' + defaultPhone + '?text=Promo%5B' + trackingCode + '%5D%20Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment';
-                window.location.href = redirectUrl;
+                setTimeout(function() {
+                  window.location.href = redirectUrl;
+                }, 300);
               })
               .catch(function(err) {
                 clearTimeout(safetyTimeout);

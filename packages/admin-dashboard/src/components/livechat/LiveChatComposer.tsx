@@ -625,6 +625,24 @@ const LiveChatComposerInner = (
         </div>
       )}
 
+      {isInternalMode && (
+        <div className="flex sm:hidden items-center justify-between bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-500/40 px-2.5 py-1 rounded-lg mb-1 animate-fadeIn text-[11px] font-bold text-amber-900 dark:text-amber-200">
+          <span className="flex items-center space-x-1.5 min-w-0">
+            <Lock size={12} className="text-amber-700 dark:text-amber-300 shrink-0" />
+            <span className="truncate">Mode Catatan Internal (Hanya Staf)</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsInternalMode(false)}
+            className="px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-950 dark:text-amber-100 font-bold text-[10px] transition active:scale-95 cursor-pointer shrink-0 ml-2"
+            title="Batalkan mode catatan dan kembali ke chat WhatsApp"
+            aria-label="Batalkan mode catatan internal"
+          >
+            Batal (✕)
+          </button>
+        </div>
+      )}
+
       <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-[#e9edef] w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
         <div className="relative shrink-0" ref={toolsMenuRef}>
           <button

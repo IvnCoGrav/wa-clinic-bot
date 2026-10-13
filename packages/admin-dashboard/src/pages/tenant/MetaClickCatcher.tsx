@@ -80,6 +80,8 @@ interface MetaSummary {
   ctrNote?: string;
   coverage?: { pageViewSources: string[]; note: string };
   coverageNote?: string;
+  metaLpvOfficial?: number | null;
+  metaLpvNote?: string | null;
   // Fase 5a (issue #136): rincian sumber PageView server { source: count }.
   // Absen bila kolom `source` belum termigrasi di DB — panel rincian disembunyikan.
   pageViewsBySource?: Record<string, number>;
@@ -522,11 +524,16 @@ export const MetaClickCatcher: React.FC = () => {
           <span>{summary.ctrNote}</span>
         </div>
       )}
-      <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard
-          label="Total Page View / Kunjungan"
+          label="Meta LPV Resmi (superset)"
+          value={summary?.metaLpvOfficial ?? '-'}
+          sub={summary?.metaLpvNote || 'Data Ads Manager (via rekonsiliasi)'}
+        />
+        <StatCard
+          label="Server Views (subset)"
           value={summary?.totalPageViews ?? 0}
-          sub={summary?.coverage ? 'LP terinstrumentasi (subset)' : 'pengunjung buka web/LP'}
+          sub={summary?.coverage ? 'LP terinstrumentasi (subset server)' : 'pengunjung buka web/LP'}
         />
         <StatCard
           label="Total Klik CTA"
@@ -534,11 +541,13 @@ export const MetaClickCatcher: React.FC = () => {
           sub={
             summary?.isTrackingCodeFiltered
               ? 'Filter kode tracking aktif — CTR disembunyikan'
-              : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalPageViews >= summary.totalClicks
-                ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR dari Page View`
-                : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalClicks > summary.totalPageViews
-                  ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR parsial (klik > view)`
-                  : 'klik tombol chat / redirect WA'
+              : summary && summary.metaLpvOfficial && summary.metaLpvOfficial > 0
+                ? `${fmtPct((summary.totalClicks / summary.metaLpvOfficial) * 100)} CTR dari Meta LPV`
+                : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalPageViews >= summary.totalClicks
+                  ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR dari Server Views`
+                  : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalClicks > summary.totalPageViews
+                    ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR parsial (klik > view)`
+                    : 'klik tombol chat / redirect WA'
           }
         />
         <StatCard
@@ -551,7 +560,11 @@ export const MetaClickCatcher: React.FC = () => {
           label="Drop-off (Batal Kirim WA)"
           value={summary?.unmatchedDrain ?? '-'}
           tone={summary && summary.unmatchedDrain > 0 ? 'warn' : 'default'}
-          sub={`${summary && summary.totalClicks > 0 ? fmtPct((summary.unmatchedDrain / summary.totalClicks) * 100) : '0%'} klik tanpa kirim chat`}
+          sub={
+            summary && summary.metaLpvOfficial && summary.metaLpvOfficial > 0
+              ? `${fmtPct(Math.max(0, (1 - (summary.totalClicks / summary.metaLpvOfficial)) * 100))} drop-off LPV→Klik`
+              : `${summary && summary.totalClicks > 0 ? fmtPct((summary.unmatchedDrain / summary.totalClicks) * 100) : '0%'} klik tanpa kirim chat`
+          }
         />
         <StatCard
           label="CAPI Events Delivered"

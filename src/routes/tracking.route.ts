@@ -264,10 +264,17 @@ export async function trackingRoutes(fastify: FastifyInstance) {
 
 
   /**
-   * POST /api/tracking/click
+   * OPTIONS & POST /api/tracking/click
    * REST Endpoint internal untuk menyimpan data fbclid/fbp/fbc/UTMs saat click-through 
    * di landing page, lalu mengembalikan trackingCode unik.
    */
+  fastify.options('/api/tracking/click', async (_req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Tracking-Api-Key');
+    return reply.status(204).send();
+  });
+
   fastify.post(
     '/api/tracking/click',
     {
@@ -280,6 +287,10 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Tracking-Api-Key');
+
       // 1. AUTH / ORIGIN CHECK: Enforce valid API Key if provided or required
       const trackingApiKey = process.env.TRACKING_API_KEY;
       const clientKey = request.headers['x-tracking-api-key'] as string;
@@ -307,10 +318,8 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       const phone = body.phone || null;
       const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
 
-      // 3. CAPTURE IP & USER-AGENT dari socket peer langsung (no spoofing).
-      // SEC-AUDIT-15: cookie `_fbi` dan header XFF dikendalikan klien (tanpa
-      // trustProxy) sehingga DILARANG menimpa request.ip. Catatan deploy: bila
-      // di belakang reverse proxy, IP tercatat = IP proxy (lihat KNOWN_ISSUES 129).
+      // 3. CAPTURE IP & USER-AGENT: Fastify telah dikonfigurasi dengan trustProxy: true
+      // sehingga request.ip mengambil IP klien terluar dari header X-Forwarded-For Caddy.
       const ipAddress = request.ip || null;
       const userAgent = request.headers['user-agent'] || null;
 

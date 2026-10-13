@@ -242,6 +242,9 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       // cta-fallback / meta-reconciliation / backfill-synthetic) — where
       // IDENTIK dengan totalPageViews agar jumlahnya konsisten.
       let pageViewsBySource: Record<string, number> | undefined;
+      // Fase 5 (anti double-count): Meta LPV resmi dari rekonsiliasi (superset)
+      let metaLpvOfficial: number | null = null;
+      let metaLpvNote: string | null = null;
 
       try {
         const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
@@ -311,6 +314,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             const key = (r?.source as string) || '(tanpa label)';
             pageViewsBySource[key] = (pageViewsBySource[key] || 0) + (r?._count?._all ?? 0);
           }
+          if (pageViewsBySource['meta-reconciliation']) {
+            metaLpvOfficial = pageViewsBySource['meta-reconciliation'];
+            metaLpvNote = 'Dari rekonsiliasi Meta Ads Insights (superset)';
+            // Kontrak anti double-count (Fase 5): totalPageViews adalah subset server,
+            // sehingga baris rekonsiliasi tidak digabungkan ke totalPageViews server.
+            totalPageViews = Math.max(0, totalPageViews - metaLpvOfficial);
+          }
         }
       } catch (err: any) {
         dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
@@ -337,7 +347,14 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             if (utmCampaign && !(r.utmCampaign || '').toLowerCase().includes(utmCampaign.toLowerCase())) return false;
             return true;
           });
-          totalPageViews = pageViewsInMem.length;
+          const reconInMem = pageViewsInMem.filter((r: any) => r.source === 'meta-reconciliation').length;
+          if (reconInMem > 0) {
+            metaLpvOfficial = reconInMem;
+            metaLpvNote = 'Dari rekonsiliasi Meta Ads Insights (superset)';
+            totalPageViews = Math.max(0, pageViewsInMem.length - reconInMem);
+          } else {
+            totalPageViews = pageViewsInMem.length;
+          }
           totalClicks = clicksInMem.length;
           matchedChats = clicksInMem.filter((r: any) => r.matchedAt).length;
         } catch {}
@@ -381,6 +398,8 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             endDate: dateRange.createdAt?.lte?.toISOString?.() ?? null,
           },
           totalPageViews,
+          metaLpvOfficial,
+          metaLpvNote,
           totalClicks,
           matchedChats,
           unmatchedDrain,

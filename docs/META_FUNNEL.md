@@ -67,17 +67,22 @@ Dibaca lewat `getTenantCapiFormats(tenantId)` di [capi.service.ts] (fallback def
 
 ---
 
-## 3b. Dual-kolom PageView: Web-side vs Server-side (Fase 5, issue #136)
+## 3b. Dual-kolom PageView: Web-side vs Server-side (Fase 5, issue #136 & #252)
 
 Angka "Page View" di dashboard Meta Click Catcher **bukan** angka Meta Ads Manager.
 Keduanya benar — mengukur hal berbeda:
 
 | | Kolom Web-side (browser → Meta) | Kolom Server-side (DB `landing_page_views`) |
 |---|---|---|
-| Sumber | Pixel `fbq('track','PageView')` di LP + Events Manager | Beacon server, fallback, rekonsiliasi |
-| Cakupan | **Superset** — semua kunjungan | **Subset** — hanya LP terinstrumentasi |
+| Sumber | Pixel `fbq('track','PageView')` di LP + Events Manager (`metaLpvOfficial`) | Beacon server, fallback (`totalPageViews`) |
+| Cakupan | **Superset** — semua kunjungan | **Subset** — hanya LP terinstrumentasi server |
 | Waktu | Real-time | Tertunda (klik CTA / rekonsiliasi harian) |
 | Kunci join | `eventID` kembar (browser ↔ CAPI) | `eventId` tersimpan (UNIQUE, dedup) |
+
+**Kontrak Anti Double-Count (Fase 5)**:
+Endpoint summary `/api/admin/debug/meta-summary` mengekstrak baris `meta-reconciliation` ke dalam `metaLpvOfficial`. Untuk mencegah double-counting, baris rekonsiliasi tersebut **dikeluarkan dari `totalPageViews`** (Server Views subset). Kartu dashboard menyajikan kedua angka secara terpisah:
+1. `Meta LPV Resmi (superset)`: dari `metaLpvOfficial`
+2. `Server Views (subset)`: dari `totalPageViews`
 
 Rincian sumber baris server (`pageViewsBySource` di meta-summary, ditampilkan di dashboard):
 

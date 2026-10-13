@@ -22,7 +22,7 @@ const RESERVED_SLUGS = new Set([
 const ONLOAD_EVENTS = ['ViewContent', 'Search'];
 const CLICK_EVENTS = [
   'Lead',
-  'Purchase',
+  // 'Purchase' DILARANG untuk event klik CTA (Purchase kanonis hanya dari pembayaran real via purchase-detection.service)
   'InitiateCheckout',
   'AddToCart',
   'CompleteRegistration',
@@ -153,7 +153,13 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .map((e) => `      fbq('track', '${e}');`)
     .join('\n');
   const eventsOnclick = events
-    .filter((e) => CLICK_EVENTS.includes(e))
+    .filter((e) => {
+      if (e === 'Purchase') {
+        console.warn(`[TAXONOMY GATE] Event 'Purchase' ditolak untuk klik tombol CTA (slug=${slug}). Purchase hanya boleh ditembakkan pasca-pembayaran.`);
+        return false;
+      }
+      return CLICK_EVENTS.includes(e);
+    })
     .map((e) => `      if (typeof fbq !== 'undefined') { fbq('track', '${e}', {}, { eventID: trackingCode }); }`)
     .join('\n');
 
@@ -347,8 +353,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
         // = LP tanpa tracker / link manual → sintesis view `source='cta-fallback'`.
         // Klik DENGAN `landing_url` = tracker aktif → beacon sudah ada → jangan sintesis.
         // Dedup: fbclid sama sudah tercatat (race klik-dini) → jangan baris kedua.
-        // Tanpa fbclid tidak ada kunci dedup andal (IP semua visitor = IP proxy di
-        // belakang Caddy, KNOWN_ISSUES #129) → langsung sintesis.
+        // Tanpa fbclid tidak ada kunci dedup andal → langsung sintesis.
         // Mode test tidak menyintesis (anti-polusi data).
         if (!query.landing_url && !isTest) {
           try {

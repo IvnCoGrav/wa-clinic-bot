@@ -68,6 +68,7 @@ export function buildApp() {
   }
 
   const app = Fastify({
+    trustProxy: true,
     logger: {
       level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
     },
@@ -101,11 +102,24 @@ export function buildApp() {
   // urutan kunci/whitespace sehingga HMAC selalu mismatch di production.
   // Registrasi content-type string (bukan regex) agar menimpa parser default
   // Fastify utk 'application/json' (matching string menang atas regex).
-  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+  // Simpan raw body (Buffer) untuk verifikasi X-Hub-Signature-256 Meta dan dukung
+  // Beacon navigator.sendBeacon bertipe 'text/plain;charset=UTF-8' (zero-preflight simple request).
+  app.addContentTypeParser(['application/json', 'text/plain'], { parseAs: 'buffer' }, (req, body, done) => {
     (req as any).rawBody = body;
+    const str = body.toString('utf8');
+    const isTextPlain = ((req.headers['content-type'] as string) || '').toLowerCase().includes('text/plain');
+
+    if (!str.trim()) {
+      return done(null, {});
+    }
+
     try {
-      done(null, JSON.parse(body.toString('utf8')));
+      done(null, JSON.parse(str));
     } catch (err: any) {
+      if (isTextPlain) {
+        // Fail-safe untuk payload text/plain non-JSON
+        return done(null, str);
+      }
       err.statusCode = 400;
       done(err);
     }

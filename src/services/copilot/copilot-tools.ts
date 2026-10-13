@@ -79,6 +79,75 @@ export function resolveReservationDateFilter(
   return { gte: startOfTodayWib(now) };
 }
 
+/**
+ * Format nama display pelanggan dengan privasi & higienitas (anti-kebocoran username teknis).
+ * - Bila nama kosong atau hanya honorifik ("Bunda"), sematkan nomor HP tersamar bila ada.
+ * - Bila nama berupa username teknis (mengandung angka atau underscore, mis. "aguspurnomo68301"),
+ *   ganti dengan "Bunda (<masked_phone>)".
+ * - Nama manusia asli (mis. "Chaterina", "Cindy Amalia", "Bunda Megga") DIPERTAHANKAN apa adanya.
+ * Mengembalikan displayName untuk LLM dan rawName untuk grounding link token.
+ */
+export function formatCustomerDisplayName(
+  name: string | null | undefined,
+  phone: string | null | undefined
+): { displayName: string; rawName: string } {
+  const raw = (name || '').trim();
+  const phoneSuffix = phone ? maskPhoneNumber(phone) : '';
+  const cleanHonorific = raw.replace(/\b(bunda|ibu|mbak|bu|kak|ny|tante)\b/gi, ' ').trim();
+
+  // 1. Tanpa nama atau hanya honorifik saja (mis. "Bunda", "Ibu")
+  if (!raw || !cleanHonorific) {
+    const disp = phoneSuffix ? `Bunda (${phoneSuffix})` : (raw || 'Bunda');
+    return { displayName: disp, rawName: raw || 'Bunda' };
+  }
+
+  // 2. Username teknis sistem / nomor akun (mengandung digit atau underscore, mis. "aguspurnomo68301", "cust_01")
+  // Wajib ada digit ATAU underscore, dan tanpa spasi (nama manusia punya spasi atau hanya huruf)
+  const isSystemUsername =
+    !/\s/.test(raw) &&
+    ((/^(?=.*\d)[a-z0-9_]{6,}$/i.test(raw)) || /^[a-z0-9_]*_[a-z0-9_]*$/i.test(raw));
+
+  if (isSystemUsername) {
+    const disp = phoneSuffix ? `Bunda (${phoneSuffix})` : raw;
+    return { displayName: disp, rawName: raw };
+  }
+
+  // 3. Nama normal manusia (mis. "Chaterina", "Cindy Amalia", "Bunda Megga")
+  return { displayName: raw, rawName: raw };
+}
+
+/**
+ * Pola spam telekomunikasi & broadcast komersial operator.
+ * Memadukan kata kunci operator/telekomunikasi dengan produk (kuota/roaming/pulsa/dll)
+ * agar TIDAK salah mendeteksi istilah klinik (mis. "paket persalinan", "voucher USG").
+ */
+export function isTelecomSpamLine(line: string): boolean {
+  const lower = (line || '').toLowerCase().trim();
+  if (!lower) return false;
+
+  // 1. Operator brand jelas
+  const hasOperatorBrand = /\b(im3|indosat|telkomsel|xl\s*axiata|smartfren|tri\s*indonesia|myim3|mytelkomsel)\b/i.test(lower);
+  // 2. Layanan telekomunikasi spesifik
+  const hasTelecomService = /\b(simpelroam|roaming|kuota\s*(data|internet|hingga)|isi\s*pulsa|paket\s*(data|roaming|nelpon|unlimited)|cashback\s*pulsa|top\s*up\s*pulsa)\b/i.test(lower);
+
+  if (hasOperatorBrand && hasTelecomService) return true;
+  if (hasTelecomService && /\b(gb|gigabyte|mbps|roaming|simpelroam)\b/i.test(lower)) return true;
+  if (/\b(simpelroam|myim3|mytelkomsel)\b/i.test(lower)) return true;
+
+  return false;
+}
+
+/**
+ * Bersihkan baris spam komersial dari teks pesan.
+ * Jika seluruh teks adalah spam, kembalikan string kosong.
+ */
+export function stripCommercialSpam(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  const lines = text.split('\n');
+  const validLines = lines.filter((l) => !isTelecomSpamLine(l));
+  return validLines.join('\n').trim();
+}
+
 /** Tool 1: jadwal reservasi berdasarkan filter (tanggal/status/terapis). */
 export const queryReservationsByFilter: CopilotTool = {
   name: 'query_reservations_by_filter',
@@ -110,6 +179,7 @@ export const queryReservationsByFilter: CopilotTool = {
           select: {
             id: true,
             name: true,
+            phone: true,
             // conversationId untuk deep-link Live Chat (1 query, tanpa N+1).
             conversations: {
               select: { id: true },
@@ -127,16 +197,20 @@ export const queryReservationsByFilter: CopilotTool = {
       tool: 'query_reservations_by_filter',
       args,
       count: rows.length,
-      rows: rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer?.id || null,
-        customerName: r.customer?.name || 'Bunda',
-        conversationId: r.customer?.conversations?.[0]?.id || null,
-        treatment: r.treatment_detail || r.treatment_category,
-        bookingDate: r.booking_date,
-        status: r.status,
-        staff: r.assigned_staff?.name || null,
-      })),
+      rows: rows.map((r) => {
+        const nameInfo = formatCustomerDisplayName(r.customer?.name, (r.customer as any)?.phone);
+        return {
+          id: r.id,
+          customerId: r.customer?.id || null,
+          customerName: nameInfo.displayName,
+          rawCustomerName: nameInfo.rawName,
+          conversationId: r.customer?.conversations?.[0]?.id || null,
+          treatment: r.treatment_detail || r.treatment_category,
+          bookingDate: r.booking_date,
+          status: r.status,
+          staff: r.assigned_staff?.name || null,
+        };
+      }),
     };
   },
 };
@@ -174,10 +248,12 @@ export const queryUnrepliedChats: CopilotTool = {
       if (cust && cust.phone && isDummyOrTestContact(cust.phone, cust.name, false)) continue;
       const lastReal = (c as any).messages?.[0];
       if (lastReal && (lastReal.direction as any) === Direction.INBOUND) {
+        const nameInfo = formatCustomerDisplayName(cust?.name, cust?.phone);
         rows.push({
           conversationId: c.id,
           customerId: c.customer?.id || null,
-          customerName: c.customer?.name || 'Bunda',
+          customerName: nameInfo.displayName,
+          rawCustomerName: nameInfo.rawName,
           lastMessage: lastReal.content,
           lastInboundAt: lastReal.created_at,
           waitingMinutes: Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000),
@@ -231,9 +307,11 @@ export const queryUnscheduledProspects: CopilotTool = {
       // Saring kontak dummy/test di level aplikasi (pola nomor tak bisa diindeks DB).
       if (isDummyOrTestContact(c.phone, c.name, false)) continue;
       const conv = (c as any).conversations?.[0] || null;
+      const nameInfo = formatCustomerDisplayName(c.name, c.phone);
       rows.push({
         customerId: c.id,
-        customerName: c.name || 'Bunda',
+        customerName: nameInfo.displayName,
+        rawCustomerName: nameInfo.rawName,
         conversationId: conv?.id || null,
         lastActivityAt: conv?.last_message_at || (c as any).updated_at || null,
       });
@@ -326,12 +404,14 @@ function matchesDayToken(text: string, token: string): boolean {
  */
 export function hasTextScheduleSignal(text: string): boolean {
   if (!text || !text.trim()) return false;
-  if (!isScheduleCheckEngagement(text)) return false;
+  const clean = stripCommercialSpam(text);
+  if (!clean) return false;
+  if (!isScheduleCheckEngagement(clean)) return false;
   return (
-    hasScheduleSignal(text) ||
-    isScheduleAvailabilityText(text) ||
-    extractTimeHint(text) !== null ||
-    hasBookingCommitSignal(text)
+    hasScheduleSignal(clean) ||
+    isScheduleAvailabilityText(clean) ||
+    extractTimeHint(clean) !== null ||
+    hasBookingCommitSignal(clean)
   );
 }
 
@@ -413,12 +493,21 @@ export const queryStalledInquiries: CopilotTool = {
       if (hasActive) continue;
 
       const msgs: any[] = (c as any).messages || [];
-      const lastReal = msgs[0];
+      // Saring dan bersihkan pesan dari spam komersial
+      const cleanedMsgs = msgs
+        .map((m) => ({
+          direction: m.direction,
+          content: stripCommercialSpam(m.content || ''),
+          created_at: m.created_at,
+        }))
+        .filter((m) => m.content.length > 0);
+
+      const lastReal = cleanedMsgs[0];
       // Pesan nyata terakhir harus INBOUND (belum dibalas admin) → menggantung.
       if (!lastReal || (lastReal.direction as any) !== Direction.INBOUND) continue;
 
       // Sinyal jadwal: state sesi ATAU teks pesan customer (detektor kanonik).
-      const inboundTexts = msgs
+      const inboundTexts = cleanedMsgs
         .filter((m) => (m.direction as any) === Direction.INBOUND && typeof m.content === 'string')
         .map((m) => m.content as string);
       const textHint = inboundTexts.map((t) => extractTimeHint(t)).find((h) => h) || null;
@@ -440,15 +529,17 @@ export const queryStalledInquiries: CopilotTool = {
       // tahu titik percakapan berhenti ("sudah ditawari jam 10, belum balas").
       // Reuse detektor jam kanonik; bukan regex per-kasus.
       const offeredTime =
-        msgs
+        cleanedMsgs
           .filter((m) => (m.direction as any) === Direction.OUTBOUND && typeof m.content === 'string')
           .map((m) => extractTimeOfDayHint(m.content as string))
           .find((h) => h) || null;
 
       const booking = (c.session_data as any)?.booking;
+      const nameInfo = formatCustomerDisplayName(cust.name, cust.phone);
       rows.push({
         customerId: cust.id,
-        customerName: cust.name || 'Bunda',
+        customerName: nameInfo.displayName,
+        rawCustomerName: nameInfo.rawName,
         conversationId: c.id,
         treatment: c.last_discussed_treatment || null,
         requestedTime: booking?.requestedTimeHint || booking?.preferredDate || textHint || null,
@@ -518,9 +609,11 @@ export const getCustomerHistory: CopilotTool = {
       if (isDummyOrTestContact(c.phone, c.name, false)) continue;
       const reservations = (c as any).reservations || [];
       const conv = (c as any).conversations?.[0] || null;
+      const nameInfo = formatCustomerDisplayName(c.name, c.phone);
       rows.push({
         customerId: c.id,
-        customerName: c.name || 'Bunda',
+        customerName: nameInfo.displayName,
+        rawCustomerName: nameInfo.rawName,
         phone: maskPhoneNumber(c.phone),
         kecamatan: c.kecamatan || null,
         kota: c.kota || null,

@@ -5,6 +5,81 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-12 - Fixed: Resolusi Diskrepansi Meta Ads vs Sistem (Anti-Race CTA, TrustProxy, Zero-Preflight Beacon, Taxonomy Gate & Anti Double-Count) (Fase 0-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - Race Condition Redirect CTA: Tombol CTA di `go.html` dan `html-sanitizer.ts` melakukan `window.location.href = redirectUrl` seketika setelah menerima respons tracking tanpa jeda, memicu pemutusan HTTP request Meta Pixel (`ERR_ABORTED`).
+  - Rate Limit Bucket Collapse: Fastify tanpa `trustProxy: true` membuat `request.ip` bernilai IP internal reverse-proxy Caddy (`172.19.0.4`), menyebabkan seluruh pengunjung web berbagi satu kuota rate-limit 60 req/menit di `/cta` dan `/api/tracking/click`.
+  - Beacon Preflight Failure: `navigator.sendBeacon` dengan `Blob` bertipe `application/json` memicu CORS preflight `OPTIONS` yang sering dibatalkan browser mobile saat navigasi. Server juga belum memiliki parser `text/plain` untuk membaca JSON string.
+  - Kebocoran Event Purchase di Klik CTA: Daftar `CLICK_EVENTS` memuat `Purchase`, membuka celah event Purchase tertembak dari klik tombol landing padahal funnel kanonis mewajibkan Purchase hanya dipicu pasca-pembayaran.
+  - Potensi Double-Count Dashboard: Baris rekonsiliasi Meta Ads (`meta-reconciliation`) tergabung ke dalam `totalPageViews` server sehingga berisiko terhitung dua kali saat kolom Meta LPV ditampilkan.
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 0 (Forensik Bukti Server & DB)**: Verifikasi 100% IP proxy di DB, pendaftaran domain landing eksternal `landing_domain = 'kalababyspa.online'` di tabel `tenants`.
+  - **Fase 1 (Anti-Race Redirect CTA)**: Seragamkan pola redirect dengan jeda `setTimeout 300ms` dan guard `isRedirecting` di `go.html` dan `html-sanitizer.ts`, konsisten dengan `/cta`.
+  - **Fase 2 (TrustProxy & Per-IP Rate Limiting)**: Aktifkan `trustProxy: true` di Fastify (`src/app.ts`), mengisolasi bucket rate limit per IP client asli dari header `X-Forwarded-For`.
+  - **Fase 3 (Zero-Preflight Plaintext Beacon)**: Ubah `sendBeacon` ke `text/plain;charset=UTF-8` di 5 titik (klien) dan tambahkan parser `text/plain` di `src/app.ts` serta route preflight `OPTIONS & POST /api/tracking/click` dengan CORS headers.
+  - **Fase 4 (Taxonomy Gate)**: Cabut `Purchase` dari `CLICK_EVENTS` pada `landing.route.ts` dan `html-sanitizer.ts`; blokir event `Purchase` pada klik tombol CTA.
+  - **Fase 5 (Dashboard Dual-Kolom Anti Double-Count)**: Endpoint `/api/admin/debug/meta-summary` mengekstrak `metaLpvOfficial` dan memotongnya dari `totalPageViews` subset server; UI `MetaClickCatcher.tsx` menyajikan kartu Meta LPV Resmi dan Server Views secara terpisah.
+- **File Dimodifikasi**: `src/app.ts`, `src/routes/tracking.route.ts`, `src/routes/landing.route.ts`, `src/services/html-sanitizer.ts`, `src/landing/public/go.html`, `src/landing/public/external-tracker.js`, `src/routes/admin/meta-attribution.subroute.ts`, `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx`, `docs/META_FUNNEL.md`, `docs/KNOWN_ISSUES.md`.
+
+
+#### 2026-10-12 - Fixed: AI Copilot Grounding Hardening, Deterministic Deep-Link Injection, Persona Hygiene & Spam Filtering (Fase 1-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - False-Negative Grounding: Jawaban akurat Copilot tentang pasien tertahan ("menunggu", "untuk") dicap grounded: false karena regex honorifik mendeteksi kata kerja/fungsi bahasa Indonesia huruf kecil sebagai nama pasien halusinasi.
+  - Tautan Live Chat Hilang: LLM kerap menghilangkan [Buka Chat] walau data tool menyediakan conversationId valid.
+  - Persona Bleeding: Copilot internal menyapa admin menggunakan sapaan dan empati konsumen ("Kami paham Bunda menunggu kepastian...").
+  - Infiltrasi Spam Operator: SMS/broadcast promo telekomunikasi ("SimpelRoam IM3") masuk sebagai prospek jadwal tertahan karena memuat kata "sekarang".
+  - Kebocoran Username Sistem: Pasien anonim/akun teknis tampil mentah ("aguspurnomo68301" / "Bunda").
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Deterministic Deep-Link Injection)**: Injeksi [Buka Chat](/admin/live-chat?conversationId=...) deterministik berbasis token unik terpanjang (\btoken\b) pada daftar bullet dan tabel | ... |, validasi format conversationId (^[A-Za-z0-9_-]+$), dan resolusi tautan terdekat sebelum placeholder.
+  - **Fase 2 (Grounding Validator Hardening)**: Aturan proper noun huruf kapital ([A-Z][a-zA-Z]+) + daftar stopword bahasa Indonesia (INDONESIAN_HONORIFIC_STOPWORDS) mengabaikan kata fungsi huruf kecil/kapital, simetrisasi honorifik (Ny|Tante), dan toleransi tanda baca pada labelRe.
+  - **Fase 3 (Persona Hygiene & Identity Masking)**: Klausul preseden mutlak pada buildSummarizePrompt melarang sapaan Bunda ke admin; formatCustomerDisplayName menyamarkan username teknis (aguspurnomo68301 -> Bunda (0812****7890)) dan nama kosong tanpa menyentuh nama asli manusia ("Chaterina", "Cindy Amalia").
+  - **Fase 4 (Telecom Spam Filter & Schedule Signal Hardening)**: stripCommercialSpam membuang baris spam operator tanpa menyentuh istilah klinik ("paket persalinan", "voucher USG"); extractTimeHint mewajibkan konteks jadwal/klinik untuk kata "sekarang".
+  - **Fase 5 (Adversarial Testing)**: 19 unit test baru di tests/unit/copilot-grounding-stopword.test.ts (total 146 copilot tests lulus, build clean).
+- **File Dimodifikasi**: src/services/copilot/copilot.service.ts, src/services/copilot/copilot-tools.ts, src/v3/agent/pipeline/medical-signal-detector.ts, tests/unit/copilot-grounding-stopword.test.ts.
+
+
+#### 2026-10-12 - Feature: Skema Baru Hide Message (Role-Based Privacy Display di LiveChatMonitor)
+
+- **Akar Masalah & Kebutuhan:**
+  - Sebelumnya pesan yang di-hide admin dicegat penuh oleh `HiddenMessageStrip` abu-abu gelap (`LiveChatMonitor.tsx`), sehingga teks dan media tertutup dari pandangan Admin/CS kecuali diklik buka.
+  - Di daftar chat sebelah kiri, cuplikan pesan terakhir hanya bertuliskan teks kaku `[Pesan disembunyikan]`.
+- **Fixed (fondasional & privacy-preserving):**
+  - Di `LiveChatMonitor.tsx`:
+    - Hapus pencegatan `HiddenMessageStrip` baris 5882–5910 agar gelembung pesan mengalir normal ke pipeline perenderan chat.
+    - Berikan styling abu-abu lembut transparan pada gelembung pesan saat `isMessageHidden === true` (`slate-100 / slate-800` untuk pesan customer, `slate-200 / slate-700` untuk pesan staf/bot).
+    - Tampilkan footer status di dalam gelembung: icon `EyeOff`, label `Disembunyikan dari Staf Bidan`, dan tombol interaktif `Pulihkan` (`handleToggleMessageHide(msg, false)`).
+    - Di kartu daftar obrolan kiri (baris 4724), ganti preview `[Pesan disembunyikan]` dengan teks asli bertanda `👁️🗨️ [Hidden] ${lastMsg?.content || 'Pesan'}`.
+    - Bersihkan state `revealedHiddenIds` dan import `HiddenMessageStrip` yang tidak lagi digunakan di file ini.
+  - Di `StaffToday.tsx`:
+    - Proteksi privasi staf bidan/terapis tetap 100% aman (filter `is_message_hidden` di baris 1029, 1320, dan 1455 mencegah pesan hidden tampil ke terapis).
+- **Verifikasi:**
+  - Dashboard build (`npm --prefix packages/admin-dashboard run build`): EXIT 0 (2494 modules transformed).
+  - Backend root build (`npm run build`): EXIT 0.
+  - Vitest `live_chat_monitor.test.ts`: 3/3 passed.
+
+
+#### 2026-10-12 - Fixed: Optimalisasi UI/UX LiveChat Mobile (Fase 1-4)
+
+- **Akar Masalah (terbukti di kode):**
+  - Header obrolan di layar sempit HP (375px) sesak oleh tombol unread (`handleToggleReadStatus`) dan tombol "Aktifkan AI" ganda. Fungsi tandai-baca sudah tersedia di menu konteks (klik kanan / tekan-lama).
+  - Banner AI Nonaktif di mobile terduplikasi di 2 tempat (`LiveChatMonitor.tsx`: loading branch dan list branch) dengan tombol "Aktifkan AI" hijau yang memicu dialog ganda dan potensi tipe `amber` tak valid. Sakelar ON/OFF kanonis sudah tersedia di sticky search bar.
+  - Di layar HP, tombol gembok composer disembunyikan via `hidden sm:flex` (`LiveChatComposer.tsx:885`), sehingga staf yang mengaktifkan mode catatan internal via menu `+` terjebak tanpa tombol batal (harus refresh halaman).
+- **Fixed (fondasional & modular):**
+  - Fase 1: Bersihkan header obrolan di `LiveChatMonitor.tsx` (hapus tombol unread dan tombol Aktifkan AI di header chat); nama pasien dan nomor telepon kini tampil lapang, tombol search in-chat dan ambil alih tetap utuh.
+  - Fase 2: Ekstraksi strip status ke komponen kanonis tunggal `packages/admin-dashboard/src/components/livechat/AiOffStrip.tsx` (teks saja, tanpa tombol toggle); ganti 2 banner duplikat mobile di loading dan list dengan `<AiOffStrip />`; satu-satunya toggle tetap di sticky search bar (`emerald/rose`, `useUiFeedback`).
+  - Fase 3: Tambah strip pembatalan mode internal `isInternalMode` di HP (`flex sm:hidden`) dengan tombol `Batal (✕)` tepat sebelum wrapper composer di `LiveChatComposer.tsx`.
+- **Verifikasi & Regresi:**
+  - `grep handleToggleReadStatus LiveChatMonitor.tsx`: tepat 3 hasil (1 definisi, 2 pemakai menu).
+  - `grep AiOffStrip LiveChatMonitor.tsx`: tepat 3 hasil (1 import, 2 pemakai).
+  - Area mobile tombol "Aktifkan AI": 0 (tombol hijau hilang dari HP).
+  - Dashboard build (`npm --prefix packages/admin-dashboard run build`): EXIT 0 (2495 modules transformed).
+  - Backend root build (`npm run build`): EXIT 0.
+  - Backend tests: 654 passed files / 5356 passed tests, zero regresi baru (kegagalan adalah pre-existing lama).
+  - File: `LiveChatMonitor.tsx`, `LiveChatComposer.tsx`, `AiOffStrip.tsx`.
+
+
 #### 2026-10-12 - Fixed: Split-Brain Lokasi, Healing Alamat & Navigasi Sadar-Akurasi (REVISI-1, Tahap 1-4)
 
 - **Akar (terbukti di kode + SELECT live):** endpoint admin lokasi hanya tulis

@@ -107,7 +107,7 @@ import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormat
 import { BRAND } from '../../config/brand';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
-import { HiddenMessageStrip } from '../../components/livechat/HiddenMessageStrip';
+import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
@@ -513,7 +513,6 @@ export const LiveChatMonitor: React.FC = () => {
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pinnedBubble, setPinnedBubble] = useState<PinnedMessageData | null>(null);
-  const [revealedHiddenIds, setRevealedHiddenIds] = useState<Set<string>>(new Set());
   const [isPinningMessageId, setIsPinningMessageId] = useState<string | null>(null);
   const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
@@ -1509,7 +1508,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const isRefreshSameThread = isSameConversation(loadedThreadConvIdRef.current, conversationId);
     if (!isRefreshSameThread) {
       setIsThreadLoading(true);
-      setRevealedHiddenIds(new Set());
     }
     // Reset cursor pagination setiap ganti/refresh percakapan
     setHasMoreOlderMessages(false);
@@ -3081,15 +3079,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       )
     );
 
-    // Hapus dari status buka lokal jika disembunyikan
-    if (nextHidden) {
-      setRevealedHiddenIds((prev) => {
-        const next = new Set(prev);
-        next.delete(msg.id);
-        return next;
-      });
-    }
-
     try {
       const res = await apiRequest(
         `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}/hide`,
@@ -4356,25 +4345,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {loading && chats.length === 0 ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
-          {/* Loading: banner AI-off mobile ikut tampil agar konsisten dengan daftar (desktop memakai banner global di atas) */}
-          {!chatBotActive && (
-            <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
-              <div className="flex items-center space-x-1.5 min-w-0">
-                <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="truncate">
-                  <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                  <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
-                </span>
-              </div>
-              <button
-                onClick={() => handleToggleGlobalBot(true)}
-                disabled={togglingBotCutoff}
-                className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-              >
-                Aktifkan AI
-              </button>
-            </div>
-          )}
+          {/* Loading: strip status AI-off mobile (toggle ada di sticky search bar) */}
+          {!chatBotActive && <AiOffStrip />}
           <div className="flex-1 flex justify-center items-center py-20">
             <Loader className="animate-spin text-[#008069]" size={32} />
           </div>
@@ -4464,25 +4436,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               </div>
 
-              {/* Mobile Chatbot OFF Warning (ikut scroll bersama daftar; desktop memakai banner global) */}
-              {!chatBotActive && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[11px] font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <ShieldAlert size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="truncate">
-                      <span className="font-bold text-amber-700 dark:text-amber-300">AI NONAKTIF</span>{' '}
-                      <span className="text-amber-800 dark:text-amber-200">— CS manual.</span>
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleToggleGlobalBot(true)}
-                    disabled={togglingBotCutoff}
-                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-                  >
-                    Aktifkan AI
-                  </button>
-                </div>
-              )}
+              {/* Mobile Chatbot OFF Warning (strip teks; toggle ada di sticky search bar) */}
+              {!chatBotActive && <AiOffStrip />}
 
               {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
               {bgSyncProgress.isSyncing && (
@@ -4761,7 +4716,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     : null;
                   const isLastMsgHidden = !!((lastMsg as any)?.is_message_hidden || (lastMsg as any)?.payload_raw?.is_hidden);
                   const preview = isLastMsgHidden
-                    ? '[Pesan disembunyikan]'
+                    ? `👁️🗨️ [Hidden] ${lastMsg?.content || 'Pesan'}`
                     : lastMsg?.content || null;
                   // Draf typing tersimpan sementara (24 jam): untuk chat yang sedang dibuka
                   // pakai teks live composer, untuk lainnya baca dari penyimpanan. draftTick
@@ -5351,37 +5306,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       )}
                       <button
                         type="button"
-                        onClick={() => handleToggleReadStatus(selectedChat)}
-                        title={(selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread ? 'Tandai sudah dibaca' : 'Tandai belum dibaca'}
-                        className={`p-1.5 rounded-xl border transition shadow-2xs cursor-pointer active:scale-95 ${
-                          (selectedChat.unreadCount || 0) > 0 || selectedChat.isManualUnread
-                            ? 'bg-[#e8f5f2] dark:bg-[#1f3a34] text-[#008069] dark:text-[#25d366] border-[#c2e7e0] dark:border-[#2a4e45]'
-                            : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
-                        }`}
-                      >
-                        <MessageSquareDot size={14} />
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setInChatSearchOpen((v) => !v)}
                         title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
                         className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'}`}
                       >
                         <Search size={14} />
                       </button>
-                      {/* Mobile: Aktifkan AI global (banner global hanya tampil di desktop, banner list ikut scroll) */}
-                      {!chatBotActive && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleGlobalBot(true)}
-                          disabled={togglingBotCutoff}
-                          title="Aktifkan Chatbot AI"
-                          className="lg:hidden px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs disabled:opacity-50 cursor-pointer"
-                        >
-                          <Bot size={13} />
-                          <span>Aktifkan AI</span>
-                        </button>
-                      )}
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
@@ -5935,37 +5865,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                       const isMessagePinned = !!(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
                       const isMessageHidden = !!(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
-                      const isRevealedLocally = revealedHiddenIds.has(msg.id);
-
-                      if (isMessageHidden && !isRevealedLocally) {
-                        return (
-                          <React.Fragment key={msg.id}>
-                            {showDateSeparator && (
-                              <div className="flex justify-center my-2 sm:my-2.5">
-                                <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-[#54656f] shadow-2xs border border-black/5 select-none tracking-wide">
-                                  {formatChatDateSeparator(msg.created_at)}
-                                </div>
-                              </div>
-                            )}
-                            <div id={`msg-${msg.id}`} className="w-full">
-                              <HiddenMessageStrip
-                                messageId={msg.id}
-                                hiddenBy={msg.hidden_by || (msg as any).payload_raw?.hidden_by}
-                                isRevealedLocally={false}
-                                onToggleRevealLocal={() => {
-                                  setRevealedHiddenIds((prev) => {
-                                    const next = new Set(prev);
-                                    next.add(msg.id);
-                                    return next;
-                                  });
-                                }}
-                                onUnhidePermanent={() => handleToggleMessageHide(msg, false)}
-                                isUnhiding={isHidingMessageId === msg.id}
-                              />
-                            </div>
-                          </React.Fragment>
-                        );
-                      }
 
                       return (
                         <React.Fragment key={msg.id}>
@@ -6052,6 +5951,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'
                                   : isRevoked
                                   ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
+                                  : isMessageHidden
+                                  ? isCustomer
+                                    ? 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none'
+                                    : 'bg-slate-200/90 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-tr-none'
                                   : isCustomer
                                     ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                                     : isAdmin
@@ -6059,22 +5962,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                               }`}
                             >
-                              {isMessageHidden && isRevealedLocally && (
-                                <HiddenMessageStrip
-                                  messageId={msg.id}
-                                  hiddenBy={msg.hidden_by || (msg as any).payload_raw?.hidden_by}
-                                  isRevealedLocally={true}
-                                  onToggleRevealLocal={() => {
-                                    setRevealedHiddenIds((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(msg.id);
-                                      return next;
-                                    });
-                                  }}
-                                  onUnhidePermanent={() => handleToggleMessageHide(msg, false)}
-                                  isUnhiding={isHidingMessageId === msg.id}
-                                />
-                              )}
                               {isMessagePinned && !isRevoked && (
                                 <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
                                   <Pin size={10} className="text-amber-600 fill-amber-500" />
@@ -6282,6 +6169,23 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   <Ban size={12} className="text-[#8696a0] shrink-0" />
                                   <span>Pesan ini telah ditarik</span>
                                 </p>
+                              )}
+                              {isMessageHidden && !isRevoked && (
+                                <div className="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-slate-300/60 dark:border-slate-600/60 text-[10px] text-slate-500 dark:text-slate-400 select-none">
+                                  <span className="flex items-center gap-1 font-medium truncate">
+                                    <EyeOff size={11} className="text-slate-400 shrink-0" />
+                                    <span className="truncate">Disembunyikan dari Staf Bidan{msg.hidden_by ? ` • oleh ${msg.hidden_by}` : ''}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={isHidingMessageId === msg.id}
+                                    onClick={() => handleToggleMessageHide(msg, false)}
+                                    className="text-[#008069] dark:text-[#25d366] hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
+                                    title="Pulihkan pesan agar terlihat kembali oleh staf bidan"
+                                  >
+                                    Pulihkan
+                                  </button>
+                                </div>
                               )}
                               <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
                                 {isEdited && !isRevoked && (
