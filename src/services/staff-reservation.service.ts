@@ -172,6 +172,23 @@ function looksLikeStreetAddress(value: string): boolean {
  * Maps memandu ke klaster/blok). Titik `gps_pin` dan pemanggil lama tanpa
  * `locationSource` tetap byte-identik dengan perilaku semula.
  */
+export function isSpecificStreetAddress(text?: string | null): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 5) return false;
+  // Satu kata tanpa angka (misal "Bohar", "Taman") -> nama wilayah umum, bukan alamat jalan
+  if (!trimmed.includes(' ') && !/\d/.test(trimmed)) return false;
+  // Memuat penanda jalan / perumahan / kluster / blok
+  if (/\b(?:jl|jalan|gang|gg|blok|no|nomor|rt|rw|perum|perumahan|komplek|cluster|tower|dusun|kavling|kav)\b/i.test(trimmed)) {
+    return true;
+  }
+  // Memuat angka (nomor rumah, RT/RW, blok)
+  if (/\d/.test(trimmed)) return true;
+  // Teks majemuk dengan detail (minimal 4 kata)
+  const parts = trimmed.split(/[,;\s]+/).filter(Boolean);
+  return parts.length >= 4;
+}
+
 export function buildMapsUrls(
   lat?: number | null,
   lng?: number | null,
@@ -185,7 +202,7 @@ export function buildMapsUrls(
   const useAddressText =
     (locationSource === 'manual_staff' || locationSource === 'estimated_area') &&
     typeof fullAddress === 'string' &&
-    fullAddress.trim().length > 0;
+    isSpecificStreetAddress(fullAddress);
   if (useAddressText) {
     // Bangun via URLSearchParams (anti-template rapuh + encoding aman).
     const query = new URLSearchParams({ api: '1', destination: fullAddress!.trim(), travelmode: 'two-wheeler' });

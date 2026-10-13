@@ -101,10 +101,15 @@ describe('getGoogleMapsDirectionUrl — sinkron dengan backend', () => {
     expect(url).toContain(`destination=${LAT},${LNG}`);
   });
 
-  it('manual_staff + fallbackText: destination teks alamat', () => {
+  it('manual_staff + fallbackText spesifik: destination teks alamat', () => {
     const url = getGoogleMapsDirectionUrl(LAT, LNG, 'The Oso Blok C-06', 'manual_staff');
     const dest = new URL(url).searchParams.get('destination');
     expect(dest).toContain('The Oso');
+  });
+
+  it('manual_staff + nama wilayah umum (Bohar): koordinat dipertahankan (bukan destination=Bohar)', () => {
+    const url = getGoogleMapsDirectionUrl(LAT, LNG, 'Bohar', 'manual_staff');
+    expect(url).toContain(`destination=${LAT},${LNG}`);
   });
 
   it('manual_staff tanpa fallbackText: jatuh ke koordinat', () => {

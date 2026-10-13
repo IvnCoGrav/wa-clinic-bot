@@ -292,7 +292,33 @@ export function needsNavigationPreflight(source?: string | null): boolean {
  * `locationSource` (opsional): bila titik NON-presisi (`manual_staff`/
  * `estimated_area`) DAN ada `fallbackText` (alamat lengkap), `destination`
  * memakai TEKS alamat agar Google Maps memandu ke klaster/blok perumahan —
- * bukan pin mati di area umum. Pemanggil lama (3 arg) tetap byte-identik.
+/**
+ * Memeriksa apakah teks alamat merupakan alamat jalan/perumahan spesifik
+ * (memuat nomor, blok, jalan, dsb) dan bukan sekadar nama kelurahan/kecamatan umum.
+ */
+export function isSpecificStreetAddress(text?: string | null): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 5) return false;
+  // Satu kata tanpa angka (misal "Bohar", "Taman") -> nama wilayah umum, bukan alamat jalan
+  if (!trimmed.includes(' ') && !/\d/.test(trimmed)) return false;
+  // Memuat penanda jalan / perumahan / kluster / blok
+  if (/\b(?:jl|jalan|gang|gg|blok|no|nomor|rt|rw|perum|perumahan|komplek|cluster|tower|dusun|kavling|kav)\b/i.test(trimmed)) {
+    return true;
+  }
+  // Memuat angka (nomor rumah, RT/RW, blok)
+  if (/\d/.test(trimmed)) return true;
+  // Teks majemuk dengan detail (minimal 4 kata)
+  const parts = trimmed.split(/[,;\s]+/).filter(Boolean);
+  return parts.length >= 4;
+}
+
+/**
+ * Link navigasi Google Maps motor (two-wheeler).
+ * - gps_pin: SELALU memakai koordinat lat,lng presisi.
+ * - manual_staff/estimated_area: HANYA memakai teks alamat bila teks merupakan alamat
+ *   jalan/perumahan spesifik (isSpecificStreetAddress). Teks nama desa/kelurahan umum
+ *   (seperti "Bohar") TIDAK BOLEH membuang koordinat lat,lng.
  */
 export function getGoogleMapsDirectionUrl(
   lat?: number | null,
@@ -302,7 +328,8 @@ export function getGoogleMapsDirectionUrl(
 ): string {
   const isNonPrecise = locationSource === 'manual_staff' || locationSource === 'estimated_area';
   const hasText = !!fallbackText && fallbackText.trim().length > 0;
-  if (isNonPrecise && hasText) {
+  const hasSpecificText = hasText && isSpecificStreetAddress(fallbackText);
+  if (isNonPrecise && hasSpecificText) {
     const query = new URLSearchParams({ api: '1', destination: fallbackText!.trim(), travelmode: 'two-wheeler' });
     return `https://www.google.com/maps/dir/?${query.toString()}`;
   }
@@ -310,7 +337,8 @@ export function getGoogleMapsDirectionUrl(
     return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`;
   }
   if (hasText) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackText!.trim())}`;
+    const query = new URLSearchParams({ api: '1', destination: fallbackText!.trim(), travelmode: 'two-wheeler' });
+    return `https://www.google.com/maps/dir/?${query.toString()}`;
   }
   // Default search ke Surabaya/Sidoarjo jika kosong
   return `https://www.google.com/maps/search/?api=1&query=Sidoarjo`;

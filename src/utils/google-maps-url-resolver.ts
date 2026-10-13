@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { decodePlusCode } from './open-location-code';
 
 export interface ResolvedCoordinates {
   success: boolean;
@@ -165,6 +166,16 @@ export function extractCoordinatesFromUrlString(urlString: string): { lat: numbe
     }
   }
 
+  // Pola 7: Plus Code (Open Location Code, misal: JP96+9WG atau 6P4JJP96+9WG)
+  // Banyak tempat bisnis/komersial di Google Maps menyematkan Plus Code di URL tempat (/place/)
+  try {
+    const decodedUrl = decodeURIComponent(urlString);
+    const plusMatch = decodePlusCode(decodedUrl);
+    if (plusMatch && isValidCoordinate(plusMatch.lat, plusMatch.lng)) {
+      return { lat: plusMatch.lat, lng: plusMatch.lng };
+    }
+  } catch (_) {}
+
   return null;
 }
 
@@ -222,6 +233,12 @@ function cleanAddressQuery(raw: string | null): string | null {
   // Nilai q berupa koordinat angka → bukan alamat (sudah ditangani pola koordinat).
   if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(decoded)) return null;
   if (decoded.length < 4) return null;
+  // Bersihkan token Plus Code di depan/belakang nama tempat (misal "JP96+9WG Asian Conveksi" -> "Asian Conveksi")
+  const withoutPlus = decoded
+    .replace(/\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/gi, '')
+    .trim()
+    .replace(/^[,;\s]+|[,;\s]+$/g, '');
+  if (withoutPlus.length >= 4) return withoutPlus;
   return decoded;
 }
 
