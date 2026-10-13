@@ -4,7 +4,6 @@ Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, DEPLOYED + HEALED)
-=======
 ## 252. [Tracking/Meta] Resolusi Diskrepansi Meta Ads vs Sistem (77/222 LPV & 9/27 Klik) (2026-10-12, IMPLEMENTED lokal — Menunggu Deploy FASE 6)
 
 - **Status:** IMPLEMENTED lokal (Fase 0–5 selesai, build root + dashboard hijau, seluruh test baru hijau, zero regresi baru). Siap deploy ke server live.
