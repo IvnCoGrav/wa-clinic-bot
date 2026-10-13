@@ -43,7 +43,7 @@ export interface MetaPerformanceReport {
     ctrNote?: string;
   };
   channelComparison: Array<{
-    channel: 'CTWA_NATIVE' | 'PROMO_CTA';
+    channel: 'CTWA_NATIVE' | 'CTWA_FUZZY' | 'PROMO_CTA';
     leads: number;
     mql: number;
     firstTimeBuyers: number;

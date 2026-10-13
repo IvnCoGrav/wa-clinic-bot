@@ -610,92 +610,94 @@ export const MetaClickCatcher: React.FC = () => {
       )}
 
       {/* ---------------- 2. Filter Bar (tanggal dipakai bersama kedua tab) ---------------- */}
-      <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
-        {/* Preset Shortcuts */}
-        <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[#f0f2f5]">
-          <span className="text-[11px] font-bold text-[#667781] uppercase mr-1">Shortcut Tanggal:</span>
-          <button
-            type="button"
-            onClick={() => setDatePreset('today')}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
-          >
-            Hari Ini
-          </button>
-          <button
-            type="button"
-            onClick={() => setDatePreset('7days')}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
-          >
-            7 Hari Terakhir
-          </button>
-          <button
-            type="button"
-            onClick={() => setDatePreset('30days')}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
-          >
-            30 Hari Terakhir
-          </button>
-          <button
-            type="button"
-            onClick={() => setDatePreset('thisMonth')}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
-          >
-            Bulan Ini
-          </button>
-          <button
-            type="button"
-            onClick={() => setDatePreset('allTime')}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
-          >
-            Semua Waktu
-          </button>
-        </div>
+      {activeTab !== 'catchers' && (
+        <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
+          {/* Preset Shortcuts */}
+          <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[#f0f2f5]">
+            <span className="text-[11px] font-bold text-[#667781] uppercase mr-1">Shortcut Tanggal:</span>
+            <button
+              type="button"
+              onClick={() => setDatePreset('today')}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+            >
+              Hari Ini
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('7days')}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+            >
+              7 Hari Terakhir
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('30days')}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+            >
+              30 Hari Terakhir
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('thisMonth')}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+            >
+              Bulan Ini
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('allTime')}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+            >
+              Semua Waktu
+            </button>
+          </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
-            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
+              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
+              <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+            </div>
+            {activeTab === 'observability' && (
+              <>
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
+              <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
+                <option value="all">Semua Status</option>
+                <option value="matched">MATCHED (Chat Masuk)</option>
+                <option value="unmatched">PENDING (Batal / Belum Chat)</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-[180px] space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Tag size={12} className="text-[#008069]" /> Tracking Code / Campaign</label>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+                placeholder="Cari kode tracking (mis. mh) atau campaign..."
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              />
+            </div>
+              </>
+            )}
+            {activeTab === 'performance' && (
+              <p className="text-xs text-[#8696a0] self-center">Filter status &amp; pencarian hanya berlaku pada tab Observability. Ubah rentang tanggal untuk memperbarui laporan.</p>
+            )}
+            <div className="flex items-center gap-2">
+              <button onClick={handleApplyFilters} className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
+                <Search size={13} /> <span>Terapkan</span>
+              </button>
+              <button onClick={handleResetFilters} className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs">
+                Reset
+              </button>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
-            <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
-          </div>
-          {activeTab === 'observability' && (
-            <>
-          <div className="space-y-1">
-            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
-            <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
-              <option value="all">Semua Status</option>
-              <option value="matched">MATCHED (Chat Masuk)</option>
-              <option value="unmatched">PENDING (Batal / Belum Chat)</option>
-            </select>
-          </div>
-          <div className="flex-1 min-w-[180px] space-y-1">
-            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Tag size={12} className="text-[#008069]" /> Tracking Code / Campaign</label>
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
-              placeholder="Cari kode tracking (mis. mh) atau campaign..."
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
-            />
-          </div>
-            </>
-          )}
-          {activeTab === 'performance' && (
-            <p className="text-xs text-[#8696a0] self-center">Filter status &amp; pencarian hanya berlaku pada tab Observability. Ubah rentang tanggal untuk memperbarui laporan.</p>
-          )}
-          <div className="flex items-center gap-2">
-            <button onClick={handleApplyFilters} className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
-              <Search size={13} /> <span>Terapkan</span>
-            </button>
-            <button onClick={handleResetFilters} className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs">
-              Reset
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {activeTab === 'observability' && (
         <>

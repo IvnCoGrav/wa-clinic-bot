@@ -100,11 +100,27 @@ const statusBadge = (s: string | null | undefined) => {
   }
 };
 
-const attributionBadge = (attribution: QueueItem['attribution']) => {
+export const isCtwaFuzzyAttribution = (
+  attribution: QueueItem['attribution'],
+  utm?: QueueItem['utm'],
+): boolean =>
+  Boolean(
+    attribution.trackingCode?.startsWith('ctwa_fuzzy_') ||
+    utm?.medium === 'ctwa_fuzzy',
+  );
+
+const attributionBadge = (attribution: QueueItem['attribution'], utm?: QueueItem['utm']) => {
   if (attribution.ctwa_clid) {
     return (
       <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
         CTWA Direct
+      </span>
+    );
+  }
+  if (isCtwaFuzzyAttribution(attribution, utm)) {
+    return (
+      <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800/40 text-teal-800 dark:text-teal-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Click-to-WhatsApp (Tertangkap via Greeting Catcher)">
+        CTWA Fuzzy
       </span>
     );
   }
@@ -213,7 +229,7 @@ export function cleanTreatmentList(detail: string): string[] {
 /**
  * Membangun preview payload JSON Meta Graph API CAPI
  */
-const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
+export const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean = false) => {
   const eventName = item.eventType || 'Purchase';
   const cleanTreatments = cleanTreatmentList(item.treatment_detail);
   const occurredTimestamp = item.purchase_occurred_at
@@ -297,7 +313,7 @@ const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
     }
   }
 
-  // FBC (Click ID) dengan string fbclid asli
+  // FBC: hanya dari fbclid asli atau fbc asli. Jangan sintesis dari kode fuzzy.
   let resolvedFbc: string | undefined = item.attribution.fbc || undefined;
   let fbclid: string | undefined = item.attribution.fbclid || undefined;
   if (!fbclid && landingUrl) {
@@ -306,9 +322,19 @@ const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
       fbclid = u.searchParams.get('fbclid') || undefined;
     } catch {}
   }
+
+  const isCtwaNative = Boolean(item.attribution.ctwa_clid);
+  const isCtwaFuzzy = isCtwaFuzzyAttribution(item.attribution, item.utm);
+  const isCtwaAny = isCtwaNative || isCtwaFuzzy;
+
   if (fbclid) {
     resolvedFbc = `fb.1.${occurredTimestamp}.${fbclid}`;
-  } else if (item.attribution.isPaid && item.attribution.trackingCode) {
+  } else if (
+    item.attribution.isPaid &&
+    item.attribution.trackingCode &&
+    !item.attribution.trackingCode.startsWith('ctwa_fuzzy_') &&
+    !isCtwaFuzzy
+  ) {
     resolvedFbc = `fb.1.${occurredTimestamp}.${item.attribution.trackingCode}`;
   }
 
@@ -316,11 +342,8 @@ const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
   const treatmentLow = (item.treatment_detail || '' + ' ' + cleanTreatments.join(' ')).toLowerCase();
   const isMoms = treatmentLow.includes('moms') || treatmentLow.includes('ibu') || treatmentLow.includes('hamil') || treatmentLow.includes('nifas') || treatmentLow.includes('laktasi');
 
-  const isCtwa = Boolean(item.attribution.ctwa_clid);
-  // Paritas backend (`capi.service.ts` useBusinessMessaging): envelope
-  // business_messaging HANYA dipakai bila ctwa_clid ADA *dan* tenant punya WABA id.
-  // Tanpa WABA id, backend fail-open ke action_source 'chat' — preview HARUS sama.
-  const useBusinessMessaging = isCtwa && wabaConfigured;
+  // Amplop business_messaging HANYA untuk native (paritas capi.service.ts:1108)
+  const useBusinessMessaging = isCtwaNative && wabaConfigured;
 
   return {
     event_name: eventName,
@@ -339,11 +362,11 @@ const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean) => {
       country: `sha256(id)`,
       external_id: item.customer.id ? `sha256(${item.customer.id})` : undefined,
       ge: isMoms ? `sha256(f)` : undefined,
-      fbp: item.attribution.fbp || (item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
+      fbp: item.attribution.fbp || (!isCtwaAny && item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
       fbc: resolvedFbc,
       ctwa_clid: item.attribution.ctwa_clid || undefined,
-      client_ip_address: item.attribution.ipAddress || (item.attribution.isPaid ? '114.122.34.56' : undefined),
-      client_user_agent: item.attribution.userAgent || (item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
+      client_ip_address: item.attribution.ipAddress || (!isCtwaAny && item.attribution.isPaid ? '114.122.34.56' : undefined),
+      client_user_agent: item.attribution.userAgent || (!isCtwaAny && item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
     },
     custom_data:
       eventName === 'Purchase'
@@ -833,7 +856,7 @@ export const MetaCapiQueue: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          {attributionBadge(item.attribution)}
+                          {attributionBadge(item.attribution, item.utm)}
                           {customerTypeBadge(item)}
                           {item.attribution.trackingCode && (
                             <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
@@ -1028,7 +1051,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                   {/* Attribution & Distance Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                    {attributionBadge(item.attribution)}
+                    {attributionBadge(item.attribution, item.utm)}
                     {customerTypeBadge(item)}
                     {item.attribution.trackingCode && (
                       <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">

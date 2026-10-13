@@ -5,6 +5,31 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-13 - Fixed: Resolusi Anomali Atribusi CTWA Fuzzy, Paritas JSON Preview CAPI, dan Komparasi Kanal (Fase 1-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - Salah Label Atribusi Transaksi: Lead & Purchase yang tertangkap melalui greeting matcher CTWA (`ctwa_fuzzy_...`) dicap sebagai "Web LP" di `MetaCapiQueue.tsx` karena logika badge hanya mengecek `attribution.ctwa_clid`.
+  - Injeksi Data Palsu ke Preview JSON CAPI: Payload preview di `MetaCapiQueue.tsx` menginjeksi fallback IP contoh (`114.122.34.56`), User-Agent iPhone contoh, dan FBP contoh ke transaksi iklan WhatsApp (yang berlangsung di aplikasi WhatsApp tanpa web browser), serta mensintesis FBC dari `ctwa_fuzzy_...` yang menurunkan integritas data Event Match Quality (EMQ).
+  - Inkonsistensi Envelope CAPI: Backend `capi.service.ts` hanya memakai envelope `business_messaging` bila `ctwa_clid` resmi tersedia + WABA aktif, sedangkan traffic greeting catcher (fuzzy) memakai `action_source: 'chat'`.
+  - Ketidaksinkronan Kamus Kanal Dashboard: `ChannelTable.tsx` dan `types.ts` belum mendaftarkan kanal `CTWA_FUZZY`, sehingga label kanal jatuh ke string mentah dan memicu peringatan kuning keliru ("CTWA Native bernilai 0...") padahal lead aktif mengalir lewat Greeting Catcher.
+  - Distraksi Filter Bar di Tab Catchers: Tab Greeting Catchers (`MetaClickCatcher.tsx`) menampilkan filter bar tanggal yang tidak dikonsumsi oleh komponen tab tersebut.
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Badge & Eliminasi Data Palsu di MetaCapiQueue.tsx)**:
+    - Fungsi murni `isCtwaFuzzyAttribution` memeriksa `ctwa_fuzzy_` dan `utm.medium === 'ctwa_fuzzy'` secara deterministik.
+    - Badge toska "CTWA Fuzzy" ditampilkan pada tabel antrean dan card view moderasi.
+    - Pemisahan flag `isCtwaNative`, `isCtwaFuzzy`, dan `isCtwaAny` pada `buildCapiJsonPayload`.
+    - Eliminasi total sintesis FBC palsu dari tracking code fuzzy.
+    - Meniadakan fallback IP/UA/FBP palsu untuk seluruh transaksi CTWA (native & fuzzy).
+    - Paritas envelope: `action_source: 'business_messaging'` hanya diaktifkan untuk CTWA Native dengan WABA terkonfigurasi.
+  - **Fase 2 (Kamus & Banner Info ChannelTable.tsx)**:
+    - Pendaftaran label `CTWA_FUZZY: 'Click-to-WhatsApp (Greeting Fuzzy)'` pada `CHANNEL_LABEL` dan union tipe `types.ts`.
+    - Banner info teal edukatif ditampilkan jika CTWA Native bernilai 0 namun lead CTWA Fuzzy aktif berjalan.
+  - **Fase 3 (UX Tab Catchers MetaClickCatcher.tsx)**:
+    - Bar filter tanggal disembunyikan secara bersih saat tab Greeting Catchers aktif (`activeTab !== 'catchers'`).
+  - **Fase 4 (Pengujian Adversarial & Paritas)**:
+    - Unit test komprehensif di `tests/unit/ctwa-fuzzy-attribution-dashboard.test.ts` memverifikasi skenario Bunda Narita (CTWA Fuzzy), CTWA Native dengan & tanpa WABA, serta Web LP.
+- **File Dimodifikasi**: `packages/admin-dashboard/src/pages/tenant/MetaCapiQueue.tsx`, `packages/admin-dashboard/src/components/meta-performance/ChannelTable.tsx`, `packages/admin-dashboard/src/components/meta-performance/types.ts`, `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx`, `tests/unit/ctwa-fuzzy-attribution-dashboard.test.ts`, `docs/KNOWN_ISSUES.md`.
+
 #### 2026-10-13 - Fixed: Peringatan Titik Presisi (GPS Pin) & Pengingat Shareloc Otomatis (Fase 1-6)
 
 - **Akar Masalah (Audit Multi-Lapisan):**

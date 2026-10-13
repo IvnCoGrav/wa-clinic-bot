@@ -4,6 +4,7 @@ import { MetaPerformanceReport, fmtRupiah, fmtNum } from './types';
 
 const CHANNEL_LABEL: Record<string, string> = {
   CTWA_NATIVE: 'Click-to-WhatsApp (Native)',
+  CTWA_FUZZY: 'Click-to-WhatsApp (Greeting Fuzzy)',
   PROMO_CTA: 'Landing Page / Promo Code',
 };
 
@@ -11,7 +12,9 @@ const CHANNEL_LABEL: Record<string, string> = {
 export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ report }) => {
   const rows = report.channelComparison;
   if (!rows || rows.length === 0) return null;
-  const ctwa = rows.find((r) => r.channel === 'CTWA_NATIVE');
+  const ctwaNative = rows.find((r) => r.channel === 'CTWA_NATIVE');
+  const ctwaFuzzy = rows.find((r) => r.channel === 'CTWA_FUZZY');
+  const hasFuzzyLeads = (ctwaFuzzy?.leads ?? 0) > 0;
   return (
     <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
       <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
@@ -23,10 +26,16 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
       <p className="text-[11px] text-[#8696a0]">
         LP/PageView tidak dapat diatribusikan ke customer (tidak menyimpan nomor WA), sehingga komparasi ini murni pada kanal yang memiliki jejak AdClick.
       </p>
-      {ctwa && ctwa.leads === 0 && (
+      {ctwaNative && ctwaNative.leads === 0 && !hasFuzzyLeads && (
         <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
           <AlertCircle size={13} className="text-amber-600 mt-0.5 shrink-0" />
           CTWA Native bernilai 0 karena seluruh traffic dikirim ke Landing Page (Promo CTA). Iklan Click-to-WhatsApp Native belum diaktifkan.
+        </p>
+      )}
+      {ctwaNative && ctwaNative.leads === 0 && hasFuzzyLeads && (
+        <p className="flex items-start gap-1.5 text-[11px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
+          <Info size={13} className="text-teal-600 mt-0.5 shrink-0" />
+          Iklan CTWA berjalan dan tertangkap melalui Greeting Catcher (Fuzzy Attribution). Native bernilai 0 karena traffic lewat sapaan.
         </p>
       )}
       <div className="overflow-x-auto">

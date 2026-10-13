@@ -3,6 +3,24 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 254. [Meta/Dashboard] Resolusi Anomali Atribusi CTWA Fuzzy, Paritas JSON Preview CAPI, dan Komparasi Kanal (2026-10-13, IMPLEMENTED lokal)
+
+- **Status:** IMPLEMENTED lokal (Fase 0–4 selesai, build root + dashboard hijau, vitest ctwa-fuzzy 100% hijau, zero regresi baru).
+- **Akar & Temuan:**
+  1. Label Transaksi Salah: Iklan WhatsApp yang tertangkap lewat sapaan (`ctwa_fuzzy_...`) dicap sebagai "Web LP" di `MetaCapiQueue.tsx` karena badge hanya memeriksa `attribution.ctwa_clid`.
+  2. Data Sintetis Palsu: Pratinjau payload CAPI menyuntikkan IP dummy (`114.122.34.56`), User-Agent iPhone dummy, dan FBP dummy pada transaksi iklan CTWA (yang sebenarnya berjalan di lingkungan WhatsApp tanpa browser/cookie web), serta mensintesis FBC dari kode `ctwa_fuzzy_...`.
+  3. Paritas Envelope CAPI: Backend `capi.service.ts:1108` hanya menggunakan envelope `business_messaging` untuk CTWA Native (`ctwa_clid` ada) dengan WABA terpasang, sedangkan CTWA Fuzzy memakai action_source `chat`.
+  4. Komparasi Kanal Tertinggal: `ChannelTable.tsx` dan `types.ts` belum mendaftarkan `CTWA_FUZZY`, sehingga label fallback mentah dan banner kuning memperingatkan CTWA Native bernilai 0 padahal lead masuk melalui Greeting Catcher.
+  5. UX Filter Bar: Tab Greeting Catchers terdorong ke bawah oleh bar tanggal yang tidak digunakan oleh tab tersebut.
+- **Resolusi (Fondasional):**
+  1. `isCtwaFuzzyAttribution`: helper murni mendeteksi `ctwa_fuzzy_` dan `utm.medium === 'ctwa_fuzzy'`.
+  2. Badge toska `CTWA Fuzzy` ditampilkan untuk traffic greeting catcher di tabel antrean dan card view.
+  3. `buildCapiJsonPayload`: memisahkan `isCtwaNative`, `isCtwaFuzzy`, dan `isCtwaAny`. Menghilangkan sintesis FBC dari fuzzy tracking code dan meniadakan fallback IP/UA/FBP dummy untuk semua jenis CTWA. Envelope `business_messaging` hanya aktif untuk `isCtwaNative` dengan WABA.
+  4. `ChannelTable.tsx` & `types.ts`: menambah `CTWA_FUZZY` ke kamus dan tipe data, serta menampilkan info banner hijau/biru bila lead CTWA Fuzzy aktif meski CTWA Native bernilai 0.
+  5. `MetaClickCatcher.tsx`: menyembunyikan bar filter tanggal saat tab Greeting Catchers aktif.
+- **Catatan:**
+  - Event CAPI lama yang sudah pernah terkirim ke Meta sebelum perbaikan ini dengan data dummy tidak dapat ditarik kembali (Meta immutable event stream).
+
 ## 253. [Penjadwalan/Pesan Pasien] Opsi A Pesan Tanpa Jam & Soft Guard Foto Rumah (2026-10-13, IMPLEMENTED)
 
 - **Status:** IMPLEMENTED lokal (Fase 1–4 selesai, build root + dashboard hijau, 13 test baru hijau).
