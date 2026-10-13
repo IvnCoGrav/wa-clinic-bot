@@ -3,11 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, IMPLEMENTED lokal — healing PROD + deploy MENUNGGU)
+## 251. [Lokasi/Split-Brain] Resolusi Dual-Write, Healing Alamat & Navigasi (2026-10-12, DEPLOYED + HEALED)
 
-- **Status:** Kode 4 tahap selesai lokal (build + dashboard hijau, 5359 test hijau;
-  6 gagal pre-existing lama). Commit lokal — BELUM push, BELUM healing DB prod,
-  BELUM deploy server.
+- **Status:** Kode 4 tahap live di server (commit `6d1a7ac5`, app+worker recreate,
+  `/health` OK, WAHA untouched). Healing PROD SELESAI 12/10 16:0x WIB:
+  batch-1 12 tulis (10 MOVE_PRIMARY + 2 SYNC_ADDR), batch-2 2 tulis
+  (SYNC_CUSTOMER_FROM_ADDR), rerun final 0 tulis (8 REPORT_ONLY sisa).
+  Backup: `backups/splitbrain-backup-20261012.sql` (683K, di server).
 - **Isi:** domain enrichment asimetris + ghost-primary; endpoint lokasi delegasi
   seam `updateCustomerLocation`; helper `buildEffectiveTaskAddress` (3 situs);
   notifikasi reuse `buildMapsUrls`; 8 situs dashboard helper 4-arg; label
