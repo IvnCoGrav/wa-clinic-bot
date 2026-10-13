@@ -235,7 +235,7 @@ function isValidCoordinate(lat: number, lng: number): boolean {
  * presisinya. Redirect HTTP di-follow generik (max 5) sehingga domain pendek
  * baru tetap ter-resolve tanpa perubahan kode tambahan.
  */
-export async function resolveGoogleMapsUrl(url: string, timeoutMs = 2500): Promise<ResolvedCoordinates> {
+export async function resolveGoogleMapsUrl(url: string, timeoutMs = 6000): Promise<ResolvedCoordinates> {
   if (!url || typeof url !== 'string') {
     return { success: false, error: 'Empty URL' };
   }

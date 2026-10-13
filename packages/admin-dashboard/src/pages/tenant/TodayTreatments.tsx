@@ -42,8 +42,10 @@ import {
   Edit3,
   ArrowLeft,
   Pencil,
+  Loader,
 } from 'lucide-react';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
+import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import {
@@ -170,6 +172,7 @@ export const TodayTreatments: React.FC = () => {
   const [locGpsError, setLocGpsError] = useState<string | null>(null);
   const [locSaving, setLocSaving] = useState(false);
   const [locMapsUrlInput, setLocMapsUrlInput] = useState('');
+  const { resolve: resolveLocMapsUrl, isResolving: locMapsResolving } = useMapsShortlinkResolver();
   const [locGeocoding, setLocGeocoding] = useState(false);
   const [locShowManualCoords, setLocShowManualCoords] = useState(false);
   const [locProcessingPhoto, setLocProcessingPhoto] = useState(false);
@@ -595,14 +598,13 @@ export const TodayTreatments: React.FC = () => {
   };
 
   // Smart Maps URL Parser
-  const handlePasteLocMapsUrl = (rawUrl: string) => {
+  const handlePasteLocMapsUrl = async (rawUrl: string) => {
     setLocMapsUrlInput(rawUrl);
     if (!rawUrl.trim()) return;
 
-    const extracted = extractLatLngFromMapsUrl(rawUrl);
+    const extracted = await resolveLocMapsUrl(rawUrl);
     if (extracted) {
       setLocCoords({ lat: extracted.lat, lng: extracted.lng });
-      toast(`✓ Koordinat terdeteksi dari Link: ${extracted.lat.toFixed(5)}, ${extracted.lng.toFixed(5)}! 📍`, 'success');
     }
   };
 
@@ -2080,13 +2082,31 @@ export const TodayTreatments: React.FC = () => {
                         <Link2 size={11} className="text-[#008069]" />
                         <span>Tempel Link Shareloc / Google Maps Pasien:</span>
                       </label>
-                      <input
-                        type="text"
-                        value={locMapsUrlInput}
-                        onChange={(e) => handlePasteLocMapsUrl(e.target.value)}
-                        placeholder="Paste link Google Maps / shareloc di sini..."
-                        className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
-                      />
+                      <div className="flex space-x-1.5">
+                        <input
+                          type="text"
+                          value={locMapsUrlInput}
+                          onChange={(e) => handlePasteLocMapsUrl(e.target.value)}
+                          placeholder="Paste link Google Maps / shareloc di sini..."
+                          className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePasteLocMapsUrl(locMapsUrlInput)}
+                          disabled={locMapsResolving || !locMapsUrlInput.trim()}
+                          className="px-3 py-2 bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] border border-[#c2e7e0] dark:border-[#374248] text-[#008069] dark:text-[#00a884] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                          title="Cari koordinat dari tautan"
+                        >
+                          {locMapsResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
+                          <span>Cek</span>
+                        </button>
+                      </div>
+                      {locMapsResolving && (
+                        <p className="text-[11px] text-[#008069] dark:text-[#00a884] flex items-center gap-1.5 animate-pulse mt-1">
+                          <Loader size={12} className="animate-spin" />
+                          <span>Sedang mengurai tautan Google Maps...</span>
+                        </p>
+                      )}
                     </div>
 
                     {/* Assistant 2: Tombol Cepat GPS & Geocode */}

@@ -1548,6 +1548,8 @@ export const CustomerDatabase: React.FC = () => {
       {/* Edit Profil Modal - terpisah, placement seperti ReservationDetailModal (tidak nested, full overlay) */}
       {detailEditMode && activeDetailCustomer && (
         <CustomerEditForm
+          key={activeDetailCustomer.id}
+          resetKey={detailData?.updated_at || detailData?.updatedAt}
           customer={{
             id: activeDetailCustomer.id,
             name: detailData?.name || activeDetailCustomer.name,

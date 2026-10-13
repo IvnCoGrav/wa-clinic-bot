@@ -1372,8 +1372,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         let result: any = null;
 
         if (url) {
-          const { resolveLocationFromUrl } = await import('../../services/location-resolver.service');
-          result = await resolveLocationFromUrl(url, tenantId);
+          const { resolveLocationFromUrl, extractGoogleMapsUrls } = await import('../../services/location-resolver.service');
+          const extracted = extractGoogleMapsUrls(url);
+          const cleanUrl = extracted.length > 0 ? extracted[0] : url.trim();
+          result = await resolveLocationFromUrl(cleanUrl, tenantId);
         } else if (text) {
           const { geocodingService } = await import('../../integrations/google-maps/geocoding');
           const { deliveryService } = await import('../../services/delivery.service');

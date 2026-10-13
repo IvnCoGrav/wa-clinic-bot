@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useUiFeedback } from '../common/UiFeedback';
 import { 
   X, 
@@ -17,7 +17,8 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { extractLatLngFromMapsUrl, getCurrentDeviceLocation } from '../../utils/geoUtils';
+import { getCurrentDeviceLocation } from '../../utils/geoUtils';
+import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { apiRequest } from '../../services/api';
 import { RefreshCw } from 'lucide-react';
 
@@ -54,6 +55,7 @@ interface CustomerEditFormProps {
   onSave: (data: any) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+  resetKey?: string | number;
 }
 
 export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
@@ -61,6 +63,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   onSave,
   onCancel,
   loading = false,
+  resetKey,
 }) => {
   const { toast, confirm } = useUiFeedback();
   const [saving, setSaving] = useState(false);
@@ -93,14 +96,20 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
   // Smart Coordinate Assistant states
   const [mapsUrlInput, setMapsUrlInput] = useState('');
-  const [mapsUrlResolving, setMapsUrlResolving] = useState(false);
+  const { isResolving: mapsUrlResolving, resolve: resolveMapsUrl } = useMapsShortlinkResolver();
   const [gettingGps, setGettingGps] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [showManualCoords, setShowManualCoords] = useState(false);
   const [refreshingChatLoc, setRefreshingChatLoc] = useState(false);
 
+  const lastSyncKeyRef = useRef<string | null>(null);
+  const syncKey = `${customer.id}::${resetKey ?? ''}`;
+
   useEffect(() => {
+    if (lastSyncKeyRef.current === syncKey) return; // SSE re-render: jangan timpa form kotor
+    lastSyncKeyRef.current = syncKey;
+
     setFormData({
       name: customer.name || '',
       phone: customer.phone || '',
@@ -127,7 +136,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
     } else {
       setChildren([]);
     }
-  }, [customer]);
+  }, [syncKey, customer]);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -156,50 +165,22 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
     setChildren((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Smart Maps URL Parser - calls backend to resolve Google Maps URL (shortlink + coordinate + geocode fallback)
+  // Smart Maps URL Parser - calls unified hook (shortlink + coordinate + geocode fallback)
   const handlePasteMapsUrl = async (val: string) => {
     setMapsUrlInput(val);
     if (!val || val.trim().length < 5) return;
 
-    // First try local regex extraction for immediate feedback (works for URLs with explicit coords)
-    const parsed = extractLatLngFromMapsUrl(val);
-    if (parsed) {
+    const result = await resolveMapsUrl(val);
+    if (result) {
       setFormData((prev) => ({
         ...prev,
-        lat: parsed.lat.toFixed(6),
-        lng: parsed.lng.toFixed(6),
+        lat: result.lat.toFixed(6),
+        lng: result.lng.toFixed(6),
+        kelurahan: result.kelurahan || prev.kelurahan,
+        kecamatan: result.kecamatan || prev.kecamatan,
+        kota: result.kota || prev.kota,
       }));
       setGpsAccuracy(null);
-      toast('✓ Koordinat berhasil diekstrak dari link Google Maps! 📍', 'success');
-      return;
-    }
-
-    // If no coords in URL, call backend to resolve shortlink + geocode fallback
-    setMapsUrlResolving(true);
-    try {
-      const res: any = await apiRequest('/api/admin/customers/resolve-location', {
-        method: 'POST',
-        body: JSON.stringify({ url: val }),
-      });
-      if (res?.success && res?.data) {
-        const d = res.data;
-        setFormData((prev) => ({
-          ...prev,
-          lat: String(d.lat),
-          lng: String(d.lng),
-          kelurahan: d.kelurahan || prev.kelurahan,
-          kecamatan: d.kecamatan || prev.kecamatan,
-          kota: d.kota || prev.kota,
-        }));
-        setGpsAccuracy(null);
-        toast('✓ Alamat & koordinat berhasil diambil dari Google Maps! 📍', 'success');
-      } else {
-        toast(res?.error || 'Gagal resolve link Google Maps', 'error');
-      }
-    } catch (err: any) {
-      toast(err?.message || 'Gagal resolve link Google Maps', 'error');
-    } finally {
-      setMapsUrlResolving(false);
     }
   };
 
@@ -578,7 +559,23 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                   placeholder="https://maps.google.com/?q=-7.3488,112.7516"
                   className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
                 />
+                <button
+                  type="button"
+                  onClick={() => handlePasteMapsUrl(mapsUrlInput)}
+                  disabled={mapsUrlResolving || !mapsUrlInput.trim()}
+                  className="px-3 py-2 bg-white hover:bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  title="Cari koordinat dari tautan"
+                >
+                  {mapsUrlResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
+                  <span>Cek</span>
+                </button>
               </div>
+              {mapsUrlResolving && (
+                <p className="text-[11px] text-[#008069] flex items-center gap-1.5 animate-pulse mt-1">
+                  <Loader size={12} className="animate-spin" />
+                  <span>Sedang mengurai tautan & mencari lokasi Google Maps...</span>
+                </p>
+              )}
             </div>
 
             {/* Quick Actions: Lock GPS & Geocode */}
@@ -686,7 +683,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             </button>
             <button
               type="submit"
-              disabled={saving || loading}
+              disabled={saving || loading || mapsUrlResolving}
               className="flex-1 py-2.5 px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-2xs disabled:opacity-50 cursor-pointer"
             >
               {saving || loading ? (

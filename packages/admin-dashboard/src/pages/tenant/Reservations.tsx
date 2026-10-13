@@ -54,6 +54,7 @@ import {
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
 import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
+import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
@@ -828,6 +829,7 @@ export const Reservations: React.FC = () => {
 
   // Smart location assistant states in Reservations
   const [editMapsUrlInput, setEditMapsUrlInput] = useState('');
+  const { resolve: resolveEditMapsUrl, isResolving: editMapsResolving } = useMapsShortlinkResolver();
   const [editGettingGps, setEditGettingGps] = useState(false);
   const [editGeocoding, setEditGeocoding] = useState(false);
   const [editGpsAccuracy, setEditGpsAccuracy] = useState<number | null>(null);
@@ -881,16 +883,15 @@ export const Reservations: React.FC = () => {
   };
 
   // Smart Maps URL Parser
-  const handlePasteEditMapsUrl = (val: string) => {
+  const handlePasteEditMapsUrl = async (val: string) => {
     setEditMapsUrlInput(val);
     if (!val || val.trim().length < 5) return;
 
-    const parsed = extractLatLngFromMapsUrl(val);
+    const parsed = await resolveEditMapsUrl(val);
     if (parsed) {
       setEditLat(parsed.lat.toFixed(6));
       setEditLng(parsed.lng.toFixed(6));
       setEditGpsAccuracy(null);
-      toast('✓ Titik koordinat berhasil diekstrak dari link Google Maps! 📍', 'success');
     }
   };
 
@@ -2021,13 +2022,31 @@ export const Reservations: React.FC = () => {
                     <Link2 size={11} className="text-[#008069]" />
                     <span>Tempel Link Shareloc / Google Maps Pasien:</span>
                   </label>
-                  <input
-                    type="text"
-                    value={editMapsUrlInput}
-                    onChange={(e) => handlePasteEditMapsUrl(e.target.value)}
-                    placeholder="Paste link Google Maps / shareloc di sini..."
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
-                  />
+                  <div className="flex space-x-1.5">
+                    <input
+                      type="text"
+                      value={editMapsUrlInput}
+                      onChange={(e) => handlePasteEditMapsUrl(e.target.value)}
+                      placeholder="Paste link Google Maps / shareloc di sini..."
+                      className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handlePasteEditMapsUrl(editMapsUrlInput)}
+                      disabled={editMapsResolving || !editMapsUrlInput.trim()}
+                      className="px-3 py-2 bg-white hover:bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                      title="Cari koordinat dari tautan"
+                    >
+                      {editMapsResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
+                      <span>Cek</span>
+                    </button>
+                  </div>
+                  {editMapsResolving && (
+                    <p className="text-[11px] text-[#008069] flex items-center gap-1.5 animate-pulse mt-1">
+                      <Loader size={12} className="animate-spin" />
+                      <span>Sedang mengurai tautan Google Maps...</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Assistant 2: Tombol Cepat GPS & Geocode */}

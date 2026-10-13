@@ -203,7 +203,10 @@ export class GeocodingService {
    * lalu mengabaikan span yang seluruhnya berisi kata-kata stop words.
    */
   private generateCandidateSpans(text: string, maxWords = 4): string[] {
-    const cleanText = text.replace(/[,.!?()\-+;:]/g, ' ');
+    // Normalisasi teknis: abaikan token Google Plus Code (Open Location Code, misal: JP96+9WG / 7P28+VX)
+    // agar token kode grid tidak memecah span toponimi wilayah (misal: "9wg bohar taman").
+    const withoutPlusCode = text.replace(/\b[A-Za-z0-9]{2,8}\+[A-Za-z0-9]{2,3}\b/g, ' ');
+    const cleanText = withoutPlusCode.replace(/[,.!?()\-+;:]/g, ' ');
     const words = cleanText.split(/\s+/)
       .map(w => w.trim().toLowerCase())
       .filter(w => w.length > 0);

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, MapPin, Navigation, Search, Camera, Image as ImageIcon, Loader } from 'lucide-react';
-import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
+import { getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
+import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { useUiFeedback } from '../common/UiFeedback';
@@ -51,6 +52,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 }) => {
   const { toast } = useUiFeedback();
   const [mapsUrl, setMapsUrl] = useState(value.mapsUrl || '');
+  const { isResolving: resolvingShortlink, resolve: resolveMapsUrl } = useMapsShortlinkResolver();
   const [lockingGps, setLockingGps] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState(false);
@@ -60,12 +62,20 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePasteMapsUrl = (url: string) => {
+  const handlePasteMapsUrl = async (url: string) => {
     setMapsUrl(url);
-    const parsed = extractLatLngFromMapsUrl(url);
+    if (!url || url.trim().length < 5) return;
+    const parsed = await resolveMapsUrl(url);
     if (parsed) {
-      onChange({ ...value, lat: parsed.lat, lng: parsed.lng, mapsUrl: url });
-      toast(`Koordinat terdeteksi: ${parsed.lat.toFixed(5)}, ${parsed.lng.toFixed(5)}`, 'success');
+      onChange({
+        ...value,
+        lat: parsed.lat,
+        lng: parsed.lng,
+        mapsUrl: url,
+        kelurahan: parsed.kelurahan || value.kelurahan,
+        kecamatan: parsed.kecamatan || value.kecamatan,
+        kota: parsed.kota || value.kota,
+      });
     }
   };
 
@@ -164,10 +174,19 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           <label className="text-xs font-bold text-[#111b21]">Link Google Maps (tempel shareloc)</label>
           <div className="flex gap-2">
             <input value={mapsUrl} onChange={(e) => handlePasteMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="flex-1 px-3 py-2 border border-[#d1d7db] rounded-xl text-xs" />
+            <button type="button" onClick={() => handlePasteMapsUrl(mapsUrl)} disabled={resolvingShortlink || !mapsUrl.trim()} className="px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] flex items-center gap-1 disabled:opacity-50">
+              {resolvingShortlink ? <Loader size={12} className="animate-spin" /> : <Search size={12} />} Cek Link
+            </button>
             <button onClick={handleGeocode} disabled={geocoding} className="px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] flex items-center gap-1">
               {geocoding ? <Loader size={12} className="animate-spin" /> : <Search size={12} />} Cari Alamat
             </button>
           </div>
+          {resolvingShortlink && (
+            <p className="text-[11px] text-[#008069] flex items-center gap-1.5 animate-pulse mt-1">
+              <Loader size={12} className="animate-spin" />
+              <span>Sedang mengurai tautan Google Maps...</span>
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div>

@@ -6852,6 +6852,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Edit Profil Modal - terpisah, placement seperti ReservationDetailModal (tidak nested, full overlay) */}
       {customerDetailEditMode && (
         <CustomerEditForm
+          key={customerDetailData?.id || selectedChat?.customerId}
+          resetKey={customerDetailData?.updated_at || customerDetailData?.updatedAt}
           customer={{
             id: customerDetailData?.id || selectedChat?.customerId || '',
             name: customerDetailData?.name || selectedChat?.customerName || null,

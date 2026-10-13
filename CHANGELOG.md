@@ -5,6 +5,34 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-13 - Fixed: Resolusi Maps Shortlink, Plus Code Geocoding & Stabilisasi State Form Admin (Fase 0-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - **Timeout Singkat Shortlink Google Maps**: `resolveGoogleMapsUrl` memiliki default `timeoutMs = 2500` yang terlalu pendek untuk menangani rantai multi-hop redirect Google Maps (`maps.app.goo.gl` -> `goo.gl` -> `google.com/maps/place/...`), sehingga sering gagal timeout saat koneksi latensi tinggi.
+  - **Kegagalan Parsing Teks Campuran / Preamble**: Admin menempel URL bersama teks pengantar (misal `"Ini alamatnya https://maps.app.goo.gl/xxx ya"`), yang ditolak oleh endpoint `resolve-location` karena memeriksa URL mentah tanpa ekstraksi regex awal.
+  - **Polusi Plus Code pada Toponimi**: Tempat usaha di Google Maps menghasilkan Plus Code (seperti `"JP96+9WG Asian Conveksi, Bohar..."`), di mana token grid membingungkan parser gazetteer lokal bila tidak dibersihkan secara deterministik.
+  - **Form State Wipeout via SSE Re-render**: `CustomerEditForm.tsx` memiliki `useEffect([customer])`. Parent passing objek inline baru setiap kali SSE heartbeat/message ack datang di LiveChat, menimpa formulir yang sedang diketik staf kembali ke data lama DB.
+  - **Ketiadaan Indikator UX Resolving & Button Lock**: Input link tidak memiliki visual spinner loading, dan tombol simpan tidak dikunci saat background URL resolving berjalan, menyebabkan form disimpan sebelum koordinat selesai diurai.
+  - **Disparitas Shortlink di 4 Modal**: 3 komponen lain (`LocationPickerModal`, `Reservations`, `TodayTreatments`) hanya memakai regex client sederhana dan gagal mengurai shortlink `maps.app.goo.gl`.
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Backend Hardening)**:
+    - Default timeout `resolveGoogleMapsUrl` dinaikkan dari 2500 ms ke 6000 ms (`src/utils/google-maps-url-resolver.ts`).
+    - Endpoint `resolve-location` di `src/routes/admin/customers.subroute.ts` mengekstrak URL dengan `extractGoogleMapsUrls(url)[0] || url.trim()` sebelum parsing.
+    - Normalisasi deterministik Plus Code di `generateCandidateSpans` (`src/integrations/google-maps/geocoding.ts`) untuk membersihkan token grid toponimi tanpa mutilasi teks.
+    - Unit test baru `tests/unit/geocode-pluscode.test.ts` (7 varian adversarial) dan semua test suite maps/geocode 100% hijau.
+  - **Fase 2 (Stabilisasi Form & Anti-Wipeout)**:
+    - Menambahkan prop `resetKey` dan guard `lastSyncKeyRef` di `CustomerEditForm.tsx` agar form dirty tidak ter-reset oleh re-render SSE LiveChat.
+    - Menambahkan `key={id}` dan `resetKey` di `CustomerDatabase.tsx` dan `LiveChatMonitor.tsx` untuk lifecycle remount yang bersih saat berganti customer.
+  - **Fase 3 (UX Feedback & Single Shared Seam)**:
+    - Membuat hook tunggal `useMapsShortlinkResolver` (`packages/admin-dashboard/src/hooks/useMapsShortlinkResolver.ts`) untuk dipakai bersama di 4 komponen: `CustomerEditForm`, `LocationPickerModal`, `Reservations`, dan `TodayTreatments`.
+    - Menampilkan spinner status "Sedang mengurai tautan Google Maps...", tombol "Cek", dan menonaktifkan tombol simpan saat proses resolving berlangsung.
+  - **Fase 4 (Healing Bunda Nurul via Seam Kanonis)**:
+    - Baris DB Bunda Nurul dibackup ke `customer_nurul_backup_20261013`.
+    - Lokasi di-update melalui seam kanonis `customerService.updateCustomerLocation` dengan titik Bohar, Taman, Sidoarjo (lat: -7.3808642, lng: 112.7077638, jarak 9.62 km, ongkir Rp 10.000, `location_source = 'gps_pin'`).
+    - Tercatat di `audit_logs` dan riwayat `preferences.location_history`.
+- **File Dimodifikasi**: `src/utils/google-maps-url-resolver.ts`, `src/routes/admin/customers.subroute.ts`, `src/integrations/google-maps/geocoding.ts`, `packages/admin-dashboard/src/components/modals/CustomerEditForm.tsx`, `packages/admin-dashboard/src/components/common/LocationPickerModal.tsx`, `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `packages/admin-dashboard/src/pages/tenant/Reservations.tsx`, `packages/admin-dashboard/src/pages/tenant/TodayTreatments.tsx`, `packages/admin-dashboard/src/hooks/useMapsShortlinkResolver.ts`, `tests/unit/geocode-pluscode.test.ts`, `docs/KNOWN_ISSUES.md`, `CHANGELOG.md`.
+
+
 #### 2026-10-13 - Fixed: Resolusi Anomali Atribusi CTWA Fuzzy, Paritas JSON Preview CAPI, dan Komparasi Kanal (Fase 1-5)
 
 - **Akar Masalah (Audit Multi-Lapisan):**
