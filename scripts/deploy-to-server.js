@@ -37,8 +37,12 @@ cd /opt/wa-clinic-bot
 echo "--> Git Pull Latest Code..."
 git pull origin master
 
-echo "--> Build App Docker Image..."
+echo "--> Build Docker Images (app & worker)..."
 docker compose build app
+if docker compose ps --services --filter "status=running" | grep -q "^worker$"; then
+  echo "--> Recreate Worker Container Safely..."
+  docker compose up -d --no-deps worker
+fi
 
 echo "--> Recreate App Container Safely (WAHA untouched)..."
 docker compose up -d --no-deps app
