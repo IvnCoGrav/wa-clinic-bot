@@ -1743,19 +1743,22 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
       return reply.status(200).send({
         success: true,
+        deprecated: true,
+        note: 'Queue-First: seluruh event Purchase wajib lewat antrean moderasi /capi-queue',
         data: {
-          autoSendPurchaseCapi: tenant?.auto_send_purchase_capi ?? false,
+          autoSendPurchaseCapi: false,
+          deprecated: true,
         },
       });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, data: { autoSendPurchaseCapi: false } });
+      return reply.status(200).send({ success: true, data: { autoSendPurchaseCapi: false, deprecated: true } });
     }
   });
 
   /**
    * PATCH /api/admin/purchase-moderation
    * Toggle kebijakan moderasi event Purchase Meta CAPI per tenant.
-   * false (default) = event ditahan ke queue moderasi admin; true = auto-kirim.
+   * Deprecated (Queue-First): seluruh event Purchase wajib lewat antrean moderasi.
    */
   fastify.patch(
     '/api/admin/purchase-moderation',
@@ -1771,15 +1774,16 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        // Queue-First: selalu simpan false untuk mencegah pengiriman CAPI ganda/bypass kasir
         const updated = await prisma.tenant.upsert({
           where: { id: DEFAULT_TENANT_ID },
           create: {
             id: DEFAULT_TENANT_ID,
             slug: DEFAULT_TENANT_ID,
             name: `Default Clinic`,
-            auto_send_purchase_capi: autoSendPurchaseCapi,
+            auto_send_purchase_capi: false,
           },
-          update: { auto_send_purchase_capi: autoSendPurchaseCapi },
+          update: { auto_send_purchase_capi: false },
         });
 
         await auditService.logAdminAction({
@@ -1787,14 +1791,16 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_PURCHASE_MODERATION',
           targetId: DEFAULT_TENANT_ID,
-          payload: { autoSendPurchaseCapi: updated.auto_send_purchase_capi },
+          payload: { autoSendPurchaseCapi: false, requested: autoSendPurchaseCapi, policy: 'QUEUE_FIRST' },
           ipAddress: request.ip,
         });
 
         return reply.status(200).send({
           success: true,
-          message: `Auto-send Purchase CAPI ${autoSendPurchaseCapi ? 'diaktifkan' : 'dinonaktifkan (moderasi manual aktif)'}.`,
-          data: { autoSendPurchaseCapi: updated.auto_send_purchase_capi },
+          deprecated: true,
+          note: 'Queue-First: seluruh event Purchase masuk antrean moderasi /capi-queue.',
+          message: 'Kebijakan Queue-First aktif: seluruh transaksi diarahkan ke antrean moderasi CAPI.',
+          data: { autoSendPurchaseCapi: false, deprecated: true },
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });

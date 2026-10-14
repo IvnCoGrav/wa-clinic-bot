@@ -3254,10 +3254,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    const existingRes = conflictInfo.existingReservation;
                     setShowConflictModal(false);
                     setConflictInfo(null);
-                    toast('Batalkan duplikat — silakan buka & edit jadwal yang sudah ada.', 'info');
+                    toast('Batalkan duplikat — membuka jadwal yang sudah ada.', 'info');
                     onClose();
+                    if (existingRes && onEditReservation) {
+                      onEditReservation(existingRes);
+                    }
                   }}
                   className="px-3 py-2 rounded-xl border border-[#d1d7db] text-xs font-bold text-[#111b21] hover:bg-[#f0f2f5] cursor-pointer"
                 >

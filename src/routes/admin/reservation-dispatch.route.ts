@@ -1866,6 +1866,22 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
         await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
 
+        // Kebijakan CAPI: Reservasi yang sudah approved lalu cancelled diaudit (Meta tidak bisa menarik event yang sudah terkirim)
+        if (existing.purchase_review_status === 'approved' || Boolean((existing as any).purchase_event_sent_at)) {
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'CANCEL_AFTER_APPROVE',
+            targetId: id,
+            payload: {
+              previousStatus: existing.status,
+              purchase_event_sent_at: existing.purchase_event_sent_at,
+              reason: (request.query as any)?.reason || 'RESERVATION_CANCELLED_POST_CAPI_APPROVE',
+            },
+            ipAddress: request.ip,
+          }).catch(() => {});
+        }
+
         const activeNoPurchaseFollowUps = await prisma.followUp.findFirst({
           where: {
             customer_id: existing.customer_id,
@@ -2139,14 +2155,19 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         const reservation = await prisma.reservation.update({
           where: { id },
           data: {
-            purchase_occurred_at: occurredDate,
+            // Integritas kasir: pertahankan nilai apa adanya. Null tetap null (belum terima uang).
+            // occurredDate (created_at fallback) hanya dipakai untuk event_time Meta, bukan disimpan.
+            ...(existing.purchase_occurred_at ? { purchase_occurred_at: occurredDate } : {}),
             purchase_value: resolvedVal ?? undefined,
             purchase_review_status: 'approved',
             purchase_event_sent_at: new Date(),
           },
         });
 
-        await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
+        // LTV = uang riil. Jangan katrol LTV saat approve dini (kasir masih null); LTV naik nanti via recordPayment.
+        if (existing.purchase_occurred_at) {
+          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
+        }
 
         // Fase 4.3: Otomatis batalkan follow-up NO_PURCHASE yang masih PENDING/QUEUED
         // karena customer sudah terbukti purchase / closing
@@ -2369,6 +2390,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         status: { not: 'cancelled' },
         customer: { is_sandbox_test: false },
         OR: [
+          // Queue-First: semua yang antre (pending) + jejak approved 7 hari. outlier yang ditolak SENGAJA tidak ikut default.
+          { purchase_review_status: { in: ['pending', 'approved'] } },
           { purchase_occurred_at: { not: null } },
           { status: 'completed' },
         ],

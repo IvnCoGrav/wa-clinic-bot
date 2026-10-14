@@ -319,7 +319,7 @@ async function findOverlappingCustomerReservations(params: {
       where: {
         tenant_id: tenantId,
         customer_id: customerId,
-        status: { in: ACTIVE_STATUSES },
+        status: { in: ['confirmed', 'en_route', 'hold', 'pending', 'in_progress'] },
         booking_date: { gte: dayStart, lte: dayEnd },
       },
       orderBy: { booking_date: 'asc' },
@@ -745,6 +745,10 @@ export class ReservationCoreService {
               where: { id: existingByRequest.id },
               data: {
                 status: bookingStatus,
+                // Queue-First reaktivasi: booking baru = antrean baru. Reset jejak kiriman lama agar tidak dikira sudah terkirim.
+                purchase_review_status: bookingStatus === 'confirmed' ? 'pending' : null,
+                purchase_event_sent_at: null,
+                purchase_occurred_at: null,
                 // Intake tanpa tanggal: pertahankan tanggal lama (jangan null-kan).
                 booking_date: hasValidDate ? bookingDate : (existingByRequest as any).booking_date,
                 assigned_staff_id:
@@ -795,9 +799,13 @@ export class ReservationCoreService {
        const holdSameDay = sameDayReservations.filter((r: any) => r.status === 'hold');
        const customerSameDayActive = sameDayReservations.length > 0;
 
-       // Kasus 1: Konflik Nyata ADMIN_PANEL — customer SUDAH memiliki reservasi 'confirmed' hari ini
+       // Kasus 1: Konflik Nyata ADMIN_PANEL — customer SUDAH memiliki reservasi 'confirmed'/'pending' hari ini
        if (source === 'ADMIN_PANEL' && !force && confirmedSameDay.length > 0) {
-         throw new ReservationConflictError('DUPLICATE_BOOKING', exactConflicts.find((r: any) => r.status === 'confirmed') || confirmedSameDay[0]);
+         const conflict = exactConflicts.find((r: any) => r.status === 'confirmed') || confirmedSameDay[0];
+         console.warn(
+           `[RESERVATION CORE] DUPLICATE_BOOKING rejected: tenantId=${tenantId}, customerId=${customerId}, date=${bookingDate ? bookingDate.toISOString() : 'null'}, treatment=${treatmentDetail || '-'}, existingId=${conflict?.id}, existingStatus=${conflict?.status}`
+         );
+         throw new ReservationConflictError('DUPLICATE_BOOKING', conflict);
        }
 
        // Validasi bentrok terapis (jika ada assignedStaffId)
@@ -944,6 +952,10 @@ export class ReservationCoreService {
       raw_text: effectiveRawText,
       status: bookingStatus,
       purchase_value: purchaseValue ?? null,
+      // Queue-First: confirmed langsung antre CAPI; non-confirmed (intake tanpa tanggal) = null agar tidak banjiri antrean.
+      purchase_review_status: bookingStatus === 'confirmed' ? 'pending' : null,
+      // Integritas kasir: WAJIB null sampai uang riil diterima via recordPayment / payment-proof.
+      purchase_occurred_at: null,
       // KB-6: snapshot ongkir saat booking (riwayat abadi).
       delivery_fee: deliveryFee ?? null,
       customer_address_id: resolvedAddressId || null,

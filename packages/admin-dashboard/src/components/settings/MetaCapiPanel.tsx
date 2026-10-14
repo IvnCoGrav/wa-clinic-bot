@@ -118,24 +118,27 @@ export const MetaCapiPanel: React.FC<Props> = ({
           Jika OFF, transaksi pembayaran ditahan di queue moderasi (Pending Review) sampai disetujui admin —
           mencegah data outlier terkirim ke Meta.
         </p>
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] opacity-90">
           <div className="pr-3">
-            <span className="text-xs font-bold text-[#111b21]">Auto-send Purchase CAPI</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#111b21]">Auto-send Purchase CAPI</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
+                Queue-First
+              </span>
+            </div>
             <p className="text-xs text-[#667781] mt-0.5">
-              {autoSendPurchaseCapi
-                ? 'Aktif — event pembayaran langsung dikirim ke Meta.'
-                : 'Off — event ditahan di queue moderasi (Pending Review Meta) sampai disetujui admin.'}
+              Seluruh transaksi pembayaran kini diproses via antrean moderasi CAPI demi akurasi data &amp; anti-duplikasi.
             </p>
           </div>
           <ToggleSwitch
-            checked={autoSendPurchaseCapi}
-            onChange={(next) => handleTogglePurchaseModeration(next)}
-            disabled={savingPurchaseModeration}
-            loading={savingPurchaseModeration}
+            checked={false}
+            onChange={() => {}}
+            disabled={true}
+            loading={false}
             onLabel="ON (AUTO-SEND)"
-            offLabel="OFF (MODERASI)"
+            offLabel="OFF (QUEUE-FIRST)"
             size="md"
-            title="Toggle moderasi event Purchase Meta CAPI"
+            title="Kebijakan Queue-First: seluruh event melalui moderasi antrean CAPI"
           />
         </div>
       </div>

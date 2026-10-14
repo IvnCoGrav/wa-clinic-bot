@@ -4,6 +4,7 @@
  */
 import { matchCatalogService } from './treatmentStringParser';
 import { getWibDateKey } from './dateWib';
+import { isTreatmentCategoryOverlap, isScheduleBlockingStatus } from './treatmentCategory';
 
 export interface ExtractedScheduleData {
   bookingDate: Date | null;
@@ -11,7 +12,7 @@ export interface ExtractedScheduleData {
   timeDisplay: string;
   treatmentName: string;
   treatmentPrice: number;
-  treatmentCategory: 'BABY' | 'MOMS' | 'BUNDLE';
+  treatmentCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BUNDLE' | 'BOTH';
   childName: string;
   childAge: string;
   babies: Array<{ name: string; ageText: string }>;
@@ -192,6 +193,49 @@ export function formatFormBannerAudienceLabel(
  * berhak booking ulang. Bulan/tanggal dibandingkan dalam kalender lokal (selaras
  * seluruh parsing tanggal frontend).
  */
+export function findExistingReservationForSchedule<
+  T extends {
+    booking_date?: string | Date | null;
+    status?: string | null;
+    treatment_detail?: string | null;
+    treatment_category?: string | null;
+  }
+>(
+  reservations: T[] | null | undefined,
+  bookingDate: Date | string | null | undefined,
+  treatmentName?: string | null,
+  treatmentCategory?: string | null
+): T | null {
+  if (!reservations || reservations.length === 0 || !bookingDate) return null;
+  const target = bookingDate instanceof Date ? bookingDate : new Date(bookingDate);
+  if (isNaN(target.getTime())) return null;
+  // Kunci tanggal dalam WIB (bukan zona lokal browser) agar pembandingan hari konsisten.
+  const ymd = (d: Date): string => getWibDateKey(d);
+  const targetYmd = ymd(target);
+  const norm = (s: unknown): string => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const targetTreat = norm(treatmentName);
+  const targetCat = String(treatmentCategory || '').toUpperCase();
+  const found = reservations.find((r) => {
+    if (!r?.booking_date) return false;
+    // Unifikasi #257-PR: supresi same-day memakai "penghambat jadwal" (termasuk
+    // completed/in_progress hari ini), BUKAN "slot aktif" yang lebih sempit.
+    if (!isScheduleBlockingStatus(r.status)) return false;
+    const d = r.booking_date instanceof Date ? r.booking_date : new Date(r.booking_date);
+    if (isNaN(d.getTime()) || ymd(d) !== targetYmd) return false;
+    const rCat = String(r.treatment_category || '').toUpperCase();
+    if (targetCat && rCat && isTreatmentCategoryOverlap(targetCat, rCat)) {
+      const rTreat = norm(r.treatment_detail);
+      const treatHit = Boolean(targetTreat && rTreat && (rTreat.includes(targetTreat) || targetTreat.includes(rTreat)));
+      if (treatHit) return true;
+      // tanpa info jam presisi → supresi demi aman (mencegah ganda Isna)
+      return true;
+    }
+    const rTreat = norm(r.treatment_detail);
+    return Boolean(targetTreat && rTreat && (rTreat.includes(targetTreat) || targetTreat.includes(rTreat)));
+  });
+  return found || null;
+}
+
 export function hasExistingReservationForSchedule(
   reservations:
     | Array<{
@@ -206,26 +250,7 @@ export function hasExistingReservationForSchedule(
   treatmentName?: string | null,
   treatmentCategory?: string | null
 ): boolean {
-  if (!reservations || reservations.length === 0 || !bookingDate) return false;
-  const target = bookingDate instanceof Date ? bookingDate : new Date(bookingDate);
-  if (isNaN(target.getTime())) return false;
-  // Kunci tanggal dalam WIB (bukan zona lokal browser) agar pembandingan hari konsisten.
-  const ymd = (d: Date): string => getWibDateKey(d);
-  const targetYmd = ymd(target);
-  const norm = (s: unknown): string => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const targetTreat = norm(treatmentName);
-  const targetCat = String(treatmentCategory || '').toUpperCase();
-  const SUPPRESS_STATUSES = new Set(['confirmed', 'completed', 'hold', 'pending', 'in_progress']);
-  return reservations.some((r) => {
-    if (!r?.booking_date) return false;
-    if (!SUPPRESS_STATUSES.has(String(r.status || '').toLowerCase())) return false;
-    const d = r.booking_date instanceof Date ? r.booking_date : new Date(r.booking_date);
-    if (isNaN(d.getTime()) || ymd(d) !== targetYmd) return false;
-    const rCat = String(r.treatment_category || '').toUpperCase();
-    if (targetCat && rCat && targetCat === rCat) return true;
-    const rTreat = norm(r.treatment_detail);
-    return Boolean(targetTreat && rTreat && (rTreat.includes(targetTreat) || targetTreat.includes(rTreat)));
-  });
+  return findExistingReservationForSchedule(reservations, bookingDate, treatmentName, treatmentCategory) !== null;
 }
 
 /**
@@ -776,7 +801,22 @@ export function extractScheduleFromMessages(
   if (babyTreatMatch && babyTreatMatch[1].trim()) {
     const rawT = babyTreatMatch[1].trim().replace(/^(?:baby|anak)\s*:\s*/i, '');
     if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir)\b/i.test(rawT)) {
-      babyTreatment = rawT;
+      if (clinicServices.length > 0) {
+        const matched = matchCatalogService(rawT, clinicServices as any);
+        if (matched) {
+          babyTreatment = matched.name;
+        } else {
+          const words = rawT.split(/\s+/).filter(Boolean);
+          if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+            babyTreatment = rawT;
+          }
+        }
+      } else {
+        const words = rawT.split(/\s+/).filter(Boolean);
+        if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+          babyTreatment = rawT;
+        }
+      }
     }
   }
 
@@ -787,7 +827,22 @@ export function extractScheduleFromMessages(
     if (momsTreatMatch && momsTreatMatch[1].trim()) {
       const rawT = momsTreatMatch[1].trim().replace(/^moms?\s*:\s*/i, '');
       if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir|usia)\b/i.test(rawT)) {
-        momsTreatment = rawT;
+        if (clinicServices.length > 0) {
+          const matched = matchCatalogService(rawT, clinicServices as any);
+          if (matched) {
+            momsTreatment = matched.name;
+          } else {
+            const words = rawT.split(/\s+/).filter(Boolean);
+            if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+              momsTreatment = rawT;
+            }
+          }
+        } else {
+          const words = rawT.split(/\s+/).filter(Boolean);
+          if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+            momsTreatment = rawT;
+          }
+        }
       }
     }
   }

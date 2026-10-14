@@ -204,6 +204,42 @@ export function isPlaceholderText(val: string | null | undefined): boolean {
   return false;
 }
 
+/**
+ * Cek apakah sebuah teks adalah nama layanan valid atau keluhan/catatan bebas.
+ * Otoritas tertinggi adalah pencocokan katalog (clinical dominance).
+ * Bila tidak cocok katalog, evaluasi apakah teks merupakan kalimat percakapan/keluhan.
+ */
+function resolveTreatmentOrNote(
+  value: string,
+  tenantId?: string
+): { isTreatment: boolean; treatmentName?: string; note?: string } {
+  if (!value || isPlaceholderText(value)) return { isTreatment: false };
+  const trimmed = value.trim();
+
+  // 1. Otoritas Katalog: cocok langsung atau melalui gabungan layanan
+  const hasDirectMatch = Boolean(treatmentCatalogService.matchCatalogItem(trimmed, tenantId));
+  const hasPartMatch = !hasDirectMatch && trimmed.split(/\s*(?:\+|,|&|\bdan\b)\s*/i).some((p) =>
+    Boolean(treatmentCatalogService.matchCatalogItem(p.trim(), tenantId))
+  );
+
+  if (hasDirectMatch || hasPartMatch) {
+    return { isTreatment: true, treatmentName: trimmed };
+  }
+
+  // 2. Evaluasi kalimat bebas / keluhan medis:
+  // Frasa ringkas (<= 4 kata) tanpa tanda baca klausa/tanya dipertahankan sebagai nama layanan custom.
+  // Kalimat panjang (> 4 kata) atau memuat koma/tanya tanpa kecocokan katalog adalah keluhan/catatan.
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const isSentenceOrNote = words.length > 4 || trimmed.includes(',') || trimmed.includes('?');
+
+  if (isSentenceOrNote) {
+    return { isTreatment: false, note: trimmed };
+  }
+
+  // 3. Frasa ringkas tanpa kecocokan katalog (misal layanan kustom pendek "Pijat Tradisional")
+  return { isTreatment: true, treatmentName: trimmed };
+}
+
 export function parseReservationText(rawText: string): ParseResult {
   if (!rawText) {
     return { success: false, error: 'Teks reservasi kosong.', missingFields: ['rawText'] };
@@ -226,9 +262,11 @@ export function parseReservationText(rawText: string): ParseResult {
   let babyTreatment = '';
   const babyNameLines: string[] = [];
   const babyAgeLines: string[] = [];
+  const pendingBabyNotes: string[] = [];
 
   let momsPregnancyAge = '';
   let momsTreatment = '';
+  const pendingMomNotes: string[] = [];
 
   let currentSection: 'GENERAL' | 'BABY' | 'MOMS' = 'GENERAL';
   let pendingField: string | null = null;
@@ -252,7 +290,11 @@ export function parseReservationText(rawText: string): ParseResult {
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
-        if (val && !isPlaceholderText(val)) babyTreatment = val;
+        if (val && !isPlaceholderText(val)) {
+          const resolved = resolveTreatmentOrNote(val);
+          if (resolved.isTreatment && resolved.treatmentName) babyTreatment = resolved.treatmentName;
+          if (resolved.note) pendingBabyNotes.push(resolved.note);
+        }
       }
       continue;
     }
@@ -267,7 +309,11 @@ export function parseReservationText(rawText: string): ParseResult {
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
-        if (val && !isPlaceholderText(val)) momsTreatment = val;
+        if (val && !isPlaceholderText(val)) {
+          const resolved = resolveTreatmentOrNote(val);
+          if (resolved.isTreatment && resolved.treatmentName) momsTreatment = resolved.treatmentName;
+          if (resolved.note) pendingMomNotes.push(resolved.note);
+        }
       }
       continue;
     }
@@ -341,7 +387,11 @@ export function parseReservationText(rawText: string): ParseResult {
         currentSection = 'MOMS';
         setOrPending(value, 'momsPregnancyAge', (v) => (momsPregnancyAge = v));
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
-        setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
+        setOrPending(value, 'babyTreatment', (v) => {
+          const resolved = resolveTreatmentOrNote(v);
+          if (resolved.isTreatment && resolved.treatmentName) babyTreatment = resolved.treatmentName;
+          if (resolved.note) pendingBabyNotes.push(resolved.note);
+        });
       }
     } else if (currentSection === 'BABY') {
       if (label.includes('nama bayi') || label.includes('nama anak') || label.includes('nama baby') || label.includes('nama pasien')) {
@@ -349,13 +399,21 @@ export function parseReservationText(rawText: string): ParseResult {
       } else if (label.includes('usia') || label.includes('umur')) {
         setOrPending(value, 'babyAge', (v) => { babyAge = v; babyAgeLines.push(v); });
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
-        setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
+        setOrPending(value, 'babyTreatment', (v) => {
+          const resolved = resolveTreatmentOrNote(v);
+          if (resolved.isTreatment && resolved.treatmentName) babyTreatment = resolved.treatmentName;
+          if (resolved.note) pendingBabyNotes.push(resolved.note);
+        });
       }
     } else if (currentSection === 'MOMS') {
       if (label.includes('usia kehamilan') || label.includes('usia hamil') || /\buk\b/i.test(label)) {
         setOrPending(value, 'momsPregnancyAge', (v) => (momsPregnancyAge = v));
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
-        setOrPending(value, 'momsTreatment', (v) => (momsTreatment = v));
+        setOrPending(value, 'momsTreatment', (v) => {
+          const resolved = resolveTreatmentOrNote(v);
+          if (resolved.isTreatment && resolved.treatmentName) momsTreatment = resolved.treatmentName;
+          if (resolved.note) pendingMomNotes.push(resolved.note);
+        });
       }
     }
   }
@@ -405,8 +463,8 @@ export function parseReservationText(rawText: string): ParseResult {
     };
   }
 
-  const hasBabyTreatment = (!!babyTreatment && !isPlaceholderText(babyTreatment)) || (!!babyName && !isPlaceholderText(babyName)) || babyNameLines.some(b => !isPlaceholderText(b));
-  const hasMomsTreatment = (!!momsTreatment && !isPlaceholderText(momsTreatment)) || (!!momsPregnancyAge && !isPlaceholderText(momsPregnancyAge));
+  const hasBabyTreatment = (!!babyTreatment && !isPlaceholderText(babyTreatment)) || (!!babyName && !isPlaceholderText(babyName)) || babyNameLines.some(b => !isPlaceholderText(b)) || pendingBabyNotes.length > 0;
+  const hasMomsTreatment = (!!momsTreatment && !isPlaceholderText(momsTreatment)) || (!!momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) || pendingMomNotes.length > 0;
   // Bersih: hanya nama treatment digabung dengan ' + ' (tanpa Bayi/Usia/Kehamilan — sudah di relasi Child/babies)
   const cleanParts: string[] = [];
   if (hasBabyTreatment && babyTreatment && !isPlaceholderText(babyTreatment)) {
@@ -454,15 +512,20 @@ export function parseReservationText(rawText: string): ParseResult {
 
   // Profil ibu: usia kehamilan WAJIB dipertahankan (tidak dibuang).
   // Tahap & catatan diisi defensif dari konteks MOMS yang tersedia.
+  const momContextString = `${momsTreatment} ${momsPregnancyAge} ${pendingMomNotes.join(' ')}`.trim();
   const momStage = hasMomsTreatment
-    ? (/nifas|paska|pasca|postpartum|menyusui|laktasi/i.test(`${momsTreatment} ${momsPregnancyAge}`) ? 'POSTPARTUM'
-      : (/hamil|kehamilan|uk\b|weeks?|minggu|trimester|induksi|perineum|prenatal/i.test(`${momsTreatment} ${momsPregnancyAge}`) ? 'PREGNANT' : 'GENERAL'))
+    ? (/nifas|paska|pasca|postpartum|menyusui|laktasi/i.test(momContextString) ? 'POSTPARTUM'
+      : (/hamil|kehamilan|uk\b|weeks?|minggu|trimester|induksi|perineum|prenatal/i.test(momContextString) ? 'PREGNANT' : 'GENERAL'))
     : undefined;
-  const momProfile = (momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) || momStage
+  const combinedMomNotes = [
+    ...pendingMomNotes,
+    ...(momsTreatment && !isPlaceholderText(momsTreatment) && !cleanParts.includes(momsTreatment.trim()) ? [momsTreatment] : [])
+  ].filter(Boolean);
+  const momProfile = (momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) || momStage || combinedMomNotes.length > 0
     ? {
         gestationalWeeks: (momsPregnancyAge && !isPlaceholderText(momsPregnancyAge)) ? momsPregnancyAge : undefined,
         stage: momStage,
-        notes: momsTreatment && !isPlaceholderText(momsTreatment) ? momsTreatment : undefined,
+        notes: combinedMomNotes.length > 0 ? combinedMomNotes.join('; ') : (momsTreatment && !isPlaceholderText(momsTreatment) ? momsTreatment : undefined),
       }
     : undefined;
 

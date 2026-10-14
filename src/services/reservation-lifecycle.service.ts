@@ -642,5 +642,31 @@ export async function tryCaptureReservationFormFromRaw(params: TryCaptureReserva
     } catch {}
   }
 
+  // Notifikasi realtime ke Live Chat Dashboard via SSE liveChatHubService
+  try {
+    const { liveChatHubService } = await import('./live-chat-hub.service');
+    const resObj = result.reservation;
+    await liveChatHubService.publish({
+      type: 'conversation.updated',
+      tenantId,
+      payload: {
+        conversationId: chatId,
+        activeConfirmedReservation: resObj
+          ? {
+              id: resObj.id,
+              booking_date: resObj.booking_date,
+              treatment_category: resObj.treatment_category,
+              treatment_detail: resObj.treatment_detail,
+              status: resObj.status,
+            }
+          : undefined,
+        isNew: result.isNew,
+        isUpdate: result.isUpdate,
+      },
+    });
+  } catch (err: any) {
+    console.warn('[RESERVATION LIFECYCLE] Failed to publish liveChatHub event:', err?.message);
+  }
+
   return { captured: true, isNew: result.isNew, isUpdate: result.isUpdate };
 }

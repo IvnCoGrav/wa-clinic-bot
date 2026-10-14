@@ -106,7 +106,7 @@ import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { BRAND } from '../../config/brand';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, findExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
 import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
@@ -561,6 +561,7 @@ export const LiveChatMonitor: React.FC = () => {
   // F-C: ref ke handler refetch reservasi customer aktif (dipanggil saat SSE
   // conversation.updated tiba agar banner/HOLD/OTW tidak basi sampai refresh manual).
   const reservationRefreshRef = useRef<(() => void) | null>(null);
+  const lastReservationRefreshTimeRef = useRef<number>(0);
   // Widget pemantauan perjalanan terapis (OTW) untuk CS.
   const [dispatchTrip, setDispatchTrip] = useState<DispatchTripData | null>(null);
   const [dispatchLoading, setDispatchLoading] = useState(false);
@@ -2463,6 +2464,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   locationSource: payload.locationSource !== undefined ? payload.locationSource : c.locationSource,
                   shareLocationSent: payload.shareLocationSent !== undefined ? payload.shareLocationSent : c.shareLocationSent,
                   sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
+                  activeConfirmedReservation: payload.activeConfirmedReservation !== undefined ? payload.activeConfirmedReservation : (c as any).activeConfirmedReservation,
                 }
               : c
           );
@@ -2470,9 +2472,27 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           startTransition(() => setChats(sorted));
           chatsRef.current = sorted;
           // F-C: bila event untuk chat yang sedang dibuka, segarkan snapshot reservasi
-          // (banner/HOLD/Terjadwal/OTW) — SSE tidak membawa snapshot reservasi.
           if (payload.conversationId && payload.conversationId === selectedIdRef.current) {
-            reservationRefreshRef.current?.();
+            if (payload.activeConfirmedReservation) {
+              setCustomerDetailData((prev: any) => {
+                if (!prev) return prev;
+                const existing = Array.isArray(prev.reservations) ? prev.reservations : [];
+                const foundIndex = existing.findIndex((r: any) => r.id === payload.activeConfirmedReservation.id);
+                let nextRes: any[];
+                if (foundIndex >= 0) {
+                  nextRes = [...existing];
+                  nextRes[foundIndex] = { ...nextRes[foundIndex], ...payload.activeConfirmedReservation };
+                } else {
+                  nextRes = [payload.activeConfirmedReservation, ...existing];
+                }
+                return { ...prev, reservations: nextRes };
+              });
+            }
+            const now = Date.now();
+            if (now - lastReservationRefreshTimeRef.current >= 1000) {
+              lastReservationRefreshTimeRef.current = now;
+              reservationRefreshRef.current?.();
+            }
           }
         } else if (type === 'message.updated' && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, content, isRevoked, isEdited, isMessagePinned, isMessageHidden, payload_raw } = payload;
@@ -3727,6 +3747,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       formBannerExtracted?.treatmentCategory,
     ]
   );
+
+  const matchedExistingReservation = useMemo(() => {
+    return (
+      findExistingReservationForSchedule(
+        customerDetailData?.reservations,
+        formBannerExtracted?.bookingDate,
+        formBannerExtracted?.treatmentName,
+        formBannerExtracted?.treatmentCategory
+      ) ||
+      (selectedChat as any)?.activeConfirmedReservation ||
+      null
+    );
+  }, [
+    customerDetailData?.reservations,
+    formBannerExtracted?.bookingDate,
+    formBannerExtracted?.treatmentName,
+    formBannerExtracted?.treatmentCategory,
+    selectedChat,
+  ]);
 
   // MT-2.2: Palang Pintu Dispatch — Deteksi reservasi selesai hari ini di DB (state-based)
   const hasTodayCompletedReservation = useMemo(() => {
@@ -5723,6 +5762,46 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
                 )}
 
+                {/* Banner Netral: Form reservasi terdeteksi tapi SUDAH tercatat (mencegah klik ganda) */}
+                {!showFormReservasiBanner &&
+                  formBannerKey &&
+                  formBannerKey !== dismissedFormBanner &&
+                  (hasExistingReservationForExtractedSchedule || activeConfirmedReservation) &&
+                  (activeConfirmedReservation || matchedExistingReservation) && (
+                    <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-slate-500/10 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                        <div className="flex flex-col justify-center leading-tight min-w-0">
+                          <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                            RESERVASI SUDAH TERCATAT (OTOMATIS)
+                          </span>
+                          <span className="font-semibold truncate text-[11px]">
+                            📅 {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReservation(activeConfirmedReservation || matchedExistingReservation)}
+                          className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-slate-700 hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                          title="Lihat detail reservasi yang sudah tercatat"
+                        >
+                          <Calendar size={14} />
+                          <span>Lihat Detail Reservasi</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDismissedFormBanner(formBannerKey)}
+                          className="inline-flex items-center justify-center w-[30px] h-[30px] text-slate-600 dark:text-slate-400 hover:bg-slate-500/15 active:scale-95 rounded-full transition shrink-0"
+                          title="Abaikan pemberitahuan ini"
+                        >
+                          <X size={14} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 {/* MT-2.2: Banner Oranye Palang Pintu Kunjungan Tanpa Reservasi Aktif */}
                 {showUnregisteredVisitBanner && selectedChat && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100">
@@ -7061,6 +7140,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           isOpen={showQuickBookingModal}
           mode={activeEditingHoldReservation || activeEditingConfirmedReservation ? 'edit' : 'create'}
           initialReservation={activeEditingHoldReservation || activeEditingConfirmedReservation || undefined}
+          onEditReservation={(res) => setSelectedReservation(res)}
           onClose={() => {
             setShowQuickBookingModal(false);
             setConvertingHoldId(null);

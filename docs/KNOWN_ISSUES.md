@@ -3,6 +3,51 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 258. [Meta CAPI/Keuangan] Arsitektur Queue-First & Anti-Duplikat Meta CAPI (2026-10-14, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 0–6 selesai, build root backend + dashboard hijau, 8 unit test invarian baru hijau di `tests/unit/capi-queue-first-workflow.test.ts`, 46 test CAPI hijau).
+- **Latar Belakang & Akar Masalah:**
+  - Sebelumnya terdapat jalan pintas pengiriman event Purchase CAPI langsung dari kasir lapangan (`recordPayment` di `staff-reservation.service.ts`) dan deteksi pesan WhatsApp (`maybeFirePurchaseEvent` di `purchase-detection.service.ts`) bila toggle tenant `auto_send_purchase_capi` aktif.
+  - Saat admin menyetujui reservasi di meja kerja CAPI `/capi-queue`, endpoint `approve-purchase` menimpa `purchase_occurred_at` dengan tanggal dibuat, memalsukan status kasir klinik seolah-olah sudah lunas ("Tagih di Tempat" lenyap dan mengkatrol LTV sebelum uang masuk).
+  - Ketika terapis di lapangan kemudian mencatat pembayaran via `recordPayment`, terjadi potensi kiriman ganda ke Meta CAPI.
+- **Solusi Fondasional Terpasang:**
+  1. **Queue-First Mutlak:** Reservasi confirmed otomatis masuk meja antrean CAPI (`purchase_review_status = 'pending'`), namun kasir tetap kosong (`purchase_occurred_at = null`). Intake tanpa tanggal tetap `purchase_review_status = null` agar tidak membanjiri antrean.
+  2. **Reaktivasi Bersih:** Reservasi berulang dengan request_id yang direaktivasi dari status `cancelled` mereset `purchase_review_status = 'pending'`, `purchase_event_sent_at = null`, `purchase_occurred_at = null`.
+  3. **Integritas Kasir & LTV Guard:** Klik `approve-purchase` murni urusan atribusi iklan Meta: mengubah `purchase_review_status = 'approved'` dan mencatat `purchase_event_sent_at`. Kolom `purchase_occurred_at` yang null tetap null, dan rekalkulasi LTV ditahan sampai uang riil diterima via `recordPayment`.
+  4. **Penutupan Seluruh Jalan Pintas & Deprecated Toggle:** Auto-send CAPI di `recordPayment` dan `maybeFirePurchaseEvent` dicabut. Flag DB `auto_send_purchase_capi` di-deprecated; skrip backfill `src/scripts/backfill-auto-send-purchase-capi.ts` disiapkan; toggle dashboard di-disable dengan label "Queue-First".
+  5. **Audit CANCEL_AFTER_APPROVE:** Reservasi yang dibatalkan setelah event CAPI terkirim tetap tercatat dan diaudit dengan action `CANCEL_AFTER_APPROVE` (Meta CAPI tidak mendukung penarikan event terkirim).
+- **Utang Sadar & Limitasi / Catatan Arsitektur:**
+  1. **Kualitas Sinyal vs Batal (Signal Quality Trade-off):** Pengiriman event CAPI pra-layanan (berdasarkan komitmen booking confirmed) mempercepat feedback pembelajaran Ads Manager Meta (memenuhi jendela atribusi 7 hari), tetapi bila rasio pembatalan/no-show tinggi, Meta menerima sinyal Purchase yang tidak terealisasi menjadi pendapatan. Mitigasi: moderasi manual manusia di dashboard tetap diwajibkan sebelum pengiriman.
+  2. **Skalabilitas Antrean:** Antrean CAPI `/capi-queue` default memuat limit 200 reservasi terbaru. Pada volume reservasi tinggi, admin perlu memproses antrean secara berkala; cron pengingat moderasi pending >24 jam sudah terpasang.
+
+## 257. [Reservasi/LiveChat] Supresi Form Intake WhatsApp & Pencegahan Reservasi Ganda (2026-10-14, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 0–5 selesai, build root backend + dashboard hijau, 85 unit test hijau, zero regresi).
+- **Latar Belakang & Insiden Nyata:**
+  - Kasus Bunda Isna (2026-10-13): Formulir intake WhatsApp ditangkap dan disimpan secara otomatis oleh backend parser ke database (`Reservation`), namun di layar dashboard `LiveChatMonitor` banner hijau "Jadwalkan & Buat Invoice" tetap menyala karena state SSE belum tersinkronisasi dan ada ketidakcocokan kategori (`BUNDLE` vs DB `BOTH`). Admin mengeklik banner tersebut, menciptakan duplikasi reservasi pada hari yang sama.
+- **Akar Masalah Sistemik (Audit 4-Lapisan):**
+   1. **Lapisan DB & Kategori (Schema Disparity):** Frontend menggunakan kategori `MOMS` / `BUNDLE` tanpa `KIDS`, sedangkan DB menggunakan enum Prisma `BABY` / `KIDS` / `MOMS` / `BOTH`. Pengecekan overlap `hasExistingReservationForSchedule` gagal mendeteksi kesamaan reservasi paket Bunda + Bayi karena `treatment_category` di DB bernilai `BOTH` sementara frontend mencari `BUNDLE`.
+  2. **Lapisan Text Parser (Treatment Detail Hijack):** Pesan formulir yang berisi catatan/keluhan panjang (misal: "bunda batuk pilek badan pegal semua") tanpa nama layanan eksplisit tersedot mentah-mentah ke kolom `treatmentDetail`, mengotori data klinis dan gagal di-match dengan katalog.
+  3. **Lapisan Realtime SSE (Stale Local State):** Webhook auto-capture menyimpan reservasi ke DB secara background, namun tidak memancarkan payload `activeConfirmedReservation` secara eksplisit ke event SSE `conversation.updated`, sehingga UI admin mengandalkan polling lambat.
+  4. **Lapisan UI/UX (Green CTA Trap):** Banner intake di `LiveChatMonitor` hanya memiliki cabang aktif hijau `Jadwalkan & Buat Invoice` tanpa status netral terverifikasi. Saat formulir terdeteksi namun reservasi sudah ada di kalender, banner tetap membujuk admin membuat reservasi baru.
+- **Solusi Fondasional Terpasang (REVISI-1):**
+  1. **Kanonis Kategori Treatment (`src/utils/treatment-category.ts` & dashboard mirror):**
+     - Kontrak pemetaan kategori kanonis: `isTreatmentCategoryOverlap` memetakan `BOTH`, `BUNDLE`, `MOMS`, `BABY`, `KIDS` secara deterministik.
+     - `isActiveReservationStatus` mencakup status aktif kanonis: `confirmed`, `completed`, `hold`, `pending`, `in_progress`.
+  2. **Validasi Katalog Klinis Data-Driven (`src/utils/reservation-text-parser.ts` & `chatScheduleExtractor.ts`):**
+     - Parser menggunakan `treatmentCatalogService.matchCatalogItem(val, tenantId)` untuk memvalidasi apakah teks adalah nama layanan nyata.
+     - Teks keluhan bebas / konsultasi (>4 kata tanpa hit katalog) dialihkan secara aman ke `notes` / `momProfile.notes` / `pendingBabyNotes`, sementara `treatmentDetail` menggunakan fallback bersih ('Layanan Homecare' / matched service). DILARANG KERAS blacklist hafalan kata (`belum tau`, `nifas`, `batuk`).
+  3. **Realtime Sync via SSE (`reservation-lifecycle.service.ts` & `LiveChatMonitor.tsx`):**
+     - Auto-capture webhook kini mem-publish event `conversation.updated` lengkap dengan payload `activeConfirmedReservation`.
+     - Frontend `LiveChatMonitor` meng-upsert data reservasi ke cache lokal secara instan dengan proteksi throttle refetch.
+  4. **Supresi UI & Banner Netral (`LiveChatMonitor.tsx` & `CreateReservationModal.tsx`):**
+     - Bila reservasi pada tanggal yang sama sudah tersimpan di DB, banner hijau "Jadwalkan & Buat Invoice" di-supresi secara deterministik.
+     - Menampilkan banner netral/slate `RESERVASI SUDAH TERCATAT (OTOMATIS)` dengan tombol `[Lihat Detail Reservasi]` yang membuka `ReservationDetailModal`.
+     - Palang pintu modal: Tombol "Batal & Buka Jadwal Existing" di `CreateReservationModal` membuka jadwal yang sudah ada via `onEditReservation`.
+- **Utang Sadar & Catatan Arsitektur:**
+   1. **Presisi Interval Jam (Sesi Ganda Sehari):** Saat ini supresi berlaku per hari WIB kalender untuk kategori yang sama. Kasus langka di mana seorang Bunda memesan 2 sesi terpisah pada jam berbeda (misal pagi pijat nifas, malam pijat laktasi) memerlukan presisi jam / manual override di modal kalender utama, bukan form banner.
+   2. **Unifikasi status aktif (SELESAI, PR #257-PR):** definisi "jadwal aktif" kini tunggal di `src/domain/reservation-status.ts` (`isActiveReservationStatus`, case-insensitive; completed/in_progress = false). `src/utils/treatment-category.ts` hanya re-export. Konsep UI "penghambat jadwal same-day" (termasuk completed/in_progress hari ini) dipisah eksplisit sebagai `isScheduleBlockingStatus` di mirror frontend. Sisa: daftar status inline di query (`reservation-core.service.ts:218,322,402`) sengaja tidak diseragamkan — spesifik per call-site, tindak lanjut terpisah bila dibutuhkan.
+
 ## 256. [Pembayaran/Struk] Deteksi Bukti Transfer Otomatis & Sync Kala Rekap (2026-10-14, IMPLEMENTED)
 
 - **Status:** IMPLEMENTED lokal (Fase 1–5 selesai, build root backend + dashboard hijau, 27 unit test baru hijau, zero regresi).

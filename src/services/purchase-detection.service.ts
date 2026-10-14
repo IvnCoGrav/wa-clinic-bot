@@ -2,11 +2,8 @@ import { prisma } from '../db/client';
 import { hasBypassLabel } from '../utils/customer-bypass';
 import {
   resolveTreatmentValue,
-  fireCapiEvent,
   getTenantCapiFormats,
-  getTenantAutoSendPurchaseCapi,
   extractValueByFormat,
-  capiService,
 } from './capi.service';
 
 /**
@@ -192,10 +189,6 @@ export async function maybeFirePurchaseEvent(params: {
       value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
     }
 
-    // Kebijakan moderasi: default tahan (false = moderasi manual aktif) sampai
-    // admin approve/reject di dashboard. Hanya true → kirim langsung.
-    const autoSend = await getTenantAutoSendPurchaseCapi(tenantId);
-
     // Terapkan downside guard pada jalur utama juga: pertahankan nilai resmi
     // bila parser menghasilkan angka lebih kecil yang tidak terverifikasi.
     let finalValue = value;
@@ -203,61 +196,16 @@ export async function maybeFirePurchaseEvent(params: {
       finalValue = Number((reservation as any).purchase_value) || value;
     }
 
+    // Queue-First: SELALU tahan ke moderasi. Flag tenant auto_send_purchase_capi diabaikan (deprecated).
+    // Uang dicatat (purchase_occurred_at) tapi event TIDAK dikirim — menunggu approve-purchase.
     const updateData: any = {
       purchase_occurred_at: new Date(),
       purchase_value: finalValue,
+      purchase_review_status: 'pending',
     };
-
-    if (autoSend) {
-      // FIX 173i-c: JANGAN tandai approved sebelum Meta benar-benar menerima.
-      // Await hasil kirim; approved/sent HANYA bila sukses. Bila gagal →
-      // purchase_review_status='pending' agar masuk moderasi/retry (bukan
-      // "sent" palsu yang mematikan retry).
-      let capiOk = false;
-      let capiMessage: string | undefined;
-      try {
-        const capiResult = await capiService.sendCapiEvent({
-          eventName: 'Purchase',
-          customer,
-          adClick: reservation.customer?.adClick || customer.adClick || undefined,
-          value: finalValue,
-          currency: 'IDR',
-          tenantId,
-          customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
-        });
-        capiOk = capiResult?.success === true;
-        capiMessage = capiResult?.message;
-      } catch (capiErr: any) {
-        capiOk = false;
-        capiMessage = capiErr?.message;
-      }
-
-      if (capiOk) {
-        updateData.purchase_event_sent_at = new Date();
-        updateData.purchase_review_status = 'approved';
-      } else {
-        updateData.purchase_review_status = 'pending';
-        console.error(
-          `[CAPI PURCHASE FAILED] Event Purchase TIDAK terkirim ke Meta (reservation ${reservation.id}): ${capiMessage || 'unknown'} → ditahan pending untuk moderasi/retry.`
-        );
-        try {
-          const { AlertService, AlertType, AlertSeverity } = await import('./alert.service');
-          await new AlertService().notifyAlert({
-            type: AlertType.THIRD_PARTY_OUTAGE,
-            severity: AlertSeverity.WARNING,
-            provider: 'Meta CAPI',
-            tenantId,
-            message: `Purchase CAPI gagal terkirim (reservation ${reservation.id}). Ditahan pending.`,
-            metadata: { reservationId: reservation.id, reason: capiMessage },
-          });
-        } catch {}
-      }
-    } else {
-      updateData.purchase_review_status = 'pending';
-      console.log(
-        `[CAPI HELD] Purchase event queued for admin review (reservation ${reservation.id}, customer ${customer.id}, value ${finalValue})`
-      );
-    }
+    console.log(
+      `[CAPI HELD] Purchase event queued for admin review (reservation ${reservation.id}, customer ${customer.id}, value ${finalValue})`
+    );
 
     // Catat pengiriman/penahanan → dasar status moderasi di dashboard.
     try {

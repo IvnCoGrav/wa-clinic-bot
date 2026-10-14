@@ -682,6 +682,8 @@ async function resolveNewVsRepeatContext(params: {
 }
 
 /**
+ * @deprecated Queue-First: seluruh event Purchase WAJIB lewat antrean moderasi CAPI (/capi-queue).
+ * Flag tenant auto_send_purchase_capi dinonaktifkan untuk mencegah pengiriman CAPI ganda/bypass kasir.
  * Kebijakan moderasi Purchase CAPI per tenant (auto_send_purchase_capi).
  * Default false = moderasi manual aktif (event ditahan ke queue admin review).
  * Tenant-aware: dibaca dari kolom tenant DB; fallback false bila DB offline.

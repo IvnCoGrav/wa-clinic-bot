@@ -19,10 +19,10 @@ export type ActiveReservationStatus = 'confirmed' | 'en_route' | 'pending' | 'ho
  */
 export const EN_ROUTE_STATUS = 'en_route';
 
-/** True bila status termasuk "jadwal aktif" (occupied slot). */
+/** True bila status termasuk "jadwal aktif" (occupied slot). Case-insensitive. */
 export function isActiveReservationStatus(status: string | null | undefined): boolean {
   if (!status) return false;
-  return ACTIVE_RESERVATION_STATUSES.includes(status);
+  return ACTIVE_RESERVATION_STATUSES.includes(String(status).trim().toLowerCase());
 }
 
 /** Status yang setara `confirmed` untuk perhitungan riwayat (termasuk en_route). */

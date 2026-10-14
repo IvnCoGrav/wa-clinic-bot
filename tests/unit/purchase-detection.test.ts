@@ -49,8 +49,8 @@ describe('purchase-detection.service', () => {
       expect(fired).toBe(false);
     });
 
-    it('fire Purchase & set status approved HANYA setelah Meta menerima (sendCapiEvent success=true)', async () => {
-      mockTenantAutoSend(true);
+    it('Queue-First: pesan Payment SELALU ditahan pending, TIDAK pernah kirim CAPI langsung', async () => {
+      mockTenantAutoSend(true); // flag tenant diabaikan (deprecated) — bahkan true tetap antre
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
         id: 'r1',
         customer_id: 'c1',
@@ -77,17 +77,13 @@ describe('purchase-detection.service', () => {
       });
 
       expect(fired).toBe(true);
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
-        eventName: 'Purchase',
-        value: 250000,
-        currency: 'IDR',
-      }));
+      // Anti-bypass: TIDAK ada kiriman langsung walau Meta sehat — semua via antrean approve-purchase.
+      expect(sendSpy).not.toHaveBeenCalled();
       expect(prisma.reservation.update).toHaveBeenCalledWith({
         where: { id: 'r1' },
         data: {
           purchase_occurred_at: expect.any(Date),
-          purchase_event_sent_at: expect.any(Date),
-          purchase_review_status: 'approved',
+          purchase_review_status: 'pending',
           purchase_value: 250000,
         },
       });
@@ -278,12 +274,12 @@ describe('purchase-detection.service', () => {
       });
 
       expect(fired).toBe(true);
-      // Nilai resmi dipertahankan, bukan 46000.
+      // Nilai resmi dipertahankan, bukan 46000. Queue-First: tetap pending tanpa kirim langsung.
       expect(prisma.reservation.update).toHaveBeenCalledWith({
         where: { id: 'r_official' },
         data: expect.objectContaining({ purchase_value: 160000 }),
       });
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ value: 160000 }));
+      expect(sendSpy).not.toHaveBeenCalled();
     });
 
     it('mendukung ekstraksi nominal murni dari financial equation (Total = 70rb + ongkir 15rb = 85rb)', async () => {
