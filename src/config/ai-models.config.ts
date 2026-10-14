@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { DEFAULT_TENANT_ID } from './tenant';
 
-export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION';
+export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'RECEIPT_VISION';
 
 export interface AiTaskModelConfig {
   task: AiTaskType;
@@ -232,6 +232,18 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       maxTokens: 2048,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
+    },
+  ],
+  [
+    'RECEIPT_VISION',
+    {
+      task: 'RECEIPT_VISION',
+      provider: 'SumoPod',
+      modelName: process.env.AI_MODEL_RECEIPT_VISION || 'gpt-4o-mini',
+      description: 'Digunakan untuk analisis bukti transfer / struk pembayaran dari gambar.',
+      maxTokens: 512,
+      temperature: 0.1,
+      confidenceThreshold: 0.7,
     },
   ],
 ]);

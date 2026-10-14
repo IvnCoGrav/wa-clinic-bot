@@ -820,6 +820,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               mimeType,
               caption: imageCaption || null,
             };
+
+            // Deteksi bukti bayar di background (fire-and-forget, tidak menahan webhook response)
+            import('../services/customer-payment-proof.service')
+              .then(({ attachFromInbound }) => {
+                void attachFromInbound({
+                  tenantId: resolvedTenantId,
+                  phone,
+                  contactName,
+                  mediaUrl: saved.hdUrl || saved.thumbUrl || '',
+                  buffer: buffer!,
+                  mimeType,
+                  waMessageId,
+                });
+              })
+              .catch((proofErr) => {
+                console.warn('[PAYMENT PROOF HOOK] Background dispatch error:', proofErr?.message || proofErr);
+              });
           } else if (mediaUrlCandidate) {
             const rawUrl = String(mediaUrlCandidate);
             const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');

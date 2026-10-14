@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
@@ -555,6 +556,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
+  // Modal Bukti Transfer dari banner reservasi aktif
+  const [proofModalReservation, setProofModalReservation] = useState<any>(null);
   // F-C: ref ke handler refetch reservasi customer aktif (dipanggil saat SSE
   // conversation.updated tiba agar banner/HOLD/OTW tidak basi sampai refresh manual).
   const reservationRefreshRef = useRef<(() => void) | null>(null);
@@ -3604,6 +3607,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     return null;
   }, [selectedChat, customerDetailData]);
 
+  // Reservasi aktif yang sedang berjalan untuk chat terpilih (confirmed / pending / hold)
+  const currentActiveReservation = useMemo(() => {
+    return activeConfirmedReservation || activePendingReservation || activeHoldReservation || null;
+  }, [activeConfirmedReservation, activePendingReservation, activeHoldReservation]);
+
   // Reservasi aktif terpilih (prioritas: OTW aktif > confirmed > hold > pending).
   // Sumber utama status OTW kini dari item chat (active*Reservation.otw_sent_at),
   // sehingga widget tetap muncul tanpa bergantung pembukaan modal detail customer.
@@ -5490,6 +5498,63 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
                 )}
 
+                {/* Active Payment Proof Banner (Bukti Bayar Masuk) */}
+                {Boolean(currentActiveReservation?.proof_url) && (
+                  <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Receipt size={16} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                          BUKTI TRANSFER ({currentActiveReservation.payment_method || 'Transfer'})
+                        </span>
+                        <span className="text-[11px] truncate font-medium text-emerald-900 dark:text-emerald-200">
+                          {currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : 'Nominal terlampir'} • Status: <span className="font-bold">{currentActiveReservation.purchase_review_status === 'approved' ? 'Lunas' : 'Menunggu Verifikasi CS'}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setProofModalReservation(currentActiveReservation)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-emerald-900 border border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-800 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                        title="Lihat Bukti Transfer"
+                      >
+                        <Eye size={13} />
+                        <span>Lihat Bukti</span>
+                      </button>
+                      {currentActiveReservation.purchase_review_status !== 'approved' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Tandai Lunas & Setujui?',
+                              message: `Setujui pembayaran ${currentActiveReservation.payment_method || 'Transfer'} sebesar ${currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : ''}?`,
+                              confirmText: 'Ya, Tandai Lunas',
+                              cancelText: 'Batal',
+                            });
+                            if (!ok) return;
+                            try {
+                              await apiRequest(`/api/admin/reservation/${currentActiveReservation.id}/approve-purchase`, {
+                                method: 'POST',
+                                body: JSON.stringify({ force: true, reason: 'CS Verified Payment Proof' }),
+                              });
+                              toast('Pembayaran berhasil disetujui & ditandai lunas.', 'success');
+                              await handleReservationUpdate();
+                            } catch (err: any) {
+                              toast(`Gagal memproses persetujuan: ${err?.message || 'Terjadi kesalahan'}`, 'error');
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Tandai pembayaran telah diverifikasi CS"
+                        >
+                          <CheckCircle size={13} />
+                          <span>Tandai Lunas</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Active Confirmed / Terjadwal Alert Banner */}
                  {!activeHoldReservation && activeConfirmedReservation && (
                    <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
@@ -6907,6 +6972,88 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           onOpenChatHistory={() => setSelectedReservation(null)}
         />
       )}
+
+      {/* Payment Proof Viewer Modal dari Live Chat Monitor */}
+      {proofModalReservation &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setProofModalReservation(null)}
+          >
+            <div
+              className="w-full max-w-md bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                  <Receipt size={16} className="text-[#008069] flex-shrink-0" />
+                  <span>Bukti Pembayaran</span>
+                </h3>
+                <button
+                  onClick={() => setProofModalReservation(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Pasien:</span>
+                  <span className="font-bold text-[#111b21]">
+                    {selectedChat?.customerName || 'Bunda'} ({selectedChat?.customerPhone || '-'})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Metode:</span>
+                  <span className="font-bold text-[#111b21]">{proofModalReservation.payment_method || 'Transfer'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Nilai:</span>
+                  <span className="font-bold text-[#111b21]">
+                    {proofModalReservation.purchase_value ? `Rp ${proofModalReservation.purchase_value.toLocaleString('id-ID')}` : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
+                  <span className="text-[#667781]">Status Review:</span>
+                  <span className={`font-semibold uppercase ${
+                    proofModalReservation.purchase_review_status === 'approved' ? 'text-emerald-700' : 'text-amber-700'
+                  }`}>
+                    {proofModalReservation.purchase_review_status || 'pending'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+                <img
+                  src={proofModalReservation.proof_url!}
+                  alt="Bukti pembayaran"
+                  className="w-full max-h-72 object-contain"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setProofModalReservation(null)}
+                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <a
+                  href={proofModalReservation.proof_url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <ExternalLink size={13} />
+                  <span>Buka Gambar Penuh</span>
+                </a>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
        {/* Quick Create Reservation Modal dari Live Chat */}
       {showQuickBookingModal && (

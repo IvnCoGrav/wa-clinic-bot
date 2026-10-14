@@ -3,6 +3,37 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 256. [Pembayaran/Struk] Deteksi Bukti Transfer Otomatis & Sync Kala Rekap (2026-10-14, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 1–5 selesai, build root backend + dashboard hijau, 27 unit test baru hijau, zero regresi).
+- **Latar Belakang & Akar Masalah:**
+  - Sebelumnya foto struk transfer yang dikirim customer via WhatsApp hanya tersimpan di media storage tanpa deteksi otomatis data finansial.
+  - CS harus memeriksa foto secara manual, menghitung ongkir, dan menginput ulang metode bayar.
+  - Audit membuktikan klaim auto-enqueue ke Kolom L Sheets pada reservasi aktif adalah keliru karena `SheetsSyncService` secara kanonis men-skip reservasi non-`completed` demi mencegah baris sampah di spreadsheet.
+- **Perbaikan Terpasang (Fondasional & Data-Driven):**
+  1. **Vision Engine Adapter (`PaymentReceiptVisionService`)**:
+     - Memeriksa gambar via Vision LLM tenant-aware (konfigurasi model dan prompt dari DB `Tenant.settings` / `RECEIPT_VISION`).
+     - Output divalidasi dengan `ReceiptSchema` Zod (`isPaymentReceipt`, `bankDestination`, `amount`, `transferDate`, `referenceNumber`, `confidence`).
+     - Threshold keyakinan minimum 0.70; gambar non-struk (foto bayi, shareloc, dokumen) otomatis fail-closed (mengembalikan `isPaymentReceipt: false`).
+     - DILARANG keras mapping hafalan `if bank === "BCA" -> "Transfer BCA"`.
+  2. **Customer Payment Proof Service (`CustomerPaymentProofService`)**:
+     - Resolusi label metode bayar secara data-driven dari DB (`StaffReservationService.getPaymentInfo(tenantId)`).
+     - Guard duplikat referensi transfer dalam 30 hari via kolom indeks `receipt_reference` dan tag `[RECEIPT_REF:xxx]`.
+     - Anti-fraud rekening asing: bila bank tujuan transfer tidak cocok dengan rekening resmi klinik di DB, ditandai `needs_staff_verification: true`.
+     - Downside nominal guard: mencegah penimpaan nilai `purchase_value` resmi yang lebih besar dengan nominal transfer parser yang lebih kecil.
+     - Status pembayaran selalu `purchase_review_status = 'pending'` (moderasi CS via tombol approve, anti-auto-lunas sepihak).
+  3. **Wiring Webhook Fire-and-Forget**:
+     - Terintegrasi di `src/routes/webhook.route.ts` tanpa menahan response webhook HTTP (200 OK cepat).
+     - Dilindungi cache idempoten `wa_message_id` untuk mencegah proses ganda pada reconnect/catch-up.
+  4. **Sinkronisasi Sheets Tetap Konsisten**:
+     - Gerbang `status === 'completed'` di `sheets-sync.service.ts` dipertahankan (eventual consistency). Kolom L (Metode Bayar) otomatis tersinkronisasi saat terapis/CS menyelesaikan reservasi via `recordPayment`/`completeReservation`. Kolom H/I/J/K dan N/O/P tetap terproteksi.
+  5. **UI Reuse di Dashboard**:
+     - Banner bukti bayar otomatis muncul di atas obrolan pada `LiveChatMonitor.tsx` dengan tombol `[Lihat Bukti]` (modal privat) dan `[Tandai Lunas]` (`approve-purchase`).
+- **Utang Sadar & Catatan Arsitektur:**
+  1. **Pesan Konfirmasi Otomatis ke Pelanggan Sengaja Ditunda**: Demi mencegah auto-claim "lunas" palsu dan menghemat kuota pesan WhatsApp, konfirmasi otomatis ditiadakan; validasi kelulusan struk tetap di tangan CS.
+  2. **Latency Vision LLM**: Pemrosesan gambar di background memakan waktu 5-15 detik tergantung provider AI; perubahan data dibroadcast secara real-time via SSE `LiveChatHub`.
+  3. **Struk QRIS Tanpa Nomor Referensi Unik**: Beberapa aplikasi e-wallet menghasilkan struk QRIS tanpa nomor referensi eksplisit; untuk kasus ini, deteksi duplikat mengandalkan moderasi visual CS.
+
 ## 255. [Lokasi/Dashboard] Resolusi Maps Shortlink, Plus Code Geocoding & Stabilisasi State Form (2026-10-13, IMPLEMENTED lokal & Healing DB Live Selesai)
 
 - **Status:** IMPLEMENTED lokal & Healing DB Live Selesai (Fase 0–5 selesai, build root + dashboard hijau, vitest maps & geocode 100% hijau, zero regresi baru, DB live ter-update via seam kanonis).

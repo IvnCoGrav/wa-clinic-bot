@@ -304,6 +304,7 @@ model Reservation {
   purchase_review_status   String            @default("pending")
   payment_method           String?
   proof_url                String?
+  receipt_reference        String?
   is_repeat_order          Boolean           @default(false)
   otw_sent_at              DateTime?
   arrived_at               DateTime?
@@ -346,6 +347,7 @@ model Reservation {
   @@index([assigned_staff_id])
   @@index([series_id])
   @@index([customer_address_id])
+  @@index([tenant_id, receipt_reference])
   @@unique([tenant_id, request_id])
   @@map("reservations")
 }
