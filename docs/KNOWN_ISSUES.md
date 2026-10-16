@@ -5,7 +5,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 260. [Anak/Ghost-Error] Pengerasan Fondasional Entitas Anak & Anti-Ghost (2026-10-16, IMPLEMENTED lokal — healing `--commit` DITAHAN)
 
-- **Status:** IMPLEMENTED lokal Fase 0–4 (validator kanonis + tutup pintu tulis/baca + healing generik dry-run). Build + suite relevan hijau; 2 gagal `chat-schedule-extractor.test.ts` terbukti pre-existing via restore-HEAD-and-rerun (tetap gagal tanpa perubahan ini). Healing `--commit` DILARANG sampai dry-run + backup + map manusia terverifikasi.
+- **Status:** IMPLEMENTED lokal Fase 0–4 (validator kanonis + tutup pintu tulis/baca + healing generik dry-run). Build + 187 test scope hijau (10 file). Full `npm test`: 5523 passed / 28 failed — sampel gagal (security-integrity add-on, adversarial 3.3, purchase-detection alias, quick-replies, staff-otw, waha-voice) terbukti pre-existing via restore-HEAD-and-rerun (tetap gagal tanpa perubahan ini; tree juga memuat modifikasi tak terkait lain). 2 gagal `chat-schedule-extractor.test.ts` terbukti pre-existing via restore-HEAD-and-rerun. Healing `--commit` DILARANG sampai dry-run + backup + map manusia terverifikasi.
 - **Yang dipasang:**
   1. `src/utils/name-sanitizer.ts:367` tolak sapaan generik (`Bunda/Ibu/Mama/Ayah`); `packages/admin-dashboard/.../chatScheduleExtractor.ts:130` cermin adverbia + kurung.
   2. Pintu tulis: `reservation-series.service.ts:202`, `reservation-dispatch.route.ts:1217` kini guard `isValidChildName` + `classifyPatientEntity === CHILD`.
