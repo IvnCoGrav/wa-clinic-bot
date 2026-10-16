@@ -107,11 +107,15 @@ export function addressesMatch(
   const aAddr = hasText(a.address);
   const bAddr = hasText(b.address);
   const sameStreet = aAddr && bAddr && norm(a.address) === norm(b.address);
-  const sameKel = hasText(a.kelurahan) && hasText(b.kelurahan) && norm(a.kelurahan) === norm(b.kelurahan);
+  const kelSamaPersis = hasText(a.kelurahan) && hasText(b.kelurahan) && norm(a.kelurahan) === norm(b.kelurahan);
+  const sameKel = kelSamaPersis;
+  const kelKompatibel = kelSamaPersis || !hasText(a.kelurahan) || !hasText(b.kelurahan);
   const sameKec = hasText(a.kecamatan) && hasText(b.kecamatan) && norm(a.kecamatan) === norm(b.kecamatan);
   const sameKota = hasText(a.kota) && hasText(b.kota) && norm(a.kota) === norm(b.kota);
 
-  if (sameStreet && sameKel && sameKec) return true;
+  // Aturan: jalan sama + kecamatan sama + desa kompatibel = COCOK.
+  // Dua desa SAMA-SAMA isi tapi BEDA -> TETAP TIDAK cocok (Rumah-2 sah).
+  if (sameStreet && sameKec && kelKompatibel) return true;
   // Tanpa detail jalan di kedua sisi: samakan bila wilayah desa/kecamatan identik.
   if (!aAddr && !bAddr && sameKel && sameKec) return true;
   // Pengayaan asimetris (ghost primary 2026-10-12): tepat SATU sisi kosong
@@ -205,20 +209,32 @@ export function upsertAddressIntoList(
 
   if (idx >= 0) {
     const prev = list[idx];
+    const nextLat = typeof input.lat === 'number' && Number.isFinite(input.lat) ? input.lat : prev.lat;
+    const nextLng = typeof input.lng === 'number' && Number.isFinite(input.lng) ? input.lng : prev.lng;
+    const nextDistanceKm = typeof input.distanceKm === 'number' && Number.isFinite(input.distanceKm) ? input.distanceKm : prev.distanceKm;
+    const nextOngkir = typeof input.ongkir === 'number' && Number.isFinite(input.ongkir) ? input.ongkir : prev.ongkir;
+    const nextLandmark = hasText(input.landmark) ? input.landmark : prev.landmark;
+
+    // Hormati kunci gps_pin: gps_pin tidak boleh diturunkan oleh input teks/manual
+    let nextLocSource = prev.locationSource;
+    if (prev.locationSource === 'gps_pin') {
+      nextLocSource = 'gps_pin';
+    } else if (input.locationSource != null) {
+      nextLocSource = input.locationSource;
+    }
+
     const merged: SavedCustomerAddress = {
       ...prev,
-      ...pickDefined({
-        address: input.address !== undefined ? String(input.address ?? '') : undefined,
-        kelurahan: input.kelurahan !== undefined ? input.kelurahan : undefined,
-        kecamatan: input.kecamatan !== undefined ? input.kecamatan : undefined,
-        kota: input.kota !== undefined ? input.kota : undefined,
-        lat: input.lat !== undefined ? input.lat : undefined,
-        lng: input.lng !== undefined ? input.lng : undefined,
-        distanceKm: input.distanceKm !== undefined ? input.distanceKm : undefined,
-        ongkir: input.ongkir !== undefined ? input.ongkir : undefined,
-        landmark: input.landmark !== undefined ? input.landmark : undefined,
-        locationSource: input.locationSource !== undefined ? input.locationSource : undefined,
-      }),
+      address: hasText(input.address) ? String(input.address) : prev.address,
+      kelurahan: hasText(input.kelurahan) ? input.kelurahan! : (prev.kelurahan ?? null),
+      kecamatan: hasText(input.kecamatan) ? input.kecamatan! : (prev.kecamatan ?? null),
+      kota: hasText(input.kota) ? input.kota! : (prev.kota ?? null),
+      lat: nextLat ?? null,
+      lng: nextLng ?? null,
+      distanceKm: nextDistanceKm ?? null,
+      ongkir: nextOngkir ?? null,
+      landmark: hasText(input.landmark) ? input.landmark! : (prev.landmark ?? null),
+      locationSource: nextLocSource ?? null,
       label: input.label && input.label.trim() ? input.label.trim() : prev.label,
       // input.isPrimary === true → jadikan entri ini primary (pindah rumah eksplisit).
       isPrimary: input.isPrimary === true ? true : prev.isPrimary,

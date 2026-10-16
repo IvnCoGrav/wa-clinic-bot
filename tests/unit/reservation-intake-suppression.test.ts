@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   hasExistingReservationForSchedule,
+  shouldShowNeutralExistingReservationBanner,
 } from '../../packages/admin-dashboard/src/utils/chatScheduleExtractor';
 import { parseReservationText } from '../../src/utils/reservation-text-parser';
 
@@ -278,6 +279,79 @@ Treatment : ${complaintText}
           'MOMS'
         )
       ).toBe(true);
+    });
+  });
+
+  describe('Grup 5: Kontrak Penampil Banner Netral (shouldShowNeutralExistingReservationBanner)', () => {
+    const dummyMatchedReservation = {
+      id: 'res-123',
+      booking_date: '2026-10-16T08:00:00.000Z',
+      status: 'confirmed',
+    };
+
+    it('Supresi total (return false) jika activeConfirmedReservation sudah tampil di layar (anti dobel-banner)', () => {
+      const result = shouldShowNeutralExistingReservationBanner({
+        showFormReservasiBanner: false,
+        activeConfirmedReservation: { id: 'res-confirmed-friday', booking_date: '2026-10-16T08:00:00.000Z' },
+        formBannerKey: 'conv-1|Sabtu 17 Okt|15.00|Pijat',
+        dismissedFormBanner: null,
+        hasExistingReservationForExtractedSchedule: true,
+        matchedExistingReservation: dummyMatchedReservation,
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('Mencegah klaim palsu (return false) bila tanggal diekstrak (e.g. Sabtu 17 Okt) BELUM ada di DB', () => {
+      const result = shouldShowNeutralExistingReservationBanner({
+        showFormReservasiBanner: false,
+        activeConfirmedReservation: null,
+        formBannerKey: 'conv-1|Sabtu 17 Okt|15.00|Pijat',
+        dismissedFormBanner: null,
+        hasExistingReservationForExtractedSchedule: false, // Tidak ada di DB!
+        matchedExistingReservation: null,
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('Supresi (return false) bila banner form reservasi baru sedang aktif', () => {
+      const result = shouldShowNeutralExistingReservationBanner({
+        showFormReservasiBanner: true,
+        activeConfirmedReservation: null,
+        formBannerKey: 'conv-1|Sabtu 17 Okt|15.00|Pijat',
+        dismissedFormBanner: null,
+        hasExistingReservationForExtractedSchedule: true,
+        matchedExistingReservation: dummyMatchedReservation,
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('Supresi (return false) bila banner sudah di-dismiss user', () => {
+      const result = shouldShowNeutralExistingReservationBanner({
+        showFormReservasiBanner: false,
+        activeConfirmedReservation: null,
+        formBannerKey: 'conv-1|Sabtu 17 Okt|15.00|Pijat',
+        dismissedFormBanner: 'conv-1|Sabtu 17 Okt|15.00|Pijat',
+        hasExistingReservationForExtractedSchedule: true,
+        matchedExistingReservation: dummyMatchedReservation,
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('Tampil (return true) HANYA bila tidak ada activeConfirmedReservation dan jadwal benar-benar cocok di DB', () => {
+      const result = shouldShowNeutralExistingReservationBanner({
+        showFormReservasiBanner: false,
+        activeConfirmedReservation: null,
+        formBannerKey: 'conv-1|Jum 16 Okt|15.00|Pijat',
+        dismissedFormBanner: null,
+        hasExistingReservationForExtractedSchedule: true,
+        matchedExistingReservation: dummyMatchedReservation,
+      });
+
+      expect(result).toBe(true);
     });
   });
 });

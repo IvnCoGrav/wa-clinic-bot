@@ -106,7 +106,7 @@ import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { BRAND } from '../../config/brand';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, findExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, findExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference, shouldShowNeutralExistingReservationBanner } from '../../utils/chatScheduleExtractor';
 import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
 import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
@@ -3816,6 +3816,24 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       selectedChat?.escalationReason !== 'recruitment_inquiry'
   );
 
+  const showNeutralExistingReservationBanner = useMemo(() => {
+    return shouldShowNeutralExistingReservationBanner({
+      showFormReservasiBanner,
+      activeConfirmedReservation,
+      formBannerKey,
+      dismissedFormBanner,
+      hasExistingReservationForExtractedSchedule,
+      matchedExistingReservation,
+    });
+  }, [
+    showFormReservasiBanner,
+    activeConfirmedReservation,
+    formBannerKey,
+    dismissedFormBanner,
+    hasExistingReservationForExtractedSchedule,
+    matchedExistingReservation,
+  ]);
+
   const visitMessages = useMemo(
     () =>
       (messages || []).map((m: any) => ({
@@ -5274,18 +5292,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               />
                             ))}
 
-                            {/* Active Reservation Badges in Chat Header */}
-                            {Boolean((selectedChat as any).hasActiveHold || activeHoldReservation) && (
+                            {/* Active Reservation Badges in Chat Header: Disupresi jika alert banner reservasi sudah tampil di bawah */}
+                            {Boolean((selectedChat as any).hasActiveHold || activeHoldReservation) && !activeHoldReservation && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-xs tracking-wide">
                                 ⏳ HOLD
                               </span>
                             )}
-                            {Boolean((selectedChat as any).hasUpcomingBooking || activeConfirmedReservation) && (
+                            {Boolean((selectedChat as any).hasUpcomingBooking || activeConfirmedReservation) && !activeConfirmedReservation && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
                                 📅 Terjadwal
                               </span>
                             )}
-                            {Boolean((selectedChat as any).hasPendingBooking || activePendingReservation) && (
+                            {Boolean((selectedChat as any).hasPendingBooking || activePendingReservation) && !activePendingReservation && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
                                 🕓 Pending
                               </span>
@@ -5622,6 +5640,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     timeZone: 'Asia/Jakarta',
                                   })
                                : 'Jadwal terkonfirmasi'}
+                              {activeConfirmedReservation.treatment_detail ? ` • ${activeConfirmedReservation.treatment_detail}` : ''}
                              {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
                            </span>
                          </span>
@@ -5762,45 +5781,42 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
                 )}
 
-                {/* Banner Netral: Form reservasi terdeteksi tapi SUDAH tercatat (mencegah klik ganda) */}
-                {!showFormReservasiBanner &&
-                  formBannerKey &&
-                  formBannerKey !== dismissedFormBanner &&
-                  (hasExistingReservationForExtractedSchedule || activeConfirmedReservation) &&
-                  (activeConfirmedReservation || matchedExistingReservation) && (
-                    <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-slate-500/10 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
-                        <div className="flex flex-col justify-center leading-tight min-w-0">
-                          <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                            RESERVASI SUDAH TERCATAT (OTOMATIS)
-                          </span>
-                          <span className="font-semibold truncate text-[11px]">
-                            📅 {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedReservation(activeConfirmedReservation || matchedExistingReservation)}
-                          className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-slate-700 hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
-                          title="Lihat detail reservasi yang sudah tercatat"
-                        >
-                          <Calendar size={14} />
-                          <span>Lihat Detail Reservasi</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDismissedFormBanner(formBannerKey)}
-                          className="inline-flex items-center justify-center w-[30px] h-[30px] text-slate-600 dark:text-slate-400 hover:bg-slate-500/15 active:scale-95 rounded-full transition shrink-0"
-                          title="Abaikan pemberitahuan ini"
-                        >
-                          <X size={14} strokeWidth={2.5} />
-                        </button>
+                {/* Banner Netral: Form reservasi terdeteksi tapi SUDAH tercatat (mencegah klik ganda).
+                    Disupresi deterministik bila activeConfirmedReservation sudah tampil di atas. */}
+                {showNeutralExistingReservationBanner && matchedExistingReservation && (
+                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-slate-500/10 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                      <div className="flex flex-col justify-center leading-tight min-w-0">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                          RESERVASI SUDAH TERCATAT (OTOMATIS)
+                        </span>
+                        <span className="font-semibold truncate text-[11px]">
+                          📅 {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
+                        </span>
                       </div>
                     </div>
-                  )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReservation(matchedExistingReservation)}
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-slate-700 hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        title="Lihat detail reservasi yang sudah tercatat"
+                      >
+                        <Calendar size={14} />
+                        <span>Lihat Detail Reservasi</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDismissedFormBanner(formBannerKey)}
+                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-slate-600 dark:text-slate-400 hover:bg-slate-500/15 active:scale-95 rounded-full transition shrink-0"
+                        title="Abaikan pemberitahuan ini"
+                      >
+                        <X size={14} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* MT-2.2: Banner Oranye Palang Pintu Kunjungan Tanpa Reservasi Aktif */}
                 {showUnregisteredVisitBanner && selectedChat && (

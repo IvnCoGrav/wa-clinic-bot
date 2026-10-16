@@ -8,6 +8,7 @@ export interface CustomerAvatarProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   indicator?: React.ReactNode;
+  alt?: string;
 }
 
 const COLOR_PALETTES = [
@@ -65,6 +66,7 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = ({
   size = 'md',
   className = '',
   indicator,
+  alt,
 }) => {
   const [imgError, setImgError] = useState(false);
   const sizeConfig = SIZE_MAP[size] || SIZE_MAP.md;
@@ -79,16 +81,18 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = ({
       {showImage ? (
         <img
           src={src!}
-          alt={name || phone || 'Profile Picture'}
+          alt={alt ?? ''}
+          aria-hidden={alt !== undefined && alt !== '' ? undefined : true}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
-          className={`${sizeConfig.box} rounded-full object-cover border border-white/10 shadow-sm transition-transform duration-200 hover:scale-105 bg-slate-800`}
+          className={`${sizeConfig.box} rounded-full object-cover border border-white/10 shadow-sm transition-transform duration-200 hover:scale-105 bg-slate-800 select-none pointer-events-none`}
         />
       ) : (
         <div
           className={`${sizeConfig.box} rounded-full flex items-center justify-center border select-none transition-transform duration-200 hover:scale-105 shadow-sm ${palette.bg} ${sizeConfig.text}`}
+          aria-hidden="true"
         >
           {initials ? initials : <User size={sizeConfig.iconSize} />}
         </div>

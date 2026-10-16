@@ -260,6 +260,31 @@ export function hasExistingReservationForSchedule(
 }
 
 /**
+ * Kontrak deterministik penampil Banner Netral "RESERVASI SUDAH TERCATAT (OTOMATIS)".
+ *
+ * Aturan UI/UX Fondasional:
+ * 1. Jika smart action banner form reservasi baru sedang aktif -> FALSE.
+ * 2. Jika banner reservasi aktif terkonfirmasi (activeConfirmedReservation) sudah tampil -> FALSE (supresi total anti-dobel banner).
+ * 3. Jika formBannerKey kosong atau sudah di-dismiss user -> FALSE.
+ * 4. Database WAJIB benar-benar memiliki reservasi yang COCOK dengan jadwal yang diekstrak
+ *    (hasExistingReservationForExtractedSchedule && matchedExistingReservation) -> Mencegah halusinasi/klaim status palsu
+ *    saat obrolan chat menyebutkan tanggal lain (e.g. Sabtu) yang belum pernah tercatat di DB.
+ */
+export function shouldShowNeutralExistingReservationBanner(params: {
+  showFormReservasiBanner: boolean;
+  activeConfirmedReservation: any;
+  formBannerKey: string | null;
+  dismissedFormBanner: string | null;
+  hasExistingReservationForExtractedSchedule: boolean;
+  matchedExistingReservation: any;
+}): boolean {
+  if (params.showFormReservasiBanner) return false;
+  if (Boolean(params.activeConfirmedReservation)) return false;
+  if (!params.formBannerKey || params.formBannerKey === params.dismissedFormBanner) return false;
+  return Boolean(params.hasExistingReservationForExtractedSchedule && params.matchedExistingReservation);
+}
+
+/**
  * Helper untuk parsing nominal harga (e.g. "80.000", "80rb", "80k", "free")
  */
 export function parsePriceText(val: string | null | undefined): number | null {

@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 261. [Lokasi/Alamat] Duplikasi "Rumah 2" & Preservasi Titik GPS Presisi (2026-10-16, IMPLEMENTED & HEALED)
+
+- **Status:** IMPLEMENTED lokal & HEALED di database server produksi (`wa_clinic_db` via Pass 3 skrip `heal-customer-addresses-split-brain.ts`). Build hijau, 35 unit test terkait hijau, 0 regresi.
+- **Latar Belakang & Insiden Nyata:**
+  - Kasus Bunda Mery (`6289667285350`): Di aplikasi staf terapis Bidan Thabita, tombol navigasi berwarna kuning `Navigasi (Estimasi)` dan badge `⚪ Estimasi Wilayah`. Di database, profil memiliki alamat ganda `Rumah Buduran` (primary) dan `Rumah Buduran 2` (kosong tanpa lat/lng), dengan reservasi aktif tertaut ke `Rumah Buduran 2`. Padahal historis 2026-08-21 Bunda Mery telah mengirimkan pin shareloc WhatsApp asli (-7.435896, 112.7260825).
+  - Kasus Bunda Hera: Muncul badge `📍 Butuh Shareloc` di LiveChat/portal staf karena pelanggan tidak pernah mengirim attachment pin GPS WhatsApp, dan titik di database adalah sentroid kelurahan Semampir (`estimated_area`), sedangkan reservasi berkoordinat null.
+- **Akar Masalah Sistemik (Audit Multi-Lapisan):**
+  1. **Domain `addressesMatch` Menolak Desa NULL (`src/domain/customer-address.ts:110-118`):** Pencocokan kelurahan mewajibkan `hasText(a.kelurahan) && hasText(b.kelurahan)`. Bila data profil lama kolom kelurahannya `NULL`, alamat dengan jalan dan kecamatan yang 100% identik dianggap rumah baru, memicu `buildAutoLabel()` otomatis melahirkan `Rumah X 2`.
+  2. **Penimpaan Koordinat di Domain `upsertAddressIntoList` (`src/domain/customer-address.ts:215-216`):** Update alamat tanpa menyertakan koordinat menimpa nilai `lat/lng` lama menjadi `NULL` (`input.lat !== undefined ? input.lat : undefined`).
+  3. **Kandidat Alamat Kopong di Service (`src/services/reservation-core.service.ts:719-730`):** Intake reservasi merakit kandidat alamat tanpa menyerap koordinat induk dari profil pelanggan, sehingga alamat baru yang terbentuk melalui jalur ini selalu kehilangan titik lokasi.
+- **Solusi Fondasional Terpasang:**
+  1. **Domain `addressesMatch` Kompatibel-NULL**: Jalan sama + kecamatan sama + kelurahan kompatibel (sama persis ATAU salah satu/kedua sisi null) dianggap rumah yang sama. Beda kelurahan terisi tetap dianggap rumah berbeda (Rumah-2 sah).
+  2. **Preservasi Koordinat di `upsertAddressIntoList`**: Input tanpa koordinat mempertahankan nilai koordinat lama; pin presisi (`location_source = 'gps_pin'`) terlindungi dari penimpaan.
+  3. **Pewarisan Koordinat Induk di `resolveCustomerAddressId`**: Kandidat reservasi mewarisi koordinat dari profil pelanggan secara aman bila kandidat kosong dan profil memiliki koordinat valid, serta mengunci `location_source = 'gps_pin'` jika pelanggan memiliki riwayat shareloc presisi.
+  4. **Healing Data Produksi Idempoten (Pass 3 `heal-customer-addresses-split-brain.ts`)**:
+     - Menggabungkan duplikat alamat teks-identik secara otomatis dan data-driven menggunakan `addressesMatch`.
+     - Menyelamatkan koordinat dari entri duplikat dan memulihkan titik presisi `gps_pin` dari pesan inbound WhatsApp `locationMessage` riil.
+     - Memindahkan reservasi ke ID pemenang dan menghapus 41 baris alamat hantu di database produksi (total alamat berkurang dari 102 menjadi 61, reservasi kopong berkurang dari 22 menjadi 1).
+- **Utang Sadar & Monitor:**
+  - Sisa 15 entri berstatus `REPORT_ONLY` adalah pelanggan yang kolom jalannya kosong atau belum pernah mengirimkan koordinat/shareloc sama sekali (tidak ada kebenaran baru, dilarang difabrikasi).
+  - Monitor berkala: `SELECT count(*) FROM customer_addresses WHERE lat IS NULL;`.
+
 ## 260. [Anak/Ghost-Error] Pengerasan Fondasional Entitas Anak & Anti-Ghost (2026-10-16, IMPLEMENTED lokal — healing `--commit` DITAHAN)
 
 - **Status:** IMPLEMENTED lokal Fase 0–4 (validator kanonis + tutup pintu tulis/baca + healing generik dry-run). Build + 187 test scope hijau (10 file). Full `npm test`: 5523 passed / 28 failed — sampel gagal (security-integrity add-on, adversarial 3.3, purchase-detection alias, quick-replies, staff-otw, waha-voice) terbukti pre-existing via restore-HEAD-and-rerun (tetap gagal tanpa perubahan ini; tree juga memuat modifikasi tak terkait lain). 2 gagal `chat-schedule-extractor.test.ts` terbukti pre-existing via restore-HEAD-and-rerun. Healing `--commit` DILARANG sampai dry-run + backup + map manusia terverifikasi.

@@ -448,6 +448,7 @@ export async function resolveCustomerAddressId(params: {
     lng?: number | null;
     distanceKm?: number | null;
     ongkir?: number | null;
+    locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
   };
   db?: any;
 }): Promise<string | null> {
@@ -469,6 +470,19 @@ export async function resolveCustomerAddressId(params: {
     }
     if (!list.length) return null;
 
+    // 1. Baca data customer untuk pewarisan koordinat yang aman
+    let customer: any = null;
+    try {
+      customer = await customerService.getCustomerById(customerId, tenantId);
+    } catch {}
+    if (!customer && params.db && typeof params.db.customer?.findUnique === 'function') {
+      try {
+        customer = await params.db.customer.findUnique({
+          where: { id: customerId, tenant_id: tenantId },
+        });
+      } catch {}
+    }
+
     if (
       candidate &&
       (candidate.address ||
@@ -476,6 +490,36 @@ export async function resolveCustomerAddressId(params: {
         candidate.kecamatan ||
         (typeof candidate.lat === 'number' && typeof candidate.lng === 'number'))
     ) {
+      // 2. Bila candidate.lat/lng kosong TAPI customer punya koordinat valid, warisi secara aman
+      const candidateHasCoords =
+        typeof candidate.lat === 'number' &&
+        typeof candidate.lng === 'number' &&
+        Number.isFinite(candidate.lat) &&
+        Number.isFinite(candidate.lng);
+
+      if (!candidateHasCoords && customer) {
+        const custLat = customer.lat;
+        const custLng = customer.lng;
+        if (
+          typeof custLat === 'number' &&
+          typeof custLng === 'number' &&
+          Number.isFinite(custLat) &&
+          Number.isFinite(custLng)
+        ) {
+          candidate.lat = custLat;
+          candidate.lng = custLng;
+          if (candidate.distanceKm == null && typeof customer.distance_km === 'number') {
+            candidate.distanceKm = customer.distance_km;
+          }
+          if (candidate.ongkir == null && typeof customer.ongkir === 'number') {
+            candidate.ongkir = customer.ongkir;
+          }
+          // 3. Kunci presisi: bila customer presisi, kunci gps_pin; jangan turunkan ke estimated/manual
+          const isPrecise = customer.location_source === 'gps_pin' || customer.share_location_sent === true;
+          candidate.locationSource = isPrecise ? 'gps_pin' : (customer.location_source || 'estimated_area');
+        }
+      }
+
       const hit = list.find((a: any) =>
         addressesMatch(
           {
@@ -492,6 +536,7 @@ export async function resolveCustomerAddressId(params: {
       if (hit) return hit.id; // cocok → pakai entri itu
 
       // tidak cocok + ada kandidat alamat baru → BUAT Rumah 2 via customerService
+      // 4. Teruskan koordinat, jarak, ongkir, dan locationSource
       const upserted = await customerService.upsertSavedAddress(
         customerId,
         {
@@ -503,6 +548,7 @@ export async function resolveCustomerAddressId(params: {
           lng: candidate.lng ?? null,
           distanceKm: candidate.distanceKm ?? null,
           ongkir: candidate.ongkir ?? null,
+          locationSource: candidate.locationSource ?? null,
         },
         tenantId
       );
