@@ -1742,14 +1742,34 @@ export class StaffReservationService {
       } catch (ltvErr: any) {
         console.warn('[STAFF RESERVATION] Failed to recalculate customer LTV on payment:', ltvErr.message);
       }
-      // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT (guard backdate + per-stage WIB) + reset V3
+      // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT (guard backdate + per-stage WIB) + reset V3.
+      // G2: guard dipersempit — lewati onReservationCompleted HANYA bila NEXT sudah ada
+      // (aktif/terkirim) DAN review siklus-ini sudah SENT. Satu baris SENT lain (mis. REVIEW
+      // tanpa NEXT akibat create parsial gagal) WAJIB tetap memicu retry idempoten.
       try {
         const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
         if (reservation.booking_date) {
-          const existingSentReview = await (prisma as any).followUp?.findFirst?.({
-            where: { reservation_id: reservationId, status: 'SENT' },
+          const existingNext = await (prisma as any).followUp?.findFirst?.({
+            where: {
+              reservation_id: reservationId,
+              type: 'NEXT_TREATMENT',
+              status: { in: ['PENDING', 'QUEUED', 'SENT'] },
+            },
           });
-          if (!existingSentReview) {
+          const existingSentReview = await (prisma as any).followUp?.findFirst?.({
+            where: {
+              reservation_id: reservationId,
+              type: { in: ['REVIEW_H1_BABY', 'REVIEW_H1_MOMS', 'REMINDER_H1'] },
+              status: 'SENT',
+            },
+          });
+          if (existingNext && existingSentReview) {
+            // Kedua deret sudah ada/tuntas — hanya sinkronkan rekapan Sheets
+            const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
+            await sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) =>
+              console.warn('[STAFF RESERVATION] sheetsSync enqueue on payment failed:', err?.message)
+            );
+          } else {
             await reservationLifecycleService.onReservationCompleted({
               customerId: reservation.customer_id,
               reservationId: reservation.id,
@@ -1757,12 +1777,6 @@ export class StaffReservationService {
               treatmentCategory: reservation.treatment_category,
               tenantId,
             });
-          } else {
-            // Review sudah pernah terkirim (SENT), tetapi rekapan Sheets tetap wajib disinkronkan
-            const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
-            await sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) =>
-              console.warn('[STAFF RESERVATION] sheetsSync enqueue on payment failed:', err?.message)
-            );
           }
         } else {
           console.warn(`[STAFF RESERVATION] recordPayment: reservasi ${reservation.id} completed tanpa booking_date, sheets sync dilewati`);

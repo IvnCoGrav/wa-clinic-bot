@@ -254,6 +254,14 @@ describe('Name & BabyName Sanitizer Unit Tests', () => {
       expect(isValidChildName('atas nama saya')).toBe(false);
     });
 
+    it('rejects generic parent greetings leaking as child name (Fase 0)', () => {
+      expect(isValidChildName('Bunda')).toBe(false);
+      expect(isValidChildName('Ibu')).toBe(false);
+      expect(isValidChildName('Mama')).toBe(false);
+      expect(isValidChildName('Ayah')).toBe(false);
+      expect(formatBabyNamesForGreeting([{ name: 'Bunda' }])).toBe('si kecil');
+    });
+
     it('rejects naked ages and generic clinic service words', () => {
       expect(isValidChildName('5 bulan')).toBe(false);
       expect(isValidChildName('3 thn')).toBe(false);

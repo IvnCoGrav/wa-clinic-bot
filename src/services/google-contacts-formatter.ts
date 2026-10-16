@@ -1,4 +1,4 @@
-import { stripTrailingLocationTag } from '../utils/name-sanitizer';
+import { stripTrailingLocationTag, isValidChildName } from '../utils/name-sanitizer';
 
 export interface CustomerContactContext {
   id?: string;
@@ -37,7 +37,9 @@ export function formatContactName(
   template: string = '{{name}} - {{child_name}}'
 ): { displayName: string; givenName: string; familyName: string } {
   const customerName = customer.name?.trim() || '';
-  const child = childName?.trim() || (customer.children && customer.children.length > 0 ? customer.children[0].name.trim() : '');
+  const validExplicitChild = childName && isValidChildName(childName) ? childName.trim() : '';
+  const validFirstChild = customer.children?.find((c) => c && c.name && isValidChildName(c.name))?.name.trim() || '';
+  const child = validExplicitChild || validFirstChild || '';
   const phone = normalizePhoneForGoogle(customer.phone);
   const city = customer.kota?.trim() || '';
   const district = customer.kecamatan?.trim() || '';
@@ -162,17 +164,20 @@ export function buildContactNotes(customer: CustomerContactContext): string {
   lines.push(`WhatsApp: ${normalizePhoneForGoogle(customer.phone)}`);
 
   if (customer.children && customer.children.length > 0) {
-    const childList = customer.children
-      .map((c) => {
-        if (c.birth_date) {
-          const d = new Date(c.birth_date);
-          const dateStr = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : '';
-          return `${c.name} (${dateStr ? 'Lahir: ' + dateStr : ''})`.trim();
-        }
-        return c.name;
-      })
-      .join(', ');
-    lines.push(`Data Anak: ${childList}`);
+    const validChildren = customer.children.filter((c) => c && c.name && isValidChildName(c.name));
+    if (validChildren.length > 0) {
+      const childList = validChildren
+        .map((c) => {
+          if (c.birth_date) {
+            const d = new Date(c.birth_date);
+            const dateStr = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : '';
+            return `${c.name} (${dateStr ? 'Lahir: ' + dateStr : ''})`.trim();
+          }
+          return c.name;
+        })
+        .join(', ');
+      lines.push(`Data Anak: ${childList}`);
+    }
   }
 
   // REVISI-1 Tahap 4.3: sertakan teks jalan agar kontak HP menampilkan alamat lengkap.

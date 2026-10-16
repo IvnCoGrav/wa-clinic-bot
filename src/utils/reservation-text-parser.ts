@@ -2,6 +2,7 @@ import { TreatmentCategory } from '@prisma/client';
 import { parsePaymentSection } from './conversation-transaction-extractor';
 import { treatmentCatalogService } from '../services/treatment-catalog.service';
 import { isGestationalText } from './age-calculator';
+import { isValidChildName } from './name-sanitizer';
 
 export interface BabyDetail {
   name: string;
@@ -621,9 +622,14 @@ export function buildBabyDetails(nameLines: string[], ageLines: string[]): BabyD
       if (!p) continue;
       const parenMatch = p.match(/^(.+?)\s*\((?:umur|usia)?\s*([^)]+)\)$/i);
       if (parenMatch) {
-        nameEntries.push({ name: parenMatch[1].trim(), age: parenMatch[2].trim() });
+        const parsedName = parenMatch[1].trim();
+        if (isValidChildName(parsedName)) {
+          nameEntries.push({ name: parsedName, age: parenMatch[2].trim() });
+        }
       } else {
-        nameEntries.push({ name: p, age: null });
+        if (isValidChildName(p)) {
+          nameEntries.push({ name: p, age: null });
+        }
       }
     }
   }
@@ -637,15 +643,28 @@ export function buildBabyDetails(nameLines: string[], ageLines: string[]): BabyD
     }
   }
 
-  const count = Math.max(nameEntries.length, ages.length);
-  for (let i = 0; i < count; i++) {
+  // Jika nama tidak ada sama sekali tapi ada usia, baru gunakan fallback "Bayi 1", dst.
+  // Jangan sekali-kali menciptakan "Bayi 2" jika nameEntries hanya punya 1 nama valid!
+  if (nameEntries.length === 0 && ages.length > 0) {
+    for (let i = 0; i < ages.length; i++) {
+      const age = ages[i];
+      if (isGestationalText(age)) continue;
+      result.push({
+        name: `Bayi ${i + 1}`,
+        age,
+      });
+    }
+    return result;
+  }
+
+  // Jika ada nameEntries, jumlah anak maksimal adalah nameEntries.length
+  // (mencegah penambahan "Bayi 2" palsu jika baris usia salah format atau terpecah)
+  for (let i = 0; i < nameEntries.length; i++) {
     const entry = nameEntries[i];
-    const age = ages[i] ?? entry?.age ?? '';
-    // Gerbang entitas: usia gestasional (hamil/nifas) BUKAN usia anak — DILARANG
-    // masuk tabel children (bug data korup: nama ibu tercatat sebagai bayi).
+    const age = ages[i] ?? entry.age ?? '';
     if (isGestationalText(age)) continue;
     result.push({
-      name: entry?.name || `Bayi ${i + 1}`,
+      name: entry.name,
       age,
     });
   }
@@ -656,15 +675,33 @@ export function buildBabyDetails(nameLines: string[], ageLines: string[]): BabyD
 /**
  * Pecah nilai multi-bayi (misal "Rara, Riri" / "Kanaya & Kenshin" / "6 bulan, 2 tahun").
  * Hanya pecah pada pemisah jelas (koma, &, "dan", ";") — bukan spasi.
+ *
+ * Kebal terhadap pemecahan salah angka desimal usia (misal "3,5 bulan", "1,5 thn", "2,4 tahun")
+ * dan koma di dalam tanda kurung (misal "Ara (2,4 thn)").
  */
 function splitMultiValue(value: string): string[] {
   if (!value) return [];
-  return value
+
+  // 1. Lindungi koma pada angka desimal usia (misal 3,5 atau 1,5)
+  let s = value.replace(/(\d+),(\d+)/g, '$1__DEC_COMMA__$2');
+
+  // 2. Lindungi koma dan ampersand di dalam tanda kurung (misal "Ara (2 thn, batuk)")
+  s = s.replace(/\(([^)]+)\)/g, (match, inner) => {
+    return '(' + inner.replace(/,/g, '__PAREN_COMMA__').replace(/&/g, '__PAREN_AMP__') + ')';
+  });
+
+  return s
     .replace(/\s+dan\s+/gi, ', ')
     .replace(/\s*&\s*/gi, ', ')
     .replace(/\s*;\s*/gi, ', ')
     .split(/\s*,\s*/)
-    .map((s) => s.trim())
+    .map((part) =>
+      part
+        .replace(/__DEC_COMMA__/g, ',')
+        .replace(/__PAREN_COMMA__/g, ',')
+        .replace(/__PAREN_AMP__/g, '&')
+        .trim()
+    )
     .filter(Boolean);
 }
 
@@ -929,7 +966,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
 
   if (babyMatch && babyMatch[1]) {
     const candidate = babyMatch[1].trim();
-    if (!isPlaceholderText(candidate) && candidate.length >= 2) {
+    if (!isPlaceholderText(candidate) && candidate.length >= 2 && isValidChildName(candidate)) {
       babyName = candidate;
     }
   }
@@ -940,7 +977,11 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
 
   if (momMatch && momMatch[1]) {
     const candidate = momMatch[1].trim();
-    if (!isPlaceholderText(candidate) && candidate.length >= 2) {
+    // Gerbang Fase 3: tolak pronomina closed-class + sapaan generik (bukan regex hafalan bisnis).
+    const momWords = candidate.toLowerCase().split(/\s+/).filter(Boolean);
+    const isPronounOnly = momWords.length > 0 && momWords.every((w) => ['saya', 'aku', 'kami', 'kita', 'sendiri', 'diri'].includes(w));
+    const isGenericSingle = momWords.length === 1 && ['bunda', 'ibu', 'mama', 'ayah', 'moms', 'pasien'].includes(momWords[0]);
+    if (!isPlaceholderText(candidate) && candidate.length >= 2 && !isPronounOnly && !isGenericSingle) {
       name = candidate;
     }
   }

@@ -115,14 +115,22 @@ async function main() {
 
     cids = cids.slice(0, limit);
 
-    // Filter aktif masa depan & sudah punya NEXT PENDING/QUEUED (seperti reconciler)
-    const nowForFilter = new Date();
-    const activeFuture = await prisma.reservation.findMany({
-      where: { tenant_id: tenantId, customer_id: { in: cids }, status: { in: ['pending', 'confirmed', 'hold'] }, booking_date: { gte: nowForFilter } },
-      select: { customer_id: true },
+    // Filter belum-selesai (paritas reconciler follow-up.service.ts + reanchor):
+    // kecualikan customer yang punya reservasi pending/confirmed/en_route/hold yang LEBIH BARU
+    // dari completed terakhirnya (termasuk booking lampau) — anchor mereka belum sah.
+    const uncompleted = await prisma.reservation.findMany({
+      where: { tenant_id: tenantId, customer_id: { in: cids }, status: { in: ['pending', 'confirmed', 'en_route', 'hold'] } },
+      select: { customer_id: true, booking_date: true },
     }).catch(() => [] as any);
-    const hasActive = new Set((activeFuture as any[]).map((r) => r.customer_id));
-    let candidates = cids.filter((id) => !hasActive.has(id));
+    const hasNewerUncompleted = new Set<string>();
+    for (const r of (uncompleted as any[]) || []) {
+      if (!r.customer_id || !r.booking_date) continue;
+      const d = new Date(r.booking_date);
+      if (isNaN(d.getTime())) continue;
+      const maxCompleted = maxByCustomer.get(r.customer_id);
+      if (!maxCompleted || d.getTime() > maxCompleted.getTime()) hasNewerUncompleted.add(r.customer_id);
+    }
+    let candidates = cids.filter((id) => !hasNewerUncompleted.has(id));
 
     const hasNext = await prisma.followUp.findMany({
       where: { tenant_id: tenantId, customer_id: { in: candidates }, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },

@@ -596,8 +596,9 @@ export class FollowUpService {
             where: {
               id: { in: activeFollowUps.map(f => f.id) },
             },
-            // Neutralkan reservation_id: baris CANCELLED tidak lagi terkait reservasi
-            // aktif, menjaga invarian @@unique([tenant_id, reservation_id, type, stage]).
+            // Baris CANCELLED disisakan dengan reservation_id utuh sebagai jejak historis
+            // (paritas onReservationCancelled V2). Keunikan baris aktif dijaga trigger
+            // active_slot_key -> NULL (migrasi 20261006000000), bukan reservation_id.
             data: { status: 'CANCELLED', cancel_reason: CANCEL_REASON.RESERVATION_CREATED },
           });
         } catch (_) {}
@@ -1179,18 +1180,15 @@ export class FollowUpService {
         if (!maxDate) continue;
         try {
           const before = await prisma.followUp.count({
-            where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED', 'SENT'] as any } },
+            where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
           }).catch(() => 0);
           await this.createNextTreatmentFollowUps(cid, maxDate, tenantId);
           const after = await prisma.followUp.count({
             where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
           }).catch(() => 0);
-          // Heuristik: jika after > 0 dan PENDING tercipta, hitung reconcile
-          if (after > 0) {
-            reconciledCount++;
-            reconciledIds.push(cid);
-          } else if (before === 0) {
-            // Offline mock (count gagal) â€” tetap anggap reconcile attempted
+          // G4: metrik jujur — hitung sukses hanya bila baris aktif benar-benar BERTAMBAH.
+          // before/after memakai filter yang sama (PENDING/QUEUED); DB mati → 0/0 → jujur 0.
+          if (after > before) {
             reconciledCount++;
             reconciledIds.push(cid);
           }

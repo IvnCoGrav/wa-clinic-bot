@@ -44,7 +44,7 @@ describe('save_reservation multi-treatment & multi-pasien', () => {
       treatmentName: BABY_PULIH,
       additionalTreatments: [MOMS_OKSI],
       bookingDate: futureDate(),
-      children: [{ ageMonths: 2 }, { name: 'Kakak', ageMonths: 36 }],
+      children: [{ name: 'Adik', ageMonths: 2 }, { name: 'Kakak', ageMonths: 36 }],
     } as any);
 
     expect(res.success).toBe(true);
@@ -56,6 +56,21 @@ describe('save_reservation multi-treatment & multi-pasien', () => {
     expect(called.babies).toHaveLength(2);
     expect(called.babies[1].name).toBe('Kakak');
     expect(called.source).toBe('AGENT');
+  });
+
+  it('Fase 3 anti-ghost: usia tanpa nama TIDAK melahirkan pasien generik', async () => {
+    const res = await executeSaveReservation({
+      customerId: 'cust-1',
+      chatId: '6281@c.us',
+      treatmentName: BABY_CERIA,
+      bookingDate: futureDate(),
+      children: [{ ageMonths: 2 } as any, { name: 'Kakak', ageMonths: 36 }],
+    } as any);
+
+    expect(res.success).toBe(true);
+    const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
+    expect(called.babies).toHaveLength(1);
+    expect(called.babies[0].name).toBe('Kakak');
   });
 
   it('single treatment → kategori BABY + kompatibel mundur (childName legacy)', async () => {

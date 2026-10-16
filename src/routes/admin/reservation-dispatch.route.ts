@@ -20,6 +20,8 @@ import {
   mergeNotesIntoRawText,
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
+import { isValidChildName } from '../../utils/name-sanitizer';
+import { classifyPatientEntity } from '../../utils/reservation-text-parser';
 import { isPrematureCompletion } from '../../domain/reservation-status';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { StaffReservationService } from '../../services/staff-reservation.service';
@@ -1201,11 +1203,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const { parseAgeTextToBirthDate, monthsBetween } = await import('../../utils/age-calculator');
           for (const b of babies) {
             if (!b.name) continue;
+            const nm = String((b as any).name || '').trim();
+            if (!nm || !isValidChildName(nm)) continue;
+            if (classifyPatientEntity({ name: nm, ageText: (b as any).ageText }) !== 'CHILD') continue;
             // Koreksi admin umur WAJIB menghitung ulang birth_date (bukan hanya
             // raw_age_text) ΓÇö jika tidak, anak lama yang sudah punya birth_date
             // tetap menampilkan umur lama (tampilan memprioritaskan birth_date).
             const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
-            const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === b.name.toLowerCase());
+            const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === nm.toLowerCase());
             if (existingChild) {
               const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
               if (newBirthDate) {
@@ -1218,7 +1223,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
                 data: {
                   tenant_id: tenantId,
                   customer_id: existing.customer_id,
-                  name: b.name,
+                  name: nm,
                   raw_age_text: b.ageText || '',
                   birth_date: newBirthDate,
                   age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,

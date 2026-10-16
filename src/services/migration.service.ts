@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { wahaClient } from '../integrations/waha/client';
 import { parseReservationText, isReservationFormMessage } from '../utils/reservation-text-parser';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { isValidChildName } from '../utils/name-sanitizer';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 import { StagingStatus, TreatmentCategory } from '@prisma/client';
@@ -390,7 +391,7 @@ export class MigrationService {
             // Simpan data anak jika ada
             if (Array.isArray(resData.babies) && resData.babies.length > 0) {
               for (const b of resData.babies) {
-                if (b.name && b.name.length > 1) {
+                if (b.name && b.name.length > 1 && isValidChildName(b.name)) {
                   const existingChild = await prisma.child.findFirst({
                     where: {
                       customer_id: customer.id,

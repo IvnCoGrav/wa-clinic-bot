@@ -2,6 +2,7 @@ import { Reservation } from '../types';
 import { extractBabiesFromRawText } from './reservationBabies';
 import { stripBufferMetadata } from './treatmentStringParser';
 import { calculateOngkirFromTiers } from './deliveryTierCalculator';
+import { isValidChildName } from './chatScheduleExtractor';
 
 const INDONESIAN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const INDONESIAN_MONTHS = [
@@ -132,20 +133,20 @@ function buildBabyDetails(reservation: GenerateInvoiceParams['reservation'], cus
   if (Array.isArray((reservation as any).babies) && (reservation as any).babies.length > 0) {
     return (reservation as any).babies
       .map((b: any) => ({ name: (b.name || '').trim(), age: (b.age || b.ageText || '').trim() }))
-      .filter((b: any) => b.name && b.name !== '-');
+      .filter((b: any) => b.name && b.name !== '-' && isValidChildName(b.name));
   }
   // Sumber 2: relasi children (reservation.children / reservation.customer.children / customer.children)
   const childrenList = (reservation as any).children || (reservation as any).customer?.children || customer?.children || [];
   if (Array.isArray(childrenList) && childrenList.length > 0) {
     return childrenList
       .map((c: any) => ({ name: (c.name || '').trim(), age: (c.current_age || c.raw_age_text || '').trim() }))
-      .filter((b: any) => b.name && b.name !== '-');
+      .filter((b: any) => b.name && b.name !== '-' && isValidChildName(b.name));
   }
   // Sumber 3: reservation.baby_details (dari GET /api/admin/reservations)
   if (Array.isArray((reservation as any).baby_details) && (reservation as any).baby_details.length > 0) {
     return (reservation as any).baby_details
       .map((b: any) => ({ name: (b.name || '').trim(), age: (b.age || '').trim() }))
-      .filter((b: any) => b.name && b.name !== '-');
+      .filter((b: any) => b.name && b.name !== '-' && isValidChildName(b.name));
   }
   // Sumber 4: Fallback regex raw_text / treatment_detail
   return extractBabiesFromRawText(reservation.raw_text, reservation.treatment_detail);

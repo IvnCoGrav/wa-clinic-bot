@@ -359,17 +359,17 @@ export function isValidChildName(raw: string | null | undefined): boolean {
   const openParen = (s.match(/\(/g) || []).length;
   const closeParen = (s.match(/\)/g) || []).length;
   if (openParen !== closeParen) return false;
-  if (s.startsWith(')') || s.endsWith(')')) return false;
+  if (s.startsWith(')') || s.endsWith('(')) return false;
 
   const lower = s.toLowerCase();
 
   // Dilarang placeholder umum
-  if (lower === '-' || lower === '--' || lower === 'null' || lower === 'undefined' || lower === 'si kecil') {
+  if (lower === '-' || lower === '--' || lower === 'null' || lower === 'undefined' || lower === 'si kecil' || lower === 'bunda' || lower === 'ibu' || lower === 'mama' || lower === 'ayah') {
     return false;
   }
 
-  // Dilarang angka usia telanjang (misal "5 bulan", "3 thn", "0 bulan")
-  if (/^\d+\s*(?:bulan|bln|thn|tahun|th|hari|hr|minggu|m)\b/i.test(lower)) {
+  // Dilarang angka usia telanjang (misal "5 bulan", "3 thn", "0 bulan", "1,5 tahun")
+  if (/^\d+(?:[.,]\d+)?\s*(?:bulan|bln|thn|tahun|th|hari|hr|minggu|m)\b/i.test(lower)) {
     return false;
   }
 
@@ -410,6 +410,9 @@ export function cleanSingleBabyName(raw: string): string {
   n = n.replace(/\b\d+\s*(?:bulan|bln|thn|tahun|th|m)\b/gi, '').trim();
   // Buang karakter aneh
   n = n.replace(/^[\s~_.*\-#@!&|+=<>]+|[\s~_.*\-#@!&|+=<>]+$/g, '').trim();
+  if (!isValidChildName(n)) {
+    return '';
+  }
   return n;
 }
 

@@ -6,7 +6,7 @@ import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
-import { sanitizeCustomerNameForStorage } from '../utils/name-sanitizer';
+import { sanitizeCustomerNameForStorage, isValidChildName } from '../utils/name-sanitizer';
 import {
   SavedCustomerAddress,
   UpsertSavedAddressInput,
@@ -1043,7 +1043,7 @@ export class CustomerService {
           where: { customer_id: customerId },
         });
 
-        const incomingValidChildren = data.children.filter((c) => c.name && c.name.trim());
+        const incomingValidChildren = data.children.filter((c) => c.name && c.name.trim() && isValidChildName(c.name));
         const processedChildIds = new Set<string>();
 
         for (const childItem of incomingValidChildren) {

@@ -127,6 +127,12 @@ export function isValidChildName(name: string | null | undefined): boolean {
   const clean = name.trim().replace(/^[-:.,\s]+|[-:.,\s]+$/g, '');
   if (clean.length < 2 || clean.length > 40) return false;
   if (/^(?:usia|umur|treatment|layanan|pilihan|nama|alamat|kec|kota|no|jam|tgl|hari|payment|total|ongkir)\b/i.test(clean)) return false;
+  // Fase 0 (sementara, dicatat di KNOWN_ISSUES): tolak adverbia waktu + kurung tak berpasangan
+  // agar konsisten dengan seam kanonis backend `src/utils/name-sanitizer.ts`.
+  const openP = (clean.match(/\(/g) || []).length;
+  const closeP = (clean.match(/\)/g) || []).length;
+  if (openP !== closeP) return false;
+  if (/\b(belakangan\s+ini|saat\s+ini|sekarang|kemarin|tadi\s+pagi|tadi\s+malam|besok|lusa|nanti|dulu|hari\s+ini)\b/i.test(clean)) return false;
   
   const words = clean.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return false;

@@ -1,4 +1,6 @@
 
+import { isValidChildName } from './name-sanitizer';
+
 export interface ExtractedTransaction {
   customerPhone: string;
   customerName: string;
@@ -364,8 +366,13 @@ export function extractTransactionsFromTranscript(content: string): ExtractedTra
       const address = addressMatch ? addressMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
       const kec = kecMatch ? kecMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
       const kota = kotaMatch ? kotaMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
-      const babyName = babyMatch ? babyMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
-      const babyAge = ageMatch ? ageMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
+      const rawBabyName = babyMatch ? babyMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
+      const rawBabyAge = ageMatch ? ageMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
+      // Gerbang ghost Fase 2: validasi per-entitas (kembar "A & B" dipisah dulu),
+      // karena '&' penanda multi-anak yang sah — bukan nama rusak.
+      const nameParts = rawBabyName ? rawBabyName.split(/\s*(?:&|,|;)\s*|\s+dan\s+/i).map((s) => s.trim()).filter(Boolean) : [];
+      const babyName = rawBabyName && nameParts.length > 0 && nameParts.every((p) => isValidChildName(p)) ? rawBabyName : '';
+      const babyAge = rawBabyAge && !rawBabyAge.includes(':') ? rawBabyAge : '';
       const treatmentDetail = treatMatch ? treatMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : 'Layanan Spa';
       const bookingDateStr = dateMatch ? dateMatch[1].replace(/^[>\s*_-]+|[>\s*_-]+$/g, '').trim() : '';
 

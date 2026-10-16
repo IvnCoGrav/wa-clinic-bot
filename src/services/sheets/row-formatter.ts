@@ -1,4 +1,5 @@
 import { resolveSheetTarget, DEFAULT_MONTH_TAB_NAMES } from './month-resolver';
+import { isValidChildName } from '../../utils/name-sanitizer';
 
 /**
  * row-formatter.ts — konversi entitas reservasi → TEPAT 16 elemen array sesuai
@@ -188,8 +189,9 @@ export function formatReservationToRow(input: SheetRowInput): (string | number)[
   const hargaLayanan = typeof reservation.purchase_value === 'number' ? reservation.purchase_value : 0;
   const total = hargaLayanan + ongkir;
 
-  // Bayi: hanya nama bayi saja, tanpa usia
-  const childName = child && child.name ? child.name.trim() : '';
+  // Bayi: hanya nama bayi saja, tanpa usia — ghost (bukan nama manusia) disembunyikan.
+  const rawChildName = child && child.name ? child.name.trim() : '';
+  const childName = rawChildName && isValidChildName(rawChildName) ? rawChildName : '';
 
   const row: (string | number)[] = [
     target.isoDate,                                             // A Tanggal

@@ -43,8 +43,15 @@ const adminIdentity: string = adminIdentityArg
 const PREMATURE_TOLERANCE_MS = 24 * 60 * 60 * 1000;
 
 function wib0900(anchor: Date, monthOffset: number): Date {
-  const w = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
-  return new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() + monthOffset, w.getUTCDate(), 2, 0, 0, 0));
+  // M2 (paritas computeNextTreatmentAtWib0900 di follow-up.service.ts + backfill):
+  // jepit akhir bulan agar 31 Okt +1 bulan = 30 Nov, BUKAN 1 Des. 09:00 WIB = 02:00 UTC.
+  const bWib = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
+  const targetMonthIndex = bWib.getUTCMonth() + monthOffset;
+  const targetYear = bWib.getUTCFullYear() + Math.floor(targetMonthIndex / 12);
+  const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  const finalDay = Math.min(bWib.getUTCDate(), daysInTargetMonth);
+  return new Date(Date.UTC(targetYear, normalizedMonth, finalDay, 2, 0, 0, 0));
 }
 
 async function getTenantIds(): Promise<string[]> {

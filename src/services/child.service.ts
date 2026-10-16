@@ -1,5 +1,6 @@
 import { parseAgeTextToBirthDate, monthsBetween, computeCurrentAge } from '../utils/age-calculator';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
+import { isValidChildName } from '../utils/name-sanitizer';
 
 /**
  * ChildService — persistensi entitas anak per customer (multi-tenant).
@@ -25,6 +26,8 @@ export class ChildService {
     const cleaned = babies
       .map((b) => ({ name: (b.name || '').trim(), age: (b.age || '').trim() }))
       .filter((b) => b.name && b.name !== '-')
+      // Filter semantik ketat: tolak ghost error / adverbia / label form
+      .filter((b) => isValidChildName(b.name))
       // Defense-in-depth: entitas Moms (hamil/nifas) DILARANG masuk tabel children.
       .filter((b) => classifyPatientEntity({ name: b.name, ageText: b.age }) !== 'MOM');
 

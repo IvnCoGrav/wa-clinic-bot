@@ -193,8 +193,8 @@ describe('Follow-Up Repeat Order & Reconciler Unit Tests (TDD Adversarial)', () 
       { id: 'cust-tenant-a', phone: '628111111111', name: 'Bunda Tenant A', status: 'active' },
     ] as any);
 
-    // Mock count agar after > 0
-    vi.spyOn(prisma.followUp, 'count').mockResolvedValue(3);
+    // Mock count sekuens sebelum/sesudah (G4: metrik delta jujur) — sebelum=0, sesudah=3
+    vi.spyOn(prisma.followUp, 'count').mockResolvedValueOnce(0).mockResolvedValue(3);
 
     const createSpy = vi.spyOn(followUpService, 'createNextTreatmentFollowUps').mockResolvedValue(undefined as any);
 
@@ -207,5 +207,69 @@ describe('Follow-Up Repeat Order & Reconciler Unit Tests (TDD Adversarial)', () 
     const resB = await followUpService.reconcileOrphanedCompletedFollowUps(tenantB);
     expect(resB.reconciledCount).toBe(0);
     expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  // 7. Paritas G1: reservasi en_route LEBIH BARU dari completed → dikecualikan (tidak dijadwalkan ulang).
+  // Mengunci kelas celah yang sama di reconciler & backfill (keduanya wajib menyertakan en_route).
+  it('7. parity: en_route lebih baru dari completed terakhir → dikecualikan dari penjadwalan', async () => {
+    const oldCompleted = new Date('2026-06-01T10:00:00+07:00');
+    const newerEnRoute = new Date('2026-09-20T10:00:00+07:00'); // en_route, booking lampau tapi lebih baru
+
+    vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args: any) => {
+      if (args?.where?.status === 'completed') {
+        return [{ customer_id: 'cust-enroute', booking_date: oldCompleted }] as any;
+      }
+      // query belum-selesai (status: { in: [...] }) — wajib menyertakan en_route
+      return [{ customer_id: 'cust-enroute', booking_date: newerEnRoute }] as any;
+    });
+    const nextSpy = vi.spyOn(followUpService, 'createNextTreatmentFollowUps').mockResolvedValue(undefined as any);
+
+    const res = await followUpService.reconcileOrphanedCompletedFollowUps(DEFAULT_TENANT_ID);
+
+    expect(res.reconciledCount).toBe(0);
+    expect(nextSpy).not.toHaveBeenCalled();
+  });
+
+  // 8. G3 terkunci: booking baru membatalkan NEXT lama, lalu reconciler pulihkan dari anchor lama.
+  // (Perbaikan penuh butuh kolom histori — ditunda; perilaku jujur ini yang dikunci + dicatat di KNOWN_ISSUES #259.)
+  it('8. cancel-booking: NEXT lama dibatalkan booking baru, lalu pulih via reconciler dari anchor lama', async () => {
+    // Fase A: booking baru membatalkan 2 baris NEXT aktif lama
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([
+      { id: 'fu-old-s1' },
+      { id: 'fu-old-s2' },
+    ] as any);
+    const cancelSpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 2 } as any);
+
+    await followUpService.onReservationCreated('cust-cancel-1', 'res-new-9', DEFAULT_TENANT_ID);
+
+    expect(cancelSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['fu-old-s1', 'fu-old-s2'] } },
+        data: expect.objectContaining({ status: 'CANCELLED' }),
+      })
+    );
+
+    // Fase B: reconciler memulihkan dari completed lama (10 hari lalu → anchor mundur 1 siklus)
+    const oldCompleted = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args: any) => {
+      if (args?.where?.status === 'completed') {
+        return [{ customer_id: 'cust-cancel-1', booking_date: oldCompleted }] as any;
+      }
+      return [] as any; // tidak ada reservasi belum-selesai
+    });
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValue([] as any); // tidak ada baris aktif
+    vi.spyOn(prisma.customer, 'findMany').mockResolvedValue([
+      { id: 'cust-cancel-1', phone: '628100000001', name: 'Bunda Cancel', status: 'active' },
+    ] as any);
+    vi.spyOn(prisma.followUp, 'count').mockResolvedValueOnce(0).mockResolvedValue(3);
+    const createSpy = vi.spyOn(followUpService, 'createNextTreatmentFollowUps').mockResolvedValue(undefined as any);
+
+    const res2 = await followUpService.reconcileOrphanedCompletedFollowUps(DEFAULT_TENANT_ID);
+
+    expect(res2.reconciledCount).toBe(1);
+    expect(res2.customerIds).toContain('cust-cancel-1');
+    expect(createSpy).toHaveBeenCalledWith('cust-cancel-1', expect.any(Date), DEFAULT_TENANT_ID);
+    const anchorArg = createSpy.mock.calls[0][1] as Date;
+    expect(Math.abs(anchorArg.getTime() - oldCompleted.getTime())).toBeLessThan(1000);
   });
 });

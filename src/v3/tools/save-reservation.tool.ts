@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { parseIndonesianDate, applyBookingTimeToDate } from '../../utils/indonesian-date-parser';
 import { buildCustomerReservationIntake } from '../../services/reservation-intake';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
+import { isValidChildName } from '../../utils/name-sanitizer';
 import { GoalTracker } from '../state/goal-tracker';
 
 /** C.1 (audit #199): true bila alamat memuat detail presisi (bukan sekadar kota luas). */
@@ -477,21 +478,31 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       };
     }
 
-    const isMulti = allTreatments.length > 1 || children.length > 1;
+    // Fase 3 (Active User Commitment): hanya nama sah yang dihitung sebagai pasien anak.
+    // Usia tanpa nama TIDAK melahirkan pasien generik "Bayi 1/Anak N" (anti-ghost).
+    const validChildEntries = (children || [])
+      .map((c) => ({ name: String(c?.name || '').trim(), ageMonths: (c as any)?.ageMonths }))
+      .filter((c) => c.name && isValidChildName(c.name));
+    const validChildName = childName && isValidChildName(String(childName).trim()) ? String(childName).trim() : undefined;
+
+    const isMulti = allTreatments.length > 1 || validChildEntries.length > 1;
     const treatmentDetail = allTreatments.join(' + ');
     // Kategori data-driven dari master katalog (tanpa tebakan regex):
     const treatmentCategory = resolveTreatmentCategory(allTreatments, {
       tenantId,
       momStage: effectiveMomStage || undefined,
       gestationalWeeks: gestationalWeeks ?? undefined,
-      hasChildren: children.length > 0 || Boolean(childName),
+      hasChildren: validChildEntries.length > 0 || Boolean(validChildName),
       isMulti,
     });
 
-    const babies: BabyDetail[] = children.length > 0
-      ? children.map((c, i) => ({ name: c.name || `Anak ${i + 1}`, age: c.ageMonths != null ? `${c.ageMonths} bulan` : '0 bulan' }))
-      : (childName
-        ? [{ name: childName, age: childAgeMonths ? `${childAgeMonths} bulan` : '0 bulan' }]
+    const babies: BabyDetail[] = validChildEntries.length > 0
+      ? validChildEntries.map((c) => ({
+          name: c.name,
+          age: c.ageMonths != null ? `${c.ageMonths} bulan` : '0 bulan',
+        }))
+      : (validChildName
+        ? [{ name: validChildName, age: childAgeMonths ? `${childAgeMonths} bulan` : '0 bulan' }]
         : []);
 
     const parsedResult = parseIndonesianDate(bookingDate);

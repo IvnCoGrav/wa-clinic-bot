@@ -1,6 +1,8 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { customerService } from './customer.service';
+import { isValidChildName } from '../utils/name-sanitizer';
+import { classifyPatientEntity } from '../utils/reservation-text-parser';
 
 export interface CreateSeriesParams {
   customerId: string;
@@ -184,12 +186,15 @@ class ReservationSeriesService {
       const { parseAgeTextToBirthDate, monthsBetween } = await import('../utils/age-calculator');
       for (const b of params.babies) {
         if (!b.name) continue;
+        const nm = String(b.name || '').trim();
+        if (!nm || !isValidChildName(nm)) continue;
+        if (classifyPatientEntity({ name: nm, ageText: (b as any).ageText }) !== 'CHILD') continue;
         try {
           // Koreksi admin umur WAJIB menghitung ulang birth_date (paritas jalur
           // edit customer) — bukan hanya raw_age_text.
           const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
           const existingChild = await prisma.child.findFirst({
-            where: { customer_id: customerId, name: { equals: b.name, mode: 'insensitive' } },
+            where: { customer_id: customerId, name: { equals: nm, mode: 'insensitive' } },
           });
           if (existingChild) {
             const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
@@ -203,7 +208,7 @@ class ReservationSeriesService {
               data: {
                 tenant_id: tenantId,
                 customer_id: customerId,
-                name: b.name,
+                name: nm,
                 raw_age_text: b.ageText || '',
                 birth_date: newBirthDate,
                 age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,

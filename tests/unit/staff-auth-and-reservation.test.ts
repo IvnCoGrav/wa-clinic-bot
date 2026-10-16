@@ -822,6 +822,89 @@ describe('Staff Auth & Reservation Services', () => {
         })
       );
     });
+
+    // G2: guard payment dipersempit — REVIEW SENT tanpa NEXT tetap memicu retry idempoten
+    it('G2a. recordPayment tetap memicu follow-up bila hanya REVIEW SENT tanpa NEXT (retry parsial)', async () => {
+      const now = new Date();
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-pay-g2a',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        status: 'confirmed',
+        booking_date: now,
+        treatment_category: 'MOMS',
+        customer_id: 'cust-g2a',
+        purchase_value: 105000,
+        customer: { id: 'cust-g2a', name: 'Bunda G2a', conversations: [{ id: 'conv-g2a' }] },
+      });
+      (prisma.reservation.update as any).mockResolvedValue({
+        id: 'res-pay-g2a',
+        status: 'completed',
+        purchase_value: 105000,
+        purchase_occurred_at: now,
+      });
+      // Cek 1 (NEXT) → null; cek 2 (review SENT) → REVIEW SENT (create parsial gagal dulu)
+      ((prisma as any).followUp.findFirst as any)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'fu-review-1', type: 'REVIEW_H1_MOMS', status: 'SENT' });
+      const { reservationLifecycleService } = await import('../../src/services/reservation-lifecycle.service');
+      const completedSpy = vi.spyOn(reservationLifecycleService, 'onReservationCompleted').mockResolvedValue(undefined as any);
+
+      const result = await StaffReservationService.recordPayment({
+        reservationId: 'res-pay-g2a',
+        staffId: 'staff-1',
+        staffName: 'Bidan Yusi F',
+        tenantId: 'default-tenant',
+        paymentMethod: 'CASH',
+        amount: 105000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(completedSpy).toHaveBeenCalledTimes(1);
+      expect(completedSpy).toHaveBeenCalledWith(expect.objectContaining({ reservationId: 'res-pay-g2a' }));
+      completedSpy.mockRestore();
+    });
+
+    // G2: guard payment dipersempit — NEXT + review SENT lengkap berarti hemat (tidak dipanggil ulang)
+    it('G2b. recordPayment tidak memicu ulang bila NEXT + review SENT sudah lengkap (hemat)', async () => {
+      const now = new Date();
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-pay-g2b',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        status: 'completed',
+        booking_date: now,
+        treatment_category: 'MOMS',
+        customer_id: 'cust-g2b',
+        purchase_value: 105000,
+        customer: { id: 'cust-g2b', name: 'Bunda G2b', conversations: [{ id: 'conv-g2b' }] },
+      });
+      (prisma.reservation.update as any).mockResolvedValue({
+        id: 'res-pay-g2b',
+        status: 'completed',
+        purchase_value: 105000,
+        purchase_occurred_at: now,
+      });
+      // Cek 1 (NEXT) → ada; cek 2 (review SENT) → ada → hemat, hanya Sheets
+      ((prisma as any).followUp.findFirst as any)
+        .mockResolvedValueOnce({ id: 'fu-next-1', type: 'NEXT_TREATMENT', status: 'QUEUED' })
+        .mockResolvedValueOnce({ id: 'fu-review-1', type: 'REVIEW_H1_MOMS', status: 'SENT' });
+      const { reservationLifecycleService } = await import('../../src/services/reservation-lifecycle.service');
+      const completedSpy = vi.spyOn(reservationLifecycleService, 'onReservationCompleted').mockResolvedValue(undefined as any);
+
+      const result = await StaffReservationService.recordPayment({
+        reservationId: 'res-pay-g2b',
+        staffId: 'staff-1',
+        staffName: 'Bidan Yusi F',
+        tenantId: 'default-tenant',
+        paymentMethod: 'CASH',
+        amount: 105000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(completedSpy).not.toHaveBeenCalled();
+      completedSpy.mockRestore();
+    });
   });
 });
 

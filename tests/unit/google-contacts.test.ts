@@ -89,6 +89,32 @@ describe('Google Contacts Integration Suite', () => {
       expect(res.familyName).toBe('Citra');
     });
 
+    it('removes dangling hyphen and strips child placeholder when child name is ghost error or invalid', () => {
+      const res1 = formatContactName(
+        {
+          name: 'Bunda Nisamahardilla',
+          phone: '081234567890',
+          children: [{ name: 'belakangan ini' }],
+        },
+        null,
+        '{{name}} - {{child_name}}'
+      );
+      expect(res1.displayName).toBe('Bunda Nisamahardilla');
+      expect(res1.displayName).not.toContain('belakangan ini');
+
+      const res2 = formatContactName(
+        {
+          name: 'Bunda Nanda',
+          phone: '081234567890',
+          children: [{ name: '5 tahun)' }],
+        },
+        '5 tahun)',
+        '{{name}} - {{child_name}}'
+      );
+      expect(res2.displayName).toBe('Bunda Nanda');
+      expect(res2.displayName).not.toContain('5 tahun)');
+    });
+
     it('supports custom template tags with kelurahan and kecamatan', () => {
       const res = formatContactName(
         {
@@ -142,6 +168,17 @@ describe('Google Contacts Integration Suite', () => {
       expect(notes).toContain('Kenzo (Lahir: 2024-01-15)');
       expect(notes).toContain('Alamat: Kalisari, Mulyorejo, Surabaya');
       expect(notes).toContain('Reservasi Terakhir: Baby Massage + Bath');
+    });
+
+    it('omits corrupted child names from notes', () => {
+      const notes = buildContactNotes({
+        id: 'cust-999',
+        name: 'Bunda Nisa',
+        phone: '081234567890',
+        children: [{ name: 'belakangan ini' }],
+      });
+      expect(notes).not.toContain('Data Anak:');
+      expect(notes).not.toContain('belakangan ini');
     });
 
     it('REVISI-1 4.3: baris Alamat menyertakan teks jalan bila ada (tanpa duplikat kelurahan)', () => {

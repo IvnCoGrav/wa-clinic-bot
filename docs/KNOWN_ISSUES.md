@@ -3,13 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 260. [Anak/Ghost-Error] Pengerasan Fondasional Entitas Anak & Anti-Ghost (2026-10-16, IMPLEMENTED lokal — healing `--commit` DITAHAN)
+
+- **Status:** IMPLEMENTED lokal Fase 0–4 (validator kanonis + tutup pintu tulis/baca + healing generik dry-run). Build + suite relevan hijau; 2 gagal `chat-schedule-extractor.test.ts` terbukti pre-existing via restore-HEAD-and-rerun (tetap gagal tanpa perubahan ini). Healing `--commit` DILARANG sampai dry-run + backup + map manusia terverifikasi.
+- **Yang dipasang:**
+  1. `src/utils/name-sanitizer.ts:367` tolak sapaan generik (`Bunda/Ibu/Mama/Ayah`); `packages/admin-dashboard/.../chatScheduleExtractor.ts:130` cermin adverbia + kurung.
+  2. Pintu tulis: `reservation-series.service.ts:202`, `reservation-dispatch.route.ts:1217` kini guard `isValidChildName` + `classifyPatientEntity === CHILD`.
+  3. Pintu baca: `sheets/row-formatter.ts:192`, dashboard `paymentInvoiceFormatter.ts:130`, `conversation-transaction-extractor.ts:346` (validasi per-entitas agar kembar `A & B` tetap lolos).
+  4. `save-reservation.tool.ts`: usia tanpa nama TIDAK lagi melahirkan `Bayi 1/Anak N` (Active User Commitment); kategori dihitung dari nama valid saja.
+  5. `src/scripts/heal-corrupted-children-and-customers.ts` ditulis ulang generik: tanpa nama hardcode, rename hanya via `--map`, hapus otomatis hanya sampah struktural, backup CSV + error jujur + `FLAG_REVIEW` untuk sisanya. `scripts/scratch-query-live.ts` dihapus (baca `.env` + tembak live).
+- **Utang sadar (sementara, sesuai Confirmation Gate Q1–Q2):**
+  1. Daftar kata adverbia/domain masih di kode (bukan DB `ClinicPolicy`); pindah ke tenant-aware butuh migrasi + UI admin — ditunda.
+  2. Masih ada 2 implementasi validator (backend + dashboard) dengan logika cermin; unifikasi impor lintas-paket ditunda (butuh infra baru).
+  3. `backup.service.ts` + skrip `import/seed` tidak dipagari (jalur non-chat, risiko rendah).
+- **Monitor:** test anti-hardcode healing + query berkala `children WHERE !isValidChildName(name)` harus 0; bila >0 → alert, bukan auto-hapus.
+
 ## 259. [Follow-Up/Repeat Order] Pemulihan Antrean Follow-Up NEXT_TREATMENT untuk Kunjungan Berulang (2026-10-16, IMPLEMENTED)
 
-- **Status:** IMPLEMENTED lokal (Fase 0–3 selesai, build root tsc hijau, 37 unit test `follow-up-engine.test.ts` hijau, 6 adversarial test baru di `tests/unit/follow-up-repeat-order.test.ts` hijau).
+- **Status:** IMPLEMENTED lokal (repeat-order inti + ghost-fix G1–G6 selesai, build root tsc hijau, 37 unit test `follow-up-engine.test.ts` hijau, 8 adversarial test di `tests/unit/follow-up-repeat-order.test.ts` hijau, 2 test guard payment G2a/G2b hijau).
 - **Latar Belakang & Insiden Nyata:**
   - Kasus Bunda Syarifa (`628993868131`, kunjungan 3 Oktober 2026 selesai) dan Bunda Mery (`6287855089399`, kunjungan 12 Oktober 2026 selesai).
   - Pada pasien repeat order (kunjungan kedua/ketiga), pengingat bulanan (`NEXT_TREATMENT` Tahap 1 & 2) tidak terbuat di antrean `follow_ups` karena terblokir oleh baris `SENT` dari riwayat kunjungan pertama (Agustus 2026).
-  - Audit horizontal mengungkap total 28 pasien repeat order di September–Oktober 2026 mengalami amputasi antrean follow-up serupa.
+  - Audit horizontal mengungkap total 28 pasien repeat order di September–Oktober 2026 mengalami amputasi antrean follow-up serupa. **(UNVERIFIED — angka pasti = hasil `--dry-run` server, belum dilampirkan; dilarang jadi patokan `--commit`. Bukti lokal: dry-run hanya jalan graceful-offline tanpa DB.)**
 - **Akar Masalah Sistemik (Audit Multi-Lapisan):**
   1. **Query Filter Tanpa Siklus Tanggal (`src/services/follow-up.service.ts:createNextTreatmentFollowUps`):** Pengecekan per-stage membaca baris `status: { in: ['PENDING', 'QUEUED', 'SENT'] }` seumur hidup. Saat menemukan baris `SENT` dari bulan Agustus, kode langsung melakukan `skippedExists++; continue;` tanpa mengecek apakah pesan tersebut dikirim untuk kunjungan saat ini atau kunjungan masa lalu.
   2. **Exclusion Kasar Reconciler (`src/services/follow-up.service.ts:reconcileOrphanedCompletedFollowUps`):** Logika rekonsiliasi harian mengecualikan customer dari daftar yatim jika memiliki minimal 1 baris aktif (`PENDING`/`QUEUED`). Pasien yang hanya memiliki Tahap 3 (seperti Bunda Syarifa untuk Januari 2027) tidak pernah dilengkapi Tahap 1 dan Tahap 2-nya.
@@ -22,6 +37,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Utang Sadar & Catatan Arsitektur:**
   1. **Data Historis Tanpa Tanggal:** Baris `SENT` yang tidak memiliki `sent_at` dan `scheduled_at` tetap di-skip untuk keamanan.
   2. **Tindakan Lanjutan Pemulihan Data:** Pemulihan antrean untuk 28 pasien lama di database server produksi dijalankan via skrip `backfill-orphaned-followups.ts` setelah konfirmasi opsi waktu pengiriman (Opsi A vs B).
+  3. **Cancel Booking Baru vs NEXT Lama (G3, dikunci test 8):** `onReservationCreated` membatalkan SEMUA aktif termasuk NEXT lama, dan re-anchor menautkan `reservation_id` baru sehingga bila booking baru dibatalkan, NEXT re-anchor ikut CANCELLED. Pulih otomatis ≤24 jam via reconciler dari completed terakhir (tanggal mundur 1 siklus). Perbaikan penuh butuh kolom histori tanggal — ditunda (tanpa migrasi schema).
 
 ## 258. [Meta CAPI/Keuangan] Arsitektur Queue-First & Anti-Duplikat Meta CAPI (2026-10-14, IMPLEMENTED)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationText, extractBabyDetails, tryParseIndonesianDate } from '../../src/utils/reservation-text-parser';
+import { parseReservationText, extractBabyDetails, tryParseIndonesianDate, parseConversationalReservation } from '../../src/utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
 
 describe('Reservation Text Parser Unit Tests', () => {
@@ -437,6 +437,65 @@ Terimakasih.  ☺️`;
   it('21. should never silently jump +7 days for impossible dates without transposition (99 September -> null)', () => {
     const d = tryParseIndonesianDate('99 September 2026 jam 09.30');
     expect(d).toBeNull();
+  });
+
+  it('22. should not split decimal age (3,5 bulan) into two babies or create phantom "Bayi 2"', () => {
+    const rawText = `Nama Bunda: Nanda
+Alamat : Bratang Gede
+No. Hp : 082186222568
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Brea Sheeza Alrescha
+Usia Bayi/Anak : 3,5 bulan
+Treatment : pijat pulih ceria`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([
+      { name: 'Brea Sheeza Alrescha', age: '3,5 bulan' },
+    ]);
+    expect(res.reservation!.babies.length).toBe(1);
+    expect(res.reservation!.babies.some(b => b.name.includes('Bayi 2'))).toBe(false);
+  });
+
+  it('23. should accurately parse multi-baby with decimal age (Chiara & Cio with 10bln & 3,5 thn)', () => {
+    const rawText = `Nama Bunda: Indra
+Alamat : Sambikerep
+No. Hp : 085692444298
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Chiara & Cio
+Usia Bayi/Anak : 10bln & 3,5 thn
+Treatment : Pijat ceria`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([
+      { name: 'Chiara', age: '10bln' },
+      { name: 'Cio', age: '3,5 thn' },
+    ]);
+    expect(res.reservation!.babies.some(b => b.name.includes('5 tahun)'))).toBe(false);
+  });
+
+  it('24. should not capture conversational adverbs like "belakangan ini" as baby name in conversational parser', () => {
+    const chatText = 'halo mba mau tanya anak saya belakangan ini batuk pilek terus, bisa homecare ke wonokromo besok?';
+    const parsed = parseConversationalReservation(chatText);
+    // babyName should NOT be "belakangan ini"
+    expect(parsed?.babyName || '').not.toBe('belakangan ini');
+    expect(parsed?.babyName || '').not.toContain('belakangan');
+  });
+
+  it('25. should reject leaked form label when baby name is empty (Usia Bayi/Anak :)', () => {
+    const rawText = `Nama Bunda: Inggrit
+Alamat : Tenggilis
+No. Hp : 081339001971
+Pilihan treatment (Baby & Kids)
+Nama Bayi :
+Usia Bayi/Anak : 
+Treatment :`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies.some(b => b.name.includes('Usia Bayi/Anak'))).toBe(false);
+    expect(res.reservation!.babies.some(b => b.name.includes('Treatment'))).toBe(false);
   });
 });
 
