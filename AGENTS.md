@@ -93,6 +93,9 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
   - **Mobile Web & Touch Responsiveness**: WAJIB menerapkan checklist `mobile-native`.
   - **Review Perubahan / Diff**: WAJIB memuat panduan `code-review`.
   - **Validasi Rencana & Keputusan**: WAJIB melakukan uji kritis (*stress-test*) dengan `grilling` / `grill-me`.
+  - **Audit berlapis (sistem/kode/keamanan/proses/data)**: WAJIB memuat skill `audit-sistem-berlapis` setiap kali pengguna meminta "audit", "audit sistem", "audit menyeluruh", "periksa semua", atau "debugging menyeluruh". Jalankan Tahap 0-6 berurutan, baca-saja, bukti-dulu.
+  - **Audit chatbot/LLM (halu, RAG, prompt)**: WAJIB memuat skill `audit-chatbot-llm` setiap kali pengguna meminta audit/evaluasi chatbot, asisten AI, atau aplikasi LLM — terutama keluhan halu, jawaban ngawur/tidak relevan, evaluasi prompt/RAG/golden dataset.
+  - **Router audit (anti-salah-pilih)**: ada kata chatbot/halu/halusinasi/RAG/prompt/golden → `audit-chatbot-llm`; ada kata kode/infrastruktur/DB/migrasi/keuangan/proses → `audit-sistem-berlapis`; ada kata animasi/motion → skill animasi (`improve-animations`); bila ragu, tanya pengguna dulu.
   - **Manajemen Tiket & Spesifikasi**: WAJIB menggunakan `to-tickets`, `to-spec`, dan `triage`.
 - **Mandat Laporan Bahasa Sederhana (MANDATORY)**: Setiap laporan audit/investigasi kepada user WAJIB memakai Bahasa Indonesia sederhana dan struktur tetap: (1) Apa yang terjadi, (2) Apa temuan, (3) Apa solusinya. Dilarang memakai istilah teknis tanpa penjelasan sederhana di sampingnya.
 
