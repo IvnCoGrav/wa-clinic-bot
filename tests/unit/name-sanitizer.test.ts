@@ -5,6 +5,7 @@ import {
   formatGreetingBunda,
   cleanSingleBabyName,
   formatBabyNamesForGreeting,
+  isValidChildName,
 } from '../../src/utils/name-sanitizer';
 import { getRollingFollowUpMessage } from '../../src/config/followup-templates';
 import { getGazetteerAreas } from '../../src/utils/gazetteer';
@@ -210,6 +211,61 @@ describe('Name & BabyName Sanitizer Unit Tests', () => {
       expect(text).toContain('dek Arka & dek Arki');
       expect(text).not.toContain('Bunda Bunda');
       expect(text).not.toContain('Sidotopo');
+    });
+  });
+
+  describe('5. isValidChildName (Ghost Error & Adverb Prevention)', () => {
+    it('accepts valid human child names', () => {
+      expect(isValidChildName('Kenzo')).toBe(true);
+      expect(isValidChildName('Arash')).toBe(true);
+      expect(isValidChildName('Chiara')).toBe(true);
+      expect(isValidChildName('Azmy Nur Rahmaniyah')).toBe(true);
+      expect(isValidChildName('Brea Sheeza Alrescha')).toBe(true);
+    });
+
+    it('rejects conversational adverbs and temporal markers', () => {
+      expect(isValidChildName('belakangan ini')).toBe(false);
+      expect(isValidChildName('saat ini')).toBe(false);
+      expect(isValidChildName('kemarin')).toBe(false);
+      expect(isValidChildName('tadi pagi')).toBe(false);
+      expect(isValidChildName('besok')).toBe(false);
+    });
+
+    it('rejects broken parentheses from split decimal ages', () => {
+      expect(isValidChildName('5 tahun)')).toBe(false);
+      expect(isValidChildName('4 tahun)')).toBe(false);
+      expect(isValidChildName('5 bulan)')).toBe(false);
+      expect(isValidChildName('newborn)')).toBe(false);
+      expect(isValidChildName('Cio (3')).toBe(false);
+      expect(isValidChildName('Alessia (0 bulan')).toBe(false);
+    });
+
+    it('rejects leaked form headers and labels', () => {
+      expect(isValidChildName('Usia Bayi/Anak :')).toBe(false);
+      expect(isValidChildName('Treatment :')).toBe(false);
+      expect(isValidChildName('Nama Bayi :')).toBe(false);
+      expect(isValidChildName('Alamat :')).toBe(false);
+    });
+
+    it('rejects self-referential or third-party phrases', () => {
+      expect(isValidChildName('saya sendiri')).toBe(false);
+      expect(isValidChildName('anak saya')).toBe(false);
+      expect(isValidChildName('anak tetangga')).toBe(false);
+      expect(isValidChildName('atas nama saya')).toBe(false);
+    });
+
+    it('rejects naked ages and generic clinic service words', () => {
+      expect(isValidChildName('5 bulan')).toBe(false);
+      expect(isValidChildName('3 thn')).toBe(false);
+      expect(isValidChildName('pijat bayi')).toBe(false);
+      expect(isValidChildName('treatment homecare')).toBe(false);
+    });
+
+    it('falls back to "si kecil" in formatBabyNamesForGreeting when child name is ghost error', () => {
+      expect(formatBabyNamesForGreeting([{ name: 'belakangan ini' }])).toBe('si kecil');
+      expect(formatBabyNamesForGreeting([{ name: '5 tahun)' }])).toBe('si kecil');
+      expect(formatBabyNamesForGreeting([{ name: 'Usia Bayi/Anak :' }])).toBe('si kecil');
+      expect(formatBabyNamesForGreeting([{ name: 'saya sendiri' }])).toBe('si kecil');
     });
   });
 });

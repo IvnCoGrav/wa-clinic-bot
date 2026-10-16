@@ -30,8 +30,20 @@ const pilotPhones: string[] | null = pilotArg
   : null;
 
 function wib0900(anchor: Date, monthOffset: number): Date {
-  const w = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
-  return new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() + monthOffset, w.getUTCDate(), 2, 0, 0, 0));
+  const bWib = new Date(anchor.getTime() + 7 * 60 * 60 * 1000);
+  const year = bWib.getUTCFullYear();
+  const month = bWib.getUTCMonth();
+  const day = bWib.getUTCDate();
+
+  // M2: jepit akhir bulan agar tanggal 31 tidak meluap (mis. 31 Okt +1 bulan = 30 Nov, BUKAN 1 Des)
+  const targetMonthIndex = month + monthOffset;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  const finalDay = Math.min(day, daysInTargetMonth);
+
+  // 09:00 WIB = 02:00 UTC
+  return new Date(Date.UTC(targetYear, normalizedMonth, finalDay, 2, 0, 0, 0));
 }
 
 async function getTenantIds(): Promise<string[]> {
@@ -114,10 +126,19 @@ async function main() {
 
     const hasNext = await prisma.followUp.findMany({
       where: { tenant_id: tenantId, customer_id: { in: candidates }, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
-      select: { customer_id: true },
+      select: { customer_id: true, stage: true },
     }).catch(() => [] as any);
-    const hasNextSet = new Set((hasNext as any[]).map((r) => r.customer_id));
-    let orphaned = candidates.filter((id) => !hasNextSet.has(id));
+    const stagesByCust = new Map<string, Set<number>>();
+    for (const r of (hasNext as any[]) || []) {
+      if (!r.customer_id) continue;
+      let s = stagesByCust.get(r.customer_id);
+      if (!s) {
+        s = new Set<number>();
+        stagesByCust.set(r.customer_id, s);
+      }
+      if (typeof r.stage === 'number') s.add(r.stage);
+    }
+    let orphaned = candidates.filter((id) => (stagesByCust.get(id)?.size ?? 0) < 3);
 
     // Filter bypass/sandbox/dummy/blocked
     try {
@@ -157,11 +178,45 @@ async function main() {
           stages.push({ stage, at, willCreate: false, reason: 'past' });
           continue;
         }
-        const exists = await prisma.followUp.findFirst({
-          where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', stage, status: { in: ['PENDING', 'QUEUED', 'SENT'] as any } },
+        // Cek baris aktif PENDING/QUEUED per-stage
+        const activeRow = await prisma.followUp.findFirst({
+          where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', stage, status: { in: ['PENDING', 'QUEUED'] as any } },
         }).catch(() => null);
-        if (exists) {
-          stages.push({ stage, at, willCreate: false, reason: 'exists/SENT' });
+
+        // Cek baris SENT siklus ini (bDate = kunjungan saat ini)
+        const inCycleSent = await prisma.followUp.findFirst({
+          where: {
+            tenant_id: tenantId,
+            customer_id: cid,
+            type: 'NEXT_TREATMENT',
+            stage,
+            status: 'SENT' as any,
+            OR: [
+              { sent_at: { gte: bDate } },
+              { scheduled_at: { gte: bDate } },
+            ],
+          },
+        }).catch(() => null);
+
+        // Fallback konservatif: data legacy SENT tanpa tanggal
+        const legacySent = !inCycleSent ? await prisma.followUp.findFirst({
+          where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', stage, status: 'SENT' as any },
+        }).catch(() => null) : null;
+
+        let legacyNoDate = false;
+        if (legacySent) {
+          const sAt = legacySent.sent_at ? new Date(legacySent.sent_at) : null;
+          const scAt = legacySent.scheduled_at ? new Date(legacySent.scheduled_at) : null;
+          const hasDate = (sAt && !isNaN(sAt.getTime())) || (scAt && !isNaN(scAt.getTime()));
+          if (!hasDate) legacyNoDate = true;
+        }
+
+        if (activeRow) {
+          stages.push({ stage, at, willCreate: false, reason: 'active(PENDING/QUEUED)' });
+        } else if (inCycleSent) {
+          stages.push({ stage, at, willCreate: false, reason: 'inCycleSent' });
+        } else if (legacyNoDate) {
+          stages.push({ stage, at, willCreate: false, reason: 'legacy-SENT-no-date' });
         } else {
           stages.push({ stage, at, willCreate: true });
         }

@@ -913,7 +913,11 @@ export class FollowUpService {
           continue;
         }
 
-        // Per-stage idempotensi: cek PENDING/QUEUED/SENT agar tidak recreate stage yang sudah ada/terkirim
+        // Per-stage idempotensi & re-anchor:
+        // Cek PENDING/QUEUED/SENT per stage.
+        // Baris aktif (PENDING/QUEUED) di-re-anchor bila tanggal/reservation_id beda.
+        // Baris SENT hanya memblokir bila milik siklus kunjungan ini (bDate/reservationId).
+        // Baris SENT masa lalu (< bDate) DILARANG memblokir kunjungan baru.
         let exists: any = null;
         try {
           exists = await prisma.followUp?.findFirst?.({
@@ -924,19 +928,15 @@ export class FollowUpService {
               tenant_id: tenantId,
               status: { in: ['PENDING', 'QUEUED', 'SENT'] as any },
             },
+            orderBy: { created_at: 'desc' },
           });
         } catch (_) {}
+
         if (exists) {
-          // Re-anchor (fondasional): baris aktif PENDING/QUEUED yang masih terjadwal di
-          // tanggal lama akibat anchor kunjungan sebelumnya WAJIB digeser ke tanggal
-          // kunjungan terbaru. Ini state-driven (status + scheduled_at), bukan tambal
-          // prompt. SENT bersifat terminal historis — tidak pernah digeser/dikirim ulang.
           const existsStatus = String(exists.status || '').toUpperCase();
-          if (existsStatus === 'SENT') {
-            skippedExists++;
-            continue;
-          }
-          if ((existsStatus === 'PENDING' || existsStatus === 'QUEUED')) {
+
+          // 1. Baris aktif (PENDING/QUEUED) -> re-anchor ke tanggal kunjungan baru
+          if (existsStatus === 'PENDING' || existsStatus === 'QUEUED') {
             const oldAt = exists.scheduled_at ? new Date(exists.scheduled_at) : null;
             const needsReAnchor =
               !oldAt ||
@@ -953,8 +953,6 @@ export class FollowUpService {
                 });
                 reAnchored++;
               } catch (updErr: any) {
-                // Bila bentrok @@unique([tenant_id, reservation_id, type, stage]) saat
-                // menautkan reservation_id, tetap selamatkan tanggal (update scheduled_at saja).
                 if (reservationId) {
                   try {
                     await prisma.followUp?.update?.({
@@ -972,8 +970,38 @@ export class FollowUpService {
             }
             continue;
           }
-          skippedExists++;
-          continue;
+
+          // 2. Baris SENT terminal historis -> TIDAK PERNAH di-update/di-reanchor.
+          // SENT hanya memblokir bila milik siklus kunjungan ini (reservationId sama atau tanggal >= bDate).
+          if (existsStatus === 'SENT') {
+            const sAt = exists.sent_at ? new Date(exists.sent_at) : null;
+            const scAt = exists.scheduled_at ? new Date(exists.scheduled_at) : null;
+            const hasDate = (sAt && !isNaN(sAt.getTime())) || (scAt && !isNaN(scAt.getTime()));
+            const sameRes = !!reservationId && !!exists.reservation_id && exists.reservation_id === reservationId;
+            const inCycleDate =
+              (sAt && !isNaN(sAt.getTime()) && sAt.getTime() >= bDate.getTime()) ||
+              (scAt && !isNaN(scAt.getTime()) && scAt.getTime() >= bDate.getTime());
+
+            if (sameRes || inCycleDate) {
+              // Sudah terkirim di siklus kunjungan ini
+              skippedExists++;
+              continue;
+            }
+
+            // Fallback konservatif (Test 14): jika SENT tanpa tanggal & tanpa reservationId,
+            // tetap anggap memblokir siklus ini agar tidak spam ganda pada data mock/legacy.
+            if (!hasDate && !sameRes) {
+              skippedExists++;
+              continue;
+            }
+
+            // Jika bertanggal dan tanggalnya < bDate (riwayat masa lalu), jangan di-skip!
+            // Lanjut ke create di bawah.
+          } else {
+            // Status tidak dikenal (mis. mock { id: 'existing-1' } di Test 4b) -> skip
+            skippedExists++;
+            continue;
+          }
         }
 
         try {
@@ -1079,8 +1107,9 @@ export class FollowUpService {
       const candidates = customerIds.filter((id) => !hasNewerUncompleted.has(id));
       if (candidates.length === 0) return empty;
 
-      // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED (SENT tidak dihitung â€” per-stage guard akan skip stage SENT)
-      let hasNext: Array<{ customer_id: string }> = [];
+      // 3. Exclude yang sudah punya NEXT_TREATMENT PENDING/QUEUED per-stage lengkap (3 stage).
+      // SENT tidak dihitung — per-stage guard di createNextTreatmentFollowUps akan menolak duplikasi stage SENT siklus-ini.
+      let hasNext: Array<{ customer_id: string; stage: number }> = [];
       try {
         hasNext = (await prisma.followUp.findMany({
           where: {
@@ -1089,11 +1118,22 @@ export class FollowUpService {
             type: 'NEXT_TREATMENT',
             status: { in: ['PENDING', 'QUEUED'] as any },
           },
-          select: { customer_id: true },
+          select: { customer_id: true, stage: true },
         })) as any;
       } catch {}
-      const hasNextSet = new Set((hasNext || []).map((r) => r.customer_id));
-      const orphaned = candidates.filter((id) => !hasNextSet.has(id));
+      const stagesByCust = new Map<string, Set<number>>();
+      for (const r of hasNext || []) {
+        if (!r.customer_id) continue;
+        let s = stagesByCust.get(r.customer_id);
+        if (!s) {
+          s = new Set<number>();
+          stagesByCust.set(r.customer_id, s);
+        }
+        if (typeof r.stage === 'number') {
+          s.add(r.stage);
+        }
+      }
+      const orphaned = candidates.filter((id) => (stagesByCust.get(id)?.size ?? 0) < 3);
       if (orphaned.length === 0) return empty;
 
       // 4. Filter bypass/sandbox/dummy/blocked (DB lesu â†’ filter best-effort, hilangkan yang jelas bypass)

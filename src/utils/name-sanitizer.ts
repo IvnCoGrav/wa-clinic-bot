@@ -340,6 +340,63 @@ export function formatGreetingBunda(cleanName: string): string {
 }
 
 /**
+ * Memvalidasi apakah sebuah string layak menjadi entitas nama anak/bayi.
+ * Mencegah masuknya ghost error seperti kata keterangan ("belakangan ini"),
+ * label formulir ("Usia Bayi/Anak :"), pecahan kurung usia ("5 tahun)"),
+ * rujukan diri ("saya sendiri"), atau kata umum layanan ("pijat bayi").
+ *
+ * Murni deterministik (zero I/O, zero side-effects).
+ */
+export function isValidChildName(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const s = raw.trim();
+  if (s.length < 2 || s.length > 40) return false;
+
+  // Dilarang karakter rusak atau pemisah sistem yang tersisa
+  if (/[:;*~_#@!&|+=<>\n\r]/.test(s)) return false;
+
+  // Dilarang pecahan tanda kurung tak berpasangan (misal "5 tahun)", "Cio (3")
+  const openParen = (s.match(/\(/g) || []).length;
+  const closeParen = (s.match(/\)/g) || []).length;
+  if (openParen !== closeParen) return false;
+  if (s.startsWith(')') || s.endsWith(')')) return false;
+
+  const lower = s.toLowerCase();
+
+  // Dilarang placeholder umum
+  if (lower === '-' || lower === '--' || lower === 'null' || lower === 'undefined' || lower === 'si kecil') {
+    return false;
+  }
+
+  // Dilarang angka usia telanjang (misal "5 bulan", "3 thn", "0 bulan")
+  if (/^\d+\s*(?:bulan|bln|thn|tahun|th|hari|hr|minggu|m)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Dilarang adverbia waktu / percakapan bahasa Indonesia
+  if (/\b(belakangan\s+ini|saat\s+ini|sekarang|kemarin|tadi\s+pagi|tadi\s+malam|besok|lusa|nanti|dulu|hari\s+ini)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Dilarang rujukan diri / pihak ketiga
+  if (/\b(saya\s+sendiri|anak\s+saya|bayi\s+saya|anak\s+tetangga|atas\s+nama\s+saya)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Dilarang kata umum domain/klinik yang tertelan
+  if (/\b(treatment|homecare|reservasi|booking|pilihan\s+treatment|jadwal|slot|pijat)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Dilarang label form formulir
+  if (/\b(nama\s+bayi|nama\s+anak|nama\s+bunda|usia\s+bayi|usia\s+anak|alamat)\b/i.test(lower)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Membersihkan satu nama anak
  */
 export function cleanSingleBabyName(raw: string): string {
@@ -373,8 +430,9 @@ export function formatBabyNamesForGreeting(
 
   if (children && children.length > 0) {
     for (const c of children) {
+      if (!c || !c.name) continue;
       const cleaned = cleanSingleBabyName(c.name);
-      if (cleaned && !names.includes(cleaned) && cleaned.toLowerCase() !== 'si kecil') {
+      if (cleaned && isValidChildName(cleaned) && !names.includes(cleaned) && cleaned.toLowerCase() !== 'si kecil') {
         names.push(cleaned);
       }
     }
@@ -387,7 +445,7 @@ export function formatBabyNamesForGreeting(
       // Split by &, dan, koma
       const parts = match[1].split(/&|\bdan\b|,/i).map(s => cleanSingleBabyName(s)).filter(Boolean);
       for (const p of parts) {
-        if (p && !names.includes(p) && p.toLowerCase() !== 'si kecil') {
+        if (p && isValidChildName(p) && !names.includes(p) && p.toLowerCase() !== 'si kecil') {
           names.push(p);
         }
       }

@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 259. [Follow-Up/Repeat Order] Pemulihan Antrean Follow-Up NEXT_TREATMENT untuk Kunjungan Berulang (2026-10-16, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 0–3 selesai, build root tsc hijau, 37 unit test `follow-up-engine.test.ts` hijau, 6 adversarial test baru di `tests/unit/follow-up-repeat-order.test.ts` hijau).
+- **Latar Belakang & Insiden Nyata:**
+  - Kasus Bunda Syarifa (`628993868131`, kunjungan 3 Oktober 2026 selesai) dan Bunda Mery (`6287855089399`, kunjungan 12 Oktober 2026 selesai).
+  - Pada pasien repeat order (kunjungan kedua/ketiga), pengingat bulanan (`NEXT_TREATMENT` Tahap 1 & 2) tidak terbuat di antrean `follow_ups` karena terblokir oleh baris `SENT` dari riwayat kunjungan pertama (Agustus 2026).
+  - Audit horizontal mengungkap total 28 pasien repeat order di September–Oktober 2026 mengalami amputasi antrean follow-up serupa.
+- **Akar Masalah Sistemik (Audit Multi-Lapisan):**
+  1. **Query Filter Tanpa Siklus Tanggal (`src/services/follow-up.service.ts:createNextTreatmentFollowUps`):** Pengecekan per-stage membaca baris `status: { in: ['PENDING', 'QUEUED', 'SENT'] }` seumur hidup. Saat menemukan baris `SENT` dari bulan Agustus, kode langsung melakukan `skippedExists++; continue;` tanpa mengecek apakah pesan tersebut dikirim untuk kunjungan saat ini atau kunjungan masa lalu.
+  2. **Exclusion Kasar Reconciler (`src/services/follow-up.service.ts:reconcileOrphanedCompletedFollowUps`):** Logika rekonsiliasi harian mengecualikan customer dari daftar yatim jika memiliki minimal 1 baris aktif (`PENDING`/`QUEUED`). Pasien yang hanya memiliki Tahap 3 (seperti Bunda Syarifa untuk Januari 2027) tidak pernah dilengkapi Tahap 1 dan Tahap 2-nya.
+  3. **Divergensi Rumus Tanggal di Skrip Backfill (`src/scripts/backfill-orphaned-followups.ts`):** Skrip menggunakan `wib0900` sederhana tanpa clamping akhir bulan (berbeda dengan `computeNextTreatmentAtWib0900` yang menjepit 31 Oktober + 1 bulan ke 30 November), serta mengulangi filter cacat `exists/SENT -> skip`.
+- **Solusi Fondasional Terpasang:**
+  1. **Cycle-Aware SENT Filtering**: Baris `SENT` hanya memblokir pembuatan jika terbukti milik siklus kunjungan ini (`sent_at >= bookingDate` ATAU `scheduled_at >= bookingDate` ATAU `reservation_id === reservationId`). Baris `SENT` masa lalu (`sent_at < bookingDate`) diperlakukan sebagai riwayat historis yang DILARANG memblokir kunjungan baru.
+  2. **Fallback Konservatif (Test 14)**: Baris `SENT` tanpa tanggal dan tanpa tautan reservasi (data legacy/mock) tetap dianggap memblokir siklus berjalan guna mencegah duplikasi pengiriman pada data lama.
+  3. **Per-Stage Reconciler Completeness**: Reconciler harian memeriksa kelengkapan 3 stage penuh (`(stagesByCust.get(id)?.size ?? 0) < 3`), sehingga pasien dengan status parsial otomatis dilengkapi stage masa depannya.
+  4. **Penyelarasan Skrip Backfill**: Rumus tanggal disamakan menggunakan clamping akhir bulan (02:00 UTC = 09:00 WIB), dan filter idempotensi diselaraskan dengan service inti.
+- **Utang Sadar & Catatan Arsitektur:**
+  1. **Data Historis Tanpa Tanggal:** Baris `SENT` yang tidak memiliki `sent_at` dan `scheduled_at` tetap di-skip untuk keamanan.
+  2. **Tindakan Lanjutan Pemulihan Data:** Pemulihan antrean untuk 28 pasien lama di database server produksi dijalankan via skrip `backfill-orphaned-followups.ts` setelah konfirmasi opsi waktu pengiriman (Opsi A vs B).
+
 ## 258. [Meta CAPI/Keuangan] Arsitektur Queue-First & Anti-Duplikat Meta CAPI (2026-10-14, IMPLEMENTED)
 
 - **Status:** IMPLEMENTED lokal (Fase 0–6 selesai, build root backend + dashboard hijau, 8 unit test invarian baru hijau di `tests/unit/capi-queue-first-workflow.test.ts`, 46 test CAPI hijau).

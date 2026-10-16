@@ -454,9 +454,14 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Sent', DEFAULT_TENANT_ID);
     const bookingDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // besok → semua stage masa depan
     const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
-    // stage 1 → SENT (skip), stage 2/3 → null (buat)
+    // stage 1 → SENT siklus ini (sent_at >= bookingDate) sehingga di-skip secara sah, stage 2/3 → null (buat baru)
     findFirstSpy
-      .mockResolvedValueOnce({ id: 'sent-1', status: 'SENT' } as any)
+      .mockResolvedValueOnce({
+        id: 'sent-1',
+        status: 'SENT',
+        sent_at: new Date(bookingDate.getTime() + 30 * 24 * 60 * 60 * 1000),
+        scheduled_at: new Date(bookingDate.getTime() + 30 * 24 * 60 * 60 * 1000),
+      } as any)
       .mockResolvedValueOnce(null as any)
       .mockResolvedValueOnce(null as any);
     const createSpy = vi.spyOn(prisma.followUp, 'create');
@@ -468,23 +473,30 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
   });
 
   it('15. createNextTreatmentFollowUps WIB & QUEUED: jam 09:00 WIB, status QUEUED', async () => {
-    const phone = `62893${Date.now()}wib`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Wib', DEFAULT_TENANT_ID);
-    const bookingDate = new Date('2026-09-14T10:00:00+07:00');
-    vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
-    const createSpy = vi.spyOn(prisma.followUp, 'create');
-    const before = createSpy.mock.calls.length;
-    await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
-    const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
-    expect(nextCalls.length).toBe(3);
-    for (const c of nextCalls) {
-      expect(c[0].data.status).toBe('QUEUED');
-      const d: Date = c[0].data.scheduled_at;
-      // 09:00 WIB = 02:00 UTC
-      expect(d.getUTCHours()).toBe(2);
-      expect(d.getUTCMinutes()).toBe(0);
+    // Fake timers agar tanggal test (2026-09-14) stabil dan tidak lapuk oleh waktu kalender di masa depan
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-14T10:00:00+07:00'));
+    try {
+      const phone = `62893${Date.now()}wib`;
+      const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Wib', DEFAULT_TENANT_ID);
+      const bookingDate = new Date('2026-09-14T10:00:00+07:00');
+      vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
+      const createSpy = vi.spyOn(prisma.followUp, 'create');
+      const before = createSpy.mock.calls.length;
+      await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
+      const nextCalls = createSpy.mock.calls.slice(before).filter((c: any) => c[0]?.data?.type === 'NEXT_TREATMENT');
+      expect(nextCalls.length).toBe(3);
+      for (const c of nextCalls) {
+        expect(c[0].data.status).toBe('QUEUED');
+        const d: Date = c[0].data.scheduled_at;
+        // 09:00 WIB = 02:00 UTC
+        expect(d.getUTCHours()).toBe(2);
+        expect(d.getUTCMinutes()).toBe(0);
+      }
+      expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-14T02:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
     }
-    expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-14T02:00:00.000Z');
   });
 
   // Fase 3 adversarial — bypass/zombie immunity
