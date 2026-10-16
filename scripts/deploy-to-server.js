@@ -34,6 +34,12 @@ async function deploy() {
   const deployCmd = `
 set -e
 cd /opt/wa-clinic-bot
+echo "--> Ensure AI_MODEL_RECEIPT_VISION in .env..."
+if ! grep -q "AI_MODEL_RECEIPT_VISION" /opt/wa-clinic-bot/.env; then
+  echo 'AI_MODEL_RECEIPT_VISION="glm-5.3-flash"' >> /opt/wa-clinic-bot/.env
+  echo "Added AI_MODEL_RECEIPT_VISION to remote .env"
+fi
+
 echo "--> Git Pull Latest Code..."
 git pull origin master
 
