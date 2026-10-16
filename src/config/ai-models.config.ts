@@ -239,9 +239,9 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     {
       task: 'RECEIPT_VISION',
       provider: 'SumoPod',
-      modelName: process.env.AI_MODEL_RECEIPT_VISION || 'gpt-4o-mini',
+      modelName: process.env.AI_MODEL_RECEIPT_VISION || 'glm-5.3-flash',
       description: 'Digunakan untuk analisis bukti transfer / struk pembayaran dari gambar.',
-      maxTokens: 512,
+      maxTokens: 1500,
       temperature: 0.1,
       confidenceThreshold: 0.7,
     },

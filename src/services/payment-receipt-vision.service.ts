@@ -6,7 +6,7 @@ import {
   extractBalancedJson,
 } from '../integrations/llm/llm-gateway';
 
-import { KENARI_CATALOG } from '../config/ai-models.config';
+import { KENARI_CATALOG, AiModelConfigService } from '../config/ai-models.config';
 
 /**
  * ReceiptSchema — Kontrak output deteksi struk pembayaran (satu pintu kanonis).
@@ -153,6 +153,10 @@ export async function detectReceipt(params: {
       timeoutMs: 20000,
     });
 
+    const taskConfig = AiModelConfigService.getModelConfig('RECEIPT_VISION', tenantId);
+    const maxTokens = taskConfig?.maxTokens || 1500;
+    const temperature = taskConfig?.temperature ?? 0.1;
+
     const base64Image = buffer.toString('base64');
     const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
@@ -185,8 +189,8 @@ export async function detectReceipt(params: {
             ],
           },
         ],
-        temperature: 0.1,
-        max_tokens: 512,
+        temperature,
+        max_tokens: maxTokens,
       },
     });
 
