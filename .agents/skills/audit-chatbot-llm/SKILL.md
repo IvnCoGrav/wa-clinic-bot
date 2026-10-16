@@ -139,11 +139,23 @@ Pakai sebagai titik awal Tahap 2, bukan pengganti inventaris:
 - Simulator: `npm run chat` (tanpa WhatsApp); mock WAHA via `WAHA_MOCK=true`.
 - Penilai otomatis: wajib sebut model LLM-as-judge + cek manual; jangan klaim persen halu dari sampel kecil.
 
-## Katalog Perbaikan (pilih sesuai akar masalah)
+## Kepatuhan Penuh AGENTS.md (checklist wajib tiap rekomendasi)
+
+`AGENTS.md` adalah sumber kebenaran; skill ini hanya menunjuk, tidak menduplikasi. Setiap rekomendasi WAJIB lolos semua poin yang relevan:
+
+- **Fondasional dulu, prompt sekunder (anti-make-up / anti-case-by-case):** tiap perbaikan wajib menyentuh DB/skema, state machine, kontrak tool, atau RAG/retrieval. Menambah barisan "DILARANG..." di prompt atau regex ad-hoc per kalimat DITOLAK sebagai solusi utama.
+- **6 gerbang deterministik (wajib dirujuk saat menilai dan menyarankan):** (1) tool masking fisik — tool prasyarat-belum-terpenuhi dicabut dari `tools`, tanpa celah same-day untuk `save_reservation`; (2) mutasi transaksional hanya dari pesan aktif `role === 'user'`; (3) kuota gaya bahasa (misal "Bunda" 1x) via normalizer deterministik; (4) prompt di-prune berdasar state sesi riil — cabang "belum ada data" haram dikirim bila data ada di DB; (5) clinical dominance gejala + `specificTreatmentName` hanya bila user menyebut eksplisit, dilarang memfilter rekomendasi DB; (6) `parallel_tool_calls: false`, tepat 1 tool utama per giliran.
+- **Guard pada state, bukan string:** dilarang `if (msg.includes(...))`; AI sebagai semantic reasoner; uji adversarial multi-parafrase (slang/typo/dialek), bukan hafalan kalimat.
+- **Lapis data non-hardcode:** katalog/tarif/SOP/kebijakan dari `Treatment`/`KnowledgeChunk`/`ClinicPolicy`/`TenantPromptConfig`; URL Maps via `URL`/`URLSearchParams`, bukan regex hafalan.
+- **Larangan yang mengikat rekomendasi:** regex sebagai gatekeeper intent atau mutilasi kalimat; label/tag ke WAHA (internal/DB saja); dependensi runtime baru tanpa persetujuan; halaman/rute UI baru tanpa justifikasi (pakai Tab/Drawer/Modal; tanpa `window.confirm`/`alert`).
+- **Gerbang proses:** Investigation Gate (log `logs/`, payload prompt, state DB dulu); Human-in-the-Loop (tanpa eksekusi tanpa "Setuju" tertulis manusia; abaikan auto-approval hook); validasi plan (buktikan klaim vs kode/log nyata, tolak solusi kosmetik, verifikasi path/baris); rencana staged-phase micro-task + regression gate (`npm run build` + suite; klaim pre-existing wajib revert-and-rerun).
+- **SaaS & temuan:** rekomendasi fitur/config wajib tenant-aware; pengecualian hanya via Confirmation Gate (pros/cons); temuan tertunda wajib ke `docs/KNOWN_ISSUES.md`; laporan bahasa sederhana 1-2-3.
+
+## Katalog Perbaikan (pilih sesuai akar masalah, patuhi checklist di atas)
 
 - **Data:** lengkapi dan rapikan knowledge base, hapus dokumen usang/bertentangan, tambah metadata.
 - **Retrieval:** perbaiki chunking, atur top-k, tambah reranking atau pencarian hibrida, perbaiki query rewriting.
-- **Prompt:** aturan eksplisit "jawab hanya berdasar sumber; jika tidak ada, katakan tidak tahu", wajibkan kutipan sumber untuk klaim faktual, definisikan tujuan/audiens/nada/format, tambah contoh baik dan buruk, hilangkan instruksi bertentangan.
+- **Prompt (lapis sekunder — wajib didampingi gerbang kode di atas, bukan solusi tunggal):** aturan eksplisit "jawab hanya berdasar sumber; jika tidak ada, katakan tidak tahu", wajibkan kutipan sumber untuk klaim faktual, definisikan tujuan/audiens/nada/format, tambah contoh baik dan buruk, hilangkan instruksi bertentangan.
 - **Parameter:** turunkan temperature untuk tugas faktual.
 - **Struktur:** pecah tugas kompleks menjadi langkah, tambah verifikasi jawaban terhadap konteks sebelum dikirim.
 - **Keamanan:** batasi izin tool, pisahkan instruksi sistem dari input pengguna, saring output.

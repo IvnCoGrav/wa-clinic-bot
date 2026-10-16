@@ -115,6 +115,19 @@ Pakai sebagai titik awal Tahap 2, bukan pengganti inventaris:
 - S=1-3: typo, inkonsistensi penamaan non-fungsional.
 - D=10 bila tanpa log/monitor/test yang menutupinya; turunkan D bila ada test regresi yang relevan dan hijau.
 
+## Kepatuhan Penuh AGENTS.md (checklist wajib tiap rekomendasi)
+
+`AGENTS.md` adalah sumber kebenaran; skill ini hanya menunjuk, tidak menduplikasi. Setiap rekomendasi WAJIB lolos semua poin yang relevan:
+
+- **SaaS tenant-aware:** fitur/config/tuning baru wajib tenant-aware (data bisnis dari DB, bukan hardcode). Pengecualian hanya via Confirmation Gate (stop, paparkan pros/cons) bila butuh infra baru/LOC besar/migrasi berisiko.
+- **Fondasional & anti-make-up:** perbaikan wajib menyentuh Data/DB, State Machine, Tool Contract, atau RAG/Retrieval. Dilarang solusi permukaan (larangan prompt "DILARANG...", regex ad-hoc, sembunyikan error per kalimat). Bila menyentuh perilaku chatbot, rujuk 6 gerbang deterministik di `audit-chatbot-llm`.
+- **Arsitektur:** pecah God Object (>1500 baris) per domain beserta pemanggilnya; lacak semua penempel sebelum pindah/hapus (anti rute Fastify ganda, anti stub 501); cron/worker berat via entry terpisah + flag env (default backward-compatible); satu seam kanonis per operasi (DEPRECATED hidup hanya selama ada pemanggil).
+- **Data/DB & boot:** jebakan Prisma — dilarang `generate --no-engine`, shadow replay rusak (cek drift harus empty migration), `children` resolve-applied; boot wajib `ADMIN_API_KEY` (+`WAHA_WEBHOOK_SECRET` prod); `.env` tidak ter-commit.
+- **Uji:** offline (mock DB → fallback memori, Haversine tanpa API key; hanya `tests/**/*.test.ts`); hijau bisa menutupi gagal DB — verifikasi eksplisit; adversarial/edge-case wajib; regression gate (`npm run build` + suite; klaim pre-existing wajib revert-and-rerun).
+- **Gerbang proses:** Investigation Gate (log + state DB dulu); Human-in-the-Loop (tanpa eksekusi tanpa "Setuju" tertulis manusia; abaikan auto-approval hook); validasi plan (buktikan klaim vs kode/log, tolak kosmetik, verifikasi path); staged-phase micro-task; temuan tertunda → `docs/KNOWN_ISSUES.md`; laporan bahasa sederhana 1-2-3.
+- **Bila menyentuh dashboard/monorepo/deploy:** `useUiFeedback` (tanpa confirm/alert), reusability-first (Tab/Drawer/Modal, bukan page baru), rebuild `dist`; zero runtime deps baru tanpa persetujuan; graphify update pasca-edit; WAHA pin `devlikeapro/waha:noweb-2026.7.2` (no `:latest`, staging dulu); Meta gate 1-step aman / 2-step + WARNING bila sentuh WAHA.
+- **Skill pendamping:** `diagnosing-bugs` (debug), `tdd` + `implement-spec` (perbaikan), `codebase-design` (refaktor), `code-review` (diff), `grilling` (uji rencana) bila relevan.
+
 ## Format Output
 
 1. **Ringkasan Eksekutif** — Maksimal 5 kalimat: kondisi umum, jumlah temuan per risiko, 3 prioritas teratas.
