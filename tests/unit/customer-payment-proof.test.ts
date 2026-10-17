@@ -282,6 +282,28 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
       const updateData = updateSpy.mock.calls[0][0].data;
       expect(updateData.purchase_review_status).toBe('pending'); // MANDATORY: NEVER approved automatically!
     });
+
+    it('preserves approved status when purchase_event_sent_at already set', async () => {
+      vi.spyOn(prisma.reservation, 'findFirst')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          ...mockActiveReservation,
+          purchase_review_status: 'approved',
+          purchase_event_sent_at: new Date('2026-10-15T11:23:50.758Z'),
+        } as any);
+      const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+      await attachCustomerPaymentProof({ tenantId, customerId, conversationId, mediaUrl, signal: validSignal, waMessageId: 'wam-approved' });
+      expect(updateSpy.mock.calls[0][0].data.purchase_review_status).toBe('approved');
+    });
+
+    it('keeps pending for a fresh reservation without prior CAPI send', async () => {
+      vi.spyOn(prisma.reservation, 'findFirst')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockActiveReservation as any); // no sent_at
+      const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+      await attachCustomerPaymentProof({ tenantId, customerId, conversationId, mediaUrl, signal: validSignal, waMessageId: 'wam-fresh' });
+      expect(updateSpy.mock.calls[0][0].data.purchase_review_status).toBe('pending');
+    });
   });
 
   describe('attachFromInbound (Adversarial Inbound Webhook Execution)', () => {

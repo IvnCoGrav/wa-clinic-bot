@@ -5752,10 +5752,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                          FORM RESERVASI MASUK
+                          {formBannerExtracted.hasExplicitReservationForm
+                            ? 'FORM RESERVASI MASUK'
+                            : 'KESEPAKATAN JADWAL TERDETEKSI (CHAT)'}
                         </span>
                         <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
+                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.isTreatmentFromHistory && formBannerExtracted.treatmentName
+                            ? `Layanan belum dipilih (rekomendasi riwayat: ${formBannerExtracted.treatmentName})`
+                            : formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
                         </span>
                       </div>
                     </div>

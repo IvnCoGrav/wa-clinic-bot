@@ -232,5 +232,33 @@ describe('isNegotiatedScheduleCommitted (adversarial multi-phrase MT-3.2)', () =
     };
     expect(isNegotiatedScheduleCommitted(messages, karinaSchedule)).toBe(true);
   });
+
+  it('negatif (D1): jika isTimeFromFallback: true (jam default 12.00-12.30), DITOLAK meskipun user bilang "boleh"', () => {
+    const messages = [
+      { direction: 'OUTBOUND', content: 'Mau kami bantu aturkan jadwalnya?' },
+      { direction: 'INBOUND', content: 'Sabtu depan boleh' },
+    ];
+    const scheduleWithFallbackTime = {
+      ...dummySchedule,
+      timeDisplay: '12.00-12.30',
+      isExtractedFromChat: true,
+      isTimeFromFallback: true,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, scheduleWithFallbackTime)).toBe(false);
+  });
+
+  it('negatif (D1): jika isDateFromFallback: true (tanggal default besok), DITOLAK meskipun user bilang "oke deal"', () => {
+    const messages = [
+      { direction: 'OUTBOUND', content: 'Slot jam 10 kosong Bunda' },
+      { direction: 'INBOUND', content: 'oke deal jam 10' },
+    ];
+    const scheduleWithFallbackDate = {
+      ...dummySchedule,
+      timeDisplay: '10.00',
+      isExtractedFromChat: true,
+      isDateFromFallback: true,
+    };
+    expect(isNegotiatedScheduleCommitted(messages, scheduleWithFallbackDate)).toBe(false);
+  });
 });
 

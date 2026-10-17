@@ -315,6 +315,34 @@ describe('purchase-detection.service', () => {
         },
       });
     });
+
+    it('tidak menimpa status approved jika purchase_event_sent_at sudah lebih dari 7 hari', async () => {
+      mockTenantAutoSend(false);
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r_old_approved',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'confirmed',
+        treatment_detail: 'Pijat Bayi',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: eightDaysAgo,
+        purchase_occurred_at: eightDaysAgo,
+        purchase_review_status: 'approved',
+        customer: { id: 'c1', adClick: null },
+      } as any);
+      const updateSpy = vi.mocked(prisma.reservation.update);
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment 250000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(false);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('resolveTreatmentValue — Alias & Multi-Service Compounding', () => {

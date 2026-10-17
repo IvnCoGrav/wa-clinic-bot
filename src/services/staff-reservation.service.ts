@@ -6,6 +6,7 @@ import { getClinicLocationAsync } from '../config/clinic-location';
 import { resolveHumanAreaName } from './staff-trip-tracking.service';
 import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
+import { resolveNextPurchaseReviewStatus } from './capi-review-status';
 import {
   getStaffChatWindowConfig,
   StaffChatWindowConfig,
@@ -1710,10 +1711,8 @@ export class StaffReservationService {
 
       // Update data Reservasi menjadi Lunas di kasir lapangan.
       // Kebijakan Queue-First: DILARANG kirim CAPI dari lapangan (semua via antrean approve-purchase).
-      // Pertahankan status approved bila sudah disetujui via antrean.
-      const isAlreadyApproved =
-        reservation.purchase_review_status === 'approved' || Boolean(reservation.purchase_event_sent_at);
-      const purchaseReviewStatus = isAlreadyApproved ? 'approved' : (reservation.purchase_review_status || 'pending');
+      // Pertahankan status approved bila sudah disetujui via antrean (kontrak kanonik).
+      const purchaseReviewStatus = resolveNextPurchaseReviewStatus(reservation as any);
       const purchaseEventSentAt = (reservation as any).purchase_event_sent_at ?? null;
 
       const updated = await prisma.reservation.update({

@@ -6,6 +6,7 @@ import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import { detectReceipt, type ReceiptSignal } from './payment-receipt-vision.service';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
+import { resolveNextPurchaseReviewStatus } from './capi-review-status';
 
 const auditService = new AuditService();
 
@@ -197,12 +198,12 @@ export async function attachCustomerPaymentProof(params: {
     // Flag staff review jika rekening asing atau nominal di bawah tagihan
     const shouldVerify = !methodInfo.isOfficialDestination || isUnderpaid || reservation.needs_staff_verification;
 
-    // 6. Update reservasi (TETAP PENDING, CS YANG MENGESAHKAN)
+    // 6. Pertahankan 'approved' bila CAPI sudah pernah terkirim (kontrak kanonik).
     const updateData: any = {
       proof_url: mediaUrl,
       payment_method: methodInfo.label,
       purchase_occurred_at: signal.transferDate ? new Date(signal.transferDate) : now,
-      purchase_review_status: 'pending',
+      purchase_review_status: resolveNextPurchaseReviewStatus(reservation as any),
       needs_staff_verification: shouldVerify,
       purchase_value: finalPurchaseValue,
     };

@@ -160,7 +160,7 @@ function normalizeForMatch(s: string): string {
   return (s || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function findCatalogPrice(term: string, catalogServices: any[]): number | undefined {
+function findCatalogPrice(term: string, catalogServices: any[], nameOnly: boolean = false): number | undefined {
   if (!term || !term.trim()) return undefined;
   const q = term.trim().toLowerCase();
   const qNorm = normalizeForMatch(q);
@@ -170,11 +170,13 @@ function findCatalogPrice(term: string, catalogServices: any[]): number | undefi
   for (const s of sorted) {
     const raw = (s.name || '').toLowerCase().trim();
     const norm = normalizeForMatch(s.name || '');
-    const desc = (s.description || '').toLowerCase();
     if (raw && (q === raw || qNorm === norm)) return s.promoPrice ?? s.originalPrice;
     if (norm && norm.length >= 5 && (q.includes(norm) || qNorm.includes(norm))) return s.promoPrice ?? s.originalPrice;
     if (raw && raw.length >= 5 && (q.includes(raw) || raw === q)) return s.promoPrice ?? s.originalPrice;
-    if (desc && q.length >= 8 && desc.includes(q) && !genericStop.has(q)) return s.promoPrice ?? s.originalPrice;
+    if (!nameOnly) {
+      const desc = (s.description || '').toLowerCase();
+      if (desc && q.length >= 8 && desc.includes(q) && !genericStop.has(q)) return s.promoPrice ?? s.originalPrice;
+    }
   }
   // Token-overlap fallback untuk alias informal — pilih layanan dengan skor kecocokan token tertinggi
   const qTokens = q.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
@@ -185,9 +187,16 @@ function findCatalogPrice(term: string, catalogServices: any[]): number | undefi
     let bestLen = Infinity;
     for (const s of catalogServices) {
       const nameTokens = (s.name || '').toLowerCase().split(/[^a-z0-9]+/).filter((t: string) => t.length >= 3);
+      const descTokens = !nameOnly ? (s.description || '').toLowerCase().split(/[^a-z0-9]+/).filter((t: string) => t.length >= 3) : [];
       let score = 0;
       for (const tok of filteredTokens) {
-        if (nameTokens.includes(tok) || (s.name || '').toLowerCase().includes(tok)) score++;
+        if (nameTokens.includes(tok) || (s.name || '').toLowerCase().includes(tok)) {
+          score += 2;
+        } else if (!nameOnly && (descTokens.includes(tok) || (s.description || '').toLowerCase().includes(tok))) {
+          // Penalti bundle untuk match deskripsi saja (prefer layanan STANDARD untuk keluhan/gejala)
+          const isBundle = s.category === 'BUNDLE' || s.serviceType === 'BUNDLE';
+          score += isBundle ? 0.5 : 1;
+        }
       }
       if (score > 0) {
         const nameLen = (s.name || '').length;
@@ -228,7 +237,7 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
 
     // 1. Direct bundle match data-driven: bila cleanStr cocok nama bundle katalog → pakai harga bundle
     const bundlePool = catalogServices.filter((s: any) => s.category === 'BUNDLE' || s.serviceType === 'BUNDLE' || s.bundleItemIds);
-    const bundlePrice = findCatalogPrice(cleanStr, bundlePool);
+    const bundlePrice = findCatalogPrice(cleanStr, bundlePool, true);
     if (bundlePrice !== undefined) return bundlePrice;
     // Juga cek cleanLower mengandung nama bundle panjang (mis. "paket selapan")
     for (const b of [...bundlePool].sort((a: any, c: any) => (c.name?.length || 0) - (a.name?.length || 0))) {

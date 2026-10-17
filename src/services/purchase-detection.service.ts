@@ -5,6 +5,7 @@ import {
   getTenantCapiFormats,
   extractValueByFormat,
 } from './capi.service';
+import { isPurchaseAlreadyApproved } from './capi-review-status';
 
 /**
  * Deteksi event Purchase dari pesan masuk customer.
@@ -168,6 +169,10 @@ export async function maybeFirePurchaseEvent(params: {
       }
       return false;
     }
+
+    // Jangan pernah menurunkan reservasi yang sudah approved / sudah terkirim ke CAPI,
+    // walau sudah melewati jendela dedup 7 hari (anti-overwrite approved -> pending).
+    if (isPurchaseAlreadyApproved(reservation as any)) return false;
 
     const alreadySentRecently =
       reservation.purchase_event_sent_at &&

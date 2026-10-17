@@ -33,6 +33,7 @@ export async function checkDailyInvariants(tenantId: string = DEFAULT_TENANT_ID)
       completedUnverified,
       pastConfirmed,
       unassignedCollisions,
+      contradictoryCapi,
     ] = await Promise.all([
       prisma.reservation.count({ where: { tenant_id: tenantId, status: 'confirmed', booking_date: null } }),
       prisma.$queryRawUnsafe<Array<{ cnt: bigint }>>(
@@ -52,6 +53,7 @@ export async function checkDailyInvariants(tenantId: string = DEFAULT_TENANT_ID)
          ) t`,
         tenantId
       ),
+      prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'pending', purchase_event_sent_at: { not: null } } }),
     ]);
 
     const pushIf = (key: string, description: string, count: number) => {
@@ -62,6 +64,7 @@ export async function checkDailyInvariants(tenantId: string = DEFAULT_TENANT_ID)
     pushIf('COMPLETED_UNVERIFIED', 'Completed dengan needs_staff_verification=true', Number(completedUnverified) || 0);
     pushIf('PAST_CONFIRMED', 'Confirmed masa lampau (< now())', Number(pastConfirmed?.[0]?.cnt) || 0);
     pushIf('UNASSIGNED_COLLISION', 'Slot bentrok tanpa staf (assigned_staff_id NULL)', Number(unassignedCollisions?.[0]?.cnt) || 0);
+    pushIf('CONTRADICTORY_CAPI_STATE', 'Pending tapi event CAPI sudah terkirim (purchase_event_sent_at terisi)', Number(contradictoryCapi) || 0);
   } catch (err: any) {
     console.warn('[INVARIANT MONITOR] DB offline / query gagal:', err?.message);
   }

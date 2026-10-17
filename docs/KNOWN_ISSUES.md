@@ -3,6 +3,67 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 263. [Meta CAPI/State Machine] Integritas Status Review CAPI & State Guard Anti-Revert (2026-10-17, IMPLEMENTED & HEALED)
+
+- **Status:** IMPLEMENTED lokal & HEALED di database server produksi (`wa_clinic_db` via SSH `klinik-server-baru`). Build `tsc` hijau, seluruh unit test CAPI/Payment Proof/Purchase Detection hijau, 0 regresi.
+- **Latar Belakang & Insiden Nyata:**
+  - Kasus Bunda Agustina (`1cbe02ee-aff1-43f0-b278-df00c64739ea`), Bunda Hera (`a995445e-3109-431e-9847-68eeb919b60d`), dan Bunda Jennifer (`79a87fb3-1da7-43aa-94ac-aee69b502f7c`):
+  - Admin mencoba meng-approve event Purchase di halaman Meja Antrean Meta CAPI (`/capi-queue`), namun muncul pesan error:
+    `Error approving event: Event Purchase untuk reservasi ini sudah pernah terkirim ke Meta CAPI pada 2026-10-15T11:23:50.758Z. Gunakan force: true beserta alasan (reason) untuk mengirim ulang.`
+  - Reservasi yang sebenarnya sudah disetujui dan dikirim ke Meta CAPI pada 15 Oktober 2026 tiba-tiba muncul kembali di antrean pending.
+- **Akar Masalah Sistemik (Audit Multi-Lapisan):**
+  1. **Penimpaan Hardcoded di Layanan Bukti Bayar (`src/services/customer-payment-proof.service.ts:205`):**
+     - Saat pelanggan mengirimkan foto bukti transfer via WhatsApp pada 17 Oktober 2026 pagi, pipeline `attachProof` menempelkan URL bukti dan menimpa kolom `purchase_review_status` secara hardcode menjadi `'pending'` tanpa mengecek apakah reservasi tersebut sebelumnya sudah pernah disetujui (`'approved'`) dan event CAPI-nya sudah terkirim (`purchase_event_sent_at != null`).
+  2. **Kebocoran Kedua di Deteksi Pembelian Otomatis (`src/services/purchase-detection.service.ts:172-175`):**
+     - Fungsi `maybeFirePurchaseEvent` memiliki pengecekan dedup 7 hari (`alreadySentRecently`). Namun jika pesan customer masuk setelah jendela 7 hari berlalu, status reservasi yang sudah `'approved'` berpotensi di-revert menjadi `'pending'`.
+  3. **Ketiadaan Kontrak Status Kanonik:**
+     - Penulisan status review CAPI tersebar di berbagai service (`customer-payment-proof`, `staff-reservation`, `purchase-detection`) tanpa aturan transisi satu arah (one-way latch).
+- **Solusi Fondasional Terpasang:**
+  1. **Kontrak Kanonik Tunggal (`src/services/capi-review-status.ts`):**
+     - Menetapkan fungsi deterministik `isPurchaseAlreadyApproved` dan `resolveNextPurchaseReviewStatus`.
+     - Aturan latch: status review CAPI TIDAK BOLEH diturunkan dari `'approved'` ke status lain jika reservasi sudah berstatus `'approved'` atau kolom `purchase_event_sent_at` sudah terisi.
+  2. **Penguncian Tiga Titik Penulis (3 Guard Points):**
+     - `src/services/customer-payment-proof.service.ts`: `purchase_review_status` memakai `resolveNextPurchaseReviewStatus(reservation)`. Penempelan bukti transfer tidak lagi menurunkan status approved.
+     - `src/services/staff-reservation.service.ts`: konsolidasi guard inline kasir lapangan menggunakan helper kanonik.
+     - `src/services/purchase-detection.service.ts`: menambahkan guard `if (isPurchaseAlreadyApproved(reservation)) return false;` sebelum evaluasi jendela waktu untuk menutup kebocoran pasca 7 hari.
+  3. **Monitor Invariant Permanen (INV7):**
+     - Menambahkan invarian INV7 pada `scripts/audit/check-reservation-invariants.ts` untuk mendeteksi kontradiksi status `purchase_review_status = 'pending'` dengan `purchase_event_sent_at IS NOT NULL`.
+     - Menambahkan metrik peringatan `CONTRADICTORY_CAPI_STATE` pada `src/services/daily-invariant-monitor.service.ts`.
+  4. **Pemulihan Data Live (Data Healing):**
+     - Dilakukan snapshot ID backup dan dieksekusi `UPDATE reservations SET purchase_review_status = 'approved' WHERE purchase_review_status = 'pending' AND purchase_event_sent_at IS NOT NULL;` pada database produksi `wa_clinic_db` di server `klinik-server-baru`.
+     - Sebanyak 3 baris kontradiksi (Bunda Agustina, Bunda Hera, Bunda Jennifer) berhasil dipulihkan ke status `'approved'`.
+- **Utang Sadar & Monitor:**
+  - Status review CAPI bersifat latch ke `'approved'` kecuali diubah secara eksplisit melalui admin API dengan parameter override `force: true`.
+  - Monitor harian `CONTRADICTORY_CAPI_STATE` memastikan jika ada anomali serupa di masa depan, sistem langsung memberikan peringatan otomatis.
+
+## 262. [Jadwal/LiveChat] Isolasi Jendela Sesi Aktif, Parser Hari Relatif & Banner Jujur (2026-10-17, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 1–5 selesai, build root backend + dashboard hijau, 78 unit test terkait hijau, zero regresi).
+- **Latar Belakang & Insiden Nyata:**
+  - Kasus Bunda Yuni (2026-10-17): Bot mengirimkan follow-up promo setelah 2 bulan tidak ada interaksi. Customer membalas singkat *"Sabtu depan boleh"*. Di layar dashboard LiveChat muncul banner hijau `FORM RESERVASI MASUK` dengan jadwal **Minggu 18 Oktober 2026 (10.00-10.30)** dan layanan **Combination: Pijat Lahap/Pulih Ceria...**. Admin bingung mengira customer mengirim form dan slot jam tersedot dari pesan 2 bulan lalu.
+- **Akar Masalah Sistemik (Audit 4-Lapisan):**
+  1. **Amnesia Jendela Waktu Sesi (Time-Window Blindness):** `extractScheduleFromMessages` memindai 15 pesan terakhir tanpa filter batas waktu. Karena chat sempat vakum 2 bulan, pesan dari 17 Agustus 2026 ikut tersedot dan jam `"10.00-10.30"` disangka sebagai jam kesepakatan hari ini.
+  2. **Ketiadaan Parser Nama Hari & Relatif:** Extractor hanya membaca `besok`, `lusa`, `hari ini`. Frasa `"Sabtu depan"` tidak terbaca sehingga variabel tanggal kosong dan jatuh ke fallback default **BESOK (H+1)**, yaitu Minggu 18 Oktober.
+  3. **Penyalinan Buta Riwayat Layanan Lama:** Karena customer belum memilih layanan hari ini, sistem menyalin layanan dari reservasi 17 Agustus 2026 tanpa penanda riwayat historis.
+  4. **Judul Banner Hardcoded:** Banner untuk kesepakatan chat dan formulir terisi memakai komponen visual yang sama dengan judul statis `FORM RESERVASI MASUK`.
+- **Solusi Fondasional Terpasang:**
+  1. **Isolasi Jendela Sesi Aktif (`filterActiveSessionMessages`):**
+     - Sesi obrolan diisolasi maksimal 72 jam dari timestamp pesan valid terbaru (`ACTIVE_SESSION_WINDOW_HOURS = 72`).
+     - Pemindaian jam mandiri (Section B) dan teks obrolan dibatasi pada jendela sesi aktif. Pesan usang dari bulan-bulan lalu tidak lagi mencemari sesi saat ini.
+     - D3: Khusus `pickFilledFormBlock`, pencarian tetap memakai 15 pesan terakhir agar formulir terstruktur tetap terbaca.
+  2. **Parser Nama Hari Relatif (`parseRelativeIndonesianDayDate`):**
+     - Memetakan nama hari Bahasa Indonesia (`senin` s/d `minggu`, `jum at`, `ahad`).
+     - Konvensi D2: nama hari tanpa modifier mengarah ke kemunculan terdekat; dengan modifier `"depan"` mengarah SELALU ke pekan berikutnya (+7 hari dari kemunculan terdekat).
+     - "Sabtu depan" pada Sabtu 17-10-2026 diekstrak secara tepat ke **Sabtu 24 Oktober 2026**.
+  3. **Flag Fallback Deterministik & Guard Komitmen (D1):**
+     - `ExtractedScheduleData` dilengkapi flag deterministik `isTimeFromFallback`, `isDateFromFallback`, `isTreatmentFromHistory`.
+     - `isNegotiatedScheduleCommitted` menolak mengklaim jadwal final jika jam atau tanggal berasal dari fallback buatan sistem.
+  4. **Banner Jujur & Penanda Riwayat (`LiveChatMonitor.tsx`):**
+     - Judul banner membedakan `FORM RESERVASI MASUK` (form terisi) vs `KESEPAKATAN JADWAL TERDETEKSI (CHAT)`.
+     - Layanan historis diberi keterangan jujur: `Layanan belum dipilih (rekomendasi riwayat: ...)`.
+- **Utang Sadar & Catatan Arsitektur:**
+  1. **Timezone Anchor Frontend:** Ekstraksi jam/tanggal frontend memakai `getTodayWibDate()` (anchor WIB), tapi jika browser admin berada di timezone non-WIB dimungkinkan off-by-one di batas tengah malam; kanonisasi penuh menunggu penyatuan definisi tanggal backend.
+
 ## 261. [Lokasi/Alamat] Duplikasi "Rumah 2" & Preservasi Titik GPS Presisi (2026-10-16, IMPLEMENTED & HEALED)
 
 - **Status:** IMPLEMENTED lokal & HEALED di database server produksi (`wa_clinic_db` via Pass 3 skrip `heal-customer-addresses-split-brain.ts`). Build hijau, 35 unit test terkait hijau, 0 regresi.

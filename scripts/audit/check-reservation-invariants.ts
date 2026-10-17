@@ -58,6 +58,14 @@ async function main() {
   line('INV5 Slot bentrok tanpa staf (assigned_staff_id NULL)', inv5.length);
   inv5.forEach((r) => console.log(`   - tenant=${r.tenant_id} booking=${new Date(r.booking_date).toISOString()} cnt=${r.cnt}`));
 
+  // INV7: pending tetapi event Purchase sudah terkirim (kontradiksi state CAPI)
+  const inv7 = await prisma.reservation.findMany({
+    where: { purchase_review_status: 'pending', purchase_event_sent_at: { not: null } },
+    select: { id: true, tenant_id: true, purchase_event_sent_at: true },
+  });
+  line('INV7 Pending tapi purchase_event_sent_at terisi', inv7.length);
+  inv7.forEach((r) => console.log(`   - ${r.id} (tenant=${r.tenant_id}, sent=${r.purchase_event_sent_at?.toISOString()})`));
+
   console.log('\n===== Selesai =====');
 }
 

@@ -3,7 +3,7 @@
  * dari percakapan obrolan WhatsApp antara Bidan/CS dan Pelanggan.
  */
 import { matchCatalogService } from './treatmentStringParser';
-import { getWibDateKey } from './dateWib';
+import { getWibDateKey, getTodayWibDate } from './dateWib';
 import { isTreatmentCategoryOverlap, isScheduleBlockingStatus } from './treatmentCategory';
 
 export interface ExtractedScheduleData {
@@ -31,6 +31,79 @@ export interface ExtractedScheduleData {
    *  jadwal + subjek terisi DAN tanggal booking belum kadaluwarsa (>= awal hari WIB)
    *  — gerbang smart-banner. */
   hasExplicitReservationForm: boolean;
+  /** Guard deterministik (D1): menandai bahwa jam/tanggal/layanan berasal dari fallback sistem / riwayat lama */
+  isTimeFromFallback?: boolean;
+  isDateFromFallback?: boolean;
+  isTreatmentFromHistory?: boolean;
+}
+
+export const ACTIVE_SESSION_WINDOW_HOURS = 72;
+
+/**
+ * Filter pesan obrolan ke dalam jendela interaksi sesi aktif (maksimal 72 jam dari pesan terakhir).
+ * Mencegah pesan berbulan-bulan lalu menyusupkan jam/jadwal lama ke sesi saat ini.
+ */
+export function filterActiveSessionMessages<T extends { created_at?: string | Date | null }>(
+  messages: T[],
+  maxWindowHours = ACTIVE_SESSION_WINDOW_HOURS
+): T[] {
+  const list = messages || [];
+  if (list.length === 0) return [];
+  // Anchor = timestamp valid TERBARU (scan dari belakang, tahan pesan tak berurut)
+  let anchor = NaN;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const t = new Date(list[i]?.created_at as any).getTime();
+    if (!isNaN(t)) {
+      anchor = t;
+      break;
+    }
+  }
+  if (isNaN(anchor)) return list.slice(-15); // pola lama bila tak ada timestamp sama sekali
+  const windowMs = maxWindowHours * 60 * 60 * 1000;
+  return list.filter((m) => {
+    if (!m?.created_at) return true; // FMEA: tanpa timestamp → dianggap terkini
+    const t = new Date(m.created_at).getTime();
+    return isNaN(t) || anchor - t <= windowMs;
+  });
+}
+
+export const INDONESIAN_DAY_MAP: Record<string, number> = {
+  minggu: 0,
+  ahad: 0,
+  senin: 1,
+  selasa: 2,
+  rabu: 3,
+  kamis: 4,
+  jumat: 5,
+  'jum at': 5,
+  sabtu: 6,
+};
+
+/**
+ * Parsing nama hari Bahasa Indonesia ("senin", "sabtu depan", dll) menjadi tanggal kalender.
+ * Konvensi D2:
+ * - Tanpa "depan"/"ini" -> kemunculan terdekat ke depan (hari yang sama tanpa modifier -> pekan depan / +7).
+ * - Dengan "depan" -> SELALU pekan berikutnya (+7 dari kemunculan terdekat).
+ */
+export function parseRelativeIndonesianDayDate(text: string, baseDate: Date): Date | null {
+  if (!text) return null;
+  const m = text.toLowerCase().match(
+    /\b(senin|selasa|rabu|kamis|jumat|jum\s*at|sabtu|minggu|ahad)\s*(depan|ini|nanti)?\b/i
+  );
+  if (!m) return null;
+  const dayKey = m[1].replace(/\s+/g, '');
+  const targetDay = INDONESIAN_DAY_MAP[dayKey];
+  if (targetDay === undefined) return null;
+  const modifier = (m[2] || '').toLowerCase();
+  let daysToAdd = (targetDay - baseDate.getDay() + 7) % 7;
+  if (modifier === 'depan') {
+    daysToAdd = daysToAdd === 0 ? 7 : daysToAdd + 7; // D2: "depan" SELALU pekan berikutnya
+  } else if (daysToAdd === 0 && modifier !== 'ini') {
+    daysToAdd = 7; // kesamaan hari tanpa "ini" → pekan depan (perilaku konsisten)
+  }
+  const res = new Date(baseDate);
+  res.setDate(res.getDate() + daysToAdd);
+  return res;
 }
 
 export interface ClinicServiceCatalogItem {
@@ -492,9 +565,10 @@ export function extractScheduleFromMessages(
   messages: Array<{ content?: string; direction?: string; created_at?: string }>,
   customer?: any,
   clinicServices: ClinicServiceCatalogItem[] = [],
-  wilayahRef?: WilayahReference | null
+  wilayahRef?: WilayahReference | null,
+  options?: { now?: Date }
 ): ExtractedScheduleData {
-  const baseDate = new Date();
+  const baseDate = options?.now || getTodayWibDate();
   let extractedDate: Date | null = null;
   let rawDateText = '';
   let extractedTime = '';
@@ -512,10 +586,15 @@ export function extractScheduleFromMessages(
   let extractedOngkir: number | null = null;
   let extractedDiscount: number = 0;
   let isExtracted = false;
+  let isTimeFromFallback = false;
+  let isDateFromFallback = false;
+  let isTreatmentFromHistory = false;
 
-  // 1. Ambil 15 pesan terakhir (dari terbaru ke terlama untuk prioritas data terkini)
+  // 1. Filter sesi aktif 72 jam untuk ekstraksi teks percakapan dan jam mandiri
+  const activeWindowMessages = filterActiveSessionMessages(messages);
+  // D3: Khusus pickFilledFormBlock memakai recentMessages 15 terakhir (form selalu terkini)
   const recentMessages = (messages || []).slice(-15);
-  const fullChatText = recentMessages
+  const fullChatText = activeWindowMessages
     .map((m) => m.content || '')
     .filter(Boolean)
     .join('\n');
@@ -637,8 +716,9 @@ export function extractScheduleFromMessages(
   // B. Ekstraksi Jam Mandiri jika belum didapat
   // Prioritas reverse-chronological: pindai pesan dari TERBARU → TERLAMA agar
   // kesepakatan jam terkini ("klo jam 10 gmna kak?") mengalahkan tawaran lama bot.
+  // F1: Dibatasi pada activeWindowMessages (maks 72 jam) agar jam 2 bulan lalu tidak menyusup.
   if (!extractedTime) {
-    const reversedMessages = [...recentMessages].reverse();
+    const reversedMessages = [...activeWindowMessages].reverse();
     for (const m of reversedMessages) {
       const text = m.content || '';
       if (!text) continue;
@@ -669,6 +749,25 @@ export function extractScheduleFromMessages(
   }
 
   // C. Ekstraksi Tanggal Percakapan jika belum didapat
+  if (!extractedDate) {
+    // T2.2: Pindai nama hari dari pesan aktif (terbaru -> terlama, INBOUND customer didahulukan)
+    const orderedCandidates = [
+      ...[...activeWindowMessages].reverse().filter((m) => (m.direction || '').toUpperCase() === 'INBOUND'),
+      ...[...activeWindowMessages].reverse(),
+    ];
+    for (const m of orderedCandidates) {
+      const text = m.content || '';
+      if (!text) continue;
+      const relativeDayDate = parseRelativeIndonesianDayDate(text, baseDate);
+      if (relativeDayDate) {
+        extractedDate = relativeDayDate;
+        rawDateText = formatIndonesianDate(relativeDayDate);
+        isExtracted = true;
+        break;
+      }
+    }
+  }
+
   if (!extractedDate) {
     const textLower = fullChatText.toLowerCase();
     if (/\b(?:besok\s*lusa|lusa)\b/i.test(textLower)) {
@@ -978,10 +1077,12 @@ export function extractScheduleFromMessages(
       if (!isNaN(bDate.getTime())) {
         extractedDate = bDate;
         rawDateText = formatIndonesianDate(bDate);
+        isDateFromFallback = true;
       }
     }
     if (!extractedTreatment && activeReservation.treatment_detail) {
       extractedTreatment = activeReservation.treatment_detail.replace(/^(?:baby|moms)\s*:\s*/i, '');
+      isTreatmentFromHistory = true;
     }
     if (extractedPrice === null && activeReservation.purchase_value) {
       extractedPrice = Number(activeReservation.purchase_value);
@@ -1077,10 +1178,12 @@ export function extractScheduleFromMessages(
     d.setDate(d.getDate() + 1);
     extractedDate = d;
     rawDateText = formatIndonesianDate(d);
+    isDateFromFallback = true;
   }
 
   if (!extractedTime) {
     extractedTime = '12.00-12.30';
+    isTimeFromFallback = true;
   }
 
   // 5. Pencocokan Treatment dengan Katalog Layanan — support akumulasi 2+ treatment
@@ -1170,6 +1273,9 @@ export function extractScheduleFromMessages(
     isExtractedFromChat: isExtracted,
     confidenceScore: isExtracted ? 0.95 : 0.6,
     hasExplicitReservationForm,
+    isTimeFromFallback,
+    isDateFromFallback,
+    isTreatmentFromHistory,
   };
 }
 
@@ -1188,6 +1294,8 @@ export function isNegotiatedScheduleCommitted(
   if (!messages || messages.length === 0) return false;
   if (!extractedSchedule?.bookingDate || !extractedSchedule?.timeDisplay) return false;
   if (!extractedSchedule.isExtractedFromChat) return false;
+  // Gerbang deterministik (D1): jam/tanggal karangan fallback BUKAN komitmen customer
+  if (extractedSchedule.isTimeFromFallback || extractedSchedule.isDateFromFallback) return false;
 
   // Jika pesan terakhir di obrolan berasal dari bot (OUTBOUND), negosiasi belum disepakati user
   const lastMsg = messages[messages.length - 1];
