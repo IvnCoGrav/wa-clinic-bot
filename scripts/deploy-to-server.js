@@ -40,11 +40,14 @@ if ! grep -q "AI_MODEL_RECEIPT_VISION" /opt/wa-clinic-bot/.env; then
   echo "Added AI_MODEL_RECEIPT_VISION to remote .env"
 fi
 
+echo "--> Discard any uncommitted whitespace/CRLF drifts on working tree..."
+git checkout -- .
+
 echo "--> Git Pull Latest Code..."
 git pull origin master
 
 echo "--> Build Docker Images (app & worker)..."
-docker compose build app
+docker compose build app worker
 if docker compose ps --services --filter "status=running" | grep -q "^worker$"; then
   echo "--> Recreate Worker Container Safely..."
   docker compose up -d --no-deps worker
