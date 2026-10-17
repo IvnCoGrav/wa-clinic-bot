@@ -5,6 +5,23 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-17 - Feat: Penyelarasan Katalog Layanan, Tarif Promo & Aset Poster Pricelist Resmi Kala Moms and Baby Spa
+
+- **Penyelarasan Data Bisnis & Katalog (Data-Driven SSOT)**:
+  - Mengaudit dan menyelaraskan katalog database dan fallback lokal terhadap poster brosur resmi cetak terbaru Kala Moms and Baby Spa.
+  - Penyesuaian tarif promo & durasi:
+    - `baby-massage-pulih-ceria-newborn`: 40 mnt, Rp 65.000 (orig: Rp 85.000)
+    - `bundle-laktasi-oksitosin`: 60 mnt, Rp 70.000 (orig: Rp 200.000)
+    - `add-on-nebulizer`: 20 mnt, Rp 80.000 (orig: Rp 100.000)
+    - `add-on-nebulizer-obat`: 20 mnt, Rp 110.000 (orig: Rp 130.000)
+    - `moms-oksitosin-fullbody`: 60 mnt, Rp 110.000 (orig: Rp 140.000)
+    - `moms-postpartum-massage`: Dinonaktifkan (`is_active = false`) karena tidak tercantum pada flyer resmi.
+- **Aset & Skrip Sinkronisasi**:
+  - `assets/pricelist_spa.jpg`: Diperbarui dengan poster JPEG resmi beresolusi optimal.
+  - `scripts/sync_catalog.sql`: Di-regenerate via `generate-sync-sql.ts` untuk sinkronisasi database SQL.
+  - Memverifikasi konsistensi data live server dan memastikan seluruh suite test katalog (4 files / 40 tests) lulus 100%.
+- **File Dimodifikasi**: `assets/pricelist_spa.jpg`, `services_custom.json`, `src/services/treatment-catalog.service.ts`, `scripts/sync_catalog.sql`, `CHANGELOG.md`.
+
 #### 2026-10-17 - Fixed: Resolusi Deadlock Auto-Pruning Media (Video, Audio & Corrupt Files) via Sniffing Magic Bytes & Pruning Sadar-Konten (Fase 1-5)
 
 - **Akar Masalah (Audit Multi-Lapisan):**

@@ -281,8 +281,8 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
       "label": "0 - 6 Bulan"
     },
     "durationMinutes": 40,
-    "originalPrice": 100000,
-    "promoPrice": 75000,
+    "originalPrice": 85000,
+    "promoPrice": 65000,
       "description": "Terapi khusus batuk, pilek (bapil), flu, rewel, susah BAB, kembung/kolik pada bayi newborn 0-6 bulan dengan double aromaterapi & titik akupresur lembut.",
     "isActive": true
   },
@@ -556,7 +556,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     "originalPrice": 130000,
     "promoPrice": 100000,
     "description": "Pijat pemulihan stamina tubuh ibu pasca persalinan, melancarkan peredaran darah dan relaksasi.",
-    "isActive": true
+    "isActive": false
   },
   {
     "id": "moms-oksitosin-fullbody",
@@ -570,7 +570,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     },
     "durationMinutes": 60,
     "originalPrice": 140000,
-    "promoPrice": 105000,
+    "promoPrice": 110000,
     "description": "Pijat relaksasi seluruh tubuh dipadukan dengan stimulasi oksitosin untuk kelancaran ASI.",
     "isActive": true
   },
@@ -767,9 +767,9 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
       "maxAgeMonths": null,
       "label": "Ibu Menyusui"
     },
-    "durationMinutes": 80,
+    "durationMinutes": 60,
     "originalPrice": 200000,
-    "promoPrice": 140000,
+    "promoPrice": 70000,
     "description": "[BUNDLE:moms-paket-laktasi,moms-oksitosin] Kombinasi breast care massage + pijat oksitosin punggung untuk booster kelancaran ASI maksimal.",
     "isActive": true,
     "bundleItemIds": [
@@ -816,7 +816,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "add-on-nebulizer",
-    "name": "Kala Terapi – Nebulizer Saline",
+    "name": "Kala Terapi – Nebulizer",
     "category": "ADD_ON",
     "serviceType": "ADD_ON",
     "ageTier": {
@@ -825,8 +825,8 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
       "label": "Bayi & Anak"
     },
     "durationMinutes": 20,
-    "originalPrice": 45000,
-    "promoPrice": 35000,
+    "originalPrice": 100000,
+    "promoPrice": 80000,
       "description": "[ADDON] Terapi uap inhalasi/penguapan dengan cairan saline steril untuk mengencerkan lendir dan dahak.",
     "isActive": true,
     "isAddon": true
@@ -842,8 +842,8 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
       "label": "Bayi & Anak"
     },
     "durationMinutes": 20,
-    "originalPrice": 60000,
-    "promoPrice": 50000,
+    "originalPrice": 130000,
+    "promoPrice": 110000,
       "description": "[ADDON] Terapi uap inhalasi/penguapan dengan obat bronkodilator/pengencer dahak sesuai resep/indikasi dokter.",
     "isActive": true,
     "isAddon": true
