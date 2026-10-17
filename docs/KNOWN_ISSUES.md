@@ -3,6 +3,23 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 264. [Media/Storage] Resolusi Deadlock Auto-Pruning Media & Mislabeling Ekstensi (2026-10-17, IMPLEMENTED lokal)
+
+- **Status:** IMPLEMENTED lokal (Fase 1–5 selesai, build root hijau, vitest 10 media suites / 87 tests 100% hijau, zero regresi baru. Full suite `npm test`: 5473 lulus / 8 gagal — 8 gagal terbukti **pre-existing** (fixture bergantung tanggal, file non-media) via revert-and-rerun).
+- **Akar & Temuan:**
+  1. Save-Time Mislabeling: `extFromMime` di `media.service.ts` memberikan default `.jpg` untuk semua mime tak dikenal atau `application/octet-stream`, dan `webhook.route.ts` memakai fallback `application/${heavyMediaType}` sehingga audio/video yang tidak memiliki MIME eksplisit disimpan sebagai `.jpg`.
+  2. Type-Blindness Sharp Thumbnailing: `ensureThumbForHd` mengasumsikan semua file adalah gambar dan memaksakannya ke Sharp, yang gagal dengan `unsupported image format`.
+  3. Pruning Deadlock: `pruneToLowWatermark` dan `deleteExpiredMedia` membatalkan penghapusan file jika thumbnail gagal dibuat, menyebabkan video dan audio lama menyandera kuota storage (produksi mencapai 207 MB > kuota 200 MB).
+  4. Inkonsistensi Nama Thumbnail: Inbound thumbnail disimpan sebagai `_thumb.jpg`, namun `withThumbName()` pada PNG/WebP mencari `_thumb.{ext}` sehingga thumbnail eksisting tidak terdeteksi.
+- **Resolusi (Fondasional):**
+  1. `src/utils/media-kind.ts`: SSOT sniffer magic bytes (`ffd8ff`, `89504e47`, `GIF8`, `RIFF..WEBP`, `OggS`, `ftyp`, `1A45DFA3`, `%PDF`, `504b0304`), grouping MIME type, dan `resolveExtForSave` dengan fallback aman `'bin'` (tidak pernah default `'jpg'`).
+  2. `media.service.ts`: helper `isSharpAvailable()` dengan caching dan seam `clearUsageCache()`; `ensureThumbForHd` menghasilkan status terstruktur (`thumb`, `not-image`, `corrupt-image`, `engine-unavailable`) serta melindungi gambar asli bila engine Sharp tidak tersedia (anti data-loss).
+  3. Pipeline Prune & Retensi Sadar-Konten: file 0-byte langsung dihapus; file non-gambar (video, audio, dokumen) langsung dihapus tanpa memanggil Sharp; file korup dibersihkan demi kuota; gambar asli baru dihapus setelah memastikan thumbnail buram ada; update ref payload DB mendukung `thumbRelUrl: string | null`.
+  4. Pembersihan Duplikat: `cleanupLegacyInboundThumbDuplicate` menghapus sibling thumbnail lama ber-magic JPEG dengan ekstensi salah di inbound saat file kanonis `_thumb.jpg` sudah ada.
+  5. Fallback Webhook: MIME fallback di `webhook.route.ts` diubah ke `audio/ogg` dan `video/mp4`.
+  6. Pemisahan kelas kegagalan thumbnail (`createBlurThumbDetailed`): `invalid` (header tak terbaca → korup, dibersihkan) vs `engine` (header valid tapi encode gagal → HD dipertahankan). Fungsi mati `extFromMime` dihapus.
+- **Residual / Catatan Operasional:** Sisa heuristik kecil: file yang header-nya valid namun isinya rusak/terpotong akan **dipertahankan** (bukan dihapus) demi keamanan data — aman, hanya berpotensi menyisakan sedikit file korup. File warisan di server dibersihkan secara *lazy* saat pruner berjalan; pasca-deploy bot, siklus pruning pertama akan langsung membersihkan media lama dan mengembalikan pemakaian ke target 65% kuota (~130 MB). Deploy hanya membutuhkan restart container `app` (1-step verification, tanpa menyentuh WAHA/Meta).
+
 ## 263. [Meta CAPI/State Machine] Integritas Status Review CAPI & State Guard Anti-Revert (2026-10-17, IMPLEMENTED & HEALED)
 
 - **Status:** IMPLEMENTED lokal & HEALED di database server produksi (`wa_clinic_db` via SSH `klinik-server-baru`). Build `tsc` hijau, seluruh unit test CAPI/Payment Proof/Purchase Detection hijau, 0 regresi.

@@ -5,6 +5,37 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-17 - Fixed: Resolusi Deadlock Auto-Pruning Media (Video, Audio & Corrupt Files) via Sniffing Magic Bytes & Pruning Sadar-Konten (Fase 1-5)
+
+- **Akar Masalah (Audit Multi-Lapisan):**
+  - **Save-Time Mislabeling & Default .jpg**: `extFromMime` di `media.service.ts` memberikan default `.jpg` untuk semua mime tak dikenal atau `application/octet-stream`. Di samping itu, `webhook.route.ts` memakai fallback `application/${heavyMediaType}` sehingga audio/video yang tidak menyertakan mimetype eksplisit tersimpan di disk sebagai file berekstensi `.jpg` (misal 6 file `.jpg` produksi yang sebenarnya berisi stream audio `OggS`).
+  - **Type-Blindness Sharp Thumbnailing**: `ensureThumbForHd` mengasumsikan seluruh file di folder penyimpanan adalah gambar. Ia membaca buffer seluruh file ke RAM (`fs.readFileSync`) dan memaksakannya ke pustaka Sharp (`createBlurThumb`). Sharp menolak memproses audio `.ogg` dan video `.mp4` dengan error `Input buffer contains unsupported image format`.
+  - **Pruning Deadlock & Sandera Kuota Disk**: `pruneToLowWatermark` dan `deleteExpiredMedia` membatalkan penghapusan file jika thumbnail gagal dibuat (`continue`). Karena video dan audio tidak bisa dibuatkan thumbnail visual, file-file terbesar ini tidak pernah terhapus sama sekali. Akibatnya, pemakaian penyimpanan menyentuh 100% kuota (207 MB dari kuota 200 MB), auto-prune gagal membebaskan disk, dan sistem mencetak ribuan baris warning loop setiap pesan WhatsApp baru masuk.
+  - **Inkonsistensi Ekstensi Thumbnail**: Inbound thumbnail selalu disimpan sebagai `{stem}_thumb.jpg`. Namun `withThumbName()` pada gambar PNG/WebP mencari `{stem}_thumb.{ext}`, menyebabkan thumbnail eksisting tidak terdeteksi dan Sharp dipaksa re-encode ulang secara tidak perlu.
+- **Fixed (Fondasional & Deterministik):**
+  - **Fase 1 (Fondasi Klasifikasi Konten SSOT & Sniffing Magic Bytes)**:
+    - Membuat modul mandiri `src/utils/media-kind.ts` (zero-dependency) untuk mendeteksi `MediaKind` (`image`, `audio`, `video`, `document`, `other`) melalui header magic bytes kanonis (`ffd8ff` JPEG, `89504e47` PNG, `GIF8`, `RIFF..WEBP`, `OggS` Ogg audio, `ftyp` MP4 video, `1A45DFA3` WebM, `%PDF`, `504b0304` ZIP/DOCX).
+    - Menambahkan `resolveExtForSave(mime, buf)` yang mengutamakan magic bytes konten ril, fallback ke kelompok MIME, dan default aman `'bin'` (DILARANG default `'jpg'`).
+    - Menyelaraskan fallback MIME media berat di `src/routes/webhook.route.ts` menjadi `audio/ogg` dan `video/mp4` bukannya `application/${type}`.
+    - Mengintegrasikan `resolveExtForSave` pada `saveInboundMedia` dan `saveOutboundMedia` di `src/services/media.service.ts`.
+  - **Fase 2 (Pipeline Prune & Retensi Sadar-Konten)**:
+    - Menambahkan helper `isSharpAvailable()` dengan caching dan seam pembersih `clearUsageCache(tenantId?: string)`.
+    - Merestrukturisasi `ensureThumbForHd` dengan return status terstruktur (`thumb`, `not-image`, `corrupt-image`, `engine-unavailable`).
+    - Memeriksa eksistensi thumbnail dengan dua pola: `{stem}_thumb.{ext}` dan `{stem}_thumb.jpg`.
+    - Menolak file non-gambar sebelum memanggil Sharp via pemeriksaan magic bytes dan regex ekstensi gambar `IMAGE_EXT_RE`.
+    - Melindungi gambar asli dari penghapusan bila engine Sharp sedang tidak tersedia (`engine-unavailable`) guna mencegah *mass data-loss*.
+    - Memisahkan kelas kegagalan thumbnail via `createBlurThumbDetailed`: `invalid` (header tak terbaca/tanpa dimensi → benar-benar korup, aman dibersihkan) vs `engine` (header valid namun encode gagal → gangguan mesin, HD dipertahankan). Menutup celah valid image ikut terhapus saat Sharp gagal transient.
+    - Menghapus fungsi mati `extFromMime` (kini digantikan `resolveExtForSave`).
+    - Loop `pruneToLowWatermark` dan `deleteExpiredMedia`: file 0-byte langsung dihapus; file non-gambar (video, audio, dokumen) langsung dihapus tanpa Sharp untuk memulihkan kuota; file korup dihapus demi kuota; gambar valid dihapus setelah memastikan thumbnail buram ada.
+    - Memperbarui `updateMediaRefsAfterHdDelete` agar mendukung `thumbRelUrl: string | null` (meng-unset field `media.url` untuk media non-gambar).
+  - **Fase 3 (Pembersihan Duplikat Thumbnail Inbound)**:
+    - Menambahkan `cleanupLegacyInboundThumbDuplicate` di folder inbound untuk mendeteksi dan menghapus sibling thumbnail lama yang salah ekstensi (misal `_thumb.png` yang ber-magic JPEG `ffd8ff`) bila thumbnail kanonis `_thumb.jpg` sudah ada.
+  - **Fase 4 & 5 (Test Adversarial & Edge Cases)**:
+    - Unit test baru `tests/unit/media-kind.test.ts` (12 tests lulus 100%).
+    - Skenario pengujian adversarial di `tests/unit/media-watermark-autoprune.test.ts` (4.2-4.11: pruning video `.mp4`, voice note `.ogg`, `mislabeled.jpg` berisi `OggS`, file 0-byte & corrupt, mock Sharp gagal anti data-loss, pembeda `engine` vs `invalid`, cross-extension thumbnail, retensi 35 hari, pembersihan duplikat thumbnail).
+    - Seluruh suite test media (10 test files / 87 tests) lulus 100% dan `npm run build` lulus tanpa error.
+- **File Dimodifikasi**: `src/utils/media-kind.ts` (baru), `src/services/media.service.ts`, `src/routes/webhook.route.ts`, `tests/unit/media-kind.test.ts` (baru), `tests/unit/media-watermark-autoprune.test.ts`, `docs/KNOWN_ISSUES.md`, `CHANGELOG.md`.
+
 #### 2026-10-13 - Fixed: Resolusi Maps Shortlink, Plus Code Geocoding & Stabilisasi State Form Admin (Fase 0-5)
 
 - **Akar Masalah (Audit Multi-Lapisan):**

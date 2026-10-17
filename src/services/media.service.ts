@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { DEFAULT_BRAND_IDENTITY } from '../config/brand';
+import { resolveExtForSave, detectKindFromMagic } from '../utils/media-kind';
 
 /**
  * Escape XML standar untuk teks yang disuntik ke SVG watermark.
@@ -101,42 +102,6 @@ export interface SavedMedia {
   thumbUrl: string | null; // relative URL thumbnail low-res (utk tampilan)
 }
 
-function extFromMime(mime: string): string {
-  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
-  switch (cleanMime) {
-    case 'image/png':
-      return 'png';
-    case 'image/webp':
-      return 'webp';
-    case 'image/gif':
-      return 'gif';
-    case 'audio/ogg':
-    case 'audio/opus':
-      return 'ogg';
-    case 'audio/mpeg':
-    case 'audio/mp3':
-      return 'mp3';
-    case 'audio/mp4':
-    case 'audio/m4a':
-    case 'audio/aac':
-      return 'm4a';
-    case 'video/mp4':
-      return 'mp4';
-    case 'video/webm':
-      return 'webm';
-    case 'application/pdf':
-      return 'pdf';
-    case 'application/msword':
-      return 'doc';
-    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-      return 'docx';
-    case 'text/plain':
-      return 'txt';
-    default:
-      return cleanMime.startsWith('audio/') ? 'ogg' : cleanMime.startsWith('video/') ? 'mp4' : 'jpg';
-  }
-}
-
 function scopeDir(scope: 'outbound' | 'inbound', tenantId: string): string {
   const dir = path.join(MEDIA_ROOT, scope, tenantId);
   fs.mkdirSync(dir, { recursive: true });
@@ -155,6 +120,25 @@ function withThumbName(filename: string): string {
 function isThumbName(filename: string): boolean {
   return /_thumb\.\w+$/.test(filename);
 }
+
+export const IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif|avif)$/i;
+
+export type EnsureThumbResult =
+  | { status: 'thumb'; thumbRel: string }
+  | { status: 'not-image' }
+  | { status: 'corrupt-image' }
+  | { status: 'engine-unavailable' };
+
+/**
+ * Hasil pembuatan blur thumb dengan alasan kegagalan terklasifikasi:
+ * - 'invalid': header gambar tak terbaca / tanpa dimensi → benar-benar korup
+ *   atau bukan gambar (aman dibersihkan).
+ * - 'engine': gambar valid (header lolos) namun encode gagal, atau modul
+ *   sharp/libvips tak termuat → gangguan mesin (HD WAJIB dipertahankan).
+ */
+export type BlurThumbResult =
+  | { ok: true; data: Buffer; mimeType: string }
+  | { ok: false; reason: 'invalid' | 'engine'; message: string };
 
 /**
  * MediaService: simpan & bersihkan gambar Live Chat.
@@ -185,9 +169,8 @@ export class MediaService {
   }): Promise<SavedMedia> {
     const { tenantId, imageB64, thumbB64, mimeType } = params;
     const mime = mimeType && ALLOWED_MIME.has(mimeType) ? mimeType : 'image/jpeg';
-    const ext = extFromMime(mime);
-
     const hdBuf = this.decodeBase64(imageB64);
+    const ext = resolveExtForSave(mime, hdBuf);
     if (hdBuf.length > MAX_OUTBOUND_BYTES) {
       throw new Error(`Gambar terlalu besar (maks ${MAX_OUTBOUND_BYTES / (1024 * 1024)} MB).`);
     }
@@ -239,8 +222,9 @@ export class MediaService {
     mimeType?: string;
   }): Promise<{ hdPath: string; hdUrl: string; thumbPath: string | null; thumbUrl: string | null }> {
     const { tenantId, buffer, mimeType } = params;
-    const mime = mimeType || 'image/jpeg';
-    const ext = extFromMime(mime);
+    const mime = (mimeType || '').trim();
+    const ext = resolveExtForSave(mime, buffer);
+    const effectiveMime = mime || (ext === 'jpg' || ext === 'png' || ext === 'webp' || ext === 'gif' ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'application/octet-stream');
 
     await this.enforceQuota(tenantId, buffer.length);
 
@@ -252,8 +236,8 @@ export class MediaService {
 
     let thumbPath: string | null = null;
     let thumbUrl: string | null = null;
-    if (mime.startsWith('image/')) {
-      const blur = await this.createBlurThumb(buffer, mime);
+    if (effectiveMime.startsWith('image/')) {
+      const blur = await this.createBlurThumb(buffer, effectiveMime);
       if (blur) {
         const thumbFile = `${stem}_thumb.jpg`;
         try {
@@ -277,21 +261,51 @@ export class MediaService {
     buffer: Buffer,
     _mimeType?: string
   ): Promise<{ data: Buffer; mimeType: string } | null> {
-    try {
-      const sharp = (await import('sharp')).default;
-      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
-      if (!meta.width || !meta.height) return null;
+    const res = await this.createBlurThumbDetailed(buffer);
+    if (res.ok) return { data: res.data, mimeType: res.mimeType };
+    console.warn('[MEDIA] Gagal generate thumbnail:', res.message);
+    return null;
+  }
 
+  /**
+   * Varian terperinci createBlurThumb yang membedakan dua kelas kegagalan:
+   * - 'invalid': header gambar tak terbaca / tanpa dimensi → file korup atau
+   *   bukan gambar asli (aman untuk dibersihkan).
+   * - 'engine': header LOLOS metadata (gambar valid) tetapi tahap encode gagal,
+   *   atau modul sharp/libvips tak termuat → gangguan mesin, HD WAJIB
+   *   dipertahankan agar tidak terjadi mass data-loss.
+   */
+  private async createBlurThumbDetailed(buffer: Buffer): Promise<BlurThumbResult> {
+    let sharp: any;
+    try {
+      sharp = (await import('sharp')).default;
+    } catch (err: any) {
+      return { ok: false, reason: 'engine', message: err?.message || String(err) };
+    }
+
+    let meta: any;
+    try {
+      meta = await sharp(buffer, { failOn: 'none' }).metadata();
+    } catch (err: any) {
+      return { ok: false, reason: 'invalid', message: err?.message || String(err) };
+    }
+    if (!meta?.width || !meta?.height) {
+      return { ok: false, reason: 'invalid', message: 'metadata tanpa dimensi' };
+    }
+
+    try {
       let pipeline = sharp(buffer, { failOn: 'none' });
       if (meta.width > 640 || meta.height > 640) {
         pipeline = pipeline.resize({ width: 640, withoutEnlargement: true });
       }
       const data = await pipeline.jpeg({ quality: 80 }).toBuffer();
-      if (!data || data.length === 0) return null;
-      return { data, mimeType: 'image/jpeg' };
+      if (!data || data.length === 0) {
+        return { ok: false, reason: 'invalid', message: 'output JPEG kosong' };
+      }
+      return { ok: true, data, mimeType: 'image/jpeg' };
     } catch (err: any) {
-      console.warn('[MEDIA] Gagal generate thumbnail:', err?.message || err);
-      return null;
+      // Header valid tetapi encode gagal → gangguan mesin, bukan file korup.
+      return { ok: false, reason: 'engine', message: err?.message || String(err) };
     }
   }
 
@@ -577,6 +591,54 @@ export class MediaService {
   }
 
   private mediaUsageCache = new Map<string, { bytes: number; expiresAt: number }>();
+  private _sharpAvailable: boolean | null = null;
+
+  private async isSharpAvailable(): Promise<boolean> {
+    if (this._sharpAvailable !== null) return this._sharpAvailable;
+    try {
+      const sharpMod = (await import('sharp')).default;
+      this._sharpAvailable = typeof sharpMod === 'function';
+    } catch {
+      this._sharpAvailable = false;
+    }
+    return this._sharpAvailable;
+  }
+
+  public clearUsageCache(tenantId?: string): void {
+    this._sharpAvailable = null;
+    if (tenantId) {
+      this.mediaUsageCache.delete(tenantId);
+    } else {
+      this.mediaUsageCache.clear();
+    }
+  }
+
+  /**
+   * Membersihkan duplikat thumbnail ber-ekstensi salah (mis. stem_thumb.png padahal isinya JPEG)
+   * khusus di folder inbound yang merupakan artefak dari penamaan ensureThumbForHd lama.
+   */
+  private cleanupLegacyInboundThumbDuplicate(inboundDir: string, hdName: string): void {
+    const stem = hdName.replace(/(\.\w+)$/, '');
+    const canonicalThumb = path.join(inboundDir, `${stem}_thumb.jpg`);
+    if (!fs.existsSync(canonicalThumb)) return;
+
+    for (const wrongExt of ['png', 'webp', 'gif']) {
+      const wrongThumb = path.join(inboundDir, `${stem}_thumb.${wrongExt}`);
+      if (fs.existsSync(wrongThumb)) {
+        try {
+          const head = Buffer.alloc(3);
+          const fd = fs.openSync(wrongThumb, 'r');
+          fs.readSync(fd, head, 0, 3, 0);
+          fs.closeSync(fd);
+          if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+            fs.unlinkSync(wrongThumb);
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    }
+  }
 
   /**
    * Mengambil pemakaian byte disk secara async dengan in-memory cache (TTL 60s)
@@ -722,12 +784,27 @@ export class MediaService {
 
       for (const candidate of candidates) {
         if (currentUsage <= targetUsage) break;
+        const relUrl = toRelativeUrl(candidate.scope, tenantId, candidate.name);
 
-        // Pastikan thumbnail ada sebelum HD dihapus
-        const thumbRel = await this.ensureThumbForHd(candidate.scope, tenantId, candidate.name, candidate.fullPath);
-        if (!thumbRel) {
-          console.warn(`[MEDIA WATERMARK PRUNE] HD dipertahankan karena thumbnail gagal dibuat: ${candidate.fullPath}`);
+        if (candidate.scope === 'inbound') {
+          this.cleanupLegacyInboundThumbDuplicate(path.dirname(candidate.fullPath), candidate.name);
+        }
+
+        if (candidate.size === 0) {
+          try {
+            await fs.promises.unlink(candidate.fullPath);
+            filesRemoved++;
+          } catch {}
           continue;
+        }
+
+        const res = await this.ensureThumbForHd(candidate.scope, tenantId, candidate.name, candidate.fullPath);
+        if (res.status === 'engine-unavailable') {
+          console.warn(`[MEDIA WATERMARK PRUNE] HD dipertahankan (engine thumbnail tak tersedia): ${candidate.fullPath}`);
+          continue;
+        }
+        if (res.status === 'corrupt-image') {
+          console.warn(`[MEDIA WATERMARK PRUNE] Gambar korup dihapus demi kuota: ${candidate.fullPath}`);
         }
 
         try {
@@ -736,8 +813,10 @@ export class MediaService {
           freedBytes += candidate.size;
           filesRemoved++;
         } catch {
-          // best-effort
+          continue;
         }
+
+        await this.updateMediaRefsAfterHdDelete(tenantId, relUrl, res.status === 'thumb' ? res.thumbRel : null);
       }
     }
 
@@ -818,10 +897,25 @@ export class MediaService {
         const relUrl = toRelativeUrl(scope, tenantId, entry.name);
         if (pricelistRel && relUrl === pricelistRel) continue; // pricelist permanen
 
-        const thumbRel = await this.ensureThumbForHd(scope, tenantId, entry.name, full);
-        if (!thumbRel) {
-          console.warn(`[MEDIA RETENTION] HD tanpa ganti blur dipertahankan (gagal generate thumb): ${relUrl}`);
+        if (scope === 'inbound') {
+          this.cleanupLegacyInboundThumbDuplicate(base, entry.name);
+        }
+
+        if (st.size === 0) {
+          try {
+            fs.unlinkSync(full);
+            removed++;
+          } catch {}
           continue;
+        }
+
+        const res = await this.ensureThumbForHd(scope, tenantId, entry.name, full);
+        if (res.status === 'engine-unavailable') {
+          console.warn(`[MEDIA RETENTION] HD tanpa ganti blur dipertahankan (engine thumbnail tak tersedia): ${relUrl}`);
+          continue;
+        }
+        if (res.status === 'corrupt-image') {
+          console.warn(`[MEDIA RETENTION] Gambar korup dihapus saat retensi: ${relUrl}`);
         }
 
         try {
@@ -830,7 +924,7 @@ export class MediaService {
         } catch {
           continue;
         }
-        await this.updateMediaRefsAfterHdDelete(tenantId, relUrl, thumbRel);
+        await this.updateMediaRefsAfterHdDelete(tenantId, relUrl, res.status === 'thumb' ? res.thumbRel : null);
       }
     };
 
@@ -841,58 +935,101 @@ export class MediaService {
 
   /**
    * Pastikan file HD punya blur thumb di disk (pakai yang ada atau generate baru).
-   * Mengembalikan relative URL thumb, atau null bila gagal.
+   * Mengembalikan status terstruktur (thumb | not-image | corrupt-image | engine-unavailable).
    */
   private async ensureThumbForHd(
     scope: 'outbound' | 'inbound',
     tenantId: string,
     hdName: string,
     hdFullPath: string
-  ): Promise<string | null> {
-    const thumbName = withThumbName(hdName);
-    const thumbPath = path.join(path.dirname(hdFullPath), thumbName);
-    if (fs.existsSync(thumbPath)) {
-      return toRelativeUrl(scope, tenantId, thumbName);
+  ): Promise<EnsureThumbResult> {
+    const thumbDir = path.dirname(hdFullPath);
+    const thumbNameSameExt = withThumbName(hdName);
+    const thumbPathSameExt = path.join(thumbDir, thumbNameSameExt);
+    if (fs.existsSync(thumbPathSameExt)) {
+      return { status: 'thumb', thumbRel: toRelativeUrl(scope, tenantId, thumbNameSameExt) };
     }
+
+    const stem = hdName.replace(/(\.\w+)$/, '');
+    const blurThumbName = `${stem}_thumb.jpg`;
+    const blurThumbPath = path.join(thumbDir, blurThumbName);
+    if (fs.existsSync(blurThumbPath)) {
+      return { status: 'thumb', thumbRel: toRelativeUrl(scope, tenantId, blurThumbName) };
+    }
+
+    let hdBuf: Buffer;
     try {
-      const hdBuf = fs.readFileSync(hdFullPath);
-      const blur = await this.createBlurThumb(hdBuf);
-      if (!blur) return null;
-      fs.writeFileSync(thumbPath, blur.data);
-      return toRelativeUrl(scope, tenantId, thumbName);
+      hdBuf = fs.readFileSync(hdFullPath);
     } catch {
-      return null;
+      return { status: 'engine-unavailable' };
+    }
+
+    if (hdBuf.length === 0) {
+      return { status: 'corrupt-image' };
+    }
+
+    const magic = detectKindFromMagic(hdBuf);
+    if (magic && magic.kind !== 'image') {
+      return { status: 'not-image' };
+    }
+    if (!magic && !IMAGE_EXT_RE.test(hdName)) {
+      return { status: 'not-image' };
+    }
+
+    if (!(await this.isSharpAvailable())) {
+      return { status: 'engine-unavailable' };
+    }
+
+    const blur = await this.createBlurThumbDetailed(hdBuf);
+    if (!blur.ok) {
+      return blur.reason === 'invalid'
+        ? { status: 'corrupt-image' }
+        : { status: 'engine-unavailable' };
+    }
+
+    try {
+      fs.writeFileSync(blurThumbPath, blur.data);
+      return { status: 'thumb', thumbRel: toRelativeUrl(scope, tenantId, blurThumbName) };
+    } catch {
+      return { status: 'engine-unavailable' };
     }
   }
 
   /**
    * Perbarui referensi media pada pesan yang menunjuk ke HD yang baru dihapus:
-   * hdUrl → null, dan url (legacy inbound) → thumbUrl agar pratinjau tidak putus.
+   * hdUrl → null, dan url (legacy inbound) → thumbUrl bila ada (atau di-unset bila non-image).
    */
   private async updateMediaRefsAfterHdDelete(
     tenantId: string,
     hdRelUrl: string,
-    thumbRelUrl: string
+    thumbRelUrl: string | null
   ): Promise<void> {
     try {
       await prisma.message.updateMany({
         where: { tenant_id: tenantId, payload_raw: { path: ['media', 'hdUrl'], equals: hdRelUrl } },
         data: { payload_raw: { unset: ['media', 'hdUrl'] } },
       });
-      await prisma.message.updateMany({
-        where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
-        data: { payload_raw: { path: ['media', 'url'], set: thumbRelUrl } },
-      });
-      // Rewrite Customer.preferences.house_photo_url jika menunjuk ke HD yang dihapus
-      await prisma.customer.updateMany({
-        where: {
-          tenant_id: tenantId,
-          preferences: { path: ['house_photo_url'], equals: hdRelUrl },
-        },
-        data: {
-          preferences: { path: ['house_photo_url'], set: thumbRelUrl },
-        },
-      });
+      if (thumbRelUrl) {
+        await prisma.message.updateMany({
+          where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
+          data: { payload_raw: { path: ['media', 'url'], set: thumbRelUrl } },
+        });
+        // Rewrite Customer.preferences.house_photo_url jika menunjuk ke HD yang dihapus
+        await prisma.customer.updateMany({
+          where: {
+            tenant_id: tenantId,
+            preferences: { path: ['house_photo_url'], equals: hdRelUrl },
+          },
+          data: {
+            preferences: { path: ['house_photo_url'], set: thumbRelUrl },
+          },
+        });
+      } else {
+        await prisma.message.updateMany({
+          where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
+          data: { payload_raw: { unset: ['media', 'url'] } },
+        });
+      }
     } catch {
       // DB offline / best-effort
     }

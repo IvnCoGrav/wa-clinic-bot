@@ -1020,8 +1020,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           canonical.media?.mimeType ||
           payload.message?.videoMessage?.mimetype ||
           payload.message?.audioMessage?.mimetype ||
-          payload.message?.documentMessage?.mimetype ||
-          `application/${heavyMediaType}`;
+          (heavyMediaType === 'audio'
+            ? 'audio/ogg'
+            : heavyMediaType === 'video'
+            ? 'video/mp4'
+            : 'application/octet-stream');
         const heavyFileName =
           canonical.media?.fileName ||
           payload.message?.documentMessage?.fileName ||
