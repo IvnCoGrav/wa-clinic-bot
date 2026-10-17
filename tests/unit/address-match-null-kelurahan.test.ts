@@ -142,6 +142,8 @@ describe('Adversarial & Regression Test: addressesMatch with NULL / Asymmetric K
 
     vi.spyOn(customerService, 'getSavedAddresses').mockResolvedValue([existingAddr]);
     const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress');
+    const { reservationLifecycleService } = await import('../../src/services/reservation-lifecycle.service');
+    vi.spyOn(reservationLifecycleService, 'onReservationCreated').mockResolvedValue(undefined as any);
 
     const result = await reservationCoreService.saveReservation({
       tenantId,
