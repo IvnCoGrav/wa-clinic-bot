@@ -5,6 +5,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Fix: Tindak Lanjut Audit Alamat (Flaky Test Timeout, Hardening API Buku Alamat, Konsistensi Chip Alamat Staf & Verifikasi Sheets F-7)
+
+- **Akar masalah**: ronde audit pasca S-1..S-5 menyisakan 3 timeout flaky saat full-suite penuh (bukan regresi logika), route buku alamat menelan error tak terduga sebagai 500 generik sambil membocorkan `err.message`, `label` alamat tak berbatas panjang, chip provenance alamat tidak konsisten antar tab staf, dan klaim F-7 (Sheets basi) belum diverifikasi terhadap kode nyata.
+- **Flaky test (deterministik, bukan masking)**: `tests/unit/media-mime-audio.test.ts` & `tests/unit/media-route-range.test.ts` mendapat `vi.setConfig({ testTimeout: 20000 })`; `tests/unit/customer-profile-edit-drift.test.ts` (Fase S-2) memindahkan impor/boot `buildApp()` ke `beforeAll` + `testTimeout 20000 / hookTimeout 30000`. Bukti: full suite kembali ke baseline **14 uji / 7 berkas** (189 dtk), trio flaky hilang.
+- **Hardening API buku alamat (`src/routes/admin/customers.subroute.ts`)**: `POST /:id/addresses` & `PATCH .../:addressId/label` kini `console.error` internal + respons 500 generik ("Gagal menambahkan alamat. Silakan coba lagi." / "Gagal mengubah label alamat. Silakan coba lagi.") sehingga pesan internal tidak bocor.
+- **Domain (`src/domain/customer-address.ts`)**: `MAX_ADDRESS_LABEL_LENGTH = 60` + `normalizeAddressLabel()` (trim + slice) dipakai `buildAutoLabel` (termasuk suffix) dan seam merge kartu; route menolak 400 "Label maksimal 60 karakter."; `AddressBookDrawer.tsx` menambah `maxLength` + guard toast (konstanta cermin).
+- **Konsistensi provenance alamat staf (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**: chip `AddressUpdatedAtChip` ("Alamat diperbarui X jam lalu") sebelumnya hanya di tab "Hari Ini"; kini tampil juga di kartu tab upcoming (jadwal mendatang), kartu completed, dan modal detail tugas. Koreksi catatan audit: `StaffSchedule.tsx` bukan gap (proksi 13 baris ke `StaffToday defaultTab="upcoming"` yang memang sudah menampilkan alamat).
+- **Verifikasi F-7 (Sheets) — LULUS tanpa perubahan kode**: `PrismaSheetsSyncStore.getReservation` (`sheets-sync.service.ts:389-418`) memang meng-`include` `customer_address`, `syncReservation:252` meneruskannya, dan `resolveLocation`/`resolveOngkir` memprioritaskan kartu di atas profil (sudah dikunci tes `customer-address-rumah-kedua.test.ts:248,275`). Yang tetap tertunda hanya override "profil lebih baru" (didokumentasikan di `KNOWN_ISSUES.md` #266.53).
+- **Gerbang regresi**: `npm run build` root exit 0; `tsc --noEmit` dashboard exit 0; 7 berkas tes terkait hijau (35 tests); full suite `7 failed | 688 passed` = baseline pra-eksisting, **0 regresi baru**.
+- **Dokumentasi**: `docs/KNOWN_ISSUES.md` #266 butir 1–3 & 5 ditandai FIXED/CLOSED + koreksi klaim U-4 + verifikasi F-7; INDEX changelog diregenerasi.
+
+
 #### 2026-10-18 - Feat: SSOT Media Balasan Cepat (/pricelist & /qris), Hardening bodyLimit 12MB & Kompresi Klien
 
 - **Akar Masalah & Kebutuhan**:
